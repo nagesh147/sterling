@@ -103,11 +103,45 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     if norm == "sell":
         held = positions.get(uid, option_symbol)
         if held is not None and held.status in (positions.OPEN, positions.PENDING):
-            await monitor._exit_position(
-                client, uid, held, held.stop_premium, reason="manual exit from the board")
+            # The exit price is only used for the activity line and the realized-PnL
+            # figure that feeds the INR daily-loss breaker. Passing the STOP there books
+            # every discretionary exit as if it had been stopped out, which is a
+            # fabricated number in both directions — so ask for the real one, and fall
+            # back to the stop only if the quote fails.
+            exit_px = held.stop_premium
+            try:
+                key = f"{held.exchange}:{held.symbol}"
+                q = await client.get_ltp([key])
+                exit_px = float((q or {}).get(key, {}).get("last_price") or held.stop_premium)
+            except Exception:  # noqa: BLE001
+                pass
+            exited = await monitor._exit_position(
+                client, uid, held, exit_px, reason="manual exit from the board",
+                price_stop_exit=False)
+            if not exited:
+                # `_exit_position` bails without selling when another exit path already
+                # holds this position, or when a broker stop it could not cancel may
+                # already be selling it. Reporting "closed" here would be a lie the user
+                # acts on — and the idempotency key must stay unrecorded, or the retry
+                # would come back "Already submitted" for the next 60 seconds.
+                state.log(uid, "order_failed",
+                          f"⚠ {option_symbol}: manual exit did NOT go through — the position "
+                          f"is STILL OPEN. Check Zerodha for a resting or triggered stop.")
+                return {"status": "error", "order_id": held.order_id or "",
+                        "message": ("Could not close the position — it is still open. A broker "
+                                    "stop may already be selling it, or another exit is in "
+                                    "flight. Check Zerodha, then retry."),
+                        "protected": False, "protection": "position still open"}
             live_safety.record_idempotency(idem, held.order_id or "manual-exit")
+            # `_exit_position` always exits the WHOLE tracked position — a GTT-protected
+            # holding cannot be part-sold without re-arming the trigger for the remainder,
+            # which it does not do. Say so rather than let a smaller requested quantity
+            # imply a partial close happened.
+            note = ("" if int(quantity) >= int(held.qty or 0) else
+                    f" — the whole tracked position ({held.qty} qty) was closed, not the "
+                    f"{quantity} requested")
             return {"status": "ok", "order_id": held.order_id or "",
-                    "message": "Position closed at market (manual exit)",
+                    "message": f"Position closed at market (manual exit){note}",
                     "protected": False, "protection": "position closed"}
 
     cfg = state.get_config(uid)
@@ -133,29 +167,54 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     if norm != "buy":
         return {"status": "ok", "order_id": oid, "message": "Order submitted"}
 
-    # ── arm the position, or say plainly that it is unprotected ────────────────
-    # The order is already live, so nothing below may raise or undo it. An entry we
-    # could not protect is still reported as ok — never block or unwind a trade the
-    # user asked for — but `protected: False` travels with it.
+    armed = await arm_manual_option_buy(
+        client, uid, option_symbol=option_symbol, exchange=exchange,
+        quantity=quantity, order_id=oid, plan=plan)
+    return {"status": "ok", "order_id": oid, "message": "Order submitted", **armed}
+
+
+async def arm_manual_option_buy(client, uid: str, *, option_symbol: str, exchange: str,
+                                quantity: int, order_id: str, plan=None) -> dict:
+    """Turn a just-placed hand-made option BUY into a protected position.
+
+    Returns ``{"protected": bool, "protection": str}`` — never raises and never unwinds:
+    the order is already live at the exchange, so a failure here is reported, not
+    thrown at a caller who can no longer undo the trade. An entry we could not protect
+    still succeeded as an ORDER; what must not happen is the board rendering an SL, a
+    TSL and a Target beside a position that has none.
+
+    Shared by BOTH order paths on purpose. ``/kite/engine/order`` (detail panel,
+    Telegram) is not the one the signal board's Buy button reaches — that goes Buy →
+    OrderWindow → ``POST /kite/orders`` — so arming only the first left every entry
+    clicked from the board unguarded.
+    """
+    cfg = state.get_config(uid)
+    if plan is None and getattr(cfg, "protect_manual_orders", True):
+        plan = protection.plan_for_symbol(uid, option_symbol)
     if plan is None:
         reason = ("this contract is not on the current board, so there is no stop to arm"
                   if getattr(cfg, "protect_manual_orders", True)
                   else "automatic protection for manual orders is switched off")
         state.log(uid, "info", f"⚠ {option_symbol} is UNPROTECTED — {reason}")
-        return {"status": "ok", "order_id": oid, "message": "Order submitted",
-                "protected": False, "protection": reason}
+        return {"protected": False, "protection": reason}
     if not plan.protectable:
         reason = "the signal has no premium stop for this contract, so nothing was armed"
         state.log(uid, "info", f"⚠ {option_symbol} is UNPROTECTED — {reason}")
-        return {"status": "ok", "order_id": oid, "message": "Order submitted",
-                "protected": False, "protection": reason}
+        return {"protected": False, "protection": reason}
+
+    # A stop that is not below the live premium is not a stop. Arm ZERO rather than
+    # skip arming altogether: the registry row, the tick subscription and — the
+    # expensive one — the expiry square-off all still apply, so a physically-settled
+    # stock option cannot go to delivery just because its stop was unusable.
+    stale = await protection.stale_stop_reason(client, plan)
+    stop_to_arm = 0.0 if stale else plan.stop_premium
 
     try:
         armed = await protection.arm_position(
-            client, uid, symbol=plan.symbol, exchange=plan.exchange, token=plan.token,
-            qty=quantity, lot_size=plan.lot_size,
-            entry_premium=plan.entry_premium, stop_premium=plan.stop_premium,
-            order_id=oid, stop_mode=cfg.stop_mode, direction=plan.direction,
+            client, uid, symbol=plan.symbol, exchange=plan.exchange or exchange,
+            token=plan.token, qty=quantity, lot_size=plan.lot_size,
+            entry_premium=plan.entry_premium, stop_premium=stop_to_arm,
+            order_id=order_id, stop_mode=cfg.stop_mode, direction=plan.direction,
             vehicle="otm_options", underlying=plan.underlying, exit_mode=cfg.exit_mode,
             entry_spot=plan.entry_spot, entry_delta=plan.entry_delta,
             strike=plan.strike, expiry=plan.expiry, target_premium=plan.target_premium)
@@ -163,12 +222,41 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
         log.warning("manual order arming failed for %s/%s: %s", uid, option_symbol, exc)
         state.log(uid, "order_failed",
                   f"⚠ {option_symbol} filled but could NOT be protected: {exc}")
-        return {"status": "ok", "order_id": oid, "message": "Order submitted",
-                "protected": False, "protection": f"arming failed: {exc}"}
+        return {"protected": False, "protection": f"arming failed: {exc}"}
 
+    if stale:
+        state.log(uid, "order_failed",
+                  f"⚠ {option_symbol} has NO STOP — {stale}. It is tracked (tick monitor + "
+                  f"expiry square-off) but you must set a stop yourself.")
+        return {"protected": False, "protection": f"no stop armed — {stale}"}
     state.log(uid, "order_placed", f"{option_symbol} protected — {armed.describe()}")
-    return {"status": "ok", "order_id": oid, "message": "Order submitted",
-            "protected": armed.protected, "protection": armed.describe()}
+    return {"protected": armed.protected, "protection": armed.describe()}
+
+
+async def disarm_for_manual_exit(client, uid: str, option_symbol: str) -> str:
+    """Take the broker stop off a position the user is selling by hand. Returns a note
+    for the caller, or "".
+
+    A resting GTT plus a hand-placed SELL is the orphan case: once the user's sell
+    fills, the trigger has nothing behind it, and if it later fires the account goes
+    NAKED SHORT an option. Cancelling first is strictly safer than cancelling after —
+    the worst case is a few seconds with only the tick monitor guarding.
+    """
+    held = positions.get(uid, option_symbol)
+    if held is None or held.status not in (positions.OPEN, positions.PENDING) or not held.gtt_id:
+        return ""
+    outcome = await protective_stop.cancel_stop_result(client, held.gtt_id)
+    positions.update_stop(uid, option_symbol, held.stop_premium, gtt_id=0)
+    if outcome == protective_stop.CANCELLED:
+        state.log(uid, "info",
+                  f"{option_symbol}: broker GTT #{held.gtt_id} cancelled for a hand-placed "
+                  f"SELL — it would have been a resting order with no position behind it")
+        return ""
+    state.log(uid, "order_failed",
+              f"⚠ {option_symbol}: broker GTT #{held.gtt_id} could NOT be cancelled "
+              f"({outcome}) before your SELL — if it fires after you are flat you will be "
+              f"SHORT an option. Check Zerodha now.")
+    return f"broker stop #{held.gtt_id} could not be cancelled ({outcome}) — check Zerodha"
 
 
 async def available_fo_capital(client) -> float:
@@ -637,6 +725,49 @@ def _is_expiring(expiry: str, today, within_days: int = 1) -> bool:
     return (d - today).days <= within_days
 
 
+#: A live market order fills in seconds. Past this, a position still PENDING means the
+#: postback was lost, not that the order is slow.
+_PENDING_GRACE_MS = 90_000
+
+
+async def _reconcile_pending_positions(client, uid: str) -> None:
+    """Resolve positions still PENDING long after their entry order went in.
+
+    Fill confirmation arrives on the WS order postback. When that message is missed — a
+    dropped socket, a server restart, a postback that landed while we were down — the
+    position stays PENDING forever, and PENDING is invisible to everything that guards
+    it: ``on_tick`` returns early, the trail updater skips it, and so do the time stop
+    and the expiry square-off. The broker GTT is then the only protection, and under
+    ``stop_mode="monitor"`` there is none at all.
+
+    So stop waiting for the message and ask the order book. The reply is fed through the
+    same ``on_order_update`` the postback would have hit, so fill / rejection / partial
+    all take their normal path, including cancelling a GTT armed against an entry that
+    never filled.
+    """
+    now_ms = int(datetime.now(_IST).timestamp() * 1000)
+    for p in positions.open_positions(uid):
+        if p.status != positions.PENDING or not p.order_id:
+            continue
+        if now_ms - int(p.opened_ms or 0) < _PENDING_GRACE_MS:
+            continue
+        try:
+            hist = await client.get_order_history(p.order_id)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("kite pending reconcile failed for %s/%s: %s", uid, p.symbol, exc)
+            continue
+        last = (hist or [])[-1] if hist else None
+        if not isinstance(last, dict) or not str(last.get("status") or "").strip():
+            continue
+        # The order book omits the symbol on some venues; on_order_update matches on it.
+        last = {**last, "tradingsymbol": last.get("tradingsymbol") or p.symbol,
+                "order_id": last.get("order_id") or p.order_id}
+        state.log(uid, "info",
+                  f"{p.symbol}: fill postback never arrived — reconciling from the order "
+                  f"book ({str(last.get('status')).lower()})")
+        await monitor.on_order_update(uid, last, client=client)
+
+
 async def _square_off_expiring(client, uid: str) -> None:
     """Market-exit auto-exec option positions inside the configured expiry window.
 
@@ -658,8 +789,12 @@ async def _square_off_expiring(client, uid: str) -> None:
             ltp = float((q or {}).get(key, {}).get("last_price") or p.stop_premium)
         except Exception:  # noqa: BLE001
             ltp = p.stop_premium
+        # NOT a price-stop exit: no broker GTT will ever square off a position for
+        # expiry, so this must place its own SELL even when the GTT cancel could not be
+        # confirmed. On a physically-settled stock option, skipping it means taking
+        # delivery — lakhs per lot.
         await monitor._exit_position(
-            client, uid, p, ltp,
+            client, uid, p, ltp, price_stop_exit=False,
             reason=f"expiry square-off (T-{days}, exp {str(p.expiry)[:10]})")
 
 
@@ -687,7 +822,8 @@ async def _time_stop_positions(client, uid: str) -> None:
         except Exception:  # noqa: BLE001
             ltp = p.stop_premium
         await monitor._exit_position(
-            client, uid, p, ltp, reason=f"time stop ({held}≥{bars} bars held)")
+            client, uid, p, ltp, price_stop_exit=False,
+            reason=f"time stop ({held}≥{bars} bars held)")
 
 
 def _new_trail_for_open(p, rows) -> Optional[float]:
@@ -794,6 +930,14 @@ async def _update_open_position_trails(client, uid: str) -> None:
                 if moved:
                     state.log(uid, "info",
                               f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+                else:
+                    # The registry now says ₹new_sl while the broker still holds ₹old_sl.
+                    # The tick monitor enforces the tighter one, so the position is not
+                    # unguarded — but a silent failure here is how the two drift apart.
+                    state.log(uid, "order_failed",
+                              f"⚠ {p.symbol}: broker GTT #{p.gtt_id} could NOT be trailed to "
+                              f"₹{new_sl:.2f} — the stop at Zerodha is still ₹{old_sl:.2f}; "
+                              f"only the tick monitor is enforcing the tighter level")
 
         # Wire red-count awareness (scan driven): compute current reds from latest alignment using this position's entry-time exit_mode.
         # The monitor will see the updated current_red_count and can exit on red threshold (in addition to price trail).
@@ -978,6 +1122,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # expiry/time stops stopped running — on exactly the positions the engine had
         # already committed real money to. Maintaining a position you hold is not the
         # same decision as opening a new one.
+        # Reconcile FIRST: everything below skips a position that is still PENDING, so a
+        # lost fill postback would otherwise hide it from all of them.
+        await _reconcile_pending_positions(client, uid)
         await _update_open_position_trails(client, uid)
         await _square_off_expiring(client, uid)
         await _time_stop_positions(client, uid)

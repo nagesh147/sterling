@@ -161,9 +161,14 @@ async def cancel_stop_result(client, trigger_id: int) -> str:
 
     The classification of a failure into GONE vs UNKNOWN is a heuristic over the
     broker's error text, because Kite's exact message for "this trigger already
-    fired" is not something this repo can pin. That is fine as long as the caller
-    treats BOTH as "not cancelled" — the distinction only changes the log line, never
-    whether a second sell order goes out.
+    fired" is not something this repo can pin. Both mean the same thing to a caller
+    deciding whether to sell: NOT cancelled.
+
+    What this function cannot tell you is the thing that actually matters next —
+    whether a stop is still going to exit the position for us. "Our cancel failed"
+    covers both "it already fired and is selling" (stand down) and "it is not there
+    any more and nothing will exit this position" (we must sell ourselves). Only the
+    broker knows which. Ask it with ``stop_status`` before standing down.
     """
     if trigger_id <= 0:
         return GONE  # nothing armed — nothing can double-fire
@@ -182,3 +187,156 @@ async def cancel_stop_result(client, trigger_id: int) -> str:
 async def cancel_stop(client, trigger_id: int) -> bool:
     """True only when the GTT was provably cancelled by this call."""
     return (await cancel_stop_result(client, trigger_id)) == CANCELLED
+
+
+#: What the BROKER says about a trigger, when a cancel did not come back CANCELLED.
+STOP_ACTIVE = "active"          # still resting at the exchange — it will fire on its own
+STOP_TRIGGERED = "triggered"    # it fired; a broker SELL exists for this position
+STOP_ABSENT = "absent"          # cancelled / deleted / expired / disabled / unknown to the
+                                # broker → NOTHING there will ever exit this position
+STOP_UNVERIFIED = "unverified"  # we could not ask — must be treated as "may still be armed"
+
+#: The only two GTT statuses under which the broker still acts for us.
+_ACTING_STATUSES = {"active": STOP_ACTIVE, "triggered": STOP_TRIGGERED}
+#: The statuses Kite documents for a trigger that will never act again.
+_INERT_STATUSES = frozenset({"cancelled", "canceled", "deleted", "expired", "rejected",
+                             "disabled"})
+#: Order-book statuses that mean the exit order will never fill. Everything else —
+#: COMPLETE, OPEN, TRIGGER PENDING, VALIDATION PENDING, PUT ORDER REQ RECEIVED — is a
+#: sell that has filled or is still working, and we must not place a second one.
+_DEAD_ORDER_STATUSES = frozenset({"REJECTED", "CANCELLED", "CANCELED"})
+
+#: Internal: the broker's GTT book provably does not hold this trigger. Not a verdict on
+#: its own — a trigger vanishes both when it is deleted (nothing will exit us) and,
+#: possibly, once it has fired (a SELL exists). The order book separates the two.
+_NOT_ON_BOOK = "__not_on_book__"
+
+
+def _classify(status: str) -> str:
+    """A single GTT status → verdict. An unrecognised status is UNVERIFIED, never
+    ABSENT: the trigger demonstrably exists at the broker, so we cannot rule out that
+    it is going to fire, and guessing ABSENT here is the one mistake that sells twice."""
+    s = (status or "").strip().lower()
+    if s in _ACTING_STATUSES:
+        return _ACTING_STATUSES[s]
+    if s in _INERT_STATUSES:
+        return STOP_ABSENT
+    return STOP_UNVERIFIED
+
+
+async def _status_from_trigger(client, trigger_id: int) -> Optional[str]:
+    """``GET /gtt/triggers/{id}``. A verdict, ``_NOT_ON_BOOK``, or None when the answer
+    was inconclusive (call failed for any reason other than 404, empty envelope)."""
+    try:
+        data = await client.get_gtt(int(trigger_id))
+    except Exception as exc:  # noqa: BLE001
+        if int(getattr(exc, "status_code", 0) or 0) == 404:
+            return _NOT_ON_BOOK
+        log.warning("kite protective GTT #%s status check failed: %s", trigger_id, exc)
+        return None
+    if not isinstance(data, dict):
+        return None
+    status = str(data.get("status") or "").strip()
+    return _classify(status) if status else None
+
+
+async def _status_from_list(client, trigger_id: int) -> Optional[str]:
+    """``GET /gtt/triggers`` as the second opinion, because Kite does not promise a 404
+    for a trigger it no longer holds — a 400/``InputException`` is just as likely, and
+    reading ABSENT out of an error *message* is the guess this module refuses to make.
+    Absence from a list we successfully read is hard evidence; an error is not.
+
+    Returns a verdict, ``_NOT_ON_BOOK``, or None when the list could not be read."""
+    try:
+        rows = await client.get_gtts()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("kite protective GTT #%s list check failed: %s", trigger_id, exc)
+        return None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if int(row.get("id") or row.get("trigger_id") or 0) != int(trigger_id):
+            continue
+        status = str(row.get("status") or "").strip()
+        return _classify(status) if status else STOP_UNVERIFIED
+    return _NOT_ON_BOOK
+
+
+async def _exit_order_is_working(client, tradingsymbol: str, direction: str) -> Optional[bool]:
+    """Is there a broker order in today's book that exits this position — filled or still
+    working? True / False / None when the book could not be read.
+
+    This is the ground truth the GTT's own status only approximates: what matters before
+    we sell is not "does a trigger exist" but "is the broker already selling this for
+    us". It is also the only way to see the *rejected* case — a trigger that fired,
+    whose market SELL the exchange bounced (freeze quantity, circuit, margin), leaving
+    no trigger and no exit.
+
+    Deliberately conservative in one place: an exit order from an EARLIER round trip in
+    the same symbol today also reads as working, so a same-day re-entry can hold the
+    position back. That costs a delayed exit the caller is told about, which is the side
+    of the trade-off this module always takes.
+    """
+    if not tradingsymbol:
+        return None
+    try:
+        orders = await client.get_orders()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("kite order-book check for %s failed: %s", tradingsymbol, exc)
+        return None
+    if not isinstance(orders, list):
+        return None
+    want_sym = tradingsymbol.strip().upper()
+    want_txn = K.TXN_SELL if direction == "long" else K.TXN_BUY
+    for o in orders:
+        if not isinstance(o, dict):
+            continue
+        if str(o.get("tradingsymbol") or "").strip().upper() != want_sym:
+            continue
+        if str(o.get("transaction_type") or "").strip().upper() != want_txn:
+            continue
+        if str(o.get("status") or "").strip().upper() in _DEAD_ORDER_STATUSES:
+            continue
+        return True
+    return False
+
+
+async def stop_status(client, trigger_id: int, *, tradingsymbol: str = "",
+                      direction: str = "long") -> str:
+    """Ask the broker what actually became of GTT ``trigger_id``.
+
+    Two ordinary events leave a trigger absent WITHOUT the position having exited: the
+    user deletes or edits it in the Kite app, or it fired and its market SELL was
+    rejected so the trigger is consumed with no fill. In both, a caller that "leaves the
+    exit to the broker" waits forever.
+
+    Three sources, cheapest first, and each one only ever narrows the answer:
+
+    1. the trigger itself — an acting or documented-inert status ends it;
+    2. the trigger list, when (1) errors or comes back empty — Kite's error code for an
+       unknown trigger is not something this repo can pin, so absence from a list we did
+       read replaces trusting a 404;
+    3. the order book, once (1) or (2) prove the trigger is not there — the only source
+       that distinguishes "deleted, nothing will exit us" from "fired, a SELL exists".
+
+    ABSENT — the verdict that lets a caller place its own exit — therefore requires
+    positive evidence from two independent reads, because a wrong ABSENT sells on top of
+    a live broker SELL and goes NAKED SHORT, whereas a wrong UNVERIFIED costs at worst a
+    delayed exit the caller is told about. Pass ``tradingsymbol``: without it step (3)
+    cannot run and a missing trigger can only be reported UNVERIFIED.
+    """
+    if trigger_id <= 0:
+        return STOP_ABSENT
+    verdict = await _status_from_trigger(client, trigger_id)
+    if verdict is None:
+        verdict = await _status_from_list(client, trigger_id)
+    if verdict is None:
+        return STOP_UNVERIFIED
+    if verdict != _NOT_ON_BOOK:
+        return verdict
+    working = await _exit_order_is_working(client, tradingsymbol, direction)
+    if working is None:
+        return STOP_UNVERIFIED
+    return STOP_TRIGGERED if working else STOP_ABSENT

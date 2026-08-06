@@ -19,6 +19,8 @@ OCO so stop and target can never both fire.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from app.services.kite_engine import monitor
@@ -27,17 +29,62 @@ from app.services.kite_engine import protection, protective_stop
 import app.services.exchanges.kite.ticker_manager as _ticker_manager
 
 
+class _NotFound(Exception):
+    """A broker 404 — the trigger id is unknown to Zerodha."""
+    status_code = 404
+
+
+class _InputError(Exception):
+    """What Kite is just as likely to answer for a trigger it no longer holds: a 400
+    ``InputException``, not a 404. Trusting only the 404 left this case UNVERIFIED."""
+    status_code = 400
+    error_type = "InputException"
+
+
 class _FakeClient:
     """Records what was sent to the broker. ``cancel_error`` makes delete_gtt fail
-    the way Zerodha would for a trigger that has already fired."""
+    the way Zerodha would for a trigger that has already fired.
 
-    def __init__(self, cancel_error: str | None = None):
+    ``gtt_status`` is what GET /gtt/triggers/{id} reports afterwards — the question
+    that decides whether our own exit is a backstop or a second SELL. "missing" makes
+    the lookup 404 the way a trigger deleted in the Kite app would; "error" makes it
+    fail with a 400 instead, which is the answer we cannot read a verdict out of.
+
+    ``gtt_book`` is GET /gtt/triggers (the second opinion) and ``order_book`` is
+    GET /orders (the third) — the two reads that turn "the trigger is not there" into
+    "and nothing is selling this for us either". Both default to empty, i.e. no
+    trigger resting and no exit order working.
+    """
+
+    def __init__(self, cancel_error: str | None = None, *, gtt_status: str = "active",
+                 ltp: float = 0.0, move_fails: bool = False, order_history: list | None = None,
+                 gtt_book: list | None = None, order_book: list | None = None,
+                 book_error: str | None = None):
         self.sells: list = []
         self.cancelled: list = []
         self.gtts: list = []
         self.modified: list = []
         self.calls: list = []          # ordered log of every broker call
         self.cancel_error = cancel_error
+        self.gtt_status = gtt_status
+        self.ltp = ltp
+        self.move_fails = move_fails
+        self.order_history = order_history or []
+        self.gtt_book = gtt_book or []
+        self.order_book = order_book or []
+        self.book_error = book_error
+
+    async def get_gtts(self):
+        self.calls.append("get_gtts")
+        if self.book_error == "gtts":
+            raise RuntimeError("gtt list unreachable")
+        return list(self.gtt_book)
+
+    async def get_orders(self):
+        self.calls.append("get_orders")
+        if self.book_error == "orders":
+            raise RuntimeError("order book unreachable")
+        return list(self.order_book)
 
     async def place_order_option(self, sym, side, size, **kw):
         self.sells.append((sym, side, size))
@@ -55,13 +102,34 @@ class _FakeClient:
         self.cancelled.append(tid)
         return {"trigger_id": tid}
 
+    async def get_gtt(self, tid):
+        self.calls.append("get_gtt")
+        if self.gtt_status == "missing":
+            raise _NotFound("gtt not found")
+        if self.gtt_status == "error":
+            raise _InputError("Invalid trigger_id")
+        return {"id": tid, "status": self.gtt_status}
+
     async def place_gtt(self, **kw):
         self.gtts.append(kw)
         return {"trigger_id": 4242}
 
     async def modify_gtt(self, tid, **kw):
+        self.calls.append("modify")
+        if self.move_fails:
+            raise RuntimeError("gtt modify rejected")
         self.modified.append((tid, kw))
         return {"trigger_id": tid}
+
+    async def get_ltp(self, keys):
+        self.calls.append("ltp")
+        if self.ltp <= 0:
+            return {}
+        return {k: {"last_price": self.ltp} for k in keys}
+
+    async def get_order_history(self, order_id):
+        self.calls.append("order_history")
+        return self.order_history
 
 
 @pytest.fixture(autouse=True)
@@ -72,6 +140,9 @@ def _no_network(monkeypatch):
     monkeypatch.setattr(_ticker_manager, "subscribe", _noop)
     monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
                         lambda *a, **k: None)
+    # The "what became of this GTT?" answer is cached for 15s per (uid, symbol, trigger).
+    # Tests reuse those triples, so a verdict must not leak from one case into the next.
+    monitor._stop_probe.clear()
 
 
 def _held(uid="p1", *, gtt_id=555, stop=80.0, target=0.0, status=None, qty=50):
@@ -488,3 +559,571 @@ def _async(value):
     async def _wrap(*a, **kw):
         return value
     return _wrap()
+
+
+# ── 6. whose exit is it? intent, not price ────────────────────────────────────
+
+class TestTheExitDecisionUsesIntentNotPrice:
+    """`_exit_position` used to infer "this is a price-stop exit" from the PRICE. But a
+    manual exit passes the stop itself as its price, and an expiry square-off or a
+    red-count exit routinely happens with the premium already under the stop — so the
+    exits a broker GTT will NEVER perform were exactly the ones it skipped."""
+
+    @pytest.mark.asyncio
+    async def test_a_non_price_exit_sells_even_when_the_price_sits_at_the_stop(self):
+        p = _held("i1", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
+
+        sold = await monitor._exit_position(client, "i1", p, 80.0,
+                                           reason="manual exit from the board",
+                                           price_stop_exit=False)
+
+        assert sold is True, "the GTT would never perform a manual exit — we must"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_price_stop_exit_stands_down_while_the_broker_stop_is_active(self):
+        p = _held("i2", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
+
+        sold = await monitor._exit_position(client, "i2", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == [], "a second SELL at a shared trigger"
+        assert pos.get("i2", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_price_stop_exit_sells_when_the_broker_has_no_such_trigger(self):
+        """The permanent-no-exit case: the trigger was deleted in the Kite app, or it
+        fired and its SELL was rejected. "Cancel failed" reads identically to "already
+        triggered", so the monitor stood down forever and logged "awaiting its fill"."""
+        p = _held("i3", stop=80.0)
+        client = _FakeClient(cancel_error="trigger not found", gtt_status="missing")
+
+        sold = await monitor._exit_position(client, "i3", p, 79.0, price_stop_exit=True)
+
+        assert sold is True, "nothing at the broker was going to exit this position"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        assert pos.get("i3", "NIFTY24JUN24000CE").status == pos.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_a_triggered_broker_stop_blocks_even_a_non_price_exit(self):
+        """An OCO's TARGET leg fires on the way UP, so no price-against-the-stop test
+        can see it. Only the broker's own status can."""
+        p = _held("i4", stop=80.0, target=160.0)
+        client = _FakeClient(cancel_error="already triggered", gtt_status="triggered")
+
+        sold = await monitor._exit_position(client, "i4", p, 165.0,
+                                           reason="red count exit 3/1 (one_red)",
+                                           price_stop_exit=False)
+
+        assert sold is False and client.sells == [], "the broker's SELL is already out"
+
+    @pytest.mark.asyncio
+    async def test_the_broker_is_asked_once_not_on_every_tick(self):
+        """A stood-down position re-enters on EVERY tick; asking each time would burn
+        the broker's rate limit for an answer that does not change."""
+        _held("i5", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
+
+        await monitor.on_tick("i5", 777, 79.0, client=client)
+        await monitor.on_tick("i5", 777, 78.5, client=client)
+
+        assert client.calls.count("get_gtt") == 1
+
+    @pytest.mark.asyncio
+    async def test_a_failed_sell_after_a_cancelled_stop_clears_the_trigger_id(self):
+        """We took the broker's stop off and then could not sell. Leaving the id set
+        made every later tick defer to a trigger we had cancelled ourselves."""
+        p = _held("i6", stop=80.0)
+
+        class _NoSell(_FakeClient):
+            async def place_order_option(self, *a, **kw):
+                raise RuntimeError("exchange rejected")
+
+        client = _NoSell()
+        sold = await monitor._exit_position(client, "i6", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.cancelled == [555]
+        assert pos.get("i6", "NIFTY24JUN24000CE").gtt_id == 0
+
+
+# ── 7. the manual exit must not claim a close it did not make ─────────────────
+
+class TestManualExitTellsTheTruth:
+    @pytest.mark.asyncio
+    async def test_a_manual_exit_that_sold_nothing_is_reported_as_an_error(
+            self, monkeypatch):
+        """The broker's OCO has already fired, so we correctly do NOT add a second SELL.
+        What must not happen is telling the user "Position closed at market" for an order
+        of theirs that placed nothing — they act on that."""
+        from app.services.exchanges.kite import accounts as kite_accounts
+        from app.services.kite_engine import service as ksvc
+
+        client = _FakeClient(cancel_error="already triggered", gtt_status="triggered")
+        recorded: list = []
+
+        class _Acct:
+            user_id, id, is_paper, connected = "x-user", 1, False, True
+
+        monkeypatch.setattr(kite_accounts, "get_active", lambda uid: _Acct())
+        monkeypatch.setattr(kite_accounts, "acquire_client", lambda acct: _async(client))
+        monkeypatch.setattr(ksvc.live_safety, "assert_safe_to_trade",
+                            lambda **kw: type("D", (), {"allowed": True, "code": "", "reason": ""})())
+        monkeypatch.setattr(ksvc.live_safety, "check_idempotency", lambda key: None)
+        monkeypatch.setattr(ksvc.live_safety, "record_idempotency",
+                            lambda key, oid: recorded.append(key))
+        pos.reset("x-user")
+        pos.register(pos.OpenPosition(
+            uid="x-user", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=50, lot_size=50, entry_premium=100.0, stop_premium=80.0,
+            order_id="E1", status=pos.OPEN, gtt_id=555))
+
+        res = await ksvc.place_manual_order(
+            "x-user", "NIFTY24JUN24000CE", "SELL", 50, exchange="NFO")
+
+        assert res["status"] == "error", "the user was told a live position was closed"
+        assert "still open" in res["message"]
+        assert client.sells == []
+        assert pos.get("x-user", "NIFTY24JUN24000CE").status == pos.OPEN
+        assert recorded == [], "a burnt idempotency key blocks the retry for 60s"
+
+
+# ── 8. expiry square-off is not a price exit ──────────────────────────────────
+
+class TestExpirySquareOffAlwaysSells:
+    @pytest.mark.asyncio
+    async def test_it_sells_when_both_the_quote_and_the_cancel_fail(self, monkeypatch):
+        """Its LTP fallback IS the stop price, so a quote failure used to turn the
+        square-off into a "price breach" and stand it down. On a physically settled
+        stock option that means taking delivery — lakhs per lot."""
+        from app.services.kite_engine import service as ksvc
+
+        pos.reset("e1")
+        pos.register(pos.OpenPosition(
+            uid="e1", symbol="TCS26AUG2440CE", exchange="NFO", token=888,
+            qty=175, lot_size=175, entry_premium=60.0, stop_premium=40.0,
+            order_id="E1", status=pos.OPEN, gtt_id=555,
+            expiry=datetime.now(timezone.utc).date().isoformat()))
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
+        monkeypatch.setattr(ksvc, "is_market_open", lambda: True)
+
+        await ksvc._square_off_expiring(client, "e1")
+
+        assert client.sells == [("TCS26AUG2440CE", "sell", 175)]
+        assert pos.get("e1", "TCS26AUG2440CE").status == pos.CLOSED
+
+
+# ── 9. the GTT quantity must match what we hold ───────────────────────────────
+
+class TestTheBrokerStopTracksTheRealQuantity:
+    @pytest.mark.asyncio
+    async def test_a_partial_fill_resizes_the_resting_trigger(self):
+        """The GTT was armed for the full intended size. Holding less than that leaves
+        the surplus as a NAKED SHORT the moment the trigger fires."""
+        _held("q1", status=pos.PENDING, qty=150)
+        client = _FakeClient()
+
+        await monitor.on_order_update(
+            "q1", {"tradingsymbol": "NIFTY24JUN24000CE", "status": "CANCELLED",
+                   "order_id": "O1", "filled_quantity": 50, "average_price": 101.5},
+            client=client)
+
+        assert pos.get("q1", "NIFTY24JUN24000CE").qty == 50
+        assert client.modified, "the trigger still sells 150 of something we hold 50 of"
+        assert client.modified[0][1]["orders"][0]["quantity"] == 50
+
+    @pytest.mark.asyncio
+    async def test_a_scale_in_arms_the_stop_for_the_total_holding(self):
+        """`register` overwrites by symbol, so a second buy used to store only the new
+        order's qty — the earlier lot kept no stop at all."""
+        _held("q2", qty=35, gtt_id=555)
+        client = _FakeClient()
+
+        await protection.arm_position(
+            client, "q2", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=35, lot_size=35, entry_premium=100.0, stop_premium=80.0,
+            order_id="O2", stop_mode="both")
+
+        held = pos.get("q2", "NIFTY24JUN24000CE")
+        assert held.qty == 70, "we hold two lots; the registry knew about one"
+        assert client.gtts[0]["orders"][0]["quantity"] == 70
+        # Both lots are accounted for by order id, so a fill postback for either one
+        # corrects that lot instead of re-totalling to it alone.
+        assert held.qty_by_order == {"O1": 35, "O2": 35}
+
+    @pytest.mark.asyncio
+    async def test_a_fill_on_the_new_lot_does_not_forget_the_old_one(self):
+        """The scale-in and the postback have to agree, or the fix that added the lot is
+        undone by the message confirming it."""
+        _held("q4", qty=35, gtt_id=555)   # order_id "O1"
+        client = _FakeClient()
+        await protection.arm_position(
+            client, "q4", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=35, lot_size=35, entry_premium=100.0, stop_premium=80.0,
+            order_id="O2", stop_mode="both")
+
+        await monitor.on_order_update(
+            "q4", {"tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+                   "order_id": "O2", "filled_quantity": 35, "average_price": 99.0},
+            client=client)
+
+        assert pos.get("q4", "NIFTY24JUN24000CE").qty == 70
+
+    @pytest.mark.asyncio
+    async def test_a_fill_postback_corrects_only_its_own_lot(self):
+        pos.reset("q3")
+        pos.register(pos.OpenPosition(
+            uid="q3", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=70, lot_size=35, entry_premium=100.0, stop_premium=80.0,
+            order_id="O2", status=pos.PENDING, gtt_id=555,
+            qty_by_order={"O1": 35, "O2": 35}))
+        client = _FakeClient()
+
+        await monitor.on_order_update(
+            "q3", {"tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+                   "order_id": "O2", "filled_quantity": 18, "average_price": 99.0},
+            client=client)
+
+        held = pos.get("q3", "NIFTY24JUN24000CE")
+        assert held.qty == 53, "the other lot was forgotten (35 + 18)"
+        assert client.modified[0][1]["orders"][0]["quantity"] == 53
+
+
+# ── 10. re-arming never adds a rival trigger ──────────────────────────────────
+
+class TestReArmingNeverAddsASecondTrigger:
+    @pytest.mark.asyncio
+    async def test_an_unconfirmed_cancel_retargets_the_old_trigger(self):
+        """Two resting SELLs against one long is the naked short this guard exists to
+        prevent — and it only LOGGED the cancel outcome before arming another."""
+        _held("s1", qty=35, gtt_id=555)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
+
+        armed = await protection.arm_position(
+            client, "s1", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=35, lot_size=35, entry_premium=100.0, stop_premium=80.0,
+            order_id="O2", stop_mode="both")
+
+        assert client.gtts == [], "a second trigger was armed for one position"
+        assert client.modified and client.modified[0][0] == 555
+        assert client.modified[0][1]["orders"][0]["quantity"] == 70
+        assert armed.gtt_id == 555
+
+    @pytest.mark.asyncio
+    async def test_a_trigger_that_can_be_neither_cancelled_nor_moved_is_not_replaced(self):
+        _held("s2", qty=35, gtt_id=555)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="active",
+                             move_fails=True)
+
+        armed = await protection.arm_position(
+            client, "s2", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=35, lot_size=35, entry_premium=100.0, stop_premium=80.0,
+            order_id="O2", stop_mode="broker")
+
+        assert client.gtts == []
+        assert armed.stale_gtt is True
+        assert armed.protected is False, "the board must not imply this stop is live"
+        assert "EARLIER GTT" in armed.describe()
+
+
+# ── 11. a stop that is not below the premium is not a stop ────────────────────
+
+class TestAStaleStopIsNotArmed:
+    @pytest.mark.asyncio
+    async def test_a_stop_above_the_live_premium_is_refused_but_the_position_is_tracked(
+            self, monkeypatch):
+        """An ended row's trail is frozen where the signal died. Armed as a GTT it
+        triggers on acceptance and market-sells the entry just made — while a position
+        with no registry row would also miss the expiry square-off."""
+        from app.services.exchanges.kite import accounts as kite_accounts
+        from app.services.kite_engine import service as ksvc
+        from app.services.kite_engine.scanner import scanner
+
+        client = _FakeClient(ltp=200.0)   # premium has fallen through the 255 trail
+
+        class _Acct:
+            user_id, id, is_paper, connected = "z-user", 1, False, True
+
+        monkeypatch.setattr(kite_accounts, "get_active", lambda uid: _Acct())
+        monkeypatch.setattr(kite_accounts, "acquire_client", lambda acct: _async(client))
+        monkeypatch.setattr(ksvc.live_safety, "assert_safe_to_trade",
+                            lambda **kw: type("D", (), {"allowed": True, "code": "", "reason": ""})())
+        monkeypatch.setattr(ksvc.live_safety, "check_idempotency", lambda key: None)
+        monkeypatch.setattr(ksvc.live_safety, "record_idempotency", lambda key, oid: None)
+        pos.reset("z-user")
+        scanner.snapshot("z-user").rows = [
+            TestManualOrdersAreProtected._board_row("BANKNIFTY26AUG57000CE", stop=255.0)]
+        try:
+            res = await ksvc.place_manual_order(
+                "z-user", "BANKNIFTY26AUG57000CE", "BUY", 35, exchange="NFO")
+        finally:
+            scanner._users.pop("z-user", None)
+
+        assert res["status"] == "ok" and res["protected"] is False
+        assert "above the live premium" in res["protection"]
+        assert client.gtts == [], "that GTT would have sold the entry immediately"
+        held = pos.get("z-user", "BANKNIFTY26AUG57000CE")
+        assert held is not None, "still tracked — the expiry square-off depends on it"
+        assert held.stop_premium == 0.0
+
+
+# ── 12. an exit that filled elsewhere must not leave a trigger behind ─────────
+
+class TestNoOrphanedTriggerAfterAnOutsideExit:
+    @pytest.mark.asyncio
+    async def test_reconciling_a_broker_exit_fill_clears_the_trigger(self):
+        """The exit may have come from a hand-placed SELL or the Kite web order book,
+        not from the GTT. Whatever is left resting would sell an option we no longer own."""
+        _held("o1", gtt_id=555)
+        client = _FakeClient()
+
+        await monitor.on_order_update(
+            "o1", {"tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+                   "order_id": "OTHER-9", "transaction_type": "SELL",
+                   "filled_quantity": 50, "average_price": 90.0}, client=client)
+
+        held = pos.get("o1", "NIFTY24JUN24000CE")
+        assert held.status == pos.CLOSED
+        assert client.cancelled == [555] and held.gtt_id == 0
+
+    @pytest.mark.asyncio
+    async def test_a_completed_exit_postback_cannot_resurrect_a_closed_position(self):
+        """With no order_id the postback falls into the ENTRY branch, which flipped a
+        CLOSED position back to OPEN at the exit price — and the next tick sold it again."""
+        _held("o2", gtt_id=0)
+        pos.close("o2", "NIFTY24JUN24000CE", reason="already exited")
+        client = _FakeClient()
+
+        await monitor.on_order_update(
+            "o2", {"tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+                   "order_id": "", "filled_quantity": 50, "average_price": 90.0},
+            client=client)
+
+        assert pos.get("o2", "NIFTY24JUN24000CE").status == pos.CLOSED
+
+
+# ── 13. a lost fill postback must not hide a position ────────────────────────
+
+class TestPendingPositionsAreReconciled:
+    @pytest.mark.asyncio
+    async def test_a_missing_postback_is_recovered_from_the_order_book(self, monkeypatch):
+        """PENDING is invisible to on_tick, the trail updater, the time stop AND the
+        expiry square-off. A dropped WS message left a real position guarded by nothing
+        but its GTT — and by nothing at all under stop_mode="monitor"."""
+        from app.services.kite_engine import service as ksvc
+
+        pos.reset("r9")
+        pos.register(pos.OpenPosition(
+            uid="r9", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=50, lot_size=50, entry_premium=100.0, stop_premium=80.0,
+            order_id="E1", status=pos.PENDING, gtt_id=555, opened_ms=1))
+        client = _FakeClient(order_history=[
+            {"status": "COMPLETE", "order_id": "E1", "filled_quantity": 50,
+             "average_price": 101.25, "transaction_type": "BUY"}])
+
+        await ksvc._reconcile_pending_positions(client, "r9")
+
+        held = pos.get("r9", "NIFTY24JUN24000CE")
+        assert held.status == pos.OPEN
+        assert held.fill_price == pytest.approx(101.25)
+
+
+# ── 14. "the broker did not say 404" is not evidence of anything ───────────────
+
+class TestAMissingTriggerIsProvedNotGuessed:
+    """The one honest gap left by the previous round. `stop_status` concluded ABSENT —
+    the verdict that lets us place our own exit — from a 404 and nothing else. Kite
+    does not promise a 404 for a trigger it no longer holds; a 400 `InputException` is
+    just as likely. On that answer the probe returned UNVERIFIED, the price stop stood
+    down, and the position sat open with NO exit at all — exactly the defect the round
+    set out to close, now merely announced instead of silent.
+
+    So a missing trigger is proved against two independent reads: the trigger list
+    (nothing resting → nothing will fire later) and the day's order book (nothing
+    filled or working → nothing fired already). ABSENT still needs positive evidence;
+    it is just no longer hostage to one HTTP status code.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_400_on_the_lookup_no_longer_strands_the_position(self):
+        """The headline case: deleted in the Kite app, and Kite answers the probe 400."""
+        p = _held("n1", stop=80.0)
+        client = _FakeClient(cancel_error="trigger not found", gtt_status="error")
+
+        sold = await monitor._exit_position(client, "n1", p, 79.0, price_stop_exit=True)
+
+        assert sold is True, (
+            "no trigger on the broker's list and no exit order in the book — nothing "
+            "was ever going to exit this position, so standing down abandons it"
+        )
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        assert client.calls[:5] == ["cancel", "get_gtt", "get_gtts", "get_orders", "sell"], (
+            "the two confirming reads must both happen, and only after the cheap one fails"
+        )
+        assert client.calls[5:] == ["cancel"], "the post-sell orphan chase still runs"
+
+    @pytest.mark.asyncio
+    async def test_a_filled_exit_in_the_order_book_still_blocks_our_sell(self):
+        """Same 400, but the trigger fired and its SELL is COMPLETE. Selling here is the
+        naked short. The order book is what tells the two apart."""
+        p = _held("n2", stop=80.0)
+        client = _FakeClient(
+            cancel_error="already triggered", gtt_status="error",
+            order_book=[{"tradingsymbol": "NIFTY24JUN24000CE", "transaction_type": "SELL",
+                         "status": "COMPLETE", "order_id": "GTT-SELL-1"}])
+
+        sold = await monitor._exit_position(client, "n2", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == [], "sold on top of the broker's own SELL"
+        assert pos.get("n2", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_rejected_exit_in_the_order_book_does_not_count(self):
+        """The trigger fired, the exchange bounced the SELL (freeze quantity, circuit,
+        margin). Trigger consumed, position unexited — and this is the case no GTT
+        status can express."""
+        p = _held("n3", stop=80.0)
+        client = _FakeClient(
+            cancel_error="already triggered", gtt_status="error",
+            order_book=[{"tradingsymbol": "NIFTY24JUN24000CE", "transaction_type": "SELL",
+                         "status": "REJECTED", "order_id": "GTT-SELL-2"}])
+
+        sold = await monitor._exit_position(client, "n3", p, 79.0, price_stop_exit=True)
+
+        assert sold is True, "a rejected SELL exits nothing — we are still long"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_working_exit_order_blocks_our_sell(self):
+        """OPEN, not COMPLETE: the broker's exit is live and will fill. Also a stand-down."""
+        p = _held("n4", stop=80.0)
+        client = _FakeClient(
+            cancel_error="already triggered", gtt_status="error",
+            order_book=[{"tradingsymbol": "NIFTY24JUN24000CE", "transaction_type": "SELL",
+                         "status": "OPEN", "order_id": "GTT-SELL-3"}])
+
+        sold = await monitor._exit_position(client, "n4", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == []
+
+    @pytest.mark.asyncio
+    async def test_our_own_entry_buy_is_not_mistaken_for_an_exit(self):
+        """The book also holds the BUY that opened this position. Reading that as "the
+        broker is exiting us" would strand every long."""
+        p = _held("n5", stop=80.0)
+        client = _FakeClient(
+            cancel_error="trigger not found", gtt_status="error",
+            order_book=[{"tradingsymbol": "NIFTY24JUN24000CE", "transaction_type": "BUY",
+                         "status": "COMPLETE", "order_id": "O1"}])
+
+        sold = await monitor._exit_position(client, "n5", p, 79.0, price_stop_exit=True)
+
+        assert sold is True and client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_sell_in_another_symbol_is_not_ours(self):
+        p = _held("n6", stop=80.0)
+        client = _FakeClient(
+            cancel_error="trigger not found", gtt_status="error",
+            order_book=[{"tradingsymbol": "BANKNIFTY24JUN52000CE",
+                         "transaction_type": "SELL", "status": "COMPLETE"}])
+
+        sold = await monitor._exit_position(client, "n6", p, 79.0, price_stop_exit=True)
+
+        assert sold is True and client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_trigger_still_on_the_list_is_believed_over_the_failed_lookup(self):
+        """The lookup erroring does not mean the trigger is gone. If the list still shows
+        it resting, it is going to fire and we stand down."""
+        p = _held("n7", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="error",
+                             gtt_book=[{"id": 555, "status": "active"}])
+
+        sold = await monitor._exit_position(client, "n7", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == []
+        assert "get_orders" not in client.calls, "no need to read the book — it is resting"
+
+    @pytest.mark.asyncio
+    async def test_an_inert_status_on_the_list_needs_the_order_book_too(self):
+        """Listed as cancelled is an inert status, so nothing will fire later — but the
+        trigger may have fired BEFORE being cancelled, so the book is still consulted."""
+        p = _held("n8", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="error",
+                             gtt_book=[{"id": 555, "status": "cancelled"}])
+
+        sold = await monitor._exit_position(client, "n8", p, 79.0, price_stop_exit=True)
+
+        assert sold is True and client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_order_book_stands_the_price_exit_down(self):
+        """Two reads are required, so failing the second one is UNVERIFIED — never a
+        licence to sell. The user is told, loudly."""
+        p = _held("n9", stop=80.0)
+        client = _FakeClient(cancel_error="trigger not found", gtt_status="error",
+                             book_error="orders")
+
+        sold = await monitor._exit_position(client, "n9", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == []
+        assert pos.get("n9", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_trigger_list_stands_the_price_exit_down(self):
+        p = _held("n10", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="error",
+                             book_error="gtts")
+
+        sold = await monitor._exit_position(client, "n10", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == []
+
+    @pytest.mark.asyncio
+    async def test_an_unrecognised_status_is_not_read_as_absent(self):
+        """A status this code does not know means the trigger EXISTS and its state is
+        unreadable. Guessing ABSENT there is the mistake that sells twice; the trigger
+        list is consulted instead."""
+        p = _held("n11", stop=80.0)
+        client = _FakeClient(cancel_error="gateway timeout", gtt_status="some_new_state")
+
+        sold = await monitor._exit_position(client, "n11", p, 79.0, price_stop_exit=True)
+
+        assert sold is False and client.sells == [], "sold on a status we cannot read"
+
+    @pytest.mark.asyncio
+    async def test_a_non_price_exit_is_still_performed_when_nothing_is_working(self):
+        """The other half: with the trigger gone and the book clean, a red-count or
+        expiry exit must go through as before."""
+        p = _held("n12", stop=80.0)
+        pos.update_health("n12", p.symbol, red_count=3, exit_mode="one_red")
+        client = _FakeClient(cancel_error="trigger not found", gtt_status="error")
+
+        out = await monitor.on_tick("n12", 777, 150.0, client=client)
+
+        assert out == "NIFTY24JUN24000CE"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_short_position_watches_the_buy_side(self):
+        """A short's exit is a BUY. Looking for a SELL there would find our own entry
+        and never find the exit."""
+        assert await protective_stop._exit_order_is_working(
+            _FakeClient(order_book=[{"tradingsymbol": "NIFTY24JUNFUT",
+                                     "transaction_type": "BUY", "status": "COMPLETE"}]),
+            "NIFTY24JUNFUT", "short") is True
+        assert await protective_stop._exit_order_is_working(
+            _FakeClient(order_book=[{"tradingsymbol": "NIFTY24JUNFUT",
+                                     "transaction_type": "SELL", "status": "COMPLETE"}]),
+            "NIFTY24JUNFUT", "short") is False
+
+    @pytest.mark.asyncio
+    async def test_without_a_symbol_a_missing_trigger_is_only_unverified(self):
+        """The order book cannot be consulted for an unnamed position, so the honest
+        answer is "may still be armed" — no caller may read ABSENT out of silence."""
+        client = _FakeClient(gtt_status="missing")
+
+        assert await protective_stop.stop_status(client, 555) == protective_stop.STOP_UNVERIFIED
+        assert await protective_stop.stop_status(
+            client, 555, tradingsymbol="NIFTY24JUN24000CE") == protective_stop.STOP_ABSENT

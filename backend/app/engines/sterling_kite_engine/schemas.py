@@ -267,6 +267,14 @@ class EngineOrderResponse(BaseModel):
     order_id: str
     status: str  # ok | duplicate
     message: str
+    #: Whether anything will exit this position without the user acting. A BUY that
+    #: could not be armed still returns status "ok" — the order IS live — so this is
+    #: the only field that distinguishes a protected entry from a bare one, and the
+    #: board must show the difference instead of rendering an SL/TSL/Target beside a
+    #: position that has none.
+    protected: bool = True
+    #: Human-readable detail: what was armed, or why nothing was.
+    protection: str = ""
 
 
 class HistorySignal(BaseModel):

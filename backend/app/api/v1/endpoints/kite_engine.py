@@ -247,7 +247,11 @@ async def place_order(body: EngineOrderRequest,
         raise HTTPException(502, detail=res.get("message", "Order failed"))
     return EngineOrderResponse(
         order_id=res.get("order_id", ""), status=res["status"],
-        message=res.get("message", ""))
+        message=res.get("message", ""),
+        # A BUY that could not be armed is still status "ok" (the order is live), so
+        # these two are the only way the board learns the position has no stop.
+        protected=bool(res.get("protected", True)),
+        protection=str(res.get("protection", "") or ""))
 
 
 @router.get("/detail/{token}")
@@ -303,8 +307,15 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
     if p:
         try:
             client = await _client(user)
-            if p.gtt_id:
-                await pstop.cancel_stop(client, p.gtt_id)
+            if p.gtt_id and not await pstop.cancel_stop(client, p.gtt_id):
+                # We are about to forget this position, so a trigger left armed becomes
+                # a resting SELL with nothing behind it — a naked short if it fires.
+                # `cancel_stop` returns False instead of raising, so the except below
+                # would never see this.
+                state.log(uid, "order_failed",
+                          f"⚠ {symbol} removed from the registry but its broker GTT "
+                          f"#{p.gtt_id} could NOT be cancelled — a resting SELL may still "
+                          f"be armed at Zerodha with nothing tracking it. Cancel it there.")
             if p.token:
                 await ticker_manager.unsubscribe(uid, [p.token])
         except Exception as _exc:# noqa: BLE001

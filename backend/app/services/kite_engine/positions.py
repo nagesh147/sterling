@@ -72,6 +72,14 @@ class OpenPosition:
     #: counter. Enforced BROKER-side as the second leg of an OCO GTT, so the
     #: exchange cancels the stop when the target fills and vice versa.
     target_premium: float = 0.0
+    #: order_id → quantity, one entry per entry order that makes up this holding.
+    #: A second hand-placed buy of a contract we already hold is a SCALE-IN: we end
+    #: up holding the SUM. This registry is keyed on symbol, so without a per-order
+    #: breakdown the row would carry only the newest order's qty while we hold more —
+    #: and ``qty`` is what every exit SELL, GTT quantity and PnL figure is derived
+    #: from, so the difference is a lot with no stop on it. Empty on legacy rows,
+    #: which keep the old single-order behaviour.
+    qty_by_order: Dict[str, int] = field(default_factory=dict)
     # derived threshold from exit_mode for convenience in responses/UI
 
 
@@ -140,14 +148,20 @@ def all_open_tokens(uid: str) -> List[int]:
 
 
 def mark_filled(uid: str, symbol: str, fill_price: float,
-                filled_qty: int = 0) -> Optional[OpenPosition]:
+                filled_qty: int = 0, order_id: str = "") -> Optional[OpenPosition]:
     """Confirm a fill. ``filled_qty``, when supplied by the broker postback, becomes
-    the position's quantity.
+    the quantity of the order it belongs to.
 
     The quantity matters as much as the price: every downstream number is derived
     from ``qty`` — the exit SELL, the GTT's order quantity, and the realized PnL. If
     2 of 3 intended lots fill and we keep believing we hold 3, both the broker stop
     and the monitor try to sell 3, and the extra lot is a naked short.
+
+    ``order_id`` is what makes that correction safe on a scaled-in holding: the
+    postback reports only ITS order's filled quantity, so writing it straight into
+    ``qty`` would silently forget every other lot. With the id we correct that lot
+    and re-total. Absent an id (legacy postbacks) the old whole-position behaviour
+    stands.
     """
     p = _load(uid).get(symbol)
     if p is None:
@@ -156,7 +170,15 @@ def mark_filled(uid: str, symbol: str, fill_price: float,
     if fill_price > 0:
         p.fill_price = float(fill_price)
     if filled_qty > 0:
-        p.qty = int(filled_qty)
+        oid = str(order_id or "")
+        if oid and p.qty_by_order:
+            p.qty_by_order[oid] = int(filled_qty)   # never drops the other lots
+            p.qty = sum(int(v) for v in p.qty_by_order.values())
+        elif oid:
+            p.qty_by_order = {oid: int(filled_qty)}
+            p.qty = int(filled_qty)
+        else:
+            p.qty = int(filled_qty)
     _persist(uid)
     return p
 

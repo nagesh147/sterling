@@ -282,14 +282,26 @@ export function usePlaceKiteOrder() {
     // have no live WS postback, and rejections (e.g. "Markets are closed").
     onSuccess: (data, body) => {
       qc.invalidateQueries({ queryKey: ['kite-orders'] });
+      qc.invalidateQueries({ queryKey: ['kite-engine-open-positions'] });
       const paper = !!data?.paper;
       const amo = !!data?.amo;  // backend auto-converted a market-closed order to AMO
+      // An F&O option BUY placed here is registered and armed by the engine (this is
+      // the endpoint the signal board's Buy reaches). Whether that succeeded is the
+      // single most important thing to say afterwards: the board renders an SL, a TSL
+      // and a Target beside the position either way, so an entry with nothing guarding
+      // it has to be named here rather than left looking protected.
+      const unprotected = data?.protected === false;
       notifyOrder({
-        kind: amo ? 'open' : 'placed',
-        title: paper ? 'Paper order placed' : amo ? 'Placed as AMO' : 'Order placed',
-        message: amo
+        kind: amo ? 'open' : unprotected ? 'info' : 'placed',
+        title: paper ? 'Paper order placed'
+          : amo ? 'Placed as AMO'
+          : unprotected ? 'Order placed — UNPROTECTED' : 'Order placed',
+        message: (amo
           ? `${body.transaction_type} ${body.quantity} ${body.tradingsymbol} — market closed, queued as an After-Market Order for the next open.`
-          : `${body.transaction_type} ${body.quantity} ${body.tradingsymbol}${paper ? ' (simulated)' : ''}.`,
+          : `${body.transaction_type} ${body.quantity} ${body.tradingsymbol}${paper ? ' (simulated)' : ''}.`)
+          + (data?.protection
+            ? ` ${unprotected ? 'No automatic exit' : 'Protected'}: ${data.protection}.`
+            : ''),
         orderId: data?.order_id,
       });
     },

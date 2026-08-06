@@ -645,8 +645,30 @@ async def place_order(body: PlaceOrderRequest, user: UserContext = Depends(get_c
     if prior:
         return {"order_id": prior, "deduplicated": True}
 
+    # ── F&O option orders get the engine's position protection ─────────────────
+    # This is the endpoint the signal board's Buy button actually reaches (Buy →
+    # OrderWindow → POST /kite/orders); the engine's own /kite/engine/order path is only
+    # the detail panel and the Telegram bot. Arming only that one left every entry
+    # clicked from the board with no registry row, no broker stop, no tick monitor and
+    # no expiry square-off — while the board rendered an SL, a TSL and a Target beside
+    # it. Options only, and never fatal: the order comes first, always.
+    is_opt = (str(body.exchange).upper() in ("NFO", "BFO")
+              and str(body.tradingsymbol).upper().endswith(("CE", "PE")))
+    is_opt_buy = is_opt and str(body.transaction_type).upper() == "BUY"
+    is_opt_sell = is_opt and str(body.transaction_type).upper() == "SELL"
+
     async def _do(c):
-        return await c._place(
+        disarm_note = ""
+        if is_opt_sell:
+            # Before the sell, not after: a GTT left resting once the user is flat is a
+            # naked short waiting to happen.
+            try:
+                from app.services.kite_engine import service as engine_service
+                disarm_note = await engine_service.disarm_for_manual_exit(
+                    c, user.user_id, body.tradingsymbol)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("kite manual-exit disarm failed for %s: %s", body.tradingsymbol, exc)
+        res = await c._place(
             variety=body.variety, exchange=body.exchange, tradingsymbol=body.tradingsymbol,
             transaction_type=body.transaction_type, quantity=body.quantity, product=body.product,
             order_type=body.order_type, price=body.price, trigger_price=body.trigger_price,
@@ -654,6 +676,20 @@ async def place_order(body: PlaceOrderRequest, user: UserContext = Depends(get_c
             validity_ttl=body.validity_ttl, iceberg_legs=body.iceberg_legs,
             iceberg_quantity=body.iceberg_quantity, tag=body.tag or idem_key,
         )
+        if disarm_note:
+            res = {**(res or {}), "protection": disarm_note}
+        placed_id = (res or {}).get("order_id", "")
+        if placed_id and is_opt_buy:
+            try:
+                from app.services.kite_engine import service as engine_service
+                res = {**(res or {}), **await engine_service.arm_manual_option_buy(
+                    c, user.user_id, option_symbol=body.tradingsymbol,
+                    exchange=body.exchange, quantity=int(body.quantity), order_id=placed_id)}
+            except Exception as exc:  # noqa: BLE001
+                log.warning("kite manual BUY arming failed for %s: %s", body.tradingsymbol, exc)
+                res = {**(res or {}), "protected": False,
+                       "protection": f"arming failed: {exc}"}
+        return res
 
     result = await _run(user, _do)
     oid = (result or {}).get("order_id", "")

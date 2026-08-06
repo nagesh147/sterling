@@ -19,7 +19,8 @@ exit itself is a market SELL of the held quantity via the warm client.
 """
 from __future__ import annotations
 
-from typing import Optional
+import time
+from typing import Dict, Optional, Tuple
 
 from app.core.logging import get_logger
 from app.engines.common.exit_counter import get_exit_threshold
@@ -53,6 +54,33 @@ def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None
         return
     sign = 1.0 if p.direction == "long" else -1.0
     state.record_realized_pnl(uid, (float(exit_price) - entry) * p.qty * sign)
+
+
+async def _resize_broker_stop(client, uid: str, p: pos.OpenPosition, old_qty: int) -> None:
+    """Re-arm the resting GTT for the quantity we actually hold.
+
+    A GTT carries its own order quantity, fixed when it was placed. When a partial fill
+    means we hold LESS than we intended, the trigger still sells the full intended size
+    and the surplus is a NAKED SHORT the moment it fires — the position the postback
+    just corrected is exactly the one whose stop is now wrong. A modify rewrites the
+    trigger whole, so one call fixes it (and covers a scale-in growing the qty too).
+    """
+    if client is None or not p.gtt_id or p.qty <= 0 or p.qty == old_qty or p.stop_premium <= 0:
+        return
+    moved = await pstop.move_stop(
+        client, trigger_id=p.gtt_id, tradingsymbol=p.symbol, exchange=p.exchange,
+        qty=p.qty, trigger_premium=p.stop_premium,
+        last_price=float(p.fill_price or p.entry_premium or p.stop_premium),
+        direction=p.direction,
+        target_premium=float(getattr(p, "target_premium", 0.0) or 0.0))
+    if moved:
+        state.log(uid, "info",
+                  f"Protective GTT #{p.gtt_id} resized {old_qty} → {p.qty} qty for {p.symbol}")
+    elif p.qty < old_qty:
+        state.log(uid, "order_failed",
+                  f"⚠ {p.symbol}: only {p.qty} of {old_qty} filled but GTT #{p.gtt_id} still "
+                  f"sells {old_qty} — the surplus {old_qty - p.qty} would be a NAKED SHORT if "
+                  f"it fires. Fix the trigger quantity in Zerodha now.")
 
 
 async def on_order_update(uid: str, order: dict, *, client=None) -> None:
@@ -97,6 +125,22 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             pos.close(uid, symbol,
                       reason=(f"broker stop/exit fill @ ₹{avg:.2f}" if avg else "broker stop/exit fill"))
             _record_realized(uid, p, avg)
+            # The exit may have come from somewhere other than the GTT — a hand-placed
+            # SELL, another app, the Kite web order book. Anything still resting is now
+            # an ORPHAN: a SELL with no position behind it, i.e. a naked short if it
+            # fires. If the GTT is what filled, this cancel is a harmless no-op.
+            if p.gtt_id and client is not None:
+                gid = int(p.gtt_id)
+                outcome = await pstop.cancel_stop_result(client, gid)
+                if outcome != pstop.CANCELLED and await pstop.stop_status(
+                        client, gid, tradingsymbol=symbol,
+                        direction=p.direction) == pstop.STOP_ACTIVE:
+                    state.log(uid, "order_failed",
+                              f"⚠ {symbol} is flat but its GTT #{gid} is still ACTIVE at "
+                              f"Zerodha — it would sell an option you no longer own. Cancel it "
+                              f"there now.")
+                pos.update_stop(uid, symbol, p.stop_premium, gtt_id=0)
+                _stop_probe.pop((uid, symbol, gid), None)
             if p.guard_key:
                 state.clear_auto_open(uid, p.guard_key)
             if p.token:
@@ -111,22 +155,31 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 
         filled = int(float(order.get("filled_quantity") or 0) or 0)
 
-        if status == _FILLED_STATUS and (is_entry or not oid):
+        # A COMPLETE that is not the entry and carries no order_id lands here too. It must
+        # not RESURRECT a position we already closed: mark_filled would flip it back to
+        # OPEN at the exit price, and the next tick would sell it a second time.
+        if (status == _FILLED_STATUS and (is_entry or not oid)
+                and p.status in (pos.PENDING, pos.OPEN)):
             avg = float(order.get("average_price") or 0.0)
-            pos.mark_filled(uid, symbol, avg, filled_qty=filled)
-            qty_note = f" ({filled} qty)" if filled and filled != p.qty else ""
+            old_qty = int(p.qty or 0)
+            pos.mark_filled(uid, symbol, avg, filled_qty=filled, order_id=oid)
+            qty_note = f" ({filled} qty)" if filled and filled != old_qty else ""
             state.log(uid, "info",
                       f"Fill confirmed: {symbol} @ ₹{avg:.2f}{qty_note} (#{oid})")
+            await _resize_broker_stop(client, uid, p, old_qty)
         elif status in _DEAD_STATUSES and (is_entry or not oid):
             if filled > 0:
                 # PARTIALLY filled then cancelled: we DO hold something. Treating this
                 # as a rejection would leave a real position with no registry entry, no
                 # stop, no monitor and no expiry square-off — invisible and unguarded.
                 avg = float(order.get("average_price") or 0.0)
-                pos.mark_filled(uid, symbol, avg, filled_qty=filled)
+                old_qty = int(p.qty or 0)
+                pos.mark_filled(uid, symbol, avg, filled_qty=filled, order_id=oid)
                 state.log(uid, "info",
                           f"⚠ {symbol} {status.lower()} after a PARTIAL fill — holding "
                           f"{filled} qty @ ₹{avg:.2f}; protection kept on the filled part")
+                # …and resized to it. The GTT was armed for the full intended size.
+                await _resize_broker_stop(client, uid, p, old_qty)
                 return
             # Nothing filled → the position does not exist. Any protective GTT armed for
             # it is now an ORPHAN: a resting SELL with nothing to sell, which opens a
@@ -153,24 +206,49 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         log.debug("kite monitor on_order_update error for %s: %s", uid, exc)
 
 
-def _is_price_breach(p: pos.OpenPosition, ltp: float) -> bool:
-    """True when the live price has reached the level the BROKER GTT is also armed at.
+#: (uid, symbol, gtt_id) → (monotonic ts, verdict) of the last "what became of this
+#: trigger?" probe. A position we stand down on re-enters ``_exit_position`` on EVERY
+#: tick, and asking the broker each time would burn the 3 req/s limit for an answer
+#: that does not change second to second.
+_stop_probe: Dict[Tuple[str, str, int], Tuple[float, str]] = {}
+_PROBE_TTL_S = 15.0
 
-    This is the one case where our own exit is redundant: the same price that made us
-    want out has already triggered the broker's stop.
+
+async def _broker_stop_status(client, uid: str, p: pos.OpenPosition) -> str:
+    """``protective_stop.stop_status`` for this position, rate-limited (see _stop_probe).
+
+    The symbol and direction are required, not optional: without them the probe cannot
+    consult the order book and a trigger the broker no longer holds comes back
+    UNVERIFIED, which stands a price-stop exit down instead of performing it.
     """
-    if not p.gtt_id or p.stop_premium <= 0 or ltp <= 0:
-        return False
-    return pos.should_exit(p.stop_premium, ltp, p.direction)
+    key = (uid, p.symbol, int(p.gtt_id))
+    now = time.monotonic()
+    hit = _stop_probe.get(key)
+    if hit is not None and (now - hit[0]) < _PROBE_TTL_S:
+        return hit[1]
+    status = await pstop.stop_status(client, int(p.gtt_id),
+                                     tradingsymbol=p.symbol, direction=p.direction)
+    _stop_probe[key] = (now, status)
+    return status
 
 
 async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
-                         reason: Optional[str] = None) -> bool:
+                         reason: Optional[str] = None, *,
+                         price_stop_exit: bool = False) -> bool:
     """Market-exit the full quantity and clear any broker GTT (trail breach, red count,
     target, expiry, time stop, manual close). Returns True only when an exit order was
     actually placed — a caller that reports "exited" on a bail would tell the user (and
     the activity log) that a position was closed while it is still open.
-    For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
+    For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short).
+
+    ``price_stop_exit`` is the caller's INTENT, and only the price-trail branch of
+    ``on_tick`` may pass True. It is a parameter rather than something inferred from
+    ``ltp`` because the two are not the same question: a manual exit passes the stop
+    itself as its price, and an expiry square-off or a red-count exit routinely
+    happens with the premium already below the stop. Inferring intent from price
+    classified all of those as price-stop exits and stood down on them — i.e. the
+    exits that the broker's stop will NEVER perform for us were the ones we skipped.
+    """
     # Claim the exit synchronously (single-threaded loop → check-then-add is atomic):
     # if another exit path already holds this claim, or the position is no longer live,
     # bail without placing a duplicate SELL. The claim is released on placement failure
@@ -194,19 +272,48 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # of the way — or if this exit is NOT a price breach (a red-count, target, expiry
     # or manual exit will never be executed by the GTT, so we must do it ourselves
     # even when the cancel could not be confirmed).
+    old_gtt = int(p.gtt_id or 0)
+    outcome = pstop.CANCELLED
     if p.gtt_id:
         outcome = await pstop.cancel_stop_result(client, p.gtt_id)
-        if outcome != pstop.CANCELLED and _is_price_breach(p, ltp):
-            _exiting.discard(key)
-            state.log(uid, "info",
-                      f"{p.symbol}: broker GTT #{p.gtt_id} could not be cancelled "
-                      f"({outcome}) and price is at the stop — leaving the exit to the "
-                      f"broker rather than risking a second SELL. Awaiting its fill.")
-            return False
-        if outcome == pstop.UNKNOWN:
-            state.log(uid, "info",
-                      f"⚠ {p.symbol}: GTT #{p.gtt_id} cancel unconfirmed; exiting anyway "
-                      f"because this is not a price-stop exit ({reason or 'no reason given'})")
+        if outcome != pstop.CANCELLED:
+            # A failed cancel does not say what we need to know. It covers "it already
+            # fired and is selling for us" (we must NOT add a second SELL) and "it is not
+            # there any more and nothing will ever exit this position" (we MUST sell) —
+            # the user may have deleted it in the Kite app, or it fired and its market
+            # SELL was rejected. Only the broker can tell them apart, so ask.
+            status = await _broker_stop_status(client, uid, p)
+            if status == pstop.STOP_TRIGGERED:
+                # The broker's exit is already out. This also catches the OCO's TARGET
+                # leg, which fires on the way UP and so is invisible to any
+                # price-against-the-stop test.
+                _exiting.discard(key)
+                state.log(uid, "info",
+                          f"{p.symbol}: broker GTT #{p.gtt_id} has TRIGGERED ({outcome}) — "
+                          f"its SELL is the exit; not placing a second one. Awaiting its fill.")
+                return False
+            if price_stop_exit and status != pstop.STOP_ABSENT:
+                # Still armed at this very price: it will fire on its own.
+                _exiting.discard(key)
+                unverified = status == pstop.STOP_UNVERIFIED
+                state.log(uid, "order_failed" if unverified else "info",
+                          f"{p.symbol}: broker GTT #{p.gtt_id} could not be cancelled "
+                          f"({outcome}) and price is at the stop; the broker says it is "
+                          f"{status} — leaving the exit to it rather than risking a second "
+                          f"SELL." + (" ⚠ COULD NOT VERIFY — check Zerodha now, this position "
+                                      "may have no stop at all." if unverified else
+                                      " Awaiting its fill."))
+                return False
+            if status == pstop.STOP_ABSENT:
+                state.log(uid, "order_failed",
+                          f"⚠ {p.symbol}: GTT #{p.gtt_id} is NOT at the broker any more "
+                          f"({outcome}/{status}) — exiting from here instead of waiting for "
+                          f"a fill that is never coming")
+            else:
+                state.log(uid, "info",
+                          f"⚠ {p.symbol}: GTT #{p.gtt_id} cancel unconfirmed ({outcome}/"
+                          f"{status}); exiting anyway — the broker's stop would never "
+                          f"perform this exit ({reason or 'no reason given'})")
 
     try:
         if is_futures:
@@ -219,6 +326,15 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                 tag=f"trailexit:{p.symbol}")
     except Exception as exc:  # noqa: BLE001
         _exiting.discard(key)
+        if old_gtt and outcome == pstop.CANCELLED:
+            # We took the broker's stop off and then failed to sell. The position has no
+            # protection at all right now, and leaving the id set would make every later
+            # tick "defer to the broker" for a trigger we cancelled ourselves.
+            pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
+            _stop_probe.pop((uid, p.symbol, old_gtt), None)
+            state.log(uid, "order_failed",
+                      f"⚠ {p.symbol}: broker stop #{old_gtt} was cancelled but the exit "
+                      f"{exit_side.upper()} FAILED — this position has NO stop right now")
         state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
         return False
     breach_dir = "≥" if p.direction == "short" else "≤"
@@ -226,6 +342,20 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     pos.close(uid, p.symbol, reason=close_reason)
     _exiting.discard(key)  # closed now; status guard keeps later exits out
     _record_realized(uid, p, ltp)
+    if old_gtt:
+        # We just sold. Any trigger still resting at Zerodha is now an ORPHAN — a SELL
+        # with nothing behind it, which opens a naked short if it fires. One retry, then
+        # tell the operator; this is the case the code cannot fix by itself.
+        if outcome != pstop.CANCELLED and await pstop.cancel_stop_result(
+                client, old_gtt) != pstop.CANCELLED:
+            state.log(uid, "order_failed",
+                      f"⚠ {p.symbol} is closed but its GTT #{old_gtt} could not be "
+                      f"cancelled — a resting SELL may still be armed at Zerodha with no "
+                      f"position behind it. Cancel it there now.")
+        # Never keep a stale trigger id: re-entering this contract later would try to
+        # cancel it and read the failure as "a rival stop may be live".
+        pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
+        _stop_probe.pop((uid, p.symbol, old_gtt), None)
     if p.guard_key:
         state.clear_auto_open(uid, p.guard_key)
     state.log(uid, "order_placed",
@@ -278,7 +408,10 @@ async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
                 else:
                     close_reason = (f"target reached @ ₹{ltp:.2f} "
                                     f"{'≥' if p.direction == 'long' else '≤'} ₹{target:.2f}")
-                exited = await _exit_position(client, uid, p, ltp, reason=close_reason)
+                # Only the price branch may claim to be a price-stop exit: it is the one
+                # exit the broker's own GTT would also perform.
+                exited = await _exit_position(client, uid, p, ltp, reason=close_reason,
+                                              price_stop_exit=bool(price_exit))
                 return p.symbol if exited else None
             return None
     except Exception as exc:  # noqa: BLE001
