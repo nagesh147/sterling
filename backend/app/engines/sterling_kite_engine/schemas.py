@@ -56,6 +56,12 @@ class EngineSignalRow(BaseModel):
     # Live red-counter progress at the latest bar, "<reds>/<threshold> red" (threshold
     # from exit_mode). The Exit column; None for legacy cached rows.
     exit_state: Optional[str] = None
+    #: How many of the three SuperTrend lines are against ``direction`` ON THE LATEST
+    #: CLOSED BAR — always live, never frozen. ``alignment`` is the ENTRY bar's chip and
+    #: ``exit_state`` freezes at the exit bar for an ended row, so neither can drive the
+    #: red-count exit of an OPEN position. Reading the entry chip instead is what made
+    #: every bear position report 3/3 the moment it opened.
+    current_reds: int = 0
     # Why this entry ended, when it has ("trail breach (≤ 1000.63)" / "red count exit
     # 3/3 (three_red_signal)"). None while the trade is still running. The red counter
     # and the trailing stop are independent rules and either can end a trade, so

@@ -1127,3 +1127,358 @@ class TestAMissingTriggerIsProvedNotGuessed:
         assert await protective_stop.stop_status(client, 555) == protective_stop.STOP_UNVERIFIED
         assert await protective_stop.stop_status(
             client, 555, tradingsymbol="NIFTY24JUN24000CE") == protective_stop.STOP_ABSENT
+
+
+# ── 15. auto-exec must not open what it cannot exit ───────────────────────────
+
+def _spot_row(underlying="RELIANCE", direction="long", *, current_reds=0, ts=1000):
+    """A SPOT-source signal row: the leg carries no premium, so entry and stop have to
+    be resolved from a live quote (the case that used to fail open)."""
+    from app.engines.sterling_kite_engine.schemas import (
+        AlignmentChip, EngineSignalRow, OptionLeg)
+    opt = "CE" if direction == "long" else "PE"
+    trend = 1 if direction == "long" else -1
+    return EngineSignalRow(
+        underlying=underlying, token=111, exchange="NFO",
+        regime="BULL" if direction == "long" else "BEAR",
+        # The ENTRY-bar chip: fully aligned WITH the trade. Counting these against a
+        # position is the bug - for a bear signal all three are -1.
+        alignment=AlignmentChip(fast=trend, mid=trend, slow=trend),
+        direction=direction, option_type=opt,
+        legs=[OptionLeg(moneyness="ATM", option_type=opt,
+                        option_symbol=f"{underlying}25JUN3000{opt}",
+                        strike=3000, expiry="2026-06-26", lot_size=250)],
+        spot=3010.0, stop_loss=2950.0 if direction == "long" else 3070.0,
+        score=85.0, timestamp_ms=ts, current_reds=current_reds)
+
+
+class _QuotelessClient:
+    """A broker that cannot answer a quote - strike untraded today, or the call was
+    rate-limited and swallowed. entry_premium and therefore stop_premium resolve to 0."""
+
+    def __init__(self):
+        self.placed: list = []
+
+    async def place_order_option(self, sym, side, size, **kw):
+        self.placed.append((sym, side, size, kw.get("stop_loss")))
+        return {"order_id": "O-" + sym}
+
+    async def place_gtt(self, **kw):
+        return {"trigger_id": 4242}
+
+
+class _QuotingClient(_QuotelessClient):
+    def __init__(self, ltp: float = 90.0):
+        super().__init__()
+        self.ltp = ltp
+
+    async def get_ltp(self, keys):
+        return {k: {"last_price": self.ltp} for k in keys}
+
+
+class TestAutoExecNeverOpensAnUnprotectablePosition:
+    """The engine placed a REAL market BUY when the premium quote came back empty, then
+    armed nothing: place_stop refuses a trigger of 0, should_exit(0, ltp) is False on
+    every tick, and _retranslated_stop cannot re-derive a level from an entry premium of
+    0 - so the stop stayed 0 for the life of the trade. The terminal printed
+    "[both stop+monitor]" over it, because the log reported the CONFIG rather than what
+    was installed. Only the T-1 expiry square-off would ever close it."""
+
+    @pytest.mark.asyncio
+    async def test_no_resolvable_stop_means_no_order_at_all(self):
+        from app.services.kite_engine import service, state
+        state.reset("nx1")
+        client = _QuotelessClient()
+
+        cb = service._make_place_cb(client, "nx1")
+        await cb(_spot_row(), None)
+
+        assert client.placed == [], (
+            "auto-exec is unattended - opening a position with no resolvable stop means "
+            "no GTT, an inert monitor, and no way to ever acquire one"
+        )
+        kinds = [e.kind for e in state.activity("nx1")]
+        assert "order_blocked" in kinds and "order_placed" not in kinds
+
+    @pytest.mark.asyncio
+    async def test_the_guard_does_not_block_a_resolvable_entry(self):
+        """The abort must be narrow: a quote that answers still trades."""
+        from app.services.kite_engine import service, state
+        state.reset("nx2")
+        pos.reset("nx2")
+        client = _QuotingClient(ltp=90.0)
+
+        cb = service._make_place_cb(client, "nx2")
+        await cb(_spot_row(), None)
+
+        assert len(client.placed) == 1
+        sym, side, size, stop_loss = client.placed[0]
+        assert side == "buy" and size == 250
+        assert stop_loss is not None and stop_loss > 0, (
+            "the resolved premium stop must reach the broker, not None")
+
+    @pytest.mark.asyncio
+    async def test_the_log_reports_the_stop_installed_not_the_one_configured(self):
+        from app.services.kite_engine import service, state
+        state.reset("nx3")
+        pos.reset("nx3")
+        client = _QuotingClient(ltp=90.0)
+
+        cb = service._make_place_cb(client, "nx3")
+        await cb(_spot_row(), None)
+
+        placed = [e for e in state.activity("nx3") if e.kind == "order_placed"]
+        assert placed, "the entry should have gone through"
+        line = placed[-1].message
+        assert "broker GTT #4242" in line, (
+            f"the log must name the protection actually armed, got: {line}")
+
+
+# ── 16. the red counter is defined against the SIGNAL, not the premium side ───
+
+class TestRedCountUsesTheSignalNotTheOptionSide:
+    """Every option position is LONG in premium space, CE and PE alike. The old code fed
+    that `direction` to the red counter, so for a bear signal - whose three SuperTrends
+    are all -1 by definition at entry - it counted 3 of 3 against the position it had
+    just opened. exit_mode "one_red" fires at 1, so the PE was market-sold on the first
+    tick after the first post-entry scan, with the trend still perfectly in its favour.
+    It also read the ENTRY-bar alignment chip, which never moves, and took whichever row
+    matched the underlying first - the bull row, for a bear position."""
+
+    @staticmethod
+    def _open(uid, symbol, *, signal_direction, underlying="RELIANCE", reds=0):
+        pos.reset(uid)
+        p = pos.register(pos.OpenPosition(
+            uid=uid, symbol=symbol, exchange="NFO", token=111, qty=250, lot_size=250,
+            entry_premium=90.0, stop_premium=70.0, order_id="O1", status=pos.OPEN,
+            direction="long", signal_direction=signal_direction,
+            underlying=underlying, exit_mode="one_red", current_red_count=reds))
+        return p
+
+    @staticmethod
+    def _snapshot(uid, rows):
+        from app.services.kite_engine.scanner import scanner
+        snap = scanner.snapshot(uid)
+        snap.rows = list(rows)
+        return snap
+
+    @pytest.mark.asyncio
+    async def test_a_bear_position_is_not_red_counted_out_the_moment_it_opens(self):
+        from app.services.kite_engine import service, state
+        state.reset("rc1")
+        self._open("rc1", "RELIANCE25JUN3000PE", signal_direction="short")
+        # The bear row's SuperTrends are all -1 (that IS the bear signal), and the live
+        # count against a SHORT signal is 0 - nothing has turned against it yet.
+        self._snapshot("rc1", [_spot_row(direction="short", current_reds=0)])
+
+        await service._update_open_position_trails(_QuotingClient(), "rc1")
+
+        held = pos.get("rc1", "RELIANCE25JUN3000PE")
+        assert held.current_red_count == 0, (
+            "counted the bear signal's own alignment as 3 reds against itself - the "
+            "monitor would market-sell this on the next tick")
+
+    @pytest.mark.asyncio
+    async def test_a_real_reversal_still_counts(self):
+        """The other half: when the trend genuinely turns, the counter must fire."""
+        from app.services.kite_engine import service, state
+        state.reset("rc2")
+        self._open("rc2", "RELIANCE25JUN3000PE", signal_direction="short")
+        self._snapshot("rc2", [_spot_row(direction="short", current_reds=2)])
+
+        await service._update_open_position_trails(_QuotingClient(), "rc2")
+
+        assert pos.get("rc2", "RELIANCE25JUN3000PE").current_red_count == 2
+
+    @pytest.mark.asyncio
+    async def test_the_counter_comes_from_the_row_of_the_same_direction(self):
+        """scan_source="both" yields a bull row AND a bear row per underlying. The old
+        loop took the first match on underlying and broke, so a bear position could read
+        the bull row's counter."""
+        from app.services.kite_engine import service, state
+        state.reset("rc3")
+        self._open("rc3", "RELIANCE25JUN3000PE", signal_direction="short")
+        self._snapshot("rc3", [
+            _spot_row(direction="long", current_reds=3),   # the WRONG row, listed first
+            _spot_row(direction="short", current_reds=1),  # ours
+        ])
+
+        await service._update_open_position_trails(_QuotingClient(), "rc3")
+
+        assert pos.get("rc3", "RELIANCE25JUN3000PE").current_red_count == 1
+
+    @pytest.mark.asyncio
+    async def test_a_bull_position_reads_the_bull_row(self):
+        from app.services.kite_engine import service, state
+        state.reset("rc4")
+        self._open("rc4", "RELIANCE25JUN3000CE", signal_direction="long")
+        self._snapshot("rc4", [
+            _spot_row(direction="short", current_reds=3),
+            _spot_row(direction="long", current_reds=0),
+        ])
+
+        await service._update_open_position_trails(_QuotingClient(), "rc4")
+
+        assert pos.get("rc4", "RELIANCE25JUN3000CE").current_red_count == 0
+
+    @pytest.mark.asyncio
+    async def test_no_matching_row_leaves_the_last_count_alone(self):
+        """A scan whose universe no longer covers this underlying must not silently
+        reset the counter to 0 - that disarms the red exit for a position already in
+        trouble."""
+        from app.services.kite_engine import service, state
+        state.reset("rc5")
+        self._open("rc5", "RELIANCE25JUN3000PE", signal_direction="short", reds=2)
+        self._snapshot("rc5", [_spot_row(underlying="INFY", direction="short",
+                                         current_reds=0)])
+
+        await service._update_open_position_trails(_QuotingClient(), "rc5")
+
+        assert pos.get("rc5", "RELIANCE25JUN3000PE").current_red_count == 2
+
+    @pytest.mark.asyncio
+    async def test_the_signal_direction_is_recorded_at_entry(self):
+        """It cannot be inferred from the CE/PE suffix: a derivatives-source row runs the
+        SuperTrend on the contract's own premium series, so a PE bought there really is a
+        LONG signal. It has to be stamped when the position is armed."""
+        from app.services.kite_engine import service, state
+        state.reset("rc6")
+        pos.reset("rc6")
+        client = _QuotingClient(ltp=90.0)
+
+        cb = service._make_place_cb(client, "rc6")
+        await cb(_spot_row(direction="short"), None)
+
+        held = pos.get("rc6", "RELIANCE25JUN3000PE")
+        assert held is not None, "the bear entry should have been registered"
+        assert held.direction == "long", "buying a PE is long in premium space"
+        assert held.signal_direction == "short", "…but the SIGNAL is short"
+
+
+# ── 17. a trigger that was orphaned BEFORE we were watching ───────────────────
+
+class _GttBookClient:
+    def __init__(self, triggers, net=None, fail=False):
+        self.triggers, self.net, self.fail = triggers, net or [], fail
+        self.deleted: list = []
+
+    async def get_gtts(self):
+        if self.fail:
+            raise RuntimeError("gtt list unreachable")
+        return list(self.triggers)
+
+    async def get_positions_raw(self):
+        return {"net": list(self.net), "day": []}
+
+    async def delete_gtt(self, tid):
+        self.deleted.append(tid)
+        return {"trigger_id": tid}
+
+
+def _trigger(tid, sym, status="active"):
+    return {"id": tid, "status": status,
+            "condition": {"tradingsymbol": sym, "exchange": "NFO"}}
+
+
+class TestOrphanedStopsAreReported:
+    """Every path that CREATES an orphan is closed at the point it happens. This is the
+    one nobody covers: a trigger already resting when the process started, or one left
+    behind by a cancel that failed and only logged. Nothing ever looked again."""
+
+    @pytest.mark.asyncio
+    async def test_a_resting_trigger_with_no_holding_is_reported(self):
+        from app.services.kite_engine import service, state
+        state.reset("o1")
+        pos.reset("o1")
+        service._orphan_warned.clear()
+        client = _GttBookClient([_trigger(901, "NIFTY24JUN24000CE")])
+
+        await service._reconcile_orphan_stops(client, "o1")
+
+        msgs = [e.message for e in state.activity("o1") if e.kind == "order_failed"]
+        assert any("ORPHANED STOP" in m and "#901" in m for m in msgs), msgs
+
+    @pytest.mark.asyncio
+    async def test_it_never_cancels_anything(self):
+        """It cannot tell our abandoned trigger from a stop the user placed by hand, and
+        deleting theirs would remove the protection they were relying on."""
+        from app.services.kite_engine import service, state
+        state.reset("o2")
+        pos.reset("o2")
+        service._orphan_warned.clear()
+        client = _GttBookClient([_trigger(902, "NIFTY24JUN24000CE")])
+
+        await service._reconcile_orphan_stops(client, "o2")
+
+        assert client.deleted == []
+
+    @pytest.mark.asyncio
+    async def test_a_trigger_over_a_real_holding_is_left_alone(self):
+        """Whoever placed it, a stop on something the user actually holds is doing its
+        job — warning about it would train them to ignore the alert."""
+        from app.services.kite_engine import service, state
+        state.reset("o3")
+        pos.reset("o3")
+        service._orphan_warned.clear()
+        client = _GttBookClient(
+            [_trigger(903, "NIFTY24JUN24000CE")],
+            net=[{"tradingsymbol": "NIFTY24JUN24000CE", "quantity": 75}])
+
+        await service._reconcile_orphan_stops(client, "o3")
+
+        assert not [e for e in state.activity("o3") if e.kind == "order_failed"]
+
+    @pytest.mark.asyncio
+    async def test_our_own_open_position_is_not_an_orphan(self):
+        """Registered but not yet reflected in the broker's net (a PENDING entry)."""
+        from app.services.kite_engine import service, state
+        state.reset("o4")
+        pos.reset("o4")
+        service._orphan_warned.clear()
+        pos.register(pos.OpenPosition(
+            uid="o4", symbol="NIFTY24JUN24000CE", exchange="NFO", qty=75,
+            order_id="O1", status=pos.PENDING, gtt_id=904))
+        client = _GttBookClient([_trigger(904, "NIFTY24JUN24000CE")])
+
+        await service._reconcile_orphan_stops(client, "o4")
+
+        assert not [e for e in state.activity("o4") if e.kind == "order_failed"]
+
+    @pytest.mark.asyncio
+    async def test_a_triggered_trigger_is_not_an_orphan(self):
+        """It has already fired — it cannot sell anything again."""
+        from app.services.kite_engine import service, state
+        state.reset("o5")
+        pos.reset("o5")
+        service._orphan_warned.clear()
+        client = _GttBookClient([_trigger(905, "NIFTY24JUN24000CE", status="triggered")])
+
+        await service._reconcile_orphan_stops(client, "o5")
+
+        assert not [e for e in state.activity("o5") if e.kind == "order_failed"]
+
+    @pytest.mark.asyncio
+    async def test_the_same_orphan_is_reported_once_not_every_scan(self):
+        from app.services.kite_engine import service, state
+        state.reset("o6")
+        pos.reset("o6")
+        service._orphan_warned.clear()
+        client = _GttBookClient([_trigger(906, "NIFTY24JUN24000CE")])
+
+        await service._reconcile_orphan_stops(client, "o6")
+        await service._reconcile_orphan_stops(client, "o6")
+
+        hits = [e for e in state.activity("o6") if "ORPHANED STOP" in e.message]
+        assert len(hits) == 1
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_book_is_silent_not_noisy(self):
+        """A network blip must not manufacture an alarm about triggers we never saw."""
+        from app.services.kite_engine import service, state
+        state.reset("o7")
+        pos.reset("o7")
+        service._orphan_warned.clear()
+
+        await service._reconcile_orphan_stops(_GttBookClient([], fail=True), "o7")
+
+        assert not [e for e in state.activity("o7") if e.kind == "order_failed"]

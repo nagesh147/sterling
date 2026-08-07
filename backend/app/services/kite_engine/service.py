@@ -657,6 +657,24 @@ def _make_place_cb(client, uid: str):
 
         # ── live safety (Kite is INR; USD daily-loss breaker is crypto-only) ───
         trade_side = "BUY" if (not use_futures or signal_dir == "long") else "SELL"
+        # ── no stop, no trade ─────────────────────────────────────────────────
+        # An unresolved premium (strike has not traded yet today, quote rate-limited,
+        # `_resolve_premium_stop` swallowed an error) leaves stop_px at 0. Everything
+        # downstream then degrades silently: place_stop refuses a trigger of 0 so no GTT
+        # is armed, positions.should_exit(0, ltp) is False on every tick so the monitor
+        # is inert, and _retranslated_stop cannot re-derive a level from an entry premium
+        # of 0 — so the stop stays 0 for the life of the position. The result is a real,
+        # automatic, unattended BUY with no exit of any kind until the expiry square-off.
+        # AUTO-EXEC IS UNATTENDED: a position we cannot protect must not be opened at all.
+        # (The manual path deliberately does the opposite — the user asked for the fill,
+        # and gets an explicit "UNPROTECTED" warning instead of a refusal.)
+        if stop_px <= 0:
+            state.log(uid, "order_blocked",
+                      f"{row.underlying} {trade_symbol}: NO STOP could be resolved "
+                      f"(premium quote unavailable) — auto-entry skipped rather than "
+                      f"opened unprotected")
+            return
+
         idem = live_safety.make_idempotency_key(uid, trade_symbol, trade_side, qty, row.timestamp_ms)
         decision = live_safety.assert_safe_to_trade(
             positions=[], idempotency_key=idem, check_daily_loss=False)
@@ -697,18 +715,26 @@ def _make_place_cb(client, uid: str):
             client, uid, symbol=trade_symbol, exchange=trade_exchange,
             token=trade_token, qty=qty, lot_size=trade_lot,
             entry_premium=entry_px, stop_premium=stop_px, order_id=oid,
-            stop_mode=cfg.stop_mode, direction=pos_direction, vehicle=vehicle_label,
+            stop_mode=cfg.stop_mode, direction=pos_direction,
+            # The red counter is defined against the SIGNAL, not the premium side.
+            signal_direction=signal_dir, vehicle=vehicle_label,
             underlying=row.underlying, exit_mode=cfg.exit_mode, guard_key=guard_key,
             entry_spot=pos_entry_spot, entry_delta=pos_delta,
             strike=pos_strike, expiry=pos_expiry,
             target_premium=target_px)
 
-        monitor_note = "+monitor" if cfg.stop_mode in ("monitor", "both") else ""
         veh_note = f"{vehicle_label} " if cfg.directional_mode else ""
         dir_note = f" [{pos_direction}]" if cfg.directional_mode else ""
+        # `armed.describe()`, not cfg.stop_mode: the config is what was ASKED for, and
+        # printing it made the terminal claim "[both stop+monitor]" over a position that
+        # got neither. This reports what is actually holding the position.
         state.log(uid, "order_placed",
                   f"{trade_side} {qty} ({lots} lot) {trade_symbol} @ market (#{oid}) "
-                  f"[{veh_note}{cfg.stop_mode} stop{monitor_note}]{dir_note}")
+                  f"[{veh_note}{armed.describe()}]{dir_note}")
+        if not armed.protected:
+            state.log(uid, "order_failed",
+                      f"⚠ {trade_symbol} is OPEN and UNPROTECTED — {armed.describe()}. "
+                      f"Set a stop in Zerodha now.")
     return _cb
 
 
@@ -939,25 +965,36 @@ async def _update_open_position_trails(client, uid: str) -> None:
                               f"₹{new_sl:.2f} — the stop at Zerodha is still ₹{old_sl:.2f}; "
                               f"only the tick monitor is enforcing the tighter level")
 
-        # Wire red-count awareness (scan driven): compute current reds from latest alignment using this position's entry-time exit_mode.
-        # The monitor will see the updated current_red_count and can exit on red threshold (in addition to price trail).
-        current_reds = 0
-        for row in rows:
-            if row.underlying != p.underlying:
-                continue
-            al = getattr(row, 'alignment', None)
-            if al:
-                trends = [al.fast, al.mid, al.slow]
-                want_red = -1 if getattr(p, 'direction', 'long') == "long" else 1
-                current_reds = sum(1 for t in trends if t == want_red)
-            break
-        positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
-        if current_reds > 0:
-            mode = getattr(p, 'exit_mode', 'one_red')
-            from app.engines.common.exit_counter import get_exit_threshold
-            thresh = get_exit_threshold(mode)
-            if current_reds >= thresh:
-                state.log(uid, "info", f"Red count hit {current_reds}/{thresh} for open {p.symbol} under {mode} — monitor will consider for exit")
+        # ── red-count awareness (scan driven) ─────────────────────────────────
+        # The monitor exits on current_red_count >= the exit_mode threshold, so what is
+        # written here is a market SELL waiting to happen. Two things it must get right:
+        #
+        #   1. WHICH ROW. Match on the SIGNAL direction, not just the underlying. With
+        #      scan_source="both" one underlying yields a bull row AND a bear row, and
+        #      taking whichever came first (the old `break`) read the counter of the
+        #      opposite trade.
+        #   2. WHICH BAR. `row.current_reds` is computed at the LATEST bar. The old code
+        #      read `row.alignment`, which is frozen at the ENTRY bar, and counted it
+        #      against `p.direction` — "long" for every option, CE and PE alike. So a PE
+        #      opened on an all-red bear signal scored 3-of-3 against itself immediately
+        #      and was market-sold on the very next tick, with the SuperTrend still
+        #      perfectly aligned in its favour.
+        #
+        # No matching row → leave the last known count alone. Writing 0 would silently
+        # disarm the red exit for a position whose underlying simply dropped out of this
+        # scan's universe.
+        want_dir = getattr(p, "signal_direction", "") or p.direction
+        match = next((r for r in rows
+                      if r.underlying == p.underlying and r.direction == want_dir), None)
+        if match is not None:
+            current_reds = int(getattr(match, "current_reds", 0) or 0)
+            positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
+            if current_reds > 0:
+                mode = getattr(p, 'exit_mode', 'one_red')
+                from app.engines.common.exit_counter import get_exit_threshold
+                thresh = get_exit_threshold(mode)
+                if current_reds >= thresh:
+                    state.log(uid, "info", f"Red count hit {current_reds}/{thresh} for open {p.symbol} under {mode} — monitor will consider for exit")
 
 
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:
@@ -1125,6 +1162,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # Reconcile FIRST: everything below skips a position that is still PENDING, so a
         # lost fill postback would otherwise hide it from all of them.
         await _reconcile_pending_positions(client, uid)
+        await _reconcile_orphan_stops(client, uid)
         await _update_open_position_trails(client, uid)
         await _square_off_expiring(client, uid)
         await _time_stop_positions(client, uid)
@@ -1139,6 +1177,62 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         state.log(uid, "error", f"Scan failed: {exc}")
         log.warning("kite-engine scan_user failed for %s: %s", uid, exc)
         raise
+
+
+#: Orphan-stop warnings already issued, per (uid, trigger_id). The sweep runs every
+#: scan; without this it would repeat the same alarm every few minutes until the user
+#: acts, and an alert that cries every scan stops being read.
+_orphan_warned: set = set()
+
+
+async def _reconcile_orphan_stops(client, uid: str) -> None:
+    """Find protective triggers resting at Zerodha with NO position behind them.
+
+    Every live path that can orphan a trigger is now closed at the point it happens — a
+    rejected entry cancels its GTT, an exit filled outside the engine cancels it, an
+    unconfirmed cancel is chased after the sell. What none of them covers is a trigger
+    that was ALREADY orphaned: the process restarted while one was armed, or a cancel
+    failed and only logged "check Zerodha for a resting SELL" before the position left
+    the registry. Nothing ever looked again. A resting SELL with nothing behind it opens
+    a naked short the moment it fires.
+
+    Reports, never cancels. We cannot tell our own abandoned trigger from a stop the
+    user placed by hand in the Kite app, and silently deleting the second would remove
+    the protection they were relying on — the same class of harm, pointed the other way.
+    The broker's own net quantity is the discriminator that makes the warning safe: a
+    trigger over a holding they actually have is legitimate whoever placed it, so only a
+    trigger with NO underlying holding is reported.
+    """
+    try:
+        triggers = await client.get_gtts()
+        raw = await client.get_positions_raw()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("kite orphan-stop sweep skipped for %s: %s", uid, exc)
+        return
+    if not isinstance(triggers, list) or not triggers:
+        return
+    held = {str(p.get("tradingsymbol", "")).strip().upper()
+            for p in ((raw or {}).get("net") or [])
+            if int(p.get("quantity", 0) or 0) != 0}
+    live = {p.symbol.upper() for p in positions.open_positions(uid)
+            if p.status in (positions.PENDING, positions.OPEN)}
+    for t in triggers:
+        if not isinstance(t, dict):
+            continue
+        if str(t.get("status") or "").strip().lower() != "active":
+            continue  # only a RESTING trigger can still fire
+        tid = int(t.get("id") or t.get("trigger_id") or 0)
+        if not tid or (uid, tid) in _orphan_warned:
+            continue
+        cond = t.get("condition") if isinstance(t.get("condition"), dict) else {}
+        sym = str(cond.get("tradingsymbol") or "").strip().upper()
+        if not sym or sym in held or sym in live:
+            continue
+        _orphan_warned.add((uid, tid))
+        state.log(uid, "order_failed",
+                  f"⚠ ORPHANED STOP: GTT #{tid} is resting at Zerodha for {sym}, but you "
+                  f"hold no {sym} and the engine has no open position in it. If it "
+                  f"triggers it will SELL something you do not own — cancel it in Kite.")
 
 
 def _broker_open_slots(positions_net: list) -> set:

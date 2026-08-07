@@ -47,6 +47,14 @@ class OpenPosition:
     stop_mode: str = "both"     # broker | monitor | both
     guard_key: str = ""         # the state.auto_open slot this position guards
     direction: str = "long"     # "long" | "short" — options are always long; futures can be either
+    #: Direction of the SIGNAL that opened this position, which is NOT ``direction``.
+    #: Buying a PE on a BEAR signal is a LONG position in premium space but a SHORT
+    #: signal, and the red counter is defined against the signal — feeding it
+    #: ``direction`` made every bear position read 3-of-3 red at entry and exit on the
+    #: next tick. For a derivatives-source row the ST runs on the contract's own premium
+    #: series, so the signal really is "long" even for a PE; that is why this has to be
+    #: recorded at entry rather than guessed from the CE/PE suffix.
+    signal_direction: str = "long"
     vehicle: str = "otm_options" # otm_options | deep_itm_options | futures
     underlying: str = ""        # display underlying ("NIFTY 50") — for correlation grouping
     opened_ms: int = field(default_factory=lambda: int(time.time() * 1000))

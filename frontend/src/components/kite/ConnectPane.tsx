@@ -6,19 +6,20 @@ import {
   useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
-import { useEngineConfig, useSetEngineConfig, useEngineSignals } from '../../hooks/useSterlingKiteEngine';
+import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
-import { TradingModeControls } from './TradingModeControls';
-import { DirectionalModePanel } from './DirectionalModePanel';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
-import { EngineConfigurationPanel } from './EngineConfigurationPanel';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
-import { SharedScanSetupPanel } from './SharedScanSetupPanel';
+import { MarketContractsPanel } from './MarketContractsPanel';
+import { TradeRulesPanel } from './TradeRulesPanel';
+import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
+import { TradingModePanel } from './TradingModePanel';
+import { type SectionId, resolveSectionId } from './config/registry';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -539,100 +540,39 @@ function TickerControl() {
   );
 }
 
-function DirectionalModePanelWrapper() {
-  const { data: cfgData } = useEngineConfig();
-  const { data: signals } = useEngineSignals();
-  const setCfg = useSetEngineConfig();
-  if (!cfgData) return null;
-
-  // Pull a representative lot size + ATM premium from the freshest ready signal so
-  // the impact calculator opens with real numbers. Prefer a fresh/active row.
-  const rows = signals?.rows ?? [];
-  const pick = rows.find((r) => r.is_fresh) ?? rows.find((r) => r.is_active) ?? rows[0];
-  const leg = pick?.legs?.find((l) => l.moneyness === 'ATM') ?? pick?.legs?.[0];
-
-  return (
-    <DirectionalModePanel
-      cfg={cfgData}
-      onUpdate={(patch) => setCfg.mutate({ ...cfgData, ...patch })}
-      busy={setCfg.isPending}
-      liveLotSize={leg?.lot_size ?? undefined}
-      livePremium={leg?.premium_spot ?? undefined}
-      liveUnderlying={pick?.underlying}
-    />
-  );
-}
-
-// Master ON/OFF for the whole Sterling Kite Engine. Sits at the very bottom of
-// the Connect page. OFF = Kite behaves as a normal manual-trading platform.
-function EngineMasterToggle() {
-  const { data: cfg } = useEngineConfig();
-  const setCfg = useSetEngineConfig();
-  if (!cfg) return null;
-  const on = cfg.engine_enabled;
-  return (
-    <div style={{ ...S.card, borderLeft: `3px solid ${on ? '#f06428' : '#c9c9c9'}` }}>
-      <div style={S.title}>STERLING KITE ENGINE</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          aria-label="Sterling Kite engine"
-          onClick={() => setCfg.mutate({ ...cfg, engine_enabled: !on })}
-          disabled={setCfg.isPending}
-          style={{
-            width: 40, height: 22, borderRadius: 11, border: 'none', position: 'relative',
-            cursor: 'pointer', background: on ? '#f06428' : '#c7c7c7', transition: 'background .2s', flexShrink: 0,
-          }}
-        >
-          <span style={{
-            position: 'absolute', top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: 9,
-            background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-          }} />
-        </button>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
-            {on ? 'Engine ON — scanning, signals & auto-execute active' : 'Engine OFF — normal manual Kite only'}
-          </div>
-          <div style={{ ...S.hint, marginTop: 2 }}>
-            {on
-              ? 'The strategy scans the market and surfaces signals. Auto-execute (if armed) places orders.'
-              : 'No scanning, no signals, no auto-orders. Market watch, charts and manual orders work as usual.'}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Settings hub ─────────────────────────────────────────────────────────────
 // Connect used to contain another horizontal tab bar, while display, exchange,
 // Telegram and engine controls were injected above/between those tabs. A stable
 // category rail gives every setting one predictable home and keeps each page calm.
-type ConnectSection = 'account' | 'sharedScan' | 'engine' | 'navigator' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
+//
+// The rail is now grouped by what a setting decides, rather than by which
+// component happened to own it. The three trading groups follow the order a
+// user actually thinks in: am I live and who places the order → what do we
+// scan → how is the trade handled. Each signal engine then keeps only the
+// settings that exist because of that engine's own indicator.
+type ConnectSection = SectionId;
 
-const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string }> = [
-  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection' },
-  { id: 'sharedScan', label: 'Scan Setup', eyebrow: 'Shared by both engines' },
-  { id: 'engine', label: 'SuperTrend Engine', eyebrow: 'Triple-SuperTrend signals & exits' },
-  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow' },
-  { id: 'orderSelection', label: 'Order Selection & Entry Quality', eyebrow: 'Vehicle profile & filters' },
-  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data' },
-  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts' },
-  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback' },
+type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: string };
+
+const SECTION_DEFS: SectionDef[] = [
+  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
+  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/automatic', group: 'Trading' },
+  { id: 'market', label: 'Market & Contracts', eyebrow: 'What gets scanned', group: 'Trading' },
+  { id: 'rules', label: 'Trade Rules', eyebrow: 'Entry, stop, exit, size', group: 'Trading' },
+  { id: 'engine', label: 'SuperTrend', eyebrow: 'Triple-SuperTrend strategy', group: 'Signal engines' },
+  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines' },
+  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform' },
+  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform' },
+  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform' },
 ];
 
 function readInitialSection(): ConnectSection {
-  const current = localStorage.getItem('kite_connect_section');
-  if (SECTION_DEFS.some((item) => item.id === current)) return current as ConnectSection;
-
-  // Seamlessly map the previous nested tabs to their new permanent homes.
-  const legacy = localStorage.getItem('kite_connect_tab');
-  if (legacy === 'strategy') return 'engine';
-  if (legacy === 'tools') return 'markets';
-  if (legacy === 'settings') return 'experience';
-  return 'account';
+  // resolveSectionId follows the 2026-08-07 renames (sharedScan → market,
+  // orderSelection → rules) and the older nested-tab ids, so a stored
+  // preference or an existing deep link still lands somewhere sensible.
+  return resolveSectionId(localStorage.getItem('kite_connect_section'))
+    ?? resolveSectionId(localStorage.getItem('kite_connect_tab'))
+    ?? 'account';
 }
 
 function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; children: React.ReactNode }) {
@@ -668,8 +608,8 @@ export function ConnectPane() {
 
   React.useEffect(() => {
     const onOpen = (event: Event) => {
-      const next = (event as CustomEvent<ConnectSection>).detail;
-      if (SECTION_DEFS.some((item) => item.id === next)) select(next);
+      const next = resolveSectionId((event as CustomEvent<string>).detail);
+      if (next) select(next);
     };
     window.addEventListener('kite-connect-section', onOpen);
     return () => window.removeEventListener('kite-connect-section', onOpen);
@@ -700,20 +640,31 @@ export function ConnectPane() {
 
       <div className="kite-settings-layout" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '218px minmax(0, 1fr)', gap: 26, alignItems: 'start' }}>
         <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 6, position: 'sticky', top: 14, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-          {SECTION_DEFS.map((item) => {
+          {SECTION_DEFS.map((item, index) => {
             const selected = item.id === section;
+            const startsGroup = index === 0 || SECTION_DEFS[index - 1].group !== item.group;
             return (
-              <button key={item.id} type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                width: '100%', minHeight: 52, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                borderRadius: 6, background: selected ? '#fff5f0' : 'transparent',
-                display: 'flex', alignItems: 'center',
-                padding: '8px 11px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
-              }}>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', color: '#444', fontSize: 12, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
-                  <span style={{ display: 'block', color: '#929292', fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{item.eyebrow}</span>
-                </span>
-              </button>
+              <React.Fragment key={item.id}>
+                {startsGroup && (
+                  <div className="kite-rail-group" style={{
+                    padding: '10px 11px 4px', color: '#a0a0a0', fontSize: 9,
+                    fontWeight: 750, letterSpacing: .8, textTransform: 'uppercase',
+                  }}>
+                    {item.group}
+                  </div>
+                )}
+                <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
+                  width: '100%', minHeight: 52, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
+                  borderRadius: 6, background: selected ? '#fff5f0' : 'transparent',
+                  display: 'flex', alignItems: 'center',
+                  padding: '8px 11px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
+                }}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', color: '#444', fontSize: 12, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: '#929292', fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{item.eyebrow}</span>
+                  </span>
+                </button>
+              </React.Fragment>
             );
           })}
         </nav>
@@ -721,7 +672,7 @@ export function ConnectPane() {
         <main style={{ minWidth: 0 }}>
           {section === 'account' && (
             <>
-              <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Trading behaviour is configured separately under Engine Configuration." />
+              <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Whether those orders are simulated or real is set under Trading Mode." />
               {isLoading && <div style={S.hint}>Loading accounts…</div>}
               {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
               {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
@@ -732,19 +683,31 @@ export function ConnectPane() {
             </>
           )}
 
-          {section === 'sharedScan' && (
+          {section === 'mode' && (
             <>
-              <SectionHeading title="Scan Setup" description="The instruments Sterling scans and the chart a signal is read from. Both signal engines — SuperTrend and the Value-Flow Navigator — use this, so it lives in one place rather than being configured twice." />
-              <SharedScanSetupPanel />
+              <SectionHeading title="Trading Mode" description="Whether orders are simulated or real, whether you or the engine places them, and which signal engines are running. Everything on this page changes what happens to real money." />
+              <TradingModePanel />
+            </>
+          )}
+
+          {section === 'market' && (
+            <>
+              <SectionHeading title="Market & Contracts" description="What gets scanned, which chart a signal is read from, and which strikes and expiries are considered. Both signal engines read every setting here, so it is set once rather than configured twice." />
+              <MarketContractsPanel />
+            </>
+          )}
+
+          {section === 'rules' && (
+            <>
+              <SectionHeading title="Trade Rules" description="How a trade is sized, guarded and protected once a signal exists — in the order it happens, from entry through to the safety net. Every rule is tagged by whether it affects orders you place, orders the engine places, or both." />
+              <TradeRulesPanel />
             </>
           )}
 
           {section === 'engine' && (
             <>
-              <SectionHeading title="SuperTrend Engine" description="The triple-SuperTrend signal engine: how its setups are graded, how they exit, and how orders and risk are handled. What it scans is shared — see Scan Setup." />
-              <EngineMasterToggle />
-              <TradingModeControls />
-              <EngineConfigurationPanel />
+              <SectionHeading title="SuperTrend" description="The triple-SuperTrend strategy itself: how a setup is armed, how the stop trails, and what closes the trade. What it scans is in Market & Contracts; how the order is handled is in Trade Rules." />
+              <SuperTrendEnginePanel />
             </>
           )}
 
@@ -753,13 +716,6 @@ export function ConnectPane() {
               <SectionHeading title="Value-Flow Navigator" description="A second signal engine alongside SuperTrend — it reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity. It can confirm SuperTrend's setups, find its own, or both. Off by default; never bypasses any existing order or risk control." />
               <NavigatorSettingsPanel />
               <NavigatorCalibrationPanel />
-            </>
-          )}
-
-          {section === 'orderSelection' && (
-            <>
-              <SectionHeading title="Order Selection & Entry Quality" description="Vehicle profile, directional filters and trade-impact preview." />
-              <DirectionalModePanelWrapper />
             </>
           )}
 
@@ -808,7 +764,10 @@ export function ConnectPane() {
           .kite-settings-hub { padding: 18px 14px 36px !important; }
           .kite-settings-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
           .kite-settings-layout > nav { position: static !important; display: flex; overflow-x: auto; gap: 4px; }
-          .kite-settings-layout > nav > button { min-width: 156px; margin-bottom: 0 !important; }
+          .kite-settings-layout > nav button { min-width: 156px; margin-bottom: 0 !important; }
+          /* The group headings only read as headings in the vertical rail; in the
+             horizontal scroller they would be islands of text between buttons. */
+          .kite-rail-group { display: none; }
         }
         @media (max-width: 560px) {
           .kite-settings-hub > header { flex-direction: column; }

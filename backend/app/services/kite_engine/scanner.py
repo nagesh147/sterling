@@ -242,6 +242,9 @@ def evaluate_item(
             spot=float(c[i]), stop_loss=stop_loss,
             entry_sl=_entry_sl_value(r, i, cfg),
             exit_state=_exit_state_str(r, direction, end_idx, cfg),
+            # Deliberately last_idx, not end_idx: exit_state freezes at the exit bar so a
+            # dead row stops moving, but an OPEN position needs the CURRENT count.
+            current_reds=r.red_line_count(direction, last_idx),
             exit_reason=exit_reason or None,
             score=85.0, timestamp_ms=ts,
             is_active=active,
@@ -383,6 +386,9 @@ def evaluate_derivative_contract(
                             premium_target=None)],
             spot=float(c[i]), stop_loss=stop_loss, entry_sl=entry_sl,
             exit_state=_exit_state_str(r, "long", end_idx, cfg),
+            # Live, at the latest bar. A derivatives row runs the ST on the CONTRACT's
+            # own premium series, so "long" is the true signal direction for a PE too.
+            current_reds=r.red_line_count("long", last_idx),
             exit_reason=exit_reason or None,
             score=85.0, timestamp_ms=ts, source="derivatives",
             is_active=active, is_fresh=(ts == latest_ts),

@@ -58,11 +58,20 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+export function Field({ label, hint, badge, children }: {
+  label: string;
+  hint?: string;
+  /** Rendered beside the label — used for the manual/auto applicability chip. */
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '148px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
       <div>
-        <div style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>
+          {badge}
+        </div>
         {hint && <div style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45, marginTop: 4 }}>{hint}</div>}
       </div>
       <div style={{ minWidth: 0 }}>{children}</div>
@@ -72,7 +81,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 
 export function ChoiceRow<T extends string>({ value, options, onChange }: {
   value: T;
-  options: Array<{ value: T; label: string }>;
+  options: Array<{ value: T; label: string; hint?: string }>;
   onChange: (value: T) => void;
 }) {
   return (
@@ -80,7 +89,7 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
       {options.map((option) => {
         const selected = option.value === value;
         return (
-          <button key={option.value} type="button" aria-pressed={selected} onClick={() => onChange(option.value)} style={{
+          <button key={option.value} type="button" aria-pressed={selected} title={option.hint} onClick={() => onChange(option.value)} style={{
             border: 'none', minHeight: 32, borderRadius: 6,
             background: selected ? '#fff' : 'transparent', color: selected ? TEXT : MUTED,
             padding: '0 13px', fontSize: 11.5, fontWeight: selected ? 700 : 550,
@@ -95,15 +104,17 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
   );
 }
 
-export function Switch({ checked, label, onChange }: {
+export function Switch({ checked, label, onChange, disabled = false }: {
   checked: boolean;
   label: string;
   onChange: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange} style={{
-      width: 40, height: 22, borderRadius: 11, border: 'none', padding: 0,
-      position: 'relative', cursor: 'pointer', background: checked ? ORANGE : '#c7c7c7',
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange} disabled={disabled} style={{
+      width: 40, height: 22, borderRadius: 11, border: 'none', padding: 0, flexShrink: 0,
+      position: 'relative', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .55 : 1,
+      background: checked ? ORANGE : '#c7c7c7',
       transition: 'background .16s ease',
     }}>
       <span style={{ position: 'absolute', width: 18, height: 18, borderRadius: 9, top: 2, left: checked ? 20 : 2, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .16s ease' }} />

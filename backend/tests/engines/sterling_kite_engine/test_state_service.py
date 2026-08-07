@@ -161,6 +161,13 @@ async def test_auto_exec_one_position_guard():
             placed.append((sym, size))
             return {"order_id": "O-" + sym}
 
+        async def get_ltp(self, keys):
+            # A spot-source row carries no premium, so the leg's LTP is what the entry
+            # and the delta-implied stop are derived from. Without it stop_px stays 0
+            # and auto-exec now (correctly) refuses to open an unprotectable position —
+            # which would make this test pass for the wrong reason.
+            return {k: {"last_price": 90.0} for k in keys}
+
     cb = service._make_place_cb(C(), "g1")
 
     def _row(ts):

@@ -158,3 +158,92 @@ regression guards on the stand-down direction that must keep passing.
 The five `[critical]` items in `docs/kite_signal_audit_2026-08-04.md:383,406,430,459,487`
 remain unverified. They are auto-exec-only, so they do not gate manual trading — but they do
 gate `auto_execute=true`.
+
+---
+
+## Round 2 — the five `[critical]` auto-exec items
+
+`docs/kite_signal_audit_2026-08-04.md` lists five `[critical]` claims under "Unverified
+claims, worth checking". They were written before `41f1d00`, so each was re-checked against
+the code as it stands rather than taken at face value.
+
+| # | Audit line | Claim | Verdict |
+|---|-----------|-------|---------|
+| C1 | 383 | Rejected entry / externally-filled exit orphans the broker GTT | **PARTIAL** → fixed |
+| C2 | 406 | `stop_mode="both"` fires GTT *and* monitor at one trigger → 2× sell | **CLOSED** |
+| C3 | 430 | GTT armed on a PENDING entry, never cancelled on REJECT/CANCEL | **CLOSED** |
+| C4 | 459 | Zero premium quote → real BUY, no stop, log claims `[both stop+monitor]` | **OPEN** → fixed |
+| C5 | 487 | Live red count read from the entry-bar chip → every PE sold at entry | **OPEN** → fixed |
+
+### Already closed by `41f1d00` + round 1
+
+* **C2.** `monitor._exit_position` cancels strictly before selling and skips the sell unless
+  the broker confirms nothing is acting (`monitor.py:275`). Pinned by
+  `test_no_second_sell_when_the_gtt_could_not_be_cancelled` and `test_cancel_happens_before_the_sell`.
+* **C3.** A `REJECTED`/`CANCELLED` entry with `filled_quantity` 0 cancels the GTT and zeroes
+  `gtt_id` (`monitor.py:187`); a partial fill takes the other branch and *resizes* the trigger
+  to what actually filled (`monitor.py:171`). The audit's precondition — "ticker_manager must
+  start passing a client" — is satisfied at `ticker_manager.py:66`.
+* **C1's live paths.** The broker-exit-fill branch cancels and chases the orphan
+  (`monitor.py:132`).
+
+### C1's residual — the orphan nobody was looking for
+
+Every path that *creates* an orphan is closed at the point it happens. What none of them
+covers is one that was **already** resting: the process restarted while a trigger was armed,
+or a cancel failed and only logged "check Zerodha for a resting SELL" before the position left
+the registry. Nothing ever looked again.
+
+`_reconcile_orphan_stops` now runs each scan: any **active** trigger whose symbol is neither
+in the broker's net positions nor in our registry is reported once. It **reports and never
+cancels** — our abandoned trigger is indistinguishable from a stop the user placed by hand in
+the Kite app, and deleting theirs would remove the protection they were relying on. The
+broker's own net quantity is what makes the warning safe: a trigger over a real holding is
+legitimate whoever placed it.
+
+### C4 — auto-exec opened positions it could not exit
+
+When the premium quote came back empty (strike untraded today, quote rate-limited,
+`_resolve_premium_stop` swallowing an error) `stop_px` stayed 0 and *everything downstream
+degraded silently*: `place_stop` refuses a trigger of 0, `should_exit(0, ltp)` is False on
+every tick, and `_retranslated_stop` cannot re-derive a level from an entry premium of 0 — so
+the stop stayed 0 for the life of the trade. The terminal printed `[both stop+monitor]` over
+it, because the log reported `cfg.stop_mode`, i.e. what was *asked for*. Only the T-1 expiry
+square-off would ever close it.
+
+Two changes: **no stop, no trade** — auto-exec logs `order_blocked` and returns before placing
+anything; and the `order_placed` line now prints `armed.describe()`, with a second
+`order_failed` line when `armed.protected` is False. The manual path deliberately keeps the
+opposite policy: the user asked for the fill and gets an explicit UNPROTECTED warning rather
+than a refusal.
+
+### C5 — the red counter was pointed at the wrong thing
+
+Confirmed exactly as claimed. `want_red` came from `p.direction`, which is `"long"` for every
+option — CE and PE alike, as `positions.py` documents. A bear signal's three SuperTrends are
+all `-1` *by definition at entry*, so a PE scored 3-of-3 against the position it had just
+opened; `one_red` fires at 1, so the monitor market-sold it on the first tick after the first
+post-entry scan with the trend still perfectly in its favour. Two further errors compounded
+it: the code read `row.alignment`, which is frozen at the **entry** bar and therefore never
+moves, and it took whichever row matched the underlying first — the bull row, for a bear
+position, under `scan_source="both"`.
+
+* `EngineSignalRow.current_reds` — computed at `last_idx`, always live. Distinct from
+  `exit_state`, which freezes at the exit bar so an ended row stops moving.
+* `OpenPosition.signal_direction` — recorded at arm time. It cannot be inferred from the CE/PE
+  suffix: a *derivatives*-source row runs the SuperTrend on the contract's own premium series,
+  so a PE bought there really is a long signal.
+* The trail updater matches on underlying **and** signal direction, and a scan with no
+  matching row leaves the last count alone instead of resetting it to 0 — writing 0 there
+  would silently disarm the red exit for a position already in trouble.
+
+### Verification
+
+* `test_protection.py` — 55 → 71 tests. Of the 16 new, 15 fail against the pre-fix logic
+  (verified by reverting the three decision sites and re-running); the 16th is the deliberate
+  narrowness guard proving the C4 abort does not block a resolvable entry.
+* One existing test changed: `test_auto_exec_one_position_guard`'s fake broker gained a
+  `get_ltp`. It was passing only because auto-exec would open an unprotectable position — an
+  accidental dependency on the C4 defect, not a behaviour worth preserving.
+* Full backend suite: **2305 passed**, 6 skipped, 1 xfailed, same 2 pre-existing failures.
+  Frontend `tsc --noEmit` clean.
