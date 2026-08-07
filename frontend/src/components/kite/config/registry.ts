@@ -23,7 +23,7 @@ import type {
 // Exported so the board and other panes can deep-link without duplicating the
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
-  | 'account' | 'mode' | 'market' | 'rules'
+  | 'account' | 'mode' | 'manualRules' | 'autoRules'
   | 'engine' | 'navigator' | 'markets' | 'notifications' | 'experience';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
@@ -72,12 +72,22 @@ export interface FieldDef {
 const F = <T extends Record<string, FieldDef>>(defs: T) => defs;
 
 export const FIELDS = F({
-  // ── Market & Contracts — read by BOTH engines ─────────────────────────────
+  // ── Engine power ──────────────────────────────────────────────────────────
+  engine_enabled: {
+    key: 'engine_enabled',
+    label: 'SuperTrend engine',
+    help: 'Whether the SuperTrend engine scans and produces signals at all.',
+    owner: 'supertrend', applies: 'both', stage: 'discovery', rescan: false, home: 'engine',
+    evidence: 'service.scan_user returns early when it is off; Navigator is unaffected and can run on its own.',
+    navigator: 'never',
+  },
+
+  // ── What an engine scans ──────────────────────────────────────────────────
   scan_source: {
     key: 'scan_source',
     label: 'Signal source',
     help: 'Which chart a SuperTrend signal is read from. Navigator keeps its own separate setting for this.',
-    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'service.scan_user builds the spot/premium/confluence universes from it, and service._make_place_cb uses it for the both-mode cross guard.',
     navigator: 'never',
   },
@@ -85,7 +95,7 @@ export const FIELDS = F({
     key: 'strike_moneyness',
     label: 'Strike coverage',
     help: 'Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits.',
-    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes; navigator/runtime passes the same list when resolving its own legs.',
     navigator: 'always',
   },
@@ -93,7 +103,7 @@ export const FIELDS = F({
     key: 'scan_expiries_indices',
     label: 'Index expiries',
     help: 'Contract cycles scanned for indices.',
-    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'Handed to the scanner, and to navigator/runtime on every pass when it resolves legs for its own setups.',
     navigator: 'always',
   },
@@ -101,7 +111,7 @@ export const FIELDS = F({
     key: 'scan_indices',
     label: 'Indices',
     help: 'The indices included in every scan.',
-    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
     navigator: 'when-scope-shared',
   },
@@ -109,15 +119,23 @@ export const FIELDS = F({
     key: 'scan_stocks',
     label: 'F&O stocks',
     help: 'The individual stocks included in every scan.',
-    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
+    navigator: 'when-scope-shared',
+  },
+  scan_stock_contracts: {
+    key: 'scan_stock_contracts',
+    label: 'Scan stock contracts',
+    help: 'Off leaves single-stock underlyings out of the scan entirely — no stock contracts are resolved and no stock rows appear. Indices are unaffected.',
+    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
+    evidence: 'universe.select_scan_universe drops every single-stock item, so nothing downstream ever sees one.',
     navigator: 'when-scope-shared',
   },
   scan_all_stocks: {
     key: 'scan_all_stocks',
     label: 'All F&O stocks',
     help: 'Use the full eligible universe instead of a curated list.',
-    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
+    owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Same scan boundary as scan_stocks.',
     navigator: 'when-scope-shared',
   },
@@ -157,133 +175,133 @@ export const FIELDS = F({
     key: 'stop_mode',
     label: 'Protection mode',
     help: 'Where the protective stop lives: at the broker as a GTT, in the server-side tick monitor, or both.',
-    owner: 'execution', applies: 'both', stage: 'stop', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'both', stage: 'stop', rescan: false, home: 'autoRules',
     evidence: 'service.arm_manual_option_buy passes it to protection.arm_position, exactly as the automatic path does.',
   },
   protect_manual_orders: {
     key: 'protect_manual_orders',
     label: 'Protect orders I place by hand',
     help: 'Arm your own BUY the same way an automatic one is armed, using the stop this board already shows for that contract.',
-    owner: 'execution', applies: 'manual', stage: 'protection', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'manual', stage: 'protection', rescan: false, home: 'manualRules',
     evidence: 'service.place_manual_order / arm_manual_option_buy — consulted only on the hand-placed order path.',
   },
   expiry_square_off_days: {
     key: 'expiry_square_off_days',
     label: 'Expiry square-off',
     help: 'Close an option position this many calendar days before expiry. 0 disables it.',
-    owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._square_off_expiring iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
   time_stop_bars: {
     key: 'time_stop_bars',
     label: 'Time stop',
     help: 'Close a position after this many 1H bars held. 0 disables it.',
-    owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._time_stop_positions iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
   risk_sizing: {
     key: 'risk_sizing',
     label: 'Risk-based sizing',
     help: 'Size automatic orders so the premium at risk stays within a set share of available capital.',
-    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb only — the automatic placement path.',
   },
   risk_pct: {
     key: 'risk_pct',
     label: 'Risk per trade',
     help: 'Percent of available F&O capital risked on one automatic entry.',
-    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb only — the automatic placement path.',
   },
   max_lots: {
     key: 'max_lots',
     label: 'Maximum lots',
     help: 'Hard ceiling on the lots one automatic order may place.',
-    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb / sizing.py, inside the automatic placement path only.',
   },
   adx_min: {
     key: 'adx_min',
     label: 'Minimum ADX',
     help: 'Skip an automatic entry when trend strength is below this. Blank disables it.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb skips an automatic entry only. The board still shows ADX on every row.',
   },
   atr_pct_min: {
     key: 'atr_pct_min',
     label: 'Minimum ATR percentile',
     help: 'Skip an automatic entry when volatility is below this percentile. Blank disables it.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb skips an automatic entry only.',
   },
   block_entry_minutes_before_close: {
     key: 'block_entry_minutes_before_close',
     label: 'Late-entry block',
     help: 'Refuse new automatic entries in the last N minutes before 15:30, so a late signal cannot enter straight into an overnight gap. 0 disables it.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb gates the automatic entry only.',
   },
   max_spread_pct: {
     key: 'max_spread_pct',
     label: 'Maximum spread',
     help: 'Skip an automatic entry whose bid-ask spread is wider than this share of mid. Blank disables it.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb makes one quote call at automatic entry.',
   },
   min_oi: {
     key: 'min_oi',
     label: 'Minimum open interest',
     help: 'Skip an automatic entry into a strike thinner than this. Blank disables it.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb makes one quote call at automatic entry.',
   },
   max_daily_loss_pct: {
     key: 'max_daily_loss_pct',
     label: 'Daily loss limit',
     help: 'Halt new automatic entries once the day’s realised losses reach this share of F&O capital. Never force-closes. Blank disables it.',
-    owner: 'execution', applies: 'auto', stage: 'guard', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'guard', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb blocks new automatic entries only. It never force-closes.',
   },
   wire_risk_infra: {
     key: 'wire_risk_infra',
     label: 'Portfolio risk infrastructure',
     help: 'Feed the drawdown circuit breaker and correlation penalty into automatic sizing.',
-    owner: 'execution', applies: 'auto', stage: 'guard', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'guard', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb — consulted during automatic sizing only.',
   },
   directional_mode: {
     key: 'directional_mode',
     label: 'Directional mode',
     help: 'Monetise a signal through a chosen vehicle instead of the default option leg.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Selects the contract the engine buys; a manual trader picks their own contract.',
   },
   vehicle: {
     key: 'vehicle',
     label: 'Vehicle',
     help: 'What an automatic order buys: an option leg, a deep in-the-money option, or an index future.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Read by the automatic placement callback when choosing the instrument.',
   },
   target_delta: {
     key: 'target_delta',
     label: 'Target delta',
     help: 'Pick the strike nearest this delta. Takes precedence over a fixed depth.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Consulted when the automatic path resolves a deep-ITM leg.',
   },
   itm_depth: {
     key: 'itm_depth',
     label: 'In-the-money depth',
     help: 'How many strike steps into the money. Only used when no target delta is set.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Only consulted when no target delta is set — a target delta overrides it.',
   },
   futures_expiry: {
     key: 'futures_expiry',
     label: 'Futures contract',
     help: 'Which futures series an automatic order trades.',
-    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'rules',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Read by the automatic placement callback when the vehicle is futures.',
   },
 });
@@ -370,10 +388,14 @@ export function exitModeLabel(mode: ExitMode): string {
 // ── Section navigation ──────────────────────────────────────────────────────
 
 const LEGACY_SECTIONS: Record<string, SectionId> = {
+  // 2026-08-08: the shared market page was dissolved into each engine's own
+  // scan settings, and the one Trade Rules page was split into Manual/Automatic.
+  market: 'engine',
+  rules: 'manualRules',
   // The rail was reorganised on 2026-08-07; keep old deep links and stored
   // preferences pointing somewhere sensible instead of silently resetting.
-  sharedScan: 'market',
-  orderSelection: 'rules',
+  sharedScan: 'engine',
+  orderSelection: 'autoRules',
   // Older still: the nested tab bar that preceded the rail.
   strategy: 'engine',
   tools: 'markets',
@@ -381,7 +403,7 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
 };
 
 export const SECTION_IDS: SectionId[] = [
-  'account', 'mode', 'market', 'rules', 'engine', 'navigator',
+  'account', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
   'markets', 'notifications', 'experience',
 ];
 

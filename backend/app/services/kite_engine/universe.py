@@ -90,11 +90,19 @@ def build_universe(
 def select_scan_universe(
     universe: List[UniverseItem], *,
     indices: Sequence[str], stocks: Sequence[str], all_stocks: bool,
+    stock_contracts: bool = True,
 ) -> List[UniverseItem]:
     """Filter selections while enforcing the high-liquidity stock boundary.
 
     ``all_stocks`` means all eligible high-liquidity stocks, never all listed F&O.
     Explicit arbitrary stock names are ignored.
+
+    ``stock_contracts=False`` drops every single-stock underlying, whatever the
+    stock selection says. It is the master switch above the list: single-stock
+    derivatives are listed monthly only, they carry physical settlement risk at
+    expiry, and they are the bulk of the scan cost — so "indices only" deserves
+    to be one click rather than un-ticking a long list. Defaults True, so an
+    existing config scans exactly what it scanned before.
     """
     selected_indices = set(indices)
     selected_stocks = set(stocks) & _HIGH_LIQUIDITY
@@ -103,6 +111,8 @@ def select_scan_universe(
         if item.is_index:
             if item.name in selected_indices:
                 output.append(item)
+        elif not stock_contracts:
+            continue
         elif item.name in _HIGH_LIQUIDITY and (all_stocks or item.name in selected_stocks):
             output.append(item)
     return output

@@ -3,7 +3,7 @@
 // `engine_sources` is fixed to a single value; there is no
 // directional/crypto config surface here or on the server.
 
-import type { EngineSignalRow } from './kiteEngine';
+import type { EngineSignalRow, Moneyness } from './kiteEngine';
 
 export type NavigatorOperatingMode = 'shadow' | 'advisory' | 'gate';
 export type SignalOrigination = 'off' | 'heads_up' | 'full';
@@ -151,7 +151,17 @@ export interface NavigatorConfigModel {
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
+  scan_stock_contracts?: boolean;
   scan_source: 'spot' | 'derivatives' | 'both' | 'confluence';
+  /**
+   * Navigator's own contract coverage. `null` means "follow the SuperTrend
+   * engine's", which is what every existing config does. Read independently of
+   * `scan_scope_mode`: which instruments Navigator watches and which contracts
+   * it resolves are separate choices.
+   */
+  strike_moneyness?: Moneyness[] | null;
+  scan_expiries_indices?: Array<'weekly' | 'monthly'> | null;
+  scan_expiries_stocks?: Array<'monthly'> | null;
   // ── Structure Radar / Signal Origination (additive, all off by default) ──
   // See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
   structure_radar_enabled: boolean;

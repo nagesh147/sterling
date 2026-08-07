@@ -32,7 +32,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 }));
 
 vi.mock('../TradingModePanel', () => ({ TradingModePanel: () => <div>Trading mode controls</div> }));
-vi.mock('../TradeRulesPanel', () => ({ TradeRulesPanel: () => <div>Trade rules panel</div> }));
+vi.mock('../TradeRulesPanels', () => ({
+  ManualRulesPanel: () => <div>Manual rules panel</div>,
+  AutomaticRulesPanel: () => <div>Automatic rules panel</div>,
+}));
 vi.mock('../SuperTrendEnginePanel', () => ({ SuperTrendEnginePanel: () => <div>SuperTrend strategy panel</div> }));
 vi.mock('../NavigatorSettingsPanel', () => ({ NavigatorSettingsPanel: () => <div>Navigator settings panel</div> }));
 vi.mock('../NavigatorCalibrationPanel', () => ({ NavigatorCalibrationPanel: () => <div>Navigator calibration panel</div> }));

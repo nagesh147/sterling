@@ -15,8 +15,7 @@ import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
-import { MarketContractsPanel } from './MarketContractsPanel';
-import { TradeRulesPanel } from './TradeRulesPanel';
+import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
 import { type SectionId, resolveSectionId } from './config/registry';
@@ -557,9 +556,9 @@ type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: s
 const SECTION_DEFS: SectionDef[] = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
   { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/automatic', group: 'Trading' },
-  { id: 'market', label: 'Market & Contracts', eyebrow: 'What gets scanned', group: 'Trading' },
-  { id: 'rules', label: 'Trade Rules', eyebrow: 'Entry, stop, exit, size', group: 'Trading' },
-  { id: 'engine', label: 'SuperTrend', eyebrow: 'Triple-SuperTrend strategy', group: 'Signal engines' },
+  { id: 'manualRules', label: 'Manual Rules', eyebrow: 'Orders you place', group: 'Trading' },
+  { id: 'autoRules', label: 'Automatic Rules', eyebrow: 'Orders the engine places', group: 'Trading' },
+  { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines' },
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform' },
@@ -690,30 +689,30 @@ export function ConnectPane() {
             </>
           )}
 
-          {section === 'market' && (
+          {section === 'manualRules' && (
             <>
-              <SectionHeading title="Market & Contracts" description="What gets scanned, which chart a signal is read from, and which strikes and expiries are considered. Both signal engines read every setting here, so it is set once rather than configured twice." />
-              <MarketContractsPanel />
+              <SectionHeading title="Manual Rules" description="What happens to a trade you place yourself. Nothing here can block your order — it decides whether the trade gets a stop and what closes it." />
+              <ManualRulesPanel />
             </>
           )}
 
-          {section === 'rules' && (
+          {section === 'autoRules' && (
             <>
-              <SectionHeading title="Trade Rules" description="How a trade is sized, guarded and protected once a signal exists — in the order it happens, from entry through to the safety net. Every rule is tagged by whether it affects orders you place, orders the engine places, or both." />
-              <TradeRulesPanel />
+              <SectionHeading title="Automatic Rules" description="What the engine is allowed to open on your behalf, how big, and what closes it. Inert until automatic execution is armed in Trading Mode." />
+              <AutomaticRulesPanel />
             </>
           )}
 
           {section === 'engine' && (
             <>
-              <SectionHeading title="SuperTrend" description="The triple-SuperTrend strategy itself: how a setup is armed, how the stop trails, and what closes the trade. What it scans is in Market & Contracts; how the order is handled is in Trade Rules." />
+              <SectionHeading title="SuperTrend" description="This engine end to end: whether it runs, what it scans, and how it enters and exits. Navigator is configured separately and can run on its own." />
               <SuperTrendEnginePanel />
             </>
           )}
 
           {section === 'navigator' && (
             <>
-              <SectionHeading title="Value-Flow Navigator" description="A second signal engine alongside SuperTrend — it reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity. It can confirm SuperTrend's setups, find its own, or both. Off by default; never bypasses any existing order or risk control." />
+              <SectionHeading title="Value-Flow Navigator" description="A peer signal engine alongside SuperTrend, with its own scan settings and its own entry, stop and target. It reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity, and can confirm SuperTrend's setups, find its own, or both. Off by default; it never bypasses any order or risk control." />
               <NavigatorSettingsPanel />
               <NavigatorCalibrationPanel />
             </>

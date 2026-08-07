@@ -373,6 +373,14 @@ class EngineConfigModel(BaseModel):
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
     scan_stocks: List[str] = []
     scan_all_stocks: bool = False  # default preserves the full spot universe
+    #: Master switch above the stock list. False = leave single-stock
+    #: underlyings out of the scan entirely: no stock contracts are resolved and
+    #: no stock rows appear. Indices are unaffected.
+    #:
+    #: Single-stock derivatives list a monthly cycle only, settle physically at
+    #: expiry, and account for most of the scan cost, so "indices only" is worth
+    #: one switch rather than un-ticking every name. True keeps today's behaviour.
+    scan_stock_contracts: bool = True
     auto_execute: bool = False
     # ── Per-trade risk sizing (workstream F) ──────────────────────────────────
     # When on, auto-exec sizes lots so premium-at-risk ((entry − stop) × qty) stays

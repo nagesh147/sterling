@@ -1148,7 +1148,8 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # Granular selection applies to BOTH scans.
         selected = select_scan_universe(
             full_universe, indices=cfg_model.scan_indices,
-            stocks=cfg_model.scan_stocks, all_stocks=cfg_model.scan_all_stocks)
+            stocks=cfg_model.scan_stocks, all_stocks=cfg_model.scan_all_stocks,
+            stock_contracts=getattr(cfg_model, "scan_stock_contracts", True))
         spot_universe = selected if source in ("spot", "both") else []
         deriv_universe = selected if source in ("derivatives", "both") else None
         # Confluence runs its own pass (underlying regime + per-leg premium confirmation),
@@ -1201,7 +1202,8 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
                 if nav_cfg.scan_scope_mode == "custom":
                     nav_universe = select_scan_universe(
                         full_universe, indices=nav_cfg.scan_indices,
-                        stocks=nav_cfg.scan_stocks, all_stocks=nav_cfg.scan_all_stocks)
+                        stocks=nav_cfg.scan_stocks, all_stocks=nav_cfg.scan_all_stocks,
+                        stock_contracts=getattr(nav_cfg, "scan_stock_contracts", True))
                     if nav_cfg.enabled:
                         state.log(uid, "info",
                                   f"Navigator scan plan: {len(nav_universe)} instruments "

@@ -113,7 +113,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     ]);
     await renderPane();
     openSignalModeMenu();
-    fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Where both agree/ }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SENSEX').length).toBeGreaterThan(0);
     expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
@@ -140,7 +140,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     ]);
     await renderPane();
     openSignalModeMenu();
-    fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+    fireEvent.click(screen.getByRole('option', { name: /^Where both agree/ }));
     expect(screen.getByText(/1 SuperTrend setup on the board/)).toBeInTheDocument();
     expect(screen.queryByText(/3 SuperTrend setups/)).not.toBeInTheDocument();
   });
@@ -185,7 +185,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
       fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
       expect(screen.queryByTitle(exitRuleTitle)).not.toBeInTheDocument();
       openSignalModeMenu();
-      fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+      fireEvent.click(screen.getByRole('option', { name: /^Where both agree/ }));
       expect(screen.getByTitle(exitRuleTitle)).toBeInTheDocument();
     });
   });
@@ -204,7 +204,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
       mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED'), makeNavigatorRow('NIFTY BANK', 2, 'HIGH_CONVICTION')]);
       await renderPane();
       openSignalModeMenu();
-      fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+      fireEvent.click(screen.getByRole('option', { name: /^Where both agree/ }));
       expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
       expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
     });

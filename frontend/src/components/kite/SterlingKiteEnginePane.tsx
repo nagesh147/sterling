@@ -59,10 +59,10 @@ const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyne
 // scan_source/exit_mode above, this never changes what the engine scans.
 type SignalMode = 'supertrend' | 'navigator' | 'combined' | 'common';
 const SIGNAL_MODE_OPTS: { value: SignalMode; label: string; hint: string }[] = [
-  { value: 'supertrend', label: 'SuperTrend', hint: 'Default triple-SuperTrend (Heikin-Ashi) signal only — the Navigator badge is hidden even when Navigator has evidence.' },
-  { value: 'navigator', label: 'Navigator', hint: "Only setups the Value-Flow Navigator owns or has evidence for, viewed through its own status/effective score. Navigator scans independently and can run while SuperTrend is off." },
-  { value: 'combined', label: 'Combined', hint: 'Every SuperTrend setup, with Navigator evidence shown alongside when available. (Default)' },
-  { value: 'common', label: 'Common', hint: "Only setups where BOTH systems agree: SuperTrend is live and Navigator status is Confirmed or High Conviction. Navigator-owned rows remain visible in the Navigator lens." },
+  { value: 'combined', label: 'Everything', hint: 'Every setup either engine found. (Default)' },
+  { value: 'supertrend', label: 'SuperTrend only', hint: 'Only SuperTrend setups. Navigator is ignored, even where it has an opinion.' },
+  { value: 'navigator', label: 'Navigator only', hint: 'Only Navigator setups. Works even while SuperTrend is switched off.' },
+  { value: 'common', label: 'Where both agree', hint: 'Only setups SuperTrend found AND Navigator backs. The shortest, highest-conviction list.' },
 ];
 
 // Granular universe pickers. `name` is the value stored in config (matches the
@@ -557,6 +557,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
+          <SourceBadge source={row.source} />
           {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -1636,7 +1637,7 @@ function SignalTableSettingsPanel({
   // when the settings pane was already mounted), while the settings panels fired
   // 'kite-connect-section' (a no-op when it was not). openSettingsSection does
   // both, and validates the id.
-  const openTradeRules = () => openSettingsSection('rules');
+  const openTradeRules = () => openSettingsSection('manualRules');
 
   return (
     <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
@@ -1731,6 +1732,29 @@ function HeaderControlLabel({ title, children }: { title: string; children: Reac
       style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, flexShrink: 0 }}
     >
       {children}
+    </span>
+  );
+}
+
+
+/** Where this setup came from — the underlying's chart, the option's own premium
+ *  chart, both agreeing, or Navigator. In "both" mode one contract can produce a
+ *  Spot row AND a Premium row with different entries; without this they looked
+ *  like a duplicate. */
+function SourceBadge({ source }: { source: EngineSignalRow['source'] }) {
+  const map: Record<string, { label: string; tone: string; title: string }> = {
+    spot: { label: 'SPOT', tone: k.orange, title: "Read from the underlying's own chart. The option legs are candidates to buy." },
+    derivatives: { label: 'PREMIUM', tone: k.blue, title: "Read from this option's own premium chart." },
+    confluence: { label: 'BOTH AGREE', tone: k.green, title: 'The underlying fired AND this option\u2019s own premium confirmed it.' },
+    navigator: { label: 'NAVIGATOR', tone: k.purple, title: 'Found by the Value-Flow Navigator from its own AVWAP and flow evidence.' },
+  };
+  const it = map[source ?? 'spot'] ?? map.spot;
+  return (
+    <span title={it.title} style={{
+      flexShrink: 0, padding: '1px 5px', borderRadius: 3, letterSpacing: 0.3,
+      fontSize: 8, fontWeight: 800, color: it.tone, background: tint(it.tone, 8),
+    }}>
+      {it.label}
     </span>
   );
 }
@@ -1944,7 +1968,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // set and, during scanning, MERGE it with the freshly-arriving rows (fresh wins on
   // key collision). Rows therefore only get added/updated mid-scan, never vanish.
   // When the scan finishes, the fresh set becomes the new baseline.
-  const rowKey = (r: EngineSignalRow) => `${r.token}:${r.option_type}:${r.timestamp_ms}`;
+  // `source` is part of the identity. In "both" mode the same contract can fire
+  // once from the underlying's chart and once from its own premium chart; those
+  // are two different setups with different entries. Keying without the source
+  // let the later one silently overwrite the earlier in this merge map, so a
+  // real signal could vanish — and the two were indistinguishable on screen.
+  const rowKey = (r: EngineSignalRow) => `${r.source}:${r.token}:${r.option_type}:${r.timestamp_ms}`;
   const lastStableRows = React.useRef<EngineSignalRow[]>([]);
   const rawRows = signals?.rows ?? [];
   const isScanning = signals?.scanning ?? false;

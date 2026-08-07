@@ -247,10 +247,12 @@ def _resolve_nav_universe(nav_cfg, engine_cfg, full_universe):
         return select_scan_universe(
             full_universe, indices=nav_cfg.scan_indices,
             stocks=nav_cfg.scan_stocks, all_stocks=nav_cfg.scan_all_stocks,
+            stock_contracts=getattr(nav_cfg, "scan_stock_contracts", True),
         )
     return select_scan_universe(
         full_universe, indices=engine_cfg.scan_indices,
         stocks=engine_cfg.scan_stocks, all_stocks=engine_cfg.scan_all_stocks,
+        stock_contracts=getattr(engine_cfg, "scan_stock_contracts", True),
     )
 
 
@@ -565,10 +567,21 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
                     default_underlyings=engine_cfg.scan_indices,
                     underlying_tokens={item.name: item.token},
                     universe=[item], nfo_rows=nfo, bfo_rows=bfo,
-                    moneyness=engine_cfg.strike_moneyness,
+                    # Navigator's own contract coverage when it has been given
+                    # one, otherwise the Kite engine's. Before these fields
+                    # existed the engine's ladder was used unconditionally, so
+                    # a user editing strike coverage "for SuperTrend" silently
+                    # moved Navigator too, with no way to separate them.
+                    moneyness=(record.config.strike_moneyness
+                               if record.config.strike_moneyness is not None
+                               else engine_cfg.strike_moneyness),
                     expiry_types=engine_cfg.scan_expiries,
-                    expiry_types_indices=engine_cfg.scan_expiries_indices,
-                    expiry_types_stocks=engine_cfg.scan_expiries_stocks,
+                    expiry_types_indices=(record.config.scan_expiries_indices
+                                          if record.config.scan_expiries_indices is not None
+                                          else engine_cfg.scan_expiries_indices),
+                    expiry_types_stocks=(record.config.scan_expiries_stocks
+                                         if record.config.scan_expiries_stocks is not None
+                                         else engine_cfg.scan_expiries_stocks),
                     evaluation_kwargs=kwargs,
                 )
                 for row in rows[before:]:

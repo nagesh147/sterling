@@ -567,82 +567,12 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <strong> ×eff</strong> = ₹ gain per ₹100 of premium (higher = more leverage, but more decay/IV risk).
       </div>
 
-      {/* ── 4. Entry quality filters ────────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={S.section}>ENTRY QUALITY FILTERS</div>
-      <div style={{ ...S.hint, marginBottom: 12 }}>
-        Optional gates. When set, the engine skips signals where the trend is too weak or
-        volatility too low. Applies to all profiles — OTM, deep ITM, and futures alike.
-      </div>
-
-      <div style={S.filterRow}>
-        <span style={S.filterLabel}>
-          <span style={{ display: 'flex', alignItems: 'center' }}>
-            Min ADX
-            <DefaultNote changed={cfg.adx_min !== DEFAULTS.adx_min} defaultText="off" />
-          </span>
-          <span style={{ ...S.hint, display: 'block' }}>
-            Trend strength (0–100). 20 = decent trend forming. 30 = strong.
-            40+ = very strong, rare. Leave blank to accept all signals.
-          </span>
-        </span>
-        <input type="number"
-          style={{ ...S.numInput, ...(cfg.adx_min !== DEFAULTS.adx_min ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}) }}
-          value={cfg.adx_min ?? ''} placeholder="off"
-          step={1} min={5} max={50}
-          onChange={e => onUpdate({ adx_min: e.target.value ? parseFloat(e.target.value) : null })}
-          disabled={busy}
-        />
-      </div>
-
-      <div style={S.filterRow}>
-        <span style={S.filterLabel}>
-          <span style={{ display: 'flex', alignItems: 'center' }}>
-            Min ATR %ile
-            <DefaultNote changed={cfg.atr_pct_min !== DEFAULTS.atr_pct_min} defaultText="off" />
-          </span>
-          <span style={{ ...S.hint, display: 'block' }}>
-            Volatility rank vs the past year (0–100). 50 = market is moving more
-            than half its historical range. Higher = only trade when it's volatile.
-          </span>
-        </span>
-        <input type="number"
-          style={{ ...S.numInput, ...(cfg.atr_pct_min !== DEFAULTS.atr_pct_min ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}) }}
-          value={cfg.atr_pct_min ?? ''} placeholder="off"
-          step={5} min={10} max={95}
-          onChange={e => onUpdate({ atr_pct_min: e.target.value ? parseFloat(e.target.value) : null })}
-          disabled={busy}
-        />
-      </div>
-
-      {/* ── 5. Risk infrastructure ──────────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        RISK INFRASTRUCTURE
-        <DefaultNote changed={cfg.wire_risk_infra !== DEFAULTS.wire_risk_infra} defaultText="off" />
-      </div>
-
-      <div style={{ ...S.row, marginBottom: 8 }}>
-        <button
-          style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#f06428' : '#ccc' }}
-          onClick={() => onUpdate({ wire_risk_infra: !cfg.wire_risk_infra })}
-          disabled={busy}
-        >
-          <span style={{ ...S.toggleDot, left: cfg.wire_risk_infra ? 20 : 2 }} />
-        </button>
-        <span style={{ fontSize: 12, fontWeight: 600, color: cfg.wire_risk_infra ? '#a65525' : '#999' }}>
-          {cfg.wire_risk_infra ? 'ON' : 'OFF'}
-        </span>
-      </div>
-      <div style={S.hint}>
-        Wires two safety layers into every entry:
-        <br />• <strong>Drawdown circuit breaker</strong> — if your account drops 5%/10%/15%, new position
-        sizes are scaled down automatically, then entries are halted.
-        <br />• <strong>Correlation penalty</strong> — if you already hold a position correlated with the
-        new signal (e.g. Nifty and BankNifty moving together), the new lot size is reduced to avoid
-        doubling up on the same risk.
-        <br /><br />Applies to all profiles. Recommended once you run more than one position at a time.
-      </div>
+      {/* Sections 4 and 5 (entry-quality filters and the risk-infrastructure
+          toggle) were removed on 2026-08-08. They are not vehicle settings, and
+          rendering them here put a SECOND editable control for adx_min,
+          atr_pct_min and wire_risk_infra on the same page as the Automatic
+          Rules copies — with different input bounds, both writing the same
+          field. Those now have exactly one home, in Automatic Rules. */}
 
     </div>
   );

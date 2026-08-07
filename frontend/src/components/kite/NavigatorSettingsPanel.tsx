@@ -4,6 +4,9 @@ import {
 } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS, openSettingsSection } from './config/registry';
+import { ScopedGroup } from './config/EngineScope';
+import { ContractsGroup, InstrumentsGroup } from './config/ScanSettings';
+import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import { useEngineConfig, useStockRegistry } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
@@ -240,6 +243,21 @@ function set<K extends keyof NavigatorConfigModel>(
   return { ...draft, [key]: { ...(draft[key] as object), ...patch } };
 }
 
+/** Navigator's own signal source. Kept compact — the full card grid belongs on
+ *  the engine pages where the choice is being made for the first time. */
+function NavSignalSource({ value, onChange }: {
+  value: 'spot' | 'derivatives' | 'both' | 'confluence';
+  onChange: (v: 'spot' | 'derivatives' | 'both' | 'confluence') => void;
+}) {
+  return (
+    <ChoiceRow
+      value={value}
+      onChange={onChange}
+      options={SCAN_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+    />
+  );
+}
+
 export function NavigatorSettingsPanel() {
   const { data, isLoading, error: loadError } = useNavigatorConfig();
   const setConfig = useSetNavigatorConfig();
@@ -315,6 +333,15 @@ export function NavigatorSettingsPanel() {
     ? `${draft.scan_indices.length} indices + all stocks`
     : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
 
+  // One line describing what Navigator covers, saying per group whether it is
+  // following SuperTrend or standing on its own.
+  const scanSummary = [
+    draft.scan_scope_mode === 'shared' ? 'Instruments: shared' : `Instruments: ${customScopeCount}`,
+    draft.strike_moneyness == null
+      ? 'contracts: shared'
+      : `contracts: ${draft.strike_moneyness.length} strikes`,
+  ].join(' · ');
+
   return (
     <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
       <style>{NUM_INPUT_CSS}</style>
@@ -322,10 +349,24 @@ export function NavigatorSettingsPanel() {
       <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ color: TEXT, fontSize: 14.5, fontWeight: 800 }}>Value-Flow Navigator</div>
-            <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 3 }}>
-              Anchored VWAP structure, projected ranges, volatility regime, option flow, and gamma activity —
-              fused into an auditable confirmation layer over the existing Sterling signal. Off by default.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+              <span style={{ color: TEXT, fontSize: 15, fontWeight: 800 }}>Value-Flow Navigator</span>
+              <span style={{
+                padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800, letterSpacing: .4,
+                color: draft.enabled ? '#2e7d32' : MUTED,
+                background: draft.enabled ? '#e8f5e9' : '#f6f6f7',
+                border: `1px solid ${draft.enabled ? '#cfe2d0' : BORDER}`,
+              }}>
+                {draft.enabled ? 'RUNNING' : 'OFF'}
+              </span>
+            </div>
+            <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 4 }}>
+              Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity.
+            </div>
+            <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>
+              {draft.enabled
+                ? 'Reading structure for its instruments. It can confirm SuperTrend setups and find its own.'
+                : 'Not scanning. SuperTrend can still run on its own.'}
             </div>
           </div>
           <Switch
@@ -452,113 +493,96 @@ export function NavigatorSettingsPanel() {
         </div>
       </AdvancedGroup>
 
-      {/* ── 1. scan scope — shared with the Kite engine, or Navigator's own ── */}
+      {/* ── 1. what Navigator scans — per group, linked or its own ─────────
+          One all-or-nothing "scan scope" flag could not express "same
+          instruments, different strikes", and it shared things the backend
+          never shared (Navigator always read its own scan_source). Each group
+          now carries its own link control. */}
       <Section
         title="What Navigator scans"
-        description="Navigator is its own signal engine. It can cover the same instruments as SuperTrend, or a completely separate list of your own."
-        summary={draft.scan_scope_mode === 'shared' ? 'Same as SuperTrend' : `Its own · ${customScopeCount}`}
+        description="Navigator is a peer engine, not an add-on. Each group below either follows SuperTrend or stands on its own."
+        summary={scanSummary}
         defaultOpen
       >
-        <Field label="Scan scope" hint="Which instruments Navigator looks at.">
-          <ChoiceRow<NavigatorScanScopeMode>
-            value={draft.scan_scope_mode}
-            onChange={(mode) => patch(mode === 'custom' ? seedCustomScope(draft, engineCfg) : { ...draft, scan_scope_mode: mode })}
-            options={[
-              { value: 'shared', label: 'Same as SuperTrend' },
-              { value: 'custom', label: 'Its own' },
-            ]}
-          />
-          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
-            {draft.scan_scope_mode === 'shared'
-              ? "Navigator watches the same instruments as SuperTrend, set once under Market & Contracts. Sharing covers the instrument list only — the signal source below stays Navigator's own."
-              : "Navigator watches its own list below — the Market & Contracts instrument list then applies to SuperTrend only. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
-          </div>
-        </Field>
-
-        {draft.scan_scope_mode === 'shared' ? (
-          <Field label="Currently covering" hint="The instrument list, edited under Market & Contracts.">
-            {engineCfg ? (
-              <>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                  {engineCfg.scan_indices.map((u) => (
-                    <span key={u} style={chipStyle}>{u}</span>
-                  ))}
-                  {engineCfg.scan_all_stocks
-                    ? <span style={chipStyle}>+ all F&amp;O stocks</span>
-                    : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
-
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openSettingsSection('market')}
-                  style={{ marginTop: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: ORANGE, fontSize: 11, fontWeight: 700 }}
-                >
-                  Change in Market &amp; Contracts →
-                </button>
-              </>
-            ) : (
-              <span style={{ color: DIM, fontSize: 10.5 }}>Loading the shared scan setup…</span>
-            )}
-          </Field>
-        ) : (
-          <>
-            <Field label="Indices" hint="Index charts, and their options.">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {NAV_INDEX_OPTIONS.map((name) => (
-                  <CheckOption
-                    key={name} label={name} compact
-                    checked={draft.scan_indices.includes(name)}
-                    onChange={() => patch({ ...draft, scan_indices: toggleName(draft.scan_indices, name) })}
-                  />
-                ))}
-              </div>
-            </Field>
-            <BoolField
-              label="All F&amp;O stocks"
-              hint="Every liquid F&O stock, instead of hand-picking below. Slower scans — Navigator reads each one's chart in turn."
-              value={draft.scan_all_stocks}
-              onChange={(v) => patch({ ...draft, scan_all_stocks: v })}
-            />
-            {!draft.scan_all_stocks && (
-              <Field label="Stocks" hint="Pick individual stocks for Navigator to cover.">
-                <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, border: `1px solid ${BORDER}`, borderRadius: 7, padding: 8 }}>
-                  {(stockRegistry ?? []).flatMap((group) => group.stocks).map((stock) => (
-                    <CheckOption
-                      key={stock.name} label={stock.name} compact
-                      checked={draft.scan_stocks.includes(stock.name)}
-                      onChange={() => patch({ ...draft, scan_stocks: toggleName(draft.scan_stocks, stock.name) })}
-                    />
-                  ))}
-                  {!stockRegistry?.length && <span style={{ color: DIM, fontSize: 10.5 }}>Loading stocks…</span>}
-                </div>
-              </Field>
-            )}
-            {customScopeEmpty && (
-              <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Icons.Warning />
-                Pick at least one index or stock — an empty list means Navigator scans nothing at all.
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Navigator's OWN signal source, shown in BOTH scopes.
-            "Same as SuperTrend" shares the instrument universe only —
-            navigator/runtime reads `record.config.scan_source`, never the
-            engine's. This used to be hidden unless the scope was custom, while
-            the panel displayed the ENGINE's source above as if it were
-            Navigator's, so in shared scope the value Navigator actually used
-            was neither visible nor reachable. */}
-        <Field
-          label="Contracts to scan"
-          hint="Which chart Navigator reads. Navigator's own setting — it is not taken from SuperTrend, even on a shared scan scope."
+        <ScopedGroup
+          title="Instruments"
+          description="The indices and stocks Navigator watches."
+          linked={draft.scan_scope_mode === 'shared'}
+          onLinkChange={(linked) => patch(linked
+            ? { ...draft, scan_scope_mode: 'shared' }
+            : seedCustomScope(draft, engineCfg))}
+          sharedSummary={engineCfg?.scan_indices ? (
+            <>
+              Following SuperTrend:{' '}
+              {engineCfg.scan_all_stocks
+                ? `${engineCfg.scan_indices.length} indices + all F&O stocks`
+                : `${engineCfg.scan_indices.length} indices + ${(engineCfg.scan_stocks ?? []).length} stocks`}.
+            </>
+          ) : 'Following SuperTrend.'}
         >
-          <ChoiceRow
+          <InstrumentsGroup
+            idPrefix="Navigator"
+            allowEmptyIndices
+            indices={draft.scan_indices}
+            stocks={draft.scan_stocks}
+            allStocks={draft.scan_all_stocks}
+            onChange={(next) => patch({
+              ...draft,
+              ...(next.scan_indices !== undefined ? { scan_indices: next.scan_indices } : {}),
+              ...(next.scan_stocks !== undefined ? { scan_stocks: next.scan_stocks } : {}),
+              ...(next.scan_all_stocks !== undefined ? { scan_all_stocks: next.scan_all_stocks } : {}),
+            })}
+          />
+          {customScopeEmpty && (
+            <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Icons.Warning />
+              Pick at least one index or stock — an empty list means Navigator scans nothing at all.
+            </div>
+          )}
+        </ScopedGroup>
+
+        {/* Navigator's signal source has ALWAYS been its own — the runtime reads
+            record.config.scan_source unconditionally. There is no "linked" state
+            to offer here without inventing backend behaviour. */}
+        <div style={{ padding: '15px 0', borderTop: `1px solid ${BORDER}` }}>
+          <div style={{ color: TEXT, fontSize: 12.5, fontWeight: 700 }}>Signal source</div>
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '2px 0 9px' }}>
+            Which chart Navigator reads. Always its own — SuperTrend&apos;s source never applied here.
+          </div>
+          <NavSignalSource
             value={draft.scan_source}
             onChange={(v) => patch({ ...draft, scan_source: v })}
-            options={SCAN_SOURCE_OPTIONS}
           />
-        </Field>
+        </div>
+
+        <ScopedGroup
+          title="Contracts"
+          description="Which strikes and expiry cycles Navigator resolves for its own setups."
+          linked={draft.strike_moneyness == null}
+          onLinkChange={(linked) => patch(linked
+            ? { ...draft, strike_moneyness: null, scan_expiries_indices: null }
+            : {
+                ...draft,
+                strike_moneyness: engineCfg?.strike_moneyness ?? ['ITM1', 'ATM', 'OTM1'],
+                scan_expiries_indices: engineCfg?.scan_expiries_indices ?? engineCfg?.scan_expiries ?? ['weekly', 'monthly'],
+              })}
+          sharedSummary={engineCfg?.strike_moneyness
+            ? `Following SuperTrend: ${engineCfg.strike_moneyness.length} strikes · ${(engineCfg.scan_expiries_indices ?? engineCfg.scan_expiries ?? ['weekly', 'monthly']).join(' + ')}.`
+            : 'Following SuperTrend.'}
+        >
+          <ContractsGroup
+            strikes={draft.strike_moneyness ?? engineCfg?.strike_moneyness ?? ['ATM']}
+            indexExpiries={draft.scan_expiries_indices ?? ['weekly', 'monthly']}
+            stockContracts={draft.scan_stock_contracts ?? true}
+            onChange={(next) => patch({
+              ...draft,
+              ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
+              ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.scan_stock_contracts !== undefined ? { scan_stock_contracts: next.scan_stock_contracts } : {}),
+            })}
+          />
+        </ScopedGroup>
+
 
         <Field label="Price timeframe" hint="Read-only in v1 — must match the Kite base engine's 1H clock.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>60 minute</div>

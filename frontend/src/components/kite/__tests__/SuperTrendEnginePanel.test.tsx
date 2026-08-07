@@ -42,6 +42,9 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   usePatchEngineConfig: () => ({ mutate: setCfgMutate, isPending: false }),
   useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useRunScan: () => ({ mutate: runScanMutate, isPending: false }),
+  useStockRegistry: () => ({
+    data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE', label: 'RELIANCE' }] }],
+  }),
 }));
 
 function renderPanel() {
@@ -116,15 +119,25 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
     expect(screen.queryByLabelText(/hybrid weight/i)).not.toBeInTheDocument();
   });
 
-  it('does not own what it scans — it points at Market & Contracts instead', () => {
+  it('owns what it scans, rather than pointing at a shared page', () => {
+    // The shared "Market & Contracts" page could not express "SuperTrend on the
+    // full ladder, Navigator on ATM only", and claimed a sharing the backend
+    // only partly does. Each engine now owns its own scan settings.
     renderPanel();
-    fireEvent.click(screen.getByText('What this engine scans'));
+    fireEvent.click(screen.getByText('Contracts'));
 
-    // No editable strike or universe control on this page any more…
-    expect(screen.queryByRole('checkbox', { name: /Deep ITM/i })).not.toBeInTheDocument();
-    // …just pointers to the layer that genuinely owns them.
-    expect(screen.getAllByRole('button', { name: /Change in Market & Contracts/ }).length)
-      .toBeGreaterThanOrEqual(3);
+    expect(screen.getByRole('checkbox', { name: /Deep ITM/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Confluence/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Change in Market & Contracts/ })).not.toBeInTheDocument();
+  });
+
+  it('can be switched off from its own page, the same way Navigator can', () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('switch', { name: 'SuperTrend engine' }));
+    expect(setCfgMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ engine_enabled: false }),
+      expect.anything(),
+    );
   });
 
   it('does not own sizing or the order guards either', () => {

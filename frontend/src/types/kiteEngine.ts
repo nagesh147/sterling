@@ -228,6 +228,9 @@ export interface EngineConfigModel {
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
+  /** Master switch above the stock list. False leaves single-stock underlyings
+   *  out of the scan entirely — no stock contracts, no stock rows. */
+  scan_stock_contracts?: boolean;
   auto_execute: boolean;
   // Per-trade risk sizing (workstream F)
   risk_sizing: boolean;

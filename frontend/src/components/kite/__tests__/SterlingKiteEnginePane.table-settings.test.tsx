@@ -103,7 +103,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     // The drawer now points at Trade Rules — entry, stop, exit and sizing are
     // engine-independent, so that is where they live.
     fireEvent.click(screen.getByRole('button', { name: /trade rules/i }));
-    expect(localStorage.getItem('kite_connect_section')).toBe('rules');
+    expect(localStorage.getItem('kite_connect_section')).toBe('manualRules');
     expect(navListener).toHaveBeenCalled();
 
     window.removeEventListener('kite-nav-click', navListener);

@@ -82,7 +82,7 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
     },
   }),
   useStockRegistry: () => ({
-    data: [{ label: 'Very High', stocks: [{ name: 'RELIANCE' }, { name: 'TCS' }] }],
+    data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE' }, { name: 'TCS' }] }],
   }),
 }));
 
@@ -159,15 +159,15 @@ describe('NavigatorSettingsPanel', () => {
   describe('Scan scope — shared with SuperTrend, or Navigator\'s own', () => {
     it('defaults to shared and shows what the engine currently covers, read-only', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getByRole('button', { name: 'Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText('Currently covering')).toBeInTheDocument();
-      expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0); // mirrors mocked engine cfg
+      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText(/Following SuperTrend:/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true'); // mirrors mocked engine cfg
       // Navigator's OWN signal source stays visible on a shared scope: sharing
       // covers the instrument universe only (navigator/runtime._resolve_nav_universe),
       // and navigator/runtime reads `record.config.scan_source` regardless. It
       // used to be hidden here while the engine's source was displayed above as
       // if it were Navigator's.
-      expect(screen.getByText('Contracts to scan')).toBeInTheDocument(); // no custom pickers
+      expect(screen.getByText('Signal source')).toBeInTheDocument(); // no custom pickers
     });
 
     it('the dead read-only "Engine source" row is gone', () => {
@@ -178,15 +178,15 @@ describe('NavigatorSettingsPanel', () => {
 
     it('switching to its own scope reveals the universe pickers and a contracts choice', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
-      expect(screen.getByText('Contracts to scan')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      expect(screen.getByText('Signal source')).toBeInTheDocument();
       expect(screen.getByText('Indices')).toBeInTheDocument();
       expect(screen.queryByText('Currently covering')).not.toBeInTheDocument();
     });
 
     it('seeds a fresh custom scope from the engine so the first save is never empty', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_scope_mode).toBe('custom');
@@ -196,7 +196,7 @@ describe('NavigatorSettingsPanel', () => {
     it('blocks Apply and warns when a custom scope has nothing selected', () => {
       queryData = makeRecord({ scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'] });
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('checkbox', { name: 'NIFTY 50' })); // clear the only pick
+      fireEvent.click(screen.getByRole('checkbox', { name: 'NIFTY' })); // clear the only pick
       expect(screen.getByText(/Navigator scans nothing at all/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
     });
@@ -213,8 +213,8 @@ describe('NavigatorSettingsPanel', () => {
     it('a configured custom universe survives flipping to shared and back', () => {
       queryData = makeRecord({ scan_scope_mode: 'custom', scan_stocks: ['RELIANCE'] });
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Same as SuperTrend' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_stocks).toEqual(['RELIANCE']); // not re-seeded over

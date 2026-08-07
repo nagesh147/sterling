@@ -494,7 +494,28 @@ class NavigatorConfigModel(BaseModel):
     scan_indices: list[str] = Field(default_factory=list)
     scan_stocks: list[str] = Field(default_factory=list)
     scan_all_stocks: bool = False
+    #: Master switch above Navigator's own stock list — see the engine field of
+    #: the same name. Read only when scan_scope_mode == "custom".
+    scan_stock_contracts: bool = True
     scan_source: Literal["spot", "derivatives", "both", "confluence"] = "spot"
+    #: Navigator's OWN contract coverage. ``None`` (default) means "follow the
+    #: Kite engine's", which is what every existing config does and what the
+    #: runtime did unconditionally before these existed. Set them to give
+    #: Navigator a different strike ladder or expiry cycle from SuperTrend —
+    #: the two engines look for different things, so a user who wants Navigator
+    #: on ATM-only while SuperTrend sweeps the full ladder can now say so.
+    #:
+    #: Read independently of ``scan_scope_mode``: contract coverage and the
+    #: instrument universe are separate choices, and forcing them to move
+    #: together is what made the old "shared" flag confusing.
+    strike_moneyness: Optional[list[Literal[
+        "ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5",
+        "OTM1", "OTM2", "OTM3", "OTM4", "OTM5",
+    ]]] = None
+    scan_expiries_indices: Optional[list[Literal["weekly", "monthly"]]] = None
+    #: Empty list = do not scan single-stock contracts at all (the exchange
+    #: lists only a monthly cycle, so "monthly" is the sole thing to include).
+    scan_expiries_stocks: Optional[list[Literal["monthly"]]] = None
     # ── Structure Radar / Signal Origination (additive, all off by default) ──
     # See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
     # Orthogonal to `operating_mode` — none of these change how Navigator
