@@ -5,7 +5,9 @@ import type { Moneyness, ScanExpiry } from '../../types/kiteEngine';
 import {
   BORDER, CheckOption, DIM, Field, MUTED, ORANGE, ORANGE_SOFT, Section, Switch, TEXT,
 } from './kiteSettingsPrimitives';
-import { AppliesChip, ConfigNote, PanelCard } from './config/ConfigPrimitives';
+import {
+  AppliesChip, ConfigNote, NavigatorScopeChip, PanelCard,
+} from './config/ConfigPrimitives';
 import {
   FIELDS, INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS, scanSourceLabel,
 } from './config/registry';
@@ -16,17 +18,24 @@ const GREEN = '#4caf50';
 /**
  * Everything that decides WHAT gets scanned and WHICH contracts are considered.
  *
- * This is the market layer, not an engine's layer: SuperTrend and the Navigator
- * both read every setting on this page. It used to be split — the universe and
- * the signal source lived in a "shared" panel while strike coverage and the
- * index expiries stayed on the page titled "SuperTrend Engine", even though
- * Navigator reads those through the same shared scan scope.
- * Changing strike coverage from the SuperTrend page therefore moved Navigator
- * too, silently. Now the whole layer lives in one place.
+ * This is the market layer rather than an engine's layer, but "both engines read
+ * everything here" would be too strong and was wrong when this page first said
+ * it. What is actually true, field by field:
+ *
+ *   • strike coverage and the expiry lists — handed to Navigator on every pass,
+ *     whatever its scan scope;
+ *   • the instrument universe — shared only while Navigator's scan scope is
+ *     "shared" (navigator/runtime._resolve_nav_universe);
+ *   • the signal source — NOT shared. Navigator carries its own `scan_source`
+ *     and reads that one unconditionally.
+ *
+ * Each field carries a chip saying which of those it is, instead of one blanket
+ * sentence that is only mostly true.
  */
 
-/** Which engines are currently following this setup. Navigator only follows it
- *  while its scan scope is "shared"; claiming otherwise would be a lie. */
+/** Whether Navigator is currently following the shared INSTRUMENT UNIVERSE.
+ *  It is deliberately not a claim about the whole page — the signal source is
+ *  never shared, and strike/expiry coverage is shared regardless of this. */
 function FollowerChips({ navigatorFollows, navigatorEnabled }: {
   navigatorFollows: boolean;
   navigatorEnabled: boolean;
@@ -46,14 +55,14 @@ function FollowerChips({ navigatorFollows, navigatorEnabled }: {
   );
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      {chip('SuperTrend', true, 'The SuperTrend engine always scans this market setup.')}
+      {chip('SuperTrend', true, 'The SuperTrend engine always scans this universe.')}
       {chip(
         navigatorFollows ? 'Navigator' : 'Navigator — on its own',
         navigatorFollows,
         navigatorFollows
           ? navigatorEnabled
-            ? 'Navigator is set to follow this setup.'
-            : 'Navigator would follow this, but Navigator is currently off.'
+            ? 'Navigator is set to follow this instrument universe.'
+            : 'Navigator would follow this universe, but Navigator is currently off.'
           : 'Navigator has its own universe — change it in the Value-Flow Navigator section.',
       )}
     </div>
@@ -109,9 +118,9 @@ export function MarketContractsPanel() {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: TEXT, fontSize: 14.5, fontWeight: 800 }}>Market &amp; contracts</div>
             <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.55, margin: '3px 0 10px' }}>
-              What gets scanned, which chart a signal is read from, and which contracts are
-              considered. Both signal engines read every setting on this page, so it is set once
-              here rather than configured twice.
+              What gets scanned and which contracts are considered. Most of this is shared with
+              the Value-Flow Navigator, so it is set once here rather than configured twice — but
+              not all of it, so each setting says who reads it.
             </div>
           </div>
           <span aria-live="polite" style={{
@@ -128,9 +137,10 @@ export function MarketContractsPanel() {
             marginTop: 10, padding: '8px 11px', borderRadius: 7, background: '#f6f6f7',
             border: `1px solid ${BORDER}`, color: MUTED, fontSize: 10.5, lineHeight: 1.5,
           }}>
-            Navigator is currently set to its own universe, so changes here affect SuperTrend only.
-            Switch it back under <b>Value-Flow Navigator → What Navigator scans</b> if you want them
-            to move together again.
+            Navigator is currently set to its own universe, so the <b>Instruments</b> list below
+            applies to SuperTrend only. Strike coverage and the expiry cycles still reach Navigator
+            either way. Switch it back under <b>Value-Flow Navigator → What Navigator scans</b> if
+            you want the instrument lists to move together again.
           </div>
         )}
         <div style={{ marginTop: 10, color: DIM, fontSize: 10.5 }}>
@@ -142,14 +152,17 @@ export function MarketContractsPanel() {
 
       <Section
         title="Where a signal comes from"
-        description="Which chart a setup is read from."
+        description="Which chart a SuperTrend setup is read from. Navigator has its own."
         summary={scanSourceLabel(cfg.scan_source)}
         defaultOpen
       >
         <Field
           label={FIELDS.scan_source.label}
           hint={FIELDS.scan_source.help}
-          badge={<AppliesChip applies={FIELDS.scan_source.applies} evidence={FIELDS.scan_source.evidence} />}
+          badge={<>
+            <AppliesChip applies={FIELDS.scan_source.applies} evidence={FIELDS.scan_source.evidence} />
+            <NavigatorScopeChip scope={FIELDS.scan_source.navigator!} navigatorFollowsUniverse={navigatorFollows} />
+          </>}
         >
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8 }}>
             {SCAN_SOURCE_OPTIONS.map((option) => {
@@ -189,7 +202,10 @@ export function MarketContractsPanel() {
       >
         <Field
           label={FIELDS.scan_indices.label}
-          badge={<AppliesChip applies={FIELDS.scan_indices.applies} evidence={FIELDS.scan_indices.evidence} />}
+          badge={<>
+            <AppliesChip applies={FIELDS.scan_indices.applies} evidence={FIELDS.scan_indices.evidence} />
+            <NavigatorScopeChip scope={FIELDS.scan_indices.navigator!} navigatorFollowsUniverse={navigatorFollows} />
+          </>}
         >
           <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
             {INDEX_OPTIONS.map((option) => (
@@ -207,7 +223,10 @@ export function MarketContractsPanel() {
         <Field
           label={FIELDS.scan_stocks.label}
           hint={FIELDS.scan_all_stocks.help}
-          badge={<AppliesChip applies={FIELDS.scan_stocks.applies} evidence={FIELDS.scan_stocks.evidence} />}
+          badge={<>
+            <AppliesChip applies={FIELDS.scan_stocks.applies} evidence={FIELDS.scan_stocks.evidence} />
+            <NavigatorScopeChip scope={FIELDS.scan_stocks.navigator!} navigatorFollowsUniverse={navigatorFollows} />
+          </>}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <Switch
@@ -255,7 +274,10 @@ export function MarketContractsPanel() {
         <Field
           label={FIELDS.strike_moneyness.label}
           hint={FIELDS.strike_moneyness.help}
-          badge={<AppliesChip applies={FIELDS.strike_moneyness.applies} evidence={FIELDS.strike_moneyness.evidence} />}
+          badge={<>
+            <AppliesChip applies={FIELDS.strike_moneyness.applies} evidence={FIELDS.strike_moneyness.evidence} />
+            <NavigatorScopeChip scope={FIELDS.strike_moneyness.navigator!} navigatorFollowsUniverse={navigatorFollows} />
+          </>}
         >
           <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
             {STRIKE_GROUPS.map((group) => {
@@ -278,7 +300,10 @@ export function MarketContractsPanel() {
         <Field
           label={FIELDS.scan_expiries_indices.label}
           hint={FIELDS.scan_expiries_indices.help}
-          badge={<AppliesChip applies={FIELDS.scan_expiries_indices.applies} evidence={FIELDS.scan_expiries_indices.evidence} />}
+          badge={<>
+            <AppliesChip applies={FIELDS.scan_expiries_indices.applies} evidence={FIELDS.scan_expiries_indices.evidence} />
+            <NavigatorScopeChip scope={FIELDS.scan_expiries_indices.navigator!} navigatorFollowsUniverse={navigatorFollows} />
+          </>}
         >
           <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
             {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (

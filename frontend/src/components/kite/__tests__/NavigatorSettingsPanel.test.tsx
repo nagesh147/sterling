@@ -162,7 +162,12 @@ describe('NavigatorSettingsPanel', () => {
       expect(screen.getByRole('button', { name: 'Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText('Currently covering')).toBeInTheDocument();
       expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0); // mirrors mocked engine cfg
-      expect(screen.queryByText('Contracts to scan')).not.toBeInTheDocument(); // no custom pickers
+      // Navigator's OWN signal source stays visible on a shared scope: sharing
+      // covers the instrument universe only (navigator/runtime._resolve_nav_universe),
+      // and navigator/runtime reads `record.config.scan_source` regardless. It
+      // used to be hidden here while the engine's source was displayed above as
+      // if it were Navigator's.
+      expect(screen.getByText('Contracts to scan')).toBeInTheDocument(); // no custom pickers
     });
 
     it('the dead read-only "Engine source" row is gone', () => {

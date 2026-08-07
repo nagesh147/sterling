@@ -37,12 +37,18 @@ def _mock_adapter():
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
     app = create_app()
     adapter = _mock_adapter()
     app.state.adapter = adapter
     with TestClient(app) as c:
         c.app.state.adapter = adapter
+        # The position endpoints resolve their adapter as
+        # `adapter_manager.get_adapter() or request.app.state.adapter`, so the
+        # process-wide adapter that startup installed wins and this mock is never
+        # reached — the monitor loop would call the REAL exchange. Override both.
+        from app.services import adapter_manager as _adm
+        monkeypatch.setattr(_adm, "get_adapter", lambda: adapter)
         yield c
 
 

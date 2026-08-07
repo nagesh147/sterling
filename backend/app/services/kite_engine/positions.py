@@ -71,6 +71,13 @@ class OpenPosition:
     exit_reason: str = ""
     exit_mode: str = "one_red"  # exit counter chosen at entry time (one_red/two_red/three_red/three_red_signal)
     current_red_count: int = 0  # latest computed red ST lines against this position (updated on scans)
+    #: When ``current_red_count`` was last refreshed from a live scan row. The count is
+    #: only as good as its age: when the signal that opened a position ends and no row of
+    #: that direction is emitted again, there is nothing to refresh it from and it holds
+    #: its last value forever. Leaving it alone is the safe direction — inventing a 0
+    #: would disarm the exit — but a counter that silently stopped counting must not look
+    #: like a working one.
+    red_count_ms: int = 0
     # ── delta-translation context (workstream: spot-mode + deep-ITM premium stop) ──
     # For option vehicles the protective stop lives in PREMIUM space but the signal's
     # trail lives in UNDERLYING space. We store the entry underlying spot + the BS
@@ -275,6 +282,7 @@ def update_health(uid: str, symbol: str, red_count: int, exit_mode: Optional[str
     if p is None:
         return None
     p.current_red_count = max(0, int(red_count))
+    p.red_count_ms = int(time.time() * 1000)
     if exit_mode:
         p.exit_mode = exit_mode
     _persist(uid)

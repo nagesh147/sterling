@@ -141,7 +141,7 @@ export function SuperTrendEnginePanel() {
 
       <Section
         title="What this engine scans"
-        description="Shared with the Value-Flow Navigator, so it is set once in Market & Contracts."
+        description="Set in Market & Contracts. Strike coverage and the expiry cycles reach Navigator too; the signal source below is SuperTrend's alone."
         summary={`${scanSourceLabel(cfg.scan_source)} · ${cfg.strike_moneyness.length} strikes`}
       >
         <Field label={FIELDS.scan_source.label} hint={FIELDS.scan_source.help}>

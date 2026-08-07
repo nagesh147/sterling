@@ -1716,3 +1716,207 @@ class TestThePositionStoreSurvivesAnUnknownField:
             uid="z3", symbol="NIFTY24JUN24000PE", exchange="NFO", qty=75,
             order_id="O1", status=pos.OPEN, direction="long", signal_direction="short"))
         assert pos.signal_direction_of(pos.get("z3", "NIFTY24JUN24000PE")) == "short"
+
+
+# ── 21. a counter that stopped counting must not look like a working one ──────
+
+class TestAFrozenRedCounterIsAnnounced:
+    @pytest.mark.asyncio
+    async def test_a_stale_counter_is_reported(self):
+        import time as _t
+        from app.services.kite_engine import service, state
+        from app.services.kite_engine.scanner import scanner as _scanner
+        state.reset("f1")
+        pos.reset("f1")
+        service._red_stale_warned.clear()
+        old = int(_t.time() * 1000) - service._RED_STALE_MS - 1
+        pos.register(pos.OpenPosition(
+            uid="f1", symbol="RELIANCE25JUN3000PE", exchange="NFO", token=111, qty=250,
+            entry_premium=90.0, stop_premium=70.0, order_id="O1", status=pos.OPEN,
+            direction="long", signal_direction="short", underlying="RELIANCE",
+            current_red_count=1, red_count_ms=old, opened_ms=old))
+        _scanner.snapshot("f1").rows = []   # nothing to refresh from
+
+        await service._update_open_position_trails(_QuotingClient(), "f1")
+
+        msgs = [e.message for e in state.activity("f1") if e.kind == "order_failed"]
+        assert any("NOT being maintained" in m for m in msgs), msgs
+
+    @pytest.mark.asyncio
+    async def test_a_fresh_counter_is_not_reported(self):
+        import time as _t
+        from app.services.kite_engine import service, state
+        from app.services.kite_engine.scanner import scanner as _scanner
+        state.reset("f2")
+        pos.reset("f2")
+        service._red_stale_warned.clear()
+        pos.register(pos.OpenPosition(
+            uid="f2", symbol="RELIANCE25JUN3000PE", exchange="NFO", token=111, qty=250,
+            entry_premium=90.0, stop_premium=70.0, order_id="O1", status=pos.OPEN,
+            direction="long", signal_direction="short", underlying="RELIANCE",
+            red_count_ms=int(_t.time() * 1000)))
+        _scanner.snapshot("f2").rows = []
+
+        await service._update_open_position_trails(_QuotingClient(), "f2")
+
+        assert not [e for e in state.activity("f2") if e.kind == "order_failed"]
+
+    @pytest.mark.asyncio
+    async def test_the_warning_is_not_repeated_every_scan(self):
+        import time as _t
+        from app.services.kite_engine import service, state
+        from app.services.kite_engine.scanner import scanner as _scanner
+        state.reset("f3")
+        pos.reset("f3")
+        service._red_stale_warned.clear()
+        old = int(_t.time() * 1000) - service._RED_STALE_MS - 1
+        pos.register(pos.OpenPosition(
+            uid="f3", symbol="RELIANCE25JUN3000PE", exchange="NFO", token=111, qty=250,
+            entry_premium=90.0, stop_premium=70.0, order_id="O1", status=pos.OPEN,
+            direction="long", signal_direction="short", underlying="RELIANCE",
+            red_count_ms=old, opened_ms=old))
+        _scanner.snapshot("f3").rows = []
+
+        await service._update_open_position_trails(_QuotingClient(), "f3")
+        await service._update_open_position_trails(_QuotingClient(), "f3")
+
+        hits = [e for e in state.activity("f3") if "NOT being maintained" in e.message]
+        assert len(hits) == 1
+
+    def test_update_health_stamps_the_refresh_time(self):
+        pos.reset("f4")
+        pos.register(pos.OpenPosition(uid="f4", symbol="X25JUN100CE", exchange="NFO",
+                                      qty=1, status=pos.OPEN))
+        assert pos.get("f4", "X25JUN100CE").red_count_ms == 0
+        pos.update_health("f4", "X25JUN100CE", 2, "one_red")
+        assert pos.get("f4", "X25JUN100CE").red_count_ms > 0
+
+
+# ── 22. every exit_mode's threshold must actually be reachable ────────────────
+
+class TestEveryExitModeThresholdIsReachable:
+    """A verifier claimed the red exit was unreachable under three_red /
+    three_red_signal. The counter is bounded at 3 by construction (three SuperTrend
+    lines), so a threshold above 3 would be unsatisfiable — check every mode."""
+
+    def test_no_mode_needs_more_reds_than_exist(self):
+        from app.engines.common.exit_counter import get_exit_threshold
+        for mode in ("one_red", "two_red", "three_red", "three_red_signal"):
+            thresh = get_exit_threshold(mode)
+            assert 1 <= thresh <= 3, f"{mode} threshold {thresh} is outside 0..3 reds"
+
+    def test_three_reds_is_a_value_the_scan_can_actually_produce(self):
+        """Not just in range — reachable. All three lines against a long is exactly
+        what red_line_count returns 3 for."""
+        import numpy as np
+        from app.engines.sterling_kite_engine.regime import RegimeSeries
+        r = RegimeSeries.__new__(RegimeSeries)
+        r.t_fast = np.array([-1]); r.t_mid = np.array([-1]); r.t_slow = np.array([-1])
+        assert r.red_line_count("long", 0) == 3
+        assert r.red_line_count("short", 0) == 0
+
+
+# ── 23. auto-execute is gated on the positions already held ───────────────────
+
+class TestAutoExecPreflight:
+    def test_a_clean_book_does_not_block(self):
+        from app.services.kite_engine import service
+        pos.reset("g1")
+        assert service.autoexec_preflight("g1") == []
+
+    def test_an_unprotected_open_position_blocks(self):
+        from app.services.kite_engine import service
+        pos.reset("g2")
+        pos.register(pos.OpenPosition(
+            uid="g2", symbol="NIFTY24JUN24000CE", exchange="NFO", qty=75,
+            status=pos.OPEN, stop_premium=0.0))
+        reasons = service.autoexec_preflight("g2")
+        assert any("NO stop" in r for r in reasons), reasons
+
+    def test_a_position_stuck_pending_blocks(self):
+        import time as _t
+        from app.services.kite_engine import service
+        pos.reset("g3")
+        pos.register(pos.OpenPosition(
+            uid="g3", symbol="NIFTY24JUN24000CE", exchange="NFO", qty=75,
+            status=pos.PENDING, stop_premium=80.0,
+            opened_ms=int(_t.time() * 1000) - service._PENDING_GRACE_MS - 1))
+        assert any("PENDING" in r for r in service.autoexec_preflight("g3"))
+
+    def test_a_frozen_counter_blocks(self):
+        import time as _t
+        from app.services.kite_engine import service
+        pos.reset("g4")
+        old = int(_t.time() * 1000) - service._RED_STALE_MS - 1
+        pos.register(pos.OpenPosition(
+            uid="g4", symbol="NIFTY24JUN24000CE", exchange="NFO", qty=75,
+            status=pos.OPEN, stop_premium=80.0, opened_ms=old, red_count_ms=old))
+        assert any("stopped updating" in r for r in service.autoexec_preflight("g4"))
+
+    def test_a_healthy_position_does_not_block(self):
+        import time as _t
+        from app.services.kite_engine import service
+        pos.reset("g5")
+        now = int(_t.time() * 1000)
+        pos.register(pos.OpenPosition(
+            uid="g5", symbol="NIFTY24JUN24000CE", exchange="NFO", qty=75,
+            status=pos.OPEN, stop_premium=80.0, opened_ms=now, red_count_ms=now))
+        assert service.autoexec_preflight("g5") == []
+
+
+# ── 24. an expired session must not read as evidence ──────────────────────────
+
+class TestASessionlessClientCannotManufactureEvidence:
+    """`stop_status` treats an empty GTT list plus an empty order book as POSITIVE
+    evidence that nothing is protecting a position, and sells on it. Every read on the
+    live client used to answer "[]" when the access_token was missing or expired — so a
+    dropped session fabricated exactly that evidence and would have gone naked short on
+    top of a live broker stop. The reads raise now; the probe reports UNVERIFIED."""
+
+    @pytest.mark.asyncio
+    async def test_an_expired_session_yields_unverified_not_absent(self):
+        from app.services.exchanges.kite.client import KiteClient
+        live = KiteClient(api_key="ak", api_secret="s", access_token="", is_paper=False)
+
+        verdict = await protective_stop.stop_status(
+            live, 555, tradingsymbol="NIFTY24JUN24000CE")
+
+        assert verdict == protective_stop.STOP_UNVERIFIED, (
+            "an expired session answered '[]' and was read as proof that nothing "
+            "protects this position")
+
+    @pytest.mark.asyncio
+    async def test_a_price_stop_stands_down_on_an_expired_session(self):
+        from app.services.exchanges.kite.client import KiteClient
+
+        class _Sessionless(KiteClient):
+            def __init__(self, **kw):
+                super().__init__(**kw)
+                self.attempted: list = []
+
+            async def place_order_option(self, sym, side, size, **kw):
+                # Record rather than raise: _exit_position catches exceptions from the
+                # sell and reports False either way, so raising here would make this
+                # test pass without proving anything.
+                self.attempted.append((sym, side, size))
+                return {"order_id": "X"}
+
+            async def delete_gtt(self, tid):
+                raise RuntimeError("session expired")
+
+        p = _held("sess1", stop=80.0)
+        client = _Sessionless(api_key="ak", access_token="", is_paper=False)
+
+        sold = await monitor._exit_position(client, "sess1", p, 79.0, price_stop_exit=True)
+
+        assert client.attempted == [], "sold on top of a possibly-live broker stop"
+        assert sold is False
+        assert pos.get("sess1", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_paper_mode_is_unaffected(self):
+        """Paper has no session by design — its stubs stay stubs."""
+        from app.services.exchanges.kite.client import KiteClient
+        paper = KiteClient(api_key="ak", access_token="", is_paper=True)
+        assert await paper.get_gtts() == []
+        assert await paper.get_orders() == []

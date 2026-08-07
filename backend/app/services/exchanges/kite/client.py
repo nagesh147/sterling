@@ -141,6 +141,28 @@ class KiteClient(TradingExchangeAdapter):
             raise_for_kite(msg or f"HTTP {resp.status_code}", etype, resp.status_code)
         return body.get("data", body) if isinstance(body, dict) else body
 
+    def _allow_sessionless_read(self) -> None:
+        """Gate every read that answers with a stub when there is no ``access_token``.
+
+        Paper mode has no session by design, so an empty list is the honest answer. A
+        LIVE client with no token is a different thing entirely — the session expired or
+        was never established — and the truthful answer is "I cannot tell you", not
+        "empty".
+
+        The difference is load-bearing. ``protective_stop.stop_status`` reads an empty
+        GTT list plus an empty order book as positive evidence that NOTHING is protecting
+        a position, and on that evidence places its own SELL. An expired token that
+        answered "[]" instead of raising would manufacture exactly that evidence and go
+        naked short on top of a live broker stop. Sizing has the same shape: an empty
+        balance stub is fabricated capital to size against.
+        """
+        if not self._is_paper:
+            raise KiteTokenError(
+                "Kite session missing or expired (no access_token) — reconnect before "
+                "reading live account state.",
+                error_type="TokenException",
+            )
+
     def _require_session(self) -> None:
         # Paper mode only simulates ORDER PLACEMENT — reads still use the real
         # session when a token is present, so a connected paper account shows its
@@ -413,12 +435,14 @@ class KiteClient(TradingExchangeAdapter):
     # ─── Orders / trades (reads) ──────────────────────────────────────────────
     async def get_orders(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/orders") or []
 
     async def get_trades(self) -> list:
         """Full tradebook for the day (raw)."""
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/trades") or []
 
@@ -431,6 +455,7 @@ class KiteClient(TradingExchangeAdapter):
     # ─── GTT ──────────────────────────────────────────────────────────────────
     async def get_gtts(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/gtt/triggers") or []
 
@@ -513,16 +538,19 @@ class KiteClient(TradingExchangeAdapter):
     # ─── Mutual funds ──────────────────────────────────────────────────────────
     async def get_mf_holdings(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/mf/holdings") or []
 
     async def get_mf_orders(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/mf/orders") or []
 
     async def get_mf_sips(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/mf/sips") or []
 
@@ -588,6 +616,7 @@ class KiteClient(TradingExchangeAdapter):
     # ─── Portfolio (reads) ─────────────────────────────────────────────────────
     async def get_holdings(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/portfolio/holdings") or []
 
@@ -595,6 +624,7 @@ class KiteClient(TradingExchangeAdapter):
         """Raw {net, day} positions (keeps exchange + instrument_token, unlike the
         mapped get_positions)."""
         if not self._access_token:
+            self._allow_sessionless_read()
             return {"net": [], "day": []}
         return await self._auth_get("/portfolio/positions") or {"net": [], "day": []}
 
@@ -607,6 +637,7 @@ class KiteClient(TradingExchangeAdapter):
     async def get_auctions(self) -> list:
         """Instruments currently up for auction that the account is eligible for."""
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/portfolio/holdings/auctions") or []
 
@@ -639,6 +670,7 @@ class KiteClient(TradingExchangeAdapter):
     # ─── Alerts (native Kite Connect Alerts API) ──────────────────────────────
     async def get_alerts(self) -> list:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         return await self._auth_get("/alerts") or []
 
@@ -888,6 +920,7 @@ class KiteClient(TradingExchangeAdapter):
 
     async def get_balances(self) -> List[AssetBalance]:
         if not self._access_token:
+            self._allow_sessionless_read()
             return _paper_balances()
         data = await self.get_margins()
         balances = []
@@ -906,6 +939,7 @@ class KiteClient(TradingExchangeAdapter):
 
     async def get_positions(self) -> List[AccountPosition]:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         data = await self._auth_get("/portfolio/positions")
         positions = []
@@ -931,6 +965,7 @@ class KiteClient(TradingExchangeAdapter):
 
     async def get_open_orders(self, underlying: Optional[str] = None) -> List[AccountOrder]:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         data = await self._auth_get("/orders")
         orders = []
@@ -955,6 +990,7 @@ class KiteClient(TradingExchangeAdapter):
 
     async def get_fills(self, limit: int = 50) -> List[AccountFill]:
         if not self._access_token:
+            self._allow_sessionless_read()
             return []
         data = await self._auth_get("/trades")
         fills = []

@@ -57,6 +57,16 @@ export interface FieldDef {
    * tooltip so a claim about real-money behaviour is never unsourced.
    */
   evidence: string;
+  /**
+   * Whether the Value-Flow Navigator actually reads this field too.
+   *
+   * Not every setting on the Market & Contracts page is shared, and saying so
+   * in one blanket sentence was wrong. `strike_moneyness` and the expiry lists
+   * are handed to Navigator on every pass; the instrument universe is shared
+   * only while Navigator's scan scope is "shared"; and `scan_source` is not
+   * shared at all — Navigator carries its own copy of that field.
+   */
+  navigator?: 'always' | 'when-scope-shared' | 'never';
 }
 
 const F = <T extends Record<string, FieldDef>>(defs: T) => defs;
@@ -66,37 +76,42 @@ export const FIELDS = F({
   scan_source: {
     key: 'scan_source',
     label: 'Signal source',
-    help: 'Which chart a signal is read from. Both engines use it.',
+    help: 'Which chart a SuperTrend signal is read from. Navigator keeps its own separate setting for this.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
-    evidence: 'scanner.py + navigator/runtime.py both branch on scan_source.',
+    evidence: 'service.scan_user builds the spot/premium/confluence universes from it, and service._make_place_cb uses it for the both-mode cross guard.',
+    navigator: 'never',
   },
   strike_moneyness: {
     key: 'strike_moneyness',
     label: 'Strike coverage',
     help: 'Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
-    evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes; navigator/runtime reads the same list.',
+    evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes; navigator/runtime passes the same list when resolving its own legs.',
+    navigator: 'always',
   },
   scan_expiries_indices: {
     key: 'scan_expiries_indices',
     label: 'Index expiries',
     help: 'Contract cycles scanned for indices.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'market',
-    evidence: 'Passed to the scanner and to Navigator alike, as part of the shared scan scope.',
+    evidence: 'Handed to the scanner, and to navigator/runtime on every pass when it resolves legs for its own setups.',
+    navigator: 'always',
   },
   scan_indices: {
     key: 'scan_indices',
     label: 'Indices',
     help: 'The indices included in every scan.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
-    evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scope is shared.',
+    evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
+    navigator: 'when-scope-shared',
   },
   scan_stocks: {
     key: 'scan_stocks',
     label: 'F&O stocks',
     help: 'The individual stocks included in every scan.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
-    evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scope is shared.',
+    evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
+    navigator: 'when-scope-shared',
   },
   scan_all_stocks: {
     key: 'scan_all_stocks',
@@ -104,6 +119,7 @@ export const FIELDS = F({
     help: 'Use the full eligible universe instead of a curated list.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'market',
     evidence: 'Same scan boundary as scan_stocks.',
+    navigator: 'when-scope-shared',
   },
 
   // ── SuperTrend strategy mechanics ─────────────────────────────────────────

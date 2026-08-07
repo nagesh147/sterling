@@ -72,7 +72,33 @@ describe('MarketContractsPanel', () => {
     navScopeMode = 'custom';
     renderPanel();
     expect(screen.getByText('Navigator — on its own')).toBeInTheDocument();
-    expect(screen.getByText(/affect SuperTrend only/)).toBeInTheDocument();
+    // Precisely: the INSTRUMENT list stops reaching Navigator. Strike coverage
+    // and the expiry cycles still do, whatever the scope.
+    expect(screen.getByText(/applies to SuperTrend only/)).toBeInTheDocument();
+    expect(screen.getByText(/Strike coverage and the expiry cycles still reach Navigator/)).toBeInTheDocument();
+  });
+
+  it('does not claim the signal source is shared — Navigator keeps its own', () => {
+    // The engine's scan_source has two readers, both in service.py; Navigator
+    // reads its OWN scan_source unconditionally, so "both engines use it" was
+    // false and this page used to say exactly that.
+    renderPanel();
+    const sourceRow = screen.getByText('Signal source').closest('div');
+    expect(sourceRow).toHaveTextContent('SUPERTREND ONLY');
+  });
+
+  it('marks strike coverage as reaching Navigator whatever its scan scope', () => {
+    navScopeMode = 'custom';
+    renderPanel();
+    fireEvent.click(screen.getByText('Contracts'));
+    // Navigator is on its own universe, yet it is still handed these strikes.
+    expect(screen.getByText('Strike coverage').closest('div')).toHaveTextContent('BOTH ENGINES');
+  });
+
+  it('marks the instrument universe as SuperTrend-only once Navigator opts out', () => {
+    navScopeMode = 'custom';
+    renderPanel();
+    expect(screen.getByText('Indices').closest('div')).toHaveTextContent('SUPERTREND ONLY');
   });
 
   it('editing the universe saves once and triggers a rescan', () => {

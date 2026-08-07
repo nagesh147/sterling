@@ -56,6 +56,11 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
     isError: false,
     mutate: mocks.setConfig,
   }),
+  usePatchEngineConfig: () => ({
+    isPending: false,
+    isError: false,
+    mutate: mocks.setConfig,
+  }),
   useRunScan: () => ({ mutate: mocks.runScan }),
 }));
 

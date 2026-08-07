@@ -54,7 +54,7 @@ export function HelpPane() {
             </p>
             <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.6, margin: '10px 0 0' }}>
               Navigator has its own scan loop, so it keeps working even with the SuperTrend engine switched
-              off entirely. It can follow the shared Scan Setup or run on its own universe and its own
+              off entirely. It can follow the Market & Contracts instrument list or run on its own universe and its own
               signal source — your choice, under Connect → Value-Flow Navigator → What Navigator scans.
               What it does with what it finds is a separate, stricter choice: by default it only comments on
               setups SuperTrend already triggered, and it puts its own rows on the board only once you turn
@@ -124,7 +124,7 @@ export function HelpPane() {
             <Scenario goal="See structure on my indices even when SuperTrend is quiet" settings="Structure Radar = on. Check Connect → Value-Flow Navigator's snapshot/status for a given underlying." />
             <Scenario goal="Let Navigator surface brand-new setups I take manually" settings="Signal Origination = Heads-up (browse only) or Full (tradeable, manual execute)." />
             <Scenario goal="Run Navigator instead of SuperTrend" settings="Turn the Kite engine off, keep Navigator on, Signal Origination = Heads-up or Full, Signal lens = Navigator. Navigator's own scan loop keeps running." />
-            <Scenario goal="Scan different instruments than SuperTrend" settings="Connect → Value-Flow Navigator → What Navigator scans = its own universe. The shared Scan Setup then drives SuperTrend only." />
+            <Scenario goal="Scan different instruments than SuperTrend" settings="Connect → Value-Flow Navigator → What Navigator scans = its own universe. The Market & Contracts instrument list then drives SuperTrend only." />
             <Scenario goal="Let it trade on its own" settings="Signal Origination = Full, Auto-Execute Originated = on, Kite engine's own Auto-Execute = on. Still blocked until you promote a calibration report." />
           </Section>
         </section>

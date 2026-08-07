@@ -321,3 +321,68 @@ the safe direction, but it is not a working red counter, and it is not fixed her
 * `test_protection.py` — 71 → 88 tests. 12 of the 17 new ones fail against `01a90496`
   (verified by reverting the decision sites and re-running); the rest are regression guards.
 * Full backend suite: **2322 passed**, same 2 pre-existing failures. Frontend `tsc` clean.
+
+---
+
+## Round 4 — the remaining gaps, the gate, and both "pre-existing" failures
+
+### The two failing tests were not incidental
+
+Both had been carried as "pre-existing, unrelated" since round 1. Neither was.
+
+**`test_live_mode_requires_credentials`** was pointing at a real hole *in this session's own
+work*. Every read on `KiteClient` answered with a stub — `[]`, `{"net": [], "day": []}`,
+fabricated paper balances — whenever `access_token` was empty, **regardless of `is_paper`**.
+Round 1 then built `stop_status` to treat an empty GTT list plus an empty order book as
+positive evidence that nothing is protecting a position, and to place its own SELL on that
+evidence. So an expired or dropped session manufactured exactly that evidence and would have
+gone **naked short on top of a live broker stop** — the precise failure the whole asymmetry
+was designed to prevent, defeated by a stub. `_allow_sessionless_read` now raises for a live
+client with no session; paper is untouched. A test pins it: with the guard removed, the probe
+returns `ABSENT` and the monitor sells.
+
+**`test_monitor_all_records_pnl_history`** sat next to two defects of its own. `_monitor_one`
+ended in a bare `except Exception: return None`, so `monitor-all` reported
+`open_positions_checked=N` while having monitored none of them — no snapshot, no trail update,
+no exit check, and nothing anywhere saying so. And the P&L snapshot whose comment read "Record
+P&L snapshot first — ensures capture regardless of which exit path fires" sat *after* the
+red-count exit's early return, which was itself handed `estimated_pnl=0.0` and
+`current_dte=0` — so **every red-count exit closed a position while reporting a P&L of exactly
+zero**. DTE and P&L are now computed before any exit path can return, the snapshot really is
+first, and the handler logs. The test's own mock adapter was never reaching the code
+(`adapter_manager.get_adapter()` wins over `app.state.adapter` in all six position endpoints),
+so the fixture now overrides both.
+
+### The frozen red counter is now audible
+
+Round 3 documented this and left it: when the signal that opened a position ends and no row of
+that direction is emitted again, the count holds its last value forever. Holding it is still
+the right call — inventing a `0` disarms the exit outright — but a counter that has silently
+stopped counting looks exactly like a working one on the board. `OpenPosition.red_count_ms`
+records each refresh, and after three scan intervals without one the user is told, once, that
+the red-count exit is not being maintained for that position and only the price trail and the
+expiry square-off apply.
+
+### Auto-execute is gated
+
+It was a plain boolean any client could flip. `service.autoexec_preflight` now runs on the way
+ON (never OFF) and refuses when the engine cannot account for what it is already carrying:
+open positions with no stop, entries stuck `PENDING` past the fill grace window, or a red
+counter that stopped updating. It returns the reasons and `force=true` overrides — a gate, not
+a prohibition, and an informed choice rather than a silent one.
+
+### One round-3 claim refuted
+
+A verifier reported the red exit as "mathematically unreachable" under `three_red` /
+`three_red_signal`. It is not: thresholds are 1–3, the counter is bounded at 3 by construction,
+and `red_line_count` returns 3 when all three lines are against the signal. Both are now
+pinned by tests so the claim does not resurface.
+
+### Verification
+
+* `test_protection.py` — 88 → 102 tests. Full backend suite **2343 passed, 0 failed** — the
+  first fully green run of this work. Frontend `tsc` clean, 393 tests pass.
+* Two existing tests changed, both because they had been asserting the defect:
+  `test_get_auctions/alerts_empty_without_session` asserted that a **live** sessionless client
+  returns `[]`; they now assert it raises and still makes no network call, with the paper case
+  added alongside.

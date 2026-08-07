@@ -12,6 +12,7 @@ import pytest
 
 from app.services.exchanges.kite import constants as K
 from app.services.exchanges.kite.client import KiteClient
+from app.services.exchanges.kite.errors import KiteTokenError
 
 
 def _client(handler, *, is_paper=False):
@@ -69,12 +70,20 @@ async def test_get_auctions_reads_auction_list():
     assert out[0]["tradingsymbol"] == "INFY"
 
 
-async def test_get_auctions_empty_without_session():
+async def test_get_auctions_without_session_never_hits_the_network():
+    """A LIVE client with no token must not answer "[]" — that is a fabricated fact
+    about the account. It raises instead, and still makes no request. Paper mode has no
+    session by design, so there the stub IS the honest answer."""
     async def boom(request):
         raise AssertionError("network hit without a session")
     c = _client(boom)
     c._access_token = ""
-    assert await c.get_auctions() == []
+    with pytest.raises(KiteTokenError):
+        await c.get_auctions()
+
+    paper = _client(boom, is_paper=True)
+    paper._access_token = ""
+    assert await paper.get_auctions() == []
 
 
 async def test_initiate_holdings_auth_posts_isin_quantity():
@@ -180,12 +189,17 @@ async def test_search_mf_instruments_parses_csv():
 
 
 # ─── Alerts API ──────────────────────────────────────────────────────────────
-async def test_get_alerts_empty_without_session():
+async def test_get_alerts_without_session_never_hits_the_network():
     async def boom(request):
         raise AssertionError("network hit without a session")
     c = _client(boom)
     c._access_token = ""
-    assert await c.get_alerts() == []
+    with pytest.raises(KiteTokenError):
+        await c.get_alerts()
+
+    paper = _client(boom, is_paper=True)
+    paper._access_token = ""
+    assert await paper.get_alerts() == []
 
 
 async def test_get_alerts_reads_list():

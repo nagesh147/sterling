@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 from app.core.logging import get_logger
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
@@ -913,6 +914,82 @@ def _retranslated_stop(p, row) -> Optional[float]:
     return new_sl if (new_sl > p.stop_premium and new_sl > 0) else None
 
 
+def autoexec_preflight(uid: str) -> List[str]:
+    """Reasons it is not safe to start opening positions automatically right now.
+
+    Empty means clear. This is deliberately about the positions ALREADY held rather
+    than about the strategy: turning auto-exec on tells an unattended process to add
+    new real-money positions, and doing that while the engine cannot account for the
+    ones it is already carrying is how a small problem becomes several.
+
+    Registry-only — no broker calls — so it can run inline on the config write.
+    """
+    reasons: List[str] = []
+    now = int(time.time() * 1000)
+    live = [p for p in positions.open_positions(uid)
+            if p.status in (positions.PENDING, positions.OPEN)]
+
+    unprotected = [p.symbol for p in live
+                   if p.status == positions.OPEN and float(p.stop_premium or 0.0) <= 0]
+    if unprotected:
+        reasons.append(
+            f"{len(unprotected)} open position(s) have NO stop: "
+            f"{', '.join(sorted(unprotected)[:5])}. Nothing will exit them on price.")
+
+    stuck = [p.symbol for p in live
+             if p.status == positions.PENDING
+             and (now - int(p.opened_ms or 0)) > _PENDING_GRACE_MS]
+    if stuck:
+        reasons.append(
+            f"{len(stuck)} position(s) stuck PENDING past the fill grace window: "
+            f"{', '.join(sorted(stuck)[:5])}. We do not know whether they filled.")
+
+    stale = [p.symbol for p in live
+             if p.status == positions.OPEN
+             and (now - int(getattr(p, "red_count_ms", 0) or p.opened_ms or 0)) > _RED_STALE_MS]
+    if stale:
+        reasons.append(
+            f"{len(stale)} position(s) have a red counter that stopped updating: "
+            f"{', '.join(sorted(stale)[:5])}. Their red-count exit is not being maintained.")
+
+    return reasons
+
+
+#: How long a red count may go unrefreshed before the user is told it has stopped
+#: counting. Three scan intervals — one missed scan is noise, three is a pattern.
+_RED_STALE_MS = int(SCAN_INTERVAL_S * 3 * 1000)
+
+#: (uid, symbol) already warned about a frozen counter, cleared when it refreshes.
+_red_stale_warned: set = set()
+
+
+def _warn_if_red_count_stale(uid: str, p) -> None:
+    """Say so when a position's red counter has stopped being refreshed.
+
+    No scan row of this position's signal direction means there is nothing to compute a
+    fresh count from — the signal that opened it ended, or its underlying dropped out of
+    the scan universe. Holding the last value is the safe choice (inventing a 0 would
+    disarm the exit outright), but a counter that has silently stopped counting looks
+    exactly like a working one on the board, and the user would go on believing the
+    red-count exit is watching this position. It is not; only the price trail and the
+    expiry square-off are.
+    """
+    key = (uid, p.symbol)
+    stamped = int(getattr(p, "red_count_ms", 0) or 0)
+    age = int(time.time() * 1000) - (stamped or int(getattr(p, "opened_ms", 0) or 0))
+    if age < _RED_STALE_MS:
+        _red_stale_warned.discard(key)
+        return
+    if key in _red_stale_warned:
+        return
+    _red_stale_warned.add(key)
+    state.log(uid, "order_failed",
+              f"⚠ {p.symbol}: no signal row for its direction in "
+              f"{int(age / 60000)} min — the red-count exit is NOT being maintained "
+              f"(showing a stale {int(getattr(p, 'current_red_count', 0) or 0)}). "
+              f"The price trail and the expiry square-off still apply.")
+
+
 def _live_red_count(p, rows) -> Optional[int]:
     """This position's live red count from the fresh scan, or None when the scan cannot
     say — in which case the caller must leave the last known count alone.
@@ -1031,7 +1108,10 @@ async def _update_open_position_trails(client, uid: str) -> None:
         # freezes at its last value and only the price trail and the expiry square-off
         # remain. That is the safe direction, but it is not a working red counter.
         current_reds = _live_red_count(p, rows)
+        if current_reds is None:
+            _warn_if_red_count_stale(uid, p)
         if current_reds is not None:
+            _red_stale_warned.discard((uid, p.symbol))
             positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
             if current_reds > 0:
                 mode = getattr(p, 'exit_mode', 'one_red')

@@ -11,7 +11,11 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from pydantic import BaseModel
+
+from app.core.logging import get_logger
 from app.schemas.execution import CandidateContract
+
+log = get_logger(__name__)
 
 
 def _dte_from_expiry(expiry_date: str) -> int:
@@ -922,16 +926,13 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 signal = compute_signal(c1h)
 
                 current_spot = await adapter.get_index_price(inst)
-                # minimal for red path (full pnl computed below or in other paths)
-                estimated_pnl = 0.0
-                current_dte = 0
 
-                red_result = _compute_red_and_maybe_close(
-                    pos, signal, current_spot, now_ms, estimated_pnl, current_dte
-                )
-                if red_result:
-                    return red_result
-                # (trail update continues below)
+                # DTE and P&L are computed BEFORE any exit path can return. They used to
+                # be initialised to 0.0/0 here and only filled in after the red-count
+                # check, which meant two things at once: the red path closed the position
+                # while reporting `estimated_pnl_usd` of exactly 0.00 and `current_dte` 0
+                # — a fabricated number on a real exit — and the "record first" snapshot
+                # below was in fact unreachable for that path, despite saying otherwise.
                 leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
                 dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
                 if dte_from_expiry >= 0:
@@ -947,8 +948,14 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                     pos.sized_trade.structure.max_gain,
                 )
 
-                # Record P&L snapshot first — ensures capture regardless of which exit path fires
+                # Now genuinely first: every exit path below is preceded by this.
                 pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+                red_result = _compute_red_and_maybe_close(
+                    pos, signal, current_spot, now_ms, estimated_pnl, current_dte
+                )
+                if red_result:
+                    return red_result
 
                 # ── Trail update (mirrors monitor_position logic) ─────────────
                 if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
@@ -1021,7 +1028,14 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                     estimated_pnl_usd=estimated_pnl, current_dte=current_dte,
                     current_signal_trend=signal.trend, timestamp_ms=now_ms,
                 )
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                # Never kill the whole sweep for one position — but never swallow it
+                # silently either. This returned None on any failure, so `monitor-all`
+                # reported `open_positions_checked=N` while having actually monitored
+                # none of them: no P&L snapshot, no trail update, no exit check, and
+                # nothing anywhere saying so.
+                log.warning("monitor-all: %s (%s) could not be monitored: %s",
+                            pos.id, pos.underlying, exc, exc_info=True)
                 return None
 
     raw = await asyncio.gather(*[_monitor_one(p) for p in active_positions])

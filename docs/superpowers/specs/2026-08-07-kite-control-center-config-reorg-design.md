@@ -184,16 +184,62 @@ is correct: its validator discards whatever it is sent and always returns
 Applicability tooltips cite backend *function names*, not line numbers —
 line numbers drift with every commit and these strings are user-visible.
 
+## What "shared with Navigator" actually means
+
+The first draft of this page asserted that "both signal engines read every
+setting here". That is false, and an adversarial review caught it. Field by
+field, from `navigator/runtime.py`:
+
+| Field | Reaches Navigator? | Where |
+|---|---|---|
+| `strike_moneyness`, `scan_expiries*` | **Always**, whatever its scan scope | passed on every pass when Navigator resolves legs for its own setups |
+| `scan_indices`, `scan_stocks`, `scan_all_stocks` | **Only while Navigator's scan scope is "shared"** | `_resolve_nav_universe` |
+| `scan_source` | **Never** | Navigator carries its own `scan_source` and reads that one unconditionally |
+
+`scanner.py` does not read `scan_source` at all — the engine's two readers are
+`service.scan_user` and `service._make_place_cb`. The registry's `evidence`
+string named the wrong file.
+
+So each field now carries a `navigator: 'always' | 'when-scope-shared' | 'never'`
+tag and a **BOTH ENGINES / SUPERTREND ONLY** chip that reflects the live scope,
+instead of one blanket sentence that was only mostly true.
+
+This also exposed a pre-existing bug the copy was papering over: Navigator's own
+signal-source picker was rendered **only** in custom scope, while the panel
+displayed the *engine's* source above it as "Currently covering". On a shared
+scope the value Navigator actually used was therefore neither visible nor
+reachable. The picker now renders in both scopes.
+
+## Concurrency: partial writes
+
+`POST /config` replaces the whole model, so every UI write was a
+read-modify-write over all 38 fields — and anything that had moved since the
+client's copy was fetched got silently reverted. New `PATCH /kite/engine/config`
+merges only the named fields (unknown keys are rejected 422, and the merge is
+re-validated through the model so field validators still run). Every frontend
+writer now sends only what changed, so a write cannot revert a field it does not
+mention. Five backend tests cover it, including the concrete two-surface
+revert scenario.
+
+Related fixes in the same area:
+* `useEngineConfig` now revalidates (60s + on focus). It was the only query
+  never refreshed, despite being the one that decides real-money behaviour.
+* `useRunScan` no longer invalidates in `onMutate` (that refetch raced its own
+  optimistic `scanning: true` flag), gained an `onError` rollback (a failed scan
+  left the board stuck "scanning"), and now merges rather than replaces so a
+  SuperTrend scan stops wiping Navigator-originated rows off the board.
+* `useResetEngineConfig` invalidates the derived caches, instead of leaving the
+  board showing rows computed under the settings it just discarded.
+
 ## Non-goals
 
 * No new backend config fields. The manual/auto separation is expressed as
   applicability, not as duplicated storage.
 * No change to any trading behaviour. `hybrid_st_weight` losing its control
   changes nothing because nothing read it.
-* The known concurrency hazard (SuperTrend config is full-object
-  last-write-wins with no revision token, unlike Navigator's `expected_revision`)
-  is documented but **not** fixed here — it is a backend change with its own
-  blast radius and deserves its own branch.
+* Navigator's own settings page is not restructured. It keeps its existing
+  layout; only the scan-scope honesty fix and the shared source vocabulary
+  landed here.
 
 ## Test contract
 
@@ -209,12 +255,12 @@ New coverage added, because these had none and are the UI face of the 2026-08-06
 real-money hardening: `price_stop_exit`, `protect_manual_orders`, the
 applicability tags, and the registry-driven rescan policy.
 
-Result: 258 kite tests green (was 237), 386 frontend tests green, `tsc` clean.
+Result: 261 kite tests green (was 237), 389 frontend tests green, 504 backend
+kite+navigator tests green, `tsc` clean. The kite suite was run twice back to
+back to rule out the order-dependent flakiness this repo is prone to.
 
-**Not done:** an independent adversarial review of this change. The review run
-hit a session limit and returned nothing, so the checks that stand behind it are
-the author's own — the applicability tags were re-traced against the backend
-after `01a90496` moved the line numbers, the rescan flags were diffed field by
-field against the deleted panels, every settings deep link in the frontend was
-enumerated, and every `EngineConfigModel` field was checked for a control. A
-second pair of eyes on the four new panels is still worth having.
+An adversarial review did run: 23 candidate findings, 22 refuted, **1
+confirmed** — the false "both engines read every setting here" claim, fixed
+above. Note that 19 of the refutation agents died on a session limit partway
+through, so the refuted set is less thoroughly established than the confirmed
+one.

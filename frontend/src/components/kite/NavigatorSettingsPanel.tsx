@@ -3,7 +3,7 @@ import {
   BORDER, CheckOption, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle,
 } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
-import { openSettingsSection, scanSourceLabel } from './config/registry';
+import { SCAN_SOURCE_OPTIONS, openSettingsSection } from './config/registry';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import { useEngineConfig, useStockRegistry } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
@@ -470,13 +470,13 @@ export function NavigatorSettingsPanel() {
           />
           <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
             {draft.scan_scope_mode === 'shared'
-              ? "Navigator watches whatever the shared Scan Setup covers — the same list SuperTrend uses. Change it once there and both follow it."
-              : "Navigator watches its own list below — the shared Scan Setup then applies to SuperTrend only. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
+              ? "Navigator watches the same instruments as SuperTrend, set once under Market & Contracts. Sharing covers the instrument list only — the signal source below stays Navigator's own."
+              : "Navigator watches its own list below — the Market & Contracts instrument list then applies to SuperTrend only. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
           </div>
         </Field>
 
         {draft.scan_scope_mode === 'shared' ? (
-          <Field label="Currently covering" hint="Edited in the shared Scan Setup section.">
+          <Field label="Currently covering" hint="The instrument list, edited under Market & Contracts.">
             {engineCfg ? (
               <>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -486,7 +486,7 @@ export function NavigatorSettingsPanel() {
                   {engineCfg.scan_all_stocks
                     ? <span style={chipStyle}>+ all F&amp;O stocks</span>
                     : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
-                  <span style={{ color: DIM, fontSize: 10.5 }}>· {scanSourceLabel(engineCfg.scan_source)} contracts</span>
+
                 </div>
                 <button
                   type="button"
@@ -533,18 +533,6 @@ export function NavigatorSettingsPanel() {
                 </div>
               </Field>
             )}
-            <Field label="Contracts to scan" hint="Same choice SuperTrend has — which chart Navigator reads.">
-              <ChoiceRow
-                value={draft.scan_source}
-                onChange={(v) => patch({ ...draft, scan_source: v })}
-                options={[
-                  { value: 'spot', label: 'Spot' },
-                  { value: 'derivatives', label: 'Options' },
-                  { value: 'both', label: 'Both' },
-                  { value: 'confluence', label: 'Confluence' },
-                ]}
-              />
-            </Field>
             {customScopeEmpty && (
               <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Icons.Warning />
@@ -553,6 +541,24 @@ export function NavigatorSettingsPanel() {
             )}
           </>
         )}
+
+        {/* Navigator's OWN signal source, shown in BOTH scopes.
+            "Same as SuperTrend" shares the instrument universe only —
+            navigator/runtime reads `record.config.scan_source`, never the
+            engine's. This used to be hidden unless the scope was custom, while
+            the panel displayed the ENGINE's source above as if it were
+            Navigator's, so in shared scope the value Navigator actually used
+            was neither visible nor reachable. */}
+        <Field
+          label="Contracts to scan"
+          hint="Which chart Navigator reads. Navigator's own setting — it is not taken from SuperTrend, even on a shared scan scope."
+        >
+          <ChoiceRow
+            value={draft.scan_source}
+            onChange={(v) => patch({ ...draft, scan_source: v })}
+            options={SCAN_SOURCE_OPTIONS}
+          />
+        </Field>
 
         <Field label="Price timeframe" hint="Read-only in v1 — must match the Kite base engine's 1H clock.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>60 minute</div>

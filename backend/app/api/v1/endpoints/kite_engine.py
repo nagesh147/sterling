@@ -123,14 +123,41 @@ async def get_config(user: UserContext = Depends(get_current_user)) -> EngineCon
     return state.get_config(user.user_id)
 
 
+def _gate_autoexec(uid: str, was_on: bool, now_on: bool, force: bool) -> None:
+    """Refuse to switch auto-execute ON while the engine cannot account for what it is
+    already carrying.
+
+    Turning this on tells an unattended process to open new real-money positions. Doing
+    that on top of holdings with no stop, entries whose fill we never confirmed, or a red
+    counter that stopped updating is how one unguarded position becomes several. Turning
+    it OFF is never gated, and `force=true` is always available — this is a gate, not a
+    prohibition, and the reasons are returned so the choice is an informed one.
+    """
+    if not now_on or was_on or force:
+        return
+    reasons = service.autoexec_preflight(uid)
+    if reasons:
+        raise HTTPException(409, {
+            "error": "auto_execute_blocked",
+            "message": "Auto-execute was not enabled — resolve these first, "
+                       "or re-send with force=true to override.",
+            "reasons": reasons,
+        })
+
+
 @router.post("/config")
 async def set_config(body: EngineConfigModel,
+                     force: bool = False,
                      user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
+    _gate_autoexec(user.user_id,
+                   bool(state.get_config(user.user_id).auto_execute),
+                   bool(body.auto_execute), force)
     return state.set_config(user.user_id, body)
 
 
 @router.patch("/config")
 async def patch_config(body: dict,
+                       force: bool = False,
                        user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     """Merge only the supplied fields into the stored config.
 
@@ -150,9 +177,12 @@ async def patch_config(body: dict,
     if unknown:
         raise HTTPException(422, f"Unknown engine config field(s): {', '.join(unknown)}")
     current = state.get_config(user.user_id).model_dump()
+    merged = EngineConfigModel(**{**current, **body})
+    _gate_autoexec(user.user_id, bool(current.get("auto_execute")),
+                   bool(merged.auto_execute), force)
     # Re-validate through the model so field validators still run on the merged
     # result (scan_expiries_stocks is forced to monthly, target_delta is bounded).
-    return state.set_config(user.user_id, EngineConfigModel(**{**current, **body}))
+    return state.set_config(user.user_id, merged)
 
 
 @router.post("/config/reset")

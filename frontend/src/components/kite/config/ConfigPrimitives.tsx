@@ -41,6 +41,47 @@ export function AppliesChip({ applies, evidence }: { applies: Applies; evidence?
   );
 }
 
+/**
+ * Says whether the Value-Flow Navigator reads this setting too.
+ *
+ * The page used to claim in one sentence that "both signal engines read every
+ * setting here". That was false for the signal source: Navigator carries its
+ * own copy of that field and never reads the engine's. A per-field chip states
+ * only what is true of that field.
+ */
+export function NavigatorScopeChip({ scope, navigatorFollowsUniverse }: {
+  scope: 'always' | 'when-scope-shared' | 'never';
+  /** Whether Navigator's scan scope is currently set to "shared". */
+  navigatorFollowsUniverse: boolean;
+}) {
+  const shared = scope === 'always' || (scope === 'when-scope-shared' && navigatorFollowsUniverse);
+  const label = scope === 'never'
+    ? 'SUPERTREND ONLY'
+    : shared ? 'BOTH ENGINES' : 'SUPERTREND ONLY';
+  const title = scope === 'never'
+    ? 'Navigator keeps its own copy of this setting — change it under Value-Flow Navigator.'
+    : scope === 'always'
+      ? 'Navigator is handed this same value on every pass, whatever its scan scope.'
+      : navigatorFollowsUniverse
+        ? 'Navigator is following the shared scan scope, so it uses this list too.'
+        : 'Navigator is on its own scan scope, so this currently applies to SuperTrend only.';
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+        padding: '2px 7px', borderRadius: 4, letterSpacing: .4,
+        fontSize: 8.5, fontWeight: 800, whiteSpace: 'nowrap',
+        color: shared ? '#2e7d32' : MUTED,
+        background: shared ? '#eef5ee' : SOFT,
+        border: `1px solid ${shared ? '#cfe2d0' : BORDER}`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 export type Scope = 'all' | 'manual' | 'auto';
 
 /** Does a field with this applicability survive the current scope filter? */
