@@ -129,6 +129,32 @@ async def set_config(body: EngineConfigModel,
     return state.set_config(user.user_id, body)
 
 
+@router.patch("/config")
+async def patch_config(body: dict,
+                       user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
+    """Merge only the supplied fields into the stored config.
+
+    ``POST /config`` replaces the whole model, so every UI write had to be a
+    read-modify-write off a cached copy: change one toggle and the client
+    re-sends its idea of all 38 fields. If anything had moved in between — a
+    second browser tab, another surface in the same tab, a server-side
+    normalisation — those fields were silently reverted to the stale snapshot,
+    with no error and nothing on screen to show it. These are real-money
+    settings; a stop mode that quietly reverts is not an acceptable failure.
+
+    A partial write cannot revert a field it does not mention. Unknown keys are
+    rejected rather than ignored, so a typo in a client fails loudly instead of
+    silently not taking effect.
+    """
+    unknown = sorted(set(body) - set(EngineConfigModel.model_fields))
+    if unknown:
+        raise HTTPException(422, f"Unknown engine config field(s): {', '.join(unknown)}")
+    current = state.get_config(user.user_id).model_dump()
+    # Re-validate through the model so field validators still run on the merged
+    # result (scan_expiries_stocks is forced to monthly, target_delta is bounded).
+    return state.set_config(user.user_id, EngineConfigModel(**{**current, **body}))
+
+
 @router.post("/config/reset")
 async def reset_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.set_config(user.user_id, EngineConfigModel())

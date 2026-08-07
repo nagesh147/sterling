@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 from typing import Dict, List, Optional
 
+from app.core.logging import get_logger
 from app.services import db
+
+log = get_logger(__name__)
 
 
 # Lifecycle of an auto-exec position.
@@ -52,9 +55,15 @@ class OpenPosition:
     #: signal, and the red counter is defined against the signal — feeding it
     #: ``direction`` made every bear position read 3-of-3 red at entry and exit on the
     #: next tick. For a derivatives-source row the ST runs on the contract's own premium
-    #: series, so the signal really is "long" even for a PE; that is why this has to be
-    #: recorded at entry rather than guessed from the CE/PE suffix.
-    signal_direction: str = "long"
+    #: series, so the signal really is "long" even for a PE; that is why this is recorded
+    #: at entry rather than guessed from the CE/PE suffix.
+    #:
+    #: Empty means UNKNOWN, not "long". Positions are persisted with ``asdict`` and read
+    #: back with ``OpenPosition(**d)``, so every row written before this field existed
+    #: reloads without it — and defaulting those to "long" would hand a surviving bear
+    #: position the exact wrong-way count this field was added to prevent. Read it
+    #: through ``signal_direction_of``.
+    signal_direction: str = ""
     vehicle: str = "otm_options" # otm_options | deep_itm_options | futures
     underlying: str = ""        # display underlying ("NIFTY 50") — for correlation grouping
     opened_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -95,6 +104,33 @@ _positions: Dict[str, Dict[str, OpenPosition]] = {}   # uid → {symbol → Open
 
 
 # ── pure exit predicate ──────────────────────────────────────────────────────
+def signal_direction_of(p: OpenPosition) -> str:
+    """The direction the red counter must be evaluated against for ``p``.
+
+    Prefers what was recorded at entry. Falls back to the CE/PE suffix only for a
+    position that predates the field (persisted before it existed), because there the
+    alternative — assuming "long" — reproduces the very defect the field prevents: a
+    surviving bear position would match the BULL row and read every down-trend as a red
+    against itself.
+
+    The suffix is a fallback, never the source of truth: a derivatives-source row runs
+    the SuperTrend on the contract's OWN premium series, so a PE bought there really is a
+    long signal and this would call it short. That mistake costs a red exit that never
+    fires (the price trail and the expiry square-off still run) rather than a position
+    sold while the trend is still with it — the same asymmetry this engine takes
+    everywhere.
+    """
+    recorded = str(getattr(p, "signal_direction", "") or "").strip().lower()
+    if recorded:
+        return recorded
+    sym = str(getattr(p, "symbol", "") or "").upper()
+    if sym.endswith("CE"):
+        return "long"
+    if sym.endswith("PE"):
+        return "short"
+    return str(getattr(p, "direction", "long") or "long")  # futures trail in index points
+
+
 def should_exit(stop_premium: float, ltp: float, direction: str = "long") -> bool:
     """True when a position's live price has breached its trail.
 
@@ -117,9 +153,20 @@ def _load(uid: str) -> Dict[str, OpenPosition]:
         try:
             raw = db.get_config(f"kite_engine_positions_{uid}")
             if raw:
+                known = {f.name for f in fields(OpenPosition)}
                 for d in json.loads(raw):
-                    p = OpenPosition(**d)
-                    out[p.symbol] = p
+                    # Drop keys this build does not know, and isolate each row. A
+                    # payload written by a NEWER build carries fields this one has
+                    # never heard of; `OpenPosition(**d)` would raise on the first
+                    # such row and the blanket `except` below would discard the WHOLE
+                    # registry — every live position silently unguarded, and the
+                    # auto-open guard freed to re-enter slots already held. Rolling
+                    # back a release must not be able to do that.
+                    try:
+                        p = OpenPosition(**{k: v for k, v in d.items() if k in known})
+                        out[p.symbol] = p
+                    except Exception:  # noqa: BLE001 — one unreadable row, not all
+                        log.warning("kite positions: skipped an unreadable row for %s", uid)
         except Exception:
             out = {}
         _positions[uid] = out

@@ -65,8 +65,10 @@ export function Field({ label, hint, badge, children }: {
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // The label column is wide enough for "MANUAL + AUTO" to sit on the title's
+  // line rather than wrapping underneath it.
   return (
-    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '148px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
+    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '196px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>

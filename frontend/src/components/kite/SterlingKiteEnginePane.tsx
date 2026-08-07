@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import {
-  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig,
+  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig,
 } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type {
@@ -26,6 +26,9 @@ import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
+import {
+  EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection,
+} from './config/registry';
 
 
 interface Props {
@@ -36,42 +39,13 @@ interface Props {
   onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
 }
 
-// Plain-language labels (users were confused by fast/mid/slow + "early lock").
-const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
-  { value: 'fast', label: 'Tight', hint: 'Default — exit quickly; trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
-  { value: 'mid', label: 'Balanced', hint: 'Trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
-  { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
-];
+// Exit counter modes and scan sources come from the shared config registry, so
+// the board header and the settings pages cannot disagree about what a value is
+// called. They used to be declared here as well, and had already drifted — the
+// same scan_source was "Derivatives" on one page and "Options" on another.
+const EXIT_MODE_OPTS = EXIT_MODE_OPTIONS;
+const SCAN_SOURCE_OPTS = SCAN_SOURCE_OPTIONS;
 
-// Expert exit counter modes — mirrors backend ExitMode exactly.
-// Entry is ALWAYS "full 3 green lines + fresh green transition (arrow)".
-// Exit is the COUNTER chosen by user.
-const EXIT_MODE_OPTS: { value: ExitMode; label: string; hint: string; short: string }[] = [
-  { value: 'one_red', label: '1 Red', short: 'Tightest', hint: 'Auto-exit the moment ANY one of the 3 ST lines turns red against your position. Fastest lock, highest sensitivity.' },
-  { value: 'two_red', label: '2 Red', short: 'Moderate', hint: 'Exit when any TWO SuperTrend lines have flipped red. Good balance of room vs protection.' },
-  { value: 'three_red', label: '3 Red', short: 'Patient', hint: 'Hold until ALL THREE lines are red (full reversal). Gives the trend maximum room to breathe.' },
-  { value: 'three_red_signal', label: '3R + Signal', short: 'Safest', hint: 'Only exit on 3 red lines AND a fresh opposite arrow (counter-entry confirmation). Maximum conviction filter for exits.' },
-];
-const STOP_MODE_OPTS: { value: 'broker' | 'monitor' | 'both'; label: string; hint: string }[] = [
-  { value: 'both', label: 'Both', hint: 'Broker GTT stop + server-side tick monitor. Defense in depth — recommended for real money.' },
-  { value: 'broker', label: 'Broker', hint: 'A GTT/SL-M stop placed at Zerodha. Survives server/laptop/network death; no intrabar trailing.' },
-  { value: 'monitor', label: 'Monitor', hint: 'Server-side tick loop exits on trail breach. Intrabar, but unprotected if the server/WS drops.' },
-];
-const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
-  { value: 'ITM5', hint: 'Five strikes in-the-money.' },
-  { value: 'ITM4', hint: 'Four strikes in-the-money.' },
-  { value: 'ITM3', hint: 'Three strikes in-the-money.' },
-  { value: 'ITM2', hint: 'Two strikes in-the-money — deep intrinsic value.' },
-  { value: 'ITM1', hint: 'One strike in-the-money.' },
-  { value: 'ATM', hint: 'At-the-money — strike nearest spot.' },
-  { value: 'OTM1', hint: 'One strike out-of-the-money — cheaper, more leverage.' },
-  { value: 'OTM2', hint: 'Two strikes out-of-the-money.' },
-  { value: 'OTM3', hint: 'Three strikes out-of-the-money.' },
-  { value: 'OTM4', hint: 'Four strikes out-of-the-money.' },
-  { value: 'OTM5', hint: 'Five strikes out-of-the-money — cheapest, lottery-like.' },
-];
-// Delta-themed strike buckets — a friendlier face on the 11 raw ITM/OTM steps.
-// Each tile selects a group of moneyness steps; "active" = any member selected.
 // This is the VIEW/SCAN filter: which strikes get resolved and shown as rows.
 const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyness[] }[] = [
   { id: 'deep_itm', label: 'Deep ITM', sub: 'δ ≈ 0.80+',     members: ['ITM5', 'ITM4'] },
@@ -79,12 +53,6 @@ const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyne
   { id: 'atm',      label: 'ATM',      sub: 'δ ≈ 0.50',       members: ['ATM'] },
   { id: 'otm',      label: 'OTM',      sub: 'δ ≈ 0.30–0.45', members: ['OTM1', 'OTM2'] },
   { id: 'far_otm',  label: 'Far OTM',  sub: 'δ ≲ 0.25',       members: ['OTM3', 'OTM4', 'OTM5'] },
-];
-const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
-  { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
-  { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
-  { value: 'both', label: 'Both', hint: 'Run both scans; each signal is tagged Spot or DERIV.' },
-  { value: 'confluence', label: 'Confluence', hint: "Highest conviction: emit a strike only when the underlying fires a fresh entry AND that option's own premium ST also confirms. One merged row per underlying." },
 ];
 // Which evidence lens the signal board is viewed through. Purely a local
 // display preference (localStorage), never patched to the server — unlike
@@ -1663,10 +1631,12 @@ function SignalTableSettingsPanel({
     onShowEndedChange(true);
   };
 
-  const openEngine = () => {
-    localStorage.setItem('kite_connect_section', 'engine');
-    window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: 'connect' }));
-  };
+  // One navigation helper for the whole app. There used to be two incompatible
+  // channels — this one wrote localStorage and fired 'kite-nav-click' (a no-op
+  // when the settings pane was already mounted), while the settings panels fired
+  // 'kite-connect-section' (a no-op when it was not). openSettingsSection does
+  // both, and validates the id.
+  const openTradeRules = () => openSettingsSection('rules');
 
   return (
     <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
@@ -1674,11 +1644,11 @@ function SignalTableSettingsPanel({
         <div>
           <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Signal table settings</div>
           <div style={{ color: '#777', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
-            These choices change only this table. Scanner, entry, exit and risk rules live under Connect → Engine.
+            These choices change only how this table looks. Entry, stop, exit and sizing rules live under Connect → Trade Rules.
           </div>
         </div>
-        <button type="button" onClick={openEngine} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 7, background: k.bg, color: k.text, padding: '0 11px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-          Configure engine ↗
+        <button type="button" onClick={openTradeRules} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 7, background: k.bg, color: k.text, padding: '0 11px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+          Trade rules ↗
         </button>
       </div>
 
@@ -1752,6 +1722,19 @@ function SignalTableSettingsPanel({
 // right from the table toolbar — same open/close/select interaction as the chart's
 // candle-type and indicator pickers (a button showing the current choice + chevron,
 // which opens a positioned popover list with a checkmark on the active option).
+/** The caps name that sits in front of a header dropdown, so a bare value pill
+ *  never has to be guessed at. */
+function HeaderControlLabel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <span
+      title={title}
+      style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, flexShrink: 0 }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function InlineDropdown<T extends string>({
   value, options, onChange, tone, title,
 }: {
@@ -1872,7 +1855,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const { data: signals, isLoading: signalsLoading } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
   const { data: navigatorConfig } = useNavigatorConfig();
-  const setCfg = useSetEngineConfig();
+  const setCfg = usePatchEngineConfig();
   const scan = useRunScan();
   const cancelScan = useCancelScan();
   const navigatorScan = useRunNavigatorScan();
@@ -1948,7 +1931,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // All other engine configuration now lives under Connect → Engine.
   const patch = (values: Partial<EngineConfigModel>, message?: string, rescan = false) => {
     if (!cfg) return;
-    setCfg.mutate({ ...cfg, ...values }, {
+    setCfg.mutate(values, {
       onSuccess: () => {
         if (message) notifyOrder({ kind: 'info', title: 'Settings updated', message });
         if (rescan) doScan();
@@ -2211,18 +2194,27 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             Sterling Kite Engine
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
+          {/* Both engine dropdowns are named. They used to be bare pills showing
+              only their current value, so "Derivatives" sitting next to "1 Red"
+              gave no clue which was the signal source and which was the exit
+              rule — the VIEW filter beside them was the only labelled one. */}
           {cfg && (
-            <InlineDropdown
-              value={cfg.scan_source}
-              options={SCAN_SOURCE_OPTS}
-              tone={k.orange}
-              title="Signal source — change it right here, or from Connect → Scan Setup. Shared by both engines, unless Navigator is set to its own scan scope."
-              onChange={(next) => patch(
-                { scan_source: next },
-                `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
-                true,
-              )}
-            />
+            <>
+              <HeaderControlLabel title="Which chart a signal is read from — a Market & Contracts setting, shared by both engines unless Navigator is on its own scan scope.">
+                SOURCE
+              </HeaderControlLabel>
+              <InlineDropdown
+                value={cfg.scan_source}
+                options={SCAN_SOURCE_OPTS}
+                tone={k.orange}
+                title="Signal source — change it here, or from Connect → Market & Contracts. Shared by both engines, unless Navigator is set to its own scan scope."
+                onChange={(next) => patch(
+                  { scan_source: next },
+                  `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
+                  needsRescan('scan_source'),
+                )}
+              />
+            </>
           )}
           {/* The red-counter exit rule is SuperTrend-only — it counts the
               three SuperTrend lines flipping against a position. A
@@ -2232,23 +2224,31 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               Hide it there rather than leave a live engine setting sitting
               next to rows it can't affect. */}
           {cfg && signalMode !== 'navigator' && (
-            <InlineDropdown
-              value={cfg.exit_mode ?? 'one_red'}
-              options={EXIT_MODE_OPTS}
-              tone={k.blue}
-              title="Auto-exit rule (counter to the 3-green entry) — a SuperTrend setting, applies to every SuperTrend row. Change it right here, or from Connect → Engine Configuration"
-              onChange={(next) => patch(
-                { exit_mode: next },
-                `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
-              )}
-            />
+            <>
+              <HeaderControlLabel title="How many SuperTrend lines must turn red to close a trade — a SuperTrend setting, applied to every SuperTrend row.">
+                EXIT
+              </HeaderControlLabel>
+              <InlineDropdown
+                value={cfg.exit_mode ?? 'one_red'}
+                options={EXIT_MODE_OPTS}
+                tone={k.blue}
+                title="Exit confirmation (the counter to the 3-green entry) — a SuperTrend setting, applies to every SuperTrend row. Change it here, or from Connect → SuperTrend."
+                onChange={(next) => patch(
+                  { exit_mode: next },
+                  `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
+                  needsRescan('exit_mode'),
+                )}
+              />
+            </>
           )}
           {/* Divider: everything left is real engine config (server-persisted,
               changes what's scanned/how trades exit); everything right is a
               local-only display filter (localStorage, never patched to the
               server, never changes what's scanned). */}
           <div title="Left of here: engine settings (server-side). Right: local view filter only." style={{ width: 1, alignSelf: 'stretch', minHeight: 16, background: k.border, flexShrink: 0 }} />
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, flexShrink: 0 }}>VIEW</span>
+          <HeaderControlLabel title="A local display filter. It never changes what is scanned or traded.">
+            VIEW
+          </HeaderControlLabel>
           <InlineDropdown
             value={signalMode}
             options={SIGNAL_MODE_OPTS}

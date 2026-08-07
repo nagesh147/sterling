@@ -293,6 +293,8 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
         leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
         leg.alignment = leg.alignment or r.alignment
         leg.exit_state = leg.exit_state or r.exit_state
+        if leg.current_reds is None:
+            leg.current_reds = r.current_reds
         sym_key = (*key, leg.option_symbol)
         if key not in grouped_derivs:
             parent = r.model_copy(deep=True)
@@ -383,6 +385,9 @@ def evaluate_derivative_contract(
                             signal_timestamp_ms=ts, entry_timestamp_ms=ts,
                             alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
                             exit_state=_exit_state_str(r, "long", end_idx, cfg),
+                            # Per CONTRACT: grouping puts many legs under one parent, so
+                            # a position on any strike but the first must read its own.
+                            current_reds=r.red_line_count("long", last_idx),
                             premium_target=None)],
             spot=float(c[i]), stop_loss=stop_loss, entry_sl=entry_sl,
             exit_state=_exit_state_str(r, "long", end_idx, cfg),

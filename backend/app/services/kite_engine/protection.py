@@ -47,6 +47,12 @@ class LegPlan:
     expiry: str
     underlying: str
     direction: str
+    #: The direction of the SIGNAL behind this leg, which is not ``direction``. Buying a
+    #: PE on a bear signal is long premium but a SHORT signal, and the red counter is
+    #: defined against the signal. Omitting it here is what left every hand-placed
+    #: position counting the wrong way — and hand-placed is the path essentially all
+    #: real positions take, since auto_execute is off.
+    signal_direction: str
     source: str
     #: Underlying spot and SIGNED delta at the signal, needed to re-translate the
     #: underlying trail into a premium stop on later scans.
@@ -154,6 +160,8 @@ def plan_for_symbol(uid: str, option_symbol: str) -> Optional[LegPlan]:
                 # points: a PE bought on a bearish signal is still long premium, so
                 # its stop is on the DOWNSIDE of the premium.
                 direction="long",
+                # …but the SIGNAL that produced it points wherever the row points.
+                signal_direction=str(getattr(row, "direction", "") or "long"),
                 source=str(getattr(row, "source", "") or "spot"),
                 entry_spot=spot,
                 entry_delta=_signed_delta(
@@ -309,7 +317,14 @@ async def arm_position(
         uid=uid, symbol=symbol, exchange=exchange, token=token, qty=total_qty, lot_size=lot_size,
         entry_premium=entry_premium, stop_premium=stop_premium, order_id=order_id,
         status=positions.PENDING, stop_mode=stop_mode, guard_key=guard_key,
-        direction=direction, signal_direction=(signal_direction or direction),
+        # Stored exactly as passed: "" means the caller did not know, and
+        # ``signal_direction_of`` derives one rather than silently assuming "long",
+        # which is how a bear position ends up counting the bull row's reds. A SCALE-IN
+        # keeps what the first entry recorded — re-registering is how the row is updated,
+        # so a second buy arriving without one would blank a known signal direction.
+        direction=direction,
+        signal_direction=(signal_direction
+                          or (prior.signal_direction if prior_live and prior is not None else "")),
         vehicle=vehicle, underlying=underlying, exit_mode=exit_mode,
         entry_spot=entry_spot, entry_delta=entry_delta, strike=strike, expiry=expiry,
         initial_stop_premium=stop_premium, target_premium=target_premium,

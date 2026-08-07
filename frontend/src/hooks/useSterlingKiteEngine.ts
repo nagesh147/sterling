@@ -43,6 +43,12 @@ export function useEngineConfig() {
     queryKey: ['kite-engine-config'],
     queryFn: () => api.get<EngineConfigModel>(`${E}/config`),
     staleTime: 30_000,
+    // Signals, activity and open positions all poll; the config — the one thing
+    // that decides what happens to real money — used to be the only query never
+    // revalidated, so a change made in another tab or applied server-side stayed
+    // invisible here indefinitely. Refetch on focus and on a slow timer.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -66,12 +72,37 @@ export function useSetEngineConfig() {
   });
 }
 
+/**
+ * Change only the named fields, leaving every other one exactly as the server
+ * has it.
+ *
+ * `useSetEngineConfig` POSTs the whole model, so a caller has to spread its
+ * cached copy — `{...cfg, ...values}` — and any field that moved since that
+ * copy was fetched gets reverted. Two tabs, or two surfaces in one tab, could
+ * silently undo each other's real-money settings. A PATCH that names one field
+ * cannot revert the other 37.
+ */
+export function usePatchEngineConfig() {
+  const qc = useQueryClient();
+  return useMutation<EngineConfigModel, Error, Partial<EngineConfigModel>>({
+    mutationFn: (body) => api.patch<EngineConfigModel>(`${E}/config`, body),
+    onSuccess: (data) => qc.setQueryData(['kite-engine-config'], data),
+  });
+}
+
 export function useResetEngineConfig() {
   const qc = useQueryClient();
   return useMutation<EngineConfigModel, Error, void>({
     mutationFn: () => api.post<EngineConfigModel>(`${E}/config/reset`),
     onSuccess: (data) => {
       qc.setQueryData(['kite-engine-config'], data);
+      // A reset changes strike coverage, the trail and the exit rule all at
+      // once, so every row on the board was computed under rules that no longer
+      // apply. Drop the derived caches rather than leave the board, the setup
+      // chart and the detail dock quoting the old configuration.
+      qc.invalidateQueries({ queryKey: ['kite-engine-signals'] });
+      qc.invalidateQueries({ queryKey: ['kite-engine-setup'] });
+      qc.invalidateQueries({ queryKey: ['kite-engine-detail'] });
       notifyOrder({
         kind: 'info',
         title: 'Settings reset',
@@ -93,12 +124,37 @@ export function useRunScan() {
     // which can leave the board on a stale/empty view for the entire scan) and
     // force an immediate refetch so real rows show up as soon as the backend
     // starts flushing them.
+    //
+    // Do NOT invalidate here: that refetch races the optimistic flag and can
+    // land before the backend has flipped its own `scanning`, overwriting the
+    // true we just set with a false — the board then looks idle for the whole
+    // scan. The 2s poll that `scanning: true` itself switches on brings the
+    // rows in, so the invalidate bought nothing and cost the flag.
     onMutate: () => {
       qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) =>
         prev ? { ...prev, scanning: true } : prev);
+    },
+    // A SuperTrend scan returns SuperTrend rows only. Replacing the cache
+    // wholesale therefore wipes any Navigator-originated rows that
+    // useRunNavigatorScan had merged in, until the next poll re-fetches them —
+    // rows visibly vanish from the board. Merge on the same key instead.
+    onSuccess: (data) => {
+      qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) => {
+        const navigatorRows = (prev?.rows ?? []).filter((row) => row.source === 'navigator');
+        if (!navigatorRows.length) return data;
+        const fresh = new Set(data.rows.map((row) => `${row.token}:${row.option_type}:${row.timestamp_ms}`));
+        const kept = navigatorRows.filter((row) => !fresh.has(`${row.token}:${row.option_type}:${row.timestamp_ms}`));
+        return { ...data, rows: [...data.rows, ...kept] };
+      });
+    },
+    // Without this a failed /scan leaves `scanning: true` stuck in the cache
+    // until a poll happens to return false — the board claims to be scanning
+    // when nothing is running.
+    onError: () => {
+      qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) =>
+        prev ? { ...prev, scanning: false } : prev);
       qc.invalidateQueries({ queryKey: ['kite-engine-signals'] });
     },
-    onSuccess: (data) => qc.setQueryData(['kite-engine-signals'], data),
   });
 }
 

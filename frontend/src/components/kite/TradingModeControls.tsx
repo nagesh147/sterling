@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
-import { useEngineConfig, useSetEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useEngineConfig, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
 import { ModeToggle } from './ModeToggle';
 
@@ -36,7 +36,7 @@ export function TradingModeControls() {
   const { data } = useKiteAccounts();
   const update = useUpdateKiteAccount();
   const { data: cfg } = useEngineConfig();
-  const setCfg = useSetEngineConfig();
+  const setCfg = usePatchEngineConfig();
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
 
   const active = data?.accounts.find((a) => a.is_active);
@@ -69,10 +69,10 @@ export function TradingModeControls() {
   const onSignals = (side: 'left' | 'right') => {
     if (!cfg) return;
     if (side === 'right') { setConfirm('enable-auto'); return; }
-    setCfg.mutate({ ...cfg, auto_execute: false });
+    setCfg.mutate({ auto_execute: false });
   };
   const confirmEnableAuto = () =>
-    cfg && setCfg.mutate({ ...cfg, auto_execute: true }, { onSuccess: () => setConfirm(null) });
+    cfg && setCfg.mutate({ auto_execute: true }, { onSuccess: () => setConfirm(null) });
 
   return (
     <div style={S.card}>

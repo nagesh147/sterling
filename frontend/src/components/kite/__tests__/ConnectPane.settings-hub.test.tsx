@@ -29,13 +29,14 @@ vi.mock('../../../hooks/useKite', () => ({
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineConfig: () => ({ data: { engine_enabled: true } }),
   useSetEngineConfig: () => ({ mutate: setConfig, isPending: false }),
+  usePatchEngineConfig: () => ({ mutate: setConfig, isPending: false }),
   useEngineSignals: () => ({ data: { rows: [] } }),
 }));
 
-vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>Trading mode controls</div> }));
-vi.mock('../DirectionalModePanel', () => ({ DirectionalModePanel: () => <div>Order profile controls</div> }));
-vi.mock('../EngineConfigurationPanel', () => ({ EngineConfigurationPanel: () => <div>Engine configuration panel</div> }));
-vi.mock('../SharedScanSetupPanel', () => ({ SharedScanSetupPanel: () => <div>Shared scan setup panel</div> }));
+vi.mock('../TradingModePanel', () => ({ TradingModePanel: () => <div>Trading mode controls</div> }));
+vi.mock('../TradeRulesPanel', () => ({ TradeRulesPanel: () => <div>Trade rules panel</div> }));
+vi.mock('../SuperTrendEnginePanel', () => ({ SuperTrendEnginePanel: () => <div>SuperTrend strategy panel</div> }));
+vi.mock('../MarketContractsPanel', () => ({ MarketContractsPanel: () => <div>Market and contracts panel</div> }));
 vi.mock('../KiteTelegramPanel', () => ({
   KiteTelegramPanel: () => <div>Kite alert destinations</div>,
   BrandIconPicker: () => <div>Icon picker</div>,
@@ -57,14 +58,9 @@ describe('ConnectPane settings hub', () => {
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
     expect(screen.getByRole('heading', { name: 'Account & Login' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Engine Triple-SuperTrend signals & exits/i }));
-    expect(screen.getByRole('heading', { name: 'SuperTrend Engine' })).toBeInTheDocument();
-    expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
-    expect(screen.getByText('Engine configuration panel')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Order Selection & Entry Quality Vehicle profile & filters/i }));
-    expect(screen.getByRole('heading', { name: 'Order Selection & Entry Quality' })).toBeInTheDocument();
-    expect(screen.getByText('Order profile controls')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Triple-SuperTrend strategy/i }));
+    expect(screen.getByRole('heading', { name: 'SuperTrend' })).toBeInTheDocument();
+    expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Notifications Kite Telegram alerts/i }));
     expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
@@ -77,12 +73,50 @@ describe('ConnectPane settings hub', () => {
     expect(screen.getByText('Icon picker')).toBeInTheDocument();
   });
 
-  it('gives the settings both engines share their own home, separate from either engine', () => {
+  it('groups the rail by what a setting decides', () => {
     render(<ConnectPane />);
-    fireEvent.click(screen.getByRole('button', { name: /Scan Setup Shared by both engines/i }));
-    expect(screen.getByRole('heading', { name: 'Scan Setup' })).toBeInTheDocument();
-    expect(screen.getByText('Shared scan setup panel')).toBeInTheDocument();
+    ['Connection', 'Trading', 'Signal engines', 'Platform']
+      .forEach((group) => expect(screen.getByText(group)).toBeInTheDocument());
+  });
+
+  it('gives the market layer its own home, separate from either engine', () => {
+    render(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: /Market & Contracts What gets scanned/i }));
+    expect(screen.getByRole('heading', { name: 'Market & Contracts' })).toBeInTheDocument();
+    expect(screen.getByText('Market and contracts panel')).toBeInTheDocument();
     // it is its own section, not nested inside the SuperTrend engine's page
-    expect(screen.queryByText('Engine configuration panel')).not.toBeInTheDocument();
+    expect(screen.queryByText('SuperTrend strategy panel')).not.toBeInTheDocument();
+  });
+
+  it('gives the engine-independent trade rules their own home', () => {
+    render(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: /Trade Rules Entry, stop, exit, size/i }));
+    expect(screen.getByRole('heading', { name: 'Trade Rules' })).toBeInTheDocument();
+    expect(screen.getByText('Trade rules panel')).toBeInTheDocument();
+    expect(screen.queryByText('SuperTrend strategy panel')).not.toBeInTheDocument();
+  });
+
+  it('lifts paper/live and manual/automatic out of the SuperTrend page onto their own', () => {
+    // auto_execute is user-global and Navigator reuses the same placement path,
+    // so it never belonged behind a page titled "SuperTrend Engine".
+    render(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: /Trading Mode Paper\/live, manual\/automatic/i }));
+    expect(screen.getByRole('heading', { name: 'Trading Mode' })).toBeInTheDocument();
+    expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Triple-SuperTrend strategy/i }));
+    expect(screen.queryByText('Trading mode controls')).not.toBeInTheDocument();
+  });
+
+  it('follows renamed sections so an existing deep link still lands somewhere sensible', () => {
+    localStorage.setItem('kite_connect_section', 'sharedScan');
+    render(<ConnectPane />);
+    expect(screen.getByRole('heading', { name: 'Market & Contracts' })).toBeInTheDocument();
+  });
+
+  it('sends the retired order-selection deep link to Trade Rules, which absorbed it', () => {
+    localStorage.setItem('kite_connect_section', 'orderSelection');
+    render(<ConnectPane />);
+    expect(screen.getByRole('heading', { name: 'Trade Rules' })).toBeInTheDocument();
   });
 });

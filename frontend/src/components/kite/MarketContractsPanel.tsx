@@ -20,7 +20,7 @@ const GREEN = '#4caf50';
  * both read every setting on this page. It used to be split — the universe and
  * the signal source lived in a "shared" panel while strike coverage and the
  * index expiries stayed on the page titled "SuperTrend Engine", even though
- * Navigator reads those through the same call (navigator/runtime.py:568-571).
+ * Navigator reads those through the same shared scan scope.
  * Changing strike coverage from the SuperTrend page therefore moved Navigator
  * too, silently. Now the whole layer lives in one place.
  */
@@ -141,7 +141,7 @@ export function MarketContractsPanel() {
       </div>
 
       <Section
-        title="Signal source"
+        title="Where a signal comes from"
         description="Which chart a setup is read from."
         summary={scanSourceLabel(cfg.scan_source)}
         defaultOpen

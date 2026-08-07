@@ -27,12 +27,13 @@ vi.mock('../../../hooks/useKite', () => ({
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineConfig: () => ({ data: { engine_enabled: true } }),
   useSetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useEngineSignals: () => ({ data: { rows: [] } }),
 }));
 
-vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>Trading mode controls</div> }));
-vi.mock('../DirectionalModePanel', () => ({ DirectionalModePanel: () => <div>Order profile controls</div> }));
-vi.mock('../EngineConfigurationPanel', () => ({ EngineConfigurationPanel: () => <div>Engine configuration panel</div> }));
+vi.mock('../TradingModePanel', () => ({ TradingModePanel: () => <div>Trading mode controls</div> }));
+vi.mock('../TradeRulesPanel', () => ({ TradeRulesPanel: () => <div>Trade rules panel</div> }));
+vi.mock('../SuperTrendEnginePanel', () => ({ SuperTrendEnginePanel: () => <div>SuperTrend strategy panel</div> }));
 vi.mock('../NavigatorSettingsPanel', () => ({ NavigatorSettingsPanel: () => <div>Navigator settings panel</div> }));
 vi.mock('../NavigatorCalibrationPanel', () => ({ NavigatorCalibrationPanel: () => <div>Navigator calibration panel</div> }));
 vi.mock('../KiteTelegramPanel', () => ({
@@ -56,6 +57,6 @@ describe('ConnectPane — Navigator settings section', () => {
     expect(screen.getByRole('heading', { name: 'Value-Flow Navigator' })).toBeInTheDocument();
     expect(screen.getByText('Navigator settings panel')).toBeInTheDocument();
     // Not copied into the existing engine form
-    expect(screen.queryByText('Engine configuration panel')).not.toBeInTheDocument();
+    expect(screen.queryByText('SuperTrend strategy panel')).not.toBeInTheDocument();
   });
 });

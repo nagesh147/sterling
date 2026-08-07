@@ -38,6 +38,7 @@ function mockEngineHooks(row: ReturnType<typeof makeRow>) {
   vi.doMock('../../../hooks/useSterlingKiteEngine', () => ({
     useEngineConfig: () => ({ data: cfg }),
     useSetEngineConfig: () => ({ mutate: vi.fn() }),
+    usePatchEngineConfig: () => ({ mutate: vi.fn() }),
     useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
     useEngineSignals: () => ({
       data: { generated_ms: 1, scanning: false, scanning_label: '', rows: [row], next_scan_ms: 0, auto_scan: false, market_open: true },

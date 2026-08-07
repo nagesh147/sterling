@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEngineConfig, useSetEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useEngineConfig, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives';
 import { PanelCard, PanelHeader } from './config/ConfigPrimitives';
@@ -48,7 +48,7 @@ function RunningRow({ label, description, on, children }: {
 
 export function TradingModePanel() {
   const { data: cfg } = useEngineConfig();
-  const setCfg = useSetEngineConfig();
+  const setCfg = usePatchEngineConfig();
   const { data: navData } = useNavigatorConfig();
 
   const navCfg = navData?.record.config;
@@ -78,7 +78,7 @@ export function TradingModePanel() {
               <Switch
                 checked={engineOn} label="Sterling Kite engine"
                 disabled={setCfg.isPending}
-                onChange={() => setCfg.mutate({ ...cfg, engine_enabled: !engineOn })}
+                onChange={() => setCfg.mutate({ engine_enabled: !engineOn })}
               />
             )}
           </RunningRow>

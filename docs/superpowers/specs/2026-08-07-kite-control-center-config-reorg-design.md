@@ -165,6 +165,25 @@ dropdowns get caps labels matching the existing `VIEW` treatment, and their
 options come from the registry, so the board and the settings page can never
 disagree about what a value is called.
 
+## Deliberate behaviour changes
+
+Two, both narrowing waste rather than changing trading:
+
+1. **`protect_manual_orders` no longer forces a rescan.** The old panel passed
+   `rescan=true` when it was toggled, costing a multi-minute full scan. It is
+   read only by `place_manual_order` / `arm_manual_option_buy` and by nothing in
+   the scanner, so no board row changes when it flips. Every other field's
+   rescan flag matches the old behaviour exactly.
+2. **`hybrid_st_weight`'s control is gone**, as above. It was the other field
+   that forced a rescan for nothing.
+
+`scan_expiries_stocks` is the one config field with no control anywhere, which
+is correct: its validator discards whatever it is sent and always returns
+`["monthly"]`, so the page states the exchange constraint instead.
+
+Applicability tooltips cite backend *function names*, not line numbers —
+line numbers drift with every commit and these strings are user-visible.
+
 ## Non-goals
 
 * No new backend config fields. The manual/auto separation is expressed as
@@ -189,3 +208,13 @@ Tests that must be updated because the IA they assert is what is changing:
 New coverage added, because these had none and are the UI face of the 2026-08-06
 real-money hardening: `price_stop_exit`, `protect_manual_orders`, the
 applicability tags, and the registry-driven rescan policy.
+
+Result: 258 kite tests green (was 237), 386 frontend tests green, `tsc` clean.
+
+**Not done:** an independent adversarial review of this change. The review run
+hit a session limit and returned nothing, so the checks that stand behind it are
+the author's own — the applicability tags were re-traced against the backend
+after `01a90496` moved the line numbers, the rescan flags were diffed field by
+field against the deleted panels, every settings deep link in the frontend was
+enumerated, and every `EngineConfigModel` field was checked for a control. A
+second pair of eyes on the four new panels is still worth having.

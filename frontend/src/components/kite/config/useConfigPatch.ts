@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useEngineConfig, useRunScan, useSetEngineConfig,
+  useEngineConfig, usePatchEngineConfig, useRunScan,
 } from '../../../hooks/useSterlingKiteEngine';
 import { notifyOrder } from '../../../store/useKiteNotifications';
 import type { EngineConfigModel } from '../../../types/kiteEngine';
@@ -23,7 +23,7 @@ import { FIELDS, type FieldKey } from './registry';
  */
 export function useConfigPatch() {
   const { data: cfg } = useEngineConfig();
-  const setCfg = useSetEngineConfig();
+  const setCfg = usePatchEngineConfig();
   const runScan = useRunScan();
   const qc = useQueryClient();
 
@@ -31,21 +31,30 @@ export function useConfigPatch() {
    * Apply one or more registry-described fields.
    *
    * @param values  the fields to change
-   * @param keys    which registry entries these are — decides the rescan and
-   *                supplies the label for the confirmation toast
+   * @param keys    which registry entries these are. Omit it and the keys are
+   *                read off `values` itself, which is the safer default for a
+   *                caller that patches a variable set of fields — naming one
+   *                key by hand would apply that field's rescan policy to all of
+   *                them.
    */
   const patch = (
     values: Partial<EngineConfigModel>,
-    keys: FieldKey | FieldKey[],
+    keys?: FieldKey | FieldKey[],
     messageOverride?: string,
   ) => {
     if (!cfg) return;
-    const list = (Array.isArray(keys) ? keys : [keys]).filter((key) => key in FIELDS);
+    const named = keys === undefined
+      ? (Object.keys(values) as FieldKey[])
+      : (Array.isArray(keys) ? keys : [keys]);
+    const list = named.filter((key) => key in FIELDS);
     const rescan = list.some((key) => FIELDS[key].rescan);
     const message = messageOverride
       ?? (list.length === 1 ? `${FIELDS[list[0]].label} updated` : 'Settings updated');
 
-    setCfg.mutate({ ...cfg, ...values }, {
+    // Send ONLY what changed. Spreading `cfg` here would re-assert this
+    // component's cached idea of every other field and revert anything that
+    // moved since it was fetched.
+    setCfg.mutate(values, {
       onSuccess: () => {
         notifyOrder({ kind: 'info', title: 'Settings updated', message });
         // A trail/exit change alters what the setup chart and the detail dock

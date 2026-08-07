@@ -3,6 +3,7 @@ import {
   BORDER, CheckOption, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle,
 } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
+import { openSettingsSection, scanSourceLabel } from './config/registry';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import { useEngineConfig, useStockRegistry } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
@@ -485,14 +486,14 @@ export function NavigatorSettingsPanel() {
                   {engineCfg.scan_all_stocks
                     ? <span style={chipStyle}>+ all F&amp;O stocks</span>
                     : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
-                  <span style={{ color: DIM, fontSize: 10.5 }}>· {engineCfg.scan_source} contracts</span>
+                  <span style={{ color: DIM, fontSize: 10.5 }}>· {scanSourceLabel(engineCfg.scan_source)} contracts</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent('kite-connect-section', { detail: 'sharedScan' }))}
+                  onClick={() => openSettingsSection('market')}
                   style={{ marginTop: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: ORANGE, fontSize: 11, fontWeight: 700 }}
                 >
-                  Change in Scan Setup →
+                  Change in Market &amp; Contracts →
                 </button>
               </>
             ) : (

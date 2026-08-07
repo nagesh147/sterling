@@ -1131,7 +1131,7 @@ class TestAMissingTriggerIsProvedNotGuessed:
 
 # ── 15. auto-exec must not open what it cannot exit ───────────────────────────
 
-def _spot_row(underlying="RELIANCE", direction="long", *, current_reds=0, ts=1000):
+def _spot_row(underlying="RELIANCE", direction="long", *, current_reds=None, ts=1000):
     """A SPOT-source signal row: the leg carries no premium, so entry and stop have to
     be resolved from a live quote (the case that used to fail open)."""
     from app.engines.sterling_kite_engine.schemas import (
@@ -1482,3 +1482,237 @@ class TestOrphanedStopsAreReported:
         await service._reconcile_orphan_stops(_GttBookClient([], fail=True), "o7")
 
         assert not [e for e in state.activity("o7") if e.kind == "order_failed"]
+
+
+# ── 18. the red counter has to reach the path real positions take ─────────────
+
+class TestSignalDirectionOnEveryEntryPath:
+    """Stamping the signal direction only in the auto-exec branch repeated the mistake
+    that started all of this: auto_execute is OFF, so hand-placed is the path essentially
+    every real position takes. `LegPlan.direction` is hardcoded "long" (correct — a PE is
+    long premium), and the manual arm passed only that, so a hand-bought PE went into the
+    registry claiming a LONG signal and matched the BULL row's red count."""
+
+    @pytest.mark.asyncio
+    async def test_a_hand_placed_bear_leg_records_a_short_signal(self):
+        p = pos.OpenPosition(uid="s1", symbol="NIFTY24JUN24000PE", exchange="NFO",
+                             qty=50, direction="long", signal_direction="short")
+        assert pos.signal_direction_of(p) == "short"
+
+    def test_a_position_from_before_the_field_is_not_assumed_long(self):
+        """Positions are persisted with asdict and rebuilt with OpenPosition(**d), so a
+        row written before this field existed reloads without it. Defaulting those to
+        "long" hands a surviving bear position the exact wrong-way count."""
+        legacy = pos.OpenPosition(uid="s2", symbol="NIFTY24JUN24000PE",
+                                  exchange="NFO", qty=50, direction="long")
+        assert legacy.signal_direction == "", "empty must mean UNKNOWN, not long"
+        assert pos.signal_direction_of(legacy) == "short", (
+            "a legacy PE must not be counted against the bull row")
+
+    def test_a_legacy_call_position_reads_long(self):
+        legacy = pos.OpenPosition(uid="s3", symbol="NIFTY24JUN24000CE",
+                                  exchange="NFO", qty=50, direction="long")
+        assert pos.signal_direction_of(legacy) == "long"
+
+    def test_a_recorded_direction_beats_the_suffix(self):
+        """A derivatives-source row runs the SuperTrend on the contract's own premium
+        series, so a PE bought there really IS a long signal. What was recorded at entry
+        must win over the suffix guess."""
+        p = pos.OpenPosition(uid="s4", symbol="NIFTY24JUN24000PE", exchange="NFO",
+                             qty=50, direction="long", signal_direction="long")
+        assert pos.signal_direction_of(p) == "long"
+
+    def test_a_legacy_future_falls_back_to_its_own_direction(self):
+        p = pos.OpenPosition(uid="s5", symbol="NIFTY24JUNFUT", exchange="NFO",
+                             qty=50, direction="short")
+        assert pos.signal_direction_of(p) == "short"
+
+    def test_a_round_trip_through_persistence_keeps_the_signal(self):
+        from dataclasses import asdict
+        original = pos.OpenPosition(uid="s6", symbol="NIFTY24JUN24000PE", exchange="NFO",
+                                    qty=50, direction="long", signal_direction="short")
+        restored = pos.OpenPosition(**asdict(original))
+        assert pos.signal_direction_of(restored) == "short"
+
+    @pytest.mark.asyncio
+    async def test_a_hand_placed_bear_position_is_not_red_counted_out(self):
+        """End to end on the manual path: the plan carries the row's direction through
+        arming, so the trail updater matches the bear row instead of the bull one."""
+        from app.services.kite_engine import service, state
+        from app.services.kite_engine.scanner import scanner as _scanner
+        state.reset("s7")
+        pos.reset("s7")
+
+        plan = protection.LegPlan(
+            symbol="RELIANCE25JUN3000PE", exchange="NFO", token=111, lot_size=250,
+            entry_premium=90.0, stop_premium=70.0, target_premium=0.0,
+            strike=3000.0, expiry="2026-06-26", underlying="RELIANCE",
+            direction="long", signal_direction="short", source="spot",
+            entry_spot=3010.0, entry_delta=-0.35, live=True)
+        client = _QuotingClient(ltp=90.0)
+        await service.arm_manual_option_buy(
+            client, "s7", option_symbol="RELIANCE25JUN3000PE", exchange="NFO",
+            quantity=250, order_id="M1", plan=plan)
+
+        held = pos.get("s7", "RELIANCE25JUN3000PE")
+        assert held is not None and held.signal_direction == "short"
+
+        snap = _scanner.snapshot("s7")
+        snap.rows = [_spot_row(direction="long", current_reds=3),
+                     _spot_row(direction="short", current_reds=0)]
+        await service._update_open_position_trails(client, "s7")
+
+        assert pos.get("s7", "RELIANCE25JUN3000PE").current_red_count == 0, (
+            "the hand-placed bear position read the BULL row and would have been sold")
+
+
+# ── 19. matching a position to the row that actually describes it ─────────────
+
+def _deriv_row(underlying="RELIANCE", option_type="CE", *, legs, current_reds=None):
+    """A derivatives-source row: the SuperTrend ran on each CONTRACT's own premium, and
+    _compile_rows groups every strike under one parent. Every such row is direction
+    "long" — long premium, whatever the strike — on the same underlying string the spot
+    rows use, which is why underlying+direction cannot tell them apart."""
+    from app.engines.sterling_kite_engine.schemas import (
+        AlignmentChip, EngineSignalRow, OptionLeg)
+    return EngineSignalRow(
+        underlying=underlying, token=111, exchange="NFO",
+        regime="BULL" if option_type == "CE" else "BEAR",
+        alignment=AlignmentChip(fast=1, mid=1, slow=1),
+        direction="long", option_type=option_type, source="derivatives",
+        legs=[OptionLeg(moneyness=m, option_type=option_type, option_symbol=sym,
+                        strike=st, expiry="2026-06-26", lot_size=250, current_reds=cr)
+              for (m, sym, st, cr) in legs],
+        spot=0.0, stop_loss=0.0, score=85.0, timestamp_ms=1000,
+        current_reds=current_reds)
+
+
+class TestTheRowMustDescribeThisPosition:
+    """Matching on (underlying, direction) alone is not enough. Every derivatives row is
+    direction "long" on the same underlying as the spot rows, so a derivatives PE would
+    match the spot BULL row and be sold on its count — C5 again through another door.
+    And grouping collapses many contracts into one parent, so the parent's count belongs
+    to whichever leg arrived first, not to the strike actually held."""
+
+    @staticmethod
+    def _pos(symbol, *, signal_direction, underlying="RELIANCE"):
+        return pos.OpenPosition(uid="m", symbol=symbol, exchange="NFO", qty=250,
+                                direction="long", signal_direction=signal_direction,
+                                underlying=underlying, status=pos.OPEN)
+
+    def test_a_derivatives_position_reads_its_own_leg_not_the_spot_row(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="long")
+        rows = [
+            _spot_row(direction="long", current_reds=3),   # the collapsing underlying
+            _deriv_row(option_type="PE",
+                       legs=[("ATM", "RELIANCE25JUN3000PE", 3000.0, 0)]),
+        ]
+        assert service._live_red_count(p, rows) == 0, (
+            "a derivatives PE whose own premium trend is intact must not inherit the "
+            "spot bull row's reds and be market-sold")
+
+    def test_each_strike_reads_its_own_count_not_the_first_legs(self):
+        from app.services.kite_engine import service
+        rows = [_deriv_row(option_type="CE", legs=[
+            ("ATM", "RELIANCE25JUN3000CE", 3000.0, 0),
+            ("ITM1", "RELIANCE25JUN2900CE", 2900.0, 3),
+        ], current_reds=0)]
+        healthy = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        dying = self._pos("RELIANCE25JUN2900CE", signal_direction="long")
+
+        assert service._live_red_count(healthy, rows) == 0
+        assert service._live_red_count(dying, rows) == 3, (
+            "the held strike had fully reversed but read the parent's (first leg's) 0")
+
+    def test_a_spot_position_still_matches_by_underlying_and_direction(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        rows = [_spot_row(direction="long", current_reds=3),
+                _spot_row(direction="short", current_reds=1)]
+        assert service._live_red_count(p, rows) == 1
+
+    def test_an_unknown_count_is_not_read_as_zero(self):
+        """A row hydrated from a cache written before the field existed has None. Zero
+        would mean "nothing against us" and overwrite a real count of 2 or 3, disarming
+        the red exit one tick before it fired."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, [_spot_row(direction="long")]) is None
+
+    def test_an_unknown_leg_count_does_not_fall_back_to_the_underlying(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="long")
+        rows = [_spot_row(direction="long", current_reds=3),
+                _deriv_row(option_type="PE",
+                           legs=[("ATM", "RELIANCE25JUN3000PE", 3000.0, None)])]
+        assert service._live_red_count(p, rows) is None
+
+    def test_no_row_at_all_is_unknown(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, []) is None
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_count_leaves_the_stored_one_untouched(self):
+        from app.services.kite_engine import service, state
+        from app.services.kite_engine.scanner import scanner as _scanner
+        state.reset("m2")
+        pos.reset("m2")
+        pos.register(pos.OpenPosition(
+            uid="m2", symbol="RELIANCE25JUN3000CE", exchange="NFO", token=111, qty=250,
+            entry_premium=90.0, stop_premium=70.0, order_id="O1", status=pos.OPEN,
+            direction="long", signal_direction="long", underlying="RELIANCE",
+            current_red_count=2))
+        _scanner.snapshot("m2").rows = [_spot_row(direction="long")]  # count unknown
+
+        await service._update_open_position_trails(_QuotingClient(), "m2")
+
+        assert pos.get("m2", "RELIANCE25JUN3000CE").current_red_count == 2
+
+
+# ── 20. a rollback must not empty the registry ────────────────────────────────
+
+class TestThePositionStoreSurvivesAnUnknownField:
+    """Positions round-trip through JSON as whole dicts. A payload written by a NEWER
+    build carries fields an older one has never heard of, and OpenPosition(**d) raises on
+    the first — where the blanket except discarded the WHOLE registry, leaving every live
+    position unguarded and freeing the auto-open guard to re-enter slots already held."""
+
+    def test_an_unknown_field_does_not_discard_every_position(self, monkeypatch):
+        import json as _json
+        from app.services.kite_engine import positions as _pos
+        saved = _json.dumps([
+            {"uid": "z1", "symbol": "NIFTY24JUN24000CE", "exchange": "NFO", "qty": 75,
+             "status": _pos.OPEN, "a_field_from_the_future": "boom"},
+            {"uid": "z1", "symbol": "NIFTY24JUN24100CE", "exchange": "NFO", "qty": 75,
+             "status": _pos.OPEN},
+        ])
+        monkeypatch.setattr(_pos.db, "get_config", lambda k: saved)
+        _pos._positions.pop("z1", None)
+
+        loaded = _pos._load("z1")
+
+        assert set(loaded) == {"NIFTY24JUN24000CE", "NIFTY24JUN24100CE"}, (
+            "one unreadable row must not take the others with it")
+
+    def test_a_corrupt_row_is_skipped_not_fatal(self, monkeypatch):
+        import json as _json
+        from app.services.kite_engine import positions as _pos
+        saved = _json.dumps([
+            "not a dict at all",
+            {"uid": "z2", "symbol": "NIFTY24JUN24000CE", "exchange": "NFO", "qty": 75},
+        ])
+        monkeypatch.setattr(_pos.db, "get_config", lambda k: saved)
+        _pos._positions.pop("z2", None)
+
+        assert set(_pos._load("z2")) == {"NIFTY24JUN24000CE"}
+
+    def test_a_scale_in_keeps_the_recorded_signal_direction(self):
+        """Re-registering is how a scale-in updates the row, so a second buy arriving
+        without a signal direction must not blank the first entry's."""
+        pos.reset("z3")
+        pos.register(pos.OpenPosition(
+            uid="z3", symbol="NIFTY24JUN24000PE", exchange="NFO", qty=75,
+            order_id="O1", status=pos.OPEN, direction="long", signal_direction="short"))
+        assert pos.signal_direction_of(pos.get("z3", "NIFTY24JUN24000PE")) == "short"

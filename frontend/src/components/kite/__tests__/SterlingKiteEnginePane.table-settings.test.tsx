@@ -38,6 +38,7 @@ const cfg = {
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineConfig: () => ({ data: cfg }),
   useSetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useEngineSignals: () => ({
     data: {
       generated_ms: 0,
@@ -84,7 +85,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
 
     expect(screen.getByText('Signal table settings')).toBeInTheDocument();
-    expect(screen.getByText(/change only this table/i)).toBeInTheDocument();
+    expect(screen.getByText(/change only how this table looks/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('checkbox', { name: 'Show ended setups' })).toBeChecked();
 
@@ -99,8 +100,10 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Best signal per instrument' }));
     expect(localStorage.getItem('kite_st_best_only')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: /configure engine/i }));
-    expect(localStorage.getItem('kite_connect_section')).toBe('engine');
+    // The drawer now points at Trade Rules — entry, stop, exit and sizing are
+    // engine-independent, so that is where they live.
+    fireEvent.click(screen.getByRole('button', { name: /trade rules/i }));
+    expect(localStorage.getItem('kite_connect_section')).toBe('rules');
     expect(navListener).toHaveBeenCalled();
 
     window.removeEventListener('kite-nav-click', navListener);

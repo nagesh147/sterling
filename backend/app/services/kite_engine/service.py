@@ -215,6 +215,9 @@ async def arm_manual_option_buy(client, uid: str, *, option_symbol: str, exchang
             token=plan.token, qty=quantity, lot_size=plan.lot_size,
             entry_premium=plan.entry_premium, stop_premium=stop_to_arm,
             order_id=order_id, stop_mode=cfg.stop_mode, direction=plan.direction,
+            # Hand-placed is the path essentially every real position takes, so leaving
+            # this off meant the C5 fix reached almost nothing.
+            signal_direction=plan.signal_direction,
             vehicle="otm_options", underlying=plan.underlying, exit_mode=cfg.exit_mode,
             entry_spot=plan.entry_spot, entry_delta=plan.entry_delta,
             strike=plan.strike, expiry=plan.expiry, target_premium=plan.target_premium)
@@ -910,6 +913,47 @@ def _retranslated_stop(p, row) -> Optional[float]:
     return new_sl if (new_sl > p.stop_premium and new_sl > 0) else None
 
 
+def _live_red_count(p, rows) -> Optional[int]:
+    """This position's live red count from the fresh scan, or None when the scan cannot
+    say — in which case the caller must leave the last known count alone.
+
+    Two match steps, and the order matters:
+
+    1. **The exact contract.** A derivatives-source row runs the SuperTrend on ONE
+       contract's own premium series, and ``_compile_rows`` then groups every strike of
+       an underlying under a single parent whose count belongs to whichever leg arrived
+       first. Only the leg's own count describes this position.
+    2. **The underlying**, matched on the SIGNAL direction — and never against a
+       derivatives row. Every derivatives row carries ``direction="long"`` (long premium,
+       whatever the strike) on the same underlying string as the spot rows, so matching
+       one by underlying would hand a PE the bull row's count and market-sell a position
+       whose own trend is intact. That is C5 again through a different door.
+
+    None is returned for "no matching row" and for a row whose ``current_reds`` is None —
+    a row hydrated from a cache written before the field existed. Reading that as 0 would
+    say "nothing against us" and overwrite a real count of 2 or 3, disarming the red exit
+    one tick before it fired.
+    """
+    sym = str(getattr(p, "symbol", "") or "").upper()
+    for r in rows:
+        if getattr(r, "source", "") != "derivatives":
+            continue
+        for leg in (getattr(r, "legs", None) or []):
+            if str(getattr(leg, "option_symbol", "") or "").upper() != sym:
+                continue
+            reds = getattr(leg, "current_reds", None)
+            return None if reds is None else int(reds)
+    want_dir = positions.signal_direction_of(p)
+    for r in rows:
+        if getattr(r, "source", "") == "derivatives":
+            continue
+        if r.underlying != getattr(p, "underlying", "") or r.direction != want_dir:
+            continue
+        reds = getattr(r, "current_reds", None)
+        return None if reds is None else int(reds)
+    return None
+
+
 async def _update_open_position_trails(client, uid: str) -> None:
     """After each scan, push tightened trail stops to open positions.
 
@@ -973,21 +1017,21 @@ async def _update_open_position_trails(client, uid: str) -> None:
         #      scan_source="both" one underlying yields a bull row AND a bear row, and
         #      taking whichever came first (the old `break`) read the counter of the
         #      opposite trade.
-        #   2. WHICH BAR. `row.current_reds` is computed at the LATEST bar. The old code
-        #      read `row.alignment`, which is frozen at the ENTRY bar, and counted it
-        #      against `p.direction` — "long" for every option, CE and PE alike. So a PE
-        #      opened on an all-red bear signal scored 3-of-3 against itself immediately
-        #      and was market-sold on the very next tick, with the SuperTrend still
-        #      perfectly aligned in its favour.
+        #   2. WHICH BAR. `current_reds` is computed at the LATEST bar. The old code read
+        #      `row.alignment`, which is frozen at the ENTRY bar, and counted it against
+        #      `p.direction` — "long" for every option, CE and PE alike. So a PE opened on
+        #      an all-red bear signal scored 3-of-3 against itself immediately and was
+        #      market-sold on the very next tick, with the SuperTrend still perfectly
+        #      aligned in its favour.
         #
-        # No matching row → leave the last known count alone. Writing 0 would silently
-        # disarm the red exit for a position whose underlying simply dropped out of this
-        # scan's universe.
-        want_dir = getattr(p, "signal_direction", "") or p.direction
-        match = next((r for r in rows
-                      if r.underlying == p.underlying and r.direction == want_dir), None)
-        if match is not None:
-            current_reds = int(getattr(match, "current_reds", 0) or 0)
+        # See `_live_red_count` for how the row is chosen. None → leave the last known
+        # count alone: writing 0 would disarm the red exit for a position whose underlying
+        # simply dropped out of this scan's universe. KNOWN LIMIT: if the signal that
+        # opened a position ends and no row of that direction is emitted again, the count
+        # freezes at its last value and only the price trail and the expiry square-off
+        # remain. That is the safe direction, but it is not a working red counter.
+        current_reds = _live_red_count(p, rows)
+        if current_reds is not None:
             positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
             if current_reds > 0:
                 mode = getattr(p, 'exit_mode', 'one_red')

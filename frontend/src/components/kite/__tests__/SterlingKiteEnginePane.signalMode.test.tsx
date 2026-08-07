@@ -48,6 +48,7 @@ function mockRows(rows: ReturnType<typeof makeRow>[]) {
   vi.doMock('../../../hooks/useSterlingKiteEngine', () => ({
     useEngineConfig: () => ({ data: cfg }),
     useSetEngineConfig: () => ({ mutate: vi.fn() }),
+    usePatchEngineConfig: () => ({ mutate: vi.fn() }),
     useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
     useEngineSignals: () => ({
       data: { generated_ms: 1, scanning: false, scanning_label: '', rows, next_scan_ms: 0, auto_scan: false, market_open: true },
@@ -153,7 +154,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
   });
 
   describe('SuperTrend-only controls hide when the lens shows no SuperTrend rows', () => {
-    const exitRuleTitle = /^Auto-exit rule/;
+    const exitRuleTitle = /^Exit confirmation/;
 
     it('shows the exit-rule dropdown under Combined (SuperTrend rows are on screen)', async () => {
       mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);

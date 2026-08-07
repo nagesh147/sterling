@@ -247,3 +247,77 @@ position, under `scan_source="both"`.
   accidental dependency on the C4 defect, not a behaviour worth preserving.
 * Full backend suite: **2305 passed**, 6 skipped, 1 xfailed, same 2 pre-existing failures.
   Frontend `tsc --noEmit` clean.
+
+---
+
+## Round 3 — C5 under independent attack
+
+`01a90496` claimed C5 closed. Five adversarial verifiers were sent at it, each on a different
+angle, each told its default position was that the fix is wrong. Four returned (the fifth and
+the judge hit a session limit); **all four ruled FIX_INCOMPLETE with high confidence, and all
+four actually ran code rather than only reading it.**
+
+They confirmed the original defect was real — one reproduced it against the parent commit and
+reported the actual number a bear position scored: **3**, against a threshold of 1.
+
+They also found five ways the fix did not reach far enough. Two of those had been caught
+independently while they ran; three had not.
+
+| # | Hole | Effect |
+|---|------|--------|
+| 1 | The manual path never passed `signal_direction` | C5 **completely unfixed** on the path essentially every real position takes |
+| 2 | Positions persisted before the field default to `"long"` | C5 survives a restart for anything open across the deploy |
+| 3 | Every derivatives row is `direction="long"` on the same underlying string | a derivatives PE matched the spot **bull** row and read its count |
+| 4 | Grouping collapses every strike under one parent | a position on any leg but the first read another contract's counter |
+| 5 | `current_reds` defaulted to `0` on rows from the pre-fix cache | `0` means "nothing against us" — it **overwrote** a real count of 2 or 3 |
+
+### 1 & 2 — the fix missed the path that matters
+
+`LegPlan.direction` is hardcoded `"long"` — correct, a PE is long premium — and
+`arm_manual_option_buy` passed only that. So every hand-placed position was stamped as a long
+signal. With `auto_execute` off, hand-placed is *the* path, which makes this the same mistake
+as round 1's headline defect: the fix landed on the branch almost nothing uses. `LegPlan` now
+carries `signal_direction` from the row, and the manual arm passes it.
+
+`OpenPosition.signal_direction` now defaults to `""` meaning **unknown**, not `"long"`, and is
+read through `positions.signal_direction_of`, which falls back to the CE/PE suffix only for a
+row that predates the field. The suffix is a fallback and never the source of truth — a
+derivatives-source PE really is a long signal — but it errs toward a red exit that does not
+fire rather than a position sold while the trend is still with it.
+
+### 3 & 4 — `(underlying, direction)` does not identify a position
+
+Every derivatives row carries `direction="long"` on the same underlying string the spot rows
+use, so the match key could not tell them apart: a derivatives PE whose own premium trend was
+intact matched the spot **bull** row and would be market-sold as the underlying broke down —
+which is the normal state of affairs for a profitable PE. And `_compile_rows` groups every
+strike of an underlying under one parent whose count belongs to whichever leg arrived first.
+
+`_live_red_count` now matches the **exact contract** first — `OptionLeg.current_reds`, stamped
+per contract in the derivatives builder and carried through grouping — and only then falls back
+to underlying + signal direction, skipping derivatives rows entirely.
+
+### 5 — zero is not "unknown"
+
+`current_reds` is `Optional[int]`, `None` meaning the scan cannot say. `None` leaves the stored
+count untouched; `0` would have disarmed the red exit one tick before it fired.
+
+### Also fixed: a rollback could empty the position registry
+
+Not a C5 finding, but found while checking persistence. `_load` rebuilt each row with
+`OpenPosition(**d)` inside one blanket `except` that set `out = {}`. A payload written by a
+newer build carries fields an older one has never heard of — so **one** unknown key discarded
+**every** position for that user, leaving them unguarded and freeing the auto-open guard to
+re-enter slots already held. Unknown keys are now dropped and each row is isolated.
+
+### Known limit, accepted
+
+If the signal that opened a position ends and no row of that direction is emitted again, the
+red count freezes at its last value; the price trail and the expiry square-off remain. That is
+the safe direction, but it is not a working red counter, and it is not fixed here.
+
+### Verification
+
+* `test_protection.py` — 71 → 88 tests. 12 of the 17 new ones fail against `01a90496`
+  (verified by reverting the decision sites and re-running); the rest are regression guards.
+* Full backend suite: **2322 passed**, same 2 pre-existing failures. Frontend `tsc` clean.

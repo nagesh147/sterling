@@ -4,7 +4,7 @@ import {
   useEngineConfig,
   useExpiryCalendar,
   useRunScan,
-  useSetEngineConfig,
+  usePatchEngineConfig,
 } from '../../hooks/useSterlingKiteEngine';
 import type {
   EngineConfigModel,
@@ -321,12 +321,12 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
   const panelId = React.useId();
   const { data: cfg } = useEngineConfig();
   const calendar = useExpiryCalendar();
-  const setConfig = useSetEngineConfig();
+  const setConfig = usePatchEngineConfig();
   const runScan = useRunScan();
 
   const save = (patch: Partial<EngineConfigModel>) => {
     if (!cfg || setConfig.isPending) return;
-    setConfig.mutate({ ...cfg, ...patch }, { onSuccess: () => runScan.mutate() });
+    setConfig.mutate(patch, { onSuccess: () => runScan.mutate() });
   };
 
   const indexEntries = cfg && calendar.data

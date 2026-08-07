@@ -40,6 +40,7 @@ const spotRow = {
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineConfig: () => ({ data: cfg }),
   useSetEngineConfig: () => ({ mutate: vi.fn((_v: unknown, o?: { onSuccess?: () => void }) => o?.onSuccess?.()) }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn((_v: unknown, o?: { onSuccess?: () => void }) => o?.onSuccess?.()) }),
   useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useEngineSignals: () => ({
     data: {

@@ -24,13 +24,13 @@ import { DirectionalModePanel } from './DirectionalModePanel';
  * The tags are a property of one shared field, not two duplicated fields. The
  * backend cannot honour a manual stop mode that disagrees with the automatic
  * one: `arm_manual_option_buy` and the automatic path both call
- * `protection.arm_position` with the same `cfg.stop_mode` (service.py:217). A UI
+ * `protection.arm_position` with the same `cfg.stop_mode`. A UI
  * offering two values would be describing behaviour that does not exist.
  *
  * It also corrects a real mislabel. Expiry square-off and the time stop were
  * filed under "Advanced auto-execution guards", but both iterate
  * `positions.open_positions(uid)` — the whole registry, which includes
- * hand-placed orders armed by manual protection (service.py:783, :812). They
+ * hand-placed orders armed by manual protection. They
  * are tagged MANUAL+AUTO here, because that is what they do.
  */
 
@@ -85,15 +85,18 @@ function readScope(): Scope {
 }
 
 /** A number input that treats an empty string as "off" (null). */
-function OptionalNumber({ field, value, onChange, min = 0, max, step = 1 }: {
+function OptionalNumber({ field, testId, value, onChange, min = 0, max, step = 1 }: {
   field: FieldKey;
+  /** Kept stable across the reorg so existing coverage keeps pointing at the
+   *  same control even though it lives on a different page now. */
+  testId: string;
   value: number | null | undefined;
   onChange: (next: number | null) => void;
   min?: number; max?: number; step?: number;
 }) {
   return (
     <input
-      data-testid={`rule-${field}`}
+      data-testid={testId}
       aria-label={FIELDS[field].label}
       type="number" min={min} max={max} step={step} placeholder="off"
       value={value ?? ''} style={inputStyle}
@@ -180,13 +183,13 @@ export function TradeRulesPanel() {
           <>
             {visible('adx_min') && (
               <Field label={FIELDS.adx_min.label} hint={FIELDS.adx_min.help} badge={chip('adx_min')}>
-                <OptionalNumber field="adx_min" value={cfg.adx_min} min={0} max={100} step={1}
+                <OptionalNumber field="adx_min" testId="adx-min-input" value={cfg.adx_min} min={0} max={100} step={1}
                   onChange={(next) => patch({ adx_min: next }, 'adx_min')} />
               </Field>
             )}
             {visible('atr_pct_min') && (
               <Field label={FIELDS.atr_pct_min.label} hint={FIELDS.atr_pct_min.help} badge={chip('atr_pct_min')}>
-                <OptionalNumber field="atr_pct_min" value={cfg.atr_pct_min} min={0} max={100} step={5}
+                <OptionalNumber field="atr_pct_min" testId="atr-pct-min-input" value={cfg.atr_pct_min} min={0} max={100} step={5}
                   onChange={(next) => patch({ atr_pct_min: next }, 'atr_pct_min')} />
               </Field>
             )}
@@ -255,7 +258,11 @@ export function TradeRulesPanel() {
           <div style={{ marginTop: 12 }}>
             <DirectionalModePanel
               cfg={cfg}
-              onUpdate={(values) => patch(values, 'vehicle', 'Vehicle profile updated')}
+              // This panel patches a variable set of fields (vehicle, delta,
+              // depth, futures series, the ADX/ATR filters), so let the keys be
+              // read off the patch rather than naming one and applying its
+              // rescan policy to the rest.
+              onUpdate={(values) => patch(values, undefined, 'Vehicle profile updated')}
               busy={saving}
               liveLotSize={leg?.lot_size ?? undefined}
               livePremium={leg?.premium_spot ?? undefined}
@@ -463,7 +470,7 @@ export function TradeRulesPanel() {
               badge={chip('max_daily_loss_pct')}
             >
               <OptionalNumber
-                field="max_daily_loss_pct" value={cfg.max_daily_loss_pct} min={0} max={100} step={0.5}
+                field="max_daily_loss_pct" testId="daily-loss-input" value={cfg.max_daily_loss_pct} min={0} max={100} step={0.5}
                 onChange={(next) => patch({ max_daily_loss_pct: next }, 'max_daily_loss_pct')}
               />
             </Field>

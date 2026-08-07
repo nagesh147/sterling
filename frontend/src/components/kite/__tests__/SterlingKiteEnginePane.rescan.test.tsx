@@ -45,6 +45,7 @@ let scanning = false;
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineConfig: () => ({ data: cfg }),
   useSetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useEngineSignals: () => ({
     data: {
       generated_ms: 0, scanning, scanning_label: '', rows: [],

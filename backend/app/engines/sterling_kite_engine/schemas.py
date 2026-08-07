@@ -35,6 +35,12 @@ class OptionLeg(BaseModel):
     entry_timestamp_ms: Optional[int] = None
     alignment: Optional[AlignmentChip] = None
     exit_state: Optional[str] = None
+    #: This CONTRACT's own live red count. A derivatives row runs the SuperTrend on each
+    #: contract's OWN premium series, and `_compile_rows` then groups the legs under a
+    #: single parent — so the parent's count belongs to whichever leg happened to arrive
+    #: first. A position holding any other strike must read its own leg, not that one.
+    #: None = unknown (see EngineSignalRow.current_reds).
+    current_reds: Optional[int] = None
     resolution_note: Optional[str] = None
 
 
@@ -61,7 +67,12 @@ class EngineSignalRow(BaseModel):
     #: ``exit_state`` freezes at the exit bar for an ended row, so neither can drive the
     #: red-count exit of an OPEN position. Reading the entry chip instead is what made
     #: every bear position report 3/3 the moment it opened.
-    current_reds: int = 0
+    #:
+    #: None means UNKNOWN — a row hydrated from a cache written before this field
+    #: existed. It must NOT read as 0: zero means "nothing against us" and would
+    #: overwrite a real count of 2 or 3, disarming the red exit one tick before it
+    #: fired. Consumers leave the last known count alone instead.
+    current_reds: Optional[int] = None
     # Why this entry ended, when it has ("trail breach (≤ 1000.63)" / "red count exit
     # 3/3 (three_red_signal)"). None while the trade is still running. The red counter
     # and the trailing stop are independent rules and either can end a trade, so
