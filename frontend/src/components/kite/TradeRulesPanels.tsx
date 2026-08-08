@@ -129,16 +129,11 @@ export function ManualRulesPanel() {
         defaultOpen
       >
         <Field label={FIELDS.protect_manual_orders.label} hint={FIELDS.protect_manual_orders.help}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Switch
-              checked={protectOn} label="Add stop when I buy"
-              onChange={() => patch({ protect_manual_orders: !protectOn }, 'protect_manual_orders',
-                `Manual stop ${!protectOn ? 'on' : 'off'}`)}
-            />
-            <span style={{ color: TEXT, fontSize: 11.5 }}>
-              {protectOn ? 'On — stop-loss is placed after fill' : 'Off — you manage exits yourself'}
-            </span>
-          </div>
+          <Switch
+            checked={protectOn} label="Add stop when I buy"
+            onChange={() => patch({ protect_manual_orders: !protectOn }, 'protect_manual_orders',
+              `Manual stop ${!protectOn ? 'on' : 'off'}`)}
+          />
         </Field>
 
         {protectOn ? (
@@ -290,14 +285,11 @@ export function AutomaticRulesPanel() {
           defaultOpen
         >
           <Field label={FIELDS.risk_sizing.label} hint={FIELDS.risk_sizing.help}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <Switch
-                checked={cfg.risk_sizing} label="Size by risk"
-                onChange={() => patch({ risk_sizing: !cfg.risk_sizing }, 'risk_sizing',
-                  `Risk sizing ${!cfg.risk_sizing ? 'enabled' : 'disabled'}`)}
-              />
-              <span style={{ color: TEXT, fontSize: 11.5 }}>Size positions from available capital</span>
-            </div>
+            <Switch
+              checked={cfg.risk_sizing} label="Size by risk"
+              onChange={() => patch({ risk_sizing: !cfg.risk_sizing }, 'risk_sizing',
+                `Risk sizing ${!cfg.risk_sizing ? 'enabled' : 'disabled'}`)}
+            />
           </Field>
           {cfg.risk_sizing && (
             <Field label={FIELDS.risk_pct.label} hint={FIELDS.risk_pct.help}>
@@ -316,21 +308,14 @@ export function AutomaticRulesPanel() {
               label={FIELDS.allow_min_lot_over_risk.label}
               hint={FIELDS.allow_min_lot_over_risk.help}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <Switch
-                  checked={cfg.allow_min_lot_over_risk ?? false}
-                  label="Allow 1 lot over risk"
-                  onChange={() => patch(
-                    { allow_min_lot_over_risk: !(cfg.allow_min_lot_over_risk ?? false) },
-                    'allow_min_lot_over_risk',
-                    `Minimum lot over risk ${!(cfg.allow_min_lot_over_risk ?? false) ? 'allowed' : 'refused'}`)}
-                />
-                <span style={{ color: TEXT, fontSize: 11.5 }}>
-                  {(cfg.allow_min_lot_over_risk ?? false)
-                    ? 'Takes one lot even when that exceeds the cap'
-                    : 'Skips the entry when one lot exceeds the cap'}
-                </span>
-              </div>
+              <Switch
+                checked={cfg.allow_min_lot_over_risk ?? false}
+                label="Allow 1 lot over risk"
+                onChange={() => patch(
+                  { allow_min_lot_over_risk: !(cfg.allow_min_lot_over_risk ?? false) },
+                  'allow_min_lot_over_risk',
+                  `Minimum lot over risk ${!(cfg.allow_min_lot_over_risk ?? false) ? 'allowed' : 'refused'}`)}
+              />
               {(cfg.allow_min_lot_over_risk ?? false) && (
                 <ConfigNote>
                   Positions opened this way risk more than <b>{cfg.risk_pct}%</b>. On a small
@@ -458,15 +443,10 @@ export function AutomaticRulesPanel() {
             summary={cfg.wire_risk_infra ? 'On' : 'Off'}
           >
             <Field label={FIELDS.wire_risk_infra.label} hint={FIELDS.wire_risk_infra.help}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Switch
-                  checked={cfg.wire_risk_infra} label="Portfolio risk guards"
-                  onChange={() => patch({ wire_risk_infra: !cfg.wire_risk_infra }, 'wire_risk_infra')}
-                />
-                <span style={{ color: TEXT, fontSize: 11.5 }}>
-                  {cfg.wire_risk_infra ? 'Drawdown breaker and correlation penalty feed sizing' : 'Sizing ignores portfolio-level risk'}
-                </span>
-              </div>
+              <Switch
+                checked={cfg.wire_risk_infra} label="Portfolio risk guards"
+                onChange={() => patch({ wire_risk_infra: !cfg.wire_risk_infra }, 'wire_risk_infra')}
+              />
             </Field>
           </Section>
 
