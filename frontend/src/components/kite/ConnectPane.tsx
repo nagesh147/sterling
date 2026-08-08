@@ -38,11 +38,6 @@ const S: Record<string, React.CSSProperties> = {
   ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
 };
 
-const badge = (col: string): React.CSSProperties => ({
-  background: '#f9f9f9', color: col, border: `1px solid ${col}`,
-  padding: '2px 8px', borderRadius: 2, fontSize: 9, fontWeight: 700,
-});
-
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
 function kiteErrorHelp(msg: string): string | null {
   const m = (msg || '').toLowerCase();
@@ -233,19 +228,19 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
     && !(status?.account_id === acc.id && status?.connected === false);
   const isLive = !acc.is_paper;
 
-  // Dot colour: green = live+connected, amber = paper+connected, grey = disconnected
-  const dotColor = connected ? (isLive ? '#4caf50' : '#ff9800') : '#bbb';
-  const modeLabel = connected ? (isLive ? 'LIVE' : 'PAPER') : 'offline';
-
   // Real Zerodha account holder name comes from /status (only for the connected
   // account). Prefer it over the user-chosen label, then fall back to the label.
   const statusName = status?.account_id === acc.id ? status?.user_name : null;
   const kiteId = statusName ? status?.kite_user_id ?? acc.kite_user_id : acc.kite_user_id;
   const displayName = statusName || acc.label;
-  const subText = [kiteId ? `ID ${kiteId}` : null, displayName !== acc.label ? acc.label : null]
-    .filter(Boolean).join(' · ') || acc.api_key_hint || '';
-
-  const avatarColor = isLive && connected ? '#2e7d32' : connected ? '#1565c0' : '#9e9e9e';
+  // One quiet meta line — no PAPER/LIVE badge (that lives under Trading Mode / expand).
+  const subParts = [
+    kiteId ? `ID ${kiteId}` : (acc.api_key_hint || null),
+    displayName !== acc.label ? acc.label : null,
+    acc.is_active ? 'Active' : null,
+    connected ? 'Connected' : (acc.has_credentials ? 'Not connected' : 'No keys'),
+  ].filter(Boolean);
+  const subText = subParts.join(' · ');
 
   const flipPaperLive = () => {
     if (isLive) { update.mutate({ id: acc.id, is_paper: true }); return; }
@@ -256,43 +251,32 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
   };
 
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-      {/* ── Collapsed row ── */}
+    <div style={{
+      border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
+      background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+    }}>
+      {/* ── Collapsed row: name + quiet meta, no status badges ── */}
       <div
         onClick={() => setExpanded((v) => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
-        {/* Avatar */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: '50%', background: avatarColor,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: 0.5,
-          }}>
-            {initials(displayName)}
-          </div>
-          {/* Status LED */}
-          <span style={{
-            position: 'absolute', bottom: 0, right: 0, width: 10, height: 10,
-            borderRadius: '50%', background: dotColor, border: '2px solid #fff',
-            boxShadow: connected ? `0 0 4px ${dotColor}` : undefined,
-          }} />
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%', background: '#e8e8e8', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#666', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
+        }}>
+          {initials(displayName)}
         </div>
-
-        {/* Name + sub-info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, color: '#333', fontSize: 14 }}>{displayName}</span>
-            {acc.is_active && <span style={badge('#f06428')}>ACTIVE</span>}
-          </div>
-          {subText && <div style={{ color: '#999', fontSize: 11, marginTop: 1 }}>{subText}</div>}
+          <div style={{ fontWeight: 700, color: '#444', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
+          {subText ? (
+            <div style={{ color: '#9b9b9b', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
+          ) : null}
         </div>
-
-        {/* Mode badge + chevron */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <span style={{ ...badge(dotColor), fontSize: 9 }}>{modeLabel.toUpperCase()}</span>
-          <span style={{ color: '#ccc', fontSize: 12, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .15s', display: 'inline-block' }}>▼</span>
-        </div>
+        <span aria-hidden style={{
+          color: '#bbb', fontSize: 11, flexShrink: 0,
+          transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s',
+        }}>▼</span>
       </div>
 
       {/* ── Expanded body ── */}
@@ -357,21 +341,40 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
             </div>
           )}
 
-          {/* PAPER / LIVE toggle + key management */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ModeToggle
-              size="sm" left="PAPER" right="LIVE"
-              value={acc.is_paper ? 'left' : 'right'}
-              onSelect={(side) => { if (side === 'left') update.mutate({ id: acc.id, is_paper: true }); else flipPaperLive(); }}
-              leftColor="#387ed1" rightColor="#4caf50"
-              rightDotWhenActive busy={update.isPending}
-              rightDisabled={!acc.has_credentials}
-              rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
-            />
-            {!acc.is_active && <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set active</button>}
-            <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>{test.isPending ? '…' : 'Test connection'}</button>
-            <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>{editKeys ? 'Cancel' : 'Edit keys'}</button>
-            <button style={{ ...S.btnRed, marginLeft: 'auto' }} onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}>Remove</button>
+          {/* Order destination + account tools */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <div style={{ ...S.label, marginBottom: 6 }}>ORDER DESTINATION</div>
+              <ModeToggle
+                size="sm" left="PAPER" right="LIVE"
+                value={acc.is_paper ? 'left' : 'right'}
+                onSelect={(side) => { if (side === 'left') update.mutate({ id: acc.id, is_paper: true }); else flipPaperLive(); }}
+                leftColor="#387ed1" rightColor="#4caf50"
+                rightDotWhenActive busy={update.isPending}
+                rightDisabled={!acc.has_credentials}
+                rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
+              />
+              <div style={{ ...S.hint, marginTop: 6 }}>
+                Paper simulates fills. Live sends orders to Zerodha. Prefer Trading Mode for day-to-day switching.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {!acc.is_active && (
+                <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set as active</button>
+              )}
+              <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>
+                {test.isPending ? '…' : 'Test'}
+              </button>
+              <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>
+                {editKeys ? 'Cancel' : 'Keys'}
+              </button>
+              <button
+                style={{ ...S.btnRed, marginLeft: 'auto' }}
+                onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
 
           {test.data && (
