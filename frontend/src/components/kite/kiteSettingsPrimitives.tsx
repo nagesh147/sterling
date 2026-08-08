@@ -1,21 +1,20 @@
 import React from 'react';
 
 /**
- * Kite settings design system
- * Pattern: Linear / Stripe settings — open groups, not stacked accordion cards.
+ * Kite settings primitives
  *
- * Hierarchy:
- *   Page title (ConnectPane)
- *   → Group (Section): title + description + plain summary
- *   → Field: label | control, hint under
- *   → Advanced: only collapsible block
+ * Pattern: quiet progressive disclosure
+ * - Sections collapse (page stays scannable)
+ * - No card frames, orange bars, or pill chips
+ * - Summary = plain status text on the right
+ * - Only Advanced uses a lighter, secondary treatment
  */
 
 export const ORANGE = '#f06428';
-export const BORDER = '#ebebeb';
+export const BORDER = '#eaeaea';
 export const TEXT = '#171717';
-export const MUTED = '#737373';
-export const DIM = '#a3a3a3';
+export const MUTED = '#6f6f6f';
+export const DIM = '#9c9c9c';
 export const SOFT = '#f5f5f5';
 export const ORANGE_SOFT = '#fff7f3';
 
@@ -23,7 +22,7 @@ export const inputStyle: React.CSSProperties = {
   width: 112,
   height: 34,
   padding: '0 10px',
-  border: '1px solid #d4d4d4',
+  border: '1px solid #d6d6d6',
   borderRadius: 6,
   background: '#fff',
   color: TEXT,
@@ -33,73 +32,91 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /**
- * Settings group — always open.
- * Left rail already navigates between pages; within a page we show all groups.
- * Summary is plain status text on the right (not a chip).
+ * Collapsible group — minimal chrome.
+ * Closed: title + summary only (scannable).
+ * Open: fields below with a single light rule under the header.
  */
-export function Section({ title, description, summary, defaultOpen: _defaultOpen = false, children }: {
+export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
   description: string;
   summary: string;
-  /** Kept for API compatibility; groups are always expanded. */
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
   return (
-    <section
+    <details
       className="sk-settings-group"
-      style={{ marginBottom: 32 }}
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      style={{ marginBottom: 2 }}
     >
-      <header
+      <summary
         style={{
+          listStyle: 'none',
+          cursor: 'pointer',
           display: 'flex',
-          alignItems: 'flex-start',
-          gap: 16,
-          paddingBottom: 12,
-          marginBottom: 4,
+          alignItems: 'center',
+          gap: 10,
+          padding: '14px 0',
+          userSelect: 'none',
           borderBottom: `1px solid ${BORDER}`,
         }}
       >
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h3
+        <span
+          aria-hidden
+          style={{
+            flexShrink: 0,
+            width: 14,
+            color: DIM,
+            fontSize: 13,
+            lineHeight: 1,
+            transform: isOpen ? 'rotate(90deg)' : 'none',
+            transition: 'transform .14s ease',
+          }}
+        >
+          ›
+        </span>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span
             style={{
-              margin: 0,
+              display: 'block',
               color: TEXT,
-              fontSize: 15,
-              fontWeight: 650,
-              letterSpacing: '-0.02em',
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: '-0.015em',
               lineHeight: 1.3,
             }}
           >
             {title}
-          </h3>
+          </span>
           {description ? (
-            <p
+            <span
               style={{
-                margin: '4px 0 0',
+                display: 'block',
                 color: MUTED,
-                fontSize: 13,
-                lineHeight: 1.45,
-                maxWidth: 560,
+                fontSize: 12.5,
+                lineHeight: 1.4,
+                marginTop: 2,
               }}
             >
               {description}
-            </p>
+            </span>
           ) : null}
-        </div>
+        </span>
         {summary ? (
           <span
             className="sk-config-summary"
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 180,
-              marginTop: 2,
+              maxWidth: 168,
               color: DIM,
               fontSize: 12,
               fontWeight: 500,
               textAlign: 'right',
-              lineHeight: 1.35,
+              lineHeight: 1.3,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -108,17 +125,19 @@ export function Section({ title, description, summary, defaultOpen: _defaultOpen
             {summary}
           </span>
         ) : null}
-      </header>
-      <div className="sk-config-section-body" style={{ paddingTop: 2 }}>
+      </summary>
+      <div
+        className="sk-config-section-body"
+        style={{ padding: '4px 0 12px 24px' }}
+      >
         {children}
       </div>
-    </section>
+    </details>
   );
 }
 
 /**
- * Single setting row.
- * Label left · control right · hint full-width under (never beside the control).
+ * Setting row: label left · control right · hint under the row.
  */
 export function Field({ label, hint, badge, children }: {
   label: string;
@@ -135,8 +154,8 @@ export function Field({ label, hint, badge, children }: {
         columnGap: 24,
         rowGap: 4,
         alignItems: 'center',
-        padding: '14px 0',
-        borderBottom: '1px solid #f0f0f0',
+        padding: '12px 0',
+        borderBottom: '1px solid #f3f3f3',
       }}
     >
       <div
@@ -224,9 +243,8 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
               padding: '0 12px',
               fontSize: 12.5,
               fontWeight: 550,
-              boxShadow: selected ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+              boxShadow: selected ? '0 1px 2px rgba(0,0,0,.07)' : 'none',
               outline: selected ? `1px solid ${ORANGE}` : '1px solid transparent',
-              outlineOffset: 0,
               fontFamily: 'inherit',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
