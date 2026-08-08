@@ -176,3 +176,45 @@ export function PanelCard({ children }: { children: React.ReactNode }) {
     </section>
   );
 }
+
+/**
+ * Quieter, collapsed-by-default section for secondary / edge-case controls.
+ * Use for filters, fine-tuning and guards so the Core controls stay visible.
+ */
+export function AdvancedSection({ count, children, defaultOpen = false }: {
+  count: number;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+
+  return (
+    <details
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      style={{ borderTop: `1px solid ${BORDER}` }}
+    >
+      <summary style={{
+        listStyle: 'none', cursor: 'pointer', padding: '14px 18px', display: 'flex',
+        alignItems: 'center', gap: 10, userSelect: 'none', boxSizing: 'border-box',
+        background: isOpen ? '#fafafa' : 'transparent',
+      }}>
+        <span aria-hidden style={{
+          width: 18, color: DIM, display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 16, flexShrink: 0,
+          transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease',
+        }}>›</span>
+        <span style={{ color: MUTED, fontSize: 12, fontWeight: 700, letterSpacing: 0.2 }}>
+          Advanced
+        </span>
+        <span style={{
+          color: DIM, fontSize: 10.5, fontWeight: 600,
+          padding: '2px 7px', borderRadius: 4, background: SOFT, border: `1px solid ${BORDER}`,
+        }}>
+          {count} setting{count === 1 ? '' : 's'}
+        </span>
+      </summary>
+      <div style={{ padding: '0 0 8px' }}>{children}</div>
+    </details>
+  );
+}
