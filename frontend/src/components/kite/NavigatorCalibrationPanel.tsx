@@ -92,11 +92,10 @@ export function NavigatorCalibrationPanel() {
             Gate stays locked until calibration passes. Expand to score and promote.
           </div>
         </div>
-        <span style={{
-          flexShrink: 0, fontSize: 9.5, fontWeight: 700, borderRadius: 4, padding: '3px 9px',
-          color: ready ? GREEN : DIM, background: ready ? '#e8f5e9' : '#f2f2f3',
-          border: `1px solid ${ready ? `${GREEN}55` : BORDER}`,
-        }}>
+        <span className="sk-config-summary" style={{
+            flexShrink: 0, width: 168, color: DIM, fontSize: 10.5, fontWeight: 500,
+            textAlign: 'right', lineHeight: 1.3,
+          }}>
           {ready ? 'Ready — gate unlocked' : 'Not yet calibrated'}
         </span>
       </summary>

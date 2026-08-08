@@ -38,118 +38,87 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /** Accordion section — same card chrome as Trading Mode. */
-export function Section({ title, description, summary, defaultOpen = false, headerAction, children }: {
+export function Section({
+  title, description, summary, defaultOpen = false, headerAction, persistKey, children,
+}: {
   title: string;
   description: string;
   summary: string;
   defaultOpen?: boolean;
   headerAction?: React.ReactNode;
+  persistKey?: string;
   children: React.ReactNode;
 }) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const storageKey = persistKey ? `kite-settings-section:${persistKey}` : null;
+  const [isOpen, setIsOpen] = React.useState(() => {
+    if (storageKey && typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+      } catch { /* ignore */ }
+    }
+    return defaultOpen;
+  });
+
+  const onToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const next = event.currentTarget.open;
+    setIsOpen(next);
+    if (storageKey) {
+      try { window.localStorage.setItem(storageKey, next ? '1' : '0'); } catch { /* ignore */ }
+    }
+  };
 
   return (
     <details
       className="sk-settings-group"
       open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{
-        ...settingsCardStyle,
-        fontFamily: k.fontFamily,
-      }}
+      onToggle={onToggle}
+      style={{ ...settingsCardStyle, fontFamily: k.fontFamily }}
     >
       <summary
         style={{
-          listStyle: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 16px',
-          userSelect: 'none',
+          listStyle: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
+          gap: 10, padding: '12px 16px', minHeight: 52, userSelect: 'none',
           background: k.bg,
           borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
           boxSizing: 'border-box',
         }}
       >
-        <span
-          aria-hidden
-          style={{
-            flexShrink: 0,
-            width: 14,
-            color: isOpen ? k.orange : k.dim,
-            fontSize: 12,
-            fontWeight: 700,
-            lineHeight: 1,
-            transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .12s ease',
-          }}
-        >
-          ›
-        </span>
+        <span aria-hidden style={{
+          flexShrink: 0, width: 14, color: isOpen ? k.orange : k.dim, fontSize: 12, fontWeight: 700,
+          lineHeight: 1, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .12s ease',
+        }}>›</span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span
-            style={{
-              display: 'block',
-              color: k.text,
-              fontSize: 12,
-              fontWeight: 700,
-              lineHeight: 1.25,
-            }}
-          >
-            {title}
-          </span>
+          <span style={{ display: 'block', color: k.text, fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{title}</span>
           {description ? (
-            <span
-              style={{
-                display: 'block',
-                color: k.dim,
-                fontSize: 10.5,
-                lineHeight: 1.35,
-                marginTop: 1,
-                maxWidth: 440,
-              }}
-            >
+            <span style={{ display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440 }}>
               {description}
             </span>
           ) : null}
         </span>
-        {headerAction ? (
-          <span
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onKeyDown={(e) => e.stopPropagation()}
-            style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}
-          >
-            {headerAction}
-          </span>
-        ) : null}
-        {summary ? (
-          <span
-            className="sk-config-summary"
-            title={summary}
-            style={{
-              flexShrink: 0,
-              maxWidth: 160,
-              color: k.dim,
-              fontSize: 10.5,
-              fontWeight: 500,
-              textAlign: 'right',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {summary}
+        {(headerAction || summary) ? (
+          <span className="sk-config-meta" style={{
+            flexShrink: 0, width: 168, display: 'flex', flexDirection: 'column',
+            alignItems: 'flex-end', justifyContent: 'center', gap: 4, textAlign: 'right',
+          }}>
+            {headerAction ? (
+              <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onKeyDown={(e) => e.stopPropagation()}
+                style={{ display: 'inline-flex', alignItems: 'center' }}>
+                {headerAction}
+              </span>
+            ) : null}
+            {summary ? (
+              <span className="sk-config-summary" title={summary} style={{
+                width: '100%', color: k.dim, fontSize: 10.5, fontWeight: 500, lineHeight: 1.3,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{summary}</span>
+            ) : null}
           </span>
         ) : null}
       </summary>
-      <div
-        className="sk-config-section-body"
-        style={{
-          padding: '2px 16px 12px 16px',
-          background: k.bg,
-        }}
-      >
+      <div className="sk-config-section-body" style={{ padding: '2px 16px 12px 16px', background: k.bg }}>
         {children}
       </div>
     </details>

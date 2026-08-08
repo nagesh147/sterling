@@ -326,7 +326,8 @@ export function NavigatorSettingsPanel() {
       <Section
         title="Chart source"
         description="Which price series Navigator reads."
-        summary={NAVIGATOR_SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
+        summary={NAVIGATOR_SCAN_SOURCE_OPTIONS.find((o) =
+        persistKey="nav-chart"> o.value === draft.scan_source)?.label ?? draft.scan_source}
         defaultOpen
       >
         <div>
@@ -351,7 +352,8 @@ export function NavigatorSettingsPanel() {
           <ScopeLink
             groupLabel="Instruments"
             linked={draft.scan_scope_mode === 'shared'}
-            onChange={(linked) => patch(linked
+            onChange={(linked) =
+        persistKey="nav-instruments"> patch(linked
               ? { ...draft, scan_scope_mode: 'shared' }
               : seedCustomScope(draft, engineCfg))}
             ownLabel="Own"
@@ -416,7 +418,8 @@ export function NavigatorSettingsPanel() {
           <ScopeLink
             groupLabel="Contracts"
             linked={draft.strike_moneyness == null}
-            onChange={(linked) => patch(linked
+            onChange={(linked) =
+        persistKey="nav-contracts"> patch(linked
               ? { ...draft, strike_moneyness: null, scan_expiries_indices: null }
               : {
                   ...draft,
@@ -461,7 +464,8 @@ export function NavigatorSettingsPanel() {
         description="Optional: let Navigator find and show its own setups, without waiting for SuperTrend. Off by default."
         summary={draft.signal_origination === 'off' ? (draft.structure_radar_enabled ? 'Radar only' : 'Off') : `Origination: ${draft.signal_origination === 'heads_up' ? 'Heads-up' : 'Full'}`}
         defaultOpen
-      >
+      
+        persistKey="nav-radar">
         <BoolField
           label="Structure Radar"
           hint="Keeps reading structure even when SuperTrend has nothing live. Never adds a row by itself."
@@ -513,7 +517,8 @@ export function NavigatorSettingsPanel() {
             : draft.operating_mode === 'advisory' ? 'Advisory' : 'Shadow'
         }
         defaultOpen
-      >
+      
+        persistKey="nav-mode">
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
           <div style={{ minWidth: 0, flex: '1 1 220px' }}>
             <ChoiceRow

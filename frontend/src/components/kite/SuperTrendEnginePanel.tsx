@@ -114,7 +114,8 @@ export function SuperTrendEnginePanel() {
           description="Which price series SuperTrend reads a setup from."
           summary={scanSourceLabel(cfg.scan_source)}
           defaultOpen
-        >
+        
+          persistKey="st-chart">
           <SignalSourceGroup
             name="supertrend-signal-source"
             value={cfg.scan_source}
@@ -127,7 +128,8 @@ export function SuperTrendEnginePanel() {
           description="The indices and F&O stocks this engine watches."
           summary={instrumentsSummary}
           defaultOpen
-        >
+        
+          persistKey="st-instruments">
           <InstrumentsGroup
             idPrefix="SuperTrend"
             indices={cfg.scan_indices}
@@ -143,7 +145,8 @@ export function SuperTrendEnginePanel() {
           description="Which strikes and expiry cycles SuperTrend resolves."
           summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
           defaultOpen
-        >
+        
+          persistKey="st-contracts">
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
@@ -156,7 +159,8 @@ export function SuperTrendEnginePanel() {
           description="Which line the stop follows once a trade is running."
           summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`}
           defaultOpen
-        >
+        
+          persistKey="st-trail">
           <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}>
             <ChoiceRow
               value={cfg.trail_target} options={TRAIL_OPTIONS}
@@ -181,7 +185,8 @@ export function SuperTrendEnginePanel() {
           description="What closes a SuperTrend trade."
           summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`}
           defaultOpen
-        >
+        
+          persistKey="st-exit">
           <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}>
             <ChoiceRow
               value={cfg.exit_mode} options={EXIT_MODE_OPTIONS}
