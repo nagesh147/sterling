@@ -305,10 +305,7 @@ export function KiteSearchBar({
                 { lbl: 'Price change %', val: s.showPriceChangePct, set: () => s.toggleShow('showPriceChangePct') },
                 { lbl: 'Price direction', val: s.showPriceDirection, set: () => s.toggleShow('showPriceDirection') },
                 { lbl: 'Exchange', val: s.showExchange, set: () => s.toggleShow('showExchange') },
-                { lbl: 'Leg', val: s.showLeg, set: () => s.toggleShow('showLeg') },
-                { lbl: 'Holdings', val: s.showHoldings, set: () => s.toggleShow('showHoldings') },
-                { lbl: 'Notes', val: s.showNotes, set: () => s.toggleShow('showNotes') },
-                { lbl: 'Group colors', val: s.showGroupColors, set: () => s.toggleShow('showGroupColors') }
+                { lbl: 'Leg', val: s.showLeg, set: () => s.toggleShow('showLeg') }
               ].map(opt => (
                 <label key={opt.lbl} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: opt.val ? t.text : t.dim }}>
                   <div style={{ width: 14, height: 14, borderRadius: 2, border: `1px solid ${opt.val ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -6,7 +6,10 @@ export type LoaderStyle = 'ubuntu' | 'mac' | 'material' | 'windows' | 'gnome' | 
 
 export type MotionStyle = Exclude<LoaderStyle, 'classic' | 'off'>;
 
-type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showHoldings' | 'showNotes' | 'showGroupColors' | 'showExchange' | 'showLeg';
+// showHoldings / showNotes / showGroupColors were removed on 2026-08-08: two
+// separate toggle UIs wrote them and NOTHING rendered them, so they were three
+// checkboxes that did nothing on either the watchlist or the signal board.
+type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showExchange' | 'showLeg';
 
 export interface KiteSettingsState {
   macKite: boolean;
@@ -19,9 +22,6 @@ export interface KiteSettingsState {
   showPriceChange: boolean;
   showPriceChangePct: boolean;
   showPriceDirection: boolean;
-  showHoldings: boolean;
-  showNotes: boolean;
-  showGroupColors: boolean;
   showExchange: boolean;
   showLeg: boolean;
   sortBy: string;
@@ -54,9 +54,6 @@ export const useKiteSettings = create<KiteSettingsState>()(
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
-      showHoldings: true,
-      showNotes: true,
-      showGroupColors: true,
       showExchange: true,
       showLeg: true,
       sortBy: 'Custom',

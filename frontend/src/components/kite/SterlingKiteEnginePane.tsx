@@ -1,15 +1,9 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
-import {
-  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig,
-} from '../../hooks/useSterlingKiteEngine';
+import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
-import type {
-  AlignmentChip, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
-  ScanSource, SignalsResponse, StockEntry, TrailTarget,
-  ExitMode, SignalChartData,
-} from '../../types/kiteEngine';
+import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
 import { useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Tip } from './InfoTooltip';
@@ -26,10 +20,7 @@ import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
-import {
-  EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection,
-} from './config/registry';
-
+import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 
 interface Props {
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -46,14 +37,6 @@ interface Props {
 const EXIT_MODE_OPTS = EXIT_MODE_OPTIONS;
 const SCAN_SOURCE_OPTS = SCAN_SOURCE_OPTIONS;
 
-// This is the VIEW/SCAN filter: which strikes get resolved and shown as rows.
-const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyness[] }[] = [
-  { id: 'deep_itm', label: 'Deep ITM', sub: 'δ ≈ 0.80+',     members: ['ITM5', 'ITM4'] },
-  { id: 'itm',      label: 'ITM',      sub: 'δ ≈ 0.60–0.80', members: ['ITM3', 'ITM2', 'ITM1'] },
-  { id: 'atm',      label: 'ATM',      sub: 'δ ≈ 0.50',       members: ['ATM'] },
-  { id: 'otm',      label: 'OTM',      sub: 'δ ≈ 0.30–0.45', members: ['OTM1', 'OTM2'] },
-  { id: 'far_otm',  label: 'Far OTM',  sub: 'δ ≲ 0.25',       members: ['OTM3', 'OTM4', 'OTM5'] },
-];
 // Which evidence lens the signal board is viewed through. Purely a local
 // display preference (localStorage), never patched to the server — unlike
 // scan_source/exit_mode above, this never changes what the engine scans.
@@ -73,56 +56,6 @@ const INDEX_OPTS: { name: string; label: string }[] = [
   { name: 'NIFTY FIN SERVICE', label: 'FINNIFTY' },
   { name: 'SENSEX', label: 'SENSEX' },
 ];
-function fmtTime(charts: number): string {
-  const secs = Math.round(charts / 3); // ~3 historical req/s
-  return secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
-}
-
-// Scan-cost readout: shows what the current universe + strikes will scan.
-function scanCost(cfg: EngineConfigModel): string {
-  const nStocks = cfg.scan_stocks?.length ?? 0;
-  const nIdx = cfg.scan_indices.length;
-  const nStrikes = Math.max(1, cfg.strike_moneyness.length);
-  const instruments = nIdx + nStocks;
-  const charts = instruments * nStrikes * 2; // CE + PE per strike per instrument
-  if (cfg.scan_source === 'spot') {
-    return `${nIdx} indices + ${nStocks} stocks = ${instruments} spot charts · ${fmtTime(instruments)}/scan`;
-  }
-  if (cfg.scan_source === 'derivatives') {
-    return `${nIdx} indices + ${nStocks} stocks × ${nStrikes} strikes × 2 (CE+PE) = ${charts} option charts · ${fmtTime(charts)}/scan`;
-  }
-  if (cfg.scan_source === 'confluence') {
-    // underlying spot chart + one premium per candidate strike (signal direction only)
-    const premiums = instruments * nStrikes;
-    return `${instruments} spot + up to ${premiums} premiums (confirmed legs only) · ${fmtTime(instruments + premiums)}/scan`;
-  }
-  return `${instruments} instruments · ${charts} option charts · spot ${fmtTime(instruments)} + deriv ${fmtTime(charts)}/scan`;
-}
-
-// Compact one-line summary built from the current selection, for the drawer header
-// and the collapsed Universe card. e.g. "Derivatives · 11 strikes · 2 idx + 12 stocks · ~2 min/scan".
-function universeSummary(cfg: EngineConfigModel): string {
-  const nIdx = cfg.scan_indices.length;
-  const nStocks = cfg.scan_stocks?.length ?? 0;
-  return `${nIdx} idx + ${nStocks} stocks`;
-}
-function settingsSummary(cfg: EngineConfigModel): string {
-  const sourceLabel = (SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives';
-  const nStrikes = Math.max(1, cfg.strike_moneyness.length);
-  const nIdx = cfg.scan_indices.length;
-  const nStocks = cfg.scan_stocks?.length ?? 0;
-  const instruments = nIdx + nStocks;
-  const charts = instruments * nStrikes * 2;
-  const cost = cfg.scan_source === 'spot' ? fmtTime(instruments) : fmtTime(charts);
-  return `${sourceLabel} · ${nStrikes} strike${nStrikes === 1 ? '' : 's'} · ${universeSummary(cfg)} · ${cost}/scan`;
-}
-
-function timeAgo(ms: number): string {
-  if (!ms) return 'never';
-  const s = Math.round((Date.now() - ms) / 1000);
-  if (s < 60) return `${s} Sec ago`;
-  return `${Math.floor(s / 60)} Min ago`;
-}
 
 function countdown(ms: number): string {
   if (!ms) return '—';
@@ -134,19 +67,6 @@ function countdown(ms: number): string {
 export function Arrow({ v }: { v: number }) {
   const flat = v === 0;
   return <span style={{ color: flat ? k.dim : v > 0 ? k.green : k.red, fontSize: 11, fontWeight: 700 }}>{flat ? '·' : v > 0 ? '▲' : '▼'}</span>;
-}
-
-export function AlignmentChips({ a }: { a: AlignmentChip }) {
-  return (
-    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-      {(['fast', 'mid', 'slow'] as const).map((key) => (
-        <span key={key} style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-          <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase' }}>{key[0]}</span>
-          <Arrow v={a[key]} />
-        </span>
-      ))}
-    </span>
-  );
 }
 
 export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align = 'left' }: any) {
@@ -1229,8 +1149,24 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 // Console-header building blocks (clean console + collapsible settings drawer)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const UNIVERSE_TIP =
-  'Scans Nifty50, BankNifty, FinNifty & Sensex constituents plus their index options on the 1H timeframe.';
+/** What this engine is actually scanning, read off the live config.
+ *
+ *  This used to be a constant asserting "Nifty50, BankNifty, FinNifty & Sensex
+ *  constituents" no matter what was configured — so a board scanning one index
+ *  still claimed to cover four. */
+function universeTip(cfg?: EngineConfigModel | null): string {
+  if (!cfg) return 'Scans the configured instruments on the 1H timeframe.';
+  const indices = cfg.scan_indices.length;
+  const stocks = cfg.scan_stock_contracts === false
+    ? 'no stocks'
+    : cfg.scan_all_stocks
+      ? 'all eligible F&O stocks'
+      : `${cfg.scan_stocks.length} stock${cfg.scan_stocks.length === 1 ? '' : 's'}`;
+  const strikes = cfg.strike_moneyness.length;
+  const source = SCAN_SOURCE_OPTIONS.find((o) => o.value === cfg.scan_source)?.label ?? cfg.scan_source;
+  return `Scans ${indices} ${indices === 1 ? 'index' : 'indices'} + ${stocks}, `
+    + `${strikes} strike${strikes === 1 ? '' : 's'} each, from the ${source} chart on the 1H timeframe.`;
+}
 
 function RefreshIcon({ spinning }: { spinning?: boolean }) {
   return (
@@ -1240,14 +1176,6 @@ function RefreshIcon({ spinning }: { spinning?: boolean }) {
       <polyline points="23 4 23 10 17 10" />
       <polyline points="1 20 1 14 7 14" />
       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-    </svg>
-  );
-}
-
-function ZapIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden>
-      <polygon points="13 2 3 14 11 14 11 22 21 10 13 10 13 2" />
     </svg>
   );
 }
@@ -1287,22 +1215,6 @@ function EngineMark() {
   );
 }
 
-function ReadyPill({ count }: { count: number }) {
-  const has = count > 0;
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999,
-      fontSize: 11, fontWeight: 600, color: has ? k.orange : k.dim,
-      background: has ? tint(k.orange, 10) : k.surface,
-      border: `1px solid ${has ? tint(k.orange, 30) : k.border}`,
-      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: 3, background: has ? k.orange : k.dim }} />
-      {count} live
-    </span>
-  );
-}
-
 function HeaderIconBtn({ title, onClick, active, disabled, children }: {
   title: string; onClick: () => void; active?: boolean; disabled?: boolean; children: React.ReactNode;
 }) {
@@ -1337,64 +1249,6 @@ function Switch({ on, onChange, color, label }: { on: boolean; onChange: () => v
   );
 }
 
-function Segmented({ options, isActive, onSelect }: {
-  options: { value: string; label: string; hint?: string }[];
-  isActive: (v: string) => boolean;
-  onSelect: (v: string) => void;
-}) {
-  return (
-    <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 6, overflow: 'hidden', background: k.bg }}>
-      {options.map((o, i) => {
-        const active = isActive(o.value);
-        return (
-          <button key={o.value} title={o.hint} aria-pressed={active} onClick={() => onSelect(o.value)}
-            style={{
-              fontSize: 11, fontWeight: active ? 600 : 500, padding: '4px 13px', cursor: 'pointer',
-              border: 'none', borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
-              background: active ? k.orange : 'transparent', color: active ? '#fff' : k.text,
-              transition: 'background .15s ease, color .15s ease',
-            }}
-            onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = k.surfaceHover; }}
-            onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// Delta-bucket strike chips (view/scan filter). Compact inline chips that show
-// the label + delta hint in one line. A chip is active when any of its moneyness
-// members are selected; partially-selected chips get a dashed border.
-function StrikeBuckets({ selected, onToggle }: {
-  selected: Moneyness[]; onToggle: (members: Moneyness[]) => void;
-}) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-      {STRIKE_BUCKETS.map((b) => {
-        const inCount = b.members.filter((m) => selected.includes(m)).length;
-        const active = inCount > 0;
-        const partial = active && inCount < b.members.length;
-        return (
-          <button key={b.id} onClick={() => onToggle(b.members)} aria-pressed={active}
-            title={`${b.label} (${b.members.join(', ')})`}
-            style={{
-              fontSize: 11, fontWeight: active ? 700 : 500, padding: '3px 9px',
-              borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-              border: `1px ${partial ? 'dashed' : 'solid'} ${active ? k.orange : k.border}`,
-              background: active ? tint(k.orange, 10) : k.bg,
-              color: active ? k.orange : k.text, transition: 'all .13s ease',
-            }}>
-            {b.label}
-            <span style={{ fontSize: 10, marginLeft: 5, fontWeight: 600, color: active ? k.orange : k.dim }}>{b.sub}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // Pill toggle for the granular universe pickers (multi-select chips).
 function Chip({ label, active, onClick, dim }: { label: string; active: boolean; onClick: () => void; dim?: boolean }) {
   return (
@@ -1408,152 +1262,6 @@ function Chip({ label, active, onClick, dim }: { label: string; active: boolean;
       }}>
       {label}
     </button>
-  );
-}
-
-// Custom-stock autocomplete. Suggestions are drawn ONLY from the F&O stock
-// registry (the liquid, tradable F&O universe) — never arbitrary symbols — so a
-// user can't add an illiquid or non-F&O name. Matches are ranked by liquidity
-// (most tradable first) then alphabetically, and already-selected names hidden.
-const LIQUIDITY_RANK: Record<string, number> = {
-  'Very High': 0, 'High': 1, 'Good': 2, 'Moderate-Good': 3, 'Moderate': 4,
-};
-const LIQUIDITY_COLOR: Record<string, string> = {
-  'Very High': k.green, 'High': k.green, 'Good': k.blue,
-  'Moderate-Good': k.amber, 'Moderate': k.dim,
-};
-
-function CustomStockSearch({ stockReg, selected, onAdd }: {
-  stockReg?: LiquidityGroup[];
-  selected: string[];
-  onAdd: (name: string) => void;
-}) {
-  const [query, setQuery] = React.useState('');
-  const [open, setOpen] = React.useState(false);
-  const [activeIdx, setActiveIdx] = React.useState(0);
-
-  // Flatten the registry once into a de-duplicated, liquidity-ranked list.
-  const universe = React.useMemo(() => {
-    const seen = new Set<string>();
-    const out: StockEntry[] = [];
-    for (const g of stockReg ?? []) {
-      for (const s of g.stocks) {
-        if (seen.has(s.name)) continue;
-        seen.add(s.name);
-        out.push(s);
-      }
-    }
-    out.sort((a, b) =>
-      (LIQUIDITY_RANK[a.liquidity] ?? 9) - (LIQUIDITY_RANK[b.liquidity] ?? 9)
-      || a.name.localeCompare(b.name));
-    return out;
-  }, [stockReg]);
-
-  const matches = React.useMemo(() => {
-    const q = query.trim().toUpperCase();
-    if (!q) return [];
-    return universe
-      .filter((s) => !selected.includes(s.name)
-        && (s.name.toUpperCase().includes(q) || (s.label || '').toUpperCase().includes(q)))
-      .slice(0, 8);
-  }, [query, universe, selected]);
-
-  React.useEffect(() => { setActiveIdx(0); }, [query]);
-
-  const pick = (s: StockEntry) => {
-    onAdd(s.name);
-    setQuery('');
-    setOpen(false);
-  };
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 2, position: 'relative' }}>
-      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52, paddingTop: 4 }}>CUSTOM</span>
-      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-        <input
-          style={{ width: '100%', boxSizing: 'border-box', fontSize: 9.5, padding: '3px 6px', background: k.surface, border: `1px solid ${open && matches.length ? k.orange : k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search F&O stock…"
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, matches.length - 1)); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
-            else if (e.key === 'Enter' && matches[activeIdx]) { e.preventDefault(); pick(matches[activeIdx]); }
-            else if (e.key === 'Escape') { setOpen(false); }
-          }}
-        />
-        {open && query.trim() && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, marginTop: 2, background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
-            {matches.length === 0 ? (
-              <div style={{ padding: '7px 10px', fontSize: 10, color: k.dim }}>No matching F&amp;O stock.</div>
-            ) : matches.map((s, i) => (
-              <div
-                key={s.name}
-                onMouseDown={(e) => { e.preventDefault(); pick(s); }}
-                onMouseEnter={() => setActiveIdx(i)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px', cursor: 'pointer', background: i === activeIdx ? k.surfaceHover : 'transparent' }}
-              >
-                <span style={{ fontSize: 11, fontWeight: 600, color: k.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {s.name}
-                  {s.label && s.label !== s.name && <span style={{ fontSize: 9.5, fontWeight: 400, color: k.dim, marginLeft: 5 }}>{s.label}</span>}
-                </span>
-                <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, color: LIQUIDITY_COLOR[s.liquidity] ?? k.dim, border: `1px solid ${tint(LIQUIDITY_COLOR[s.liquidity] ?? k.dim, 40)}`, borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>
-                  {s.liquidity}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Settings-drawer layout primitives ──────────────────────────────────────
-// A consistent setting row: tiny caps label inline-left, control to the right.
-// Each row carries its own padding + bottom border for a clean list-of-settings look.
-function SettingRow({ label, hint, children, align = 'center', full = false }: {
-  label: string; hint?: string; children: React.ReactNode;
-  align?: 'center' | 'top'; full?: boolean;
-}) {
-  return (
-    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 10, padding: '13px 16px', borderBottom: `1px solid ${k.border}` }}>
-      <span title={hint} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim, width: 62, flexShrink: 0, lineHeight: 1.4, paddingTop: align === 'top' ? 2 : 0 }}>{label}</span>
-      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>{children}</div>
-    </div>
-  );
-}
-
-// Tab bar for the 'tabs' layout.
-// Polished pill-style tab bar for the settings drawer. The active pill gets a
-// solid surface lift + orange label; inactive ones are quiet until hovered.
-function PillTabs({ active, onSelect, tabs }: {
-  active: string; onSelect: (v: string) => void; tabs: { value: string; label: string; icon?: React.ReactNode }[];
-}) {
-  return (
-    <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 8, background: k.bg, border: `1px solid ${k.border}` }}>
-      {tabs.map((t) => {
-        const on = active === t.value;
-        return (
-          <button key={t.value} onClick={() => onSelect(t.value)} aria-pressed={on}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              fontSize: 11, fontWeight: on ? 700 : 600, letterSpacing: 0.2,
-              padding: '5px 13px', cursor: 'pointer', border: 'none', borderRadius: 6,
-              background: on ? k.surface : 'transparent',
-              color: on ? k.orange : k.dim,
-              boxShadow: on ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
-              transition: 'color .15s ease, background .15s ease',
-            }}
-            onMouseEnter={(e) => { if (!on) e.currentTarget.style.color = k.text; }}
-            onMouseLeave={(e) => { if (!on) e.currentTarget.style.color = k.dim; }}>
-            {t.icon}{t.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -1691,6 +1399,13 @@ function SignalTableSettingsPanel({
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
           <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
+          {/* The same five flags are also editable from the sliders button in the
+              search bar, which is the only place the watchlist has. Both write one
+              store, so they cannot drift — but a user who changes them here should
+              not be surprised to find the watchlist changed too. */}
+          <div style={{ color: k.dim, fontSize: 9.5, lineHeight: 1.45, marginBottom: 8 }}>
+            Shared with the watchlist — one setting, two places to reach it.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '2px 8px' }}>
             {columns.map((column) => (
               <label key={column.key} title={column.hint} style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer' }}>
@@ -1735,7 +1450,6 @@ function HeaderControlLabel({ title, children }: { title: string; children: Reac
     </span>
   );
 }
-
 
 /** Where this setup came from — the underlying's chart, the option's own premium
  *  chart, both agreeing, or Navigator. In "both" mode one contract can produce a
@@ -1917,7 +1631,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
-  const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
     () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
@@ -2015,15 +1728,8 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         return false;
       });
     }
-    if (sortBy === 'A-Z') {
-      result.sort((a, b) => a.underlying.localeCompare(b.underlying));
-    } else if (sortBy === 'EXCH') {
-      result.sort((a, b) => a.exchange.localeCompare(b.exchange));
-    } else if (sortBy === 'LTP') {
-      result.sort((a, b) => b.spot - a.spot);
-    }
     return result;
-  }, [rows, query, sortBy, signalMode]);
+  }, [rows, query, signalMode]);
   const showSignalPremiumColumns = React.useMemo(
     () => cfg?.scan_source !== 'spot' || filteredRows.some(hasPremiumSnapshot),
     [cfg?.scan_source, filteredRows],
@@ -2093,6 +1799,31 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const groupedRows = React.useMemo(() => {
     const buckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
+
+    // The chosen sort has to be applied HERE. Sorting `filteredRows` upstream
+    // did nothing, because this memo re-sorted by timestamp and the "Active
+    // now" bucket re-sorted alphabetically straight afterwards — which is why
+    // the search bar's sort buttons appeared to do nothing on this board even
+    // once they were reading the right value.
+    const chgPctOf = (row: EngineSignalRow): number => {
+      const exch = row.underlying.includes('NIFTY') || row.underlying === 'SENSEX' ? 'NSE' : 'NSE';
+      const q = quotes?.[`${exch}:${row.underlying}`];
+      const base = s.chgType === 'close' ? q?.ohlc?.close : q?.ohlc?.open;
+      if (q && base) return ((q.last_price - base) / base) * 100;
+      return Number.NEGATIVE_INFINITY;  // unknown sorts last, never in the middle
+    };
+    const userSort = (a: EngineSignalRow, b: EngineSignalRow): number | null => {
+      if (s.sortBy === 'A-Z') return a.underlying.localeCompare(b.underlying);
+      if (s.sortBy === 'EXCH') return a.exchange.localeCompare(b.exchange);
+      if (s.sortBy === 'LTP') return b.spot - a.spot;
+      if (s.sortBy === '%') return chgPctOf(b) - chgPctOf(a);
+      return null;  // 'Custom' — keep each bucket's own natural order
+    };
+    const applyUserSort = (list: typeof filteredRows) => {
+      if (s.sortBy === 'Custom') return list;
+      return [...list].sort((a, b) => userSort(a, b) ?? 0);
+    };
+
     const sorted = [...filteredRows].sort((a, b) => b.timestamp_ms - a.timestamp_ms);
 
     // Currently-running trades (SuperTrend still aligned on the latest bar) surface at
@@ -2110,7 +1841,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       if (aIdx !== bIdx) return bIdx - aIdx; // indices first
       return a.underlying.localeCompare(b.underlying);
     });
-    if (active.length) buckets.push({ label: 'Active now', rows: sortedActive, active: true });
+    if (active.length) {
+      buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
+    }
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -2130,11 +1863,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       groups[label].push(r);
     }
     for (const label of ["Today", "Yesterday", "Last week", "Last 15 days"]) {
-      if (groups[label].length) buckets.push({ label: `${label} (ended)`, rows: groups[label] });
+      if (groups[label].length) {
+        buckets.push({ label: `${label} (ended)`, rows: applyUserSort(groups[label]) });
+      }
     }
     if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
-  }, [filteredRows, showEnded, quotes]);
+  }, [filteredRows, showEnded, quotes, s.sortBy, s.chgType]);
   const scanning = signals?.scanning;
   // The Navigator/Common lenses can legitimately show nothing even while
   // SuperTrend has live setups — Navigator may be disabled, still warming
@@ -2219,7 +1954,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         {/* Row 1: identity + live count + settings */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
           <EngineMark />
-          <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
+          <span title={universeTip(cfg)} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
             Sterling Kite Engine
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
@@ -2452,7 +2187,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           .st-spin, .st-pulse, .st-scan-bar, .st-drawer, .st-signal-in { animation: none !important; transition: none !important; }
         }
       `}</style>
-
 
       {/* Table-only preferences. Trading logic is configured in Connect → Engine. */}
       <div data-signal-table-settings className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>

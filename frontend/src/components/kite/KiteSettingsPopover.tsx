@@ -13,10 +13,7 @@ import {
   type KiteExchange,
 } from '../../utils/kiteExchanges';
 
-const TOGGLES: Array<{ key: 'showHoldings' | 'showNotes' | 'showGroupColors' | 'showExchange' | 'showLeg'; label: string }> = [
-  { key: 'showHoldings', label: 'Show holdings in watchlist' },
-  { key: 'showNotes', label: 'Show notes' },
-  { key: 'showGroupColors', label: 'Show group colours' },
+const TOGGLES: Array<{ key: 'showExchange' | 'showLeg'; label: string }> = [
   { key: 'showExchange', label: 'Show exchange badge' },
   { key: 'showLeg', label: 'Show leg labels' },
 ];
