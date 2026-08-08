@@ -402,7 +402,7 @@ function TradingModeCard() {
             ['DTE range', `${cfg.dte_min}–${cfg.dte_max}d`], ['Position %', `${(cfg.position_pct * 100).toFixed(1)}%`],
             ['Max positions', String(cfg.max_concurrent)], ['Stop mult', `${cfg.stop_atr_mult}×ATR`],
             ['Trail mode', cfg.trail_mode], ['Poll', `${cfg.poll_interval_s}s`],
-            ['Hybrid ST weight', (cfg.hybrid_st_weight ?? kiteCfg?.hybrid_st_weight ?? 0.5).toFixed(1)],
+            ['Hybrid ST weight', (cfg.hybrid_st_weight ?? 0.5).toFixed(1)],
             ['Exit mode (unified)', kiteCfg?.exit_mode || 'two_red'],
           ].map(([k, v]) => (
             <div key={k as string}>

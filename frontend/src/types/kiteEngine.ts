@@ -266,8 +266,6 @@ export interface EngineConfigModel {
   adx_min: number | null;
   atr_pct_min: number | null;
   wire_risk_infra: boolean;
-  // Hybrid ATR+ST trail weight (0-1)
-  hybrid_st_weight?: number;
 }
 
 export interface ExpiryCalendarEntry {

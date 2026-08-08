@@ -17,7 +17,7 @@ const cfg = {
   stop_mode: 'both', directional_mode: false, vehicle: 'otm_options',
   enabled_vehicles: ['otm_options', 'deep_itm_options'], itm_depth: 'ITM10', target_delta: null,
   futures_expiry: 'near', adx_min: null, atr_pct_min: null, block_entry_minutes_before_close: 0,
-  max_spread_pct: null, min_oi: null, max_daily_loss_pct: null, wire_risk_infra: false, hybrid_st_weight: 0.5,
+  max_spread_pct: null, min_oi: null, max_daily_loss_pct: null, wire_risk_infra: false,
 };
 
 const confluenceRow = {

@@ -1970,16 +1970,23 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               only their current value, so "Derivatives" sitting next to "1 Red"
               gave no clue which was the signal source and which was the exit
               rule — the VIEW filter beside them was the only labelled one. */}
-          {cfg && (
+          {/* Hidden under the Navigator lens for the same reason as EXIT below:
+              it governs nothing on screen there. It used to be exempt because
+              the tooltip claimed the source was "shared by both engines unless
+              Navigator is on its own scan scope" — wrong twice over. That page
+              no longer exists, and the source is never shared:
+              navigator/runtime reads `record.config.scan_source`
+              unconditionally, so scan scope has nothing to do with it. */}
+          {cfg && signalMode !== 'navigator' && (
             <>
-              <HeaderControlLabel title="Which chart a signal is read from — a Market & Contracts setting, shared by both engines unless Navigator is on its own scan scope.">
+              <HeaderControlLabel title="Which chart SuperTrend reads a signal from. Navigator has its own source setting, under Connect → Value-Flow Navigator.">
                 SOURCE
               </HeaderControlLabel>
               <InlineDropdown
                 value={cfg.scan_source}
                 options={SCAN_SOURCE_OPTS}
                 tone={k.orange}
-                title="Signal source — change it here, or from Connect → Market & Contracts. Shared by both engines, unless Navigator is set to its own scan scope."
+                title="SuperTrend's signal source — change it here, or from Connect → SuperTrend engine. Navigator keeps its own."
                 onChange={(next) => patch(
                   { scan_source: next },
                   `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,

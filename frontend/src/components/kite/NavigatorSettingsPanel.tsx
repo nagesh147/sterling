@@ -167,6 +167,9 @@ function seedCustomScope(
     scan_indices: engineCfg?.scan_indices ?? ['NIFTY 50'],
     scan_stocks: engineCfg?.scan_stocks ?? [],
     scan_all_stocks: engineCfg?.scan_all_stocks ?? false,
+    // Seeded like the rest of the universe: an engine set to indices-only must
+    // not silently start scanning stocks the moment Navigator takes its own scope.
+    scan_stock_contracts: engineCfg?.scan_stock_contracts ?? true,
     scan_source: engineCfg?.scan_source === 'both' || engineCfg?.scan_source === 'confluence'
       || engineCfg?.scan_source === 'derivatives' ? engineCfg.scan_source : 'spot',
   };
@@ -514,9 +517,11 @@ export function NavigatorSettingsPanel() {
           sharedSummary={engineCfg?.scan_indices ? (
             <>
               Following SuperTrend:{' '}
-              {engineCfg.scan_all_stocks
-                ? `${engineCfg.scan_indices.length} indices + all F&O stocks`
-                : `${engineCfg.scan_indices.length} indices + ${(engineCfg.scan_stocks ?? []).length} stocks`}.
+              {!(engineCfg.scan_stock_contracts ?? true)
+                ? `${engineCfg.scan_indices.length} indices, no stocks`
+                : engineCfg.scan_all_stocks
+                  ? `${engineCfg.scan_indices.length} indices + all F&O stocks`
+                  : `${engineCfg.scan_indices.length} indices + ${(engineCfg.scan_stocks ?? []).length} stocks`}.
             </>
           ) : 'Following SuperTrend.'}
         >
@@ -526,11 +531,13 @@ export function NavigatorSettingsPanel() {
             indices={draft.scan_indices}
             stocks={draft.scan_stocks}
             allStocks={draft.scan_all_stocks}
+            stockContracts={draft.scan_stock_contracts ?? true}
             onChange={(next) => patch({
               ...draft,
               ...(next.scan_indices !== undefined ? { scan_indices: next.scan_indices } : {}),
               ...(next.scan_stocks !== undefined ? { scan_stocks: next.scan_stocks } : {}),
               ...(next.scan_all_stocks !== undefined ? { scan_all_stocks: next.scan_all_stocks } : {}),
+              ...(next.scan_stock_contracts !== undefined ? { scan_stock_contracts: next.scan_stock_contracts } : {}),
             })}
           />
           {customScopeEmpty && (
@@ -573,12 +580,10 @@ export function NavigatorSettingsPanel() {
           <ContractsGroup
             strikes={draft.strike_moneyness ?? engineCfg?.strike_moneyness ?? ['ATM']}
             indexExpiries={draft.scan_expiries_indices ?? ['weekly', 'monthly']}
-            stockContracts={draft.scan_stock_contracts ?? true}
             onChange={(next) => patch({
               ...draft,
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
-              ...(next.scan_stock_contracts !== undefined ? { scan_stock_contracts: next.scan_stock_contracts } : {}),
             })}
           />
         </ScopedGroup>

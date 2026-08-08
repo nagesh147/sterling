@@ -22,11 +22,30 @@ import { INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
  */
 
 /** Which instruments an engine scans. */
-export function InstrumentsGroup({ indices, stocks, allStocks, onChange, idPrefix, allowEmptyIndices = false }: {
+export function InstrumentsGroup({
+  indices, stocks, allStocks, stockContracts, onChange, idPrefix, allowEmptyIndices = false,
+}: {
   indices: string[];
   stocks: string[];
   allStocks: boolean;
-  onChange: (next: { scan_indices?: string[]; scan_stocks?: string[]; scan_all_stocks?: boolean }) => void;
+  /**
+   * Master switch for single-stock underlyings.
+   *
+   * This lives here, with the rest of the universe, because that is where the
+   * backend applies it: `select_scan_universe` drops single-stock items right
+   * alongside the index/stock/all-stocks selection. It was previously rendered
+   * under "Contracts", which on Navigator's page is gated by the contract-
+   * coverage link rather than the scan-scope link — so the switch could be
+   * shown while the backend was reading the other engine's value, and hidden
+   * while it was reading this one's.
+   */
+  stockContracts: boolean;
+  onChange: (next: {
+    scan_indices?: string[];
+    scan_stocks?: string[];
+    scan_all_stocks?: boolean;
+    scan_stock_contracts?: boolean;
+  }) => void;
   idPrefix: string;
   /**
    * Whether every index may be unticked.
@@ -60,6 +79,27 @@ export function InstrumentsGroup({ indices, stocks, allStocks, onChange, idPrefi
           ))}
         </div>
       </Field>
+      <Field
+        label="Single-stock underlyings"
+        hint="Off leaves stocks out of the scan entirely. Indices are unaffected."
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Switch
+            checked={stockContracts} label={`${idPrefix} scan single-stock underlyings`}
+            onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
+          />
+          <span style={{ color: TEXT, fontSize: 12 }}>
+            {stockContracts ? 'Scanning stocks' : 'Indices only'}
+          </span>
+        </div>
+        {!stockContracts && (
+          <ConfigNote>
+            No stock contracts are resolved and no stock rows appear. Your stock selection is
+            kept, so turning this back on restores it.
+          </ConfigNote>
+        )}
+      </Field>
+      {stockContracts && (
       <Field label="F&O stocks" hint="Use the full eligible universe, or curate a smaller list.">
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <Switch
@@ -69,7 +109,8 @@ export function InstrumentsGroup({ indices, stocks, allStocks, onChange, idPrefi
           <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&amp;O stocks</span>
         </div>
       </Field>
-      {!allStocks && (
+      )}
+      {stockContracts && !allStocks && (
         <Field label="Selected stocks" hint={`${stocks.length} selected`}>
           <div style={{ maxHeight: 240, overflow: 'auto', paddingRight: 4 }}>
             {(stockRegistry ?? []).map((group, groupIndex) => (
@@ -133,16 +174,19 @@ export function SignalSourceGroup({ value, onChange, name }: {
   );
 }
 
-/** Which strikes and expiry cycles this engine resolves. */
-export function ContractsGroup({ strikes, indexExpiries, stockContracts, onChange }: {
+/**
+ * Which strikes and expiry cycles this engine resolves.
+ *
+ * Deliberately does NOT hold the single-stock master switch: that is a universe
+ * filter, and on Navigator's page the two are gated by different scope links.
+ * It lives in `InstrumentsGroup`.
+ */
+export function ContractsGroup({ strikes, indexExpiries, onChange }: {
   strikes: Moneyness[];
   indexExpiries: ScanExpiry[];
-  /** Whether single-stock underlyings are scanned at all. */
-  stockContracts: boolean;
   onChange: (next: {
     strike_moneyness?: Moneyness[];
     scan_expiries_indices?: ScanExpiry[];
-    scan_stock_contracts?: boolean;
   }) => void;
 }) {
   const toggleStrikeGroup = (values: Moneyness[]) => {
@@ -185,26 +229,10 @@ export function ContractsGroup({ strikes, indexExpiries, stockContracts, onChang
           ))}
         </div>
       </Field>
-      <Field
-        label="Stock contracts"
-        hint="Single-stock contracts are exchange-listed on a monthly cycle only, so the cycle is not a choice — whether to scan them at all is."
-      >
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
-          <CheckOption
-            label="Monthly"
-            hint={stockContracts ? 'Scanning single-stock contracts' : 'Stocks are excluded from the scan'}
-            checked={stockContracts}
-            onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
-          />
-        </div>
-        {!stockContracts && (
-          <ConfigNote>
-            Single-stock underlyings are left out of the scan entirely — no stock contracts and no
-            stock rows. Your stock selection under <b>Instruments</b> is kept, so ticking this back
-            on restores it. Indices are unaffected.
-          </ConfigNote>
-        )}
-      </Field>
+      <ConfigNote>
+        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to
+        choose. Whether stocks are scanned at all is under <b>Instruments</b>.
+      </ConfigNote>
     </>
   );
 }

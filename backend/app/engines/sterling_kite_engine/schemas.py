@@ -455,9 +455,6 @@ class EngineConfigModel(BaseModel):
     # ── Risk infrastructure wiring ────────────────────────────────────────────
     # Wires the drawdown circuit breaker + correlation penalty into sizing.
     wire_risk_infra: bool = False
-    # ── Hybrid trail weight (for ATR+ST hybrid trailing in unified exit logic) ─
-    # 0 = pure ATR, 1 = pure ST lines, 0.5 = balanced blend. Used when trail_mode=hybrid.
-    hybrid_st_weight: float = 0.5
 
     @field_validator("risk_pct")
     @classmethod
@@ -496,13 +493,6 @@ class EngineConfigModel(BaseModel):
         # ATM ~0.50, deep-ITM ~0.80+. The resolver (pick_by_delta) simply picks the
         # nearest strike, so the full band is allowed.
         return min(0.99, max(0.05, float(v)))
-
-    @field_validator("hybrid_st_weight")
-    @classmethod
-    def _hybrid_weight_bounds(cls, v):
-        if v is None:
-            return v
-        return min(1.0, max(0.0, float(v)))
 
     @field_validator("adx_min")
     @classmethod

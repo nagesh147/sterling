@@ -113,7 +113,10 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
   it('no longer offers the hybrid weight input, which the engine never read', () => {
     // hybrid_st_weight was written into SterlingKiteEngineConfig and consumed by
     // nothing in the Kite engine, yet it saved, said "Saved" and forced a full
-    // rescan. Removing the control is the point of this assertion.
+    // rescan. The control went first; the field itself is now gone from
+    // EngineConfigModel too, so this guards against it being reintroduced.
+    // (The identically-named field on the crypto risk config is a different,
+    // live setting — see RiskConfigPanel.)
     renderPanel();
     expect(screen.queryByTestId('hybrid-weight-input')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/hybrid weight/i)).not.toBeInTheDocument();

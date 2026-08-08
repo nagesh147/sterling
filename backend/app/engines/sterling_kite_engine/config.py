@@ -82,8 +82,6 @@ class SterlingKiteEngineConfig:
     # this can still construct the config; the live exit is the trail_target flip.
     early_lock: bool = False
     early_lock_profit_r: float = 1.0
-    # Hybrid ST weight for ATR+ST blend in trailing (0=pure ATR, 1=pure ST)
-    hybrid_st_weight: float = 0.5
 
     @property
     def warmup(self) -> int:

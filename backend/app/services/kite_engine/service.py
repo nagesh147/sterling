@@ -51,7 +51,6 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
         exit_mode=c.exit_mode,
         exit_aligned_trail=getattr(c, 'exit_aligned_trail', False),
         price_stop_exit=getattr(c, 'price_stop_exit', True),
-        hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
     )
 
 

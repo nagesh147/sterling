@@ -67,20 +67,14 @@ function makeRecord(cfgOverrides: Partial<NavigatorConfigModel> = {}, recordOver
 const setConfig = vi.fn();
 const resetConfig = vi.fn();
 let queryData: ReturnType<typeof makeRecord> | undefined;
+let engineCfg: Record<string, unknown>;
 
 // The panel reads the engine's own config (to show what a SHARED scan scope
 // currently covers) and the stock registry (to populate a CUSTOM scope's
 // picker). Both are React Query hooks; mock them so this suite keeps
 // rendering the panel bare, without a QueryClientProvider.
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
-  useEngineConfig: () => ({
-    data: {
-      scan_indices: ['NIFTY 50', 'NIFTY BANK'],
-      scan_stocks: [],
-      scan_all_stocks: false,
-      scan_source: 'spot',
-    },
-  }),
+  useEngineConfig: () => ({ data: engineCfg }),
   useStockRegistry: () => ({
     data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE' }, { name: 'TCS' }] }],
   }),
@@ -99,6 +93,13 @@ describe('NavigatorSettingsPanel', () => {
     setConfig.mockClear();
     resetConfig.mockClear();
     queryData = makeRecord();
+    engineCfg = {
+      scan_indices: ['NIFTY 50', 'NIFTY BANK'],
+      scan_stocks: [],
+      scan_all_stocks: false,
+      scan_source: 'spot',
+      scan_stock_contracts: true,
+    };
   });
 
   it('loads server config disabled by default and shows the master toggle off', () => {
@@ -218,6 +219,60 @@ describe('NavigatorSettingsPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_stocks).toEqual(['RELIANCE']); // not re-seeded over
+    });
+
+    // The single-stock master switch is gated by the SCAN SCOPE link, because
+    // that is the axis the backend gates it on: navigator/runtime._resolve_nav_universe
+    // and kite_engine.service both read `nav_cfg.scan_stock_contracts` only when
+    // `scan_scope_mode == "custom"`, and otherwise use the engine's value.
+    //
+    // It was previously rendered inside the CONTRACTS group, which is linked by
+    // `strike_moneyness == null` instead. That put it on the wrong axis in both
+    // directions: shown-but-ignored on a shared scope with its own contracts,
+    // and hidden-but-live on a custom scope following the engine's contracts.
+    describe('the single-stock switch follows the scope the backend reads', () => {
+      const SWITCH = 'Navigator scan single-stock underlyings';
+
+      it('is hidden on a shared scope, where the engine\'s value is what applies', () => {
+        queryData = makeRecord({ scan_scope_mode: 'shared', strike_moneyness: ['ATM'] });
+        render(<NavigatorSettingsPanel />);
+        // Contracts is unlinked here, so the Contracts controls ARE on screen…
+        expect(screen.getByText('Strike coverage')).toBeInTheDocument();
+        // …but the stock switch must not be, or it would save a value the
+        // backend never reads while the board kept scanning stocks.
+        expect(screen.queryByRole('switch', { name: SWITCH })).not.toBeInTheDocument();
+      });
+
+      it('is reachable on a custom scope even while contracts follow SuperTrend', () => {
+        queryData = makeRecord({
+          scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'], strike_moneyness: null,
+        });
+        render(<NavigatorSettingsPanel />);
+        // Contracts is linked, so its controls are summarised away…
+        expect(screen.queryByText('Strike coverage')).not.toBeInTheDocument();
+        // …and the stock switch, which IS live for this user, stays reachable.
+        expect(screen.getByRole('switch', { name: SWITCH })).toBeInTheDocument();
+      });
+
+      it('saves onto Navigator and hides the now-inert stock pickers', () => {
+        queryData = makeRecord({ scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'] });
+        render(<NavigatorSettingsPanel />);
+        expect(screen.getByRole('checkbox', { name: 'RELIANCE' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('switch', { name: SWITCH }));
+        expect(screen.queryByRole('checkbox', { name: 'RELIANCE' })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+        expect(setConfig.mock.calls[0][0].config.scan_stock_contracts).toBe(false);
+      });
+
+      it('seeds from the engine, so an indices-only engine does not silently gain stocks', () => {
+        engineCfg = { ...engineCfg, scan_stock_contracts: false };
+        render(<NavigatorSettingsPanel />);
+        fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+        fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+        expect(setConfig.mock.calls[0][0].config.scan_stock_contracts).toBe(false);
+      });
     });
   });
 

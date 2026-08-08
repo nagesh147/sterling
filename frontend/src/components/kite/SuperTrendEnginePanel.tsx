@@ -59,9 +59,11 @@ export function SuperTrendEnginePanel() {
         <Section
           title="Instruments"
           description="The indices and F&O stocks this engine watches."
-          summary={cfg.scan_all_stocks
-            ? `All F&O · ${cfg.scan_indices.length} indices`
-            : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`}
+          summary={!(cfg.scan_stock_contracts ?? true)
+            ? `${cfg.scan_indices.length} indices · no stocks`
+            : cfg.scan_all_stocks
+              ? `All F&O · ${cfg.scan_indices.length} indices`
+              : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`}
           defaultOpen
         >
           <InstrumentsGroup
@@ -69,6 +71,7 @@ export function SuperTrendEnginePanel() {
             indices={cfg.scan_indices}
             stocks={cfg.scan_stocks}
             allStocks={cfg.scan_all_stocks}
+            stockContracts={cfg.scan_stock_contracts ?? true}
             onChange={(next) => patch(next, undefined, 'SuperTrend universe updated')}
           />
         </Section>
@@ -94,7 +97,6 @@ export function SuperTrendEnginePanel() {
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
-            stockContracts={cfg.scan_stock_contracts ?? true}
             onChange={(next) => patch(next, undefined, 'SuperTrend contracts updated')}
           />
         </Section>

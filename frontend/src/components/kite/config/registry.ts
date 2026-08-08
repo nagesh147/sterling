@@ -57,17 +57,21 @@ export interface FieldDef {
    * tooltip so a claim about real-money behaviour is never unsourced.
    */
   evidence: string;
-  /**
-   * Whether the Value-Flow Navigator actually reads this field too.
-   *
-   * Not every setting on the Market & Contracts page is shared, and saying so
-   * in one blanket sentence was wrong. `strike_moneyness` and the expiry lists
-   * are handed to Navigator on every pass; the instrument universe is shared
-   * only while Navigator's scan scope is "shared"; and `scan_source` is not
-   * shared at all — Navigator carries its own copy of that field.
-   */
-  navigator?: 'always' | 'when-scope-shared' | 'never';
 }
+
+/*
+ * There is deliberately no per-field "does Navigator read this too?" tag here.
+ *
+ * One existed, to correct a blanket "both engines read every setting here"
+ * claim on the shared Market & Contracts page. That page is gone — each engine
+ * now owns its own scan settings — and the tag was never rendered by anything.
+ * It had already gone stale: it marked `strike_moneyness` and the expiry lists
+ * as shared unconditionally, which stopped being true once Navigator got its
+ * own contract coverage (navigator/runtime prefers its own value and falls back
+ * to the engine's). Unread metadata cannot be kept honest, so the statement now
+ * lives where it is true and visible: Navigator's own page shows, per group,
+ * whether it is following SuperTrend and what it is following.
+ */
 
 const F = <T extends Record<string, FieldDef>>(defs: T) => defs;
 
@@ -79,7 +83,6 @@ export const FIELDS = F({
     help: 'Whether the SuperTrend engine scans and produces signals at all.',
     owner: 'supertrend', applies: 'both', stage: 'discovery', rescan: false, home: 'engine',
     evidence: 'service.scan_user returns early when it is off; Navigator is unaffected and can run on its own.',
-    navigator: 'never',
   },
 
   // ── What an engine scans ──────────────────────────────────────────────────
@@ -89,23 +92,20 @@ export const FIELDS = F({
     help: 'Which chart a SuperTrend signal is read from. Navigator keeps its own separate setting for this.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'service.scan_user builds the spot/premium/confluence universes from it, and service._make_place_cb uses it for the both-mode cross guard.',
-    navigator: 'never',
   },
   strike_moneyness: {
     key: 'strike_moneyness',
     label: 'Strike coverage',
     help: 'Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
-    evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes; navigator/runtime passes the same list when resolving its own legs.',
-    navigator: 'always',
+    evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes. Navigator falls back to this list only when it has no ladder of its own.',
   },
   scan_expiries_indices: {
     key: 'scan_expiries_indices',
     label: 'Index expiries',
     help: 'Contract cycles scanned for indices.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
-    evidence: 'Handed to the scanner, and to navigator/runtime on every pass when it resolves legs for its own setups.',
-    navigator: 'always',
+    evidence: 'Handed to the scanner. Navigator falls back to it only when it has no expiry cycles of its own.',
   },
   scan_indices: {
     key: 'scan_indices',
@@ -113,7 +113,6 @@ export const FIELDS = F({
     help: 'The indices included in every scan.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
-    navigator: 'when-scope-shared',
   },
   scan_stocks: {
     key: 'scan_stocks',
@@ -121,7 +120,6 @@ export const FIELDS = F({
     help: 'The individual stocks included in every scan.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Applied to both the spot and derivatives scans, and to Navigator when its scan scope is shared.',
-    navigator: 'when-scope-shared',
   },
   scan_stock_contracts: {
     key: 'scan_stock_contracts',
@@ -129,7 +127,6 @@ export const FIELDS = F({
     help: 'Off leaves single-stock underlyings out of the scan entirely — no stock contracts are resolved and no stock rows appear. Indices are unaffected.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'universe.select_scan_universe drops every single-stock item, so nothing downstream ever sees one.',
-    navigator: 'when-scope-shared',
   },
   scan_all_stocks: {
     key: 'scan_all_stocks',
@@ -137,7 +134,6 @@ export const FIELDS = F({
     help: 'Use the full eligible universe instead of a curated list.',
     owner: 'market', applies: 'both', stage: 'universe', rescan: true, home: 'engine',
     evidence: 'Same scan boundary as scan_stocks.',
-    navigator: 'when-scope-shared',
   },
 
   // ── SuperTrend strategy mechanics ─────────────────────────────────────────

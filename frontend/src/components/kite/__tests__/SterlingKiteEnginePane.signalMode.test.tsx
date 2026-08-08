@@ -12,7 +12,7 @@ const cfg = {
   stop_mode: 'both', directional_mode: false, vehicle: 'otm_options',
   enabled_vehicles: ['otm_options', 'deep_itm_options'], itm_depth: 'ITM10', target_delta: null,
   futures_expiry: 'near', adx_min: null, atr_pct_min: null, block_entry_minutes_before_close: 0,
-  max_spread_pct: null, min_oi: null, max_daily_loss_pct: null, wire_risk_infra: false, hybrid_st_weight: 0.5,
+  max_spread_pct: null, min_oi: null, max_daily_loss_pct: null, wire_risk_infra: false,
 };
 
 function navDecision(status: string) {
@@ -170,12 +170,26 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
       expect(screen.queryByTitle(exitRuleTitle)).not.toBeInTheDocument();
     });
 
-    it('the shared Signal-source control stays visible under every lens', async () => {
+    // This used to assert the source control was SHARED and so stayed visible
+    // under every lens. It is not shared: navigator/runtime reads its own
+    // `record.config.scan_source` unconditionally, and Navigator's settings page
+    // says so ("Always its own — SuperTrend's source never applied here"). The
+    // header was the last surface still claiming otherwise, so it now hides on
+    // the Navigator lens for exactly the reason the exit rule does.
+    const sourceTitle = /^SuperTrend's signal source/;
+
+    it('shows the source dropdown under Combined', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
+      await renderPane();
+      expect(screen.getByTitle(sourceTitle)).toBeInTheDocument();
+    });
+
+    it('hides the source dropdown under the Navigator lens — it is SuperTrend\'s, not shared', async () => {
       mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
       await renderPane();
       openSignalModeMenu();
       fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
-      expect(screen.getByTitle(/^Signal source/)).toBeInTheDocument();
+      expect(screen.queryByTitle(sourceTitle)).not.toBeInTheDocument();
     });
 
     it('comes back when switching off the Navigator lens', async () => {

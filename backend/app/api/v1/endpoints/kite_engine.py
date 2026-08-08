@@ -38,7 +38,6 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
     return SterlingKiteEngineConfig(
         trail_target=c.trail_target,
         exit_mode=c.exit_mode,
-        hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
     )
 
 
