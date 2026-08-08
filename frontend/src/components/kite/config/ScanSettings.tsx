@@ -124,25 +124,68 @@ export function InstrumentsGroup({
   );
 }
 
-/** Chart source — full-width horizontal strip; hint shows the selected option. */
+/** Chart source — 2×2 tiles with title + description (shared by SuperTrend + Navigator). */
 export function SignalSourceGroup({ value, onChange, name }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
   name: string;
 }) {
-  const selected = SCAN_SOURCE_OPTIONS.find((o) => o.value === value);
   return (
-    <Field
-      label="Read from"
-      hint={selected?.hint ?? 'The chart this engine takes its entry signal off.'}
-      wide
+    <div
+      role="radiogroup"
+      aria-label={name || 'Chart source'}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 10,
+        width: '100%',
+      }}
     >
-      <ChoiceRow
-        value={value}
-        options={SCAN_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-        onChange={onChange}
-      />
-    </Field>
+      {SCAN_SOURCE_OPTIONS.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option.value)}
+            style={{
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              padding: '12px 14px',
+              borderRadius: 9,
+              border: selected ? `1.5px solid ${ORANGE}` : `1px solid ${BORDER}`,
+              background: selected ? ORANGE_SOFT : '#fff',
+              boxShadow: selected ? '0 1px 3px rgba(240,100,40,.12)' : '0 1px 2px rgba(0,0,0,.025)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              minHeight: 88,
+              transition: 'border-color .12s ease, background .12s ease',
+            }}
+          >
+            <span style={{
+              color: TEXT,
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+            }}>
+              {option.label}
+            </span>
+            <span style={{
+              color: selected ? TEXT : DIM,
+              fontSize: 11,
+              lineHeight: 1.45,
+              fontWeight: 500,
+            }}>
+              {option.hint}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
