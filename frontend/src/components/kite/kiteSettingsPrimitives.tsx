@@ -1,22 +1,29 @@
 import React from 'react';
 
-// Shared design tokens + primitives for Kite settings panels.
-// Visual hierarchy (strong → quiet):
-//   Section header  →  Field label  →  control  →  hint  →  Advanced
+/**
+ * Kite settings design system
+ * Pattern: Linear / Stripe settings — open groups, not stacked accordion cards.
+ *
+ * Hierarchy:
+ *   Page title (ConnectPane)
+ *   → Group (Section): title + description + plain summary
+ *   → Field: label | control, hint under
+ *   → Advanced: only collapsible block
+ */
 
 export const ORANGE = '#f06428';
-export const BORDER = '#e8e8e8';
-export const TEXT = '#1f1f1f';
-export const MUTED = '#6b6b6b';
-export const DIM = '#9a9a9a';
-export const SOFT = '#f6f6f7';
-export const ORANGE_SOFT = '#fff5f0';
+export const BORDER = '#ebebeb';
+export const TEXT = '#171717';
+export const MUTED = '#737373';
+export const DIM = '#a3a3a3';
+export const SOFT = '#f5f5f5';
+export const ORANGE_SOFT = '#fff7f3';
 
 export const inputStyle: React.CSSProperties = {
-  width: 108,
+  width: 112,
   height: 34,
   padding: '0 10px',
-  border: '1px solid #d8d8d8',
+  border: '1px solid #d4d4d4',
   borderRadius: 6,
   background: '#fff',
   color: TEXT,
@@ -25,118 +32,94 @@ export const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-/** Primary accordion block — Stop-loss, Position size, What to buy, … */
-export function Section({ title, description, summary, defaultOpen = false, children }: {
+/**
+ * Settings group — always open.
+ * Left rail already navigates between pages; within a page we show all groups.
+ * Summary is plain status text on the right (not a chip).
+ */
+export function Section({ title, description, summary, defaultOpen: _defaultOpen = false, children }: {
   title: string;
   description: string;
   summary: string;
+  /** Kept for API compatibility; groups are always expanded. */
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
   return (
-    <details
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{
-        marginBottom: 10,
-        border: `1px solid ${isOpen ? '#e0e0e0' : BORDER}`,
-        borderRadius: 10,
-        background: '#fff',
-        overflow: 'hidden',
-      }}
+    <section
+      className="sk-settings-group"
+      style={{ marginBottom: 32 }}
     >
-      <summary style={{
-        listStyle: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '14px 16px',
-        userSelect: 'none',
-        boxSizing: 'border-box',
-        background: '#fff',
-        borderLeft: isOpen ? `3px solid ${ORANGE}` : '3px solid transparent',
-        transition: 'background .12s ease',
-      }}>
-        <span
-          aria-hidden
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            flexShrink: 0,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isOpen ? ORANGE_SOFT : SOFT,
-            color: isOpen ? ORANGE : DIM,
-            fontSize: 14,
-            fontWeight: 700,
-            transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .15s ease, background .12s ease, color .12s ease',
-          }}
-        >
-          ›
-        </span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{
-            display: 'block',
-            color: TEXT,
-            fontSize: 14,
-            fontWeight: 700,
-            letterSpacing: '-.01em',
-            lineHeight: 1.25,
-          }}>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 16,
+          paddingBottom: 12,
+          marginBottom: 4,
+          borderBottom: `1px solid ${BORDER}`,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h3
+            style={{
+              margin: 0,
+              color: TEXT,
+              fontSize: 15,
+              fontWeight: 650,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.3,
+            }}
+          >
             {title}
-          </span>
-          <span style={{
-            display: 'block',
-            color: MUTED,
-            fontSize: 12,
-            lineHeight: 1.4,
-            marginTop: 3,
-          }}>
-            {description}
-          </span>
-        </span>
+          </h3>
+          {description ? (
+            <p
+              style={{
+                margin: '4px 0 0',
+                color: MUTED,
+                fontSize: 13,
+                lineHeight: 1.45,
+                maxWidth: 560,
+              }}
+            >
+              {description}
+            </p>
+          ) : null}
+        </div>
         {summary ? (
           <span
             className="sk-config-summary"
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 160,
+              maxWidth: 180,
+              marginTop: 2,
               color: DIM,
               fontSize: 12,
               fontWeight: 500,
               textAlign: 'right',
+              lineHeight: 1.35,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              lineHeight: 1.3,
             }}
           >
             {summary}
           </span>
         ) : null}
-      </summary>
-      <div
-        className="sk-config-section-body"
-        style={{
-          padding: '4px 16px 14px',
-          borderTop: `1px solid ${BORDER}`,
-          background: '#fff',
-        }}
-      >
+      </header>
+      <div className="sk-config-section-body" style={{ paddingTop: 2 }}>
         {children}
       </div>
-    </details>
+    </section>
   );
 }
 
-/** One setting row — label left, control right, hint under. */
+/**
+ * Single setting row.
+ * Label left · control right · hint full-width under (never beside the control).
+ */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
@@ -148,48 +131,56 @@ export function Field({ label, hint, badge, children }: {
       className="sk-config-field"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(108px, max-content)',
-        columnGap: 20,
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(112px, max-content)',
+        columnGap: 24,
         rowGap: 4,
         alignItems: 'center',
-        padding: '12px 0',
-        borderBottom: '1px solid #f2f2f2',
+        padding: '14px 0',
+        borderBottom: '1px solid #f0f0f0',
       }}
     >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        minWidth: 0,
-        userSelect: 'none',
-      }}>
-        <span style={{
-          color: TEXT,
-          fontSize: 13,
-          fontWeight: 600,
-          letterSpacing: '-.005em',
-        }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          minWidth: 0,
+          userSelect: 'none',
+        }}
+      >
+        <span
+          style={{
+            color: TEXT,
+            fontSize: 13.5,
+            fontWeight: 550,
+            letterSpacing: '-0.01em',
+          }}
+        >
           {label}
         </span>
         {badge}
       </div>
-      <div style={{
-        justifySelf: 'end',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-      }}>
+      <div
+        style={{
+          justifySelf: 'end',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
         {children}
       </div>
       {hint != null && hint !== '' ? (
-        <div style={{
-          gridColumn: '1 / -1',
-          color: MUTED,
-          fontSize: 12,
-          lineHeight: 1.45,
-          minHeight: '1.35em',
-          userSelect: 'text',
-        }}>
+        <div
+          style={{
+            gridColumn: '1 / -1',
+            color: MUTED,
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            minHeight: '1.35em',
+            userSelect: 'text',
+          }}
+        >
           {hint}
         </div>
       ) : null}
@@ -203,16 +194,18 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
   onChange: (value: T) => void;
 }) {
   return (
-    <div style={{
-      display: 'inline-flex',
-      maxWidth: '100%',
-      border: `1px solid ${BORDER}`,
-      borderRadius: 8,
-      padding: 3,
-      gap: 2,
-      background: SOFT,
-      flexWrap: 'wrap',
-    }}>
+    <div
+      role="group"
+      style={{
+        display: 'inline-flex',
+        maxWidth: '100%',
+        gap: 2,
+        padding: 3,
+        borderRadius: 8,
+        background: SOFT,
+        flexWrap: 'wrap',
+      }}
+    >
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -229,14 +222,15 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
               background: selected ? '#fff' : 'transparent',
               color: selected ? TEXT : MUTED,
               padding: '0 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              boxShadow: selected
-                ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.06)`
-                : 'none',
+              fontSize: 12.5,
+              fontWeight: 550,
+              boxShadow: selected ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+              outline: selected ? `1px solid ${ORANGE}` : '1px solid transparent',
+              outlineOffset: 0,
               fontFamily: 'inherit',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
+              transition: 'background .12s ease, box-shadow .12s ease',
             }}
           >
             {option.label}
@@ -270,22 +264,24 @@ export function Switch({ checked, label, onChange, disabled = false }: {
         flexShrink: 0,
         position: 'relative',
         cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.55 : 1,
-        background: checked ? ORANGE : '#cfcfcf',
-        transition: 'background .16s ease',
+        opacity: disabled ? 0.5 : 1,
+        background: checked ? ORANGE : '#d4d4d4',
+        transition: 'background .18s ease',
       }}
     >
-      <span style={{
-        position: 'absolute',
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        top: 2,
-        left: checked ? 20 : 2,
-        background: '#fff',
-        boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-        transition: 'left .16s ease',
-      }} />
+      <span
+        style={{
+          position: 'absolute',
+          width: 18,
+          height: 18,
+          borderRadius: 9,
+          top: 2,
+          left: checked ? 20 : 2,
+          background: '#fff',
+          boxShadow: '0 1px 3px rgba(0,0,0,.18)',
+          transition: 'left .18s ease',
+        }}
+      />
     </button>
   );
 }
@@ -313,13 +309,13 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         gridTemplateColumns: '16px minmax(0, 1fr)',
         alignItems: 'center',
         gap: 9,
-        border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#e7c5b7' : BORDER}`,
+        border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#f0d2c4' : BORDER}`,
         background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fff',
         color: TEXT,
         borderRadius: 6,
-        padding: compact ? '4px 7px' : '7px 10px',
+        padding: compact ? '4px 7px' : '8px 10px',
         cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.72 : 1,
+        opacity: disabled ? 0.7 : 1,
         boxSizing: 'border-box',
       }}
     >
@@ -332,22 +328,26 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         style={{ width: 15, height: 15, margin: 0, accentColor: ORANGE }}
       />
       <span style={{ minWidth: 0 }}>
-        <span style={{
-          display: 'block',
-          fontSize: compact ? 10.5 : 12,
-          fontWeight: checked || indeterminate ? 700 : 550,
-          lineHeight: 1.25,
-        }}>
+        <span
+          style={{
+            display: 'block',
+            fontSize: compact ? 11 : 12.5,
+            fontWeight: checked || indeterminate ? 600 : 500,
+            lineHeight: 1.25,
+          }}
+        >
           {label}
         </span>
         {hint && !compact && (
-          <span style={{
-            display: 'block',
-            marginTop: 2,
-            color: DIM,
-            fontSize: 10,
-            lineHeight: 1.3,
-          }}>
+          <span
+            style={{
+              display: 'block',
+              marginTop: 2,
+              color: DIM,
+              fontSize: 11,
+              lineHeight: 1.3,
+            }}
+          >
             {hint}
           </span>
         )}
