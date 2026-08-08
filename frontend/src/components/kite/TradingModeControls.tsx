@@ -15,8 +15,8 @@ function vehicleOrderLabel(cfg?: EngineConfigModel | null): string {
 }
 
 // Central trading-mode panel for the active Kite account. Two orthogonal axes:
-//   • EXECUTION  — PAPER vs LIVE  (account.is_paper; where orders actually go)
-//   • SIGNALS    — MANUAL vs AUTO (engine.auto_execute; who places them)
+//   • WHERE ORDERS GO — PAPER vs LIVE  (account.is_paper)
+//   • WHO PLACES ORDERS — MANUAL vs AUTO (engine.auto_execute)
 // Both read/write existing backend state, so this stays in sync with the
 // per-account row toggles and the engine sidebar's Auto-execute switch.
 
@@ -52,7 +52,7 @@ export function TradingModeControls() {
     return (
       <div style={S.card}>
         <div style={S.title}>TRADING MODE</div>
-        <div style={S.hint}>Add and activate a Kite account below to set paper/live and manual/auto.</div>
+        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, and who places orders.</div>
       </div>
     );
   }
@@ -76,15 +76,15 @@ export function TradingModeControls() {
 
   return (
     <div style={S.card}>
-      <div style={S.title}>TRADING MODE — {active.label}</div>
+      <div style={S.title}>TRADING MODE · {active.label}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* EXECUTION — PAPER / LIVE */}
+        {/* Paper / Live — where orders go */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
-            <div style={S.modeLabel}>EXECUTION</div>
+            <div style={S.modeLabel}>WHERE ORDERS GO</div>
             <div style={S.modeDesc}>
-              {isLive ? 'Orders execute on your real Zerodha account.' : 'Orders are simulated — no real money at risk.'}
+              {isLive ? 'Live — orders hit your real Zerodha account.' : 'Paper — orders are simulated, no real money at risk.'}
             </div>
           </div>
           <ModeToggle
@@ -100,14 +100,14 @@ export function TradingModeControls() {
 
         <div style={S.divider} />
 
-        {/* SIGNALS — MANUAL / AUTO */}
+        {/* Manual / Auto — who places orders */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
-            <div style={S.modeLabel}>SIGNALS</div>
+            <div style={S.modeLabel}>WHO PLACES ORDERS</div>
             <div style={S.modeDesc}>
               {auto
-                ? 'The engine auto-places ready signals (live-safety gated).'
-                : 'You place every order yourself from the signal list.'}
+                ? 'Automatic — the engine places ready signals (live-safety gated).'
+                : 'Manual — you place every order yourself from the signal list.'}
             </div>
           </div>
           <ModeToggle
@@ -128,7 +128,7 @@ export function TradingModeControls() {
       )}
       {auto && !connected && (
         <div style={{ marginTop: 8, ...S.hint }}>
-          Auto-execute is on, but this account isn’t connected — log in below for the engine to trade.
+          Automatic is on, but this account isn’t connected — log in below for the engine to trade.
         </div>
       )}
 
