@@ -19,6 +19,7 @@ import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
 import { type SectionId, resolveSectionId } from './config/registry';
+import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -553,6 +554,18 @@ type ConnectSection = SectionId;
 
 type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: string };
 
+const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
+  account: <Icons.Settings />,
+  mode: <Icons.Sliders />,
+  manualRules: <Icons.Filter />,
+  autoRules: <Icons.Pulse />,
+  engine: <Icons.Chart />,
+  navigator: <Icons.Pulse />,
+  markets: <Icons.Basket />,
+  notifications: <Icons.Bell />,
+  experience: <Icons.Settings />,
+};
+
 const SECTION_DEFS: SectionDef[] = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
   { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading' },
@@ -615,30 +628,49 @@ export function ConnectPane() {
   }, []);
 
   return (
-    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '28px 30px 48px', background: '#f7f7f8', minHeight: '100%' }}>
-      <header style={{ maxWidth: 1120, margin: '0 auto 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#777', fontSize: 10, fontWeight: 750, letterSpacing: .9, textTransform: 'uppercase' }}>
-            <span aria-hidden style={{ width: 16, height: 2, borderRadius: 1, background: '#f06428' }} />Kite control center
-          </div>
-          <h1 style={{ margin: '6px 0 0', color: '#2f2f2f', fontSize: 24, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & Settings</h1>
-          <p style={{ margin: '8px 0 0', color: '#777', fontSize: 12.5, lineHeight: 1.55, maxWidth: 600 }}>
-            One place for the Zerodha connection, engine behaviour, markets, alerts and app experience.
-          </p>
-        </div>
-        <div className="kite-settings-status" aria-label="Kite status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end', padding: '7px 10px', borderTop: '1px solid #dedede', borderBottom: '1px solid #dedede' }}>
+    <div className="kite-settings-hub" style={{
+      width: '100%', boxSizing: 'border-box', padding: '16px 20px 28px',
+      background: '#eef0f2', minHeight: '100%', display: 'flex', flexDirection: 'column',
+    }}>
+      <header style={{
+        maxWidth: 1180, margin: '0 auto 12px', width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+      }}>
+        <h1 style={{ margin: 0, color: '#1a1a1a', fontSize: 20, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-.02em' }}>
+          Settings
+        </h1>
+        <div className="kite-settings-status" aria-label="Session status" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '6px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e2e2e2',
+        }}>
           <StatusPill tone={connected ? 'good' : active ? 'warn' : 'quiet'}>
-            {connected ? `${active?.label ?? 'Kite'} connected` : active ? 'Login required' : 'No account'}
+            {connected ? (active?.label ? `${active.label}` : 'Connected') : active ? 'Login required' : 'No account'}
           </StatusPill>
+          <span style={{ color: '#d0d0d0', fontSize: 12 }} aria-hidden>·</span>
           <StatusPill tone={engineCfg?.engine_enabled ? 'good' : 'quiet'}>
             Engine {engineCfg?.engine_enabled ? 'on' : 'off'}
           </StatusPill>
-          {active && <StatusPill tone={active.is_paper ? 'quiet' : 'warn'}>{active.is_paper ? 'Paper' : 'Live'}</StatusPill>}
+          {active && (
+            <>
+              <span style={{ color: '#d0d0d0', fontSize: 12 }} aria-hidden>·</span>
+              <StatusPill tone={active.is_paper ? 'quiet' : 'warn'}>
+                {active.is_paper ? 'Paper' : 'Live'}
+              </StatusPill>
+            </>
+          )}
         </div>
       </header>
 
-      <div className="kite-settings-layout" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '218px minmax(0, 1fr)', gap: 26, alignItems: 'start' }}>
-        <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 6, position: 'sticky', top: 14, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <div className="kite-settings-layout" style={{
+        maxWidth: 1180, margin: '0 auto', width: '100%', flex: 1,
+        display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 16, alignItems: 'stretch',
+      }}>
+        <nav aria-label="Kite settings sections" style={{
+          background: '#fff', border: '1px solid #e2e2e2', borderRadius: 10, padding: '8px 6px 12px',
+          position: 'sticky', top: 10, alignSelf: 'start',
+          minHeight: 'calc(100vh - 72px)', maxHeight: 'calc(100vh - 20px)',
+          overflowY: 'auto',
+        }}>
           {SECTION_DEFS.map((item, index) => {
             const selected = item.id === section;
             const startsGroup = index === 0 || SECTION_DEFS[index - 1].group !== item.group;
@@ -653,14 +685,22 @@ export function ConnectPane() {
                   </div>
                 )}
                 <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                  width: '100%', minHeight: 52, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                  borderRadius: 6, background: selected ? '#fff5f0' : 'transparent',
-                  display: 'flex', alignItems: 'center',
-                  padding: '8px 11px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
+                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
+                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
                 }}>
+                  <span aria-hidden style={{
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: selected ? '#ffe8dc' : '#f4f4f5',
+                    color: selected ? '#f06428' : '#8a8a8a',
+                  }}>
+                    {SECTION_ICONS[item.id]}
+                  </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', color: '#444', fontSize: 12, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
-                    <span style={{ display: 'block', color: '#929292', fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{item.eyebrow}</span>
+                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
                   </span>
                 </button>
               </React.Fragment>

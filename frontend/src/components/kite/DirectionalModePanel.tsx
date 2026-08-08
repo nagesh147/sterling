@@ -237,25 +237,28 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       </div>
 
 
-      <div style={{ display: 'flex', gap: 2, padding: 3, marginBottom: 14, flexWrap: 'wrap' as const, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4,
+        padding: 4, marginBottom: 12, border: '1px solid #e4e4e4', borderRadius: 8, background: '#f3f4f6',
+      }}>
         {PROFILES.map(p => {
           const active = p.id === activeId;
           return (
             <button
               key={p.id}
+              type="button"
               disabled={busy}
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
-                minHeight: 44, flex: '1 1 88px', padding: '5px 7px', borderRadius: 6,
-                border: 'none',
+                minHeight: 48, padding: '6px 4px', borderRadius: 6, border: 'none',
                 background: active ? '#fff' : 'transparent',
-                boxShadow: active ? 'inset 0 -2px #f06428, 0 1px 2px rgba(0,0,0,.08)' : 'none',
+                boxShadow: active ? '0 1px 2px rgba(0,0,0,.08), inset 0 -2px #f06428' : 'none',
                 cursor: busy ? 'default' : 'pointer',
-                textAlign: 'center' as const, transition: 'all 0.15s',
+                textAlign: 'center' as const, transition: 'background .12s, box-shadow .12s',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: active ? 700 : 600, color: active ? '#444' : '#666' }}>{p.label}</div>
-              <div style={{ fontSize: 9, color: '#999', marginTop: 2 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 12, fontWeight: active ? 700 : 600, color: active ? '#222' : '#555' }}>{p.label}</div>
+              <div style={{ fontSize: 9.5, color: '#888', marginTop: 2 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
