@@ -142,31 +142,35 @@ export function PanelHeader({ title, description, saving }: {
 }) {
   const green = '#4caf50';
   const hasText = !!(title || description);
+  // Only show while a save is in flight — never a permanent empty "Saved" strip.
+  const showSaving = saving === true;
+  if (!hasText && !showSaving) return null;
+
   return (
     <div style={{
       display: 'flex', alignItems: hasText ? 'flex-start' : 'center', gap: 12,
-      padding: hasText ? '16px 18px' : '10px 18px', borderBottom: `1px solid ${BORDER}`,
+      padding: hasText ? '14px 18px' : '8px 18px',
+      borderBottom: hasText ? `1px solid ${BORDER}` : undefined,
     }}>
       {hasText && (
         <div style={{ minWidth: 0, flex: 1 }}>
-          {title && <div style={{ color: TEXT, fontSize: 14.5, fontWeight: 800 }}>{title}</div>}
+          {title && <div style={{ color: TEXT, fontSize: 14, fontWeight: 700 }}>{title}</div>}
           {description && (
-            <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: title ? 3 : 0 }}>
+            <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.45, marginTop: title ? 3 : 0 }}>
               {description}
             </div>
           )}
         </div>
       )}
-      {!hasText && <div style={{ flex: 1 }} />}
-      {saving !== undefined && (
+      {showSaving && (
         <span aria-live="polite" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-          color: saving ? MUTED : green, fontSize: 10.5, fontWeight: 700,
+          display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto',
+          color: MUTED, fontSize: 11, fontWeight: 600,
         }}>
           <span aria-hidden style={{
-            width: 6, height: 6, borderRadius: '50%', background: saving ? '#c2c2c2' : green,
+            width: 6, height: 6, borderRadius: '50%', background: '#c2c2c2',
           }} />
-          {saving ? 'Saving…' : 'Saved'}
+          Saving…
         </span>
       )}
     </div>
@@ -177,8 +181,8 @@ export function PanelHeader({ title, description, saving }: {
 export function PanelCard({ children }: { children: React.ReactNode }) {
   return (
     <section style={{
-      background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9,
-      overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10,
+      overflow: 'hidden', marginBottom: 12, boxShadow: 'none',
     }}>
       {children}
     </section>
