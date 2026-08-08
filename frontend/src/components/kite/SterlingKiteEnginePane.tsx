@@ -359,13 +359,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
     });
   };
 
-  const uExch = (row.underlying === 'SENSEX' || row.underlying === 'BANKEX') ? 'BSE' : 'NSE';
-  let uSym = row.underlying;
-  if (uSym === 'NIFTY') uSym = 'NIFTY 50';
-  if (uSym === 'BANKNIFTY') uSym = 'NIFTY BANK';
-  if (uSym === 'FINNIFTY') uSym = 'NIFTY FIN SERVICE';
-  if (uSym === 'MIDCPNIFTY') uSym = 'NIFTY MID SELECT';
-  const uQ = quotes?.[`${uExch}:${uSym}`];
+  const uQ = quotes?.[underlyingQuoteKey(row.underlying)];
 
   let uChgAbs = null;
   let uChgPct = null;
@@ -612,7 +606,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           })()}
           {(() => {
             // Pin the underlying (NOT the option contract) to the top-bar tiles.
-            const tickerSym = `${uExch}:${uSym}`;
+            const tickerSym = underlyingQuoteKey(row.underlying);
             const pinned = tickerPins.includes(tickerSym);
             return (
               <button
@@ -1166,6 +1160,21 @@ function universeTip(cfg?: EngineConfigModel | null): string {
   const source = SCAN_SOURCE_OPTIONS.find((o) => o.value === cfg.scan_source)?.label ?? cfg.scan_source;
   return `Scans ${indices} ${indices === 1 ? 'index' : 'indices'} + ${stocks}, `
     + `${strikes} strike${strikes === 1 ? '' : 's'} each, from the ${source} chart on the 1H timeframe.`;
+}
+
+/** The quotes-map key for a row's underlying.
+ *  SENSEX/BANKEX are BSE, and the index short names are stored under their full
+ *  display names. Shared by the row rendering and the board sort so the two
+ *  cannot disagree about which quote a row means. */
+function underlyingQuoteKey(underlying: string): string {
+  const exch = (underlying === 'SENSEX' || underlying === 'BANKEX') ? 'BSE' : 'NSE';
+  const remap: Record<string, string> = {
+    NIFTY: 'NIFTY 50',
+    BANKNIFTY: 'NIFTY BANK',
+    FINNIFTY: 'NIFTY FIN SERVICE',
+    MIDCPNIFTY: 'NIFTY MID SELECT',
+  };
+  return `${exch}:${remap[underlying] ?? underlying}`;
 }
 
 function RefreshIcon({ spinning }: { spinning?: boolean }) {
@@ -1806,8 +1815,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     // the search bar's sort buttons appeared to do nothing on this board even
     // once they were reading the right value.
     const chgPctOf = (row: EngineSignalRow): number => {
-      const exch = row.underlying.includes('NIFTY') || row.underlying === 'SENSEX' ? 'NSE' : 'NSE';
-      const q = quotes?.[`${exch}:${row.underlying}`];
+      const q = quotes?.[underlyingQuoteKey(row.underlying)];
       const base = s.chgType === 'close' ? q?.ohlc?.close : q?.ohlc?.open;
       if (q && base) return ((q.last_price - base) / base) * 100;
       return Number.NEGATIVE_INFINITY;  // unknown sorts last, never in the middle
