@@ -1,7 +1,7 @@
 import React from 'react';
 import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT, inputStyle } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
-import { SCAN_SOURCE_OPTIONS } from './config/registry';
+import { NAVIGATOR_SCAN_SOURCE_OPTIONS, SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ScopeLink, ScopedGroup } from './config/EngineScope';
@@ -326,13 +326,14 @@ export function NavigatorSettingsPanel() {
       <Section
         title="Chart source"
         description="Which price series Navigator reads."
-        summary={SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
+        summary={NAVIGATOR_SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
         defaultOpen
       >
         <div>
           <SignalSourceGroup
             name="navigator-signal-source"
             value={draft.scan_source}
+            options={NAVIGATOR_SCAN_SOURCE_OPTIONS}
             onChange={(v) => patch({ ...draft, scan_source: v })}
           />
           <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 6, maxWidth: 440 }}>

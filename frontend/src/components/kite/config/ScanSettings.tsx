@@ -124,11 +124,12 @@ export function InstrumentsGroup({
   );
 }
 
-/** Chart source — 2×2 tiles with title + description (shared by SuperTrend + Navigator). */
-export function SignalSourceGroup({ value, onChange, name }: {
+/** Chart source — one horizontal row of four tiles (label + short description). */
+export function SignalSourceGroup({ value, onChange, name, options = SCAN_SOURCE_OPTIONS }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
   name: string;
+  options?: Array<{ value: ScanSource; label: string; hint: string }>;
 }) {
   return (
     <div
@@ -136,12 +137,12 @@ export function SignalSourceGroup({ value, onChange, name }: {
       aria-label={name || 'Chart source'}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 10,
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: 8,
         width: '100%',
       }}
     >
-      {SCAN_SOURCE_OPTIONS.map((option) => {
+      {options.map((option) => {
         const selected = option.value === value;
         return (
           <button
@@ -149,37 +150,29 @@ export function SignalSourceGroup({ value, onChange, name }: {
             type="button"
             role="radio"
             aria-checked={selected}
+            title={option.hint}
             onClick={() => onChange(option.value)}
             style={{
               textAlign: 'left',
               cursor: 'pointer',
               fontFamily: 'inherit',
-              padding: '12px 14px',
+              padding: '10px 12px',
               borderRadius: 9,
               border: selected ? `1.5px solid ${ORANGE}` : `1px solid ${BORDER}`,
               background: selected ? ORANGE_SOFT : '#fff',
               boxShadow: selected ? '0 1px 3px rgba(240,100,40,.12)' : '0 1px 2px rgba(0,0,0,.025)',
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
-              minHeight: 88,
+              gap: 5,
+              minHeight: 0,
+              minWidth: 0,
               transition: 'border-color .12s ease, background .12s ease',
             }}
           >
-            <span style={{
-              color: TEXT,
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: '-0.01em',
-            }}>
+            <span style={{ color: TEXT, fontSize: 12, fontWeight: 700, letterSpacing: '-0.01em' }}>
               {option.label}
             </span>
-            <span style={{
-              color: selected ? TEXT : DIM,
-              fontSize: 11,
-              lineHeight: 1.45,
-              fontWeight: 500,
-            }}>
+            <span style={{ color: selected ? TEXT : DIM, fontSize: 10.5, lineHeight: 1.4, fontWeight: 500 }}>
               {option.hint}
             </span>
           </button>

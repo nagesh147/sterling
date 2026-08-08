@@ -333,22 +333,43 @@ export function needsRescan(key: FieldKey): boolean {
 // scan_source was "Derivatives" in one panel and "Options" in another. One copy
 // makes that class of drift impossible rather than merely discouraged.
 
+/** SuperTrend — triple SuperTrend on the chosen price series. */
 export const SCAN_SOURCE_OPTIONS: Array<{ value: ScanSource; label: string; hint: string }> = [
   {
     value: 'spot', label: 'Spot',
-    hint: 'Read the underlying’s own chart. Option strikes are attached as candidates to buy.',
+    hint: 'SuperTrend on the underlying chart. Option strikes are candidates to buy.',
   },
   {
     value: 'derivatives', label: 'Derivatives',
-    hint: 'Read each selected contract’s own premium chart, and buy when that premium turns up.',
+    hint: 'SuperTrend on each contract’s premium chart; buy when that premium turns up.',
   },
   {
     value: 'both', label: 'Both',
-    hint: 'Run both scans side by side. Every signal is tagged Spot or DERIV.',
+    hint: 'Spot and premium scans side by side. Every signal is tagged Spot or DERIV.',
   },
   {
     value: 'confluence', label: 'Confluence',
-    hint: 'Strictest: emit a strike only when the underlying fires a fresh entry and that option’s own premium confirms it.',
+    hint: 'Only when the underlying and the option premium both fire a fresh entry.',
+  },
+];
+
+/** Navigator — structure / flow reads (not SuperTrend lines). */
+export const NAVIGATOR_SCAN_SOURCE_OPTIONS: Array<{ value: ScanSource; label: string; hint: string }> = [
+  {
+    value: 'spot', label: 'Spot',
+    hint: 'Structure on the underlying chart. Strikes are candidates when you act on a row.',
+  },
+  {
+    value: 'derivatives', label: 'Derivatives',
+    hint: 'Structure on each contract’s own premium series.',
+  },
+  {
+    value: 'both', label: 'Both',
+    hint: 'Underlying and premium structure together; each signal is tagged.',
+  },
+  {
+    value: 'confluence', label: 'Confluence',
+    hint: 'Only when underlying structure and premium structure agree.',
   },
 ];
 
