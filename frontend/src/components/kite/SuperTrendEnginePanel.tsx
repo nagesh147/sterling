@@ -5,7 +5,7 @@ import {
 import {
   BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT,
 } from './kiteSettingsPrimitives';
-import { ConfigNote, PanelCard } from './config/ConfigPrimitives';
+import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import {
@@ -13,10 +13,6 @@ import {
 } from './config/registry';
 import type { EngineConfigModel } from '../../types/kiteEngine';
 import { notifyOrder } from '../../store/useKiteNotifications';
-import { Icons } from '../../styles/kiteUI';
-
-const RED = '#c9433e';
-const AMBER = '#b06a13';
 
 /**
  * SuperTrend engine settings — draft + Apply (same pattern as Navigator).
@@ -101,6 +97,15 @@ export function SuperTrendEnginePanel() {
         onToggle={() => patch({ engine_enabled: !on })}
         runningNote="Scanning, producing signals, and eligible for automatic execution."
         offNote="Not scanning. Navigator can still run on its own."
+      />
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={saving}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
       />
 
       <PanelCard>
@@ -201,73 +206,6 @@ export function SuperTrendEnginePanel() {
             trail enforced regardless of the board exit rule.
           </ConfigNote>
         </Section>
-
-        {dirty && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            padding: '12px 16px', background: SOFT, borderTop: `1px solid ${BORDER}`,
-          }}>
-            <span aria-live="polite" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              color: saving ? MUTED : AMBER, fontSize: 10.5, fontWeight: 700, marginRight: 4,
-            }}>
-              <span aria-hidden style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: saving ? '#c2c2c2' : AMBER,
-              }} />
-              {saving ? 'Saving…' : 'Unsaved changes'}
-            </span>
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={saving}
-              style={{
-                border: 'none', background: ORANGE, color: '#fff', borderRadius: 7,
-                padding: '8px 16px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
-                fontFamily: 'inherit', opacity: saving ? 0.5 : 1,
-              }}
-            >
-              Apply changes
-            </button>
-            <button
-              type="button"
-              onClick={handleDiscard}
-              disabled={saving}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                border: `1px solid ${BORDER}`, background: '#fff', color: MUTED,
-                borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              Discard draft
-            </button>
-            <div style={{ flex: 1 }} />
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={resetCfg.isPending}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                border: `1px solid ${BORDER}`, background: '#fff',
-                color: resetConfirm ? RED : MUTED,
-                borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              <Icons.Reload /> {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
-            </button>
-          </div>
-        )}
-
-        {!dirty && (
-          <div style={{
-            padding: '12px 16px', background: SOFT, borderTop: `1px solid ${BORDER}`,
-            color: DIM, fontSize: 10.5, lineHeight: 1.45,
-          }}>
-            Sizing, order guards and protection are under Manual and Algo Trade.
-          </div>
-        )}
       </PanelCard>
 
       <style>{`

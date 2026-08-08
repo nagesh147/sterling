@@ -152,6 +152,130 @@ export function PanelCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Apply / Discard / Reset — only renders when dirty. Same bar for SuperTrend + Navigator. */
+export function SettingsDraftBar({
+  dirty,
+  saving = false,
+  onApply,
+  onDiscard,
+  onReset,
+  resetConfirm = false,
+  applyDisabled = false,
+  applyTitle,
+}: {
+  dirty: boolean;
+  saving?: boolean;
+  onApply: () => void;
+  onDiscard: () => void;
+  onReset: () => void;
+  resetConfirm?: boolean;
+  applyDisabled?: boolean;
+  applyTitle?: string;
+}) {
+  if (!dirty) return null;
+
+  const RED = '#c9433e';
+  const AMBER = '#b06a13';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+        padding: '12px 16px',
+        marginBottom: 16,
+        background: '#fff',
+        border: `1px solid ${BORDER}`,
+        borderRadius: 9,
+        boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      }}
+    >
+      <span
+        aria-live="polite"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          color: saving ? MUTED : AMBER,
+          fontSize: 10.5,
+          fontWeight: 700,
+          marginRight: 4,
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: saving ? '#c2c2c2' : AMBER,
+          }}
+        />
+        {saving ? 'Saving…' : 'Unsaved changes'}
+      </span>
+      <button
+        type="button"
+        onClick={onApply}
+        disabled={saving || applyDisabled}
+        title={applyTitle}
+        style={{
+          border: 'none',
+          background: ORANGE,
+          color: '#fff',
+          borderRadius: 7,
+          padding: '8px 16px',
+          fontSize: 11.5,
+          fontWeight: 700,
+          cursor: saving || applyDisabled ? 'default' : 'pointer',
+          fontFamily: 'inherit',
+          opacity: saving || applyDisabled ? 0.5 : 1,
+        }}
+      >
+        Apply changes
+      </button>
+      <button
+        type="button"
+        onClick={onDiscard}
+        disabled={saving}
+        style={{
+          border: `1px solid ${BORDER}`,
+          background: '#fff',
+          color: MUTED,
+          borderRadius: 7,
+          padding: '7px 12px',
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        Discard draft
+      </button>
+      <div style={{ flex: 1 }} />
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={saving}
+        style={{
+          border: `1px solid ${BORDER}`,
+          background: '#fff',
+          color: resetConfirm ? RED : MUTED,
+          borderRadius: 7,
+          padding: '7px 12px',
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
+      </button>
+    </div>
+  );
+}
+
 /**
  * Advanced — quiet disclosure. Nested Section cards keep the same left edge
  * as top-level sections (no indent).
