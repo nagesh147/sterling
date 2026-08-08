@@ -105,7 +105,10 @@ export function Section({
             {title}
           </span>
           {description ? (
-            <span style={{ display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440 }}>
+            <span style={{
+              display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440,
+              whiteSpace: 'pre-line',
+            }}>
               {description}
             </span>
           ) : null}

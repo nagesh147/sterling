@@ -125,14 +125,14 @@ export function InstrumentsGroup({
 }
 
 /** Which chart this engine reads a signal from (main-branch descriptions + tile style). */
-export function SignalSourceGroup({ value, onChange, name }: {
+export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The chart this engine takes its entry signal off.' }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
-  /** Radio-group name — must differ per engine so the two do not share state. */
   name: string;
+  fieldHint?: string | null;
 }) {
   return (
-    <Field label="Read from" hint="The chart this engine takes its entry signal off." wide>
+    <Field label="Read from" hint={fieldHint ?? undefined} wide>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8, width: '100%' }}>
         {SCAN_SOURCE_OPTIONS.map((option) => {
           const selected = value === option.value;

@@ -322,7 +322,7 @@ export function NavigatorSettingsPanel() {
       {/* ═══════════════ CORE (order matches SuperTrend) ═══════════════ */}
       <Section
         title="Chart source"
-        description="Which price series Navigator reads."
+        description={"The chart this engine takes its entry signal off.\nAlways its own — SuperTrend's source is never applied here."}
         summary={SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
         defaultOpen
         persistKey="nav-chart"
@@ -331,11 +331,9 @@ export function NavigatorSettingsPanel() {
           <SignalSourceGroup
             name="navigator-signal-source"
             value={draft.scan_source}
+            fieldHint={null}
             onChange={(v) => patch({ ...draft, scan_source: v })}
           />
-          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 6, maxWidth: 440 }}>
-            Always its own — SuperTrend's source is never applied here.
-          </div>
         </div>
       </Section>
 
