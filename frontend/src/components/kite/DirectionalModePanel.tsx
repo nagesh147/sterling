@@ -189,6 +189,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
   const [lotSize, setLotSize]       = useState(liveLotSize && liveLotSize > 0 ? liveLotSize : 75);
   const [customDelta, setCustomDelta] = useState('');  // delta override input
   const [userEdited, setUserEdited] = useState(false); // once true, stop auto-syncing from live
+  const [showImpact, setShowImpact] = useState(false); // impact estimate — open on demand
 
   // Pre-fill from the live signal when it arrives — but never clobber a value the
   // user has typed themselves.
@@ -231,7 +232,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
       <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        HOW SHOULD AUTO-EXECUTE TRADE THE SIGNAL?
+        WHAT SHOULD THE ALGO BUY?
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
 
@@ -249,7 +250,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         ) : (
           <><strong style={{ color: '#e65100' }}>You're in MANUAL mode.</strong> These settings only kick in
             once you switch <strong>SIGNALS → AUTO</strong> above. In MANUAL you pick the strike yourself
-            from each signal (use the Trade Impact Calculator), so the choice below is just pre-configuration.</>
+            from each signal, so the choice below is just pre-configuration.</>
         )}
       </div>
 
@@ -384,13 +385,48 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         </>
       )}
 
-      {/* ── 3. Trade impact calculator ─────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={S.section}>TRADE IMPACT CALCULATOR</div>
-      <div style={{ ...S.hint, marginBottom: 10 }}>
+      {/* ── 3. Impact estimate — hidden until the user asks ───────────────── */}
+      <div style={{ marginTop: 4, marginBottom: showImpact ? 0 : 4 }}>
+        <button
+          type="button"
+          onClick={() => setShowImpact((v) => !v)}
+          aria-expanded={showImpact}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showImpact ? '#f06428' : '#777',
+            fontSize: 11.5, fontWeight: 650, fontFamily: 'inherit',
+            padding: '8px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showImpact ? '#f06428' : '#c9c9c9'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700, color: showImpact ? '#f06428' : '#888',
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </span>
+          {showImpact ? 'Hide impact estimate' : 'Estimate impact for this profile'}
+        </button>
+      </div>
+
+      {showImpact && (
+      <div style={{
+        marginBottom: 4, padding: '12px 14px 14px',
+        borderRadius: 8, border: '1px solid #e8e8e8', background: '#fafafa',
+      }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#333', marginBottom: 4 }}>
+        Impact estimate
+      </div>
+      <div style={{ ...S.hint, marginBottom: 12, lineHeight: 1.5 }}>
         {(livePremium || liveLotSize) && !userEdited
-          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to explore other scenarios.</>
-          : <>Adjust the inputs below to see how this profile behaves on your trade.</>}
+          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to try other scenarios. Rough guide only — not a live quote.</>
+          : <>Adjust the inputs to see how this profile behaves. Rough guide only — not a live quote.</>}
       </div>
 
       {/* Simulator inputs */}
@@ -566,13 +602,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <strong>gain</strong> = δ × move captured per share · <strong>cost</strong> = est. premium per share ·
         <strong> ×eff</strong> = ₹ gain per ₹100 of premium (higher = more leverage, but more decay/IV risk).
       </div>
+      </div>
+      )}
 
-      {/* Sections 4 and 5 (entry-quality filters and the risk-infrastructure
-          toggle) were removed on 2026-08-08. They are not vehicle settings, and
-          rendering them here put a SECOND editable control for adx_min,
-          atr_pct_min and wire_risk_infra on the same page as the Automatic
-          Rules copies — with different input bounds, both writing the same
-          field. Those now have exactly one home, in Automatic Rules. */}
+      {/* Entry filters and portfolio risk live only under Algo Trade — not here. */}
 
     </div>
   );
