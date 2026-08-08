@@ -256,7 +256,7 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
   };
 
   return (
-    <div style={{ border: `1px solid ${expanded ? '#d0d0d0' : '#e8e8e8'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden', background: '#fff', transition: 'box-shadow .15s', boxShadow: expanded ? '0 2px 8px rgba(0,0,0,.06)' : 'none' }}>
+    <div style={{ border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
       {/* ── Collapsed row ── */}
       <div
         onClick={() => setExpanded((v) => !v)}

@@ -3,6 +3,7 @@ import { useEngineSignals } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import {
   BORDER, ChoiceRow, DIM, Field, MUTED, Section, SOFT, Switch, TEXT, inputStyle,
+  settingsCardStyle,
 } from './kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, PanelHeader } from './config/ConfigPrimitives';
 import { FIELDS, STOP_MODE_OPTIONS, openSettingsSection } from './config/registry';
@@ -224,12 +225,12 @@ export function AutomaticRulesPanel() {
 
   return (
     <>
-      <PanelCard>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px',
-          background: autoOn ? '#fff7f0' : SOFT,
-          borderLeft: `3px solid ${autoOn ? '#f06428' : '#c9c9c9'}`,
-        }}>
+      <div style={{
+        ...settingsCardStyle,
+        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px',
+        background: autoOn ? '#fff7f0' : SOFT,
+        borderLeft: `3px solid ${autoOn ? '#f06428' : '#c9c9c9'}`,
+      }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 800 }}>
               {autoOn ? 'Algo is ON' : 'Algo is OFF'}
@@ -252,7 +253,7 @@ export function AutomaticRulesPanel() {
             {autoOn ? 'Turn off in Trading Mode →' : 'Turn on in Trading Mode →'}
           </button>
         </div>
-      </PanelCard>
+      
 
       <PanelCard>
         <PanelHeader saving={saving} />

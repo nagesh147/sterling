@@ -1,7 +1,5 @@
 import React from 'react';
-import {
-  BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle,
-} from './kiteSettingsPrimitives';
+import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle, settingsCardStyle } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection } from './config/ConfigPrimitives';
@@ -297,7 +295,7 @@ export function NavigatorSettingsPanel() {
   ].join(' · ');
 
   return (
-    <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+    <section style={{ ...settingsCardStyle }}>
       <style>{NUM_INPUT_CSS}</style>
 
       {/* ── Core: enable + mode ─────────────────────────────────────────── */}
