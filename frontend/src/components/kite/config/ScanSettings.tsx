@@ -38,10 +38,19 @@ export function InstrumentsGroup({
   return (
     <>
       <Field label="Indices" wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '6px 12px',
+            width: '100%',
+          }}
+        >
           {INDEX_OPTIONS.map((option) => (
             <CheckOption
-              key={option.value} label={option.label}
+              key={option.value}
+              label={option.label}
               checked={indices.includes(option.value)}
               onChange={() => onChange({
                 scan_indices: toggle(indices, option.value, allowEmptyIndices ? [] : ['NIFTY 50']),
@@ -50,79 +59,79 @@ export function InstrumentsGroup({
           ))}
         </div>
       </Field>
+
       <Field
         label="Single-stock underlyings"
         hint="Off leaves stocks out of the scan entirely. Indices are unaffected."
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Switch
-            checked={stockContracts} label={`${idPrefix} scan single-stock underlyings`}
-            onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
-          />
-          <span style={{ color: TEXT, fontSize: 12 }}>
-            {stockContracts ? 'Scanning stocks' : 'Indices only'}
-          </span>
-        </div>
-        {!stockContracts && (
-          <ConfigNote>
-            No stock contracts are resolved and no stock rows appear. Your stock selection is
-            kept, so turning this back on restores it.
-          </ConfigNote>
-        )}
+        <Switch
+          checked={stockContracts}
+          label={`${idPrefix} scan single-stock underlyings`}
+          onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
+        />
       </Field>
+
+      {!stockContracts && (
+        <ConfigNote>
+          No stock contracts are resolved and no stock rows appear. Your stock selection is
+          kept, so turning this back on restores it.
+        </ConfigNote>
+      )}
+
       {stockContracts && (
-        <>
-          <Field
-            label="F&O stocks"
-            hint="Use the full eligible universe, or curate a smaller list."
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Switch
-                checked={allStocks} label={`${idPrefix} scan all F&O stocks`}
-                onChange={() => onChange({ scan_all_stocks: !allStocks })}
-              />
-              <span style={{ color: TEXT, fontSize: 12 }}>
-                {allStocks ? 'Scan all eligible F&O stocks' : 'Curated list'}
-              </span>
-            </div>
-          </Field>
-          {!allStocks && (
-            <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {(stockRegistry ?? []).map((group: LiquidityGroup) => (
-                  <div key={group.liquidity}>
-                    <div style={{
-                      color: DIM, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-                      marginBottom: 4, textTransform: 'uppercase' as const,
-                    }}>
-                      {group.liquidity}
-                    </div>
-                    <div className="sk-config-check-grid" style={{
-                      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3,
-                    }}>
-                      {group.stocks.map((s) => {
-                        const name = s.name;
-                        return (
-                          <CheckOption
-                            key={name}
-                            label={s.label || name}
-                            compact
-                            checked={stocks.includes(name)}
-                            onChange={() => onChange({ scan_stocks: toggle(stocks, name, []) })}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+        <Field
+          label="F&O stocks"
+          hint="Use the full eligible universe, or curate a smaller list."
+        >
+          <Switch
+            checked={allStocks}
+            label={`${idPrefix} scan all F&O stocks`}
+            onChange={() => onChange({ scan_all_stocks: !allStocks })}
+          />
+        </Field>
+      )}
+
+      {stockContracts && !allStocks && (
+        <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+            {(stockRegistry ?? []).map((group: LiquidityGroup) => (
+              <div key={group.liquidity}>
+                <div style={{
+                  color: DIM, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+                  marginBottom: 4, textTransform: 'uppercase' as const,
+                }}>
+                  {group.liquidity}
+                </div>
+                <div
+                  className="sk-config-check-grid"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                    gap: '2px 8px',
+                  }}
+                >
+                  {group.stocks.map((s) => {
+                    const name = s.name;
+                    return (
+                      <CheckOption
+                        key={name}
+                        label={s.label || name}
+                        compact
+                        checked={stocks.includes(name)}
+                        onChange={() => onChange({ scan_stocks: toggle(stocks, name, []) })}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            </Field>
-          )}
-        </>
+            ))}
+          </div>
+        </Field>
       )}
     </>
   );
 }
+
 
 /** Which chart this engine reads a signal from (main-branch descriptions + tile style). */
 export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The chart this engine takes its entry signal off.' }: {
@@ -184,8 +193,20 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
 
   return (
     <>
-      <Field label="Strike range" hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits." wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
+      <Field
+        label="Strike range"
+        hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits."
+        wide
+      >
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gap: '8px 10px',
+            width: '100%',
+          }}
+        >
           {STRIKE_GROUPS.map((group) => {
             const checked = group.values.every((v) => strikes.includes(v));
             const partial = !checked && group.values.some((v) => strikes.includes(v));
@@ -202,8 +223,17 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           })}
         </div>
       </Field>
+
       <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '6px 12px',
+            maxWidth: 320,
+          }}
+        >
           {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
             <CheckOption
               key={expiry}
@@ -214,6 +244,7 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           ))}
         </div>
       </Field>
+
       <ConfigNote>
         Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
         Whether stocks are scanned at all is under Instruments.
@@ -221,3 +252,4 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
     </>
   );
 }
+
