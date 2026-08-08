@@ -169,29 +169,29 @@ export const FIELDS = F({
   // ── Trade Rules — engine-independent execution ────────────────────────────
   stop_mode: {
     key: 'stop_mode',
-    label: 'How the stop is enforced',
-    help: 'After a fill, who is responsible for the stop-loss: Zerodha, Sterling’s server, or both.',
+    label: 'Place stop at',
+    help: 'Where the stop-loss lives after a fill.',
     owner: 'execution', applies: 'both', stage: 'stop', rescan: false, home: 'autoRules',
     evidence: 'service.arm_manual_option_buy passes it to protection.arm_position, exactly as the automatic path does.',
   },
   protect_manual_orders: {
     key: 'protect_manual_orders',
-    label: 'Add a stop after I buy',
-    help: 'When you place a BUY by hand, Sterling attaches the stop shown on the board and watches the position for you.',
+    label: 'Add stop when I buy',
+    help: 'Attach the board’s stop and watch the position after your hand-placed BUY fills.',
     owner: 'execution', applies: 'manual', stage: 'protection', rescan: false, home: 'manualRules',
     evidence: 'service.place_manual_order / arm_manual_option_buy — consulted only on the hand-placed order path.',
   },
   expiry_square_off_days: {
     key: 'expiry_square_off_days',
     label: 'Exit before expiry',
-    help: 'Close the position this many days before the option expires. 0 = leave it alone.',
+    help: 'Days before expiry to close. 0 = off.',
     owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._square_off_expiring iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
   time_stop_bars: {
     key: 'time_stop_bars',
-    label: 'Max time in trade',
-    help: 'Close the position after this many 1-hour bars. 0 = no time limit.',
+    label: 'Max hold time',
+    help: 'Hours on the chart before forced exit. 0 = off.',
     owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._time_stop_positions iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
@@ -367,16 +367,16 @@ export const TRAIL_OPTIONS: Array<{ value: TrailTarget; label: string; hint: str
 
 export const STOP_MODE_OPTIONS: Array<{ value: EngineConfigModel['stop_mode']; label: string; hint: string }> = [
   {
-    value: 'both', label: 'Zerodha + Server',
-    hint: 'Stop sits at Zerodha and Sterling also watches price. Best for live money.',
+    value: 'both', label: 'Zerodha + Sterling',
+    hint: 'Stop at Zerodha, and Sterling watches too. Best for live.',
   },
   {
-    value: 'broker', label: 'Zerodha only',
-    hint: 'Stop order lives at Zerodha. Still works if this app goes offline.',
+    value: 'broker', label: 'Zerodha',
+    hint: 'Stop only at Zerodha. Works if the app is offline.',
   },
   {
-    value: 'monitor', label: 'Server only',
-    hint: 'Sterling watches price and exits for you. Needs this app online.',
+    value: 'monitor', label: 'Sterling',
+    hint: 'Sterling watches price and exits. Needs the app online.',
   },
 ];
 
