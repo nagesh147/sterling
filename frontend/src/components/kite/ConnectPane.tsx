@@ -547,7 +547,7 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection',
     pageDescription: 'API credentials and the daily Zerodha session.' },
   { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
-    pageDescription: 'Paper or live, who places orders, and which engines run.' },
+    pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
     pageDescription: 'What happens after you place an order.' },
   { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading',
@@ -556,7 +556,7 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Scan, entry and exit for the SuperTrend engine.' },
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines',
     pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
-  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform',
+  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
     pageDescription: 'Kite signal destinations and Telegram alerts.' },
@@ -723,6 +723,7 @@ export function ConnectPane() {
           {section === 'mode' && (
             <>
               <TradingModePanel />
+              <KiteExchangeSettingsCard />
             </>
           )}
 
@@ -753,7 +754,6 @@ export function ConnectPane() {
 
           {section === 'markets' && (
             <>
-              <KiteExchangeSettingsCard />
               {liveTools ? (
                 <><Funds /><MarginCalc /><TickerControl /></>
               ) : (

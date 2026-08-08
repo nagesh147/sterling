@@ -109,6 +109,7 @@ describe('ConnectPane settings hub', () => {
     fireEvent.click(screen.getByRole('button', { name: /Trading Mode Paper\/live, manual\/automatic/i }));
     expect(screen.getByRole('heading', { name: 'Trading Mode' })).toBeInTheDocument();
     expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
+    expect(screen.getByText('Exchange choices')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /SuperTrend Scan, entry & exit/i }));
     expect(screen.queryByText('Trading mode controls')).not.toBeInTheDocument();
