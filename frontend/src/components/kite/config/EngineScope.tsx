@@ -46,7 +46,7 @@ export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Same as
         {opt(sharedLabel, linked, true)}
         {opt(ownLabel, !linked, false)}
       </div>
-      {hint && <span style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.45 }}>{hint}</span>}
+      {hint && <span style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.45, maxWidth: 280 }}>{hint}</span>}
     </div>
   );
 }
@@ -66,13 +66,13 @@ export function ScopedGroup({ title, description, linked, onLinkChange, sharedSu
     <div style={{ padding: '15px 0', borderTop: `1px solid ${BORDER}` }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ color: TEXT, fontSize: 12.5, fontWeight: 700 }}>{title}</div>
-        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '2px 0 9px' }}>{description}</div>
+        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '2px 0 9px', maxWidth: 440 }}>{description}</div>
         <ScopeLink groupLabel={title} linked={linked} onChange={onLinkChange} hint={hint} />
       </div>
       {linked ? (
         <div style={{
           padding: '9px 11px', borderRadius: 7, background: SOFT,
-          border: `1px solid ${BORDER}`, color: MUTED, fontSize: 11, lineHeight: 1.5,
+          border: `1px solid ${BORDER}`, color: MUTED, fontSize: 11, lineHeight: 1.5, maxWidth: 440,
         }}>
           {sharedSummary}
         </div>
