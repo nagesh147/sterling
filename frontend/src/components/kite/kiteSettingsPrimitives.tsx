@@ -1,41 +1,33 @@
 import React from 'react';
 
 /**
- * Kite settings primitives
- *
- * Pattern: quiet progressive disclosure
- * - Sections collapse (page stays scannable)
- * - No card frames, orange bars, or pill chips
- * - Summary = plain status text on the right
- * - Only Advanced uses a lighter, secondary treatment
+ * Kite settings — quiet disclosure with warmth.
+ * Collapse stays; chrome stays light; colour and motion add life.
  */
 
 export const ORANGE = '#f06428';
-export const BORDER = '#eaeaea';
-export const TEXT = '#171717';
-export const MUTED = '#6f6f6f';
-export const DIM = '#9c9c9c';
-export const SOFT = '#f5f5f5';
-export const ORANGE_SOFT = '#fff7f3';
+export const BORDER = '#ebe6e2';
+export const TEXT = '#1c1917';
+export const MUTED = '#78716c';
+export const DIM = '#a8a29e';
+export const SOFT = '#faf8f6';
+export const ORANGE_SOFT = '#fff5ef';
 
 export const inputStyle: React.CSSProperties = {
   width: 112,
   height: 34,
   padding: '0 10px',
-  border: '1px solid #d6d6d6',
-  borderRadius: 6,
-  background: '#fff',
+  border: '1px solid #e0dbd6',
+  borderRadius: 8,
+  background: '#fffefb',
   color: TEXT,
   fontFamily: 'inherit',
   fontSize: 13,
   boxSizing: 'border-box',
+  transition: 'border-color .15s ease, box-shadow .15s ease',
 };
 
-/**
- * Collapsible group — minimal chrome.
- * Closed: title + summary only (scannable).
- * Open: fields below with a single light rule under the header.
- */
+/** Collapsible group with soft open state — not a skeleton list. */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
   description: string;
@@ -44,36 +36,51 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const [hovered, setHovered] = React.useState(false);
 
   return (
     <details
       className="sk-settings-group"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{ marginBottom: 2 }}
+      style={{
+        marginBottom: 8,
+        borderRadius: 12,
+        background: isOpen ? '#fffefb' : hovered ? '#fafaf9' : 'transparent',
+        border: `1px solid ${isOpen ? '#ebe6e2' : 'transparent'}`,
+        transition: 'background .18s ease, border-color .18s ease',
+      }}
     >
       <summary
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           listStyle: 'none',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          padding: '14px 0',
+          gap: 12,
+          padding: '14px 14px',
           userSelect: 'none',
-          borderBottom: `1px solid ${BORDER}`,
+          borderRadius: 12,
         }}
       >
         <span
           aria-hidden
           style={{
             flexShrink: 0,
-            width: 14,
-            color: DIM,
-            fontSize: 13,
-            lineHeight: 1,
+            width: 26,
+            height: 26,
+            borderRadius: 8,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isOpen ? ORANGE_SOFT : SOFT,
+            color: isOpen ? ORANGE : DIM,
+            fontSize: 14,
+            fontWeight: 700,
             transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .14s ease',
+            transition: 'transform .18s ease, background .18s ease, color .18s ease',
           }}
         >
           ›
@@ -83,9 +90,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             style={{
               display: 'block',
               color: TEXT,
-              fontSize: 14,
-              fontWeight: 600,
-              letterSpacing: '-0.015em',
+              fontSize: 14.5,
+              fontWeight: 650,
+              letterSpacing: '-0.02em',
               lineHeight: 1.3,
             }}
           >
@@ -97,8 +104,8 @@ export function Section({ title, description, summary, defaultOpen = false, chil
                 display: 'block',
                 color: MUTED,
                 fontSize: 12.5,
-                lineHeight: 1.4,
-                marginTop: 2,
+                lineHeight: 1.45,
+                marginTop: 3,
               }}
             >
               {description}
@@ -112,14 +119,16 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             style={{
               flexShrink: 0,
               maxWidth: 168,
-              color: DIM,
+              padding: '3px 0',
+              color: isOpen ? MUTED : DIM,
               fontSize: 12,
               fontWeight: 500,
               textAlign: 'right',
-              lineHeight: 1.3,
+              lineHeight: 1.35,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              transition: 'color .15s ease',
             }}
           >
             {summary}
@@ -128,7 +137,10 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       </summary>
       <div
         className="sk-config-section-body"
-        style={{ padding: '4px 0 12px 24px' }}
+        style={{
+          padding: '2px 14px 16px 52px',
+          borderTop: isOpen ? '1px solid #f0ebe6' : 'none',
+        }}
       >
         {children}
       </div>
@@ -136,26 +148,31 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-/**
- * Setting row: label left · control right · hint under the row.
- */
+/** Setting row with soft hover life. */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const [hovered, setHovered] = React.useState(false);
+
   return (
     <div
       className="sk-config-field"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) minmax(112px, max-content)',
         columnGap: 24,
         rowGap: 4,
         alignItems: 'center',
-        padding: '12px 0',
-        borderBottom: '1px solid #f3f3f3',
+        padding: '12px 10px',
+        margin: '0 -10px',
+        borderRadius: 8,
+        background: hovered ? 'rgba(250, 248, 246, 0.9)' : 'transparent',
+        transition: 'background .14s ease',
       }}
     >
       <div
@@ -218,9 +235,9 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
       style={{
         display: 'inline-flex',
         maxWidth: '100%',
-        gap: 2,
-        padding: 3,
-        borderRadius: 8,
+        gap: 3,
+        padding: 4,
+        borderRadius: 10,
         background: SOFT,
         flexWrap: 'wrap',
       }}
@@ -236,19 +253,20 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
             onClick={() => onChange(option.value)}
             style={{
               border: 'none',
-              minHeight: 30,
-              borderRadius: 6,
+              minHeight: 32,
+              borderRadius: 8,
               background: selected ? '#fff' : 'transparent',
               color: selected ? TEXT : MUTED,
-              padding: '0 12px',
+              padding: '0 13px',
               fontSize: 12.5,
               fontWeight: 550,
-              boxShadow: selected ? '0 1px 2px rgba(0,0,0,.07)' : 'none',
-              outline: selected ? `1px solid ${ORANGE}` : '1px solid transparent',
+              boxShadow: selected
+                ? `0 1px 3px rgba(28, 25, 23, 0.08), inset 0 -2px 0 ${ORANGE}`
+                : 'none',
               fontFamily: 'inherit',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
-              transition: 'background .12s ease, box-shadow .12s ease',
+              transition: 'background .14s ease, box-shadow .14s ease, color .14s ease',
             }}
           >
             {option.label}
@@ -274,17 +292,18 @@ export function Switch({ checked, label, onChange, disabled = false }: {
       onClick={onChange}
       disabled={disabled}
       style={{
-        width: 40,
-        height: 22,
-        borderRadius: 11,
+        width: 42,
+        height: 24,
+        borderRadius: 12,
         border: 'none',
         padding: 0,
         flexShrink: 0,
         position: 'relative',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        background: checked ? ORANGE : '#d4d4d4',
-        transition: 'background .18s ease',
+        background: checked ? ORANGE : '#d6d3d1',
+        transition: 'background .2s ease',
+        boxShadow: checked ? '0 1px 4px rgba(240, 100, 40, 0.35)' : 'none',
       }}
     >
       <span
@@ -293,11 +312,11 @@ export function Switch({ checked, label, onChange, disabled = false }: {
           width: 18,
           height: 18,
           borderRadius: 9,
-          top: 2,
-          left: checked ? 20 : 2,
+          top: 3,
+          left: checked ? 21 : 3,
           background: '#fff',
-          boxShadow: '0 1px 3px rgba(0,0,0,.18)',
-          transition: 'left .18s ease',
+          boxShadow: '0 1px 3px rgba(0,0,0,.16)',
+          transition: 'left .2s ease',
         }}
       />
     </button>
@@ -328,13 +347,14 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         alignItems: 'center',
         gap: 9,
         border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#f0d2c4' : BORDER}`,
-        background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fff',
+        background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fffefb',
         color: TEXT,
-        borderRadius: 6,
+        borderRadius: 8,
         padding: compact ? '4px 7px' : '8px 10px',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.7 : 1,
         boxSizing: 'border-box',
+        transition: 'background .14s ease, border-color .14s ease',
       }}
     >
       <input
