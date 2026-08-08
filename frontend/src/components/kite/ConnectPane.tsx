@@ -567,16 +567,25 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   experience: <Icons.Settings />,
 };
 
-const SECTION_DEFS: SectionDef[] = [
-  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
-  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading' },
-  { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading' },
-  { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading' },
-  { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines' },
-  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines' },
-  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform' },
-  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform' },
-  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform' },
+const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
+  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection',
+    pageDescription: 'API credentials and the daily Zerodha session.' },
+  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
+    pageDescription: 'Paper or live, who places orders, and which engines run.' },
+  { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
+    pageDescription: 'What happens after you place an order.' },
+  { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading',
+    pageDescription: 'What happens when the algo places an order.' },
+  { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines',
+    pageDescription: 'Scan, entry and exit for the SuperTrend engine.' },
+  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines',
+    pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
+  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform',
+    pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
+  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
+    pageDescription: 'Kite signal destinations and Telegram alerts.' },
+  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform',
+    pageDescription: 'Loading, dialogs and transition feel.' },
 ];
 
 function readInitialSection(): ConnectSection {
@@ -628,6 +637,7 @@ export function ConnectPane() {
   ].filter(Boolean) as string[];
   const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
+  const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
 
   const select = (next: ConnectSection) => {
     setSection(next);
@@ -651,218 +661,24 @@ export function ConnectPane() {
     }}>
       <header style={{
         flexShrink: 0, width: '100%', boxSizing: 'border-box',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-        padding: '12px 20px', borderBottom: '1px solid #ebebeb', background: '#fff',
+        display: 'flex', alignItems: 'flex-start', gap: 16,
+        padding: '12px 16px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
       }}>
-        <h1 style={{ margin: 0, color: '#111', fontSize: 18, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-.02em' }}>
-          Settings
-        </h1>
-        <div
-          className="kite-settings-status"
-          aria-label="Session status"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, auto))',
-            gap: 0,
-            background: '#fff',
-            border: '1px solid #e4e4e4',
-            borderRadius: 10,
-            overflow: 'hidden',
-            maxWidth: '100%',
-          }}
-        >
-          <button type="button" onClick={() => openSettingsSection('account')} style={{
-            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-            textAlign: 'left', padding: '8px 14px', minWidth: 0, borderRight: '1px solid #eee',
+        <div style={{ flexShrink: 0, paddingTop: 2 }}>
+          <div style={{ color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.2 }}>Settings</div>
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h1 style={{
+            margin: 0, color: '#444', fontSize: 16, lineHeight: 1.25, fontWeight: 700,
+            letterSpacing: '-0.01em', fontFamily: 'inherit',
           }}>
-            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>KITE</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#333' }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: connected ? (isPaper ? '#f5a623' : '#2e7d32') : '#c2c2c2',
-              }} />
-              {connected ? (isPaper ? 'Zerodha · Paper' : 'Zerodha · Live') : (active ? 'Login required' : 'No account')}
-            </div>
-          </button>
-          <button type="button" onClick={() => openSettingsSection('mode')} style={{
-            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-            textAlign: 'left', padding: '8px 14px', minWidth: 0, borderRight: '1px solid #eee',
+            {page.label}
+          </h1>
+          <p style={{
+            margin: '2px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
+            fontFamily: 'inherit',
           }}>
-            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>ENGINES</div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: enginesRunning.length ? '#333' : '#999' }}>
-              {enginesRunning.length ? enginesRunning.join(' · ') : 'None running'}
-            </div>
-          </button>
-          <button type="button" onClick={() => openSettingsSection('mode')} style={{
-            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-            textAlign: 'left', padding: '8px 14px', minWidth: 0,
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>ORDERS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#333' }}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: orderMode === 'Algo' ? '#f06428' : '#8a8a8a',
-              }} />
-              {orderMode}
-            </div>
-          </button>
+            {page.pageDescription}
+          </p>
         </div>
       </header>
-
-      <div className="kite-settings-layout" style={{
-        flex: 1, minHeight: 0, width: '100%',
-        display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
-      }}>
-        <nav aria-label="Kite settings sections" style={{
-          background: '#fafafa', borderRight: '1px solid #ebebeb', padding: '10px 8px 16px',
-          overflowY: 'auto', minHeight: 0,
-        }}>
-          {SECTION_DEFS.map((item, index) => {
-            const selected = item.id === section;
-            const startsGroup = index === 0 || SECTION_DEFS[index - 1].group !== item.group;
-            return (
-              <React.Fragment key={item.id}>
-                {startsGroup && (
-                  <div className="kite-rail-group" style={{
-                    padding: '10px 11px 4px', color: '#a0a0a0', fontSize: 9,
-                    fontWeight: 750, letterSpacing: .8, textTransform: 'uppercase',
-                  }}>
-                    {item.group}
-                  </div>
-                )}
-                <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
-                }}>
-                  <span aria-hidden style={{
-                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    background: selected ? '#ffe8dc' : '#f4f4f5',
-                    color: selected ? '#f06428' : '#8a8a8a',
-                  }}>
-                    {SECTION_ICONS[item.id]}
-                  </span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
-                    <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
-                  </span>
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </nav>
-
-        <main style={{
-          minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '18px 24px 32px', background: '#fff',
-        }}>
-          {section === 'account' && (
-            <>
-              <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Whether those orders are simulated or real is set under Trading Mode." />
-              {isLoading && <div style={S.hint}>Loading accounts…</div>}
-              {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
-              {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
-              <AddAccount />
-              <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
-                Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
-              </div>
-            </>
-          )}
-
-          {section === 'mode' && (
-            <>
-              <SectionHeading title="Trading Mode" description="Whether orders are simulated or real, whether you or the engine places them, and which signal engines are running. Everything on this page changes what happens to real money." />
-              <TradingModePanel />
-            </>
-          )}
-
-          {section === 'manualRules' && (
-            <>
-              <SectionHeading title="Manual Trade" description="What happens after you place an order." />
-              <ManualRulesPanel />
-            </>
-          )}
-
-          {section === 'autoRules' && (
-            <>
-              <SectionHeading title="Algo Trade" description="What happens when the algo places an order." />
-              <AutomaticRulesPanel />
-            </>
-          )}
-
-          {section === 'engine' && (
-            <>
-              <SectionHeading title="SuperTrend" description="This engine end to end: whether it runs, what it scans, and how it enters and exits. Navigator is configured separately and can run on its own." />
-              <SuperTrendEnginePanel />
-            </>
-          )}
-
-          {section === 'navigator' && (
-            <>
-              <SectionHeading title="Value-Flow Navigator" description="A peer signal engine alongside SuperTrend, with its own scan settings and its own entry, stop and target. It reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity, and can confirm SuperTrend's setups, find its own, or both. Off by default; it never bypasses any order or risk control." />
-              <NavigatorSettingsPanel />
-              <NavigatorCalibrationPanel />
-            </>
-          )}
-
-          {section === 'markets' && (
-            <>
-              <SectionHeading title="Markets & Tools" description="Choose the exchanges Sterling can use, then inspect funds, charges and live ticker subscriptions." />
-              <KiteExchangeSettingsCard />
-              {liveTools ? (
-                <><Funds /><MarginCalc /><TickerControl /></>
-              ) : (
-                <div style={S.card}>
-                  <div style={S.title}>LIVE ACCOUNT TOOLS</div>
-                  <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
-                </div>
-              )}
-            </>
-          )}
-
-          {section === 'notifications' && (
-            <>
-              <SectionHeading title="Notifications" description="Manage only Kite signal destinations here. Crypto/global alerts remain separate." />
-              <KiteTelegramPanel />
-            </>
-          )}
-
-          {section === 'experience' && (
-            <>
-              <SectionHeading title="Experience" description="Choose how loading, dialogs and transitions feel throughout Kite." />
-              <MotionStyleSettings />
-              <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-                <BrandIconPicker />
-              </section>
-              <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
-                <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
-                  Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
-                </div>
-              </div>
-            </>
-          )}
-        </main>
-      </div>
-
-      <style>{`
-        @media (max-width: 820px) {
-          .kite-settings-hub { padding: 18px 14px 36px !important; }
-          .kite-settings-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
-          .kite-settings-layout > nav { position: static !important; display: flex; overflow-x: auto; gap: 4px; }
-          .kite-settings-layout > nav button { min-width: 156px; margin-bottom: 0 !important; }
-          /* The group headings only read as headings in the vertical rail; in the
-             horizontal scroller they would be islands of text between buttons. */
-          .kite-rail-group { display: none; }
-        }
-        @media (max-width: 560px) {
-          .kite-settings-hub > header { flex-direction: column; }
-          .kite-settings-hub > header > div:last-child { justify-content: flex-start !important; }
-          .kite-settings-status { width: 100%; box-sizing: border-box; }
-        }
-      `}</style>
-    </div>
-  );
-}
