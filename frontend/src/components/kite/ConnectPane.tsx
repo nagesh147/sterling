@@ -7,6 +7,7 @@ import {
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useNavigatorConfig } from '../../hooks/useNavigator';
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
@@ -18,7 +19,7 @@ import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
-import { type SectionId, resolveSectionId } from './config/registry';
+import { type SectionId, resolveSectionId, openSettingsSection } from './config/registry';
 import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
@@ -608,9 +609,24 @@ function SectionHeading({ title, description }: { title: string; description: st
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const { data: engineCfg } = useEngineConfig();
+  const { data: kiteStatus } = useKiteStatus();
+  const { data: navCfg } = useNavigatorConfig();
   const active = data?.accounts.find((account) => account.is_active);
-  const connected = !!active?.connected;
+  const apiConnected = kiteStatus?.account_id && active && kiteStatus.account_id === active.id
+    ? !!kiteStatus.connected
+    : !!active?.connected;
+  const connected = apiConnected;
   const liveTools = connected && !active?.is_paper;
+  const isPaper = (kiteStatus?.account_id && active && kiteStatus.account_id === active.id)
+    ? !!kiteStatus.is_paper
+    : !!active?.is_paper;
+  const stOn = !!engineCfg?.engine_enabled;
+  const navOn = !!navCfg?.record?.config?.enabled;
+  const enginesRunning = [
+    stOn ? 'SuperTrend' : null,
+    navOn ? 'Navigator' : null,
+  ].filter(Boolean) as string[];
+  const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
 
   const select = (next: ConnectSection) => {
@@ -639,25 +655,55 @@ export function ConnectPane() {
         <h1 style={{ margin: 0, color: '#1a1a1a', fontSize: 20, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-.02em' }}>
           Settings
         </h1>
-        <div className="kite-settings-status" aria-label="Session status" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          padding: '6px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e2e2e2',
-        }}>
-          <StatusPill tone={connected ? 'good' : active ? 'warn' : 'quiet'}>
-            {connected ? (active?.label ? `${active.label}` : 'Connected') : active ? 'Login required' : 'No account'}
-          </StatusPill>
-          <span style={{ color: '#d0d0d0', fontSize: 12 }} aria-hidden>·</span>
-          <StatusPill tone={engineCfg?.engine_enabled ? 'good' : 'quiet'}>
-            Engine {engineCfg?.engine_enabled ? 'on' : 'off'}
-          </StatusPill>
-          {active && (
-            <>
-              <span style={{ color: '#d0d0d0', fontSize: 12 }} aria-hidden>·</span>
-              <StatusPill tone={active.is_paper ? 'quiet' : 'warn'}>
-                {active.is_paper ? 'Paper' : 'Live'}
-              </StatusPill>
-            </>
-          )}
+        <div
+          className="kite-settings-status"
+          aria-label="Session status"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, auto))',
+            gap: 0,
+            background: '#fff',
+            border: '1px solid #e4e4e4',
+            borderRadius: 10,
+            overflow: 'hidden',
+            maxWidth: '100%',
+          }}
+        >
+          <button type="button" onClick={() => openSettingsSection('account')} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+            textAlign: 'left', padding: '8px 14px', minWidth: 0, borderRight: '1px solid #eee',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>KITE</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#333' }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: connected ? (isPaper ? '#f5a623' : '#2e7d32') : '#c2c2c2',
+              }} />
+              {connected ? (isPaper ? 'Zerodha · Paper' : 'Zerodha · Live') : (active ? 'Login required' : 'No account')}
+            </div>
+          </button>
+          <button type="button" onClick={() => openSettingsSection('mode')} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+            textAlign: 'left', padding: '8px 14px', minWidth: 0, borderRight: '1px solid #eee',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>ENGINES</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: enginesRunning.length ? '#333' : '#999' }}>
+              {enginesRunning.length ? enginesRunning.join(' · ') : 'None running'}
+            </div>
+          </button>
+          <button type="button" onClick={() => openSettingsSection('mode')} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+            textAlign: 'left', padding: '8px 14px', minWidth: 0,
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 650, color: '#919191', letterSpacing: 0.3, marginBottom: 2 }}>ORDERS</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#333' }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: orderMode === 'Algo' ? '#f06428' : '#8a8a8a',
+              }} />
+              {orderMode}
+            </div>
+          </button>
         </div>
       </header>
 

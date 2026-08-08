@@ -55,11 +55,8 @@ function ProtectionMode({ value, onChange }: {
   onChange: (v: 'broker' | 'monitor' | 'both') => void;
 }) {
   return (
-    <Field label={FIELDS.stop_mode.label} hint={FIELDS.stop_mode.help}>
+    <Field label={FIELDS.stop_mode.label} hint={STOP_LIVE_HELP[value]}>
       <ChoiceRow value={value} options={STOP_MODE_OPTIONS} onChange={onChange} />
-      <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>
-        {STOP_LIVE_HELP[value]}
-      </div>
     </Field>
   );
 }

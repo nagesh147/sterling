@@ -61,31 +61,34 @@ export function Section({ title, description, summary, defaultOpen = false, chil
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
-  /** Rendered beside the label — used for the manual/auto applicability chip. */
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="sk-config-field" style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      columnGap: 16,
+      rowGap: 6,
+      alignItems: 'center',
       padding: '12px 0',
       borderBottom: '1px solid #eee',
     }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, userSelect: 'none' }}>
+        <span style={{ color: TEXT, fontSize: 13, fontWeight: 600 }}>{label}</span>
+        {badge}
+      </div>
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+        gridColumn: 2,
+        justifySelf: 'end',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, userSelect: 'none' }}>
-          <span style={{ color: TEXT, fontSize: 13, fontWeight: 600 }}>{label}</span>
-          {badge}
-        </div>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0,
-        }}>
-          {children}
-        </div>
+        {children}
       </div>
       {hint ? (
         <div style={{
-          color: MUTED, fontSize: 12, lineHeight: 1.45, marginTop: 6, maxWidth: 520,
+          gridColumn: '1 / -1',
+          color: MUTED, fontSize: 12, lineHeight: 1.45,
           userSelect: 'text',
         }}>
           {hint}
