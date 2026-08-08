@@ -510,6 +510,40 @@ export function NavigatorSettingsPanel() {
       </Section>
 
       {/* ═══════════════ ADVANCED — fine-tuning ═══════════════ */}
+
+      <Section
+        title="Mode"
+        description="How Navigator uses its reads — observe, advise, or gate entries."
+        summary={
+          draft.operating_mode === 'gate'
+            ? (gateReady ? 'Gate' : 'Gate (locked)')
+            : draft.operating_mode === 'advisory' ? 'Advisory' : 'Shadow'
+        }
+        defaultOpen
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
+          <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+            <ChoiceRow
+              value={draft.operating_mode}
+              onChange={(mode) => {
+                if (mode === 'gate' && !gateReady) return;
+                patch({ ...draft, operating_mode: mode });
+              }}
+              options={[
+                { value: 'shadow', label: 'Shadow' },
+                { value: 'advisory', label: 'Advisory' },
+                { value: 'gate', label: gateReady ? 'Gate' : 'Gate (locked)' },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: gateReady ? GREEN : DIM, fontSize: 10.5 }}>
+            <Icons.Pulse />
+            {gateReady ? 'Calibration ready' : 'Gate unavailable — not yet calibrated'}
+          </div>
+          <div style={{ color: DIM, fontSize: 10.5 }}>Revision {record.revision}</div>
+        </div>
+      </Section>
+
       <AdvancedSection count={8}>
         <StrategyDefinitionGroup badgeText={`${MANUAL_FIELDS.filter((f) => getManualFieldValue(draft, f.path) === f.defaultValue).length}/${MANUAL_FIELDS.length} at manual default`}>
           <div style={{ padding: '4px 18px 18px' }}>
