@@ -9,7 +9,6 @@ import {
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import type { KiteAccount } from '../../types/kite';
-import { ModeToggle } from './ModeToggle';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
@@ -226,7 +225,6 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
   const connected = acc.connected
     && !(status?.account_id === acc.id && status?.connected === false);
-  const isLive = !acc.is_paper;
 
   // Real Zerodha account holder name comes from /status (only for the connected
   // account). Prefer it over the user-chosen label, then fall back to the label.
@@ -242,13 +240,6 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
   ].filter(Boolean);
   const subText = subParts.join(' · ');
 
-  const flipPaperLive = () => {
-    if (isLive) { update.mutate({ id: acc.id, is_paper: true }); return; }
-    if (!acc.has_credentials) return;
-    if (window.confirm(`Switch "${acc.label}" to LIVE? Orders will execute on your real Zerodha account.`)) {
-      update.mutate({ id: acc.id, is_paper: false });
-    }
-  };
 
   return (
     <div style={{
@@ -341,40 +332,22 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
             </div>
           )}
 
-          {/* Order destination + account tools */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <div style={{ ...S.label, marginBottom: 6 }}>ORDER DESTINATION</div>
-              <ModeToggle
-                size="sm" left="PAPER" right="LIVE"
-                value={acc.is_paper ? 'left' : 'right'}
-                onSelect={(side) => { if (side === 'left') update.mutate({ id: acc.id, is_paper: true }); else flipPaperLive(); }}
-                leftColor="#387ed1" rightColor="#4caf50"
-                rightDotWhenActive busy={update.isPending}
-                rightDisabled={!acc.has_credentials}
-                rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
-              />
-              <div style={{ ...S.hint, marginTop: 6 }}>
-                Paper simulates fills. Live sends orders to Zerodha. Prefer Trading Mode for day-to-day switching.
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              {!acc.is_active && (
-                <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set as active</button>
-              )}
-              <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>
-                {test.isPending ? '…' : 'Test'}
-              </button>
-              <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>
-                {editKeys ? 'Cancel' : 'Keys'}
-              </button>
-              <button
-                style={{ ...S.btnRed, marginLeft: 'auto' }}
-                onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}
-              >
-                Remove
-              </button>
-            </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!acc.is_active && (
+              <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set as active</button>
+            )}
+            <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>
+              {test.isPending ? '…' : 'Test'}
+            </button>
+            <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>
+              {editKeys ? 'Cancel' : 'Keys'}
+            </button>
+            <button
+              style={{ ...S.btnRed, marginLeft: 'auto' }}
+              onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}
+            >
+              Remove
+            </button>
           </div>
 
           {test.data && (
