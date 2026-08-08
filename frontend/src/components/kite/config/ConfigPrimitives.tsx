@@ -98,6 +98,7 @@ export function ConfigNote({ children }: { children: React.ReactNode }) {
     <div style={{
       display: 'flex', gap: 8, alignItems: 'flex-start',
       padding: '8px 0', color: MUTED, fontSize: 11.5, lineHeight: 1.45,
+      maxWidth: 440,
     }}>
       <span aria-hidden style={{ color: DIM, fontSize: 11, lineHeight: 1.4 }}>ⓘ</span>
       <span style={{ minWidth: 0 }}>{children}</span>

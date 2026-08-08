@@ -197,7 +197,7 @@ export function Field({ label, hint, badge, children, wide = false }: {
         fontFamily: k.fontFamily,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: 360, userSelect: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: 320, userSelect: 'none' }}>
         <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
         {badge}
       </div>
@@ -227,7 +227,7 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
         border: `1px solid ${k.border}`,
         borderRadius: 2,
         background: k.bg,
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
         fontFamily: k.fontFamily,
       }}
     >
@@ -241,7 +241,7 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
             title={option.hint}
             onClick={() => onChange(option.value)}
             style={{
-              flex: '1 1 auto',
+              flex: '1 1 0',
               border: 'none',
               borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
               minHeight: 28,

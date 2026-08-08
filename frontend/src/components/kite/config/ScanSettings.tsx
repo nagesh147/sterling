@@ -66,7 +66,7 @@ export function InstrumentsGroup({
 
   return (
     <>
-      <Field label="Indices">
+      <Field label="Indices" wide>
         <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
           {INDEX_OPTIONS.map((option) => (
             <CheckOption
@@ -116,7 +116,7 @@ export function InstrumentsGroup({
             </div>
           </Field>
           {!allStocks && (
-            <Field label="Selected stocks" hint={`${stocks.length} selected`}>
+            <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
               <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3 }}>
                 {(stockRegistry ?? []).map((s: string) => (
                   <CheckOption
@@ -186,7 +186,7 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
 
   return (
     <>
-      <Field label="Strike range" hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits.">
+      <Field label="Strike range" hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits." wide>
         <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
           {STRIKE_GROUPS.map((group) => {
             const checked = group.values.every((v) => strikes.includes(v));
@@ -204,7 +204,7 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           })}
         </div>
       </Field>
-      <Field label="Index expiries" hint="Contract cycles scanned for indices.">
+      <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
         <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
           {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
             <CheckOption
