@@ -246,12 +246,12 @@ export function AutomaticRulesPanel() {
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 800 }}>
-              {autoOn ? 'Automatic execution is ON' : 'Automatic execution is OFF'}
+              {autoOn ? 'Algo is ON' : 'Algo is OFF'}
             </div>
             <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 3 }}>
               {autoOn
-                ? 'Ready signals place real orders on the active account, under the live-safety gate. Every rule below is in force.'
-                : 'You place every order yourself. The rules below are saved, but none of them are doing anything yet.'}
+                ? 'Signals can place orders on the active account. Every rule below is in force.'
+                : 'Rules below are saved. Nothing places until you arm Algo in Trading Mode.'}
             </div>
           </div>
           <button
@@ -269,15 +269,11 @@ export function AutomaticRulesPanel() {
       </PanelCard>
 
       <PanelCard>
-        <PanelHeader
-          title="Orders the engine places"
-          description="What the engine is allowed to open, how big, and what closes it."
-          saving={saving}
-        />
+        <PanelHeader saving={saving} />
 
         <Section
           title="Stop-loss"
-          description="Where the stop lives after a fill."
+          description="Where the stop-loss lives after a fill."
           summary={STOP_MODE_OPTIONS.find((o) => o.value === cfg.stop_mode)?.label ?? cfg.stop_mode}
           defaultOpen
         >
@@ -289,7 +285,7 @@ export function AutomaticRulesPanel() {
 
         <Section
           title="Position size"
-          description="How many lots go on."
+          description="How many lots per order."
           summary={cfg.risk_sizing ? `${cfg.risk_pct}% risk · max ${cfg.max_lots} lots` : `Fixed · max ${cfg.max_lots} lots`}
           defaultOpen
         >
@@ -354,7 +350,7 @@ export function AutomaticRulesPanel() {
 
         <Section
           title="Daily loss limit"
-          description="Halt new automatic entries once the day's realised losses reach this share of F&O capital. Never force-closes."
+          description="Stop new entries after a set daily loss. Never force-closes open trades."
           summary={cfg.max_daily_loss_pct != null ? `${cfg.max_daily_loss_pct}%` : 'Off'}
           defaultOpen
         >
@@ -367,7 +363,7 @@ export function AutomaticRulesPanel() {
         <AdvancedSection count={advancedCount}>
           <Section
             title="Entry filters"
-            description="Refuse an automatic entry when these conditions are not met. Blank or zero disables one."
+            description="Skip an entry when these are not met. Blank or zero = off."
             summary={`${entryFilterCount} active`}
           >
             <Field label={FIELDS.adx_min.label} hint={FIELDS.adx_min.help}>
@@ -387,7 +383,7 @@ export function AutomaticRulesPanel() {
                 )}
               />
             </Field>
-            <Field label="Liquidity" hint="Refuse a contract that is expensive or thin to trade.">
+            <Field label="Liquidity" hint="Skip a contract that is expensive or thin to trade.">
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <label style={{ color: MUTED, fontSize: 11 }}>
                   Max spread %{' '}
@@ -426,13 +422,12 @@ export function AutomaticRulesPanel() {
           </Section>
 
           <Section
-            title="Order vehicle"
-            description="Which instrument an automatic order takes when a signal fires."
+            title="What to buy"
+            description="Instrument the algo buys when a signal fires."
             summary={cfg.directional_mode ? cfg.vehicle.replace(/_/g, ' ') : 'Default option leg'}
           >
             <ConfigNote>
-              Only automatic orders. When you place an order yourself you pick the contract in the
-              order window.
+              Only for algo orders. When you trade by hand you pick the contract yourself.
             </ConfigNote>
             <div style={{ marginTop: 12 }}>
               <DirectionalModePanel
@@ -461,7 +456,7 @@ export function AutomaticRulesPanel() {
 
           <Section
             title="Portfolio risk"
-            description="Feed drawdown and correlation into automatic sizing."
+            description="Drawdown and correlation feed into sizing."
             summary={cfg.wire_risk_infra ? 'On' : 'Off'}
           >
             <Field label={FIELDS.wire_risk_infra.label} hint={FIELDS.wire_risk_infra.help}>

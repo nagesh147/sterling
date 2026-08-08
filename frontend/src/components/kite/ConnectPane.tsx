@@ -555,9 +555,9 @@ type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: s
 
 const SECTION_DEFS: SectionDef[] = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
-  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/automatic', group: 'Trading' },
+  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading' },
-  { id: 'autoRules', label: 'Automatic Rules', eyebrow: 'Orders the engine places', group: 'Trading' },
+  { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading' },
   { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines' },
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform' },
@@ -698,7 +698,7 @@ export function ConnectPane() {
 
           {section === 'autoRules' && (
             <>
-              <SectionHeading title="Automatic Rules" description="What the engine is allowed to open on your behalf, how big, and what closes it. Inert until automatic execution is armed in Trading Mode." />
+              <SectionHeading title="Algo Trade" description="What happens when the algo places an order." />
               <AutomaticRulesPanel />
             </>
           )}

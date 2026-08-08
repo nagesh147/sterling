@@ -91,8 +91,8 @@ describe('ConnectPane settings hub', () => {
     expect(screen.getByText('Manual rules panel')).toBeInTheDocument();
     expect(screen.queryByText('Automatic rules panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Automatic Rules Orders the engine places/i }));
-    expect(screen.getByRole('heading', { name: 'Automatic Rules' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Algo Trade Orders the algo places/i }));
+    expect(screen.getByRole('heading', { name: 'Algo Trade' })).toBeInTheDocument();
     expect(screen.getByText('Automatic rules panel')).toBeInTheDocument();
     expect(screen.queryByText('Manual rules panel')).not.toBeInTheDocument();
   });
@@ -123,7 +123,7 @@ describe('ConnectPane settings hub', () => {
   it('sends the retired order-selection deep link to Automatic Rules, which absorbed it', () => {
     localStorage.setItem('kite_connect_section', 'orderSelection');
     render(<ConnectPane />);
-    expect(screen.getByRole('heading', { name: 'Automatic Rules' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Algo Trade' })).toBeInTheDocument();
   });
 
   it('follows the one-page Trade Rules deep link to the manual half', () => {
