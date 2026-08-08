@@ -319,31 +319,6 @@ export function NavigatorSettingsPanel() {
         runningNote="Reading structure for its instruments. It can confirm SuperTrend setups and find its own."
         offNote="Not scanning. SuperTrend can still run on its own."
       >
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14,
-          padding: '12px 18px 16px', borderTop: `1px solid ${BORDER}`,
-        }}>
-          <div style={{ minWidth: 0, flex: '1 1 200px' }}>
-            <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 5 }}>Mode</div>
-            <ChoiceRow
-              value={draft.operating_mode}
-              onChange={(mode) => {
-                if (mode === 'gate' && !gateReady) return;
-                patch({ ...draft, operating_mode: mode });
-              }}
-              options={[
-                { value: 'shadow', label: 'Shadow' },
-                { value: 'advisory', label: 'Advisory' },
-                { value: 'gate', label: gateReady ? 'Gate' : 'Gate (locked)' },
-              ]}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: gateReady ? GREEN : DIM, fontSize: 10.5 }}>
-            <Icons.Pulse />
-            {gateReady ? 'Calibration ready' : 'Gate unavailable — not yet calibrated'}
-          </div>
-          <div style={{ color: DIM, fontSize: 10.5 }}>Revision {record.revision}</div>
-        </div>
         {conflict && (
           <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: `1px solid #e2b6a4`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
             <Icons.Warning />
