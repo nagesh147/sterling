@@ -1648,6 +1648,79 @@ class TestTheRowMustDescribeThisPosition:
                            legs=[("ATM", "RELIANCE25JUN3000PE", 3000.0, None)])]
         assert service._live_red_count(p, rows) is None
 
+
+class TestTheCounterOutlivesTheSignal:
+    """A row exists only where there was an entry TRANSITION.
+
+    So a position routinely outlives the row that opened it, and the counter used to
+    stop being refreshed at exactly that moment — the count froze at its last value
+    and the red-count exit quietly stopped working for the rest of the trade. The scan
+    computes the regime for every instrument it evaluates regardless of whether a row
+    comes out; the snapshot now keeps that reading.
+    """
+
+    class _Snap:
+        def __init__(self, underlying_reds=None, contract_reds=None):
+            self.underlying_reds = underlying_reds or {}
+            self.contract_reds = contract_reds or {}
+
+    @staticmethod
+    def _pos(symbol, *, signal_direction, underlying="RELIANCE"):
+        return pos.OpenPosition(uid="m", symbol=symbol, exchange="NFO", qty=250,
+                                direction="long", signal_direction=signal_direction,
+                                underlying=underlying, status=pos.OPEN)
+
+    def test_a_spot_position_reads_the_scan_when_its_signal_has_ended(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 2, "short": 1}})
+        assert service._live_red_count(p, [], snap) == 2
+
+    def test_the_scan_fallback_still_respects_the_signal_direction(self):
+        """The trap this counter has fallen into three times. A bear position's reds
+        are the SHORT count; reading the long count would market-sell a position whose
+        own trend is perfectly intact."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 3, "short": 0}})
+        assert service._live_red_count(p, [], snap) == 0
+
+    def test_a_held_contract_reads_its_own_premium_series(self):
+        """Keyed by the exact symbol held, so it cannot pick up another strike's count
+        the way an underlying match would."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN2900CE", signal_direction="long")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 0, "short": 0}},
+                          contract_reds={"RELIANCE25JUN2900CE": 3})
+        assert service._live_red_count(p, [], snap) == 3
+
+    def test_a_matching_row_still_wins_over_the_scan_reading(self):
+        """A row is scoped to the exact signal, not just the instrument, so it stays
+        the more specific answer."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 0, "short": 3}})
+        assert service._live_red_count(p, [_spot_row(direction="short", current_reds=1)],
+                                       snap) == 1
+
+    def test_an_instrument_the_scan_never_looked_at_is_still_unknown(self):
+        """The genuinely unknowable case must stay None — a 0 here would report
+        "nothing against us" and disarm the exit."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, [], self._Snap(underlying_reds={"INFY": {"long": 2}})) is None
+
+    def test_a_missing_direction_in_the_reading_is_unknown_not_zero(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        assert service._live_red_count(p, [], self._Snap(
+            underlying_reds={"RELIANCE": {"long": 2}})) is None
+
+    def test_no_snapshot_at_all_behaves_as_before(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, []) is None
+
     def test_no_row_at_all_is_unknown(self):
         from app.services.kite_engine import service
         p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")

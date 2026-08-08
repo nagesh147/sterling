@@ -307,6 +307,30 @@ export function AutomaticRulesPanel() {
               </label>
             </div>
           </Field>
+          <Field
+            label={FIELDS.max_contract_staleness_bars.label}
+            hint={FIELDS.max_contract_staleness_bars.help}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                data-testid="staleness-input" aria-label="Contract staleness allowance"
+                type="number" min={0} max={12} step={1}
+                value={cfg.max_contract_staleness_bars ?? 0} style={inputStyle}
+                onChange={(e) => patch(
+                  { max_contract_staleness_bars: Math.max(0, Math.floor(Number(e.target.value) || 0)) },
+                  'max_contract_staleness_bars',
+                )}
+              />
+              <span style={{ color: DIM, fontSize: 11 }}>hours behind the underlying</span>
+            </div>
+            {(cfg.max_contract_staleness_bars ?? 0) > 0 && (
+              <ConfigNote>
+                A contract that last traded up to <b>{cfg.max_contract_staleness_bars}h</b> ago can
+                still be bought automatically. Its signal is real, but the premium on the row is
+                that old too, so a market order may fill well away from it.
+              </ConfigNote>
+            )}
+          </Field>
         </Section>
 
         <Section
@@ -355,6 +379,34 @@ export function AutomaticRulesPanel() {
                 />
                 <span style={{ color: DIM, fontSize: 11 }}>% per trade</span>
               </div>
+            </Field>
+          )}
+          {cfg.risk_sizing && (
+            <Field
+              label={FIELDS.allow_min_lot_over_risk.label}
+              hint={FIELDS.allow_min_lot_over_risk.help}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <Switch
+                  checked={cfg.allow_min_lot_over_risk ?? false}
+                  label="Allow minimum lot over risk"
+                  onChange={() => patch(
+                    { allow_min_lot_over_risk: !(cfg.allow_min_lot_over_risk ?? false) },
+                    'allow_min_lot_over_risk',
+                    `Minimum lot over risk ${!(cfg.allow_min_lot_over_risk ?? false) ? 'allowed' : 'refused'}`)}
+                />
+                <span style={{ color: TEXT, fontSize: 11.5 }}>
+                  {(cfg.allow_min_lot_over_risk ?? false)
+                    ? 'Takes one lot even when that exceeds the cap'
+                    : 'Skips the entry when one lot exceeds the cap'}
+                </span>
+              </div>
+              {(cfg.allow_min_lot_over_risk ?? false) && (
+                <ConfigNote>
+                  Positions opened this way risk more than <b>{cfg.risk_pct}%</b>. On a small
+                  account one index-option lot can be several times that.
+                </ConfigNote>
+              )}
             </Field>
           )}
           <Field label={FIELDS.max_lots.label} hint={FIELDS.max_lots.help}>

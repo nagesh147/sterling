@@ -104,6 +104,18 @@ class OpenPosition:
     #: from, so the difference is a lot with no stop on it. Empty on legacy rows,
     #: which keep the old single-order behaviour.
     qty_by_order: Dict[str, int] = field(default_factory=dict)
+    #: Whether this position's realized PnL has already been added to the day's total.
+    #:
+    #: Two independent paths close a position and book it: the monitor's own
+    #: ``_exit_position`` and the ``on_order_update`` reconciliation of a fill that
+    #: arrived from the broker. Each guards on ``status``, which is not enough — the
+    #: monitor sets CLOSED only AFTER its order returns, so a fill postback landing
+    #: inside that await sees a live position and books it, and the monitor then books
+    #: it again. Ordering the two is fragile (either can legitimately be first), so the
+    #: booking itself is made exactly-once instead. Persisted, so a restart mid-exit
+    #: cannot re-book. Legacy rows load as False, which is correct: booking only ever
+    #: happens at exit, and a position that already closed is never exited again.
+    realized_booked: bool = False
     # derived threshold from exit_mode for convenience in responses/UI
 
 
@@ -287,6 +299,23 @@ def update_health(uid: str, symbol: str, red_count: int, exit_mode: Optional[str
         p.exit_mode = exit_mode
     _persist(uid)
     return p
+
+
+def claim_realized(uid: str, symbol: str) -> bool:
+    """Claim the right to book this position's realized PnL. True for the first
+    caller only.
+
+    Check-and-set is atomic here because the event loop is single-threaded and there
+    is no await between the read and the write — the same reason ``monitor._exiting``
+    can be a plain set. An unknown symbol returns False: there is no position to
+    attribute a booking to.
+    """
+    p = _load(uid).get(symbol)
+    if p is None or getattr(p, "realized_booked", False):
+        return False
+    p.realized_booked = True
+    _persist(uid)
+    return True
 
 
 def close(uid: str, symbol: str, reason: str = "") -> Optional[OpenPosition]:

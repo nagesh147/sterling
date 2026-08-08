@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
 
 
@@ -122,3 +124,50 @@ def test_implied_vol_rejects_below_intrinsic():
 def test_implied_vol_converges_at_high_vol():
     p = bs_price(spot=20000, strike=20000, dte_days=7, iv=1.8, option_type="CE")
     assert abs(implied_vol(price=p, spot=20000, strike=20000, dte_days=7, option_type="CE") - 1.8) < 1e-3
+
+
+# ── the vol used to translate an underlying move into a premium stop ──────────
+class TestEffectiveIV:
+    """The GTT trigger and the stop on the board have to be the same number.
+
+    The board backs IV out of the option's premium; the stop translation used a flat
+    18%. On a chain printing 40% vol the two disagree about where the trade is
+    protected, and the broker's trigger is the one that actually fires.
+    """
+
+    def test_solves_the_vol_out_of_the_option_price(self):
+        from app.services.kite_engine.greeks import bs_price
+        from app.services.kite_engine.service import _effective_iv
+
+        price = bs_price(spot=25_000, strike=25_200, dte_days=7, iv=0.42, option_type="CE")
+        got = _effective_iv(price=price, spot=25_000, strike=25_200,
+                            dte_days=7, option_type="CE")
+        assert got == pytest.approx(0.42, abs=0.01)
+
+    def test_falls_back_when_there_is_no_quote(self):
+        from app.services.kite_engine.service import _IV_ASSUMPTION, _effective_iv
+
+        assert _effective_iv(price=0.0, spot=25_000, strike=25_200,
+                             dte_days=7, option_type="CE") == _IV_ASSUMPTION
+
+    def test_falls_back_on_a_degenerate_solve(self):
+        """A premium below intrinsic is not a tradable price; implied_vol returns 0."""
+        from app.services.kite_engine.service import _IV_ASSUMPTION, _effective_iv
+
+        got = _effective_iv(price=1.0, spot=25_000, strike=20_000,
+                            dte_days=7, option_type="CE")
+        assert got == _IV_ASSUMPTION
+
+    def test_falls_back_on_an_absurd_solve(self):
+        """A price near the spot itself solves to a pinned, meaningless vol."""
+        from app.services.kite_engine.service import _IV_ASSUMPTION, _effective_iv
+
+        got = _effective_iv(price=24_000.0, spot=25_000, strike=25_200,
+                            dte_days=7, option_type="CE")
+        assert got == _IV_ASSUMPTION
+
+    def test_an_expired_contract_falls_back(self):
+        from app.services.kite_engine.service import _IV_ASSUMPTION, _effective_iv
+
+        assert _effective_iv(price=50.0, spot=25_000, strike=25_200,
+                             dte_days=0, option_type="CE") == _IV_ASSUMPTION

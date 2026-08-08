@@ -209,6 +209,20 @@ export const FIELDS = F({
     owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb only — the automatic placement path.',
   },
+  max_contract_staleness_bars: {
+    key: 'max_contract_staleness_bars',
+    label: 'Contract staleness allowance',
+    help: 'How many hours a contract’s own last 1H bar may lag the underlying’s and still be auto-executed. 0 means it must be current. The row is shown either way; only the automatic order is held.',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
+    evidence: 'scanner.contract_bar_is_current gates the place_cb call in the derivatives pass. Display and the board are untouched.',
+  },
+  allow_min_lot_over_risk: {
+    key: 'allow_min_lot_over_risk',
+    label: 'Allow minimum lot over risk',
+    help: 'When even one lot would exceed the risk cap, take it anyway instead of skipping the entry. Off keeps the cap binding.',
+    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
+    evidence: 'sizing.size_position / size_future_position return blocked=True and service._make_place_cb returns without ordering. Automatic placement path only.',
+  },
   max_lots: {
     key: 'max_lots',
     label: 'Maximum lots',
