@@ -1,33 +1,34 @@
 import React from 'react';
+import { k } from '../../styles/kiteUI';
 
 /**
- * Kite settings — quiet disclosure with warmth.
- * Collapse stays; chrome stays light; colour and motion add life.
+ * Settings primitives — aligned with Kite UI tokens (k).
+ * Same typography/colours as dashboard, signals, watchlist.
+ * No decorative cards, warm fills, or large radii.
  */
 
-export const ORANGE = '#f06428';
-export const BORDER = '#ebe6e2';
-export const TEXT = '#1c1917';
-export const MUTED = '#78716c';
-export const DIM = '#a8a29e';
-export const SOFT = '#faf8f6';
-export const ORANGE_SOFT = '#fff5ef';
+export const ORANGE = k.orange;
+export const BORDER = k.border;
+export const TEXT = k.text;
+export const MUTED = k.dim;
+export const DIM = k.dim;
+export const SOFT = k.surface;
+export const ORANGE_SOFT = 'color-mix(in srgb, #ff5722 8%, transparent)';
 
 export const inputStyle: React.CSSProperties = {
-  width: 112,
-  height: 34,
-  padding: '0 10px',
-  border: '1px solid #e0dbd6',
-  borderRadius: 8,
-  background: '#fffefb',
-  color: TEXT,
-  fontFamily: 'inherit',
-  fontSize: 13,
+  width: 96,
+  height: 32,
+  padding: '0 8px',
+  border: `1px solid ${k.border}`,
+  borderRadius: 2,
+  background: k.bg,
+  color: k.text,
+  fontFamily: k.fontFamily,
+  fontSize: 12,
   boxSizing: 'border-box',
-  transition: 'border-color .15s ease, box-shadow .15s ease',
 };
 
-/** Collapsible group with soft open state — not a skeleton list. */
+/** Collapsible group — list row, not a card. */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
   description: string;
@@ -36,51 +37,36 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const [hovered, setHovered] = React.useState(false);
 
   return (
     <details
       className="sk-settings-group"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{
-        marginBottom: 8,
-        borderRadius: 12,
-        background: isOpen ? '#fffefb' : hovered ? '#fafaf9' : 'transparent',
-        border: `1px solid ${isOpen ? '#ebe6e2' : 'transparent'}`,
-        transition: 'background .18s ease, border-color .18s ease',
-      }}
+      style={{ borderBottom: `1px solid ${k.border}` }}
     >
       <summary
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         style={{
           listStyle: 'none',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          padding: '14px 14px',
+          gap: 8,
+          padding: '10px 0',
           userSelect: 'none',
-          borderRadius: 12,
+          fontFamily: k.fontFamily,
         }}
       >
         <span
           aria-hidden
           style={{
             flexShrink: 0,
-            width: 26,
-            height: 26,
-            borderRadius: 8,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isOpen ? ORANGE_SOFT : SOFT,
-            color: isOpen ? ORANGE : DIM,
-            fontSize: 14,
-            fontWeight: 700,
+            width: 12,
+            color: k.dim,
+            fontSize: 12,
+            lineHeight: 1,
             transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .18s ease, background .18s ease, color .18s ease',
+            transition: 'transform .12s ease',
           }}
         >
           ›
@@ -89,10 +75,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
           <span
             style={{
               display: 'block',
-              color: TEXT,
-              fontSize: 14.5,
-              fontWeight: 650,
-              letterSpacing: '-0.02em',
+              color: k.text,
+              fontSize: 13,
+              fontWeight: 600,
               lineHeight: 1.3,
             }}
           >
@@ -102,10 +87,10 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             <span
               style={{
                 display: 'block',
-                color: MUTED,
-                fontSize: 12.5,
-                lineHeight: 1.45,
-                marginTop: 3,
+                color: k.dim,
+                fontSize: 11,
+                lineHeight: 1.4,
+                marginTop: 2,
               }}
             >
               {description}
@@ -118,17 +103,14 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 168,
-              padding: '3px 0',
-              color: isOpen ? MUTED : DIM,
-              fontSize: 12,
+              maxWidth: 160,
+              color: k.dim,
+              fontSize: 11,
               fontWeight: 500,
               textAlign: 'right',
-              lineHeight: 1.35,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              transition: 'color .15s ease',
             }}
           >
             {summary}
@@ -137,10 +119,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       </summary>
       <div
         className="sk-config-section-body"
-        style={{
-          padding: '2px 14px 16px 52px',
-          borderTop: isOpen ? '1px solid #f0ebe6' : 'none',
-        }}
+        style={{ padding: '0 0 8px 20px' }}
       >
         {children}
       </div>
@@ -148,48 +127,41 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-/** Setting row with soft hover life. */
+/** Setting row — tight, aligned to signal-table density. */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const [hovered, setHovered] = React.useState(false);
-
   return (
     <div
       className="sk-config-field"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(112px, max-content)',
-        columnGap: 24,
-        rowGap: 4,
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(96px, max-content)',
+        columnGap: 16,
+        rowGap: 2,
         alignItems: 'center',
-        padding: '12px 10px',
-        margin: '0 -10px',
-        borderRadius: 8,
-        background: hovered ? 'rgba(250, 248, 246, 0.9)' : 'transparent',
-        transition: 'background .14s ease',
+        padding: '8px 0',
+        borderBottom: `1px solid ${k.border}`,
+        fontFamily: k.fontFamily,
       }}
     >
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 6,
           minWidth: 0,
           userSelect: 'none',
         }}
       >
         <span
           style={{
-            color: TEXT,
-            fontSize: 13.5,
-            fontWeight: 550,
-            letterSpacing: '-0.01em',
+            color: k.text,
+            fontSize: 12,
+            fontWeight: 600,
           }}
         >
           {label}
@@ -210,10 +182,9 @@ export function Field({ label, hint, badge, children }: {
         <div
           style={{
             gridColumn: '1 / -1',
-            color: MUTED,
-            fontSize: 12.5,
-            lineHeight: 1.45,
-            minHeight: '1.35em',
+            color: k.dim,
+            fontSize: 11,
+            lineHeight: 1.4,
             userSelect: 'text',
           }}
         >
@@ -235,14 +206,15 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
       style={{
         display: 'inline-flex',
         maxWidth: '100%',
-        gap: 3,
-        padding: 4,
-        borderRadius: 10,
-        background: SOFT,
+        gap: 0,
+        border: `1px solid ${k.border}`,
+        borderRadius: 2,
+        background: k.bg,
         flexWrap: 'wrap',
+        fontFamily: k.fontFamily,
       }}
     >
-      {options.map((option) => {
+      {options.map((option, i) => {
         const selected = option.value === value;
         return (
           <button
@@ -253,20 +225,18 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
             onClick={() => onChange(option.value)}
             style={{
               border: 'none',
-              minHeight: 32,
-              borderRadius: 8,
-              background: selected ? '#fff' : 'transparent',
-              color: selected ? TEXT : MUTED,
-              padding: '0 13px',
-              fontSize: 12.5,
-              fontWeight: 550,
-              boxShadow: selected
-                ? `0 1px 3px rgba(28, 25, 23, 0.08), inset 0 -2px 0 ${ORANGE}`
-                : 'none',
-              fontFamily: 'inherit',
+              borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
+              minHeight: 28,
+              borderRadius: 0,
+              background: selected ? k.surface : k.bg,
+              color: selected ? k.text : k.dim,
+              padding: '0 10px',
+              fontSize: 11,
+              fontWeight: selected ? 600 : 500,
+              boxShadow: selected ? `inset 0 -2px 0 ${k.orange}` : 'none',
+              fontFamily: k.fontFamily,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
-              transition: 'background .14s ease, box-shadow .14s ease, color .14s ease',
             }}
           >
             {option.label}
@@ -292,31 +262,30 @@ export function Switch({ checked, label, onChange, disabled = false }: {
       onClick={onChange}
       disabled={disabled}
       style={{
-        width: 42,
-        height: 24,
-        borderRadius: 12,
+        width: 36,
+        height: 20,
+        borderRadius: 10,
         border: 'none',
         padding: 0,
         flexShrink: 0,
         position: 'relative',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        background: checked ? ORANGE : '#d6d3d1',
-        transition: 'background .2s ease',
-        boxShadow: checked ? '0 1px 4px rgba(240, 100, 40, 0.35)' : 'none',
+        background: checked ? k.orange : '#ccc',
+        transition: 'background .15s ease',
       }}
     >
       <span
         style={{
           position: 'absolute',
-          width: 18,
-          height: 18,
-          borderRadius: 9,
-          top: 3,
-          left: checked ? 21 : 3,
-          background: '#fff',
-          boxShadow: '0 1px 3px rgba(0,0,0,.16)',
-          transition: 'left .2s ease',
+          width: 16,
+          height: 16,
+          borderRadius: 8,
+          top: 2,
+          left: checked ? 18 : 2,
+          background: k.bg,
+          boxShadow: '0 1px 2px rgba(0,0,0,.15)',
+          transition: 'left .15s ease',
         }}
       />
     </button>
@@ -341,20 +310,20 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
     <label
       title={hint}
       style={{
-        minHeight: compact ? 32 : 40,
+        minHeight: compact ? 28 : 34,
         display: 'grid',
-        gridTemplateColumns: '16px minmax(0, 1fr)',
+        gridTemplateColumns: '14px minmax(0, 1fr)',
         alignItems: 'center',
-        gap: 9,
-        border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#f0d2c4' : BORDER}`,
-        background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fffefb',
-        color: TEXT,
-        borderRadius: 8,
-        padding: compact ? '4px 7px' : '8px 10px',
+        gap: 8,
+        border: compact ? 'none' : `1px solid ${k.border}`,
+        background: k.bg,
+        color: k.text,
+        borderRadius: 2,
+        padding: compact ? '2px 4px' : '6px 8px',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.7 : 1,
         boxSizing: 'border-box',
-        transition: 'background .14s ease, border-color .14s ease',
+        fontFamily: k.fontFamily,
       }}
     >
       <input
@@ -363,13 +332,13 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         checked={checked}
         disabled={disabled}
         onChange={() => onChange?.()}
-        style={{ width: 15, height: 15, margin: 0, accentColor: ORANGE }}
+        style={{ width: 13, height: 13, margin: 0, accentColor: k.orange }}
       />
       <span style={{ minWidth: 0 }}>
         <span
           style={{
             display: 'block',
-            fontSize: compact ? 11 : 12.5,
+            fontSize: compact ? 10 : 12,
             fontWeight: checked || indeterminate ? 600 : 500,
             lineHeight: 1.25,
           }}
@@ -380,9 +349,9 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
           <span
             style={{
               display: 'block',
-              marginTop: 2,
-              color: DIM,
-              fontSize: 11,
+              marginTop: 1,
+              color: k.dim,
+              fontSize: 10,
               lineHeight: 1.3,
             }}
           >
