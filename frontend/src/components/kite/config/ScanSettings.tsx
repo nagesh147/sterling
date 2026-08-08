@@ -124,61 +124,40 @@ export function InstrumentsGroup({
   );
 }
 
-/** Chart source — one horizontal row of four tiles (label + short description). */
-export function SignalSourceGroup({ value, onChange, name, options = SCAN_SOURCE_OPTIONS }: {
+/** Which chart this engine reads a signal from (main-branch descriptions + tile style). */
+export function SignalSourceGroup({ value, onChange, name }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
+  /** Radio-group name — must differ per engine so the two do not share state. */
   name: string;
-  options?: Array<{ value: ScanSource; label: string; hint: string }>;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-label={name || 'Chart source'}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-        gap: 8,
-        width: '100%',
-      }}
-    >
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            title={option.hint}
-            onClick={() => onChange(option.value)}
-            style={{
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              padding: '10px 12px',
-              borderRadius: 9,
-              border: selected ? `1.5px solid ${ORANGE}` : `1px solid ${BORDER}`,
+    <Field label="Read from" hint="The chart this engine takes its entry signal off." wide>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8, width: '100%' }}>
+        {SCAN_SOURCE_OPTIONS.map((option) => {
+          const selected = value === option.value;
+          return (
+            <label key={option.value} style={{
+              minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)',
+              alignItems: 'start', gap: 9, textAlign: 'left', padding: '10px 11px', borderRadius: 7,
+              cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box',
+              border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
               background: selected ? ORANGE_SOFT : '#fff',
-              boxShadow: selected ? '0 1px 3px rgba(240,100,40,.12)' : '0 1px 2px rgba(0,0,0,.025)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 5,
-              minHeight: 0,
-              minWidth: 0,
-              transition: 'border-color .12s ease, background .12s ease',
-            }}
-          >
-            <span style={{ color: TEXT, fontSize: 12, fontWeight: 700, letterSpacing: '-0.01em' }}>
-              {option.label}
-            </span>
-            <span style={{ color: selected ? TEXT : DIM, fontSize: 10.5, lineHeight: 1.4, fontWeight: 500 }}>
-              {option.hint}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+            }}>
+              <input
+                type="radio" name={name} checked={selected}
+                onChange={() => onChange(option.value)}
+                style={{ width: 15, height: 15, margin: '1px 0 0', accentColor: ORANGE }}
+              />
+              <span>
+                <span style={{ display: 'block', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>{option.label}</span>
+                <span style={{ display: 'block', color: DIM, fontSize: 9.5, lineHeight: 1.35, marginTop: 3 }}>{option.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </Field>
   );
 }
 
