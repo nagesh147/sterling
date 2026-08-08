@@ -61,7 +61,7 @@ export function ScopeFilter({ value, onChange }: { value: Scope; onChange: (next
   return (
     <div role="group" aria-label="Show rules for" style={{
       display: 'inline-flex', maxWidth: '100%', flexWrap: 'wrap', gap: 2,
-      border: `1px solid ${BORDER}`, borderRadius: 8, padding: 3, background: SOFT,
+      border: '1px solid #ebebeb', borderRadius: 8, padding: 3, background: SOFT,
     }}>
       {SCOPE_OPTIONS.map((option) => {
         const selected = option.value === value;
@@ -100,7 +100,7 @@ export function SettingPointer({ value, section, sectionLabel }: {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
       <span style={{
-        padding: '6px 11px', borderRadius: 7, background: SOFT, border: `1px solid ${BORDER}`,
+        padding: '6px 11px', borderRadius: 7, background: SOFT, border: '1px solid #ebebeb',
         color: TEXT, fontSize: 12, fontWeight: 600,
       }}>
         {value}
@@ -125,7 +125,7 @@ export function ConfigNote({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8, margin: '10px 0 2px',
-      padding: '9px 11px', borderRadius: 7, background: SOFT, border: `1px solid ${BORDER}`,
+      padding: '9px 11px', borderRadius: 7, background: SOFT, border: '1px solid #ebebeb',
       color: MUTED, fontSize: 10.5, lineHeight: 1.55,
     }}>
       <span aria-hidden style={{ color: DIM, fontSize: 11, lineHeight: 1.4 }}>ⓘ</span>
@@ -181,7 +181,7 @@ export function PanelHeader({ title, description, saving }: {
 export function PanelCard({ children }: { children: React.ReactNode }) {
   return (
     <section style={{
-      background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10,
+      background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
       overflow: 'hidden', marginBottom: 12, boxShadow: 'none',
     }}>
       {children}

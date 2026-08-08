@@ -645,14 +645,16 @@ export function ConnectPane() {
 
   return (
     <div className="kite-settings-hub" style={{
-      width: '100%', boxSizing: 'border-box', padding: '16px 20px 28px',
-      background: '#eef0f2', minHeight: '100%', display: 'flex', flexDirection: 'column',
+      width: '100%', height: '100%', minHeight: '100%', boxSizing: 'border-box',
+      padding: 0, background: '#ffffff', display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
     }}>
       <header style={{
-        maxWidth: 1180, margin: '0 auto 12px', width: '100%',
+        flexShrink: 0, width: '100%', boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        padding: '12px 20px', borderBottom: '1px solid #ebebeb', background: '#fff',
       }}>
-        <h1 style={{ margin: 0, color: '#1a1a1a', fontSize: 20, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-.02em' }}>
+        <h1 style={{ margin: 0, color: '#111', fontSize: 18, lineHeight: 1.2, fontWeight: 700, letterSpacing: '-.02em' }}>
           Settings
         </h1>
         <div
@@ -708,14 +710,12 @@ export function ConnectPane() {
       </header>
 
       <div className="kite-settings-layout" style={{
-        maxWidth: 1180, margin: '0 auto', width: '100%', flex: 1,
-        display: 'grid', gridTemplateColumns: '228px minmax(0, 1fr)', gap: 16, alignItems: 'stretch',
+        flex: 1, minHeight: 0, width: '100%',
+        display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
       }}>
         <nav aria-label="Kite settings sections" style={{
-          background: '#fff', border: '1px solid #e2e2e2', borderRadius: 10, padding: '8px 6px 12px',
-          position: 'sticky', top: 10, alignSelf: 'start',
-          minHeight: 'calc(100vh - 72px)', maxHeight: 'calc(100vh - 20px)',
-          overflowY: 'auto',
+          background: '#fafafa', borderRight: '1px solid #ebebeb', padding: '10px 8px 16px',
+          overflowY: 'auto', minHeight: 0,
         }}>
           {SECTION_DEFS.map((item, index) => {
             const selected = item.id === section;
@@ -754,7 +754,10 @@ export function ConnectPane() {
           })}
         </nav>
 
-        <main style={{ minWidth: 0 }}>
+        <main style={{
+          minWidth: 0, minHeight: 0, overflowY: 'auto',
+          padding: '18px 24px 32px', background: '#fff',
+        }}>
           {section === 'account' && (
             <>
               <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Whether those orders are simulated or real is set under Trading Mode." />
