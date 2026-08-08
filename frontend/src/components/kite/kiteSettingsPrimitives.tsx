@@ -115,28 +115,29 @@ export function Section({
           className="sk-config-meta"
           style={{
             width: META_W,
-            display: 'grid',
-            gridTemplateRows: '24px 18px',
-            alignItems: 'center',
-            justifyItems: 'start',
-            gap: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            gap: headerAction ? 6 : 0,
             textAlign: 'left',
             boxSizing: 'border-box',
           }}
         >
-          <span
-            onClick={headerAction ? ((e) => { e.preventDefault(); e.stopPropagation(); }) : undefined}
-            onKeyDown={headerAction ? ((e) => e.stopPropagation()) : undefined}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              height: 24,
-              maxWidth: '100%',
-            }}
-          >
-            {headerAction ?? null}
-          </span>
+          {headerAction ? (
+            <span
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onKeyDown={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                maxWidth: '100%',
+              }}
+            >
+              {headerAction}
+            </span>
+          ) : null}
           <span
             className="sk-config-summary"
             title={summary || undefined}
@@ -145,8 +146,8 @@ export function Section({
               color: k.dim,
               fontSize: 10.5,
               fontWeight: 500,
-              lineHeight: '18px',
-              height: 18,
+              lineHeight: 1.35,
+              paddingTop: headerAction ? 1 : 0,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
