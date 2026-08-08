@@ -11,7 +11,7 @@ export const BORDER = '#e0e0e0';
 export const TEXT = '#444';
 export const MUTED = '#777';
 export const DIM = '#9b9b9b';
-export const SOFT = '#f6f6f7';
+export const SOFT = '#f3f4f6';
 export const ORANGE_SOFT = '#fff5f0';
 
 export const inputStyle: React.CSSProperties = {
@@ -53,7 +53,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
         </span>
         <span className="sk-config-summary" style={{ color: DIM, fontSize: 11, textAlign: 'right', maxWidth: 230 }}>{summary}</span>
       </summary>
-      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 47px' }}>{children}</div>
+      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 20px' }}>{children}</div>
     </details>
   );
 }
@@ -65,18 +65,19 @@ export function Field({ label, hint, badge, children }: {
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  // The label column is wide enough for "MANUAL + AUTO" to sit on the title's
-  // line rather than wrapping underneath it.
   return (
-    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '196px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
-      <div>
+    <div className="sk-config-field" style={{
+      display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) auto', gap: '6px 20px',
+      padding: '12px 0', alignItems: 'center', borderBottom: '1px solid #f0f0f0',
+    }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>
+          <span style={{ color: TEXT, fontSize: 13, fontWeight: 600 }}>{label}</span>
           {badge}
         </div>
-        {hint && <div style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45, marginTop: 4 }}>{hint}</div>}
+        {hint && <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.4, marginTop: 3, maxWidth: 400 }}>{hint}</div>}
       </div>
-      <div style={{ minWidth: 0 }}>{children}</div>
+      <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>{children}</div>
     </div>
   );
 }
