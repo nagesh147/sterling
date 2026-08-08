@@ -1,10 +1,9 @@
 import React from 'react';
-import { k } from '../../styles/kiteUI';
+import { k, tint } from '../../styles/kiteUI';
 
 /**
- * Settings primitives — aligned with Kite UI tokens (k).
- * Same typography/colours as dashboard, signals, watchlist.
- * No decorative cards, warm fills, or large radii.
+ * Settings primitives — accordion cards + Kite system typography.
+ * Tokens from kiteUI (same as dashboard / signals / SuperTrend tables).
  */
 
 export const ORANGE = k.orange;
@@ -13,7 +12,7 @@ export const TEXT = k.text;
 export const MUTED = k.dim;
 export const DIM = k.dim;
 export const SOFT = k.surface;
-export const ORANGE_SOFT = 'color-mix(in srgb, #ff5722 8%, transparent)';
+export const ORANGE_SOFT = tint(k.orange, 10);
 
 export const inputStyle: React.CSSProperties = {
   width: 96,
@@ -28,7 +27,10 @@ export const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-/** Collapsible group — list row, not a card. */
+/**
+ * Accordion card section — boxed, chevron tile, orange accent when open.
+ * Typography matches dashboard / engine tables (k.text, 12–13px, Inter).
+ */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
   description: string;
@@ -43,7 +45,14 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       className="sk-settings-group"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{ borderBottom: `1px solid ${k.border}` }}
+      style={{
+        marginBottom: 10,
+        border: `1px solid ${k.border}`,
+        borderRadius: 9,
+        background: k.bg,
+        overflow: 'hidden',
+        fontFamily: k.fontFamily,
+      }}
     >
       <summary
         style={{
@@ -51,22 +60,30 @@ export function Section({ title, description, summary, defaultOpen = false, chil
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '10px 0',
+          gap: 10,
+          padding: '12px 14px',
           userSelect: 'none',
-          fontFamily: k.fontFamily,
+          background: isOpen ? k.surface : k.bg,
+          borderLeft: isOpen ? `3px solid ${k.orange}` : '3px solid transparent',
+          transition: 'background .12s ease',
         }}
       >
         <span
           aria-hidden
           style={{
             flexShrink: 0,
-            width: 12,
-            color: k.dim,
-            fontSize: 12,
-            lineHeight: 1,
+            width: 22,
+            height: 22,
+            borderRadius: 4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isOpen ? tint(k.orange, 12) : k.surface,
+            color: isOpen ? k.orange : k.dim,
+            fontSize: 13,
+            fontWeight: 700,
             transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .12s ease',
+            transition: 'transform .14s ease, background .12s ease, color .12s ease',
           }}
         >
           ›
@@ -77,7 +94,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
               display: 'block',
               color: k.text,
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: 700,
               lineHeight: 1.3,
             }}
           >
@@ -103,7 +120,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 200,
+              maxWidth: 180,
               color: k.dim,
               fontSize: 11,
               fontWeight: 500,
@@ -119,7 +136,11 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       </summary>
       <div
         className="sk-config-section-body"
-        style={{ padding: '0 0 6px 20px' }}
+        style={{
+          padding: '4px 14px 12px',
+          borderTop: `1px solid ${k.border}`,
+          background: k.bg,
+        }}
       >
         {children}
       </div>
@@ -127,7 +148,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-/** Setting row — tight, aligned to signal-table density. */
+/** Setting row — label left · control right · hint under (signal-table density). */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
@@ -143,7 +164,7 @@ export function Field({ label, hint, badge, children }: {
         columnGap: 16,
         rowGap: 2,
         alignItems: 'center',
-        padding: '8px 0',
+        padding: '9px 0',
         borderBottom: `1px solid ${k.border}`,
         fontFamily: k.fontFamily,
       }}
