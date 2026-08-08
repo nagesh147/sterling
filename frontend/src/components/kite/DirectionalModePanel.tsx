@@ -189,7 +189,8 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
   const [lotSize, setLotSize]       = useState(liveLotSize && liveLotSize > 0 ? liveLotSize : 75);
   const [customDelta, setCustomDelta] = useState('');  // delta override input
   const [userEdited, setUserEdited] = useState(false); // once true, stop auto-syncing from live
-  const [showImpact, setShowImpact] = useState(false); // impact estimate — open on demand
+  const [showImpact, setShowImpact] = useState(false);
+  const [showProfileHelp, setShowProfileHelp] = useState(false);
 
   // Pre-fill from the live signal when it arrives — but never clobber a value the
   // user has typed themselves.
@@ -264,30 +265,64 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         })}
       </div>
 
-      {/* Active profile description card */}
-      <div style={{
-        padding: '11px 12px', borderRadius: 7, marginBottom: 12,
-        background: '#fff8f4', border: '1px solid #ecd1c4', borderLeft: '3px solid #f06428',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>{activeProfile.sublabel}</span>
-          {activeProfile.isExperimental && (
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>
-              EXPERIMENTAL
-            </span>
+      {/* Profile help — hidden until asked */}
+      <div style={{ marginBottom: showProfileHelp ? 10 : 8 }}>
+        <button
+          type="button"
+          onClick={() => setShowProfileHelp((v) => !v)}
+          aria-expanded={showProfileHelp}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showProfileHelp ? '#f06428' : '#888',
+            fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit', padding: '4px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showProfileHelp ? '#f06428' : '#c8c8c8'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, fontWeight: 700, lineHeight: 1,
+              color: showProfileHelp ? '#f06428' : '#888',
+            }}
+          >
+            ?
+          </span>
+          {showProfileHelp ? 'Hide profile help' : `About ${activeProfile.sublabel}`}
+        </button>
+      </div>
+      {showProfileHelp && (
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+            background: '#fff',
+            border: '1px solid #e8e8e8',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#333' }}>{activeProfile.sublabel}</span>
+            {activeProfile.isExperimental && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>EXPERIMENTAL</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.5, marginBottom: 6 }}>{activeProfile.desc}</div>
+          <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45, marginBottom: isFutures ? 0 : 4 }}>
+            {activeProfile.risk}
+          </div>
+          {!isFutures && (
+            <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45 }}>
+              δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing ITM at expiry.
+              {probItm < 40 && ' Most OTM buys expire worthless.'}
+              {probItm >= 40 && probItm < 60 && ' Roughly coin-flip at expiry — you only need a quick move.'}
+              {probItm >= 60 && ' Higher odds, higher premium.'}
+            </div>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
-        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4, marginBottom: isFutures ? 0 : 5 }}>⚡ {activeProfile.risk}</div>
-        {!isFutures && (
-          <div style={{ fontSize: 10, color: '#a65525', lineHeight: 1.4, fontWeight: 600 }}>
-            🎯 δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing in-the-money at expiry.
-            {probItm < 40 && ' Most OTM buys expire worthless — you win big occasionally, lose small often.'}
-            {probItm >= 40 && probItm < 60 && ' Roughly coin-flip odds at expiry, but you only need a quick move, not expiry.'}
-            {probItm >= 60 && ' Favourable odds — you are paying up for a higher-probability position.'}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Target delta — exact δ the algo aims for when picking a strike */}
       {!isFutures && (
