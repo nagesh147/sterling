@@ -16,7 +16,7 @@ import { notifyOrder } from '../../store/useKiteNotifications';
 
 /**
  * SuperTrend engine settings — draft + Apply (same pattern as Navigator).
- * Chart → Instruments → Contracts → Trail → Exit.
+ * Chart → draft bar → Instruments → Contracts → Trail → Exit.
  */
 export function SuperTrendEnginePanel() {
   const { data: serverCfg, isLoading } = useEngineConfig();
@@ -99,15 +99,6 @@ export function SuperTrendEnginePanel() {
         offNote="Not scanning. Navigator can still run on its own."
       />
 
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={saving}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <PanelCard>
         <Section
           title="Chart source"
@@ -121,6 +112,15 @@ export function SuperTrendEnginePanel() {
             onChange={(v) => patch({ scan_source: v })}
           />
         </Section>
+
+        <SettingsDraftBar
+          dirty={dirty}
+          saving={saving}
+          onApply={handleApply}
+          onDiscard={handleDiscard}
+          onReset={handleReset}
+          resetConfirm={resetConfirm}
+        />
 
         <Section
           title="Instruments"
