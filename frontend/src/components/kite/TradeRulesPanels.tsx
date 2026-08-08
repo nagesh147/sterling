@@ -16,89 +16,67 @@ import { DirectionalModePanel } from './DirectionalModePanel';
  * live under an Advanced section so the page stays scannable.
  */
 
-/** One shared setting — changing it here also changes Automatic rules. */
-function AlsoAppliesTo({ where }: { where: 'manual' | 'automatic' }) {
-  return (
-    <div style={{ color: DIM, fontSize: 10, lineHeight: 1.45, marginTop: 6 }}>
-      Shared with <b>{where === 'manual' ? 'Manual' : 'Automatic'} rules</b> — one value for both.
-    </div>
-  );
-}
-
-const STOP_LIVE_HELP: Record<'broker' | 'monitor' | 'both', string> = {
-  both: 'Stop is placed at Zerodha and Sterling also watches the price. Safest for live trades.',
-  broker: 'Stop order sits at Zerodha only. Still works if Sterling is offline.',
-  monitor: 'Sterling watches the price and exits for you. Needs this app to stay online.',
-};
-
-/** Links to each engine’s own entry / exit page — not editable here. */
+/** Links to each engine’s own entry / exit page. */
 function PerEngineEntryExit({ navigatorOn }: { navigatorOn: boolean }) {
   const link = (label: string, section: 'engine' | 'navigator', note: string) => (
     <button
       type="button" onClick={() => openSettingsSection(section)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-        minHeight: 48, padding: '10px 0', borderRadius: 0, cursor: 'pointer',
+        minHeight: 44, padding: '10px 0', cursor: 'pointer',
         border: 'none', borderBottom: `1px solid ${BORDER}`, background: 'transparent',
-        fontFamily: 'inherit', marginBottom: 0,
+        fontFamily: 'inherit',
       }}
     >
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ display: 'block', color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>
-        <span style={{ display: 'block', color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 2 }}>{note}</span>
+        <span style={{ display: 'block', color: MUTED, fontSize: 10.5, lineHeight: 1.35, marginTop: 2 }}>{note}</span>
       </span>
       <span aria-hidden style={{ color: '#f06428', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>→</span>
     </button>
   );
   return (
-    <>
-      <ConfigNote>
-        Each engine decides entry and exit differently, so those rules live on the engine’s own page.
-      </ConfigNote>
-      <div style={{ marginTop: 4 }}>
-        {link('SuperTrend', 'engine',
-          'When to enter, which line the stop follows, and when to exit.')}
-        {link('Navigator', 'navigator',
-          navigatorOn
-            ? 'When to enter, stop distance, and profit target.'
-            : 'Off right now — turn it on under Signal Engines to use its rules.')}
-      </div>
-    </>
+    <div>
+      {link('SuperTrend', 'engine', 'Entry, trail and exit.')}
+      {link('Navigator', 'navigator',
+        navigatorOn ? 'Entry, stop and target.' : 'Off — turn on under Signal Engines.')}
+    </div>
   );
 }
 
-// ── Shared control renderers ────────────────────────────────────────────────
+const STOP_LIVE_HELP: Record<'broker' | 'monitor' | 'both', string> = {
+  both: 'Stop at Zerodha, and Sterling watches the price too.',
+  broker: 'Stop only at Zerodha. Still works if the app is offline.',
+  monitor: 'Sterling watches the price and exits. Needs the app online.',
+};
 
-function ProtectionMode({ value, onChange, alsoOn }: {
+function ProtectionMode({ value, onChange }: {
   value: 'broker' | 'monitor' | 'both';
   onChange: (v: 'broker' | 'monitor' | 'both') => void;
-  alsoOn: 'manual' | 'automatic';
 }) {
   return (
     <Field label={FIELDS.stop_mode.label} hint={FIELDS.stop_mode.help}>
       <ChoiceRow value={value} options={STOP_MODE_OPTIONS} onChange={onChange} />
-      <div style={{ color: TEXT, fontSize: 11.5, lineHeight: 1.45, marginTop: 8 }}>
+      <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>
         {STOP_LIVE_HELP[value]}
       </div>
-      <AlsoAppliesTo where={alsoOn} />
     </Field>
   );
 }
 
-function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop, alsoOn }: {
+function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop }: {
   expiryDays: number;
   timeStop: number;
   onExpiry: (v: number) => void;
   onTimeStop: (v: number) => void;
-  alsoOn: 'manual' | 'automatic';
 }) {
   return (
     <>
       <Field
         label={FIELDS.expiry_square_off_days.label}
         hint={expiryDays > 0
-          ? `Closes the trade ${expiryDays} day${expiryDays === 1 ? '' : 's'} before the option expires.`
-          : 'Off — the position can run into expiry.'}
+          ? `Closes ${expiryDays} day${expiryDays === 1 ? '' : 's'} before expiry.`
+          : 'Off.'}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
@@ -106,25 +84,23 @@ function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop, alsoOn }: 
             type="number" min={0} max={10} step={1} value={expiryDays} style={inputStyle}
             onChange={(e) => onExpiry(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
           />
-          <span style={{ color: DIM, fontSize: 11 }}>days before expiry (0 = off)</span>
+          <span style={{ color: DIM, fontSize: 11 }}>days (0 = off)</span>
         </div>
-        <AlsoAppliesTo where={alsoOn} />
       </Field>
       <Field
         label={FIELDS.time_stop_bars.label}
         hint={timeStop > 0
-          ? `Closes the trade after about ${timeStop} hour${timeStop === 1 ? '' : 's'} on the chart.`
-          : 'Off — no time limit on how long you hold.'}
+          ? `Closes after about ${timeStop} hour${timeStop === 1 ? '' : 's'}.`
+          : 'Off.'}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
-            data-testid="time-stop-input" aria-label="Max time in trade bars"
+            data-testid="time-stop-input" aria-label="Max hold time bars"
             type="number" min={0} max={500} step={1} value={timeStop} style={inputStyle}
             onChange={(e) => onTimeStop(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
           />
-          <span style={{ color: DIM, fontSize: 11 }}>1-hour bars (0 = off)</span>
+          <span style={{ color: DIM, fontSize: 11 }}>hours on chart (0 = off)</span>
         </div>
-        <AlsoAppliesTo where={alsoOn} />
       </Field>
     </>
   );
@@ -135,7 +111,7 @@ function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop, alsoOn }: 
 export function ManualRulesPanel() {
   const { cfg, patch, saving } = useConfigPatch();
   const { data: navData } = useNavigatorConfig();
-  if (!cfg) return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading manual rules…</div>;
+  if (!cfg) return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading…</div>;
 
   const protectOn = cfg.protect_manual_orders ?? true;
   const stopLabel = STOP_MODE_OPTIONS.find((o) => o.value === cfg.stop_mode)?.label ?? cfg.stop_mode;
@@ -144,28 +120,23 @@ export function ManualRulesPanel() {
 
   return (
     <PanelCard>
-      {/* Saving only — page title/description live in the section heading above */}
       <PanelHeader saving={saving} />
 
       <Section
-        title="Stop-loss after you buy"
-        description={protectOn
-          ? 'Sterling attaches a stop when your order fills.'
-          : 'No stop is added — you manage the trade yourself.'}
+        title="Stop-loss"
+        description="Attach a stop when your order fills."
         summary={protectOn ? stopLabel : 'Off'}
         defaultOpen
       >
         <Field label={FIELDS.protect_manual_orders.label} hint={FIELDS.protect_manual_orders.help}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Switch
-              checked={protectOn} label="Add a stop after I buy"
+              checked={protectOn} label="Add stop when I buy"
               onChange={() => patch({ protect_manual_orders: !protectOn }, 'protect_manual_orders',
-                `Manual stop protection ${!protectOn ? 'on' : 'off'}`)}
+                `Manual stop ${!protectOn ? 'on' : 'off'}`)}
             />
             <span style={{ color: TEXT, fontSize: 11.5 }}>
-              {protectOn
-                ? 'Stop is added and the position is watched'
-                : 'No stop, no auto-exit — you are on your own'}
+              {protectOn ? 'On — stop is attached after fill' : 'Off — you manage the trade'}
             </span>
           </div>
         </Field>
@@ -173,13 +144,11 @@ export function ManualRulesPanel() {
         {protectOn ? (
           <ProtectionMode
             value={cfg.stop_mode}
-            onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop enforcement set to ${v}`)}
-            alsoOn="automatic"
+            onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop set to ${v}`)}
           />
         ) : (
           <ConfigNote>
-            With this off, nothing on this page runs for your hand-placed orders. The stop and exit
-            columns on the board are only a plan — you have to act on them yourself.
+            With this off, no stop or safety exit runs on your hand-placed orders.
           </ConfigNote>
         )}
       </Section>
@@ -188,7 +157,7 @@ export function ManualRulesPanel() {
         <AdvancedSection count={2}>
           <Section
             title="Safety exits"
-            description="Close a protected trade even when the signal has not flipped."
+            description="Close the trade even if the signal has not flipped."
             summary={
               [
                 expiryDays > 0 ? `${expiryDays}d before expiry` : null,
@@ -201,17 +170,15 @@ export function ManualRulesPanel() {
               timeStop={timeStop}
               onExpiry={(v) => patch({ expiry_square_off_days: v }, 'expiry_square_off_days')}
               onTimeStop={(v) => patch({ time_stop_bars: v }, 'time_stop_bars')}
-              alsoOn="automatic"
             />
             <ConfigNote>
-              These apply to every protected position Sterling is tracking — including ones you
-              bought by hand. Useful so stock options do not run into physical delivery.
+              Applies to every protected position, including ones you bought by hand.
             </ConfigNote>
           </Section>
 
           <Section
-            title="When to enter & exit"
-            description="Set on each signal engine — not here."
+            title="Signal rules"
+            description="Entry and exit live on each engine."
             summary="Per engine"
           >
             <PerEngineEntryExit navigatorOn={!!navData?.record.config.enabled} />
@@ -221,8 +188,8 @@ export function ManualRulesPanel() {
 
       {!protectOn && (
         <Section
-          title="When to enter & exit"
-          description="Set on each signal engine — not here."
+          title="Signal rules"
+          description="Entry and exit live on each engine."
           summary="Per engine"
         >
           <PerEngineEntryExit navigatorOn={!!navData?.record.config.enabled} />
@@ -251,8 +218,7 @@ export function AutomaticRulesPanel() {
     + ((cfg.block_entry_minutes_before_close ?? 0) > 0 ? 1 : 0)
     + ((cfg.max_contract_staleness_bars ?? 0) > 0 ? 1 : 0);
 
-  // Rough count of advanced controls for the badge
-  const advancedCount = entryFilterCount + 1 /* vehicle */ + 2 /* exit safeguards */ + 1 /* portfolio risk */ + 1 /* per-engine */;
+  const advancedCount = entryFilterCount + 1 + 2 + 1 + 1;
 
   const num = (
     key: Parameters<typeof patch>[1] & string,
@@ -272,7 +238,6 @@ export function AutomaticRulesPanel() {
 
   return (
     <>
-      {/* Status banner — is any of this live? */}
       <PanelCard>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px',
@@ -310,17 +275,15 @@ export function AutomaticRulesPanel() {
           saving={saving}
         />
 
-        {/* ═══════════════ CORE ═══════════════ */}
         <Section
-          title="How the stop is enforced"
-          description="After a fill, who runs the stop-loss."
+          title="Stop-loss"
+          description="Where the stop lives after a fill."
           summary={STOP_MODE_OPTIONS.find((o) => o.value === cfg.stop_mode)?.label ?? cfg.stop_mode}
           defaultOpen
         >
           <ProtectionMode
             value={cfg.stop_mode}
-            onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop enforcement set to ${v}`)}
-            alsoOn="manual"
+            onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop set to ${v}`)}
           />
         </Section>
 
@@ -401,7 +364,6 @@ export function AutomaticRulesPanel() {
           </Field>
         </Section>
 
-        {/* ═══════════════ ADVANCED ═══════════════ */}
         <AdvancedSection count={advancedCount}>
           <Section
             title="Entry filters"
@@ -485,8 +447,8 @@ export function AutomaticRulesPanel() {
           </Section>
 
           <Section
-            title="Exit safeguards"
-            description="Backstops that close a position regardless of the signal."
+            title="Safety exits"
+            description="Close the trade even if the signal has not flipped."
             summary={`Expiry T-${cfg.expiry_square_off_days ?? 1}${(cfg.time_stop_bars ?? 0) > 0 ? ` · ${cfg.time_stop_bars} bars` : ''}`}
           >
             <ExitSafeguards
@@ -494,7 +456,6 @@ export function AutomaticRulesPanel() {
               timeStop={cfg.time_stop_bars ?? 0}
               onExpiry={(v) => patch({ expiry_square_off_days: v }, 'expiry_square_off_days')}
               onTimeStop={(v) => patch({ time_stop_bars: v }, 'time_stop_bars')}
-              alsoOn="manual"
             />
           </Section>
 
@@ -517,8 +478,8 @@ export function AutomaticRulesPanel() {
           </Section>
 
           <Section
-            title="Entry & exit rules"
-            description="Set per engine, because the two engines mean different things by them."
+            title="Signal rules"
+            description="Entry and exit live on each engine."
             summary="Per engine"
           >
             <PerEngineEntryExit navigatorOn={!!navData?.record.config.enabled} />
