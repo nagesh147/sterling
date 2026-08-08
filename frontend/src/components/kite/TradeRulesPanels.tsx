@@ -72,32 +72,26 @@ function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop }: {
       <Field
         label={FIELDS.expiry_square_off_days.label}
         hint={expiryDays > 0
-          ? `Closes ${expiryDays} day${expiryDays === 1 ? '' : 's'} before expiry.`
-          : 'Off.'}
+          ? `Closes ${expiryDays} day${expiryDays === 1 ? '' : 's'} before expiry. Enter days; 0 turns this off.`
+          : 'Off. Enter days before expiry; 0 turns this off.'}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            data-testid="expiry-squareoff-input" aria-label="Exit before expiry days"
-            type="number" min={0} max={10} step={1} value={expiryDays} style={inputStyle}
-            onChange={(e) => onExpiry(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-          />
-          <span style={{ color: DIM, fontSize: 11 }}>days (0 = off)</span>
-        </div>
+        <input
+          data-testid="expiry-squareoff-input" aria-label="Exit before expiry days"
+          type="number" min={0} max={10} step={1} value={expiryDays} style={inputStyle}
+          onChange={(e) => onExpiry(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        />
       </Field>
       <Field
         label={FIELDS.time_stop_bars.label}
         hint={timeStop > 0
-          ? `Closes after about ${timeStop} hour${timeStop === 1 ? '' : 's'}.`
-          : 'Off.'}
+          ? `Closes after about ${timeStop} hour${timeStop === 1 ? '' : 's'} on the chart. Enter hours; 0 turns this off.`
+          : 'Off. Enter hours on the chart; 0 turns this off.'}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            data-testid="time-stop-input" aria-label="Max hold time bars"
-            type="number" min={0} max={500} step={1} value={timeStop} style={inputStyle}
-            onChange={(e) => onTimeStop(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-          />
-          <span style={{ color: DIM, fontSize: 11 }}>hours on chart (0 = off)</span>
-        </div>
+        <input
+          data-testid="time-stop-input" aria-label="Max hold time bars"
+          type="number" min={0} max={500} step={1} value={timeStop} style={inputStyle}
+          onChange={(e) => onTimeStop(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        />
       </Field>
     </>
   );
@@ -289,15 +283,15 @@ export function AutomaticRulesPanel() {
             />
           </Field>
           {cfg.risk_sizing && (
-            <Field label={FIELDS.risk_pct.label} hint={FIELDS.risk_pct.help}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  aria-label="Risk percent" type="number" min={0.1} max={25} step={0.5}
-                  value={cfg.risk_pct} style={inputStyle}
-                  onChange={(e) => patch({ risk_pct: Number(e.target.value) }, 'risk_pct')}
-                />
-                <span style={{ color: DIM, fontSize: 11 }}>% per trade</span>
-              </div>
+            <Field
+              label={FIELDS.risk_pct.label}
+              hint={(FIELDS.risk_pct.help || 'Percent of capital risked per trade.') + ' Enter as %.'}
+            >
+              <input
+                aria-label="Risk percent" type="number" min={0.1} max={25} step={0.5}
+                value={cfg.risk_pct} style={inputStyle}
+                onChange={(e) => patch({ risk_pct: Number(e.target.value) }, 'risk_pct')}
+              />
             </Field>
           )}
           {cfg.risk_sizing && (
@@ -399,18 +393,15 @@ export function AutomaticRulesPanel() {
               label={FIELDS.max_contract_staleness_bars.label}
               hint={FIELDS.max_contract_staleness_bars.help}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  data-testid="staleness-input" aria-label="Max contract lag"
-                  type="number" min={0} max={12} step={1}
-                  value={cfg.max_contract_staleness_bars ?? 0} style={inputStyle}
-                  onChange={(e) => patch(
-                    { max_contract_staleness_bars: Math.max(0, Math.floor(Number(e.target.value) || 0)) },
-                    'max_contract_staleness_bars',
-                  )}
-                />
-                <span style={{ color: DIM, fontSize: 11 }}>hours behind the underlying</span>
-              </div>
+              <input
+                data-testid="staleness-input" aria-label="Max contract lag"
+                type="number" min={0} max={12} step={1}
+                value={cfg.max_contract_staleness_bars ?? 0} style={inputStyle}
+                onChange={(e) => patch(
+                  { max_contract_staleness_bars: Math.max(0, Math.floor(Number(e.target.value) || 0)) },
+                  'max_contract_staleness_bars',
+                )}
+              />
               {(cfg.max_contract_staleness_bars ?? 0) > 0 && (
                 <ConfigNote>
                   A contract that last traded up to <b>{cfg.max_contract_staleness_bars}h</b> ago can
