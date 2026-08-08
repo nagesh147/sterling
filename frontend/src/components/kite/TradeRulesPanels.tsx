@@ -350,14 +350,11 @@ export function AutomaticRulesPanel() {
 
         <Section
           title="What to buy"
-          description="Instrument the algo buys when a signal fires."
+          description="What the algo buys on a signal."
           summary={cfg.directional_mode ? cfg.vehicle.replace(/_/g, ' ') : 'Default option leg'}
           defaultOpen
         >
-          <ConfigNote>
-            Only for algo orders. When you trade by hand you pick the contract yourself.
-          </ConfigNote>
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 4 }}>
             <DirectionalModePanel
               cfg={cfg}
               onUpdate={(values) => patch(values, undefined, 'Vehicle profile updated')}
