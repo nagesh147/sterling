@@ -56,7 +56,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
         padding: '14px 16px',
         userSelect: 'none',
         boxSizing: 'border-box',
-        background: isOpen ? '#fafafa' : '#fff',
+        background: '#fff',
         borderLeft: isOpen ? `3px solid ${ORANGE}` : '3px solid transparent',
         transition: 'background .12s ease',
       }}>
@@ -107,17 +107,15 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 148,
-              padding: '4px 9px',
-              borderRadius: 999,
-              background: isOpen ? '#fff' : SOFT,
-              border: `1px solid ${BORDER}`,
+              maxWidth: 160,
               color: DIM,
-              fontSize: 11,
-              fontWeight: 600,
+              fontSize: 12,
+              fontWeight: 500,
+              textAlign: 'right',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              lineHeight: 1.3,
             }}
           >
             {summary}
