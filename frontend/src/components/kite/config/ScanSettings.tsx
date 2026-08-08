@@ -5,7 +5,7 @@ import {
   BORDER, CheckOption, DIM, Field, ORANGE, ORANGE_SOFT, Switch, TEXT,
 } from '../kiteSettingsPrimitives';
 import { ConfigNote } from './ConfigPrimitives';
-import { INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
+import { FIELDS, INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
 
 /**
  * The scan controls, rendered from plain values so BOTH engines can own a copy.
@@ -106,7 +106,7 @@ export function InstrumentsGroup({
             checked={allStocks} label={`${idPrefix} scan all F&O stocks`}
             onChange={() => onChange({ scan_all_stocks: !allStocks })}
           />
-          <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&amp;O stocks</span>
+          <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&O stocks</span>
         </div>
       </Field>
       )}
@@ -203,7 +203,7 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
 
   return (
     <>
-      <Field label="Strike coverage" hint="Which strikes are resolved for each setup. An automatic BUY takes the leg nearest spot from exactly these.">
+      <Field label={FIELDS.strike_moneyness.label} hint={FIELDS.strike_moneyness.help}>
         <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
           {STRIKE_GROUPS.map((group) => {
             const count = group.values.filter((v) => strikes.includes(v)).length;
