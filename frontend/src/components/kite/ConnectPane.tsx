@@ -637,26 +637,26 @@ export function ConnectPane() {
     }}>
       <header style={{
         flexShrink: 0, width: '100%', boxSizing: 'border-box',
-        display: 'flex', alignItems: 'flex-start', gap: 16,
-        padding: '12px 16px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
+        padding: '14px 16px 12px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
       }}>
-        <div style={{ flexShrink: 0, paddingTop: 2 }}>
-          <div style={{ color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.2 }}>Settings</div>
+        <div style={{
+          color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+          textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
+        }}>
+          Settings
         </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 style={{
-            margin: 0, color: '#444', fontSize: 16, lineHeight: 1.25, fontWeight: 700,
-            letterSpacing: '-0.01em', fontFamily: 'inherit',
-          }}>
-            {page.label}
-          </h1>
-          <p style={{
-            margin: '2px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
-            fontFamily: 'inherit',
-          }}>
-            {page.pageDescription}
-          </p>
-        </div>
+        <h1 style={{
+          margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
+          letterSpacing: '-0.01em', fontFamily: 'inherit',
+        }}>
+          {page.label}
+        </h1>
+        <p style={{
+          margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
+          fontFamily: 'inherit', maxWidth: 560,
+        }}>
+          {page.pageDescription}
+        </p>
       </header>
 
       <div className="kite-settings-layout" style={{
