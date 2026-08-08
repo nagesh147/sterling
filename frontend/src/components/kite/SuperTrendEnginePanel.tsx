@@ -1,42 +1,95 @@
 import React from 'react';
-import { useResetEngineConfig, useRunScan } from '../../hooks/useSterlingKiteEngine';
 import {
-  BORDER, ChoiceRow, DIM, Field, MUTED, Section, SOFT, Switch, TEXT,
+  useEngineConfig, useResetEngineConfig, useRunScan, useSetEngineConfig,
+} from '../../hooks/useSterlingKiteEngine';
+import {
+  BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT,
 } from './kiteSettingsPrimitives';
-import { ConfigNote, PanelCard, PanelHeader } from './config/ConfigPrimitives';
+import { ConfigNote, PanelCard } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import {
   EXIT_MODE_OPTIONS, FIELDS, TRAIL_OPTIONS, exitModeLabel, scanSourceLabel,
 } from './config/registry';
-import { useConfigPatch } from './config/useConfigPatch';
+import type { EngineConfigModel } from '../../types/kiteEngine';
+import { notifyOrder } from '../../store/useKiteNotifications';
+import { Icons } from '../../styles/kiteUI';
+
+const RED = '#c9433e';
+const AMBER = '#b06a13';
 
 /**
- * The SuperTrend engine, end to end: whether it runs, what it scans, and how it
- * enters and exits.
- *
- * Core controls (chart source, trail, exit) stay visible. Universe and contract
- * coverage live under Advanced so the page stays scannable.
+ * SuperTrend engine settings — draft + Apply (same pattern as Navigator).
+ * Chart → Instruments → Contracts → Trail → Exit.
  */
 export function SuperTrendEnginePanel() {
-  const { cfg, patch, saving } = useConfigPatch();
+  const { data: serverCfg, isLoading } = useEngineConfig();
+  const setCfg = useSetEngineConfig();
   const resetCfg = useResetEngineConfig();
   const runScan = useRunScan();
 
-  if (!cfg) {
+  const [draft, setDraft] = React.useState<EngineConfigModel | null>(null);
+  const [dirty, setDirty] = React.useState(false);
+  const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!serverCfg) return;
+    if (!dirty) setDraft(serverCfg);
+  }, [serverCfg, dirty]);
+
+  if (isLoading || !draft) {
     return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading SuperTrend settings…</div>;
   }
+
+  const cfg = draft;
+
+  const patch = (values: Partial<EngineConfigModel>) => {
+    setDraft((prev) => (prev ? { ...prev, ...values } : prev));
+    setDirty(true);
+    setResetConfirm(false);
+  };
+
+  const handleApply = () => {
+    if (!draft) return;
+    setCfg.mutate(draft, {
+      onSuccess: () => {
+        setDirty(false);
+        notifyOrder({ kind: 'info', title: 'Settings updated', message: 'SuperTrend settings applied.' });
+        runScan.mutate();
+      },
+    });
+  };
+
+  const handleDiscard = () => {
+    if (serverCfg) setDraft(serverCfg);
+    setDirty(false);
+    setResetConfirm(false);
+  };
+
+  const handleReset = () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      return;
+    }
+    resetCfg.mutate(undefined, {
+      onSuccess: () => {
+        setDirty(false);
+        setResetConfirm(false);
+        runScan.mutate();
+      },
+    });
+  };
 
   const on = cfg.engine_enabled;
   const trailLabel = TRAIL_OPTIONS.find((o) => o.value === cfg.trail_target)?.label ?? cfg.trail_target;
   const indexExpiries = cfg.scan_expiries_indices ?? cfg.scan_expiries;
-  const instruments = cfg.scan_indices.length + (cfg.scan_all_stocks ? 0 : cfg.scan_stocks.length);
-
   const instrumentsSummary = !(cfg.scan_stock_contracts ?? true)
     ? `${cfg.scan_indices.length} indices · no stocks`
     : cfg.scan_all_stocks
       ? `All F&O · ${cfg.scan_indices.length} indices`
       : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
+
+  const saving = setCfg.isPending;
 
   return (
     <>
@@ -45,20 +98,12 @@ export function SuperTrendEnginePanel() {
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
         on={on}
         busy={saving}
-        onToggle={() => patch({ engine_enabled: !on }, 'engine_enabled',
-          `SuperTrend ${!on ? 'enabled' : 'disabled'}`)}
+        onToggle={() => patch({ engine_enabled: !on })}
         runningNote="Scanning, producing signals, and eligible for automatic execution."
         offNote="Not scanning. Navigator can still run on its own."
       />
 
       <PanelCard>
-        <PanelHeader
-          title="How SuperTrend trades"
-          description="What it reads, what it watches, and how it exits."
-          saving={saving}
-        />
-
-        {/* ═══════════════ CORE (order matches Navigator) ═══════════════ */}
         <Section
           title="Chart source"
           description="Which price series SuperTrend reads a setup from."
@@ -68,7 +113,7 @@ export function SuperTrendEnginePanel() {
           <SignalSourceGroup
             name="supertrend-signal-source"
             value={cfg.scan_source}
-            onChange={(v) => patch({ scan_source: v }, 'scan_source', `SuperTrend source changed to ${scanSourceLabel(v)}`)}
+            onChange={(v) => patch({ scan_source: v })}
           />
         </Section>
 
@@ -84,7 +129,7 @@ export function SuperTrendEnginePanel() {
             stocks={cfg.scan_stocks}
             allStocks={cfg.scan_all_stocks}
             stockContracts={cfg.scan_stock_contracts ?? true}
-            onChange={(next) => patch(next, undefined, 'SuperTrend universe updated')}
+            onChange={(next) => patch(next)}
           />
         </Section>
 
@@ -97,7 +142,7 @@ export function SuperTrendEnginePanel() {
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
-            onChange={(next) => patch(next, undefined, 'SuperTrend contracts updated')}
+            onChange={(next) => patch(next)}
           />
         </Section>
 
@@ -110,15 +155,14 @@ export function SuperTrendEnginePanel() {
           <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}>
             <ChoiceRow
               value={cfg.trail_target} options={TRAIL_OPTIONS}
-              onChange={(v) => patch({ trail_target: v }, 'trail_target', `Trail tightness changed to ${v}`)}
+              onChange={(v) => patch({ trail_target: v })}
             />
           </Field>
           <Field label={FIELDS.exit_aligned_trail.label} hint={FIELDS.exit_aligned_trail.help}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <Switch
                 checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter"
-                onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) },
-                  'exit_aligned_trail', 'Stop anchor updated')}
+                onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) })}
               />
               <span style={{ color: TEXT, fontSize: 11.5 }}>
                 {cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}
@@ -136,15 +180,14 @@ export function SuperTrendEnginePanel() {
           <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}>
             <ChoiceRow
               value={cfg.exit_mode} options={EXIT_MODE_OPTIONS}
-              onChange={(v) => patch({ exit_mode: v }, 'exit_mode', `Exit rule changed to ${v}`)}
+              onChange={(v) => patch({ exit_mode: v })}
             />
           </Field>
           <Field label={FIELDS.price_stop_exit.label} hint={FIELDS.price_stop_exit.help}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <Switch
                 checked={cfg.price_stop_exit ?? true} label="Enforce the trailing stop as a real exit"
-                onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) },
-                  'price_stop_exit', 'Trailing-stop exit updated')}
+                onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) })}
               />
               <span style={{ color: TEXT, fontSize: 11.5 }}>
                 {(cfg.price_stop_exit ?? true) ? 'Trail or exit counter, whichever fires first' : 'Exit counter only'}
@@ -159,29 +202,72 @@ export function SuperTrendEnginePanel() {
           </ConfigNote>
         </Section>
 
+        {dirty && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            padding: '12px 16px', background: SOFT, borderTop: `1px solid ${BORDER}`,
+          }}>
+            <span aria-live="polite" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              color: saving ? MUTED : AMBER, fontSize: 10.5, fontWeight: 700, marginRight: 4,
+            }}>
+              <span aria-hidden style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: saving ? '#c2c2c2' : AMBER,
+              }} />
+              {saving ? 'Saving…' : 'Unsaved changes'}
+            </span>
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={saving}
+              style={{
+                border: 'none', background: ORANGE, color: '#fff', borderRadius: 7,
+                padding: '8px 16px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                fontFamily: 'inherit', opacity: saving ? 0.5 : 1,
+              }}
+            >
+              Apply changes
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscard}
+              disabled={saving}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                border: `1px solid ${BORDER}`, background: '#fff', color: MUTED,
+                borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Discard draft
+            </button>
+            <div style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={resetCfg.isPending}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                border: `1px solid ${BORDER}`, background: '#fff',
+                color: resetConfirm ? RED : MUTED,
+                borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <Icons.Reload /> {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
+            </button>
+          </div>
+        )}
 
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          padding: '14px 18px', background: SOFT, borderTop: `1px solid ${BORDER}`,
-        }}>
-          <span style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45 }}>
-            Sizing, order guards and protection are under Manual and Automatic rules.
-          </span>
-          <button
-            type="button" disabled={resetCfg.isPending}
-            onClick={() => {
-              if (!window.confirm('Restore every SuperTrend setting to its default value? This also resets what it scans, and the shared trade rules.')) return;
-              resetCfg.mutate(undefined, { onSuccess: () => runScan.mutate() });
-            }}
-            style={{
-              minHeight: 34, flexShrink: 0, border: `1px solid ${BORDER}`, borderRadius: 7,
-              background: '#fff', color: '#c9433e', padding: '0 12px',
-              fontSize: 10.5, fontWeight: 650, fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            {resetCfg.isPending ? 'Restoring…' : 'Restore defaults'}
-          </button>
-        </div>
+        {!dirty && (
+          <div style={{
+            padding: '12px 16px', background: SOFT, borderTop: `1px solid ${BORDER}`,
+            color: DIM, fontSize: 10.5, lineHeight: 1.45,
+          }}>
+            Sizing, order guards and protection are under Manual and Algo Trade.
+          </div>
+        )}
       </PanelCard>
 
       <style>{`
