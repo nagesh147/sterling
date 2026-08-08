@@ -136,7 +136,7 @@ export function ManualRulesPanel() {
                 `Manual stop ${!protectOn ? 'on' : 'off'}`)}
             />
             <span style={{ color: TEXT, fontSize: 11.5 }}>
-              {protectOn ? 'On — stop is attached after fill' : 'Off — you manage the trade'}
+              {protectOn ? 'On — stop-loss is placed after fill' : 'Off — you manage exits yourself'}
             </span>
           </div>
         </Field>
@@ -148,7 +148,7 @@ export function ManualRulesPanel() {
           />
         ) : (
           <ConfigNote>
-            With this off, no stop or safety exit runs on your hand-placed orders.
+            With this off, no stop-loss or time limit runs on orders you place yourself.
           </ConfigNote>
         )}
       </Section>
@@ -156,8 +156,8 @@ export function ManualRulesPanel() {
       {protectOn && (
         <AdvancedSection count={2}>
           <Section
-            title="Safety exits"
-            description="Close the trade even if the signal has not flipped."
+            title="Time limits"
+            description="Close by expiry or max hold time, even if the signal has not flipped."
             summary={
               [
                 expiryDays > 0 ? `${expiryDays}d before expiry` : null,
@@ -447,8 +447,8 @@ export function AutomaticRulesPanel() {
           </Section>
 
           <Section
-            title="Safety exits"
-            description="Close the trade even if the signal has not flipped."
+            title="Time limits"
+            description="Close by expiry or max hold time, even if the signal has not flipped."
             summary={`Expiry T-${cfg.expiry_square_off_days ?? 1}${(cfg.time_stop_bars ?? 0) > 0 ? ` · ${cfg.time_stop_bars} bars` : ''}`}
           >
             <ExitSafeguards
