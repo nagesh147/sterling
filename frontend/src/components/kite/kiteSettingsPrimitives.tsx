@@ -3,7 +3,7 @@ import { k, tint } from '../../styles/kiteUI';
 
 /**
  * Settings primitives — compact accordion + Kite system typography.
- * Minimal borders; no header fills; small radius.
+ * Section cards match Trading Mode (radius 9, light shadow).
  */
 
 export const ORANGE = k.orange;
@@ -28,7 +28,7 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /**
- * Compact accordion — one outer border, no header wash, no field rules.
+ * Accordion section — same card chrome as Trading Mode.
  */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
@@ -45,12 +45,13 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
       style={{
-        marginBottom: 6,
+        marginBottom: 16,
         border: `1px solid ${k.border}`,
-        borderRadius: 4,
+        borderRadius: 9,
         background: k.bg,
         overflow: 'hidden',
         fontFamily: k.fontFamily,
+        boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
       <summary
@@ -60,7 +61,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          padding: '8px 10px',
+          padding: '12px 16px',
           userSelect: 'none',
           background: k.bg,
           borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
@@ -130,7 +131,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       <div
         className="sk-config-section-body"
         style={{
-          padding: '2px 10px 8px 24px',
+          padding: '4px 16px 14px 28px',
           background: k.bg,
         }}
       >
