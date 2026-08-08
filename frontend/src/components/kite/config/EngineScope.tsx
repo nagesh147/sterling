@@ -1,10 +1,8 @@
 import React from 'react';
 import { BORDER, MUTED, ORANGE, SOFT, TEXT } from '../kiteSettingsPrimitives';
 
-/**
- * "Same as SuperTrend" / "Its own", per settings group.
- */
-export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Same as SuperTrend', ownLabel = 'Its own', hint }: {
+/** Own vs Like SuperTrend — per settings group. */
+export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Like SuperTrend', ownLabel = 'Own', hint }: {
   groupLabel: string;
   linked: boolean;
   onChange: (linked: boolean) => void;
@@ -34,29 +32,32 @@ export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Same as
         display: 'inline-flex', gap: 2, padding: 3,
         border: `1px solid ${BORDER}`, borderRadius: 8, background: SOFT,
       }}>
-        {opt(sharedLabel, linked, true)}
         {opt(ownLabel, !linked, false)}
+        {opt(sharedLabel, linked, true)}
       </div>
       {hint && <span style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.45, maxWidth: 280 }}>{hint}</span>}
     </div>
   );
 }
 
-/** Follow SuperTrend or own values — chrome only; parent Section owns title/description. */
-export function ScopedGroup({ title, description, linked, onLinkChange, sharedSummary, hint, children }: {
+/** Follow SuperTrend or own values. Parent Section can host ScopeLink via headerAction + hideLink. */
+export function ScopedGroup({ title, description, linked, onLinkChange, sharedSummary, hint, hideLink = false, children }: {
   title: string;
   description: string;
   linked: boolean;
   onLinkChange: (linked: boolean) => void;
   sharedSummary: React.ReactNode;
   hint?: string;
+  hideLink?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ padding: '4px 0' }}>
-      <div style={{ marginBottom: 10 }}>
-        <ScopeLink groupLabel={title} linked={linked} onChange={onLinkChange} hint={hint} />
-      </div>
+    <div style={{ padding: hideLink ? 0 : '4px 0' }}>
+      {!hideLink && (
+        <div style={{ marginBottom: 10 }}>
+          <ScopeLink groupLabel={title} linked={linked} onChange={onLinkChange} hint={hint} />
+        </div>
+      )}
       {linked ? (
         <div style={{
           padding: '9px 11px', borderRadius: 7, background: SOFT,
