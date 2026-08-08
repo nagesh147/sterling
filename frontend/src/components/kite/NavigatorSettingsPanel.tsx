@@ -276,12 +276,9 @@ export function NavigatorSettingsPanel() {
     ? `${draft.scan_indices.length} indices + all stocks`
     : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
 
-  const scanSummary = [
-    draft.scan_scope_mode === 'shared' ? 'Instruments: shared' : `Instruments: ${customScopeCount}`,
-    draft.strike_moneyness == null
-      ? 'contracts: shared'
-      : `contracts: ${draft.strike_moneyness.length} strikes`,
-  ].join(' · ');
+  const instrumentsSummary = draft.scan_scope_mode === 'shared'
+    ? 'Like SuperTrend'
+    : customScopeCount;
 
   return (
     <>
@@ -346,7 +343,7 @@ export function NavigatorSettingsPanel() {
       <Section
         title="Instruments"
         description="The indices and stocks Navigator watches."
-        summary={scanSummary}
+        summary={instrumentsSummary}
         defaultOpen
         headerAction={(
           <ScopeLink

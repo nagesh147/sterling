@@ -69,6 +69,8 @@ export function Section({
     }
   };
 
+  const META_W = 200;
+
   return (
     <details
       className="sk-settings-group"
@@ -78,45 +80,82 @@ export function Section({
     >
       <summary
         style={{
-          listStyle: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
-          gap: 10, padding: '12px 16px', minHeight: 52, userSelect: 'none',
+          listStyle: 'none',
+          cursor: 'pointer',
+          display: 'grid',
+          gridTemplateColumns: `14px minmax(0, 1fr) ${META_W}px`,
+          columnGap: 10,
+          alignItems: 'center',
+          padding: '12px 16px',
+          minHeight: 56,
+          userSelect: 'none',
           background: k.bg,
           borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
           boxSizing: 'border-box',
         }}
       >
         <span aria-hidden style={{
-          flexShrink: 0, width: 14, color: isOpen ? k.orange : k.dim, fontSize: 12, fontWeight: 700,
+          width: 14, color: isOpen ? k.orange : k.dim, fontSize: 12, fontWeight: 700,
           lineHeight: 1, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .12s ease',
+          justifySelf: 'center',
         }}>›</span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'block', color: k.text, fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{title}</span>
+
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', color: k.text, fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>
+            {title}
+          </span>
           {description ? (
             <span style={{ display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440 }}>
               {description}
             </span>
           ) : null}
         </span>
-        {(headerAction || summary) ? (
-          <span className="sk-config-meta" style={{
-            flexShrink: 0, width: 168, display: 'flex', flexDirection: 'column',
-            alignItems: 'flex-end', justifyContent: 'center', gap: 4, textAlign: 'right',
-          }}>
-            {headerAction ? (
-              <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onKeyDown={(e) => e.stopPropagation()}
-                style={{ display: 'inline-flex', alignItems: 'center' }}>
-                {headerAction}
-              </span>
-            ) : null}
-            {summary ? (
-              <span className="sk-config-summary" title={summary} style={{
-                width: '100%', color: k.dim, fontSize: 10.5, fontWeight: 500, lineHeight: 1.3,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{summary}</span>
-            ) : null}
+
+        <span
+          className="sk-config-meta"
+          style={{
+            width: META_W,
+            display: 'grid',
+            gridTemplateRows: '24px 18px',
+            alignItems: 'center',
+            justifyItems: 'end',
+            gap: 2,
+            textAlign: 'right',
+            boxSizing: 'border-box',
+          }}
+        >
+          <span
+            onClick={headerAction ? ((e) => { e.preventDefault(); e.stopPropagation(); }) : undefined}
+            onKeyDown={headerAction ? ((e) => e.stopPropagation()) : undefined}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              height: 24,
+              maxWidth: '100%',
+            }}
+          >
+            {headerAction ?? null}
           </span>
-        ) : null}
+          <span
+            className="sk-config-summary"
+            title={summary || undefined}
+            style={{
+              width: '100%',
+              color: k.dim,
+              fontSize: 10.5,
+              fontWeight: 500,
+              lineHeight: '18px',
+              height: 18,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              textAlign: 'right',
+            }}
+          >
+            {summary || '\u00a0'}
+          </span>
+        </span>
       </summary>
       <div className="sk-config-section-body" style={{ padding: '2px 16px 12px 16px', background: k.bg }}>
         {children}
