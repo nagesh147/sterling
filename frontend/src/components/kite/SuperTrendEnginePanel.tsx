@@ -15,8 +15,8 @@ import type { EngineConfigModel } from '../../types/kiteEngine';
 import { notifyOrder } from '../../store/useKiteNotifications';
 
 /**
- * SuperTrend engine settings — draft + Apply (same pattern as Navigator).
- * Chart → draft bar → Instruments → Contracts → Trail → Exit.
+ * SuperTrend engine settings — shared order with Navigator:
+ * draft bar → power → chart → instruments → contracts → engine-specific.
  */
 export function SuperTrendEnginePanel() {
   const { data: serverCfg, isLoading } = useEngineConfig();
@@ -89,6 +89,15 @@ export function SuperTrendEnginePanel() {
 
   return (
     <>
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={saving}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
+
       <EnginePowerHeader
         name="SuperTrend"
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
@@ -112,15 +121,6 @@ export function SuperTrendEnginePanel() {
             onChange={(v) => patch({ scan_source: v })}
           />
         </Section>
-
-        <SettingsDraftBar
-          dirty={dirty}
-          saving={saving}
-          onApply={handleApply}
-          onDiscard={handleDiscard}
-          onReset={handleReset}
-          resetConfirm={resetConfirm}
-        />
 
         <Section
           title="Instruments"
