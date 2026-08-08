@@ -37,9 +37,7 @@ export const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-/**
- * Accordion section — same card chrome as Trading Mode.
- */
+/** Accordion section — same card chrome as Trading Mode. */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
   description: string;
@@ -70,6 +68,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
           userSelect: 'none',
           background: k.bg,
           borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
+          boxSizing: 'border-box',
         }}
       >
         <span
@@ -136,7 +135,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       <div
         className="sk-config-section-body"
         style={{
-          padding: '4px 16px 14px 28px',
+          padding: '2px 16px 12px 16px',
           background: k.bg,
         }}
       >
@@ -146,7 +145,6 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-/** Setting row — no per-row border; hint under control. */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
@@ -166,46 +164,15 @@ export function Field({ label, hint, badge, children }: {
         fontFamily: k.fontFamily,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          minWidth: 0,
-          userSelect: 'none',
-        }}
-      >
-        <span
-          style={{
-            color: k.text,
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          {label}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, userSelect: 'none' }}>
+        <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
         {badge}
       </div>
-      <div
-        style={{
-          justifySelf: 'end',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-        }}
-      >
+      <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         {children}
       </div>
       {hint != null && hint !== '' ? (
-        <div
-          style={{
-            gridColumn: '1 / -1',
-            color: k.dim,
-            fontSize: 10.5,
-            lineHeight: 1.35,
-            userSelect: 'text',
-          }}
-        >
+        <div style={{ gridColumn: '1 / -1', color: k.dim, fontSize: 10.5, lineHeight: 1.35, userSelect: 'text' }}>
           {hint}
         </div>
       ) : null}
@@ -353,28 +320,11 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         style={{ width: 13, height: 13, margin: 0, accentColor: k.orange }}
       />
       <span style={{ minWidth: 0 }}>
-        <span
-          style={{
-            display: 'block',
-            fontSize: compact ? 10 : 12,
-            fontWeight: checked || indeterminate ? 600 : 500,
-            lineHeight: 1.25,
-          }}
-        >
+        <span style={{ display: 'block', fontSize: compact ? 10 : 12, fontWeight: checked || indeterminate ? 600 : 500, lineHeight: 1.25 }}>
           {label}
         </span>
         {hint && !compact && (
-          <span
-            style={{
-              display: 'block',
-              marginTop: 1,
-              color: k.dim,
-              fontSize: 10,
-              lineHeight: 1.3,
-            }}
-          >
-            {hint}
-          </span>
+          <span style={{ display: 'block', marginTop: 1, color: k.dim, fontSize: 10, lineHeight: 1.3 }}>{hint}</span>
         )}
       </span>
     </label>
