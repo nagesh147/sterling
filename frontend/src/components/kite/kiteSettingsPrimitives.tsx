@@ -11,7 +11,7 @@ export const BORDER = '#e0e0e0';
 export const TEXT = '#444';
 export const MUTED = '#777';
 export const DIM = '#9b9b9b';
-export const SOFT = '#f3f4f6';
+export const SOFT = '#f7f7f8';
 export const ORANGE_SOFT = '#fff5f0';
 
 export const inputStyle: React.CSSProperties = {
@@ -44,7 +44,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
     >
       <summary style={{
         listStyle: 'none', cursor: 'pointer', padding: '17px 18px', display: 'flex',
-        alignItems: 'center', gap: 11, userSelect: 'none', minHeight: 66, boxSizing: 'border-box',
+        alignItems: 'center', gap: 11, userSelect: 'none', minHeight: 56, boxSizing: 'border-box',
       }}>
         <span aria-hidden style={{ width: 18, color: DIM, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
         <span style={{ minWidth: 0, flex: 1 }}>
@@ -53,7 +53,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
         </span>
         <span className="sk-config-summary" style={{ color: DIM, fontSize: 11, textAlign: 'right', maxWidth: 230 }}>{summary}</span>
       </summary>
-      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 20px' }}>{children}</div>
+      <div className="sk-config-section-body" style={{ padding: '4px 18px 16px 18px' }}>{children}</div>
     </details>
   );
 }
@@ -67,17 +67,30 @@ export function Field({ label, hint, badge, children }: {
 }) {
   return (
     <div className="sk-config-field" style={{
-      display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) auto', gap: '6px 20px',
-      padding: '12px 0', alignItems: 'center', borderBottom: '1px solid #f0f0f0',
+      padding: '12px 0',
+      borderBottom: '1px solid #eee',
     }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, userSelect: 'none' }}>
           <span style={{ color: TEXT, fontSize: 13, fontWeight: 600 }}>{label}</span>
           {badge}
         </div>
-        {hint && <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.4, marginTop: 3, maxWidth: 400 }}>{hint}</div>}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0,
+        }}>
+          {children}
+        </div>
       </div>
-      <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>{children}</div>
+      {hint ? (
+        <div style={{
+          color: MUTED, fontSize: 12, lineHeight: 1.45, marginTop: 6, maxWidth: 520,
+          userSelect: 'text',
+        }}>
+          {hint}
+        </div>
+      ) : null}
     </div>
   );
 }
