@@ -14,16 +14,6 @@ const APPLIES_STYLE: Record<Applies, { label: string; color: string; background:
   both: { label: 'MANUAL + AUTO', color: '#4a6b4d', background: '#eef5ee', border: '#cfe2d0' },
 };
 
-/**
- * Says whether a setting bites on orders you place yourself, on orders the
- * engine places, or on both.
- *
- * The tooltip carries the backend evidence for the claim. These are real-money
- * settings, and "Advanced auto-execution guards" previously grouped two fields
- * (expiry square-off and the time stop) that in fact iterate every registered
- * position, hand-placed ones included — so an unsourced claim here is exactly
- * the failure mode worth designing against.
- */
 export function AppliesChip({ applies, evidence }: { applies: Applies; evidence?: string }) {
   const style = APPLIES_STYLE[applies];
   return (
@@ -41,10 +31,8 @@ export function AppliesChip({ applies, evidence }: { applies: Applies; evidence?
   );
 }
 
-
 export type Scope = 'all' | 'manual' | 'auto';
 
-/** Does a field with this applicability survive the current scope filter? */
 export function inScope(applies: Applies, scope: Scope): boolean {
   if (scope === 'all') return true;
   return applies === scope || applies === 'both';
@@ -56,7 +44,6 @@ const SCOPE_OPTIONS: Array<{ value: Scope; label: string; hint: string }> = [
   { value: 'auto', label: 'Automatic', hint: 'Only what affects orders the engine places.' },
 ];
 
-/** Filters the Trade Rules page down to one order origin. */
 export function ScopeFilter({ value, onChange }: { value: Scope; onChange: (next: Scope) => void }) {
   return (
     <div role="group" aria-label="Filter by order origin" style={{
@@ -90,7 +77,6 @@ export function ScopeFilter({ value, onChange }: { value: Scope; onChange: (next
   );
 }
 
-/** Quiet link into another settings section from a related control. */
 export function CrossLink({ to, children }: { to: SectionId; children: React.ReactNode }) {
   return (
     <button
@@ -107,7 +93,6 @@ export function CrossLink({ to, children }: { to: SectionId; children: React.Rea
   );
 }
 
-/** Informational note under a group of controls. */
 export function ConfigNote({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
@@ -126,8 +111,6 @@ export function PanelHeader({ title, description, saving }: {
   description?: string;
   saving?: boolean;
 }) {
-  // Title/description belong in the page header now. Only flash Saving…
-  // as a fixed pill so toggles never shift the page.
   if (saving !== true) return null;
 
   return (
@@ -160,7 +143,6 @@ export function PanelHeader({ title, description, saving }: {
   );
 }
 
-/** Transparent shell — sections carry their own border. */
 export function PanelCard({ children }: { children: React.ReactNode }) {
   return (
     <section style={{ background: 'transparent', border: 'none', marginBottom: 0 }}>
@@ -170,11 +152,10 @@ export function PanelCard({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Quieter, collapsed-by-default section for secondary / edge-case controls.
- * Use for filters, fine-tuning and guards so the Core controls stay visible.
+ * Advanced — quiet disclosure. Nested Section cards keep the same left edge
+ * as top-level sections (no indent).
  */
 export function AdvancedSection({ count, children, defaultOpen = false }: {
-  /** Optional. When set, shows a quiet count next to the label. */
   count?: number;
   children: React.ReactNode;
   defaultOpen?: boolean;
@@ -185,23 +166,25 @@ export function AdvancedSection({ count, children, defaultOpen = false }: {
     <details
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{ marginTop: 4 }}
+      style={{ marginTop: 8, marginBottom: 0 }}
     >
       <summary style={{
-        listStyle: 'none', cursor: 'pointer', padding: '6px 0', display: 'flex',
-        alignItems: 'center', gap: 6, userSelect: 'none', boxSizing: 'border-box',
-        background: 'transparent',
+        listStyle: 'none', cursor: 'pointer', padding: '8px 2px', display: 'flex',
+        alignItems: 'center', gap: 8, userSelect: 'none', boxSizing: 'border-box',
+        background: 'transparent', outline: 'none',
       }}>
         <span aria-hidden style={{
-          width: 12, color: DIM, display: 'inline-flex', alignItems: 'center',
-          justifyContent: 'center', fontSize: 12, flexShrink: 0,
+          width: 14, color: DIM, display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 12, flexShrink: 0, fontWeight: 700,
           transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .12s ease',
         }}>›</span>
-        <span style={{ color: DIM, fontSize: 11, fontWeight: 600 }}>
+        <span style={{ color: MUTED, fontSize: 12, fontWeight: 600 }}>
           Advanced{count != null ? ` · ${count}` : ''}
         </span>
       </summary>
-      <div style={{ padding: '0 0 4px 18px' }}>{children}</div>
+      <div style={{ padding: '0', display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {children}
+      </div>
     </details>
   );
 }
