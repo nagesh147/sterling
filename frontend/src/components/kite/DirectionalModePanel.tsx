@@ -303,37 +303,45 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
       </div>
 
-      {/* Custom delta override */}
+      {/* Target delta — exact δ the algo aims for when picking a strike */}
       {!isFutures && (
-        <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
-          <span style={{ ...S.hint, flexShrink: 0 }}>Custom delta override:</span>
-          <input
-            type="number"
-            style={{
-              ...S.numInput, width: 72,
-              ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
-            }}
-            value={customDelta}
-            placeholder={activeProfile.delta.toFixed(2)}
-            step={0.05} min={0.10} max={0.99}
-            onChange={e => {
-              setCustomDelta(e.target.value);
-              const d = parseFloat(e.target.value);
-              if (d >= 0.10 && d <= 0.99) {
-                const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
-                onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
-              }
-            }}
-            disabled={busy}
-          />
-          {customDelta && (
-            <button
-              style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
-              onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
-            >✕ clear</button>
-          )}
-          <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
-          {!customDelta && <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
+            <span style={{ ...S.hint, flexShrink: 0 }}>Target delta:</span>
+            <input
+              type="number"
+              style={{
+                ...S.numInput, width: 72,
+                ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
+              }}
+              value={customDelta}
+              placeholder={activeProfile.delta.toFixed(2)}
+              step={0.05} min={0.10} max={0.99}
+              onChange={e => {
+                setCustomDelta(e.target.value);
+                const d = parseFloat(e.target.value);
+                if (d >= 0.10 && d <= 0.99) {
+                  const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
+                  onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
+                }
+              }}
+              disabled={busy}
+              aria-label="Target delta"
+            />
+            {customDelta && (
+              <button
+                type="button"
+                style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
+              >✕ clear</button>
+            )}
+            <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
+          </div>
+          <div style={{ ...S.hint, lineHeight: 1.45 }}>
+            {customDelta && parseFloat(customDelta) >= 0.10 && parseFloat(customDelta) <= 0.99
+              ? <>Algo buys the strike <strong>closest to δ {parseFloat(customDelta).toFixed(2)}</strong> — not “above this value”. The OTM / ATM / ITM buttons follow this number.</>
+              : <>Leave blank to use the profile default (now δ {activeProfile.delta.toFixed(2)}). Algo picks the nearest live delta to that target.</>}
+          </div>
         </div>
       )}
 
