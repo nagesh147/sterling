@@ -232,17 +232,15 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
     <div style={S.card}>
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
-      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        WHAT SHOULD THE ALGO BUY?
+      <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#444', fontSize: 12, fontWeight: 700 }}>What the algo buys</span>
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
-
-
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4,
-        padding: 4, marginBottom: 12, border: '1px solid #e4e4e4', borderRadius: 8, background: '#f3f4f6',
+        display: 'flex', width: '100%', gap: 0, marginBottom: 10,
+        border: '1px solid #e0e0e0', borderRadius: 2, background: '#fff', overflow: 'hidden',
       }}>
-        {PROFILES.map(p => {
+        {PROFILES.map((p, i) => {
           const active = p.id === activeId;
           return (
             <button
@@ -251,15 +249,16 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               disabled={busy}
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
-                minHeight: 48, padding: '6px 4px', borderRadius: 6, border: 'none',
-                background: active ? '#fff' : 'transparent',
-                boxShadow: active ? '0 1px 2px rgba(0,0,0,.08), inset 0 -2px #f06428' : 'none',
+                flex: 1, minWidth: 0, minHeight: 40, padding: '6px 4px', border: 'none',
+                borderLeft: i > 0 ? '1px solid #e0e0e0' : 'none',
+                background: active ? '#f9f9f9' : '#fff',
+                boxShadow: active ? 'inset 0 -2px 0 #ff5722' : 'none',
                 cursor: busy ? 'default' : 'pointer',
-                textAlign: 'center' as const, transition: 'background .12s, box-shadow .12s',
+                textAlign: 'center' as const, fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: active ? 700 : 600, color: active ? '#222' : '#555' }}>{p.label}</div>
-              <div style={{ fontSize: 9.5, color: '#888', marginTop: 2 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? '#444' : '#9b9b9b' }}>{p.label}</div>
+              <div style={{ fontSize: 9.5, color: '#9b9b9b', marginTop: 1 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
