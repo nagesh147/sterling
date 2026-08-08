@@ -2,7 +2,7 @@ import React from 'react';
 import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle, settingsCardStyle } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS } from './config/registry';
-import { AdvancedSection } from './config/ConfigPrimitives';
+import { AdvancedSection, SettingsDraftBar } from './config/ConfigPrimitives';
 import { ScopedGroup } from './config/EngineScope';
 import { ContractsGroup, InstrumentsGroup } from './config/ScanSettings';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
@@ -298,6 +298,17 @@ export function NavigatorSettingsPanel() {
     <section style={{ ...settingsCardStyle }}>
       <style>{NUM_INPUT_CSS}</style>
 
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={setConfig.isPending}
+        onApply={handleApply}
+        onDiscard={handleReload}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+        applyDisabled={customScopeEmpty}
+        applyTitle={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
+      />
+
       {/* ── Core: enable + mode ─────────────────────────────────────────── */}
       <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -376,23 +387,6 @@ export function NavigatorSettingsPanel() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button
-            type="button" onClick={handleApply}
-            disabled={!dirty || setConfig.isPending || customScopeEmpty}
-            title={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
-            style={{ ...applyButtonStyle, opacity: !dirty || setConfig.isPending || customScopeEmpty ? 0.5 : 1 }}
-          >
-            Apply changes
-          </button>
-          {dirty && (
-            <button type="button" onClick={handleReload} style={pillButtonStyle}>Discard draft</button>
-          )}
-          <div style={{ flex: 1 }} />
-          <button type="button" onClick={handleReset} style={{ ...pillButtonStyle, color: resetConfirm ? RED : MUTED }}>
-            <Icons.Reload /> {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
-          </button>
-        </div>
       </div>
 
       {/* ═══════════════ CORE ═══════════════ */}
