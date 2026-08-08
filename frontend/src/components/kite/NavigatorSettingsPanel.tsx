@@ -5,7 +5,7 @@ import { SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ScopedGroup } from './config/EngineScope';
-import { ContractsGroup, InstrumentsGroup } from './config/ScanSettings';
+import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
@@ -204,18 +204,6 @@ function set<K extends keyof NavigatorConfigModel>(
   return { ...draft, [key]: { ...(draft[key] as object), ...patch } };
 }
 
-function NavChartSource({ value, onChange }: {
-  value: 'spot' | 'derivatives' | 'both' | 'confluence';
-  onChange: (v: 'spot' | 'derivatives' | 'both' | 'confluence') => void;
-}) {
-  return (
-    <ChoiceRow
-      value={value}
-      onChange={onChange}
-      options={SCAN_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-    />
-  );
-}
 
 export function NavigatorSettingsPanel() {
   const { data, isLoading, error: loadError } = useNavigatorConfig();
@@ -342,7 +330,8 @@ export function NavigatorSettingsPanel() {
         defaultOpen
       >
         <div>
-          <NavChartSource
+          <SignalSourceGroup
+            name="navigator-signal-source"
             value={draft.scan_source}
             onChange={(v) => patch({ ...draft, scan_source: v })}
           />
