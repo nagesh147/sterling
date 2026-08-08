@@ -4,7 +4,7 @@ import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
-import { ScopedGroup } from './config/EngineScope';
+import { ScopeLink, ScopedGroup } from './config/EngineScope';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
@@ -346,11 +346,23 @@ export function NavigatorSettingsPanel() {
         description="The indices and stocks Navigator watches."
         summary={scanSummary}
         defaultOpen
+        headerAction={(
+          <ScopeLink
+            groupLabel="Instruments"
+            linked={draft.scan_scope_mode === 'shared'}
+            onChange={(linked) => patch(linked
+              ? { ...draft, scan_scope_mode: 'shared' }
+              : seedCustomScope(draft, engineCfg))}
+            ownLabel="Own"
+            sharedLabel="Like SuperTrend"
+          />
+        )}
       >
         <ScopedGroup
           title="Instruments"
           description="The indices and stocks Navigator watches."
           linked={draft.scan_scope_mode === 'shared'}
+          hideLink
           onLinkChange={(linked) => patch(linked
             ? { ...draft, scan_scope_mode: 'shared' }
             : seedCustomScope(draft, engineCfg))}
@@ -395,15 +407,31 @@ export function NavigatorSettingsPanel() {
         description="Which strikes and expiry cycles Navigator resolves for its own setups."
         summary={
           draft.strike_moneyness == null
-            ? 'Same as SuperTrend'
+            ? 'Like SuperTrend'
             : `${draft.strike_moneyness.length} strikes`
         }
         defaultOpen
+        headerAction={(
+          <ScopeLink
+            groupLabel="Contracts"
+            linked={draft.strike_moneyness == null}
+            onChange={(linked) => patch(linked
+              ? { ...draft, strike_moneyness: null, scan_expiries_indices: null }
+              : {
+                  ...draft,
+                  strike_moneyness: engineCfg?.strike_moneyness ?? ['ITM1', 'ATM', 'OTM1'],
+                  scan_expiries_indices: engineCfg?.scan_expiries_indices ?? engineCfg?.scan_expiries ?? ['weekly', 'monthly'],
+                })}
+            ownLabel="Own"
+            sharedLabel="Like SuperTrend"
+          />
+        )}
       >
         <ScopedGroup
           title="Contracts"
           description="Which strikes and expiry cycles Navigator resolves for its own setups."
           linked={draft.strike_moneyness == null}
+          hideLink
           onLinkChange={(linked) => patch(linked
             ? { ...draft, strike_moneyness: null, scan_expiries_indices: null }
             : {

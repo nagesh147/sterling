@@ -38,11 +38,12 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /** Accordion section — same card chrome as Trading Mode. */
-export function Section({ title, description, summary, defaultOpen = false, children }: {
+export function Section({ title, description, summary, defaultOpen = false, headerAction, children }: {
   title: string;
   description: string;
   summary: string;
   defaultOpen?: boolean;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
@@ -113,6 +114,15 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             </span>
           ) : null}
         </span>
+        {headerAction ? (
+          <span
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onKeyDown={(e) => e.stopPropagation()}
+            style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}
+          >
+            {headerAction}
+          </span>
+        ) : null}
         {summary ? (
           <span
             className="sk-config-summary"
