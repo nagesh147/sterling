@@ -103,7 +103,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 160,
+              maxWidth: 200,
               color: k.dim,
               fontSize: 11,
               fontWeight: 500,
@@ -119,7 +119,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       </summary>
       <div
         className="sk-config-section-body"
-        style={{ padding: '0 0 8px 20px' }}
+        style={{ padding: '0 0 6px 20px' }}
       >
         {children}
       </div>
