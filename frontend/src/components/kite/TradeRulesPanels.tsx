@@ -218,7 +218,7 @@ export function AutomaticRulesPanel() {
     + ((cfg.block_entry_minutes_before_close ?? 0) > 0 ? 1 : 0)
     + ((cfg.max_contract_staleness_bars ?? 0) > 0 ? 1 : 0);
 
-  const advancedCount = entryFilterCount + 1 + 2 + 1 + 1;
+  const advancedCount = entryFilterCount + 2 + 1 + 1; // time limits, portfolio, signal rules
 
   const num = (
     key: Parameters<typeof patch>[1] & string,
@@ -349,6 +349,27 @@ export function AutomaticRulesPanel() {
         </Section>
 
         <Section
+          title="What to buy"
+          description="Instrument the algo buys when a signal fires."
+          summary={cfg.directional_mode ? cfg.vehicle.replace(/_/g, ' ') : 'Default option leg'}
+          defaultOpen
+        >
+          <ConfigNote>
+            Only for algo orders. When you trade by hand you pick the contract yourself.
+          </ConfigNote>
+          <div style={{ marginTop: 12 }}>
+            <DirectionalModePanel
+              cfg={cfg}
+              onUpdate={(values) => patch(values, undefined, 'Vehicle profile updated')}
+              busy={saving}
+              liveLotSize={leg?.lot_size ?? undefined}
+              livePremium={leg?.premium_spot ?? undefined}
+              liveUnderlying={pick?.underlying}
+            />
+          </div>
+        </Section>
+
+        <Section
           title="Daily loss limit"
           description="Stop new entries after a set daily loss. Never force-closes open trades."
           summary={cfg.max_daily_loss_pct != null ? `${cfg.max_daily_loss_pct}%` : 'Off'}
@@ -419,26 +440,6 @@ export function AutomaticRulesPanel() {
                 </ConfigNote>
               )}
             </Field>
-          </Section>
-
-          <Section
-            title="What to buy"
-            description="Instrument the algo buys when a signal fires."
-            summary={cfg.directional_mode ? cfg.vehicle.replace(/_/g, ' ') : 'Default option leg'}
-          >
-            <ConfigNote>
-              Only for algo orders. When you trade by hand you pick the contract yourself.
-            </ConfigNote>
-            <div style={{ marginTop: 12 }}>
-              <DirectionalModePanel
-                cfg={cfg}
-                onUpdate={(values) => patch(values, undefined, 'Vehicle profile updated')}
-                busy={saving}
-                liveLotSize={leg?.lot_size ?? undefined}
-                livePremium={leg?.premium_spot ?? undefined}
-                liveUnderlying={pick?.underlying}
-              />
-            </div>
           </Section>
 
           <Section
