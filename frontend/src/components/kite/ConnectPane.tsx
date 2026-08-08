@@ -682,3 +682,152 @@ export function ConnectPane() {
           </p>
         </div>
       </header>
+
+      <div className="kite-settings-layout" style={{
+        flex: 1, minHeight: 0, width: '100%',
+        display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
+      }}>
+        <nav aria-label="Kite settings sections" style={{
+          background: '#ffffff', borderRight: '1px solid #e0e0e0', padding: '10px 8px 16px',
+          overflowY: 'auto', minHeight: 0,
+        }}>
+          {SECTION_DEFS.map((item, index) => {
+            const selected = item.id === section;
+            const startsGroup = index === 0 || SECTION_DEFS[index - 1].group !== item.group;
+            return (
+              <React.Fragment key={item.id}>
+                {startsGroup && (
+                  <div className="kite-rail-group" style={{
+                    padding: '10px 11px 4px', color: '#a0a0a0', fontSize: 9,
+                    fontWeight: 750, letterSpacing: .8, textTransform: 'uppercase',
+                  }}>
+                    {item.group}
+                  </div>
+                )}
+                <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
+                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
+                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
+                }}>
+                  <span aria-hidden style={{
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: selected ? '#ffe8dc' : '#f4f4f5',
+                    color: selected ? '#f06428' : '#8a8a8a',
+                  }}>
+                    {SECTION_ICONS[item.id]}
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
+                  </span>
+                </button>
+              </React.Fragment>
+            );
+          })}
+        </nav>
+
+        <main style={{
+          minWidth: 0, minHeight: 0, overflowY: 'auto',
+          padding: '18px 24px 32px', background: '#fff',
+        }}>
+          {section === 'account' && (
+            <>
+              {isLoading && <div style={S.hint}>Loading accounts…</div>}
+              {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
+              {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
+              <AddAccount />
+              <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
+                Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
+              </div>
+            </>
+          )}
+
+          {section === 'mode' && (
+            <>
+              <TradingModePanel />
+            </>
+          )}
+
+          {section === 'manualRules' && (
+            <>
+              <ManualRulesPanel />
+            </>
+          )}
+
+          {section === 'autoRules' && (
+            <>
+              <AutomaticRulesPanel />
+            </>
+          )}
+
+          {section === 'engine' && (
+            <>
+              <SuperTrendEnginePanel />
+            </>
+          )}
+
+          {section === 'navigator' && (
+            <>
+              <NavigatorSettingsPanel />
+              <NavigatorCalibrationPanel />
+            </>
+          )}
+
+          {section === 'markets' && (
+            <>
+              <KiteExchangeSettingsCard />
+              {liveTools ? (
+                <><Funds /><MarginCalc /><TickerControl /></>
+              ) : (
+                <div style={S.card}>
+                  <div style={S.title}>LIVE ACCOUNT TOOLS</div>
+                  <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+                </div>
+              )}
+            </>
+          )}
+
+          {section === 'notifications' && (
+            <>
+              <KiteTelegramPanel />
+            </>
+          )}
+
+          {section === 'experience' && (
+            <>
+              <MotionStyleSettings />
+              <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                <BrandIconPicker />
+              </section>
+              <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
+                <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
+                  Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+                </div>
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+
+      <style>{`
+        @media (max-width: 820px) {
+          .kite-settings-hub { padding: 18px 14px 36px !important; }
+          .kite-settings-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .kite-settings-layout > nav { position: static !important; display: flex; overflow-x: auto; gap: 4px; }
+          .kite-settings-layout > nav button { min-width: 156px; margin-bottom: 0 !important; }
+          /* The group headings only read as headings in the vertical rail; in the
+             horizontal scroller they would be islands of text between buttons. */
+          .kite-rail-group { display: none; }
+        }
+        @media (max-width: 560px) {
+          .kite-settings-hub > header { flex-direction: column; }
+          .kite-settings-hub > header > div:last-child { justify-content: flex-start !important; }
+          .kite-settings-status { width: 100%; box-sizing: border-box; }
+        }
+      `}</style>
+    </div>
+  );
+}
