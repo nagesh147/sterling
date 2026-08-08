@@ -236,23 +236,6 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
 
-      {/* What this panel controls — and what it does NOT. */}
-      <div style={{
-        fontSize: 11, lineHeight: 1.55, color: '#555', marginBottom: 10,
-        padding: '8px 11px', borderRadius: 5,
-        background: cfg.auto_execute ? '#e8f5e9' : '#fff8e1',
-        border: `1px solid ${cfg.auto_execute ? '#a5d6a7' : '#ffe082'}`,
-      }}>
-        {cfg.auto_execute ? (
-          <><strong style={{ color: '#2e7d32' }}>AUTO is ON.</strong> The engine will buy the instrument
-            below for each fresh signal. This is purely an <strong>execution</strong> choice — it does
-            <em> not</em> change which signals or strikes you see (set those in the signal table).</>
-        ) : (
-          <><strong style={{ color: '#e65100' }}>You're in MANUAL mode.</strong> These settings only kick in
-            once you switch <strong>SIGNALS → AUTO</strong> above. In MANUAL you pick the strike yourself
-            from each signal, so the choice below is just pre-configuration.</>
-        )}
-      </div>
 
       <div style={{ display: 'flex', gap: 2, padding: 3, marginBottom: 14, flexWrap: 'wrap' as const, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
         {PROFILES.map(p => {
