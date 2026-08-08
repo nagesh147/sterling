@@ -2,8 +2,8 @@ import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 
 /**
- * Settings primitives — accordion cards + Kite system typography.
- * Tokens from kiteUI (same as dashboard / signals / SuperTrend tables).
+ * Settings primitives — compact accordion + Kite system typography.
+ * Minimal borders; no header fills; small radius.
  */
 
 export const ORANGE = k.orange;
@@ -15,8 +15,8 @@ export const SOFT = k.surface;
 export const ORANGE_SOFT = tint(k.orange, 10);
 
 export const inputStyle: React.CSSProperties = {
-  width: 96,
-  height: 32,
+  width: 88,
+  height: 28,
   padding: '0 8px',
   border: `1px solid ${k.border}`,
   borderRadius: 2,
@@ -28,8 +28,7 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /**
- * Accordion card section — boxed, chevron tile, orange accent when open.
- * Typography matches dashboard / engine tables (k.text, 12–13px, Inter).
+ * Compact accordion — one outer border, no header wash, no field rules.
  */
 export function Section({ title, description, summary, defaultOpen = false, children }: {
   title: string;
@@ -46,9 +45,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
       style={{
-        marginBottom: 10,
+        marginBottom: 6,
         border: `1px solid ${k.border}`,
-        borderRadius: 9,
+        borderRadius: 4,
         background: k.bg,
         overflow: 'hidden',
         fontFamily: k.fontFamily,
@@ -60,30 +59,24 @@ export function Section({ title, description, summary, defaultOpen = false, chil
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          padding: '12px 14px',
+          gap: 8,
+          padding: '8px 10px',
           userSelect: 'none',
-          background: isOpen ? k.surface : k.bg,
-          borderLeft: isOpen ? `3px solid ${k.orange}` : '3px solid transparent',
-          transition: 'background .12s ease',
+          background: k.bg,
+          borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
         }}
       >
         <span
           aria-hidden
           style={{
             flexShrink: 0,
-            width: 22,
-            height: 22,
-            borderRadius: 4,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isOpen ? tint(k.orange, 12) : k.surface,
+            width: 14,
             color: isOpen ? k.orange : k.dim,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 700,
+            lineHeight: 1,
             transform: isOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform .14s ease, background .12s ease, color .12s ease',
+            transition: 'transform .12s ease',
           }}
         >
           ›
@@ -93,9 +86,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             style={{
               display: 'block',
               color: k.text,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 700,
-              lineHeight: 1.3,
+              lineHeight: 1.25,
             }}
           >
             {title}
@@ -105,9 +98,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
               style={{
                 display: 'block',
                 color: k.dim,
-                fontSize: 11,
-                lineHeight: 1.4,
-                marginTop: 2,
+                fontSize: 10.5,
+                lineHeight: 1.35,
+                marginTop: 1,
               }}
             >
               {description}
@@ -120,9 +113,9 @@ export function Section({ title, description, summary, defaultOpen = false, chil
             title={summary}
             style={{
               flexShrink: 0,
-              maxWidth: 180,
+              maxWidth: 160,
               color: k.dim,
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: 500,
               textAlign: 'right',
               overflow: 'hidden',
@@ -137,8 +130,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       <div
         className="sk-config-section-body"
         style={{
-          padding: '4px 14px 12px',
-          borderTop: `1px solid ${k.border}`,
+          padding: '2px 10px 8px 24px',
           background: k.bg,
         }}
       >
@@ -148,7 +140,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-/** Setting row — label left · control right · hint under (signal-table density). */
+/** Setting row — no per-row border; hint under control. */
 export function Field({ label, hint, badge, children }: {
   label: string;
   hint?: string;
@@ -160,12 +152,11 @@ export function Field({ label, hint, badge, children }: {
       className="sk-config-field"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(96px, max-content)',
-        columnGap: 16,
-        rowGap: 2,
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(88px, max-content)',
+        columnGap: 12,
+        rowGap: 1,
         alignItems: 'center',
-        padding: '9px 0',
-        borderBottom: `1px solid ${k.border}`,
+        padding: '6px 0',
         fontFamily: k.fontFamily,
       }}
     >
@@ -204,8 +195,8 @@ export function Field({ label, hint, badge, children }: {
           style={{
             gridColumn: '1 / -1',
             color: k.dim,
-            fontSize: 11,
-            lineHeight: 1.4,
+            fontSize: 10.5,
+            lineHeight: 1.35,
             userSelect: 'text',
           }}
         >
@@ -247,11 +238,11 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
             style={{
               border: 'none',
               borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
-              minHeight: 28,
+              minHeight: 26,
               borderRadius: 0,
               background: selected ? k.surface : k.bg,
               color: selected ? k.text : k.dim,
-              padding: '0 10px',
+              padding: '0 9px',
               fontSize: 11,
               fontWeight: selected ? 600 : 500,
               boxShadow: selected ? `inset 0 -2px 0 ${k.orange}` : 'none',
@@ -283,9 +274,9 @@ export function Switch({ checked, label, onChange, disabled = false }: {
       onClick={onChange}
       disabled={disabled}
       style={{
-        width: 36,
-        height: 20,
-        borderRadius: 10,
+        width: 34,
+        height: 18,
+        borderRadius: 9,
         border: 'none',
         padding: 0,
         flexShrink: 0,
@@ -299,9 +290,9 @@ export function Switch({ checked, label, onChange, disabled = false }: {
       <span
         style={{
           position: 'absolute',
-          width: 16,
-          height: 16,
-          borderRadius: 8,
+          width: 14,
+          height: 14,
+          borderRadius: 7,
           top: 2,
           left: checked ? 18 : 2,
           background: k.bg,
@@ -331,16 +322,16 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
     <label
       title={hint}
       style={{
-        minHeight: compact ? 28 : 34,
+        minHeight: compact ? 26 : 30,
         display: 'grid',
         gridTemplateColumns: '14px minmax(0, 1fr)',
         alignItems: 'center',
         gap: 8,
-        border: compact ? 'none' : `1px solid ${k.border}`,
-        background: k.bg,
+        border: 'none',
+        background: 'transparent',
         color: k.text,
         borderRadius: 2,
-        padding: compact ? '2px 4px' : '6px 8px',
+        padding: compact ? '2px 0' : '4px 0',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.7 : 1,
         boxSizing: 'border-box',
