@@ -396,9 +396,27 @@ export function NavigatorSettingsPanel() {
       </div>
 
       {/* ═══════════════ CORE ═══════════════ */}
+      {/* ═══════════════ CORE (order matches SuperTrend) ═══════════════ */}
       <Section
-        title="What Navigator scans"
-        description="Peer engine to SuperTrend. Each group either follows SuperTrend or stands on its own."
+        title="Chart source"
+        description="Which price series Navigator reads."
+        summary={SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
+        defaultOpen
+      >
+        <div>
+          <NavChartSource
+            value={draft.scan_source}
+            onChange={(v) => patch({ ...draft, scan_source: v })}
+          />
+          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 6, maxWidth: 440 }}>
+            Always its own — SuperTrend's source is never applied here.
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Instruments"
+        description="The indices and stocks Navigator watches."
         summary={scanSummary}
         defaultOpen
       >
@@ -443,17 +461,18 @@ export function NavigatorSettingsPanel() {
           )}
         </ScopedGroup>
 
-        <div style={{ padding: '15px 0', borderTop: `1px solid ${BORDER}` }}>
-          <div style={{ color: TEXT, fontSize: 12.5, fontWeight: 700 }}>Chart source</div>
-          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '2px 0 9px' }}>
-            Which price series Navigator reads. Always its own — SuperTrend's source never applied here.
-          </div>
-          <NavChartSource
-            value={draft.scan_source}
-            onChange={(v) => patch({ ...draft, scan_source: v })}
-          />
-        </div>
+      </Section>
 
+      <Section
+        title="Contracts"
+        description="Which strikes and expiry cycles Navigator resolves for its own setups."
+        summary={
+          draft.strike_moneyness == null
+            ? 'Same as SuperTrend'
+            : `${draft.strike_moneyness.length} strikes`
+        }
+        defaultOpen
+      >
         <ScopedGroup
           title="Contracts"
           description="Which strikes and expiry cycles Navigator resolves for its own setups."

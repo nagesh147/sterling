@@ -3,7 +3,7 @@ import { useResetEngineConfig, useRunScan } from '../../hooks/useSterlingKiteEng
 import {
   BORDER, ChoiceRow, DIM, Field, MUTED, Section, SOFT, Switch, TEXT,
 } from './kiteSettingsPrimitives';
-import { AdvancedSection, ConfigNote, PanelCard, PanelHeader } from './config/ConfigPrimitives';
+import { ConfigNote, PanelCard, PanelHeader } from './config/ConfigPrimitives';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import {
@@ -54,11 +54,11 @@ export function SuperTrendEnginePanel() {
       <PanelCard>
         <PanelHeader
           title="How SuperTrend trades"
-          description="Chart source, how the stop follows price, and what closes the trade."
+          description="What it reads, what it watches, and how it exits."
           saving={saving}
         />
 
-        {/* ═══════════════ CORE ═══════════════ */}
+        {/* ═══════════════ CORE (order matches Navigator) ═══════════════ */}
         <Section
           title="Chart source"
           description="Which price series SuperTrend reads a setup from."
@@ -69,6 +69,35 @@ export function SuperTrendEnginePanel() {
             name="supertrend-signal-source"
             value={cfg.scan_source}
             onChange={(v) => patch({ scan_source: v }, 'scan_source', `SuperTrend source changed to ${scanSourceLabel(v)}`)}
+          />
+        </Section>
+
+        <Section
+          title="Instruments"
+          description="The indices and F&O stocks this engine watches."
+          summary={instrumentsSummary}
+          defaultOpen
+        >
+          <InstrumentsGroup
+            idPrefix="SuperTrend"
+            indices={cfg.scan_indices}
+            stocks={cfg.scan_stocks}
+            allStocks={cfg.scan_all_stocks}
+            stockContracts={cfg.scan_stock_contracts ?? true}
+            onChange={(next) => patch(next, undefined, 'SuperTrend universe updated')}
+          />
+        </Section>
+
+        <Section
+          title="Contracts"
+          description="Which strikes and expiry cycles SuperTrend resolves."
+          summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
+          defaultOpen
+        >
+          <ContractsGroup
+            strikes={cfg.strike_moneyness}
+            indexExpiries={indexExpiries}
+            onChange={(next) => patch(next, undefined, 'SuperTrend contracts updated')}
           />
         </Section>
 
@@ -130,40 +159,6 @@ export function SuperTrendEnginePanel() {
           </ConfigNote>
         </Section>
 
-        {/* ═══════════════ ADVANCED ═══════════════ */}
-        <AdvancedSection count={2}>
-          <Section
-            title="Instruments"
-            description="The indices and F&O stocks this engine watches."
-            summary={instrumentsSummary}
-          >
-            <InstrumentsGroup
-              idPrefix="SuperTrend"
-              indices={cfg.scan_indices}
-              stocks={cfg.scan_stocks}
-              allStocks={cfg.scan_all_stocks}
-              stockContracts={cfg.scan_stock_contracts ?? true}
-              onChange={(next) => patch(next, undefined, 'SuperTrend universe updated')}
-            />
-          </Section>
-
-          <Section
-            title="Contracts"
-            description="Which strikes and expiry cycles SuperTrend resolves."
-            summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
-          >
-            <ContractsGroup
-              strikes={cfg.strike_moneyness}
-              indexExpiries={indexExpiries}
-              onChange={(next) => patch(next, undefined, 'SuperTrend contracts updated')}
-            />
-          </Section>
-
-          <div style={{ padding: '11px 18px', background: SOFT, borderTop: `1px solid ${BORDER}`, color: DIM, fontSize: 10.5 }}>
-            {instruments} instrument{instruments === 1 ? '' : 's'} · {cfg.strike_moneyness.length} strike
-            {cfg.strike_moneyness.length === 1 ? '' : 's'} · source {scanSourceLabel(cfg.scan_source)}
-          </div>
-        </AdvancedSection>
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
