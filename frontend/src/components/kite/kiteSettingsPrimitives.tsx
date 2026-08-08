@@ -14,6 +14,16 @@ export const DIM = k.dim;
 export const SOFT = k.surface;
 export const ORANGE_SOFT = tint(k.orange, 10);
 
+/** Shared shell — matches Trading Mode cards everywhere in Settings. */
+export const settingsCardStyle: React.CSSProperties = {
+  background: k.bg,
+  border: `1px solid ${k.border}`,
+  borderRadius: 9,
+  marginBottom: 16,
+  boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+  overflow: 'hidden',
+};
+
 export const inputStyle: React.CSSProperties = {
   width: 88,
   height: 28,
@@ -45,13 +55,8 @@ export function Section({ title, description, summary, defaultOpen = false, chil
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
       style={{
-        marginBottom: 16,
-        border: `1px solid ${k.border}`,
-        borderRadius: 9,
-        background: k.bg,
-        overflow: 'hidden',
+        ...settingsCardStyle,
         fontFamily: k.fontFamily,
-        boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
       <summary
