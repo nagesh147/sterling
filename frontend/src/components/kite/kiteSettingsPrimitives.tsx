@@ -106,6 +106,7 @@ export function Section({ title, description, summary, defaultOpen = false, chil
                 fontSize: 10.5,
                 lineHeight: 1.35,
                 marginTop: 1,
+                maxWidth: 440,
               }}
             >
               {description}
@@ -145,26 +146,58 @@ export function Section({ title, description, summary, defaultOpen = false, chil
   );
 }
 
-export function Field({ label, hint, badge, children }: {
+export function Field({ label, hint, badge, children, wide = false }: {
   label: string;
   hint?: string;
   badge?: React.ReactNode;
   children: React.ReactNode;
+  /** Control full-width under the label (choice strips, long option rows). */
+  wide?: boolean;
 }) {
+  const hintStyle: React.CSSProperties = {
+    color: k.dim,
+    fontSize: 10.5,
+    lineHeight: 1.4,
+    maxWidth: 440,
+    userSelect: 'text',
+  };
+
+  if (wide) {
+    return (
+      <div
+        className="sk-config-field sk-config-field--wide"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          padding: '8px 0',
+          fontFamily: k.fontFamily,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}>
+          <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
+          {badge}
+        </div>
+        <div style={{ width: '100%' }}>{children}</div>
+        {hint != null && hint !== '' ? <div style={hintStyle}>{hint}</div> : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className="sk-config-field"
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr) minmax(88px, max-content)',
-        columnGap: 12,
-        rowGap: 1,
+        columnGap: 16,
+        rowGap: 2,
         alignItems: 'center',
-        padding: '6px 0',
+        padding: '7px 0',
         fontFamily: k.fontFamily,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, userSelect: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: 360, userSelect: 'none' }}>
         <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
         {badge}
       </div>
@@ -172,9 +205,7 @@ export function Field({ label, hint, badge, children }: {
         {children}
       </div>
       {hint != null && hint !== '' ? (
-        <div style={{ gridColumn: '1 / -1', color: k.dim, fontSize: 10.5, lineHeight: 1.35, userSelect: 'text' }}>
-          {hint}
-        </div>
+        <div style={{ gridColumn: '1 / -1', ...hintStyle }}>{hint}</div>
       ) : null}
     </div>
   );
@@ -189,7 +220,8 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
     <div
       role="group"
       style={{
-        display: 'inline-flex',
+        display: 'flex',
+        width: '100%',
         maxWidth: '100%',
         gap: 0,
         border: `1px solid ${k.border}`,
@@ -209,19 +241,21 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
             title={option.hint}
             onClick={() => onChange(option.value)}
             style={{
+              flex: '1 1 auto',
               border: 'none',
               borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
-              minHeight: 26,
+              minHeight: 28,
               borderRadius: 0,
               background: selected ? k.surface : k.bg,
               color: selected ? k.text : k.dim,
-              padding: '0 9px',
+              padding: '0 10px',
               fontSize: 11,
               fontWeight: selected ? 600 : 500,
               boxShadow: selected ? `inset 0 -2px 0 ${k.orange}` : 'none',
               fontFamily: k.fontFamily,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
+              textAlign: 'center' as const,
             }}
           >
             {option.label}
