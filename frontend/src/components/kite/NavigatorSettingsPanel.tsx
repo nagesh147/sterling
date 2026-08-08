@@ -1,9 +1,8 @@
 import React from 'react';
-import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT, inputStyle } from './kiteSettingsPrimitives';
+import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, Switch, TEXT, inputStyle, settingsCardStyle } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS } from './config/registry';
-import { AdvancedSection, PanelCard } from './config/ConfigPrimitives';
-import { EnginePowerHeader } from './config/EnginePowerHeader';
+import { AdvancedSection } from './config/ConfigPrimitives';
 import { ScopedGroup } from './config/EngineScope';
 import { ContractsGroup, InstrumentsGroup } from './config/ScanSettings';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
@@ -296,25 +295,44 @@ export function NavigatorSettingsPanel() {
   ].join(' · ');
 
   return (
-    <>
+    <section style={{ ...settingsCardStyle }}>
       <style>{NUM_INPUT_CSS}</style>
 
-      <EnginePowerHeader
-        name="Value-Flow Navigator"
-        tagline="Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity."
-        on={draft.enabled}
-        busy={setConfig.isPending}
-        onToggle={() => patch({ ...draft, enabled: !draft.enabled })}
-        runningNote="Reading structure for its instruments. It can confirm SuperTrend setups and find its own."
-        offNote="Not scanning. SuperTrend can still run on its own."
-      >
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14,
-          padding: '0 18px 16px', borderTop: `1px solid ${BORDER}`,
-        }}>
-          <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+      {/* ── Core: enable + mode ─────────────────────────────────────────── */}
+      <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+              <span style={{ color: TEXT, fontSize: 15, fontWeight: 800 }}>Value-Flow Navigator</span>
+              <span style={{
+                padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800, letterSpacing: .4,
+                color: draft.enabled ? '#2e7d32' : MUTED,
+                background: draft.enabled ? '#e8f5e9' : '#f6f6f7',
+                border: `1px solid ${draft.enabled ? '#cfe2d0' : BORDER}`,
+              }}>
+                {draft.enabled ? 'RUNNING' : 'OFF'}
+              </span>
+            </div>
+            <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 4 }}>
+              Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity.
+            </div>
+            <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>
+              {draft.enabled
+                ? 'Reading structure for its instruments. It can confirm SuperTrend setups and find its own.'
+                : 'Not scanning. SuperTrend can still run on its own.'}
+            </div>
+          </div>
+          <Switch
+            checked={draft.enabled}
+            label="Enable Navigator"
+            onChange={() => patch({ ...draft, enabled: !draft.enabled })}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: 14 }}>
+          <div>
             <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 5 }}>Mode</div>
-            <ChoiceRow
+            <ChoiceRow<NavigatorOperatingMode>
               value={draft.operating_mode}
               onChange={(mode) => {
                 if (mode === 'gate' && !gateReady) return;
@@ -332,22 +350,52 @@ export function NavigatorSettingsPanel() {
             {gateReady ? 'Calibration ready' : 'Gate unavailable — not yet calibrated'}
           </div>
           <div style={{ color: DIM, fontSize: 10.5 }}>Revision {record.revision}</div>
+          {draft.enabled && record.activation_watermark_ms > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: DIM, fontSize: 10.5 }}>
+              <Icons.History />
+              Active since {new Date(record.activation_watermark_ms).toLocaleString()}
+            </div>
+          )}
+          <div style={{ flex: 1 }} />
+          <span aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: setConfig.isPending ? MUTED : dirty ? AMBER : GREEN, fontSize: 10.5, fontWeight: 700 }}>
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: setConfig.isPending ? '#c2c2c2' : dirty ? AMBER : GREEN }} />
+            {setConfig.isPending ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}
+          </span>
         </div>
+
         {conflict && (
-          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: `1px solid #e2b6a4`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          <div style={{ marginTop: 10, padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: `1px solid #e2b6a4`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
             <Icons.Warning />
-            <span style={{ flex: 1, color: TEXT }}>This config changed elsewhere. Reload or Apply to overwrite.</span>
+            <span style={{ flex: 1, color: TEXT }}>This config changed elsewhere. Your draft is preserved — reload to compare, or Apply again to overwrite.</span>
             <button type="button" onClick={handleReload} style={{ ...pillButtonStyle }}>Reload latest</button>
           </div>
         )}
         {saveError && (
-          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: '#fff0f0', border: `1px solid #e2a4a4`, color: RED, fontSize: 11 }}>
+          <div style={{ marginTop: 10, padding: '9px 11px', borderRadius: 7, background: '#fff0f0', border: `1px solid #e2a4a4`, color: RED, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
             <Icons.Warning /> {saveError}
           </div>
         )}
-      </EnginePowerHeader>
 
-      <PanelCard>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button
+            type="button" onClick={handleApply}
+            disabled={!dirty || setConfig.isPending || customScopeEmpty}
+            title={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
+            style={{ ...applyButtonStyle, opacity: !dirty || setConfig.isPending || customScopeEmpty ? 0.5 : 1 }}
+          >
+            Apply changes
+          </button>
+          {dirty && (
+            <button type="button" onClick={handleReload} style={pillButtonStyle}>Discard draft</button>
+          )}
+          <div style={{ flex: 1 }} />
+          <button type="button" onClick={handleReset} style={{ ...pillButtonStyle, color: resetConfirm ? RED : MUTED }}>
+            <Icons.Reload /> {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
+          </button>
+        </div>
+      </div>
+
+      {/* ═══════════════ CORE ═══════════════ */}
       {/* ═══════════════ CORE (order matches SuperTrend) ═══════════════ */}
       <Section
         title="Chart source"
@@ -698,30 +746,7 @@ export function NavigatorSettingsPanel() {
           <NumField label="Feature/signal retention (days)" value={draft.retention_features_days} min={1} max={3650} onChange={(v) => patch({ ...draft, retention_features_days: v })} defaultValue={ROOT_DEFAULTS.retention_features_days} />
         </Section>
       </AdvancedSection>
-
-        {dirty && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            padding: '12px 16px', background: SOFT, border: `1px solid ${BORDER}`,
-            borderRadius: 9, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
-          }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: setConfig.isPending ? MUTED : AMBER, fontSize: 10.5, fontWeight: 700 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: setConfig.isPending ? '#c2c2c2' : AMBER }} />
-              {setConfig.isPending ? 'Saving…' : 'Unsaved changes'}
-            </span>
-            <button type="button" onClick={handleApply} disabled={!dirty || setConfig.isPending || customScopeEmpty}
-              style={{ ...applyButtonStyle, opacity: !dirty || setConfig.isPending || customScopeEmpty ? 0.5 : 1 }}>
-              Apply changes
-            </button>
-            <button type="button" onClick={handleReload} style={pillButtonStyle}>Discard draft</button>
-            <div style={{ flex: 1 }} />
-            <button type="button" onClick={handleReset} style={{ ...pillButtonStyle, color: resetConfirm ? RED : MUTED }}>
-              <Icons.Reload /> {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
-            </button>
-          </div>
-        )}
-      </PanelCard>
-    </>
+    </section>
   );
 }
 
