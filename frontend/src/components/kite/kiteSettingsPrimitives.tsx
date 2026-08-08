@@ -118,9 +118,9 @@ export function Section({
             display: 'grid',
             gridTemplateRows: '24px 18px',
             alignItems: 'center',
-            justifyItems: 'end',
+            justifyItems: 'start',
             gap: 2,
-            textAlign: 'right',
+            textAlign: 'left',
             boxSizing: 'border-box',
           }}
         >
@@ -130,7 +130,7 @@ export function Section({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'flex-end',
+              justifyContent: 'flex-start',
               height: 24,
               maxWidth: '100%',
             }}
@@ -150,7 +150,7 @@ export function Section({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              textAlign: 'right',
+              textAlign: 'left',
             }}
           >
             {summary || '\u00a0'}
