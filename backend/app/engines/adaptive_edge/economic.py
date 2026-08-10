@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .edge import EdgeAssessment
+from .formula_registry import require_implemented
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ def evaluate_economics(
     execution_cost: float,
     minimum_net_value: float = 0.0,
 ) -> EconomicAssessment:
+    definition = require_implemented("F-004")
     gross = edge.expected_gross_value
     if gross is None:
         return EconomicAssessment(
@@ -35,6 +37,8 @@ def evaluate_economics(
             expected_execution_cost=execution_cost,
             expected_net_value=0.0,
             eligible=False,
+            formula_id=definition.formula_id,
+            formula_version=definition.version,
             reason="missing_expected_gross_value",
         )
 
@@ -45,5 +49,7 @@ def evaluate_economics(
         expected_execution_cost=execution_cost,
         expected_net_value=net,
         eligible=eligible,
+        formula_id=definition.formula_id,
+        formula_version=definition.version,
         reason=None if eligible else "expected_net_value_below_threshold",
     )
