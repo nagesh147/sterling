@@ -32,7 +32,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
         {engine === 'signals' ? (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         ) : (
-          <AdaptiveEdgePanel rows={[]} onScan={() => undefined} scanning={false} />
+          <AdaptiveEdgePanel rows={[]} />
         )}
       </div>
     </div>
