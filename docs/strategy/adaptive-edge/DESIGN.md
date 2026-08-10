@@ -25,6 +25,26 @@ Execution
   creates intent only; broker/router determines actual execution
 ```
 
+## Formula-first implementation rule
+
+The canonical formula registry is the boundary between specification and code:
+
+```text
+canonical formula ID
+        |
+        v
+formula_registry.py
+        |
+        +--> implementation
+        +--> tests
+        +--> audit/provenance
+        +--> UI explanation
+```
+
+A formula is executable only when its registry status is `IMPLEMENTED` and its
+implementation version equals the registry version. Locked formula IDs fail
+closed.
+
 ## Feature -> Edge -> Economic Evaluation contract
 
 The implementation must preserve this exact dependency direction:
@@ -32,12 +52,15 @@ The implementation must preserve this exact dependency direction:
 ```text
 FeatureSnapshot
       |
+      | formula_ids
       v
 EdgeAssessment
       |
+      | formula_id + formula_version
       v
 EconomicAssessment
       |
+      | F-004
       v
 DecisionCandidate
 ```
@@ -46,19 +69,20 @@ No feature module may call execution. No economic module may mutate risk authori
 
 ## FeatureSnapshot
 
-The snapshot must carry timestamps for its inputs so causal availability can be checked.
+The snapshot carries timestamps for its inputs so causal availability can be checked, plus formula provenance:
 
 ```text
 observation_time
 feature_values
 source timestamps
+formula_ids
 quality/staleness metadata
 instrument context
 ```
 
 ## EdgeAssessment
 
-Conceptual contract:
+Contract:
 
 ```text
 prediction / opportunity
@@ -68,11 +92,11 @@ explanation / feature provenance
 formula_id + formula_version
 ```
 
-The actual strategy-specific equation remains F-102 and cannot be invented.
+F-102 remains locked until recovered.
 
 ## EconomicAssessment
 
-Conceptual contract:
+Contract:
 
 ```text
 expected_gross_value
