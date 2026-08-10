@@ -18,7 +18,6 @@ import { KiteNotifications } from './KiteNotifications';
 import { PendingGttProtectionWatcher } from './PendingGttProtectionWatcher';
 import { KiteSessionGuard } from './KiteSessionGuard';
 import { KiteAuthOverlay } from './KiteLoader';
-import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
@@ -39,6 +38,7 @@ import {
 import { KiteInteractionMotion } from './KiteInteractionMotion';
 import { k } from '../../styles/kiteUI';
 import type { SignalChartData } from '../../types/kiteEngine';
+import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -184,7 +184,10 @@ export function KiteTab() {
           )}
           rightSidebar={(
             <EngineStartupBoundary>
-              <SterlingKiteEngineWithExpiry onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
+              <AdaptiveEdgeRightSidebar
+                onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }}
+                onOpenChart={handleOpenInstrument}
+              />
             </EngineStartupBoundary>
           )}
           bottomBar={<EngineTerminal />}
