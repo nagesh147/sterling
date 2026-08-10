@@ -7,7 +7,7 @@ with formula IDs before becoming executable strategy logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class FeatureSnapshot:
     observation_time: str
     values: Mapping[str, float]
     available_at: Mapping[str, str]
+    formula_ids: tuple[str, ...] = ()
     quality: str = "unknown"
 
     def assert_causal(self, decision_time: str) -> None:
@@ -36,10 +37,19 @@ class FeatureSnapshot:
 
 
 def build_feature_snapshot(
-    *, observation_time: str, inputs: list[FeatureInput], decision_time: str
+    *,
+    observation_time: str,
+    inputs: list[FeatureInput],
+    decision_time: str,
+    formula_ids: Sequence[str] = (),
 ) -> FeatureSnapshot:
     values = {item.name: item.value for item in inputs}
     available_at = {item.name: item.available_at for item in inputs}
-    snapshot = FeatureSnapshot(observation_time, values, available_at)
+    snapshot = FeatureSnapshot(
+        observation_time,
+        values,
+        available_at,
+        formula_ids=tuple(formula_ids),
+    )
     snapshot.assert_causal(decision_time)
     return snapshot
