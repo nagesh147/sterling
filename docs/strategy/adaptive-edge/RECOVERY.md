@@ -11,6 +11,34 @@
 7. Expected net value is gross value less execution cost.
 8. The dedicated UI must not reuse the SuperTrend/Navigator signal table semantics.
 9. The UI must display authoritative backend values and formula IDs rather than recomputing strategy mathematics.
+10. The machine-readable formula registry now enforces the lock state in code, not just documentation.
+
+## Repository recovery audit — 2026-08-11
+
+A repository-wide search was performed for the exact strategy identifiers and concepts, including:
+
+```text
+F-101, F-102
+Adaptive Edge
+adaptive edge prediction / score
+expected gross value
+predictive profit
+profit giveback
+DynamicRisk
+formula ID
+```
+
+No pre-existing repository artifact was found that defines F-101..F-114 as Adaptive Edge formulas.
+
+This matters because Sterling contains several *different* adaptive/edge mechanisms. They are not interchangeable:
+
+- `edge/` contains historical edge-discovery strategies and robustness gates.
+- the derivatives selector contains instrument/strike/leverage economics.
+- Navigator contains AVWAP/volatility/option-flow/gamma evidence fusion.
+- older analytics contains adaptive ATR-stop experiments.
+- risk infrastructure contains regime-adaptive sizing and calibration.
+
+These are useful implementation references, but none is evidence that its equation is the missing Adaptive Edge equation.
 
 ## Existing related Sterling work that is NOT automatically part of Adaptive Edge
 
