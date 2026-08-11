@@ -1,6 +1,5 @@
 import pytest
 
-from app.engines.adaptive_edge.edge import StrategyFormulaLockedError, evaluate_edge
 from app.engines.adaptive_edge.feature_engine import FeatureInput, build_feature_snapshot
 from app.engines.adaptive_edge.reconstructed_edge import ReconstructedEdgeFormula
 
@@ -21,12 +20,9 @@ def snapshot():
     )
 
 
-def test_reconstructed_edge_produces_versioned_assessment():
-    result = evaluate_edge(snapshot(), ReconstructedEdgeFormula())
-    assert result.formula_id == "F-102"
-    assert result.formula_version == "0.1.0"
-    assert result.score > 0
-    assert result.expected_gross_value > 0
+def test_reconstructed_edge_is_fail_closed():
+    with pytest.raises(RuntimeError, match="deprecated"):
+        ReconstructedEdgeFormula().evaluate(snapshot())
 
 
 def test_future_feature_is_rejected():
