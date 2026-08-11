@@ -1,8 +1,9 @@
+import pytest
+
 from app.engines.adaptive_edge.canonical_math import (
     ExecutionCost,
     acceleration,
     aggressor,
-    conditional_percentile,
     continuation_value,
     cumulative_delta,
     delta,
@@ -59,8 +60,12 @@ def test_liquidity_and_volume_are_parameterized():
     assert volume_intensity(150, 100) == 1.5
 
 
-def test_conditional_normalization_uses_only_supplied_history():
-    assert conditional_percentile(3, [1, 2, 3, 4]) == 0.75
+def test_volume_intensity_requires_a_defined_positive_reference_rate():
+    with pytest.raises(ValueError):
+        volume_intensity(150, 0)
+
+
+def test_normalized_return_uses_supplied_volatility():
     assert normalized_return(0.02, 0.01) == 2.0
 
 
@@ -81,11 +86,16 @@ def test_economic_value_is_net_of_costs_and_cost_monotonic():
     assert expected_net_value(10.0, cheap) > expected_net_value(10.0, expensive)
 
 
-def test_risk_and_sizing_respect_authorization():
-    unit_risk = risk_per_unit(100.0, 95.0, 1.0, 0.5)
-    assert unit_risk == 5.5
-    assert position_size(100.0, unit_risk, 10) == 10
+def test_risk_and_sizing_follow_source_relationships():
+    unit_risk = risk_per_unit(100.0, 95.0)
+    assert unit_risk == 5.0
+    assert position_size(100.0, unit_risk, 10) == 20
     assert maximum_accepted_risk(100.0, 150.0) == 100.0
+
+
+def test_sizing_does_not_invent_zero_risk_behavior():
+    with pytest.raises(ValueError):
+        position_size(100.0, 0.0, 10)
 
 
 def test_profit_protection_is_monotonic():
