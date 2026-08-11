@@ -2,36 +2,27 @@
 
 ## Source recovery correction
 
-The original conversation-generated Adaptive Edge artifacts have now been located in Git commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1`.
-
-Primary source:
-
-```text
-adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
-Master Mathematical Specification — Version 1.0
-```
-
-The source set contains the complete strategy mathematics and supporting canonical specifications. See `ORIGINAL_SOURCE_MANIFEST.md`.
+The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1`, including the Master Mathematical Specification and its supporting canonical specifications.
 
 ## Completed on this branch
 
-- Located the original Master Mathematical Specification.
-- Registered the source commit and artifact set.
+- Located and registered the original strategy specification.
 - Added source-derived mathematical operators.
-- Added source-section traceability registry.
-- Added canonical economic evaluation layer.
-- Added canonical risk authorization and sizing layer.
-- Added canonical continuation/protection layer.
-- Added deterministic tests for the source-derived mathematics.
-- Retired provisional F-101..F-114 formulas from the executable formula registry.
-- Preserved the old F-101..F-114 identifiers only as deprecated compatibility metadata.
+- Added source-section traceability.
+- Added canonical probability-model contract without invented coefficients.
+- Added canonical economic evaluation.
+- Added immutable risk authorization and sizing.
+- Added continuation/profit-protection mathematics.
+- Retired provisional F-101..F-114 equations from executable strategy logic.
+- Reworked the research replay so it consumes decisions from the strategy pipeline rather than implementing a second strategy.
+- Added a causal research-dataset contract with feature availability provenance.
+- Added chronological walk-forward folds with explicit purge and embargo windows.
+- Added deterministic tests for causal dataset validation and fold boundaries.
 - Kept all work isolated to Adaptive Edge for Sterling Kite.
 
 ## Explicitly rejected as canonical
 
-The earlier reconstructed model in `model.py` contained invented numerical weights and thresholds. Those values are **not** present in the Master Mathematical Specification and are no longer treated as canonical strategy mathematics.
-
-Examples of rejected provisional assumptions include fixed feature weights, fixed confidence thresholds, fixed ATR stop multipliers, and a fixed target delta for option selection.
+The earlier reconstructed model in `model.py` contained invented numerical weights and thresholds. Those values are not present in the Master Mathematical Specification and are no longer treated as canonical strategy mathematics.
 
 ## Current architecture
 
@@ -40,6 +31,12 @@ Canonical Event / Market State
         |
         v
 Causal Feature State
+        |
+        v
+Research Dataset + Provenance
+        |
+        v
+Purged Walk-Forward Training
         |
         v
 Parameterized Probability State
@@ -54,10 +51,10 @@ Risk Authorization
 Position Sizing
         |
         v
-Forward Management + Backward Profit Protection
+Forward Management + Profit Protection
         |
         v
-Realistic Execution
+Research Execution Replay
 ```
 
 ## Current status
@@ -69,12 +66,15 @@ CORE MATH OPERATORS      IMPLEMENTED
 ECONOMIC LAYER           IMPLEMENTED
 RISK LAYER               IMPLEMENTED
 PROTECTION LAYER         IMPLEMENTED
-PROVISIONAL F-101..114   DEPRECATED
+CAUSAL DATASET CONTRACT  IMPLEMENTED
+WALK-FORWARD SPLITTER    IMPLEMENTED
+RESEARCH REPLAY          IMPLEMENTED
 
-PROBABILITY TRAINING     NEXT
+PARAMETER FITTING        NEXT
+CALIBRATION              NEXT
 OPTION SELECTION         NEXT
 STATE/EVENT INTEGRATION  NEXT
-KITE HISTORICAL REPLAY   NEXT
+KITE HISTORICAL DATA     NEXT
 OOS VALIDATION            BLOCKED UNTIL DATA RUN
 PAPER                     BLOCKED UNTIL ROBUSTNESS GATE
 LIVE                      BLOCKED
