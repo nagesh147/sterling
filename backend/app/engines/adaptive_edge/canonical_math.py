@@ -11,7 +11,7 @@ Master Mathematical Specification — Version 1.0.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import exp, floor, sqrt
+from math import exp, floor, log, sqrt
 from typing import Sequence
 
 
@@ -83,17 +83,10 @@ def liquidity_imbalance(bid_qty: float, ask_qty: float) -> float | None:
     return (bid_qty - ask_qty) / denominator
 
 
-def volume_intensity(current_volume_rate: float, expected_volume_rate: float) -> float | None:
+def volume_intensity(current_volume_rate: float, expected_volume_rate: float) -> float:
     if expected_volume_rate <= 0:
-        return None
+        raise ValueError("expected_volume_rate must be positive")
     return current_volume_rate / expected_volume_rate
-
-
-def conditional_percentile(value: float, historical_values: Sequence[float]) -> float | None:
-    if not historical_values:
-        return None
-    less_or_equal = sum(1 for item in historical_values if item <= value)
-    return less_or_equal / len(historical_values)
 
 
 def normalized_return(future_return: float, sigma: float) -> float:
@@ -122,16 +115,16 @@ def l2_regularized_cross_entropy(probabilities: Sequence[float], target_index: i
         raise ValueError("target index outside probability vector")
     if regularization < 0:
         raise ValueError("regularization cannot be negative")
-    p = max(min(probabilities[target_index], 1.0), 1e-15)
+    p = probabilities[target_index]
+    if not 0.0 < p <= 1.0:
+        raise ValueError("target probability must be in (0, 1]")
     penalty = regularization * sum(weight * weight for row in coefficients for weight in row)
-    return -__import__("math").log(p) + penalty
+    return -log(p) + penalty
 
 
 def similarity_distance(z_current: Sequence[float], z_historical: Sequence[float], feature_weights: Sequence[float]) -> float:
     if not (len(z_current) == len(z_historical) == len(feature_weights)):
         raise ValueError("similarity dimensions do not match")
-    if any(weight < 0 for weight in feature_weights):
-        raise ValueError("feature weights cannot be negative")
     return sqrt(sum(w * (a - b) ** 2 for a, b, w in zip(z_current, z_historical, feature_weights)))
 
 
@@ -142,16 +135,12 @@ def similarity_weight(distance: float, tau: float) -> float:
 
 
 def beta_posterior(alpha: float, beta: float, successes: float, failures: float) -> tuple[float, float]:
-    if min(alpha, beta, successes, failures) < 0:
-        raise ValueError("beta parameters and observations must be non-negative")
     return alpha + successes, beta + failures
 
 
 def decayed_beta(alpha: float, beta: float, successes: float, failures: float, rho: float) -> tuple[float, float]:
     if not 0 < rho <= 1:
         raise ValueError("rho must be in (0, 1]")
-    if min(alpha, beta, successes, failures) < 0:
-        raise ValueError("beta parameters and observations must be non-negative")
     return rho * alpha + successes, rho * beta + failures
 
 
@@ -176,17 +165,15 @@ def expected_net_value(expected_gross_value: float, execution_cost: ExecutionCos
 
 def risk_per_unit(entry_price: float, initial_stop: float) -> float:
     """§36: RiskPerUnit = EntryPrice - InitialStop."""
-    if entry_price <= 0 or initial_stop <= 0:
-        raise ValueError("entry_price and initial_stop must be positive")
     return entry_price - initial_stop
 
 
 def position_size(max_risk: float, effective_risk_per_unit: float, lot_size: int) -> int:
     """§36: Q = floor(MaxRisk / EffectiveRiskPerUnit), then enforce lot size."""
-    if max_risk < 0 or effective_risk_per_unit < 0 or lot_size <= 0:
-        raise ValueError("invalid sizing inputs")
-    if max_risk == 0 or effective_risk_per_unit == 0:
-        return 0
+    if lot_size <= 0:
+        raise ValueError("lot_size must be positive")
+    if effective_risk_per_unit <= 0:
+        raise ValueError("effective_risk_per_unit must be positive")
     raw_units = floor(max_risk / effective_risk_per_unit)
     return (raw_units // lot_size) * lot_size
 
@@ -208,8 +195,6 @@ def monotonic_stop(previous_stop: float, candidate_stop: float) -> float:
 
 
 def maximum_accepted_risk(previous_risk: float, proposed_risk: float) -> float:
-    if previous_risk < 0 or proposed_risk < 0:
-        raise ValueError("risk cannot be negative")
     return min(previous_risk, proposed_risk)
 
 
