@@ -13,7 +13,7 @@ The provisional F-101..F-114 reconstruction is deprecated and is not a source au
 
 ## Rule
 
-A component is `EXACT` only when its implemented relationship is directly anchored to the source document and its tests verify the stated relationship. `PARTIAL` means only part of the source requirement is implemented. `BLOCKED` means the source requirement is known but cannot be implemented without a missing external contract or learned/validated parameter. `REMOVED` means an earlier implementation was deleted because it introduced behavior not supported by the source.
+A component is `EXACT` only when its implemented relationship is directly anchored to the source document and its tests verify the stated relationship. `PARTIAL` means only part of the source requirement is implemented. `BLOCKED` means the source requirement is known but cannot be implemented without a missing external contract or learned/validated parameter/method. `REMOVED` means an earlier implementation was deleted because it introduced behavior not supported by the source.
 
 | Source | Requirement | Code | Status |
 |---|---|---|---|
@@ -23,11 +23,11 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §10 | Delta / cumulative delta / delta velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for implemented fields |
 | §11 | Liquidity imbalance | `canonical_math.py`, `feature_state.py` | EXACT |
 | §12 | Volume intensity | `canonical_math.py` | EXACT operator; contextual rate source not implemented |
-| §19 | Causal contextual normalization | `normalization.py` | PARTIAL: generic causal history exists; full context construction remains |
+| §19 | Causal contextual normalization | `normalization.py` | PARTIAL: generic causal history exists; full context construction and exact source-defined normalization method remain unresolved |
 | §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL |
-| §22 | Multinomial logistic model | `canonical_math.py`, `parameter_fitting.py` | PARTIAL: model family + fitter; walk-forward production integration remains |
+| §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: mathematical model operator exists; exact source-defined fitting/optimization method is not specified, so no fitter is treated as canonical |
 | §23 | Empirical similarity | `canonical_math.py` | PARTIAL: operators only; effective-sample gate remains |
-| §24 | Bayesian state | `canonical_math.py` | PARTIAL: update operators only; learned decay/initialization remain |
+| §24 | Bayesian state | `canonical_math.py` | PARTIAL: update relationships only; learned decay/initialization remain |
 | §31 | Execution cost decomposition | `canonical_math.py`, `economic.py` | PARTIAL: decomposition contract; provider-specific distributions pending |
 | §32 | Option selection by ExpectedNetEV | target/economic path | BLOCKED until exact option-candidate contract is wired |
 | §33 | Target/stop EV competition | `target_stop.py` | EXACT for supplied validated candidate estimates |
@@ -40,7 +40,7 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §42 | No risk expansion | `canonical_math.maximum_accepted_risk` | EXACT invariant |
 | §43 | Dynamic mode | not implemented | BLOCKED: source defines a function of state; no arbitrary enum is permitted |
 | §46 | Conservative continuation exit | strategy orchestration | BLOCKED |
-| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py`, `parameter_fitting.py` | PARTIAL |
+| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py` | PARTIAL: causal fold machinery exists; exact fitting/calibration method remains blocked |
 | §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL |
 
 ## Removed as non-canonical
@@ -51,9 +51,8 @@ The following were removed because they introduced strategy semantics not explic
 backend/app/engines/adaptive_edge/contracts.py
 backend/app/engines/adaptive_edge/state.py
 backend/app/engines/adaptive_edge/state_machine.py
+backend/app/engines/adaptive_edge/parameter_fitting.py
 ```
-
-Those modules contained invented DynamicMode values, opportunity/risk state transitions, or lifecycle transitions that were not sufficiently anchored to the authoritative specification.
 
 ## Exactness gate
 
