@@ -41,6 +41,13 @@ def evaluate_direction(
     features: tuple[float, ...],
     parameters: ModelParameters,
 ) -> DirectionalPrediction:
+    """Evaluate the canonical DOWN/FLAT/UP model output.
+
+    Parameter fitting freezes the canonical class order as DOWN, FLAT, UP.
+    This adapter therefore uses those exact semantic labels instead of a
+    separate lowercase/neutral vocabulary that could silently break the live
+    probability-to-direction boundary.
+    """
     prediction = predict(
         prediction_id=prediction_id,
         opportunity_id=opportunity_id,
@@ -50,11 +57,11 @@ def evaluate_direction(
         parameters=parameters,
     )
     try:
-        p_up = prediction.outputs["up"]
-        p_down = prediction.outputs["down"]
-        p_neutral = prediction.outputs["neutral"]
+        p_up = prediction.outputs["UP"]
+        p_down = prediction.outputs["DOWN"]
+        p_neutral = prediction.outputs["FLAT"]
     except KeyError as exc:
-        raise ValueError("model must expose up, down, and neutral classes") from exc
+        raise ValueError("model must expose DOWN, FLAT, and UP classes") from exc
     return DirectionalPrediction(prediction, p_up, p_down, p_neutral)
 
 
