@@ -1,4 +1,4 @@
-# Adaptive Edge — Formula Recovery Branch Manifest
+# Adaptive Edge — Formula Recovery / Implementation Branch Manifest
 
 ## Branch
 
@@ -6,26 +6,60 @@
 
 ## Scope
 
-This branch is restricted to recovering and validating the strategy mathematics and its provenance. It must not modify SuperTrend, Value Flow Navigator, crypto engines, or unrelated Sterling strategies.
+This branch is restricted to Adaptive Edge formula definition, deterministic implementation, provenance, testing, and research replay. It must not modify SuperTrend, Value Flow Navigator, crypto engines, or unrelated Sterling strategies.
 
-## Changes on this branch
+## Current implementation
 
 ```text
-backend/app/engines/adaptive_edge/formula_recovery.py
-backend/tests/engines/test_adaptive_edge_formula_recovery.py
-docs/strategy/adaptive-edge/FORMULA_RECOVERY_PROTOCOL.md
-docs/strategy/adaptive-edge/RECOVERY_COMPLETE.md
-docs/strategy/adaptive-edge/BRANCH_MANIFEST.md
+backend/app/engines/adaptive_edge/
+    formula_registry.py
+    formula_recovery.py
+    feature_engine.py
+    edge.py
+    economic.py
+    pipeline.py
+    contracts.py
+    model.py
+    reconstructed_edge.py
+    replay.py
+
+backend/tests/engines/
+    test_adaptive_edge_formula_registry.py
+    test_adaptive_edge_formula_recovery.py
+    test_adaptive_edge_feature_provenance.py
+    test_adaptive_edge_model.py
+    test_adaptive_edge_reconstructed_edge.py
+    test_adaptive_edge_replay.py
 ```
+
+## Formula status
+
+F-001..F-008 are anchored platform/strategy invariants. F-101..F-114 are implemented as reconstructed Adaptive Edge v0.1.0 mathematics because the historical equations were not retrievable.
 
 ## Non-goals
 
-- no execution enablement
-- no live candidate generation from guessed mathematics
+- no live execution enablement
+- no production authorization from unit tests alone
 - no replacement of SuperTrend/Navigator logic
 - no crypto implementation
 - no borrowing of unrelated derivative strategy equations
 
-## Completion rule
+## Next completion gate
 
-The branch is complete when the recovery process is deterministic, auditable, and fail-closed. Exact F-101..F-114 definitions are external inputs to the next promotion step, not values to be invented here.
+```text
+same model
++ authoritative historical data
++ realistic execution model
+        |
+        v
+backtest
+        |
+        v
+OOS + sensitivity + robustness
+        |
+        v
+paper/shadow
+        |
+        v
+explicit production authorization
+```
