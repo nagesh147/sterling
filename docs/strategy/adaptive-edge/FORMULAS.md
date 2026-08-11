@@ -85,6 +85,8 @@ VolumeIntensity_t
       / ExpectedVolumeRate(time_of_day, instrument, regime)
 ```
 
+The expected-volume-rate source remains an upstream contextual input.
+
 ### Conditional normalization — §19
 
 ```text
@@ -92,7 +94,7 @@ Percentile_t
     = F(x_t | Context_t, Data<=t)
 ```
 
-The historical distribution must be causally available at decision time.
+The historical distribution must be causally available at decision time. The exact estimator/context-construction method is not recovered; no empirical-CDF implementation is canonical.
 
 ### Directional probability — §21
 
@@ -117,7 +119,7 @@ Loss
     = CrossEntropy + λ||β||²
 ```
 
-`β` and `λ` are learned through walk-forward validation.
+`β` and `λ` are learned through walk-forward validation. The exact fitting/optimization procedure is not recovered.
 
 ### Empirical similarity — §23
 
@@ -131,7 +133,7 @@ w_j
     = exp(-d_j² / τ)
 ```
 
-Minimum effective sample size is mandatory.
+Minimum effective sample size is mandatory; its exact gate/estimation method remains unresolved.
 
 ### Bayesian state — §24
 
@@ -142,7 +144,7 @@ Beta(α, β)
 β_t = ρ β_(t-1) + Failures_t
 ```
 
-`ρ` is learned and validated.
+`ρ` and initialization semantics are not recovered.
 
 ### Execution cost — §31
 
@@ -156,7 +158,7 @@ Cost_i
  + LatencyCost_i
 ```
 
-The actual specification also permits explicitly modeled market impact.
+The actual specification also permits explicitly modeled market impact. Provider-specific cost distributions remain upstream inputs.
 
 ### Option selection — §32
 
@@ -190,6 +192,8 @@ EV_conservative <= 0
     -> NO_TRADE
 ```
 
+The exact confidence-bound estimation procedure is not recovered.
+
 ### Entry gates — §35
 
 ```text
@@ -204,6 +208,8 @@ BUY_CE = DataOK
 BUY_PE = analogous gates for PE
 ```
 
+The predicate is exact; derivations of its upstream inputs remain subject to their own source contracts.
+
 ### Initial risk and sizing — §36
 
 ```text
@@ -217,7 +223,7 @@ Q
     = floor(MaxRisk / EffectiveRiskPerUnit)
 ```
 
-The production implementation must additionally enforce lot, capital, position and execution constraints.
+The relationships above are exact, but the source artifacts currently available do not define the semantics/derivation of `EffectiveRiskPerUnit`. Production lot/capital/position/execution constraints remain separate.
 
 ### Continuation value — §39
 
@@ -241,7 +247,7 @@ ProfitFloor_t
     = PeakPrice_t - AllowedGiveback_t
 ```
 
-`q` is learned through walk-forward validation.
+`q` is learned through walk-forward validation; its estimator is not recovered.
 
 ### Monotonic stop — §41
 
@@ -273,7 +279,7 @@ TradeMode_t
         ContinuationValue_t)
 ```
 
-Elapsed time alone does not determine mode.
+Elapsed time alone does not determine mode. The exact function `f` is not recovered.
 
 ### Continuation exit — §46
 
@@ -281,6 +287,8 @@ Elapsed time alone does not determine mode.
 ConservativeContinuationValue <= 0
     -> EXIT
 ```
+
+The exit predicate is exact; the upstream conservative continuation-value estimator is not recovered.
 
 ### Walk-forward learning — §§50–54
 
@@ -309,6 +317,8 @@ EVPerRisk_i
 
 Eligibility requires the conservative estimate to be positive.
 
+**Important:** the repository does not currently recover the semantic definition/derivation of `EffectiveRisk_i`. It must not be equated with `RiskPerUnit`, `GrossRisk`, `EffectiveRiskPerUnit`, or any other risk quantity without an authoritative source definition.
+
 ---
 
 ## Parameter policy
@@ -328,18 +338,20 @@ risk allocation
 execution/slippage distributions
 option-selection parameters
 time-of-day effects
+EffectiveRisk_i
+EffectiveRiskPerUnit derivation
 ```
 
-These belong to the walk-forward learning and validation system.
+These belong to the walk-forward learning/validation system or require explicit recovery from the original strategy artifacts.
 
 ## Status
 
 ```text
 Master Specification     SOURCE OF TRUTH
-Canonical operators      IMPLEMENTED
-Economic relationships   IMPLEMENTED
-Risk relationships       IMPLEMENTED
-Protection relationships IMPLEMENTED
+Canonical operators      IMPLEMENTED where source relationship is exact
+Economic relationships   PARTIAL where required inputs are unresolved
+Risk relationships       PARTIAL where required inputs are unresolved
+Protection relationships PARTIAL where learned inputs are unresolved
 Learned parameters       NOT INVENTED
 Provisional F-101..114   DEPRECATED
 ```
