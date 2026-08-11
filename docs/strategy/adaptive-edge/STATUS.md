@@ -13,6 +13,8 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 - Added leakage-safe multinomial probability fitting for the §22 model family.
 - Added immutable risk authorization and sizing.
 - Added continuation/profit-protection mathematics.
+- Added source-defined economic evaluation and conservative EV gates.
+- Added §32 option candidate selection using expected net value subject to explicitly supplied validated constraints.
 - Retired provisional F-101..F-114 equations from executable strategy logic.
 - Reworked the research replay so it consumes decisions from the strategy pipeline rather than implementing a second strategy.
 - Added a causal research-dataset contract with feature availability provenance.
@@ -25,6 +27,8 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 
 The earlier reconstructed model in `model.py` contained invented numerical weights and thresholds. Those values are not present in the Master Mathematical Specification and are no longer treated as canonical strategy mathematics.
 
+Calibration/model-selection code that introduced unanchored thresholds was removed from this branch. Calibration remains a downstream validation phase until the exact source-defined method and walk-forward evidence are available.
+
 ## Current architecture
 
 ```text
@@ -34,19 +38,16 @@ Canonical Event / Market State
 Causal Feature State
         |
         v
-Research Dataset + Provenance
-        |
-        v
-Purged Walk-Forward Training
-        |
-        v
-TRAIN -> FREEZE -> VALIDATE -> TEST
-        |
-        v
 Parameterized Probability State
         |
         v
 Economic Evaluation
+        |
+        v
+Option Candidate Selection
+        |
+        v
+Target / Stop Evaluation
         |
         v
 Risk Authorization
@@ -59,6 +60,9 @@ Forward Management + Profit Protection
         |
         v
 Research Execution Replay
+        |
+        v
+Validation / Calibration / OOS
 ```
 
 ## Current status
@@ -68,6 +72,7 @@ SOURCE RECOVERY          COMPLETE
 SOURCE TRACEABILITY      IMPLEMENTED
 CORE MATH OPERATORS      IMPLEMENTED
 ECONOMIC LAYER           IMPLEMENTED
+OPTION SELECTION         IMPLEMENTED
 RISK LAYER               IMPLEMENTED
 PROTECTION LAYER         IMPLEMENTED
 CAUSAL DATASET CONTRACT  IMPLEMENTED
@@ -75,11 +80,12 @@ WALK-FORWARD SPLITTER    IMPLEMENTED
 PARAMETER FITTING        IMPLEMENTED
 RESEARCH REPLAY          IMPLEMENTED
 
-CALIBRATION              NEXT
-OPTION SELECTION         NEXT
+TARGET/STOP SEARCH       NEXT
+POSITION MANAGEMENT      NEXT
 STATE/EVENT INTEGRATION  NEXT
+CALIBRATION              BLOCKED UNTIL CORE PATH IS COMPLETE
 KITE HISTORICAL DATA     NEXT
-OOS VALIDATION           BLOCKED UNTIL DATA RUN
+OOS VALIDATION            BLOCKED UNTIL DATA RUN
 PAPER                    BLOCKED UNTIL ROBUSTNESS GATE
 LIVE                     BLOCKED
 ```
