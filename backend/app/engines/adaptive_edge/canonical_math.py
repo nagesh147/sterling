@@ -1,19 +1,18 @@
 """Source-derived Adaptive Edge mathematical operators.
 
-These operators are intentionally parameterized. The source specification
-fixes the relationships and invariants, while learned quantities such as
-coefficients, calibration parameters, quantiles, thresholds, and slippage
-distributions must be supplied by the walk-forward learning pipeline.
+These operators implement relationships stated by the Master Mathematical
+Specification. Quantities explicitly designated as learned/validated remain
+inputs to these operators and are not invented here.
 
 Primary source:
 adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
-from commit 38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1.
+Master Mathematical Specification — Version 1.0.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from math import exp, floor, sqrt
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 def mid(bid: float, ask: float) -> float:
@@ -55,7 +54,6 @@ def acceleration(delta_velocity: float, delta_t: float) -> float:
 
 
 def incremental_volume(ttq: float, previous_ttq: float) -> float | None:
-    """Return incremental volume; None denotes a volume reset/data event."""
     delta = ttq - previous_ttq
     return None if delta < 0 else delta
 
@@ -92,12 +90,10 @@ def volume_intensity(current_volume_rate: float, expected_volume_rate: float) ->
 
 
 def conditional_percentile(value: float, historical_values: Sequence[float]) -> float | None:
-    """Empirical percentile using only the supplied causally valid history."""
     if not historical_values:
         return None
-    ordered = sorted(historical_values)
-    less_or_equal = sum(1 for item in ordered if item <= value)
-    return less_or_equal / len(ordered)
+    less_or_equal = sum(1 for item in historical_values if item <= value)
+    return less_or_equal / len(historical_values)
 
 
 def normalized_return(future_return: float, sigma: float) -> float:
@@ -107,7 +103,7 @@ def normalized_return(future_return: float, sigma: float) -> float:
 
 
 def multinomial_logistic(scores: Sequence[float], coefficients: Sequence[Sequence[float]], intercepts: Sequence[float] | None = None) -> tuple[float, ...]:
-    if len(coefficients) == 0:
+    if not coefficients:
         raise ValueError("at least one class is required")
     if any(len(row) != len(scores) for row in coefficients):
         raise ValueError("coefficient dimensions do not match scores")
@@ -124,6 +120,8 @@ def multinomial_logistic(scores: Sequence[float], coefficients: Sequence[Sequenc
 def l2_regularized_cross_entropy(probabilities: Sequence[float], target_index: int, coefficients: Sequence[Sequence[float]], regularization: float) -> float:
     if not 0 <= target_index < len(probabilities):
         raise ValueError("target index outside probability vector")
+    if regularization < 0:
+        raise ValueError("regularization cannot be negative")
     p = max(min(probabilities[target_index], 1.0), 1e-15)
     penalty = regularization * sum(weight * weight for row in coefficients for weight in row)
     return -__import__("math").log(p) + penalty
@@ -132,6 +130,8 @@ def l2_regularized_cross_entropy(probabilities: Sequence[float], target_index: i
 def similarity_distance(z_current: Sequence[float], z_historical: Sequence[float], feature_weights: Sequence[float]) -> float:
     if not (len(z_current) == len(z_historical) == len(feature_weights)):
         raise ValueError("similarity dimensions do not match")
+    if any(weight < 0 for weight in feature_weights):
+        raise ValueError("feature weights cannot be negative")
     return sqrt(sum(w * (a - b) ** 2 for a, b, w in zip(z_current, z_historical, feature_weights)))
 
 
@@ -174,20 +174,20 @@ def expected_net_value(expected_gross_value: float, execution_cost: ExecutionCos
     return expected_gross_value - execution_cost.total
 
 
-def risk_per_unit(entry_price: float, initial_stop: float, point_value: float, effective_execution_cost_per_unit: float = 0.0) -> float:
-    if entry_price <= 0 or point_value <= 0:
-        raise ValueError("entry_price and point_value must be positive")
-    if effective_execution_cost_per_unit < 0:
-        raise ValueError("execution cost cannot be negative")
-    return abs(entry_price - initial_stop) * point_value + effective_execution_cost_per_unit
+def risk_per_unit(entry_price: float, initial_stop: float) -> float:
+    """§36: RiskPerUnit = EntryPrice - InitialStop."""
+    if entry_price <= 0 or initial_stop <= 0:
+        raise ValueError("entry_price and initial_stop must be positive")
+    return entry_price - initial_stop
 
 
-def position_size(authorized_risk: float, effective_risk_per_unit: float, lot_size: int) -> int:
-    if authorized_risk < 0 or effective_risk_per_unit < 0 or lot_size <= 0:
+def position_size(max_risk: float, effective_risk_per_unit: float, lot_size: int) -> int:
+    """§36: Q = floor(MaxRisk / EffectiveRiskPerUnit), then enforce lot size."""
+    if max_risk < 0 or effective_risk_per_unit < 0 or lot_size <= 0:
         raise ValueError("invalid sizing inputs")
-    if authorized_risk == 0 or effective_risk_per_unit == 0:
+    if max_risk == 0 or effective_risk_per_unit == 0:
         return 0
-    raw_units = floor(authorized_risk / effective_risk_per_unit)
+    raw_units = floor(max_risk / effective_risk_per_unit)
     return (raw_units // lot_size) * lot_size
 
 
