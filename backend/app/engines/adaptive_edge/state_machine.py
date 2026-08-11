@@ -1,37 +1,45 @@
-"""Adaptive Edge orchestration state machine.
+"""Adaptive Edge strategy lifecycle state machine.
 
-This module models lifecycle state only. It does not create broker orders or
-infer fills. Broker/execution truth remains downstream of the strategy intent.
+The lifecycle mirrors the Master Specification's conceptual states while
+keeping broker truth separate from strategy intent and fill events.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class StrategyState(str, Enum):
-    FLAT = "FLAT"
+    OBSERVATION = "OBSERVATION"
+    # Backward-compatible name for callers that used the earlier lifecycle.
+    FLAT = "OBSERVATION"
     CANDIDATE = "CANDIDATE"
+    EVALUATED = "EVALUATED"
     AUTHORIZED = "AUTHORIZED"
-    ENTRY_PENDING = "ENTRY_PENDING"
+    INTENT = "INTENT"
+    ORDERED = "ORDERED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
     OPEN = "OPEN"
-    PROTECTED = "PROTECTED"
-    EXIT_PENDING = "EXIT_PENDING"
+    PROTECTING = "PROTECTING"
+    EXIT_INTENT = "EXIT_INTENT"
     CLOSED = "CLOSED"
+    REJECTED = "REJECTED"
 
 
 class Event(str, Enum):
     OPPORTUNITY = "OPPORTUNITY"
-    NO_TRADE = "NO_TRADE"
+    EVALUATED = "EVALUATED"
     AUTHORIZED = "AUTHORIZED"
     ENTRY_INTENT = "ENTRY_INTENT"
+    ORDER_SUBMITTED = "ORDER_SUBMITTED"
+    PARTIAL_FILL = "PARTIAL_FILL"
     FILL = "FILL"
     PROTECTION_UPDATED = "PROTECTION_UPDATED"
     EXIT_INTENT = "EXIT_INTENT"
     EXIT_FILL = "EXIT_FILL"
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
+    NO_TRADE = "NO_TRADE"
 
 
 @dataclass(frozen=True)
@@ -42,20 +50,28 @@ class StateTransition:
 
 
 _ALLOWED = {
-    (StrategyState.FLAT, Event.OPPORTUNITY): StrategyState.CANDIDATE,
-    (StrategyState.CANDIDATE, Event.AUTHORIZED): StrategyState.AUTHORIZED,
-    (StrategyState.CANDIDATE, Event.NO_TRADE): StrategyState.FLAT,
-    (StrategyState.AUTHORIZED, Event.ENTRY_INTENT): StrategyState.ENTRY_PENDING,
-    (StrategyState.ENTRY_PENDING, Event.FILL): StrategyState.OPEN,
-    (StrategyState.ENTRY_PENDING, Event.REJECTED): StrategyState.FLAT,
-    (StrategyState.ENTRY_PENDING, Event.CANCELLED): StrategyState.FLAT,
-    (StrategyState.OPEN, Event.PROTECTION_UPDATED): StrategyState.PROTECTED,
-    (StrategyState.PROTECTED, Event.PROTECTION_UPDATED): StrategyState.PROTECTED,
-    (StrategyState.OPEN, Event.EXIT_INTENT): StrategyState.EXIT_PENDING,
-    (StrategyState.PROTECTED, Event.EXIT_INTENT): StrategyState.EXIT_PENDING,
-    (StrategyState.EXIT_PENDING, Event.EXIT_FILL): StrategyState.CLOSED,
-    (StrategyState.EXIT_PENDING, Event.REJECTED): StrategyState.OPEN,
-    (StrategyState.EXIT_PENDING, Event.CANCELLED): StrategyState.OPEN,
+    (StrategyState.OBSERVATION, Event.OPPORTUNITY): StrategyState.CANDIDATE,
+    (StrategyState.CANDIDATE, Event.EVALUATED): StrategyState.EVALUATED,
+    (StrategyState.CANDIDATE, Event.REJECTED): StrategyState.REJECTED,
+    (StrategyState.CANDIDATE, Event.NO_TRADE): StrategyState.CLOSED,
+    (StrategyState.EVALUATED, Event.AUTHORIZED): StrategyState.AUTHORIZED,
+    (StrategyState.EVALUATED, Event.REJECTED): StrategyState.REJECTED,
+    (StrategyState.AUTHORIZED, Event.ENTRY_INTENT): StrategyState.INTENT,
+    (StrategyState.INTENT, Event.ORDER_SUBMITTED): StrategyState.ORDERED,
+    (StrategyState.ORDERED, Event.PARTIAL_FILL): StrategyState.PARTIALLY_FILLED,
+    (StrategyState.ORDERED, Event.FILL): StrategyState.OPEN,
+    (StrategyState.ORDERED, Event.REJECTED): StrategyState.REJECTED,
+    (StrategyState.ORDERED, Event.CANCELLED): StrategyState.REJECTED,
+    (StrategyState.PARTIALLY_FILLED, Event.PARTIAL_FILL): StrategyState.PARTIALLY_FILLED,
+    (StrategyState.PARTIALLY_FILLED, Event.FILL): StrategyState.OPEN,
+    (StrategyState.PARTIALLY_FILLED, Event.CANCELLED): StrategyState.OPEN,
+    (StrategyState.OPEN, Event.PROTECTION_UPDATED): StrategyState.PROTECTING,
+    (StrategyState.PROTECTING, Event.PROTECTION_UPDATED): StrategyState.PROTECTING,
+    (StrategyState.OPEN, Event.EXIT_INTENT): StrategyState.EXIT_INTENT,
+    (StrategyState.PROTECTING, Event.EXIT_INTENT): StrategyState.EXIT_INTENT,
+    (StrategyState.EXIT_INTENT, Event.EXIT_FILL): StrategyState.CLOSED,
+    (StrategyState.EXIT_INTENT, Event.REJECTED): StrategyState.OPEN,
+    (StrategyState.EXIT_INTENT, Event.CANCELLED): StrategyState.OPEN,
 }
 
 
