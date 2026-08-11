@@ -1,30 +1,60 @@
-# Adaptive Edge — Traceability
+# Adaptive Edge — Exact Source Traceability
 
-| ID | Requirement | Code | Tests | Status |
-|---|---|---|---|---|
-| F-001 | Causal availability | `adaptive_edge/feature_engine.py` | `test_adaptive_edge_pipeline.py` | Implemented |
-| F-002 | Peak P&L | Accounting/protection owner | Pending strategy integration test | Anchored |
-| F-003 | Profit giveback | Accounting/protection owner | Pending strategy integration test | Anchored |
-| F-004 | Gross minus execution cost | `adaptive_edge/economic.py` | `test_adaptive_edge_pipeline.py` | Implemented |
-| F-005 | Risk authorization immutable | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | Implemented |
-| F-006 | Mode/risk independent | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | Implemented |
-| F-007 | BUY uses executable ask | Execution owner | Pending | Anchored |
-| F-008 | SELL uses executable bid | Execution owner | Pending | Anchored |
-| F-101 | Feature formula | `adaptive_edge/feature_engine.py` contract | Pending | LOCKED |
-| F-102 | Edge/prediction | `adaptive_edge/edge.py` contract | Pending | LOCKED |
-| F-103 | Eligibility | Pending | Pending | LOCKED |
-| F-104 | Dynamic mode | `adaptive_edge/contracts.py` state model | Pending exact thresholds | LOCKED |
-| F-105 | Profit protection | Pending | Pending | LOCKED |
-| F-106 | Dynamic risk | Pending | Pending | LOCKED |
-| F-107 | Risk per unit | Pending | Pending | LOCKED |
-| F-108 | Position sizing | Pending | Pending | LOCKED |
-| F-109 | Instrument selection | Pending | Pending | LOCKED |
-| F-110 | Entry trigger | Pending | Pending | LOCKED |
-| F-111 | Exit trigger | Pending | Pending | LOCKED |
-| F-112 | Protection parameterization | Pending | Pending | LOCKED |
-| F-113 | Re-entry | Pending | Pending | LOCKED |
-| F-114 | Multi-position interaction | Pending | Pending | LOCKED |
+## Authority
 
-## Change rule
+The sole strategy authority is:
 
-No implementation PR is complete if it introduces or changes a strategy formula without updating this matrix and the canonical formula registry.
+```text
+Adaptive Order-Flow Options Scalping and Intraday Strategy
+Master Mathematical Specification — Version 1.0
+```
+
+The provisional F-101..F-114 reconstruction is deprecated and is not a source authority.
+
+## Rule
+
+A component is `EXACT` only when its implemented relationship is directly anchored to the source document and its tests verify the stated relationship. `PARTIAL` means only part of the source requirement is implemented. `BLOCKED` means the source requirement is known but cannot be implemented without a missing external contract or learned/validated parameter. `REMOVED` means an earlier implementation was deleted because it introduced behavior not supported by the source.
+
+| Source | Requirement | Code | Status |
+|---|---|---|---|
+| §7 | Mid / spread / relative spread / price change / return / velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for stated operators |
+| §8 | Incremental volume | `canonical_math.py`, `feature_state.py` | EXACT for reset semantics |
+| §9 | Aggressor classification | `canonical_math.py`, `feature_state.py` | EXACT |
+| §10 | Delta / cumulative delta / delta velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for implemented fields |
+| §11 | Liquidity imbalance | `canonical_math.py`, `feature_state.py` | EXACT |
+| §12 | Volume intensity | `canonical_math.py` | EXACT operator; contextual rate source not implemented |
+| §19 | Causal contextual normalization | `normalization.py` | PARTIAL: generic causal history exists; full context construction remains |
+| §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL |
+| §22 | Multinomial logistic model | `canonical_math.py`, `parameter_fitting.py` | PARTIAL: model family + fitter; walk-forward production integration remains |
+| §23 | Empirical similarity | `canonical_math.py` | PARTIAL: operators only; effective-sample gate remains |
+| §24 | Bayesian state | `canonical_math.py` | PARTIAL: update operators only; learned decay/initialization remain |
+| §31 | Execution cost decomposition | `canonical_math.py`, `economic.py` | PARTIAL: decomposition contract; provider-specific distributions pending |
+| §32 | Option selection by ExpectedNetEV | target/economic path | BLOCKED until exact option-candidate contract is wired |
+| §33 | Target/stop EV competition | `target_stop.py` | EXACT for supplied validated candidate estimates |
+| §34 | Conservative EV / no-trade | `target_stop.py` | EXACT for supplied conservative EV |
+| §35 | Entry gates | strategy orchestration | BLOCKED until all exact gate inputs exist |
+| §36 | Risk per unit / position sizing | `canonical_math.py` | EXACT operator; full production constraints remain |
+| §39 | Continuation value | `canonical_math.py` | EXACT operator |
+| §40 | Giveback / profit floor | `canonical_math.py`, `position_management.py` | PARTIAL |
+| §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | EXACT invariant |
+| §42 | No risk expansion | `canonical_math.maximum_accepted_risk` | EXACT invariant |
+| §43 | Dynamic mode | not implemented | BLOCKED: source defines a function of state; no arbitrary enum is permitted |
+| §46 | Conservative continuation exit | strategy orchestration | BLOCKED |
+| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py`, `parameter_fitting.py` | PARTIAL |
+| §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL |
+
+## Removed as non-canonical
+
+The following were removed because they introduced strategy semantics not explicitly supported by the source:
+
+```text
+backend/app/engines/adaptive_edge/contracts.py
+backend/app/engines/adaptive_edge/state.py
+backend/app/engines/adaptive_edge/state_machine.py
+```
+
+Those modules contained invented DynamicMode values, opportunity/risk state transitions, or lifecycle transitions that were not sufficiently anchored to the authoritative specification.
+
+## Exactness gate
+
+No subsequent implementation may mark a source row `EXACT` merely because it is mathematically plausible. It must be traceable to the source and tested against that source definition.
