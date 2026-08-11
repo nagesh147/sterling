@@ -1,0 +1,55 @@
+# Adaptive Edge — Exactness Audit
+
+Date: 2026-08-11
+
+## Audit method
+
+Before extending the implementation, the existing Adaptive Edge code was compared against:
+
+1. `docs/strategy/adaptive-edge/INDEX.md`
+2. `docs/strategy/adaptive-edge/SPEC.md`
+3. `docs/strategy/adaptive-edge/FORMULAS.md`
+4. the Master Mathematical Specification Version 1.0
+5. the existing implementation and tests
+
+## Corrections made
+
+### Risk per unit
+
+The implementation previously added absolute-value, point-value and execution-cost semantics inside the risk-per-unit operator. The source relationship is:
+
+```text
+RiskPerUnit = EntryPrice - InitialStop
+```
+
+The operator now implements that relationship directly. Additional production constraints belong outside the mathematical operator.
+
+### Unanchored state contracts
+
+The previous `contracts.py`, `state.py`, and `state_machine.py` introduced named mode values and lifecycle transitions that were not sufficiently specified by the source. They were removed rather than being treated as equivalent implementations.
+
+The source-defined state names remain documentation requirements, but transition behavior will not be invented until the exact transition rules are recovered from the authoritative artifact.
+
+### Provisional traceability
+
+The old F-101..F-114 matrix was removed from active traceability. It was a reconstruction, not the original mathematical specification.
+
+## Current exactness policy
+
+```text
+Source relationship absent
+    -> do not implement
+
+Source relationship present but required parameter is learned
+    -> implement operator, leave parameter unresolved
+
+External provider contract absent
+    -> implement provider-neutral boundary only
+
+Implementation behavior not source-anchored
+    -> remove it
+```
+
+## Result
+
+This audit deliberately reduces the amount of code classified as implemented. That is intentional. The project is now optimized for specification fidelity rather than apparent feature completeness.
