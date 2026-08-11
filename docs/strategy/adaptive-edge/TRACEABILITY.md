@@ -23,17 +23,17 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §10 | Delta / cumulative delta / delta velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for implemented fields |
 | §11 | Liquidity imbalance | `canonical_math.py`, `feature_state.py` | EXACT |
 | §12 | Volume intensity | `canonical_math.py` | EXACT operator; contextual rate source not implemented |
-| §19 | Causal contextual normalization | `normalization.py` | PARTIAL: generic causal history exists; full context construction and exact source-defined normalization method remain unresolved |
+| §19 | Causal contextual normalization | `normalization.py` | BLOCKED: exact estimator/context construction not fully recovered |
 | §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL |
-| §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: mathematical model operator exists; exact source-defined fitting/optimization method is not specified, so no fitter is treated as canonical |
+| §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: mathematical model operator exists; exact source-defined fitting/optimization method is not specified |
 | §23 | Empirical similarity | `canonical_math.py` | PARTIAL: operators only; effective-sample gate remains |
 | §24 | Bayesian state | `canonical_math.py` | PARTIAL: update relationships only; learned decay/initialization remain |
 | §31 | Execution cost decomposition | `canonical_math.py`, `economic.py` | PARTIAL: decomposition contract; provider-specific distributions pending |
-| §32 | Option selection by ExpectedNetEV | target/economic path | BLOCKED until exact option-candidate contract is wired |
-| §33 | Target/stop EV competition | `target_stop.py` | EXACT for supplied validated candidate estimates |
-| §34 | Conservative EV / no-trade | `target_stop.py` | EXACT for supplied conservative EV |
+| §32 | Option selection by ExpectedNetEV | `option_selection.py` | PARTIAL: exact argmax/constraint boundary exists; upstream candidate contract is not yet wired |
+| §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
+| §34 | Conservative EV / no-trade | `target_stop.py` | EXACT operator for strict-positive eligibility; orchestration gate remains upstream |
 | §35 | Entry gates | strategy orchestration | BLOCKED until all exact gate inputs exist |
-| §36 | Risk per unit / position sizing | `canonical_math.py` | EXACT operator; full production constraints remain |
+| §36 | Risk per unit / position sizing | `canonical_math.py` | EXACT operators; full production constraints remain separate |
 | §39 | Continuation value | `canonical_math.py` | EXACT operator |
 | §40 | Giveback / profit floor | `canonical_math.py`, `position_management.py` | PARTIAL |
 | §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | EXACT invariant |
