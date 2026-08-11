@@ -10,7 +10,7 @@ When implementing, reviewing, testing, backtesting, documenting, or changing Ada
 
 | Artifact | Purpose | Status |
 |---|---|---|
-| `SPEC.md` | Frozen end-to-end strategy specification | Active |
+| `SPEC.md` | End-to-end strategy architecture and hard boundaries | Active |
 | `FORMULAS.md` | Formula registry; every mathematical rule gets an ID | Active |
 | `DESIGN.md` | Component and dependency design | Active |
 | `EXECUTION.md` | Entry, order, fill, position and exit semantics | Active |
@@ -19,6 +19,7 @@ When implementing, reviewing, testing, backtesting, documenting, or changing Ada
 | `UI.md` | Dedicated Adaptive Edge terminal UI specification | Active |
 | `TRACEABILITY.md` | Requirement -> formula -> code -> test matrix | Active |
 | `RECOVERY.md` | Recovered decisions and unresolved definitions | Active |
+| `ARTIFACT_RESOLUTION.md` | Evidence, attack, resolution and implementation gate | Active |
 | `CHANGELOG.md` | Strategy-semantic changes only | Active |
 
 ## Non-negotiable source hierarchy
@@ -48,4 +49,6 @@ Shared infrastructure is allowed; shared strategy semantics are not.
 
 ## Current implementation gate
 
-Known-safe formulas are implemented/anchored. Strategy-specific formulas whose exact definition has not been recovered are explicitly marked `UNLOCKED` in `FORMULAS.md` and must not be guessed.
+Known-safe formulas are implemented/anchored. Strategy-specific formulas whose exact definition has not been recovered are explicitly marked `RESOLVED-BLOCKED` in `FORMULAS.md` and must not be guessed.
+
+Adaptive Edge remains non-executable while a required upstream strategy-specific formula is `RESOLVED-BLOCKED`.
