@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from app.engines.adaptive_edge.canonical_math import ExecutionCost
 from app.engines.adaptive_edge.economic_engine import evaluate
+from app.engines.adaptive_edge.master_spec_edge import evaluate_direction
+from app.engines.adaptive_edge.probability_engine import ModelParameters
 from app.engines.adaptive_edge.protection_engine import update_protection
 from app.engines.adaptive_edge.risk_engine import authorize, tighten
 
@@ -16,6 +18,27 @@ def test_economic_layer_uses_conservative_net_value():
     assert result.expected_net_value == 93.0
     assert result.eligible is True
     assert result.ev_per_risk == 2.0
+
+
+def test_direction_adapter_uses_fitted_down_flat_up_labels():
+    params = ModelParameters(
+        version="wf-1",
+        classes=("DOWN", "FLAT", "UP"),
+        coefficients=((0.0,), (0.0,), (2.0,)),
+        intercepts=(0.0, 0.0, 0.0),
+        regularization=0.0,
+    )
+    result = evaluate_direction(
+        prediction_id="pred-1",
+        opportunity_id="opp-1",
+        prediction_time="2026-01-01T09:30:00",
+        feature_snapshot_id="snap-1",
+        features=(1.0,),
+        parameters=params,
+    )
+    assert result.p_up > result.p_down
+    assert result.p_up > result.p_neutral
+    assert result.direction == 1
 
 
 def test_risk_authorization_can_only_tighten():
