@@ -1,60 +1,85 @@
 # Adaptive Edge — Current Status
 
-## Done
+## Source recovery correction
 
-- Canonical strategy folder established.
-- Strategy semantics separated from SuperTrend and Value Flow Navigator.
-- Machine-readable formula registry established.
-- F-001..F-008 anchored; F-004 implemented.
-- Historical F-101..F-114 recovery audited and found unavailable in retrievable context.
-- Decision made to proceed with an explicit reconstructed Adaptive Edge v0.1.0 model rather than remain blocked.
-- F-101..F-114 reconstructed equations documented in `FORMULAS.md`.
-- F-101..F-114 promoted to versioned registry entries.
-- Pure deterministic model implemented in `model.py`.
-- Versioned F-102 EdgeFormula adapter implemented.
-- Causal feature provenance preserved.
-- Economic evaluation remains separated under F-004.
-- DynamicMode/RiskState separation preserved.
-- Immutable RiskAuthorization contract preserved.
-- Unit and adversarial tests added for the reconstructed formula set.
-- Deterministic historical replay engine implemented.
-- Causal Kite Candle -> Adaptive Edge feature adapter implemented.
-- Replay robustness tests added.
-- Research-only Kite backtest endpoint module added; it is not wired to live execution.
-- Dedicated Adaptive Edge UI remains separate from shared Signals.
+The original conversation-generated Adaptive Edge artifacts have now been located in Git commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1`.
+
+Primary source:
+
+```text
+adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
+Master Mathematical Specification — Version 1.0
+```
+
+The source set contains the complete strategy mathematics and supporting canonical specifications. See `ORIGINAL_SOURCE_MANIFEST.md`.
+
+## Completed on this branch
+
+- Located the original Master Mathematical Specification.
+- Registered the source commit and artifact set.
+- Added source-derived mathematical operators.
+- Added source-section traceability registry.
+- Added canonical economic evaluation layer.
+- Added canonical risk authorization and sizing layer.
+- Added canonical continuation/protection layer.
+- Added deterministic tests for the source-derived mathematics.
+- Retired provisional F-101..F-114 formulas from the executable formula registry.
+- Preserved the old F-101..F-114 identifiers only as deprecated compatibility metadata.
+- Kept all work isolated to Adaptive Edge for Sterling Kite.
+
+## Explicitly rejected as canonical
+
+The earlier reconstructed model in `model.py` contained invented numerical weights and thresholds. Those values are **not** present in the Master Mathematical Specification and are no longer treated as canonical strategy mathematics.
+
+Examples of rejected provisional assumptions include fixed feature weights, fixed confidence thresholds, fixed ATR stop multipliers, and a fixed target delta for option selection.
+
+## Current architecture
+
+```text
+Canonical Event / Market State
+        |
+        v
+Causal Feature State
+        |
+        v
+Parameterized Probability State
+        |
+        v
+Economic Evaluation
+        |
+        v
+Risk Authorization
+        |
+        v
+Position Sizing
+        |
+        v
+Forward Management + Backward Profit Protection
+        |
+        v
+Realistic Execution
+```
 
 ## Current status
 
 ```text
-FORMULAS             IMPLEMENTED v0.1.0
-UNIT TESTS           IMPLEMENTED
-EDGE PIPELINE        IMPLEMENTED
-ECONOMICS            IMPLEMENTED
-RISK CONTRACT        IMPLEMENTED
-UI                   IMPLEMENTED
+SOURCE RECOVERY          COMPLETE
+SOURCE TRACEABILITY      IMPLEMENTED
+CORE MATH OPERATORS      IMPLEMENTED
+ECONOMIC LAYER           IMPLEMENTED
+RISK LAYER               IMPLEMENTED
+PROTECTION LAYER         IMPLEMENTED
+PROVISIONAL F-101..114   DEPRECATED
 
-HISTORICAL REPLAY    IMPLEMENTED
-KITE FEATURE ADAPTER IMPLEMENTED
-KITE API ROUTING     PENDING REGISTRATION
-OOS VALIDATION       BLOCKED UNTIL DATA RUN
-PAPER                BLOCKED UNTIL ROBUSTNESS GATE
-LIVE                 BLOCKED
+PROBABILITY TRAINING     NEXT
+OPTION SELECTION         NEXT
+STATE/EVENT INTEGRATION  NEXT
+KITE HISTORICAL REPLAY   NEXT
+OOS VALIDATION            BLOCKED UNTIL DATA RUN
+PAPER                     BLOCKED UNTIL ROBUSTNESS GATE
+LIVE                      BLOCKED
 ```
 
-## Important qualification
+## Governing rule
 
-F-101..F-114 are a reconstructed model because the original historical equations were not retrievable. They are not represented as recovered historical facts. The branch is now designed to falsify or improve this model quantitatively.
-
-## Next gates
-
-```text
-1. Register the research-only Adaptive Edge router
-2. Run historical Kite data through the adapter
-3. Run execution-cost/slippage sensitivity
-4. Establish chronological in-sample / validation / holdout split
-5. Measure expectancy, drawdown, turnover, hit rate, tail loss
-6. Run regime and parameter robustness tests
-7. Reject the model if robustness gates fail
-8. Paper/shadow only after robustness passes
-9. Live execution only after explicit authorization
-```
+No learned coefficient, probability threshold, calibration parameter, quantile, execution distribution, or risk allocation parameter will be invented merely to make the engine runnable. Those values must come from the specified walk-forward learning and validation process.
