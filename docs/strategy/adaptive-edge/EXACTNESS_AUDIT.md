@@ -72,6 +72,10 @@ Percentile_t = F(x_t | Context_t, Data<=t)
 
 The recovered source does not specify the empirical-CDF convention, interpolation/tie rule, smoothing, or minimum sample-size rule. A previously added empirical-CDF implementation was therefore treated as non-exact and is blocked pending recovery.
 
+### Target/stop validation
+
+§33 defines selection as `argmax ConservativeEV(s,m)` and §34 separately defines `ConservativeEV <= 0 -> NO_TRADE`. The target/stop module previously added undocumented positivity/range checks for target, stop, probabilities, gains, losses, and costs. Those checks were removed from the mathematical selection layer. Upstream validated inputs remain external to the source-defined operator.
+
 ### Traceability statuses
 
 The source registry distinguishes:
