@@ -1,9 +1,9 @@
 """Leakage-safe fitting for the Master Specification probability model.
 
 Only training rows are used to estimate coefficients. Validation/holdout rows
-are never touched by the fitter. This is intentionally a small deterministic
-multinomial logistic implementation so the research pipeline has no hidden
-sklearn state or accidental data split behavior.
+are never touched by the fitter. This module intentionally contains no
+strategy-selected defaults: regularization and optimizer settings are supplied
+by the walk-forward research configuration and recorded with the fitted model.
 """
 from __future__ import annotations
 
@@ -40,17 +40,19 @@ def _softmax(logits: Sequence[float]) -> tuple[float, ...]:
 
 
 def _label_index(label: int) -> int:
-    return { -1: 0, 0: 1, 1: 2 }[label]
+    return {-1: 0, 0: 1, 1: 2}[label]
 
 
-def _loss(rows: Sequence[ResearchRow], weights: list[list[float]], bias: list[float], l2: float) -> float:
+def _loss(rows: Sequence[ResearchRow], weights: list[list[float]], bias: list[float], l2: float, *, regularized: bool) -> float:
     if not rows:
         return 0.0
     total = 0.0
     for row in rows:
-        p = _softmax([sum(w * x for w, x in zip(class_w, row.feature_values)) + b for class_w, b in zip(weights, bias)])
+        p = _softmax(
+            [sum(w * x for w, x in zip(class_w, row.feature_values)) + b for class_w, b in zip(weights, bias)]
+        )
         total -= log(max(p[_label_index(row.label)], 1e-15))
-    penalty = l2 * sum(x * x for row in weights for x in row)
+    penalty = l2 * sum(x * x for row in weights for x in row) if regularized else 0.0
     return total / len(rows) + penalty
 
 
@@ -60,6 +62,12 @@ def fit(
     config: FitConfig,
     validation: Sequence[ResearchRow] = (),
 ) -> FitResult:
+    """Fit multinomial logistic coefficients using TRAIN only.
+
+    The validation set is evaluated only after coefficients are frozen. It is
+    never used to update weights, normalize features, or alter the fitted
+    parameters.
+    """
     if not train:
         raise ValueError("training set cannot be empty")
     dimensions = len(train[0].feature_values)
@@ -69,6 +77,10 @@ def fit(
         raise ValueError("invalid fit configuration")
     if len(config.classes) != 3:
         raise ValueError("the current fitter expects DOWN/FLAT/UP")
+    if any(row.label not in (-1, 0, 1) for row in train):
+        raise ValueError("training labels must be -1, 0, or 1")
+    if any(len(row.feature_values) != dimensions for row in validation):
+        raise ValueError("validation feature dimensions must match training")
 
     weights = [[0.0] * dimensions for _ in config.classes]
     bias = [0.0] * len(config.classes)
@@ -77,7 +89,10 @@ def fit(
         grad_w = [[0.0] * dimensions for _ in config.classes]
         grad_b = [0.0] * len(config.classes)
         for row in train:
-            logits = [sum(w * x for w, x in zip(class_w, row.feature_values)) + b for class_w, b in zip(weights, bias)]
+            logits = [
+                sum(w * x for w, x in zip(class_w, row.feature_values)) + b
+                for class_w, b in zip(weights, bias)
+            ]
             probabilities = _softmax(logits)
             target = _label_index(row.label)
             for k in range(len(config.classes)):
@@ -98,7 +113,7 @@ def fit(
         intercepts=tuple(bias),
         regularization=config.l2,
     )
-    val_loss = _loss(validation, weights, bias, config.l2) if validation else None
+    val_loss = _loss(validation, weights, bias, config.l2, regularized=False) if validation else None
     val_accuracy = None
     if validation:
         correct = 0
@@ -118,7 +133,7 @@ def fit(
 
     return FitResult(
         parameters=params,
-        training_loss=_loss(train, weights, bias, config.l2),
+        training_loss=_loss(train, weights, bias, config.l2, regularized=True),
         validation_loss=val_loss,
         validation_accuracy=val_accuracy,
     )
