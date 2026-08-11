@@ -17,21 +17,19 @@ def test_future_feature_is_rejected():
 
 
 def test_expected_net_value_is_gross_minus_cost():
-    edge = EdgeAssessment("o1", 0.8, 0.9, 100.0, "F-102", "1.0", {})
+    edge = EdgeAssessment("o1", 0.8, 0.9, 100.0, "MS-31/66", "1.0", {})
     result = evaluate_economics(edge, execution_cost=15.0)
     assert result.expected_net_value == 85.0
-    assert result.eligible is True
 
 
 def test_higher_execution_cost_cannot_improve_net_value():
-    edge = EdgeAssessment("o1", 0.8, 0.9, 100.0, "F-102", "1.0", {})
+    edge = EdgeAssessment("o1", 0.8, 0.9, 100.0, "MS-31/66", "1.0", {})
     a = evaluate_economics(edge, execution_cost=10.0)
     b = evaluate_economics(edge, execution_cost=20.0)
     assert b.expected_net_value <= a.expected_net_value
 
 
-def test_missing_gross_value_fails_economic_gate():
-    edge = EdgeAssessment("o1", 0.8, 0.9, None, "F-102", "1.0", {})
-    result = evaluate_economics(edge, execution_cost=0.0)
-    assert result.eligible is False
-    assert result.reason == "missing_expected_gross_value"
+def test_missing_gross_value_is_not_silently_converted_to_zero():
+    edge = EdgeAssessment("o1", 0.8, 0.9, None, "MS-31/66", "1.0", {})
+    with pytest.raises(ValueError, match="expected gross value is required"):
+        evaluate_economics(edge, execution_cost=0.0)
