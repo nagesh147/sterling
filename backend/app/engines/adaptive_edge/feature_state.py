@@ -48,7 +48,7 @@ class FeatureState:
 
 
 def _base_data_ok(snapshot: MarketSnapshot) -> bool:
-    if not snapshot.instrument.strip():
+    if not snapshot.instrument.strip() or snapshot.timestamp.tzinfo is None:
         return False
     required = (
         snapshot.bid,
@@ -85,8 +85,11 @@ def build_feature_state(
     cumulative_delta: float = 0.0,
 ) -> FeatureState:
     data_ok = _base_data_ok(current)
-    if previous is not None and current.instrument != previous.instrument:
-        raise ValueError("snapshots must belong to the same instrument")
+    if previous is not None:
+        if current.instrument != previous.instrument:
+            raise ValueError("snapshots must belong to the same instrument")
+        if current.timestamp.tzinfo is None or previous.timestamp.tzinfo is None:
+            data_ok = False
 
     mid = (current.bid + current.ask) / 2.0
     spread = current.ask - current.bid
