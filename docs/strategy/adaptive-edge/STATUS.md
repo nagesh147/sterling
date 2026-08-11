@@ -13,27 +13,32 @@
 - Pure deterministic model implemented in `model.py`.
 - Versioned F-102 EdgeFormula adapter implemented.
 - Causal feature provenance preserved.
-- Edge formula interface now accepts registered implemented formulas.
 - Economic evaluation remains separated under F-004.
 - DynamicMode/RiskState separation preserved.
 - Immutable RiskAuthorization contract preserved.
 - Unit and adversarial tests added for the reconstructed formula set.
+- Deterministic historical replay engine implemented.
+- Causal Kite Candle -> Adaptive Edge feature adapter implemented.
+- Replay robustness tests added.
+- Research-only Kite backtest endpoint module added; it is not wired to live execution.
 - Dedicated Adaptive Edge UI remains separate from shared Signals.
 
 ## Current status
 
 ```text
-FORMULAS       IMPLEMENTED v0.1.0
-UNIT TESTS     IMPLEMENTED
-EDGE PIPELINE  IMPLEMENTED
-ECONOMICS      IMPLEMENTED
-RISK CONTRACT  IMPLEMENTED
-UI             IMPLEMENTED
+FORMULAS             IMPLEMENTED v0.1.0
+UNIT TESTS           IMPLEMENTED
+EDGE PIPELINE        IMPLEMENTED
+ECONOMICS            IMPLEMENTED
+RISK CONTRACT        IMPLEMENTED
+UI                   IMPLEMENTED
 
-BACKTEST       NEXT
-OOS VALIDATION NEXT
-PAPER          BLOCKED UNTIL BACKTEST GATE
-LIVE           BLOCKED
+HISTORICAL REPLAY    IMPLEMENTED
+KITE FEATURE ADAPTER IMPLEMENTED
+KITE API ROUTING     PENDING REGISTRATION
+OOS VALIDATION       BLOCKED UNTIL DATA RUN
+PAPER                BLOCKED UNTIL ROBUSTNESS GATE
+LIVE                 BLOCKED
 ```
 
 ## Important qualification
@@ -43,12 +48,13 @@ F-101..F-114 are a reconstructed model because the original historical equations
 ## Next gates
 
 ```text
-1. Connect authoritative Kite market-data inputs
-2. Build historical backtest adapter using the same model functions
+1. Register the research-only Adaptive Edge router
+2. Run historical Kite data through the adapter
 3. Run execution-cost/slippage sensitivity
-4. Establish in-sample / out-of-sample split
+4. Establish chronological in-sample / validation / holdout split
 5. Measure expectancy, drawdown, turnover, hit rate, tail loss
-6. Reject the model if robustness gates fail
-7. Paper/shadow only after robustness passes
-8. Live execution only after explicit authorization
+6. Run regime and parameter robustness tests
+7. Reject the model if robustness gates fail
+8. Paper/shadow only after robustness passes
+9. Live execution only after explicit authorization
 ```
