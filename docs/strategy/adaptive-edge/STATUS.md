@@ -6,38 +6,49 @@
 - Strategy semantics separated from SuperTrend and Value Flow Navigator.
 - Machine-readable formula registry established.
 - F-001..F-008 anchored; F-004 implemented.
-- F-101..F-114 explicitly locked in both documentation and code.
-- Causal feature layer implemented and now carries formula provenance.
-- Edge formula interface enforced against the registry.
-- Economic evaluation implemented from registry formula F-004.
-- DynamicMode/RiskState separation preserved in contracts.
+- Historical F-101..F-114 recovery audited and found unavailable in retrievable context.
+- Decision made to proceed with an explicit reconstructed Adaptive Edge v0.1.0 model rather than remain blocked.
+- F-101..F-114 reconstructed equations documented in `FORMULAS.md`.
+- F-101..F-114 promoted to versioned registry entries.
+- Pure deterministic model implemented in `model.py`.
+- Versioned F-102 EdgeFormula adapter implemented.
+- Causal feature provenance preserved.
+- Edge formula interface now accepts registered implemented formulas.
+- Economic evaluation remains separated under F-004.
+- DynamicMode/RiskState separation preserved.
 - Immutable RiskAuthorization contract preserved.
-- Causal/economic/risk invariant tests added.
-- Formula-registry lock tests added.
-- Dedicated Adaptive Edge UI implemented.
-- UI occupies the same right-sidebar location as the shared signal surface through a strategy switcher.
-- Shared Signals surface remains intact.
-- Repository recovery audit completed: no exact F-101..F-114 definitions were found in existing Sterling artifacts.
+- Unit and adversarial tests added for the reconstructed formula set.
+- Dedicated Adaptive Edge UI remains separate from shared Signals.
 
-## Not claimed as complete
+## Current status
 
-The exact strategy-specific mathematical definitions F-101..F-114 have not been recovered with sufficient evidence from the repository/context available to this implementation session.
+```text
+FORMULAS       IMPLEMENTED v0.1.0
+UNIT TESTS     IMPLEMENTED
+EDGE PIPELINE  IMPLEMENTED
+ECONOMICS      IMPLEMENTED
+RISK CONTRACT  IMPLEMENTED
+UI             IMPLEMENTED
 
-Therefore Adaptive Edge is deliberately not emitting live strategy candidates yet.
+BACKTEST       NEXT
+OOS VALIDATION NEXT
+PAPER          BLOCKED UNTIL BACKTEST GATE
+LIVE           BLOCKED
+```
+
+## Important qualification
+
+F-101..F-114 are a reconstructed model because the original historical equations were not retrievable. They are not represented as recovered historical facts. The branch is now designed to falsify or improve this model quantitatively.
 
 ## Next gates
 
 ```text
-1. Recover exact F-101..F-114 definitions
-2. Promote each recovered formula into FORMULAS.md + formula_registry.py
-3. Add formula-specific unit + adversarial tests
-4. Implement concrete EdgeFormula
-5. Implement eligibility/mode/risk/sizing policies
-6. Add authoritative backend candidate endpoint/stream
-7. Bind AdaptiveEdgePanel to authoritative data
-8. Run backtest/live parity validation
-9. Paper/shadow validation
-10. Only then enable execution
+1. Connect authoritative Kite market-data inputs
+2. Build historical backtest adapter using the same model functions
+3. Run execution-cost/slippage sensitivity
+4. Establish in-sample / out-of-sample split
+5. Measure expectancy, drawdown, turnover, hit rate, tail loss
+6. Reject the model if robustness gates fail
+7. Paper/shadow only after robustness passes
+8. Live execution only after explicit authorization
 ```
-
-The UI being visible does not mean the strategy is executable. The formula lock is intentional.
