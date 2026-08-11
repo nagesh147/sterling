@@ -2,6 +2,14 @@
 
 Formula IDs are immutable identifiers. Changing a formula's meaning requires a new version and an explicit strategy change review.
 
+## Governing resolution contract
+
+Every strategy-specific formula is resolved artifact-by-artifact under `ARTIFACT_RESOLUTION.md`.
+
+A formula is `RESOLVED` only when the definition **and every required input's semantics** are authoritative, causal, versioned, and testable.
+
+A mathematically valid relationship alone is insufficient.
+
 ## F-001 — Causal availability
 
 ```text
@@ -60,9 +68,9 @@ BUY reference price = executable ASK
 SELL reference price = executable BID
 ```
 
-## Strategy-specific formulas — LOCKED OUT until recovered
+## Strategy-specific formulas — RESOLVED-BLOCKED
 
-These IDs are reserved. No implementation may invent their definitions.
+The following artifacts have been individually attacked for currently available source evidence. No authoritative complete definitions were recovered. They remain non-executable until an original definition is recovered or a new versioned strategy definition is explicitly approved.
 
 ```text
 F-101  Feature normalization / feature score
@@ -83,21 +91,46 @@ F-114  Multi-position interaction
 
 ## Formula contract
 
-Every unlocked formula must be promoted with:
+Every formula that becomes `RESOLVED` must be promoted with:
 
 ```text
 Formula ID
 Version
 Definition
 Inputs
+Input semantics
 Units
 Availability timestamp semantics
 Boundary conditions
 Numerical safeguards
+Parameter-estimation methodology, when applicable
 Owner module
 Unit tests
 Adversarial tests
-Backtest parity test
+Backtest/parity test
+Provenance
 ```
 
 Until that metadata exists, the formula is not production-authorized.
+
+## Risk semantic prohibition
+
+The repository does not authorize any silent equivalence between:
+
+```text
+EffectiveRisk_i
+EffectiveRiskPerUnit
+RiskPerUnit
+GrossRisk
+```
+
+In particular, the following are prohibited unless an authoritative strategy artifact explicitly establishes the equivalence:
+
+```text
+EffectiveRisk_i = GrossRisk
+EffectiveRisk_i = RiskPerUnit * Q
+EffectiveRisk_i = EffectiveRiskPerUnit
+EffectiveRiskPerUnit = EntryPrice - InitialStop
+```
+
+See `ARTIFACT_RESOLUTION.md` for the full attack ledger and resolution procedure.
