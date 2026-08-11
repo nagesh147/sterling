@@ -1,9 +1,11 @@
-"""Machine-readable registry for the reconstructed Adaptive Edge model.
+"""Formula registry for Adaptive Edge.
 
-No historical F-101..F-114 equations were retrievable from the available
-conversation context. These formulas are therefore an explicit strategy
-revision, versioned separately and requiring backtest validation before live
-execution authorization.
+F-101..F-114 were provisional identifiers introduced after the original
+strategy discussion and are NOT part of the Master Mathematical Specification.
+They are retained only as deprecated compatibility metadata.
+
+The source-derived registry lives in ``spec_registry.py`` and anchors
+implementation concepts to the Master Mathematical Specification v1.0.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ class FormulaStatus(str, Enum):
     ANCHORED = "anchored"
     IMPLEMENTED = "implemented"
     LOCKED = "locked"
+    DEPRECATED = "deprecated"
 
 
 @dataclass(frozen=True)
@@ -36,20 +39,20 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-006": FormulaDefinition("F-006", "1.0", "Mode/risk independence", FormulaStatus.ANCHORED, "state invariant", "risk"),
     "F-007": FormulaDefinition("F-007", "1.0", "Executable BUY reference", FormulaStatus.ANCHORED, "price", "execution"),
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
-    "F-101": FormulaDefinition("F-101", "0.1.0", "Composite feature score", FormulaStatus.IMPLEMENTED, "[-1,1]", "model"),
-    "F-102": FormulaDefinition("F-102", "0.1.0", "Edge / prediction score", FormulaStatus.IMPLEMENTED, "[-1,1]", "model"),
-    "F-103": FormulaDefinition("F-103", "0.1.0", "Opportunity eligibility", FormulaStatus.IMPLEMENTED, "boolean", "model"),
-    "F-104": FormulaDefinition("F-104", "0.1.0", "Dynamic operating mode", FormulaStatus.IMPLEMENTED, "enum", "mode"),
-    "F-105": FormulaDefinition("F-105", "0.1.0", "Predictive-profit protection floor", FormulaStatus.IMPLEMENTED, "accounting currency", "protection"),
-    "F-106": FormulaDefinition("F-106", "0.1.0", "Dynamic risk schedule", FormulaStatus.IMPLEMENTED, "accounting currency", "risk"),
-    "F-107": FormulaDefinition("F-107", "0.1.0", "Risk per unit", FormulaStatus.IMPLEMENTED, "accounting currency/unit", "sizing"),
-    "F-108": FormulaDefinition("F-108", "0.1.0", "Position sizing", FormulaStatus.IMPLEMENTED, "lots", "sizing"),
-    "F-109": FormulaDefinition("F-109", "0.1.0", "Instrument selection score", FormulaStatus.IMPLEMENTED, "[0,1]", "instrument"),
-    "F-110": FormulaDefinition("F-110", "0.1.0", "Entry trigger", FormulaStatus.IMPLEMENTED, "boolean", "entry"),
-    "F-111": FormulaDefinition("F-111", "0.1.0", "Exit trigger", FormulaStatus.IMPLEMENTED, "boolean", "exit"),
-    "F-112": FormulaDefinition("F-112", "0.1.0", "Trailing/protection parameterization", FormulaStatus.IMPLEMENTED, "price/value", "protection"),
-    "F-113": FormulaDefinition("F-113", "0.1.0", "Re-entry rule", FormulaStatus.IMPLEMENTED, "boolean", "entry"),
-    "F-114": FormulaDefinition("F-114", "0.1.0", "Multi-position interaction", FormulaStatus.IMPLEMENTED, "risk fraction", "portfolio"),
+    "F-101": FormulaDefinition("F-101", "0.1.0", "Provisional composite feature score", FormulaStatus.DEPRECATED, "[-1,1]", "legacy_model"),
+    "F-102": FormulaDefinition("F-102", "0.1.0", "Provisional edge score", FormulaStatus.DEPRECATED, "[-1,1]", "legacy_model"),
+    "F-103": FormulaDefinition("F-103", "0.1.0", "Provisional opportunity eligibility", FormulaStatus.DEPRECATED, "boolean", "legacy_model"),
+    "F-104": FormulaDefinition("F-104", "0.1.0", "Provisional dynamic operating mode", FormulaStatus.DEPRECATED, "enum", "legacy_model"),
+    "F-105": FormulaDefinition("F-105", "0.1.0", "Provisional profit protection", FormulaStatus.DEPRECATED, "accounting currency", "legacy_model"),
+    "F-106": FormulaDefinition("F-106", "0.1.0", "Provisional dynamic risk", FormulaStatus.DEPRECATED, "accounting currency", "legacy_model"),
+    "F-107": FormulaDefinition("F-107", "0.1.0", "Provisional risk per unit", FormulaStatus.DEPRECATED, "accounting currency/unit", "legacy_model"),
+    "F-108": FormulaDefinition("F-108", "0.1.0", "Provisional position sizing", FormulaStatus.DEPRECATED, "lots", "legacy_model"),
+    "F-109": FormulaDefinition("F-109", "0.1.0", "Provisional instrument selection", FormulaStatus.DEPRECATED, "score", "legacy_model"),
+    "F-110": FormulaDefinition("F-110", "0.1.0", "Provisional entry trigger", FormulaStatus.DEPRECATED, "boolean", "legacy_model"),
+    "F-111": FormulaDefinition("F-111", "0.1.0", "Provisional exit trigger", FormulaStatus.DEPRECATED, "boolean", "legacy_model"),
+    "F-112": FormulaDefinition("F-112", "0.1.0", "Provisional protection parameters", FormulaStatus.DEPRECATED, "price/value", "legacy_model"),
+    "F-113": FormulaDefinition("F-113", "0.1.0", "Provisional re-entry", FormulaStatus.DEPRECATED, "boolean", "legacy_model"),
+    "F-114": FormulaDefinition("F-114", "0.1.0", "Provisional multi-position interaction", FormulaStatus.DEPRECATED, "risk fraction", "legacy_model"),
 }
 
 
