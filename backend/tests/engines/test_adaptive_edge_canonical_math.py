@@ -4,11 +4,14 @@ from app.engines.adaptive_edge.canonical_math import (
     ExecutionCost,
     acceleration,
     aggressor,
+    candidate_stop,
     continuation_value,
     cumulative_delta,
     delta,
+    enforce_lot_size,
     expected_net_value,
     expected_value_per_risk,
+    gross_risk,
     incremental_volume,
     liquidity_imbalance,
     maximum_accepted_risk,
@@ -83,24 +86,28 @@ def test_similarity_operator_is_deterministic():
 def test_economic_value_is_net_of_costs_and_cost_monotonic():
     cheap = ExecutionCost(spread=1.0)
     expensive = ExecutionCost(spread=3.0)
-    assert expected_net_value(10.0, cheap) > expected_net_value(10.0, expensive)
+    assert expected_net_value(20.0, 10.0, cheap) > expected_net_value(20.0, 10.0, expensive)
+    assert expected_net_value(20.0, 10.0, cheap) == 9.0
 
 
 def test_risk_and_sizing_follow_source_relationships():
     unit_risk = risk_per_unit(100.0, 95.0)
     assert unit_risk == 5.0
-    assert position_size(100.0, unit_risk, 10) == 20
+    assert gross_risk(unit_risk, 20) == 100.0
+    assert position_size(100.0, unit_risk) == 20
+    assert enforce_lot_size(23, 10) == 20
     assert maximum_accepted_risk(100.0, 150.0) == 100.0
 
 
 def test_sizing_does_not_invent_zero_risk_behavior():
     with pytest.raises(ValueError):
-        position_size(100.0, 0.0, 10)
+        position_size(100.0, 0.0)
 
 
 def test_profit_protection_is_monotonic():
     assert profit_giveback(100.0, 70.0) == 30.0
     assert profit_floor(120.0, 30.0) == 90.0
+    assert candidate_stop(90.0, 95.0, 92.0) == 95.0
     assert monotonic_stop(100.0, 105.0) == 105.0
     assert monotonic_stop(105.0, 100.0) == 105.0
 
