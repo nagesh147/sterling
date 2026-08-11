@@ -183,6 +183,11 @@ def continuation_value(expected_future_profit: float, expected_future_risk: floa
     return expected_future_profit - expected_future_risk - expected_future_cost
 
 
+def continuation_exit(conservative_continuation_value: float) -> bool:
+    """§46: ConservativeContinuationValue <= 0 -> EXIT."""
+    return conservative_continuation_value <= 0
+
+
 def profit_giveback(peak_profit: float, current_profit: float) -> float:
     return peak_profit - current_profit
 
