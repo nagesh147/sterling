@@ -1,9 +1,12 @@
-"""Option selection for Adaptive Edge, anchored to Master Specification §32.
+"""Option selection for Adaptive Edge §32.
 
-The strategy selects the execution instrument only after the underlying market
-state has supplied the primary directional evidence. This module does not
-invent liquidity, slippage, risk, or data-quality thresholds; those are
-validated inputs supplied by upstream research/execution components.
+The source-defined §32 operation is only:
+
+    O* = argmax ExpectedNetEV_i
+
+subject to validated liquidity, slippage, risk and data-quality constraints.
+The positive conservative-EV eligibility gate belongs to the downstream
+entry/trade objective (§34-35 and §66), not to the §32 argmax itself.
 """
 from __future__ import annotations
 
@@ -20,13 +23,12 @@ class OptionCandidate:
     risk_ok: bool
     data_quality_ok: bool
 
-    def eligible(self) -> bool:
+    def eligible_for_selection(self) -> bool:
         return (
             self.liquidity_ok
             and self.slippage_ok
             and self.risk_ok
             and self.data_quality_ok
-            and self.expected_net_ev > 0.0
         )
 
 
@@ -37,10 +39,10 @@ class OptionSelection:
 
 
 def select_option(candidates: Sequence[OptionCandidate]) -> OptionSelection:
-    """§32: O* = argmax ExpectedNetEV_i subject to validated constraints."""
-    eligible = [candidate for candidate in candidates if candidate.eligible()]
+    """§32: select argmax(ExpectedNetEV) subject to validated constraints."""
+    eligible = [candidate for candidate in candidates if candidate.eligible_for_selection()]
     if not eligible:
-        return OptionSelection(status="NO_TRADE", candidate=None)
+        return OptionSelection(status="NO_CANDIDATE", candidate=None)
     return OptionSelection(
         status="SELECTED",
         candidate=max(eligible, key=lambda candidate: candidate.expected_net_ev),
