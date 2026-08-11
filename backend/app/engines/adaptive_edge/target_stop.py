@@ -1,13 +1,13 @@
-"""Source-anchored target/stop evaluation for Adaptive Edge §§33-34.
+"""Source-anchored target/stop mathematics for Adaptive Edge §§33-34.
 
 §33 defines the target/stop competition as argmax ConservativeEV(s,m).
 §34 separately defines the conservative-EV gate:
 
     ConservativeEV <= 0 -> NO_TRADE
 
-This module therefore does not invent target bounds, probability bounds,
-minimum samples, calibration rules, or distributional assumptions. Candidate
-inputs must already be produced by a validated upstream research layer.
+No target bounds, probability bounds, minimum samples, calibration rules, or
+distributional assumptions are invented here. Candidate inputs are supplied by
+upstream validated layers.
 """
 from __future__ import annotations
 
@@ -42,12 +42,15 @@ class TargetStopSelection:
 
 
 def select_target_stop(candidates: Sequence[TargetStopCandidate]) -> TargetStopSelection:
-    """§33 argmax; §34 positive conservative-EV eligibility."""
+    """§33: select argmax(ConservativeEV), without applying §34's gate."""
     if not candidates:
-        return TargetStopSelection(status="NO_TRADE", candidate=None)
+        return TargetStopSelection(status="NO_CANDIDATE", candidate=None)
+    return TargetStopSelection(
+        status="SELECTED",
+        candidate=max(candidates, key=lambda candidate: candidate.conservative_ev),
+    )
 
-    best = max(candidates, key=lambda candidate: candidate.conservative_ev)
-    if best.conservative_ev <= 0:
-        return TargetStopSelection(status="NO_TRADE", candidate=None)
 
-    return TargetStopSelection(status="SELECTED", candidate=best)
+def conservative_ev_eligible(conservative_ev: float) -> bool:
+    """§34: conservative EV must be strictly positive for eligibility."""
+    return conservative_ev > 0.0
