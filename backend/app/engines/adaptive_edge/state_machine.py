@@ -53,7 +53,7 @@ _ALLOWED = {
     (StrategyState.OBSERVATION, Event.OPPORTUNITY): StrategyState.CANDIDATE,
     (StrategyState.CANDIDATE, Event.EVALUATED): StrategyState.EVALUATED,
     (StrategyState.CANDIDATE, Event.REJECTED): StrategyState.REJECTED,
-    (StrategyState.CANDIDATE, Event.NO_TRADE): StrategyState.CLOSED,
+    (StrategyState.CANDIDATE, Event.NO_TRADE): StrategyState.REJECTED,
     (StrategyState.EVALUATED, Event.AUTHORIZED): StrategyState.AUTHORIZED,
     (StrategyState.EVALUATED, Event.REJECTED): StrategyState.REJECTED,
     (StrategyState.AUTHORIZED, Event.ENTRY_INTENT): StrategyState.INTENT,
