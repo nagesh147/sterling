@@ -1,98 +1,67 @@
 # Adaptive Edge — Current Status
 
-## Source recovery correction
+## Source authority
 
-The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1`, including the Master Mathematical Specification and its supporting canonical specifications.
+The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1`, including the Master Mathematical Specification and supporting canonical specifications.
 
-## Completed on this branch
+The Master Mathematical Specification is the sole authority for strategy mathematics and behavior. Provisional F-101..F-114 reconstruction is deprecated.
 
-- Located and registered the original strategy specification.
-- Added source-derived mathematical operators.
-- Added source-section traceability.
-- Added canonical probability-model contract without invented coefficients.
-- Added leakage-safe multinomial probability fitting for the §22 model family.
-- Added immutable risk authorization and sizing.
-- Added continuation/profit-protection mathematics.
-- Added source-defined economic evaluation and conservative EV gates.
-- Added §32 option candidate selection using expected net value subject to explicitly supplied validated constraints.
-- Added §33 target/stop candidate selection using caller-supplied validated conservative EV.
-- Added monotonic position-management state transitions and exit intent generation without broker-side fill assumptions.
-- Added deterministic state/event lifecycle integration with explicit rejection of impossible transitions.
-- Retired provisional F-101..F-114 equations from executable strategy logic.
-- Reworked the research replay so it consumes decisions from the strategy pipeline rather than implementing a second strategy.
-- Added a causal research-dataset contract with feature availability provenance.
-- Added chronological walk-forward folds with explicit purge and embargo windows.
-- Added deterministic tests for causal dataset validation and fold boundaries.
-- Added tests proving validation rows do not alter fitted parameters.
-- Kept all work isolated to Adaptive Edge for Sterling Kite.
+## Exactness policy
 
-## Explicitly rejected as canonical
+No implementation is classified as exact because it is plausible or approximately equivalent. A source relationship must be directly traceable and tested. Undocumented behavior is removed or marked blocked.
 
-The earlier reconstructed model in `model.py` contained invented numerical weights and thresholds. Those values are not present in the Master Mathematical Specification and are no longer treated as canonical strategy mathematics.
-
-Calibration/model-selection code that introduced unanchored thresholds was removed from this branch. Calibration remains a downstream validation phase until the exact source-defined method and walk-forward evidence are available.
-
-## Current architecture
-
-```text
-Canonical Event / Market State
-        |
-        v
-Causal Feature State
-        |
-        v
-Parameterized Probability State
-        |
-        v
-Economic Evaluation
-        |
-        v
-Option Candidate Selection
-        |
-        v
-Target / Stop Evaluation
-        |
-        v
-Risk Authorization
-        |
-        v
-Position Sizing
-        |
-        v
-Forward Management + Profit Protection
-        |
-        v
-Research Execution Replay
-        |
-        v
-Validation / Calibration / OOS
-```
+See `EXACTNESS_AUDIT.md` and `TRACEABILITY.md`.
 
 ## Current status
 
 ```text
-SOURCE RECOVERY          COMPLETE
-SOURCE TRACEABILITY      IMPLEMENTED
-CORE MATH OPERATORS      IMPLEMENTED
-ECONOMIC LAYER           IMPLEMENTED
-OPTION SELECTION         IMPLEMENTED
-TARGET/STOP EVALUATION   IMPLEMENTED
-RISK LAYER               IMPLEMENTED
-PROTECTION LAYER         IMPLEMENTED
-POSITION MANAGEMENT      IMPLEMENTED
-STATE/EVENT INTEGRATION  IMPLEMENTED
-CAUSAL DATASET CONTRACT  IMPLEMENTED
-WALK-FORWARD SPLITTER    IMPLEMENTED
-PARAMETER FITTING        IMPLEMENTED
-RESEARCH REPLAY          IMPLEMENTED
+SOURCE RECOVERY              COMPLETE
+SOURCE TRACEABILITY          IMPLEMENTED
+EXACTNESS AUDIT              COMPLETE
 
-CALIBRATION              BLOCKED UNTIL CORE PATH IS COMPLETE
-KITE HISTORICAL DATA     NEXT
-OOS VALIDATION           BLOCKED UNTIL DATA RUN
-PAPER                    BLOCKED UNTIL ROBUSTNESS GATE
-LIVE                     BLOCKED
+PRICE / VOLUME / DELTA MATH  EXACT FOR IMPLEMENTED OPERATORS
+LIQUIDITY MATH               EXACT
+NORMALIZATION                PARTIAL
+DIRECTIONAL PROBABILITY      PARTIAL
+LOGISTIC MODEL               PARTIAL
+SIMILARITY                   PARTIAL
+BAYESIAN STATE               PARTIAL
+ECONOMIC COST MODEL          PARTIAL
+OPTION SELECTION             BLOCKED
+TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
+CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
+RISK PER UNIT                EXACT OPERATOR
+POSITION SIZING              PARTIAL
+CONTINUATION VALUE           EXACT OPERATOR
+PROFIT PROTECTION            PARTIAL
+MONOTONIC STOP               EXACT INVARIANT
+NO RISK EXPANSION            EXACT INVARIANT
+DYNAMIC MODE                 BLOCKED
+ENTRY GATES                  BLOCKED
+EXIT ORCHESTRATION           BLOCKED
+STATE TRANSITIONS            BLOCKED
+WALK-FORWARD DATA CONTRACT   IMPLEMENTED
+PARAMETER FITTING            PARTIAL
+
+TRUEDATA ADAPTER             BLOCKED ON PROVIDER DOCUMENTATION
+HISTORICAL DATA              BLOCKED ON PROVIDER CONTRACT
+OOS VALIDATION               BLOCKED
+PAPER                        BLOCKED
+LIVE                         BLOCKED
 ```
+
+## Removed as non-canonical
+
+The following unanchored strategy-state implementations were removed:
+
+```text
+backend/app/engines/adaptive_edge/contracts.py
+backend/app/engines/adaptive_edge/state.py
+backend/app/engines/adaptive_edge/state_machine.py
+```
+
+They introduced named modes or transitions not sufficiently defined by the authoritative source.
 
 ## Governing rule
 
-No learned coefficient, probability threshold, calibration parameter, quantile, execution distribution, or risk allocation parameter will be invented merely to make the engine runnable. Those values must come from the specified walk-forward learning and validation process.
+No learned coefficient, probability threshold, calibration parameter, quantile, execution distribution, risk allocation parameter, mode value, or transition rule will be invented merely to make the engine runnable.
