@@ -24,6 +24,30 @@ RiskPerUnit = EntryPrice - InitialStop
 
 The operator now implements that relationship directly. Additional production constraints belong outside the mathematical operator.
 
+### Position sizing boundary
+
+The source defines:
+
+```text
+GrossRisk = RiskPerUnit × Q
+Q = floor(MaxRisk / EffectiveRiskPerUnit)
+```
+
+The exact sizing operator now returns the source-defined `floor(MaxRisk / EffectiveRiskPerUnit)` result. Lot-size enforcement is a separate production constraint rather than being folded into the mathematical operator.
+
+### Profit-protection boundary
+
+The source defines:
+
+```text
+Giveback = PeakProfit - CurrentProfit
+ProfitFloor = PeakPrice - AllowedGiveback
+CandidateStop = max(OriginalRiskBoundary, ProfitFloor, DynamicRiskBoundary)
+Stop_t = max(Stop_(t-1), CandidateStop_t)
+```
+
+The exact candidate-stop and monotonic-stop operators are now represented separately. The learned `AllowedGiveback` and dynamic risk boundary remain external inputs.
+
 ### Unanchored state contracts
 
 The previous `contracts.py`, `state.py`, and `state_machine.py` introduced named mode values and lifecycle transitions that were not sufficiently specified by the source. They were removed rather than being treated as equivalent implementations.
@@ -50,7 +74,7 @@ The recovered source does not specify the empirical-CDF convention, interpolatio
 
 ### Traceability statuses
 
-The source registry now distinguishes:
+The source registry distinguishes:
 
 ```text
 exact
