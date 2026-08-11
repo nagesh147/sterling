@@ -16,6 +16,7 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 - Added source-defined economic evaluation and conservative EV gates.
 - Added §32 option candidate selection using expected net value subject to explicitly supplied validated constraints.
 - Added §33 target/stop candidate selection using caller-supplied validated conservative EV.
+- Added monotonic position-management state transitions and exit intent generation without broker-side fill assumptions.
 - Retired provisional F-101..F-114 equations from executable strategy logic.
 - Reworked the research replay so it consumes decisions from the strategy pipeline rather than implementing a second strategy.
 - Added a causal research-dataset contract with feature availability provenance.
@@ -77,16 +78,16 @@ OPTION SELECTION         IMPLEMENTED
 TARGET/STOP EVALUATION   IMPLEMENTED
 RISK LAYER               IMPLEMENTED
 PROTECTION LAYER         IMPLEMENTED
+POSITION MANAGEMENT      IMPLEMENTED
 CAUSAL DATASET CONTRACT  IMPLEMENTED
 WALK-FORWARD SPLITTER    IMPLEMENTED
 PARAMETER FITTING        IMPLEMENTED
 RESEARCH REPLAY          IMPLEMENTED
 
-POSITION MANAGEMENT      NEXT
 STATE/EVENT INTEGRATION  NEXT
 CALIBRATION              BLOCKED UNTIL CORE PATH IS COMPLETE
 KITE HISTORICAL DATA     NEXT
-OOS VALIDATION            BLOCKED UNTIL DATA RUN
+OOS VALIDATION           BLOCKED UNTIL DATA RUN
 PAPER                    BLOCKED UNTIL ROBUSTNESS GATE
 LIVE                     BLOCKED
 ```
