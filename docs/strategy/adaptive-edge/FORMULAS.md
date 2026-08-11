@@ -23,8 +23,6 @@ The old F-101..F-114 equations were a provisional reconstruction and contained i
 
 The Master Specification defines a larger mathematical system whose numerical coefficients, calibration parameters, quantiles, thresholds, and execution distributions are learned/validated where explicitly designated. This registry therefore records relationships and section anchors rather than inventing fixed constants.
 
----
-
 ## Canonical operators
 
 ### Price state — Master Specification §7
@@ -85,7 +83,7 @@ VolumeIntensity_t
       / ExpectedVolumeRate(time_of_day, instrument, regime)
 ```
 
-The expected-volume-rate source remains an upstream contextual input.
+The operator is exact; the contextual expected-volume-rate source remains an unresolved strategy input.
 
 ### Conditional normalization — §19
 
@@ -94,7 +92,7 @@ Percentile_t
     = F(x_t | Context_t, Data<=t)
 ```
 
-The historical distribution must be causally available at decision time. The exact estimator/context-construction method is not recovered; no empirical-CDF implementation is canonical.
+The historical distribution must be causally available at decision time. The estimator, context construction, and minimum-data policy are not fully specified; therefore the complete normalization component remains BLOCKED.
 
 ### Directional probability — §21
 
@@ -107,7 +105,7 @@ NormalizedReturn(t,h)
     = Return(t,h) / σ_t
 ```
 
-The movement threshold is learned and validated.
+The movement threshold is learned and validated. The complete probability pipeline remains PARTIAL until its calibration/estimation procedure is defined.
 
 ### Multinomial logistic baseline — §22
 
@@ -119,7 +117,7 @@ Loss
     = CrossEntropy + λ||β||²
 ```
 
-`β` and `λ` are learned through walk-forward validation. The exact fitting/optimization procedure is not recovered.
+`β` and `λ` are learned through walk-forward validation. The mathematical operator is available; the exact fitting/optimization procedure is not source-defined.
 
 ### Empirical similarity — §23
 
@@ -133,7 +131,7 @@ w_j
     = exp(-d_j² / τ)
 ```
 
-Minimum effective sample size is mandatory; its exact gate/estimation method remains unresolved.
+Minimum effective sample size is mandatory. The complete similarity-selection procedure remains PARTIAL until that gate is formally defined.
 
 ### Bayesian state — §24
 
@@ -144,7 +142,7 @@ Beta(α, β)
 β_t = ρ β_(t-1) + Failures_t
 ```
 
-`ρ` and initialization semantics are not recovered.
+`ρ` is learned and validated. Initialization and learning procedure remain unresolved.
 
 ### Execution cost — §31
 
@@ -158,7 +156,7 @@ Cost_i
  + LatencyCost_i
 ```
 
-The actual specification also permits explicitly modeled market impact. Provider-specific cost distributions remain upstream inputs.
+The actual specification also permits explicitly modeled market impact. The decomposition is exact; provider-specific distributions remain unresolved.
 
 ### Option selection — §32
 
@@ -168,7 +166,7 @@ O* = argmax ExpectedNetEV_i
 
 subject to validated liquidity, slippage, risk and data-quality constraints.
 
-The option is an execution instrument; the underlying state supplies primary direction.
+The option is an execution instrument; the underlying state supplies primary direction. The exact argmax operator is available; complete candidate-input derivation remains PARTIAL.
 
 ### Target/stop competition — §33
 
@@ -182,6 +180,8 @@ EV(s,m)
  = argmax ConservativeEV(s,m)
 ```
 
+The argmax operator is exact for supplied candidate estimates.
+
 ### Conservative expected value — §34
 
 ```text
@@ -192,7 +192,7 @@ EV_conservative <= 0
     -> NO_TRADE
 ```
 
-The exact confidence-bound estimation procedure is not recovered.
+The strict eligibility predicate is exact; the source does not provide a complete estimator for the lower-confidence-bound inputs.
 
 ### Entry gates — §35
 
@@ -208,9 +208,11 @@ BUY_CE = DataOK
 BUY_PE = analogous gates for PE
 ```
 
-The predicate is exact; derivations of its upstream inputs remain subject to their own source contracts.
+The Boolean predicate is exact; upstream derivations remain unresolved.
 
 ### Initial risk and sizing — §36
+
+The recovered source contains the relationships:
 
 ```text
 RiskPerUnit
@@ -223,7 +225,7 @@ Q
     = floor(MaxRisk / EffectiveRiskPerUnit)
 ```
 
-The relationships above are exact, but the source artifacts currently available do not define the semantics/derivation of `EffectiveRiskPerUnit`. Production lot/capital/position/execution constraints remain separate.
+However, `RISK.md` and the strategy-specification anchor explicitly record that the strategy-specific F-107/F-108 definitions were not recovered. In particular, the semantics of `EffectiveRiskPerUnit` are not defined sufficiently to authorize production sizing. Therefore these relationships are **NOT strategy-authorized executable formulas** until their complete input semantics, units, boundary conditions, and provenance are recovered. Generic mathematical operators may exist in code, but they must not be treated as the Adaptive Edge sizing implementation.
 
 ### Continuation value — §39
 
@@ -233,6 +235,8 @@ ContinuationValue_t
     - ExpectedFutureRisk_t
     - ExpectedFutureCost_t
 ```
+
+The arithmetic operator is exact; the estimators supplying its inputs remain unresolved.
 
 ### Profit protection — §40
 
@@ -247,7 +251,7 @@ ProfitFloor_t
     = PeakPrice_t - AllowedGiveback_t
 ```
 
-`q` is learned through walk-forward validation; its estimator is not recovered.
+`q` is learned through walk-forward validation. Peak/current profit and giveback are exact accounting relationships; the learned quantile estimator remains BLOCKED.
 
 ### Monotonic stop — §41
 
@@ -261,7 +265,7 @@ Stop_t
     = max(Stop_(t-1), CandidateStop_t)
 ```
 
-Therefore the protective stop can tighten but cannot loosen.
+Therefore the protective stop can tighten but cannot loosen. Upstream boundary definitions remain required.
 
 ### No risk expansion — §42
 
@@ -269,6 +273,8 @@ Therefore the protective stop can tighten but cannot loosen.
 MaximumAcceptedRisk_(t+1)
     <= MaximumAcceptedRisk_t
 ```
+
+Exact invariant.
 
 ### Mode transition — §43
 
@@ -279,7 +285,7 @@ TradeMode_t
         ContinuationValue_t)
 ```
 
-Elapsed time alone does not determine mode. The exact function `f` is not recovered.
+The function itself is not defined sufficiently to implement the strategy mode transition.
 
 ### Continuation exit — §46
 
@@ -288,7 +294,7 @@ ConservativeContinuationValue <= 0
     -> EXIT
 ```
 
-The exit predicate is exact; the upstream conservative continuation-value estimator is not recovered.
+Exact gate; conservative continuation-value estimation remains unresolved.
 
 ### Walk-forward learning — §§50–54
 
@@ -301,7 +307,7 @@ TRAIN
 → ADVANCE
 ```
 
-No test-period information may influence normalization, coefficients, calibration, thresholds or parameter selection before the test completes.
+No test-period information may influence normalization, coefficients, calibration, thresholds or parameter selection before the test completes. Exact fitting/calibration procedures remain unresolved where not explicitly defined.
 
 ### Canonical trade objective — §66
 
@@ -315,11 +321,7 @@ EVPerRisk_i
     = ConservativeEV_i / EffectiveRisk_i
 ```
 
-Eligibility requires the conservative estimate to be positive.
-
-**Important:** the repository does not currently recover the semantic definition/derivation of `EffectiveRisk_i`. It must not be equated with `RiskPerUnit`, `GrossRisk`, `EffectiveRiskPerUnit`, or any other risk quantity without an authoritative source definition.
-
----
+The relationships are exact, but `EffectiveRisk_i` is not semantically defined in the recovered source. Therefore EV-per-risk is not executable until that input is defined.
 
 ## Parameter policy
 
@@ -338,20 +340,20 @@ risk allocation
 execution/slippage distributions
 option-selection parameters
 time-of-day effects
-EffectiveRisk_i
-EffectiveRiskPerUnit derivation
+EffectiveRisk_i semantics
+EffectiveRiskPerUnit semantics
 ```
 
-These belong to the walk-forward learning/validation system or require explicit recovery from the original strategy artifacts.
+These belong to the walk-forward learning and validation system or require recovery of the missing strategy definition.
 
 ## Status
 
 ```text
 Master Specification     SOURCE OF TRUTH
-Canonical operators      IMPLEMENTED where source relationship is exact
-Economic relationships   PARTIAL where required inputs are unresolved
-Risk relationships       PARTIAL where required inputs are unresolved
-Protection relationships PARTIAL where learned inputs are unresolved
+Canonical operators      IMPLEMENTED where independently exact
+Economic relationships   PARTIAL where all inputs are not defined
+Risk relationships       BLOCKED for strategy authorization until F-107/F-108 are recovered
+Protection relationships PARTIAL where learned inputs remain unresolved
 Learned parameters       NOT INVENTED
 Provisional F-101..114   DEPRECATED
 ```
