@@ -1,9 +1,9 @@
-"""Machine-readable registry for Adaptive Edge mathematics.
+"""Machine-readable registry for the reconstructed Adaptive Edge model.
 
-The registry is deliberately conservative: a formula can only become
-IMPLEMENTED after its canonical specification has been recovered and tests
-have been attached. This prevents implementation code from silently becoming
-the source of strategy truth.
+No historical F-101..F-114 equations were retrievable from the available
+conversation context. These formulas are therefore an explicit strategy
+revision, versioned separately and requiring backtest validation before live
+execution authorization.
 """
 from __future__ import annotations
 
@@ -36,25 +36,21 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-006": FormulaDefinition("F-006", "1.0", "Mode/risk independence", FormulaStatus.ANCHORED, "state invariant", "risk"),
     "F-007": FormulaDefinition("F-007", "1.0", "Executable BUY reference", FormulaStatus.ANCHORED, "price", "execution"),
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
+    "F-101": FormulaDefinition("F-101", "0.1.0", "Composite feature score", FormulaStatus.IMPLEMENTED, "[-1,1]", "model"),
+    "F-102": FormulaDefinition("F-102", "0.1.0", "Edge / prediction score", FormulaStatus.IMPLEMENTED, "[-1,1]", "model"),
+    "F-103": FormulaDefinition("F-103", "0.1.0", "Opportunity eligibility", FormulaStatus.IMPLEMENTED, "boolean", "model"),
+    "F-104": FormulaDefinition("F-104", "0.1.0", "Dynamic operating mode", FormulaStatus.IMPLEMENTED, "enum", "mode"),
+    "F-105": FormulaDefinition("F-105", "0.1.0", "Predictive-profit protection floor", FormulaStatus.IMPLEMENTED, "accounting currency", "protection"),
+    "F-106": FormulaDefinition("F-106", "0.1.0", "Dynamic risk schedule", FormulaStatus.IMPLEMENTED, "accounting currency", "risk"),
+    "F-107": FormulaDefinition("F-107", "0.1.0", "Risk per unit", FormulaStatus.IMPLEMENTED, "accounting currency/unit", "sizing"),
+    "F-108": FormulaDefinition("F-108", "0.1.0", "Position sizing", FormulaStatus.IMPLEMENTED, "lots", "sizing"),
+    "F-109": FormulaDefinition("F-109", "0.1.0", "Instrument selection score", FormulaStatus.IMPLEMENTED, "[0,1]", "instrument"),
+    "F-110": FormulaDefinition("F-110", "0.1.0", "Entry trigger", FormulaStatus.IMPLEMENTED, "boolean", "entry"),
+    "F-111": FormulaDefinition("F-111", "0.1.0", "Exit trigger", FormulaStatus.IMPLEMENTED, "boolean", "exit"),
+    "F-112": FormulaDefinition("F-112", "0.1.0", "Trailing/protection parameterization", FormulaStatus.IMPLEMENTED, "price/value", "protection"),
+    "F-113": FormulaDefinition("F-113", "0.1.0", "Re-entry rule", FormulaStatus.IMPLEMENTED, "boolean", "entry"),
+    "F-114": FormulaDefinition("F-114", "0.1.0", "Multi-position interaction", FormulaStatus.IMPLEMENTED, "risk fraction", "portfolio"),
 }
-
-for _id, _name in {
-    "F-101": "Feature normalization / feature score",
-    "F-102": "Edge / prediction score",
-    "F-103": "Opportunity eligibility",
-    "F-104": "Dynamic-mode transition",
-    "F-105": "Predictive-profit protection",
-    "F-106": "Dynamic-risk schedule",
-    "F-107": "Risk-per-unit",
-    "F-108": "Position sizing",
-    "F-109": "Instrument / option selection",
-    "F-110": "Entry trigger",
-    "F-111": "Exit trigger",
-    "F-112": "Trailing / protection parameterization",
-    "F-113": "Re-entry",
-    "F-114": "Multi-position interaction",
-}.items():
-    FORMULAS[_id] = FormulaDefinition(_id, "0.0", _name, FormulaStatus.LOCKED, "unspecified", "unassigned")
 
 
 def get_formula(formula_id: str) -> FormulaDefinition:
@@ -67,7 +63,5 @@ def get_formula(formula_id: str) -> FormulaDefinition:
 def require_implemented(formula_id: str) -> FormulaDefinition:
     definition = get_formula(formula_id)
     if definition.status is not FormulaStatus.IMPLEMENTED:
-        raise RuntimeError(
-            f"Adaptive Edge formula {formula_id} is not executable: {definition.status.value}"
-        )
+        raise RuntimeError(f"Adaptive Edge formula {formula_id} is not executable: {definition.status.value}")
     return definition
