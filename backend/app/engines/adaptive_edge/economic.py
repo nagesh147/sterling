@@ -1,8 +1,8 @@
 """Economic evaluation anchored to Master Specification §§31 and 66.
 
-Prediction and risk are deliberately not part of this module. This module
-answers only whether expected opportunity remains economically viable after
-execution costs.
+This module calculates the source-defined economic relationship only.
+Eligibility is a downstream conservative-EV decision and is deliberately not
+inferred from raw NetEV here.
 """
 from __future__ import annotations
 
@@ -16,10 +16,8 @@ class EconomicAssessment:
     expected_gross_value: float
     expected_execution_cost: float
     expected_net_value: float
-    eligible: bool
     formula_id: str = "MS-31/66"
     formula_version: str = "1.0"
-    reason: str | None = None
 
 
 def evaluate_economics(
@@ -27,27 +25,19 @@ def evaluate_economics(
     *,
     execution_cost: float,
 ) -> EconomicAssessment:
-    if execution_cost < 0:
-        raise ValueError("execution_cost cannot be negative")
+    """Compute NetEV = E[Profit] - E[Loss] - E[ExecutionCost].
 
-    gross = edge.expected_gross_value
-    if gross is None:
-        return EconomicAssessment(
-            expected_gross_value=0.0,
-            expected_execution_cost=execution_cost,
-            expected_net_value=0.0,
-            eligible=False,
-            reason="missing_expected_gross_value",
-        )
+    This function intentionally does not implement the downstream eligibility
+    rule. §66 requires a positive conservative estimate; that estimate and
+    its lower-confidence construction are separate inputs and remain blocked
+    until their source-defined calibration method is recovered.
+    """
+    if edge.expected_gross_value is None:
+        raise ValueError("expected gross value is required")
 
-    net = gross - execution_cost
-    # Master Specification §§34-35 and §66 require positive conservative/net EV;
-    # this layer only performs the non-conservative economic subtraction.
-    eligible = net > 0.0
+    net = edge.expected_gross_value - execution_cost
     return EconomicAssessment(
-        expected_gross_value=gross,
+        expected_gross_value=edge.expected_gross_value,
         expected_execution_cost=execution_cost,
         expected_net_value=net,
-        eligible=eligible,
-        reason=None if eligible else "expected_net_value_not_positive",
     )
