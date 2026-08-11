@@ -1,13 +1,18 @@
 # Adaptive Edge — Current Status
 
+## Governing rule
+
+Adaptive Edge is developed as a **versioned, causal, artifact-by-artifact specification**. Before implementation, the source artifact is attacked for provenance, semantics, inputs, units, causal availability, boundaries, parameter methodology, and validation requirements.
+
+See `ARTIFACT_RESOLUTION.md` for the governing recovery and resolution protocol.
+
 ## Done
 
 - Canonical strategy folder established.
 - Strategy semantics separated from SuperTrend and Value Flow Navigator.
 - Machine-readable formula registry established.
 - F-001..F-008 anchored; F-004 implemented.
-- F-101..F-114 explicitly locked in both documentation and code.
-- Causal feature layer implemented and now carries formula provenance.
+- Causal feature layer implemented and carries formula provenance.
 - Edge formula interface enforced against the registry.
 - Economic evaluation implemented from registry formula F-004.
 - DynamicMode/RiskState separation preserved in contracts.
@@ -17,27 +22,61 @@
 - Dedicated Adaptive Edge UI implemented.
 - UI occupies the same right-sidebar location as the shared signal surface through a strategy switcher.
 - Shared Signals surface remains intact.
-- Repository recovery audit completed: no exact F-101..F-114 definitions were found in existing Sterling artifacts.
+- Repository recovery audit completed for the currently available Sterling artifacts.
+- Artifact-by-artifact resolution protocol added.
 
-## Not claimed as complete
+## Strategy-specific formula resolution
 
-The exact strategy-specific mathematical definitions F-101..F-114 have not been recovered with sufficient evidence from the repository/context available to this implementation session.
+F-101..F-114 have been attacked as individual artifacts. The currently available repository/context evidence does not contain complete authoritative definitions for them.
 
-Therefore Adaptive Edge is deliberately not emitting live strategy candidates yet.
+They are therefore **RESOLVED-BLOCKED** rather than merely `LOCKED` or `PARTIAL`.
 
-## Next gates
+`RESOLVED-BLOCKED` means:
 
 ```text
-1. Recover exact F-101..F-114 definitions
-2. Promote each recovered formula into FORMULAS.md + formula_registry.py
-3. Add formula-specific unit + adversarial tests
-4. Implement concrete EdgeFormula
-5. Implement eligibility/mode/risk/sizing policies
-6. Add authoritative backend candidate endpoint/stream
-7. Bind AdaptiveEdgePanel to authoritative data
-8. Run backtest/live parity validation
-9. Paper/shadow validation
-10. Only then enable execution
+investigation complete for currently available evidence
+        |
+        +--> source definition recovered? NO
+        |
+        +--> substitute permitted? NO
+        |
+        +--> implementation permitted? NO
 ```
 
-The UI being visible does not mean the strategy is executable. The formula lock is intentional.
+This is a terminal resolution of the current investigation, not a claim that the mathematics is complete.
+
+## F-101..F-114 disposition
+
+| ID | Status |
+|---|---|
+| F-101 | RESOLVED-BLOCKED |
+| F-102 | RESOLVED-BLOCKED |
+| F-103 | RESOLVED-BLOCKED |
+| F-104 | RESOLVED-BLOCKED |
+| F-105 | RESOLVED-BLOCKED |
+| F-106 | RESOLVED-BLOCKED |
+| F-107 | RESOLVED-BLOCKED |
+| F-108 | RESOLVED-BLOCKED |
+| F-109 | RESOLVED-BLOCKED |
+| F-110 | RESOLVED-BLOCKED |
+| F-111 | RESOLVED-BLOCKED |
+| F-112 | RESOLVED-BLOCKED |
+| F-113 | RESOLVED-BLOCKED |
+| F-114 | RESOLVED-BLOCKED |
+
+## Risk blocker
+
+`EffectiveRisk_i` and `EffectiveRiskPerUnit` remain explicitly unresolved as strategy semantics. No equivalence with `GrossRisk`, `RiskPerUnit * Q`, or another Sterling engine's risk formula is authorized.
+
+## Next unlock
+
+Only two events may move a blocked artifact to `RESOLVED`:
+
+1. recovery of an authoritative original strategy artifact; or
+2. creation and approval of a new versioned Adaptive Edge strategy definition with complete mathematical and causal semantics.
+
+A mathematically plausible implementation is never an unlock condition.
+
+## Execution gate
+
+Adaptive Edge must remain non-executable while any required upstream strategy formula is `RESOLVED-BLOCKED`.
