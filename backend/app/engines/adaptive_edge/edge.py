@@ -1,9 +1,4 @@
-"""Adaptive Edge prediction/opportunity contract.
-
-The strategy-specific equation is intentionally not guessed here. A concrete
-implementation must register an explicit formula ID from the canonical
-Adaptive Edge formula registry.
-"""
+"""Adaptive Edge prediction/opportunity boundary."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,17 +27,18 @@ class EdgeFormula(Protocol):
 
 
 class StrategyFormulaLockedError(RuntimeError):
-    """Raised instead of silently substituting an unrelated strategy formula."""
+    """Raised when an unregistered or locked strategy formula is requested."""
 
 
 def evaluate_edge(snapshot: FeatureSnapshot, formula: EdgeFormula) -> EdgeAssessment:
     definition = get_formula(formula.formula_id)
     if not formula.formula_id.startswith("F-10") or definition.status is FormulaStatus.LOCKED:
         raise StrategyFormulaLockedError(
-            f"Adaptive Edge formula {formula.formula_id} is locked; exact strategy mathematics must be recovered first"
+            f"Adaptive Edge formula {formula.formula_id} is not executable"
         )
     if formula.formula_version != definition.version:
         raise StrategyFormulaLockedError(
             f"formula version mismatch for {formula.formula_id}: implementation={formula.formula_version}, registry={definition.version}"
         )
+    snapshot.assert_causal(snapshot.observation_time)
     return formula.evaluate(snapshot)
