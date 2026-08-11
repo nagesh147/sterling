@@ -1,221 +1,345 @@
-# Adaptive Edge Formula Registry
+# Adaptive Edge — Source-Derived Mathematical Registry
 
-Formula IDs are immutable identifiers. The F-101..F-114 equations below are a **reconstructed strategy revision**, not a recovered historical transcript. They are implemented for research/backtest and are not production-authorized until validation passes.
+## Authority
 
-## Anchored platform/strategy invariants
+The authoritative strategy source is:
 
-### F-001 — Causal availability
 ```text
-availability_time(x) <= decision_time
+adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
+Master Mathematical Specification — Version 1.0
 ```
 
-### F-002 — Peak P&L
+Source commit:
+
 ```text
-PeakPnL(t) = max(CurrentPnL(tau)) for tau <= t
+38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1
 ```
 
-### F-003 — Profit giveback
-```text
-ProfitGiveback(t) = PeakPnL(t) - CurrentPnL(t)
-```
+See `ORIGINAL_SOURCE_MANIFEST.md` and `spec_registry.py` for traceability.
 
-### F-004 — Expected net value
-```text
-ExpectedNetValue = ExpectedGrossValue - ExpectedExecutionCost
-```
+## Important correction
 
-### F-005 — Risk authorization immutability
-Risk authorization cannot increase because of P&L, score, mode, execution quality, or partial exit.
+The old F-101..F-114 equations were a provisional reconstruction and contained invented numerical weights and thresholds. They are **not canonical** and are deprecated.
 
-### F-006 — Mode/risk independence
-```text
-DynamicMode != DynamicRisk
-```
-
-### F-007 / F-008 — Execution references
-```text
-BUY  = executable ASK
-SELL = executable BID
-```
+The Master Specification defines a larger mathematical system whose numerical coefficients, calibration parameters, quantiles, thresholds, and execution distributions are learned/validated where explicitly designated. This registry therefore records relationships and section anchors rather than inventing fixed constants.
 
 ---
 
-# Reconstructed Adaptive Edge v0.1.0
+## Canonical operators
 
-## F-101 — Composite feature score
-
-Inputs are first clipped to [-1, 1].
+### Price state — Master Specification §7
 
 ```text
-S = 0.35*T + 0.30*M + 0.20*V + 0.15*X
+Mid_t = (Bid_t + Ask_t) / 2
+Spread_t = Ask_t - Bid_t
+RelativeSpread_t = Spread_t / Mid_t
+PriceChange_t = LTP_t - LTP_(t-1)
+Return_t = PriceChange_t / LTP_(t-1)
+Velocity_t = PriceChange_t / Δt
+Acceleration_t = ΔVelocity_t / Δt
 ```
 
-where:
+Implemented in `canonical_math.py`.
+
+### Incremental volume — §8
 
 ```text
-T = directional trend score
-M = normalized momentum score
-V = relative-volume score
-X = volatility-expansion score
+ΔVolume_t = TTQ_t - TTQ_(t-1)
 ```
 
-Final:
+If `ΔVolume_t < 0`, this is a data-integrity/reset event, not negative volume.
+
+### Aggressor classification — §9
 
 ```text
-F101 = clip(S, -1, +1)
+TradePrice >= Ask  -> BUY
+TradePrice <= Bid  -> SELL
+Bid < TradePrice < Ask -> UNKNOWN
 ```
 
-All features must be causally available.
+Unknown volume is never silently assigned to a side.
 
-## F-102 — Edge / prediction score
+### Delta — §10
 
 ```text
-F102 = tanh(2 * F101)
+Delta_t = AggressiveBuyVolume_t - AggressiveSellVolume_t
+CumDelta_t = CumDelta_(t-1) + Delta_t
+DeltaVelocity_t = ΔDelta_t / Δt
+DeltaAcceleration_t = ΔDeltaVelocity_t / Δt
 ```
 
-Sign determines direction; magnitude determines edge strength.
-
-Expected gross opportunity value is modelled as:
+### Liquidity imbalance — §11
 
 ```text
-ExpectedGrossValue = |F102| * ExpectedMove
+LiquidityImbalance
+    = (BidQty - AskQty) / (BidQty + AskQty)
 ```
 
-## F-103 — Opportunity eligibility
+only when the denominator is positive.
+
+### Volume intensity — §12
 
 ```text
-eligible iff:
-    |F102| >= 0.60
-    AND confidence >= 0.55
-    AND ExpectedGrossValue > ExpectedExecutionCost
+VolumeIntensity_t
+    = CurrentVolumeRate_t
+      / ExpectedVolumeRate(time_of_day, instrument, regime)
 ```
 
-## F-104 — Dynamic operating mode
+### Conditional normalization — §19
 
 ```text
-strength = |F102| * confidence
-
-stale                    -> HALTED
-late session             -> EXIT_ONLY
-strength >= 0.48         -> INTRADAY
-0.25 <= strength < 0.48  -> ACTIVE
-0.12 <= strength < 0.25  -> DEFENSIVE
-strength < 0.12          -> OBSERVE
+Percentile_t
+    = F(x_t | Context_t, Data<=t)
 ```
 
-Mode changes behavior only. It does not mutate risk authorization.
+The historical distribution must be causally available at decision time.
 
-## F-105 — Predictive-profit protection
+### Directional probability — §21
 
 ```text
-giveback = max(PeakPnL - CurrentPnL, 0)
-floor = max(0, PeakPnL * (1 - 0.35))
+P_up(h | X_t)
+P_down(h | X_t)
+P_neutral(h | X_t)
+
+NormalizedReturn(t,h)
+    = Return(t,h) / σ_t
 ```
 
-A current P&L below the floor is an exit condition. The protection rule cannot increase risk.
+The movement threshold is learned and validated.
 
-## F-106 — Dynamic risk schedule
-
-Risk is independently determined from confidence, volatility and drawdown:
+### Multinomial logistic baseline — §22
 
 ```text
-confidence_factor = clip(confidence, 0, 1)
-volatility_factor = 1 / max(volatility_ratio, 1)
-drawdown_factor = clip(1 - drawdown_ratio, 0, 1)
+P(Y=k|X)
+    = exp(β_k·X) / Σ_j exp(β_j·X)
 
-risk_multiplier = clip(
-    confidence_factor * volatility_factor * drawdown_factor,
-    0, 1
-)
-
-AuthorizedRisk = BaseRisk * risk_multiplier
+Loss
+    = CrossEntropy + λ||β||²
 ```
 
-DynamicMode is intentionally absent from this equation.
+`β` and `λ` are learned through walk-forward validation.
 
-## F-107 — Risk per unit
+### Empirical similarity — §23
 
 ```text
-RiskPerUnit = |EntryPrice - StopPrice| * PointValue + EstimatedExecutionCost
+Z_i = (X_i - μ_i) / σ_i
+
+d(X_t,X_j)
+    = sqrt(Σ w_i(Z_i,t - Z_i,j)²)
+
+w_j
+    = exp(-d_j² / τ)
 ```
 
-## F-108 — Position sizing
+Minimum effective sample size is mandatory.
+
+### Bayesian state — §24
 
 ```text
-Units = floor(AuthorizedRisk / RiskPerUnit)
-PositionSize = floor(Units / LotSize) * LotSize
+Beta(α, β)
+
+α_t = ρ α_(t-1) + Successes_t
+β_t = ρ β_(t-1) + Failures_t
 ```
 
-## F-109 — Option/instrument selection
+`ρ` is learned and validated.
 
-Candidate score:
+### Execution cost — §31
 
 ```text
-0.40 * delta_fit
-+ 0.30 * liquidity
-+ 0.20 * relative_volume
-- 0.07 * spread_penalty
-- 0.03 * theta_penalty
+Cost_i
+ = SpreadCost_i
+ + Slippage_i
+ + Brokerage_i
+ + ExchangeCharges_i
+ + Taxes_i
+ + LatencyCost_i
 ```
 
-with target absolute delta 0.55 and all bounded inputs normalized to [0,1]. Highest valid score wins.
+The actual specification also permits explicitly modeled market impact.
 
-## F-110 — Entry trigger
+### Option selection — §32
 
 ```text
-Entry = eligible
-        AND mode in {ACTIVE, INTRADAY}
-        AND instrument_score >= 0.60
+O* = argmax ExpectedNetEV_i
 ```
 
-## F-111 — Exit trigger
+subject to validated liquidity, slippage, risk and data-quality constraints.
+
+The option is an execution instrument; the underlying state supplies primary direction.
+
+### Target/stop competition — §33
 
 ```text
-Exit = edge reversal
-       OR current_pnl < protection_floor
+EV(s,m)
+ = P_target × E[Gain]
+ - P_stop × E[Loss]
+ - Costs
+
+(s*,m*)
+ = argmax ConservativeEV(s,m)
 ```
 
-For a long opportunity, edge reversal is `F102 <= -0.10`; for a short opportunity, `F102 >= +0.10`.
-
-## F-112 — Protection parameterization
-
-Given ATR and edge strength:
+### Conservative expected value — §34
 
 ```text
-strength = |F102|
-stop_distance   = ATR * (1.50 - 0.50 * strength)
-target_distance = ATR * (2.00 + 1.00 * strength)
+EV_conservative
+    = LowerConfidenceBound(EV)
+
+EV_conservative <= 0
+    -> NO_TRADE
 ```
 
-The implementation currently expresses these as long-side price distances; short-side conversion belongs to the execution/instrument adapter.
-
-## F-113 — Re-entry
+### Entry gates — §35
 
 ```text
-reenter iff:
-    prior position was exited
-    AND cooldown elapsed
-    AND |new F102| >= 0.60
-    AND |new F102| > |prior F102|
+BUY_CE = DataOK
+         ∧ DirectionalEdgeOK
+         ∧ EV_CE > 0
+         ∧ ConservativeEV_CE > 0
+         ∧ LiquidityOK
+         ∧ SlippageOK
+         ∧ RiskOK
+
+BUY_PE = analogous gates for PE
 ```
 
-## F-114 — Multi-position interaction
+### Initial risk and sizing — §36
 
 ```text
-remaining_budget = max(TotalRiskBudget - ExistingRisk, 0)
-correlation_adjusted_budget = remaining_budget * (1 - correlation_penalty)
-NewRisk = min(RequestedRisk, correlation_adjusted_budget)
+RiskPerUnit
+    = EntryPrice - InitialStop
+
+GrossRisk
+    = RiskPerUnit × Q
+
+Q
+    = floor(MaxRisk / EffectiveRiskPerUnit)
 ```
 
-`correlation_penalty` is bounded to [0,1].
+The production implementation must additionally enforce lot, capital, position and execution constraints.
+
+### Continuation value — §39
+
+```text
+ContinuationValue_t
+    = ExpectedFutureProfit_t
+    - ExpectedFutureRisk_t
+    - ExpectedFutureCost_t
+```
+
+### Profit protection — §40
+
+```text
+Giveback_t
+    = PeakProfit_t - CurrentProfit_t
+
+AllowedGiveback_t
+    = Q_q(Giveback | CurrentState, ProfitState)
+
+ProfitFloor_t
+    = PeakPrice_t - AllowedGiveback_t
+```
+
+`q` is learned through walk-forward validation.
+
+### Monotonic stop — §41
+
+```text
+CandidateStop_t
+    = max(OriginalRiskBoundary,
+          ProfitFloor_t,
+          DynamicRiskBoundary_t)
+
+Stop_t
+    = max(Stop_(t-1), CandidateStop_t)
+```
+
+Therefore the protective stop can tighten but cannot loosen.
+
+### No risk expansion — §42
+
+```text
+MaximumAcceptedRisk_(t+1)
+    <= MaximumAcceptedRisk_t
+```
+
+### Mode transition — §43
+
+```text
+TradeMode_t
+    = f(ExpectedHorizonDistribution_t,
+        Regime_t,
+        ContinuationValue_t)
+```
+
+Elapsed time alone does not determine mode.
+
+### Continuation exit — §46
+
+```text
+ConservativeContinuationValue <= 0
+    -> EXIT
+```
+
+### Walk-forward learning — §§50–54
+
+```text
+TRAIN
+→ FREEZE
+→ VALIDATE
+→ TEST
+→ RECORD
+→ ADVANCE
+```
+
+No test-period information may influence normalization, coefficients, calibration, thresholds or parameter selection before the test completes.
+
+### Canonical trade objective — §66
+
+```text
+NetEV_i
+    = E[Profit_i]
+    - E[Loss_i]
+    - E[ExecutionCost_i]
+
+EVPerRisk_i
+    = ConservativeEV_i / EffectiveRisk_i
+```
+
+Eligibility requires the conservative estimate to be positive.
 
 ---
 
-# Research status
+## Parameter policy
+
+The following must not be hard-coded without evidence:
 
 ```text
-F-001..F-008  anchored/implemented
-F-101..F-114  reconstructed v0.1.0 / implemented
+model coefficients
+probability calibration
+Bayesian decay
+MFE/MAE distributions
+profit-floor quantile
+continuation threshold
+reversal threshold
+regime-transition sensitivity
+risk allocation
+execution/slippage distributions
+option-selection parameters
+time-of-day effects
 ```
 
-This is a **model version**, not a claim about what the inaccessible historical conversation contained. It must be evaluated through deterministic tests, historical backtest, out-of-sample validation, execution-cost sensitivity, and paper/shadow validation before any live authorization.
+These belong to the walk-forward learning and validation system.
+
+## Status
+
+```text
+Master Specification     SOURCE OF TRUTH
+Canonical operators      IMPLEMENTED
+Economic relationships   IMPLEMENTED
+Risk relationships       IMPLEMENTED
+Protection relationships IMPLEMENTED
+Learned parameters       NOT INVENTED
+Provisional F-101..114   DEPRECATED
+```
