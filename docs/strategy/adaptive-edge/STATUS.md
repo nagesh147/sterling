@@ -10,7 +10,7 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 - Added source-derived mathematical operators.
 - Added source-section traceability.
 - Added canonical probability-model contract without invented coefficients.
-- Added canonical economic evaluation.
+- Added leakage-safe multinomial probability fitting for the §22 model family.
 - Added immutable risk authorization and sizing.
 - Added continuation/profit-protection mathematics.
 - Retired provisional F-101..F-114 equations from executable strategy logic.
@@ -18,6 +18,7 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 - Added a causal research-dataset contract with feature availability provenance.
 - Added chronological walk-forward folds with explicit purge and embargo windows.
 - Added deterministic tests for causal dataset validation and fold boundaries.
+- Added tests proving validation rows do not alter fitted parameters.
 - Kept all work isolated to Adaptive Edge for Sterling Kite.
 
 ## Explicitly rejected as canonical
@@ -37,6 +38,9 @@ Research Dataset + Provenance
         |
         v
 Purged Walk-Forward Training
+        |
+        v
+TRAIN -> FREEZE -> VALIDATE -> TEST
         |
         v
 Parameterized Probability State
@@ -68,16 +72,16 @@ RISK LAYER               IMPLEMENTED
 PROTECTION LAYER         IMPLEMENTED
 CAUSAL DATASET CONTRACT  IMPLEMENTED
 WALK-FORWARD SPLITTER    IMPLEMENTED
+PARAMETER FITTING        IMPLEMENTED
 RESEARCH REPLAY          IMPLEMENTED
 
-PARAMETER FITTING        NEXT
 CALIBRATION              NEXT
 OPTION SELECTION         NEXT
 STATE/EVENT INTEGRATION  NEXT
 KITE HISTORICAL DATA     NEXT
-OOS VALIDATION            BLOCKED UNTIL DATA RUN
-PAPER                     BLOCKED UNTIL ROBUSTNESS GATE
-LIVE                      BLOCKED
+OOS VALIDATION           BLOCKED UNTIL DATA RUN
+PAPER                    BLOCKED UNTIL ROBUSTNESS GATE
+LIVE                     BLOCKED
 ```
 
 ## Governing rule
