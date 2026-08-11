@@ -32,7 +32,7 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §32 | Option selection by ExpectedNetEV | `option_selection.py` | PARTIAL: exact argmax/constraint boundary exists; upstream candidate contract is not yet wired |
 | §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
 | §34 | Conservative EV / no-trade | `target_stop.py` | EXACT operator for strict-positive eligibility; orchestration gate remains upstream |
-| §35 | Entry gates | strategy orchestration | BLOCKED until all exact gate inputs exist |
+| §35 | Entry gates | `entry_gates.py` | EXACT predicate for the stated gate conditions; upstream gate-input derivations remain blocked |
 | §36 | Risk per unit / position sizing | `canonical_math.py` | EXACT operators; full production constraints remain separate |
 | §39 | Continuation value | `canonical_math.py` | EXACT operator |
 | §40 | Giveback / profit accounting | `canonical_math.py`, `position_management.py` | EXACT for PeakPnL/CurrentPnL/Giveback operators; AllowedGiveback quantile and profit-floor learned estimator remain BLOCKED |
