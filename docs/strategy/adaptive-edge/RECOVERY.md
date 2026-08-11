@@ -1,72 +1,72 @@
 # Adaptive Edge — Recovery Ledger
 
-## Recovered from Sterling artifacts
+## Historical recovery result — 2026-08-11
 
-1. Adaptive Edge has a dedicated engine namespace: `backend/app/engines/adaptive_edge/`.
-2. `DynamicMode` and `RiskState` are separate axes.
-3. `RiskAuthorization` is immutable and attached to an opportunity.
-4. Mode transitions preserve the existing authorization.
-5. Causal feature availability is a hard invariant.
-6. Economic evaluation is separate from prediction and risk.
-7. Expected net value is gross value less execution cost.
-8. The dedicated UI must not reuse the SuperTrend/Navigator signal table semantics.
-9. The UI must display authoritative backend values and formula IDs rather than recomputing strategy mathematics.
-10. The machine-readable formula registry now enforces the lock state in code, not just documentation.
+The available conversation context and Sterling repository do not expose the exact historical equations that were previously discussed. The F-101..F-114 identifiers were created by the later implementation/recovery artifacts; they are not evidence that the original conversation used those identifiers.
 
-## Repository recovery audit — 2026-08-11
+Therefore the branch does **not** claim that the new equations are recovered historical mathematics.
 
-A repository-wide search was performed for the exact strategy identifiers and concepts, including:
+## Decision: implement a reconstructed v0.1.0 model
+
+Per the project decision to proceed rather than remain blocked, F-101..F-114 are now implemented as an explicit, versioned research model.
 
 ```text
-F-101, F-102
-Adaptive Edge
-adaptive edge prediction / score
-expected gross value
-predictive profit
-profit giveback
-DynamicRisk
-formula ID
+historical equations unavailable
+        |
+        v
+reconstructed model v0.1.0
+        |
+        v
+unit + adversarial tests
+        |
+        v
+backtest / OOS / cost sensitivity
+        |
+        v
+paper / shadow
+        |
+        v
+production authorization only after validation
 ```
 
-No pre-existing repository artifact was found that defines F-101..F-114 as Adaptive Edge formulas.
+This is a strategy revision, not a claim of historical recovery.
 
-This matters because Sterling contains several *different* adaptive/edge mechanisms. They are not interchangeable:
+## Canonical invariants retained
 
-- `edge/` contains historical edge-discovery strategies and robustness gates.
-- the derivatives selector contains instrument/strike/leverage economics.
-- Navigator contains AVWAP/volatility/option-flow/gamma evidence fusion.
-- older analytics contains adaptive ATR-stop experiments.
-- risk infrastructure contains regime-adaptive sizing and calibration.
+1. Adaptive Edge is a Sterling Kite engine only.
+2. SuperTrend, Flow Navigator, and crypto semantics are independent.
+3. `DynamicMode` and `RiskState` are separate axes.
+4. `RiskAuthorization` is immutable for an opportunity.
+5. Causal feature availability is mandatory.
+6. Economic evaluation is separate from prediction and risk.
+7. `ExpectedNetValue = ExpectedGrossValue - ExpectedExecutionCost`.
+8. BUY uses executable ask; SELL uses executable bid.
+9. Signal, authorization, order, fill, position, and accounting are distinct states.
+10. The UI does not recompute strategy mathematics.
 
-These are useful implementation references, but none is evidence that its equation is the missing Adaptive Edge equation.
+## Reconstructed formulas
 
-## Existing related Sterling work that is NOT automatically part of Adaptive Edge
+The following are now implemented in `backend/app/engines/adaptive_edge/model.py` and documented in `FORMULAS.md`:
 
-The repository contains a separate derivatives-edge study and routing design. It describes an older derivatives-native research track, including calibrated options modelling and routing-gate concepts. It is explicitly not adopted as Adaptive Edge unless the Adaptive Edge specification says so.
+```text
+F-101  Composite feature score
+F-102  Edge / prediction score
+F-103  Opportunity eligibility
+F-104  Dynamic operating mode
+F-105  Predictive-profit protection
+F-106  Dynamic risk schedule
+F-107  Risk per unit
+F-108  Position sizing
+F-109  Instrument selection
+F-110  Entry trigger
+F-111  Exit trigger
+F-112  Protection parameterization
+F-113  Re-entry
+F-114  Multi-position interaction
+```
 
-Likewise, the existing Navigator and SuperTrend signal surfaces are shared platform/engine surfaces, not Adaptive Edge strategy definitions.
+## Research warning
 
-## Unresolved exact definitions
+The reconstructed formulas are **not production-proven**. The implementation is intentionally deterministic so it can now be falsified with backtests instead of remaining theoretical.
 
-The following are not present in a form strong enough to safely claim they are the exact previously agreed Adaptive Edge formulas:
-
-- F-101 feature normalization/score
-- F-102 edge/prediction equation
-- F-103 opportunity eligibility
-- F-104 dynamic-mode transition thresholds
-- F-105 predictive-profit protection threshold
-- F-106 dynamic-risk schedule
-- F-107 risk-per-unit
-- F-108 position sizing beyond generic platform constraints
-- F-109 instrument/option selection score
-- F-110 entry trigger
-- F-111 exit trigger
-- F-112 trailing/profit-protection parameterization
-- F-113 re-entry
-- F-114 multi-position interaction
-
-## Recovery rule
-
-Do not infer these from SuperTrend, Navigator, old derivatives studies, or generic trading conventions.
-
-When the exact definitions are recovered, add them here first, then promote them into `FORMULAS.md`, tests, implementation, and traceability.
+No live execution should be enabled from this branch merely because the formulas compile or pass unit tests.
