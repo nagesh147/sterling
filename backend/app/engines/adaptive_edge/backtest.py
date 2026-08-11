@@ -10,13 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
-from .canonical_math import ExecutionCost, monotonic_stop, position_size, risk_per_unit
+from .canonical_math import ExecutionCost, position_size, risk_per_unit
 
 
 @dataclass(frozen=True)
 class ReplayObservation:
-    """One decision-time observation with causally available market values."""
-
     timestamp: str
     close: float
     bid: float
@@ -28,8 +26,6 @@ class ReplayObservation:
 
 @dataclass(frozen=True)
 class ReplayDecision:
-    """Immutable decision supplied by the canonical strategy pipeline."""
-
     direction: int
     authorized_risk: float
     stop_price: float
@@ -89,11 +85,7 @@ def run_replay(
     slippage_bps: float = 5.0,
     max_holding_bars: int = 24,
 ) -> ReplayResult:
-    """Replay a precomputed decision function without creating strategy logic.
-
-    ``decision_fn`` receives only the current observation and current capital.
-    Future observations are never exposed to it.
-    """
+    """Replay precomputed decisions; the replay layer does not invent signals."""
     if initial_capital < 0 or max_holding_bars < 1:
         raise ValueError("invalid replay configuration")
 
@@ -125,13 +117,11 @@ def run_replay(
         entry = observation.ask if decision.direction > 0 else observation.bid
         exit_index = min(i + max_holding_bars, len(observations) - 1)
         exit_reason = "time"
-        active_stop = decision.stop_price
 
         for j in range(i + 1, exit_index + 1):
             current = observations[j]
             if decision.direction > 0:
-                active_stop = monotonic_stop(active_stop, min(current.close, current.close))
-                if current.close <= active_stop:
+                if current.close <= decision.stop_price:
                     exit_index = j
                     exit_reason = "stop"
                     break
@@ -140,7 +130,7 @@ def run_replay(
                     exit_reason = "target"
                     break
             else:
-                if current.close >= active_stop:
+                if current.close >= decision.stop_price:
                     exit_index = j
                     exit_reason = "stop"
                     break
@@ -158,21 +148,7 @@ def run_replay(
         net = gross - costs
         capital = max(0.0, capital + net)
         equity.append(capital)
-        trades.append(
-            ReplayTrade(
-                i,
-                exit_index,
-                decision.direction,
-                quantity,
-                entry,
-                exit_price,
-                gross,
-                costs,
-                net,
-                decision.authorized_risk,
-                exit_reason,
-            )
-        )
+        trades.append(ReplayTrade(i, exit_index, decision.direction, quantity, entry, exit_price, gross, costs, net, decision.authorized_risk, exit_reason))
         i = exit_index + 1
 
     wins = sum(trade.net_pnl > 0 for trade in trades)
