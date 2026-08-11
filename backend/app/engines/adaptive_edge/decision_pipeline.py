@@ -9,7 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from .canonical_math import ExecutionCost, conservative_expected_value, expected_net_value, expected_value_per_risk, target_stop_ev
+from .canonical_math import (
+    ExecutionCost,
+    conservative_expected_value,
+    expected_net_value,
+    expected_value_per_risk,
+    target_stop_ev,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +44,28 @@ class TradeEconomics:
 
 
 @dataclass(frozen=True)
+class OptionCandidate:
+    """A fully evaluated option instrument supplied to the §32 selector.
+
+    The selector deliberately receives validated eligibility flags rather than
+    deriving liquidity, slippage, risk, or data-quality thresholds itself.
+    Those constraints are learned/validated upstream and remain strategy inputs.
+    """
+
+    instrument_id: str
+    expected_gross_value: float
+    execution_cost: ExecutionCost
+    data_ok: bool
+    liquidity_ok: bool
+    slippage_ok: bool
+    risk_ok: bool
+
+    @property
+    def expected_net_value(self) -> float:
+        return expected_net_value(self.expected_gross_value, self.execution_cost)
+
+
+@dataclass(frozen=True)
 class TargetStopCandidate:
     target_id: str
     stop_id: str
@@ -59,6 +87,28 @@ class Decision:
     target_id: str | None
     stop_id: str | None
     reason: str
+
+
+def select_option_candidate(
+    candidates: Sequence[OptionCandidate],
+) -> tuple[OptionCandidate | None, str]:
+    """Implement §32: maximize expected net value under validated constraints."""
+    if not candidates:
+        return None, "no_option_candidates"
+
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.data_ok
+        and candidate.liquidity_ok
+        and candidate.slippage_ok
+        and candidate.risk_ok
+    ]
+    if not eligible:
+        return None, "no_option_candidate_passes_constraints"
+
+    selected = max(eligible, key=lambda candidate: candidate.expected_net_value)
+    return selected, "selected_highest_expected_net_value"
 
 
 def evaluate_candidate(outcome: OutcomeEstimate, economics: TradeEconomics) -> Decision:
