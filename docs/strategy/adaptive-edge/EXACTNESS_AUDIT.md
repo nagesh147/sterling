@@ -30,6 +30,36 @@ The previous `contracts.py`, `state.py`, and `state_machine.py` introduced named
 
 The source-defined state names remain documentation requirements, but transition behavior will not be invented until the exact transition rules are recovered from the authoritative artifact.
 
+### Deprecated formula gate
+
+The edge boundary previously required an `F-10x` formula identifier. Those identifiers are deprecated compatibility metadata and are not the authoritative strategy formulas. The edge boundary now requires an explicit source anchor instead.
+
+### Option-selection gate
+
+§32 defines option selection as an argmax of `ExpectedNetEV_i` subject to validated liquidity, slippage, risk and data-quality constraints. A positive-EV gate was removed from §32 because the positive conservative-EV eligibility requirement belongs to §§34-35 and §66.
+
+### Normalization estimator
+
+The source defines the conditional CDF relationship:
+
+```text
+Percentile_t = F(x_t | Context_t, Data<=t)
+```
+
+The recovered source does not specify the empirical-CDF convention, interpolation/tie rule, smoothing, or minimum sample-size rule. A previously added empirical-CDF implementation was therefore treated as non-exact and is blocked pending recovery.
+
+### Traceability statuses
+
+The source registry now distinguishes:
+
+```text
+exact
+parameterized
+blocked
+```
+
+A mathematical operator may be exact while its learned parameter remains unresolved. The complete strategy component is not marked exact until all source-required definitions are available.
+
 ### Provisional traceability
 
 The old F-101..F-114 matrix was removed from active traceability. It was a reconstruction, not the original mathematical specification.
@@ -47,9 +77,9 @@ External provider contract absent
     -> implement provider-neutral boundary only
 
 Implementation behavior not source-anchored
-    -> remove it
+    -> remove or block it
 ```
 
 ## Result
 
-This audit deliberately reduces the amount of code classified as implemented. That is intentional. The project is now optimized for specification fidelity rather than apparent feature completeness.
+This audit deliberately reduces the amount of code classified as implemented. That is intentional. The project is optimized for specification fidelity rather than apparent feature completeness.
