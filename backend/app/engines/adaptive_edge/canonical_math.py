@@ -1,12 +1,8 @@
 """Source-derived Adaptive Edge mathematical operators.
 
-These operators implement relationships stated by the Master Mathematical
-Specification. Quantities explicitly designated as learned/validated remain
-inputs to these operators and are not invented here.
-
-Primary source:
-adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
-Master Mathematical Specification — Version 1.0.
+Every operator in this module corresponds to a relationship explicitly stated
+by the Master Mathematical Specification. Learned/validated quantities remain
+inputs; this module does not invent their values.
 """
 from __future__ import annotations
 
@@ -54,8 +50,8 @@ def acceleration(delta_velocity: float, delta_t: float) -> float:
 
 
 def incremental_volume(ttq: float, previous_ttq: float) -> float | None:
-    delta = ttq - previous_ttq
-    return None if delta < 0 else delta
+    value = ttq - previous_ttq
+    return None if value < 0 else value
 
 
 def aggressor(trade_price: float, bid: float, ask: float) -> str:
@@ -159,23 +155,28 @@ class ExecutionCost:
         return sum((self.spread, self.slippage, self.brokerage, self.exchange_charges, self.taxes, self.latency, self.market_impact))
 
 
-def expected_net_value(expected_gross_value: float, execution_cost: ExecutionCost) -> float:
-    return expected_gross_value - execution_cost.total
+def expected_net_value(expected_profit: float, expected_loss: float, execution_cost: ExecutionCost) -> float:
+    return expected_profit - expected_loss - execution_cost.total
 
 
 def risk_per_unit(entry_price: float, initial_stop: float) -> float:
-    """§36: RiskPerUnit = EntryPrice - InitialStop."""
     return entry_price - initial_stop
 
 
-def position_size(max_risk: float, effective_risk_per_unit: float, lot_size: int) -> int:
-    """§36: Q = floor(MaxRisk / EffectiveRiskPerUnit), then enforce lot size."""
-    if lot_size <= 0:
-        raise ValueError("lot_size must be positive")
+def gross_risk(risk_per_unit_value: float, quantity: float) -> float:
+    return risk_per_unit_value * quantity
+
+
+def position_size(max_risk: float, effective_risk_per_unit: float) -> int:
     if effective_risk_per_unit <= 0:
         raise ValueError("effective_risk_per_unit must be positive")
-    raw_units = floor(max_risk / effective_risk_per_unit)
-    return (raw_units // lot_size) * lot_size
+    return floor(max_risk / effective_risk_per_unit)
+
+
+def enforce_lot_size(quantity: int, lot_size: int) -> int:
+    if quantity < 0 or lot_size <= 0:
+        raise ValueError("quantity and lot_size must be valid")
+    return (quantity // lot_size) * lot_size
 
 
 def continuation_value(expected_future_profit: float, expected_future_risk: float, expected_future_cost: float) -> float:
@@ -190,8 +191,12 @@ def profit_floor(peak_price: float, allowed_giveback: float) -> float:
     return peak_price - allowed_giveback
 
 
-def monotonic_stop(previous_stop: float, candidate_stop: float) -> float:
-    return max(previous_stop, candidate_stop)
+def candidate_stop(original_risk_boundary: float, profit_floor_value: float, dynamic_risk_boundary: float) -> float:
+    return max(original_risk_boundary, profit_floor_value, dynamic_risk_boundary)
+
+
+def monotonic_stop(previous_stop: float, candidate_stop_value: float) -> float:
+    return max(previous_stop, candidate_stop_value)
 
 
 def maximum_accepted_risk(previous_risk: float, proposed_risk: float) -> float:
