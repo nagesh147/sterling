@@ -35,11 +35,11 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §35 | Entry gates | strategy orchestration | BLOCKED until all exact gate inputs exist |
 | §36 | Risk per unit / position sizing | `canonical_math.py` | EXACT operators; full production constraints remain separate |
 | §39 | Continuation value | `canonical_math.py` | EXACT operator |
-| §40 | Giveback / profit floor | `canonical_math.py`, `position_management.py` | PARTIAL |
+| §40 | Giveback / profit accounting | `canonical_math.py`, `position_management.py` | EXACT for PeakPnL/CurrentPnL/Giveback operators; AllowedGiveback quantile and profit-floor learned estimator remain BLOCKED |
 | §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | EXACT invariant |
 | §42 | No risk expansion | `canonical_math.maximum_accepted_risk` | EXACT invariant |
 | §43 | Dynamic mode | not implemented | BLOCKED: source defines a function of state; no arbitrary enum is permitted |
-| §46 | Conservative continuation exit | strategy orchestration | BLOCKED |
+| §46 | Conservative continuation exit | `canonical_math.py` | EXACT gate; upstream conservative continuation-value estimator remains BLOCKED |
 | §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py` | PARTIAL: causal fold machinery exists; exact fitting/calibration method remains blocked |
 | §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL |
 
