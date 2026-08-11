@@ -1,45 +1,39 @@
-"""Deterministic historical replay for Adaptive Edge v0.1.0.
+"""Research-only deterministic replay for the canonical Adaptive Edge model.
 
-No broker/API calls occur here. The replay consumes a sequence of already
-prepared MarketFeatures and prices, then applies the same reconstructed model
-functions used by the strategy. It is research-only.
+This module deliberately does not contain strategy formulas. It consumes
+causally prepared observations and a caller-supplied model decision. That
+separation prevents the backtester from silently becoming a second strategy
+implementation.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Callable, Sequence
 
-from .model import (
-    MarketFeatures,
-    f101_feature_score,
-    f102_edge_score,
-    f103_opportunity,
-    f104_dynamic_mode,
-    f105_profit_protection,
-    f106_dynamic_risk,
-    f107_risk_per_unit,
-    f110_entry_trigger,
-    f111_exit_trigger,
-    f112_protection_parameters,
-)
+from .canonical_math import ExecutionCost, monotonic_stop, position_size, risk_per_unit
 
 
 @dataclass(frozen=True)
-class ReplayBar:
+class ReplayObservation:
+    """One decision-time observation with causally available market values."""
+
+    timestamp: str
     close: float
-    spread_bps: float
-    features: MarketFeatures
-    atr: float
+    bid: float
+    ask: float
+    initial_stop: float
+    point_value: float
+    lot_size: int
 
 
 @dataclass(frozen=True)
-class ReplayConfig:
-    initial_capital: float = 100_000.0
-    risk_fraction: float = 0.01
-    fee_rate: float = 0.001
-    slippage_bps: float = 5.0
-    max_holding_bars: int = 24
-    cooldown_bars: int = 2
+class ReplayDecision:
+    """Immutable decision supplied by the canonical strategy pipeline."""
+
+    direction: int
+    authorized_risk: float
+    stop_price: float
+    target_price: float | None = None
 
 
 @dataclass(frozen=True)
@@ -47,12 +41,13 @@ class ReplayTrade:
     entry_index: int
     exit_index: int
     direction: int
+    quantity: int
     entry_price: float
     exit_price: float
     gross_pnl: float
     costs: float
     net_pnl: float
-    risk_budget: float
+    authorized_risk: float
     exit_reason: str
 
 
@@ -68,18 +63,6 @@ class ReplayResult:
     profit_factor: float | None
 
 
-def _entry(bar: ReplayBar, direction: int, slippage_bps: float) -> float:
-    half_spread = max(0.0, bar.close * bar.spread_bps / 20_000.0)
-    slip = bar.close * slippage_bps / 10_000.0
-    return bar.close + direction * (half_spread + slip)
-
-
-def _exit(bar: ReplayBar, direction: int, slippage_bps: float) -> float:
-    half_spread = max(0.0, bar.close * bar.spread_bps / 20_000.0)
-    slip = bar.close * slippage_bps / 10_000.0
-    return bar.close - direction * (half_spread + slip)
-
-
 def _drawdown(equity: Sequence[float]) -> float:
     peak = 0.0
     result = 0.0
@@ -90,118 +73,118 @@ def _drawdown(equity: Sequence[float]) -> float:
     return result
 
 
-def _evaluate(bar: ReplayBar, execution_cost: float, base_risk: float, drawdown_ratio: float):
-    feature_score = f101_feature_score(bar.features)
-    edge_score = f102_edge_score(feature_score)
-    opportunity = f103_opportunity(
-        edge_score=edge_score,
-        confidence=bar.features.confidence,
-        expected_move=bar.features.expected_move,
-        execution_cost=execution_cost,
-    )
-    mode = f104_dynamic_mode(
-        edge_score=edge_score,
-        confidence=bar.features.confidence,
-        stale=bar.features.stale,
-        late_session=bar.features.late_session,
-    )
-    return feature_score, edge_score, opportunity, mode
+def _execution_cost(observation: ReplayObservation, *, fee_rate: float, slippage_bps: float) -> ExecutionCost:
+    half_spread = max(observation.ask - observation.bid, 0.0) / 2.0
+    slippage = observation.close * max(slippage_bps, 0.0) / 10_000.0
+    fees = observation.close * max(fee_rate, 0.0)
+    return ExecutionCost(spread=half_spread, slippage=slippage, brokerage=fees)
 
 
-def run_replay(bars: Sequence[ReplayBar], config: ReplayConfig = ReplayConfig()) -> ReplayResult:
-    capital = config.initial_capital
+def run_replay(
+    observations: Sequence[ReplayObservation],
+    decision_fn: Callable[[ReplayObservation, float], ReplayDecision | None],
+    *,
+    initial_capital: float = 100_000.0,
+    fee_rate: float = 0.001,
+    slippage_bps: float = 5.0,
+    max_holding_bars: int = 24,
+) -> ReplayResult:
+    """Replay a precomputed decision function without creating strategy logic.
+
+    ``decision_fn`` receives only the current observation and current capital.
+    Future observations are never exposed to it.
+    """
+    if initial_capital < 0 or max_holding_bars < 1:
+        raise ValueError("invalid replay configuration")
+
+    capital = initial_capital
     equity = [capital]
     trades: list[ReplayTrade] = []
-    cooldown_until = -1
     i = 0
 
-    while i < len(bars):
-        if i < cooldown_until:
+    while i < len(observations):
+        observation = observations[i]
+        decision = decision_fn(observation, capital)
+        if decision is None or decision.direction not in (-1, 1):
             equity.append(capital)
             i += 1
             continue
 
-        bar = bars[i]
-        execution_cost = bar.close * (config.fee_rate + config.slippage_bps / 10_000.0)
-        _, edge_score, opportunity, mode = _evaluate(bar, execution_cost, capital * config.risk_fraction, 0.0)
-        if not opportunity.eligible or opportunity.direction == 0:
-            equity.append(capital)
-            i += 1
-            continue
-
-        stop_price, _ = f112_protection_parameters(
-            entry_price=bar.close,
-            atr=max(bar.atr, bar.close * 0.001),
-            edge_score=edge_score,
+        unit_risk = risk_per_unit(
+            observation.close,
+            decision.stop_price,
+            observation.point_value,
+            _execution_cost(observation, fee_rate=fee_rate, slippage_bps=slippage_bps).total,
         )
-        risk_per_unit = f107_risk_per_unit(
-            entry_price=bar.close,
-            stop_price=stop_price,
-            point_value=1.0,
-            estimated_cost=execution_cost,
-        )
-        risk = f106_dynamic_risk(
-            base_risk=capital * config.risk_fraction,
-            confidence=bar.features.confidence,
-            volatility_ratio=max(1.0, bar.atr / max(bar.close * 0.01, 1e-9)),
-            drawdown_ratio=_drawdown(equity),
-        )
-        if risk.authorized_risk <= 0 or risk_per_unit <= 0:
+        quantity = position_size(decision.authorized_risk, unit_risk, observation.lot_size)
+        if quantity <= 0:
             equity.append(capital)
             i += 1
             continue
 
-        option_score = 1.0
-        if not f110_entry_trigger(opportunity=opportunity, mode=mode, option_score=option_score):
-            equity.append(capital)
-            i += 1
-            continue
-
-        quantity = risk.authorized_risk / risk_per_unit
-        direction = opportunity.direction
-        entry = _entry(bar, direction, config.slippage_bps)
-        peak_pnl = 0.0
-        exit_index = min(i + config.max_holding_bars, len(bars) - 1)
+        entry = observation.ask if decision.direction > 0 else observation.bid
+        exit_index = min(i + max_holding_bars, len(observations) - 1)
         exit_reason = "time"
+        active_stop = decision.stop_price
 
         for j in range(i + 1, exit_index + 1):
-            current = bars[j]
-            current_pnl = (current.close - entry) * quantity * direction
-            peak_pnl = max(peak_pnl, current_pnl)
-            floor_pnl, _ = f105_profit_protection(peak_pnl=peak_pnl, current_pnl=current_pnl)
-            _, next_edge, _, _ = _evaluate(current, execution_cost, risk.authorized_risk, 0.0)
-            if f111_exit_trigger(
-                direction=direction,
-                edge_score=next_edge,
-                current_pnl=current_pnl,
-                protection_floor=floor_pnl,
-            ):
-                exit_index = j
-                exit_reason = "edge_or_profit_protection"
-                break
+            current = observations[j]
+            if decision.direction > 0:
+                active_stop = monotonic_stop(active_stop, min(current.close, current.close))
+                if current.close <= active_stop:
+                    exit_index = j
+                    exit_reason = "stop"
+                    break
+                if decision.target_price is not None and current.close >= decision.target_price:
+                    exit_index = j
+                    exit_reason = "target"
+                    break
+            else:
+                if current.close >= active_stop:
+                    exit_index = j
+                    exit_reason = "stop"
+                    break
+                if decision.target_price is not None and current.close <= decision.target_price:
+                    exit_index = j
+                    exit_reason = "target"
+                    break
 
-        exit_bar = bars[exit_index]
-        exit_price = _exit(exit_bar, direction, config.slippage_bps)
-        gross = (exit_price - entry) * quantity * direction
-        notional = abs(entry * quantity) + abs(exit_price * quantity)
-        costs = notional * config.fee_rate
+        exit_observation = observations[exit_index]
+        exit_price = exit_observation.bid if decision.direction > 0 else exit_observation.ask
+        gross = (exit_price - entry) * quantity * decision.direction
+        entry_cost = _execution_cost(observation, fee_rate=fee_rate, slippage_bps=slippage_bps).total * quantity
+        exit_cost = _execution_cost(exit_observation, fee_rate=fee_rate, slippage_bps=slippage_bps).total * quantity
+        costs = entry_cost + exit_cost
         net = gross - costs
         capital = max(0.0, capital + net)
         equity.append(capital)
-        trades.append(ReplayTrade(i, exit_index, direction, entry, exit_price, gross, costs, net, risk.authorized_risk, exit_reason))
-        cooldown_until = exit_index + config.cooldown_bars
+        trades.append(
+            ReplayTrade(
+                i,
+                exit_index,
+                decision.direction,
+                quantity,
+                entry,
+                exit_price,
+                gross,
+                costs,
+                net,
+                decision.authorized_risk,
+                exit_reason,
+            )
+        )
         i = exit_index + 1
 
-    wins = sum(t.net_pnl > 0 for t in trades)
-    gains = sum(t.net_pnl for t in trades if t.net_pnl > 0)
-    losses = -sum(t.net_pnl for t in trades if t.net_pnl < 0)
+    wins = sum(trade.net_pnl > 0 for trade in trades)
+    gains = sum(trade.net_pnl for trade in trades if trade.net_pnl > 0)
+    losses = -sum(trade.net_pnl for trade in trades if trade.net_pnl < 0)
     return ReplayResult(
-        initial_capital=config.initial_capital,
+        initial_capital=initial_capital,
         final_capital=capital,
         trades=tuple(trades),
         equity_curve=tuple(equity),
         max_drawdown=_drawdown(equity),
-        total_return=capital / config.initial_capital - 1.0 if config.initial_capital else 0.0,
+        total_return=(capital / initial_capital - 1.0) if initial_capital else 0.0,
         win_rate=wins / len(trades) if trades else 0.0,
-        profit_factor=gains / losses if losses > 0 else None,
+        profit_factor=gains / losses if losses else None,
     )
