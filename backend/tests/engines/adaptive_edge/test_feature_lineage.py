@@ -58,6 +58,7 @@ def test_snapshot_rejects_future_availability() -> None:
     with pytest.raises(FeatureLineageError, match="watermark exceeds decision time"):
         build_feature_snapshot(
             snapshot_id="snap-1",
+            observation_time=ts(0),
             decision_time=ts(10),
             inputs=inputs,
             definitions={"a": definition("a"), "future": definition("future")},
@@ -67,6 +68,7 @@ def test_snapshot_rejects_future_availability() -> None:
 def test_snapshot_is_immutable_and_carries_provenance() -> None:
     snapshot = build_feature_snapshot(
         snapshot_id="snap-1",
+        observation_time=ts(0),
         decision_time=ts(10),
         inputs=(inp("a", 4),),
         definitions={"a": definition("a")},
@@ -83,6 +85,7 @@ def test_snapshot_is_immutable_and_carries_provenance() -> None:
 def test_snapshot_preserves_observation_and_decision_times_separately() -> None:
     snapshot = build_feature_snapshot(
         snapshot_id="snap-1",
+        observation_time=ts(0),
         decision_time=ts(10),
         inputs=(inp("a", 4, observation_minute=0),),
         definitions={"a": definition("a")},
