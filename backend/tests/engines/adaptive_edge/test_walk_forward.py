@@ -12,7 +12,6 @@ from app.engines.adaptive_edge.walk_forward import (
     HoldoutStatus,
     ObservationDisposition,
     ResearchRegistry,
-    TemporalSpan,
     TestSetContaminatedError,
     TestUseEvent,
     assign_observation,
@@ -66,7 +65,7 @@ def test_training_requires_causal_features_and_mature_labels() -> None:
     rows = [
         observation("ok", 5, maturity_day=9),
         observation("future-feature", 5, feature_day=6, maturity_day=9),
-        observation("immature", 5, maturity_day=10),
+        observation("immature", 5, maturity_day=11),
         observation("outside", 12, maturity_day=12),
     ]
 
