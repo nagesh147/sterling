@@ -3,9 +3,10 @@
 Artifact: A34
 Version: 2.0.0-draft
 Status: SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
-Implementation: NONE
+Implementation: PARTIAL — TrueData market-data adapter implemented; strategy selection remains blocked
 
 ## Purpose
+
 Define the causal boundary and contract identity required before Adaptive Edge selects a tradable instrument. This artifact does not choose NIFTY strikes, expiries, liquidity thresholds, or other numerical parameters without authoritative definitions and validation.
 
 ## Canonical dependency
@@ -86,19 +87,126 @@ Bid, ask, last, mid, and executable references are distinct. Selection must not 
 
 Potential dependencies include underlying observation, option-chain snapshot, strike, expiry, option type, contract multiplier, quote state, liquidity observations, and execution constraints. The exact dependency set remains unresolved until source and execution contracts are documented.
 
-## TrueData
+## TrueData source recovery
 
-TrueData documentation has not been received. Therefore:
+The supplied TrueData Market Data API V2.6 documentation and TCP API V2.3 documentation now provide authoritative market-data transport contracts.
+
+### Historical REST
+
+TrueData V2.6 defines:
 
 ```text
-TrueData field mapping             = UNKNOWN
-TrueData option-chain semantics    = UNKNOWN
-TrueData historical availability   = UNKNOWN
-TrueData quote timestamp semantics = UNKNOWN
-TrueData contract metadata         = UNKNOWN
+Authentication: POST https://auth.truedata.in/token
+History base: https://history.truedata.in
+Token type: bearer
+Token validity: 3600 seconds
 ```
 
-No implementation may infer these semantics from field names or generic market-data conventions.
+The authentication request is `application/x-www-form-urlencoded` with the documented fields `username`, `password`, and the documented `grant_type` value. The adapter preserves the source spelling rather than silently correcting it.
+
+The documented historical tick endpoint is:
+
+```text
+GET /getticks
+symbol
+bidask
+from
+ to
+response=csv/json
+```
+
+The documented last-N-ticks endpoint is:
+
+```text
+GET /getlastnticks
+symbol
+bidask
+response=csv/json
+nticks=1..200
+interval=tick
+```
+
+The documented LTP retrieval uses the same last-N-ticks endpoint with `nticks=1`.
+
+The documented historical response fields include:
+
+```text
+timestamp
+ltp
+volume
+oi
+bid
+bidqty
+ask
+askqty
+```
+
+Bid/ask fields are available when requested/enabled.
+
+The documented request limits are:
+
+```text
+Tick history: 5/sec, 300/min, 18000/hour
+Minute-bar history: 10/sec, 600/min, 18000/hour
+```
+
+The supplied V2.6 source lists Bar Data History and Last-N-Bars History, but the exact request contract was not recoverable from the uploaded source text used for this implementation. No bar endpoint has been invented.
+
+### Symbol master
+
+The supplied V2.6 source defines the symbol-master endpoint:
+
+```text
+GET https://api.truedata.in/getAllSymbols
+```
+
+with segments:
+
+```text
+eq
+fo
+in
+fut
+mcx
+all
+bseeq
+bsefo
+```
+
+It also explicitly documents `search`, `csv=true`, and `allexpiry=true`. The source recommends retrieving large master files once daily and storing them locally.
+
+### Option-chain symbols
+
+The supplied V2.6 source defines:
+
+```text
+GET https://api.truedata.in/getOptionChain
+symbol=<underlying>
+expiry=<yyyymmdd>
+csv=true (optional)
+```
+
+This establishes an authoritative provider endpoint for obtaining option-chain symbols for a specified underlying and expiry.
+
+### Important remaining limitation
+
+The TrueData documentation establishes provider transport and raw market-data fields. It does **not** define Adaptive Edge's strategy-specific strike-selection policy, expiry-selection policy, liquidity threshold, or historical contract-selection rule.
+
+It also does not, from the recovered material, establish a time-indexed historical option-chain universe sufficient by itself to prove that every candidate contract was knowable at every historical `t_d`. That remains a separate historical-availability dependency.
+
+Therefore:
+
+```text
+TrueData transport mapping          = RESOLVED
+TrueData historical tick contract   = RESOLVED
+TrueData symbol-master endpoint     = RESOLVED
+TrueData option-chain endpoint      = RESOLVED
+TrueData bar request contract       = UNKNOWN
+Historical candidate availability   = PARTIAL / UNKNOWN
+Adaptive Edge strike policy         = UNKNOWN
+Adaptive Edge expiry policy         = UNKNOWN
+Adaptive Edge liquidity policy      = UNKNOWN
+```
 
 ## Selection / execution separation
 
@@ -138,11 +246,11 @@ Given the same historical contract universe, market state, strategy state, and s
 
 **Learned:** any learned selection parameter remains undefined and requires a later learning artifact.
 
-**External UNKNOWN:** TrueData semantics, historical contract availability, broker contract metadata, execution-specific constraints.
+**External UNKNOWN:** historical contract availability semantics, broker contract metadata, execution-specific constraints, and the missing TrueData bar request contract.
 
 ## Implementation gate
 
-A34 cannot become executable until the instrument source, contract identity, historical availability, and selection policy are documented and versioned; strike, expiry, and liquidity policies must also be resolved where applicable.
+The TrueData transport adapter may be used for documented provider operations. A34 strategy selection cannot become executable until the historical instrument universe, contract identity, historical availability semantics, and selection policy are documented and versioned; strike, expiry, and liquidity policies must also be resolved where applicable.
 
 ## ARCHITECTURE STATUS
 
@@ -158,6 +266,11 @@ causal candidate construction
 selection/execution separation
 survivorship protection
 selection provenance
+deterministic replay
+TrueData REST authentication contract
+TrueData historical tick contract
+TrueData symbol-master endpoint
+TrueData option-chain endpoint
 ```
 
 UNRESOLVED:
@@ -168,13 +281,13 @@ strike-selection policy
 expiry-selection policy
 liquidity definition
 liquidity threshold
-TrueData mappings
 historical contract availability semantics
+TrueData bar request contract
 ```
 
 BLOCKERS:
 
-TrueData documentation remains UNKNOWN. Exact option-selection semantics remain undefined. This blocks executable selection, not the architecture.
+Exact option-selection semantics and time-indexed historical candidate availability remain undefined. This blocks executable Adaptive Edge contract selection, not the provider adapter itself.
 
 NEXT ARTIFACT:
 A35 — Execution Price / Cost and Order Contract Definition.
