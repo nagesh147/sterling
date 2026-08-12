@@ -58,7 +58,7 @@ def test_sha256_is_content_addressed(tmp_path: Path):
     path = tmp_path / "dataset.csv"
     path.write_text("abc\n", encoding="utf-8")
     assert MODULE.sha256(path) == (
-        "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982e5e5a9f2bfc"
+        "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"
     )
 
 
