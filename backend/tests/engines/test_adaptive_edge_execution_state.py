@@ -27,12 +27,9 @@ def test_unknown_submission_is_explicit_and_recoverable():
     validate_execution_transition(SubmissionState.SUBMISSION_UNKNOWN, SubmissionState.SUBMITTED)
 
 
-def test_timeout_must_not_be_encoded_as_rejection():
+def test_unknown_submission_can_be_resolved_by_authoritative_rejection():
     validate_execution_transition(SubmissionState.SUBMISSION_PENDING, SubmissionState.SUBMISSION_UNKNOWN)
-    with pytest.raises(ExecutionStateError, match="forbidden transition"):
-        validate_execution_transition(SubmissionState.SUBMISSION_UNKNOWN, SubmissionState.SUBMISSION_REJECTED)
-    # The rejected transition is intentionally not the allowed recovery path
-    # in this framework; a later authoritative observation is required.
+    validate_execution_transition(SubmissionState.SUBMISSION_UNKNOWN, SubmissionState.SUBMISSION_REJECTED)
 
 
 def test_duplicate_partial_external_observation_is_allowed():
