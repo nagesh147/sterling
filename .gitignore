@@ -96,3 +96,11 @@ frontend/e2e/.auth/
 # in-progress code changes. Kept fully out of Sterling's tracking now.
 docs/obsidian/
 
+
+# ── kitelake: offline Kite data lake ────────────────────────────────────────
+# Bulk market data lives OUTSIDE the repo (/mnt/OS/SterlingDataLake, 74 GB free)
+# because "/" has ~5 GB free. `kite-data` is a symlink to it.
+kite-data
+.venv-kitelake/
+kitelake/**/__pycache__/
+kitelake/.pytest_cache/
