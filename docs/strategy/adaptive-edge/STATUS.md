@@ -2,13 +2,13 @@
 
 ## Canonical development branch
 
-All active Adaptive Edge implementation work is now consolidated on:
+All active Adaptive Edge implementation work is consolidated on:
 
 ```text
 feature/adaptive-edge-canonical
 ```
 
-The older Adaptive Edge branches are historical work branches only. New changes must not be started on them.
+Older Adaptive Edge branches are historical work branches only. New changes must not be started on them.
 
 ## Source authority
 
@@ -48,6 +48,8 @@ WALK-FORWARD DATA CONTRACT   IMPLEMENTED
 PARAMETER FITTING            PARTIAL
 A40 FEATURE LINEAGE          IMPLEMENTED
 A41 PREDICTION CONTRACT      INTERFACE IMPLEMENTED
+A42 DECISION UTILITY         INTERFACE IMPLEMENTED
+A43 AUTHORIZATION STATE      FRAMEWORK IMPLEMENTED
 
 TRUEDATA ADAPTER             BLOCKED ON PROVIDER DOCUMENTATION
 HISTORICAL DATA              BLOCKED ON PROVIDER CONTRACT
@@ -58,7 +60,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus the source-defined A38/A39/A40 infrastructure and A41 prediction boundary. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, and A43 state-machine framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
@@ -67,5 +69,5 @@ No learned coefficient, probability threshold, calibration parameter, quantile, 
 ## Current next artifact
 
 ```text
-A42 — Economic Value, Expected Value and Decision Utility Contract
+A44 — Order Construction, Submission and Execution-Reconciliation State Machine
 ```
