@@ -40,13 +40,13 @@ async def test_get_ticks_uses_documented_history_contract():
 
     async def handler(request: httpx.Request) -> httpx.Response:
         seen["url"] = str(request.url)
-        seen["authorization"] = request.headers["authorization"]
         if request.url.path.endswith("/token"):
             return httpx.Response(
                 200,
                 json={"access_token": "token-1", "token_type": "bearer", "expires_in": 3600},
                 request=request,
             )
+        seen["authorization"] = request.headers["authorization"]
         return httpx.Response(
             200,
             text="timestamp,ltp,volume,oi\n2026-08-12T09:15:00,100.5,20,3\n",
