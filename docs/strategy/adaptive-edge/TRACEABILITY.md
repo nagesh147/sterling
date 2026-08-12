@@ -31,6 +31,7 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §23 | Empirical similarity | `canonical_math.py`, `similarity_selection.py`, `statistics.py` | PARTIAL: operators and explicit effective-sample gate implemented; complete source-defined selection procedure remains unresolved |
 | §24 | Bayesian state | `canonical_math.py`, `bayesian_state.py` | PARTIAL: additive and explicit-decay update boundaries implemented; initialization and learned decay semantics remain unresolved |
 | §25 | Probability calibration | `v2/25_PROBABILITY_CALIBRATION_CONTRACT.md` | BLOCKED: calibration method, calibration protocol, parameters, and acceptance criteria are not source-defined |
+| §28 | Horizon distribution | `v2/28_HORIZON_DISTRIBUTION_CONTRACT.md` | BLOCKED: target/horizon semantics, distribution representation, estimation and validation procedure are unresolved |
 | §31 | Execution cost decomposition | `canonical_math.py`, `economic.py` | PARTIAL: decomposition contract; provider-specific distributions pending |
 | §32 | Option selection by ExpectedNetEV | `option_selection.py` | PARTIAL: exact argmax/constraint boundary exists; upstream candidate contract is not yet wired |
 | §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
