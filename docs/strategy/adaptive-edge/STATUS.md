@@ -37,7 +37,7 @@ OPTION SELECTION             PARTIAL — CANDIDATE INPUT DERIVATION UNRESOLVED
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
 RISK PER UNIT                EXACT OPERATOR / STRATEGY SEMANTICS BLOCKED
-POSITION SIZING              PARTIAL / EFFECTIVE-RISK SEMANTICS BLOCKED
+POSITION SIZING              CONSTRAINT BOUNDARY IMPLEMENTED / EFFECTIVE-RISK SEMANTICS BLOCKED
 CONTINUATION VALUE           EXACT OPERATOR
 PROFIT PROTECTION            PARTIAL / LEARNED QUANTILE UNRESOLVED
 MONOTONIC STOP               EXACT INVARIANT / UPSTREAM BOUNDARIES UNRESOLVED
@@ -48,6 +48,7 @@ EXIT ORCHESTRATION           BLOCKED
 STATE TRANSITIONS            BLOCKED
 WALK-FORWARD DATA CONTRACT   IMPLEMENTED
 PARAMETER FITTING            PARTIAL
+A33 POSITION SIZING          CONSTRAINT FRAMEWORK IMPLEMENTED / SIZING FORMULA BLOCKED
 A40 FEATURE LINEAGE          IMPLEMENTED
 A41 PREDICTION CONTRACT      INTERFACE IMPLEMENTED
 A42 DECISION UTILITY         INTERFACE IMPLEMENTED
@@ -81,7 +82,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, A56 operational/trading-state interaction framework, A57 recovery/resume framework, A58 decision/authorization audit-chain framework, A59 execution-boundary framework, A60 end-to-end invariant gate, A61 execution/accounting integration, the source-defined probability baseline, and the source-supported normalization baseline. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, A56 operational/trading-state interaction framework, A57 recovery/resume framework, A58 decision/authorization audit-chain framework, A59 execution-boundary framework, A60 end-to-end invariant gate, A61 execution/accounting integration, the source-defined probability baseline, the source-supported normalization baseline, and the A33 quantity-constraint boundary. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
