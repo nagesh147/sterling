@@ -147,6 +147,33 @@ Dedicated tests cover these invariants in:
 backend/tests/engines/test_adaptive_edge_accounting_integrity.py
 ```
 
+### A38 label-maturity hardening
+
+A38 now has temporal primitives in:
+
+```text
+backend/app/engines/adaptive_edge/label_maturity.py
+```
+
+and tests in:
+
+```text
+backend/tests/engines/test_adaptive_edge_label_maturity.py
+```
+
+The implementation is intentionally limited to the A38 architecture:
+
+```text
+feature_available_time <= decision_time
+outcome references immutable decision identity
+outcome cannot precede decision
+mature label requires known maturity time
+label cannot exist before maturity cutoff
+training eligibility requires maturity <= training cutoff
+```
+
+It does **not** invent the unresolved A26 target, horizon, positive/negative condition, or label formula. A38 explicitly requires those semantics before executable label construction. 
+
 ## Critical status distinction
 
 ```text
