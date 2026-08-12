@@ -28,8 +28,8 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §19 | Causal contextual normalization | `normalization.py`, `test_normalization.py` | PARTIAL: empirical CDF and causal filtering exact for explicit context; context construction/min-data policy remain unresolved |
 | §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL: baseline empirical probability implemented; outcome/calibration parameters remain unfrozen |
 | §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: equation exists; exact fitting/optimization method not recovered |
-| §23 | Empirical similarity | `canonical_math.py` | PARTIAL: operators only; effective-sample gate remains unresolved |
-| §24 | Bayesian state | `canonical_math.py` | PARTIAL: update relationships only; decay/initialization semantics remain unresolved |
+| §23 | Empirical similarity | `canonical_math.py`, `similarity_selection.py`, `statistics.py` | PARTIAL: operators and explicit effective-sample gate implemented; complete source-defined selection procedure remains unresolved |
+| §24 | Bayesian state | `canonical_math.py`, `bayesian_state.py` | PARTIAL: additive and explicit-decay update boundaries implemented; initialization and learned decay semantics remain unresolved |
 | §31 | Execution cost decomposition | `canonical_math.py`, `economic.py` | PARTIAL: decomposition contract; provider-specific distributions pending |
 | §32 | Option selection by ExpectedNetEV | `option_selection.py` | PARTIAL: exact argmax/constraint boundary exists; upstream candidate contract is not yet wired |
 | §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
