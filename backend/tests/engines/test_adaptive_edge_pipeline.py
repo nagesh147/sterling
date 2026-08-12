@@ -1,18 +1,14 @@
-from dataclasses import dataclass
-
-import pytest
-
-from app.engines.adaptive_edge.edge import EdgeAssessment, StrategyFormulaLockedError
+from app.engines.adaptive_edge.edge import EdgeAssessment
 from app.engines.adaptive_edge.economic import evaluate_economics
 from app.engines.adaptive_edge.feature_engine import FeatureInput, build_feature_snapshot
 
 
 def test_future_feature_is_rejected():
-    with pytest.raises(ValueError, match="lookahead detected"):
+    with pytest.raises(ValueError, match="lookahead detected|availability watermark"):
         build_feature_snapshot(
-            observation_time="2026-08-11T10:00:00",
-            inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00")],
-            decision_time="2026-08-11T10:00:00",
+            observation_time="2026-08-11T10:00:00Z",
+            inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00Z")],
+            decision_time="2026-08-11T10:00:00Z",
         )
 
 
