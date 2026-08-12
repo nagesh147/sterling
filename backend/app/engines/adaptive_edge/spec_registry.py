@@ -32,7 +32,7 @@ ANCHORS: dict[str, SpecAnchor] = {
     "AE-MATH-PROFILE": SpecAnchor("AE-MATH-PROFILE", 14, "Volume profile", SOURCE, "profile_engine", "blocked"),
     "AE-MATH-FEATURE": SpecAnchor("AE-MATH-FEATURE", 18, "Feature vector", SOURCE, "feature_engine", "blocked"),
     "AE-MATH-NORMALIZATION": SpecAnchor("AE-MATH-NORMALIZATION", 19, "Conditional statistical normalization", SOURCE, "normalization", "blocked"),
-    "AE-MATH-PROBABILITY": SpecAnchor("AE-MATH-PROBABILITY", 20, "Probability state", SOURCE, "probability_engine", "blocked"),
+    "AE-MATH-PROBABILITY": SpecAnchor("AE-MATH-PROBABILITY", 21, "Directional probability", SOURCE, "probability_engine", "partial"),
     "AE-MATH-LOGISTIC": SpecAnchor("AE-MATH-LOGISTIC", 22, "Regularized multinomial logistic model", SOURCE, "canonical_math", "parameterized"),
     "AE-MATH-EMPIRICAL": SpecAnchor("AE-MATH-EMPIRICAL", 23, "Empirical similarity model", SOURCE, "canonical_math", "parameterized"),
     "AE-MATH-BAYES": SpecAnchor("AE-MATH-BAYES", 24, "Beta Bayesian state", SOURCE, "canonical_math", "parameterized"),
