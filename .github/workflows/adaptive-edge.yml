@@ -46,21 +46,23 @@ jobs:
           REAL_PUBLIC_DATA: "false"
           LOG_LEVEL: WARNING
 
-      - name: Verify fail-closed strategy readiness
+      - name: Verify strategy implementation and fail-closed promotion gate
         run: |
           python - <<'PY'
           from backend.app.engines.adaptive_edge.readiness import assess_strategy_readiness
           from backend.app.engines.adaptive_edge.execution_gate import evaluate_execution_gate
+          from backend.app.engines.adaptive_edge.promotion import PromotionStatus
 
           readiness = assess_strategy_readiness()
           gate = evaluate_execution_gate()
 
+          assert readiness.unresolved_formula_ids == (), readiness
+          assert readiness.promotion_status is PromotionStatus.RESEARCH_ONLY
           assert not readiness.executable, readiness
           assert not gate.authorized, gate
-          assert readiness.unresolved_formula_ids == tuple(f"F-{n:03d}" for n in range(101, 115))
-          assert gate.blocking_formulas == readiness.unresolved_formula_ids
-          print("Adaptive Edge correctly remains fail-closed.")
-          print("Blocking formulas:", ", ".join(gate.blocking_formulas))
+          assert gate.blocking_formulas == ()
+          assert gate.reason == "strategy_promotion_required"
+          print("Adaptive Edge formulas are implemented; production execution remains correctly blocked by promotion.")
           PY
 
       - name: Check Python syntax
