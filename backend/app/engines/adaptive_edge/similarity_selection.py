@@ -45,22 +45,17 @@ class SimilaritySelectionResult:
     reason: str | None = None
 
 
+from .statistics import (
+    StatisticalError,
+    effective_sample_size as _effective_sample_size,
+)
+
 def effective_sample_size(weights: Sequence[float]) -> float:
-    """Generic weighted-sample ESS: (sum w)^2 / sum(w^2).
-
-    This is a statistical utility, not a source-recovered Adaptive Edge
-    estimator or strategy parameter.
-    """
-    if not weights:
-        raise SimilaritySelectionError("weights must not be empty")
-    if not all(isfinite(weight) and weight >= 0 for weight in weights):
-        raise SimilaritySelectionError("weights must be finite and non-negative")
-    total = sum(weights)
-    squared_total = sum(weight * weight for weight in weights)
-    if squared_total <= 0:
-        raise SimilaritySelectionError("weights must contain positive mass")
-    return (total * total) / squared_total
-
+    """Domain-compatible ESS wrapper preserving selection error semantics."""
+    try:
+        return _effective_sample_size(weights)
+    except StatisticalError as exc:
+        raise SimilaritySelectionError(str(exc)) from exc
 
 def passes_effective_sample_gate(
     effective_samples: float,

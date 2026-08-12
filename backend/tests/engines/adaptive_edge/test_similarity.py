@@ -20,7 +20,7 @@ def test_weighted_distance_is_zero_for_identical_vectors():
 
 def test_weighted_distance_matches_canonical_operator():
     distance = weighted_distance((1.0, 2.0), (3.0, 1.0), (2.0, 4.0))
-    assert isclose(distance, 4.0**0.5 * 2.0, rel_tol=1e-12)
+    assert isclose(distance, 12.0**0.5, rel_tol=1e-12)
 
 
 def test_similarity_weight_matches_canonical_operator():

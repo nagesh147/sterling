@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from math import sqrt
 from typing import Iterable, Sequence
 
 
@@ -45,20 +44,31 @@ class ProbabilityState:
         probabilities = (self.p_up, self.p_down, self.p_neutral)
         if any(p < 0 or p > 1 for p in probabilities):
             raise ProbabilityError("probabilities must be in [0, 1]")
-        if abs(sum(probabilities) - 1.0) > 1e-12:
+        probability_sum = sum(probabilities)
+        if self.status == "INSUFFICIENT_DATA":
+            if probability_sum > 1e-12:
+                raise ProbabilityError(
+                    "insufficient-data probabilities must be zero"
+                )
+        elif abs(probability_sum - 1.0) > 1e-12:
             raise ProbabilityError("probabilities must sum to one")
         if self.sample_size < 0 or self.effective_sample_size < 0:
             raise ProbabilityError("sample sizes cannot be negative")
 
 
+from .statistics import (
+    StatisticalError,
+    effective_sample_size as _effective_sample_size,
+)
+
 def effective_sample_size(weights: Sequence[float]) -> float:
-    if not weights:
-        return 0.0
+    """Domain-compatible ESS wrapper preserving ProbabilityError semantics."""
     if any(weight <= 0 for weight in weights):
         raise ProbabilityError("weights must be positive")
-    total = sum(weights)
-    return total * total / sum(weight * weight for weight in weights)
-
+    try:
+        return _effective_sample_size(weights)
+    except StatisticalError as exc:
+        raise ProbabilityError(str(exc)) from exc
 
 def empirical_probability(
     observations: Iterable[HistoricalOutcome],
