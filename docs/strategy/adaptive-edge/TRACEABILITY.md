@@ -25,8 +25,8 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §10 | Delta / cumulative delta / delta velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for implemented fields |
 | §11 | Liquidity imbalance | `canonical_math.py`, `feature_state.py` | EXACT |
 | §12 | Volume intensity | `canonical_math.py` | PARTIAL: exact ratio; expected-rate semantic source remains upstream |
-| §19 | Causal contextual normalization | `normalization.py` | BLOCKED: exact estimator/context construction not recovered |
-| §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL |
+| §19 | Causal contextual normalization | `normalization.py`, `test_normalization.py` | PARTIAL: empirical CDF and causal filtering exact for explicit context; context construction/min-data policy remain unresolved |
+| §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL: baseline empirical probability implemented; outcome/calibration parameters remain unfrozen |
 | §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: equation exists; exact fitting/optimization method not recovered |
 | §23 | Empirical similarity | `canonical_math.py` | PARTIAL: operators only; effective-sample gate remains unresolved |
 | §24 | Bayesian state | `canonical_math.py` | PARTIAL: update relationships only; decay/initialization semantics remain unresolved |
