@@ -3,13 +3,52 @@
 **Artifact:** A39  
 **Version:** 2.0.0-draft  
 **Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
-**Implementation:** NONE
+**Implementation:** PARTIAL — temporal evaluation primitives implemented; numerical evaluation remains blocked
 
 ## 1. Purpose
 
 A39 defines the statistical evaluation architecture required to determine whether Adaptive Edge has demonstrated an out-of-sample edge under temporal adaptation.
 
 It does not declare profitability, statistical significance, or production readiness. It defines the conditions under which such claims may later be evaluated.
+
+## 1A. Implementation status
+
+The following architecture is now implemented in `backend/app/engines/adaptive_edge/walk_forward.py`:
+
+```text
+TemporalSpan
+EvaluationCycle
+EvaluationObservation
+causal training eligibility
+walk-forward sequence validation
+explicit outcome-span purging
+overlapping-outcome detection
+independent-episode counting
+CandidateSpec / CandidateResult
+ResearchRegistry
+FinalHoldout protection
+final-test claim eligibility gate
+```
+
+The implementation is intentionally conservative:
+
+```text
+implemented
+    = temporal/evaluation invariants
+
+not implemented
+    = target definition
+    = outcome horizon
+    = expanding vs rolling policy
+    = purge duration
+    = embargo duration
+    = model/hyperparameter selection rule
+    = statistical uncertainty estimator
+    = promotion threshold
+    = final performance metrics
+```
+
+No unresolved A26 target/horizon semantics are inferred by the implementation. A purge operation therefore requires an explicitly supplied resolved `outcome_span`; it does not invent a horizon. Test-set contamination is recorded explicitly and invalidates final-test evidence when test results influence selection.
 
 ## 2. Why walk-forward evaluation is required
 
@@ -458,6 +497,8 @@ and reproduce the result without future leakage.
 ## ARCHITECTURE STATUS
 
 **FROZEN:** walk-forward architecture; causal ordering; train/validation/test separation; purge/embargo capability; research registry; candidate preservation; cycle-level results; final holdout protection; reproducibility.
+
+**IMPLEMENTED PRIMITIVES:** temporal boundaries; A38 training eligibility; explicit outcome-span purge; overlap detection; candidate/result registry; final-holdout protection; test-contamination gate.
 
 **UNRESOLVED:** expanding vs rolling window; purge/embargo durations; statistical uncertainty method; regime definitions; promotion thresholds; update frequency; exact performance metrics.
 
