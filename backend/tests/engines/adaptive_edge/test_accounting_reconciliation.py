@@ -51,20 +51,25 @@ def test_ledger_entry_requires_source_provenance():
 
 
 def test_reconciliation_reports_exact_identity_mismatches():
-    result = reconcile_fill_ids({"a", "b"}, {"b", "c"}, as_of=T0)
+    result = reconcile_fill_ids({"a", "b"}, {"b", "c"}, reconciliation_id="recon-1", as_of=T0)
     assert result.status is ReconciliationStatus.MISMATCH
     assert result.mismatches == ("missing_internal:c", "missing_external:a")
 
 
 def test_reconciliation_is_clean_when_fill_id_sets_match():
-    result = reconcile_fill_ids({"a", "b"}, {"a", "b"}, as_of=T0)
+    result = reconcile_fill_ids({"a", "b"}, {"a", "b"}, reconciliation_id="recon-2", as_of=T0)
     assert result.status is ReconciliationStatus.RECONCILED
     assert result.mismatches == ()
 
 
 def test_reconciliation_requires_timezone_aware_as_of():
     with pytest.raises(AccountingReconciliationError, match="timezone-aware"):
-        reconcile_fill_ids(set(), set(), as_of=datetime(2026, 8, 12, 10, 0))
+        reconcile_fill_ids(set(), set(), reconciliation_id="recon-3", as_of=datetime(2026, 8, 12, 10, 0))
+
+
+def test_reconciliation_requires_explicit_identity():
+    with pytest.raises(AccountingReconciliationError, match="reconciliation_id"):
+        reconcile_fill_ids(set(), set(), reconciliation_id="", as_of=T0)
 
 
 def test_fill_cannot_arrive_before_its_execution_time():
