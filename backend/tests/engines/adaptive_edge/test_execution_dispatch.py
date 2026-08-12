@@ -13,7 +13,7 @@ class RecordingDispatcher:
         return {"accepted": True, "intent_id": intent.intent_id}
 
 
-def test_unresolved_strategy_cannot_reach_dispatcher():
+def test_unresolved_or_unpromoted_strategy_cannot_reach_dispatcher():
     dispatcher = RecordingDispatcher()
     intent = OrderIntent("i1", "NIFTY-CE", "BUY", 50)
 
@@ -23,11 +23,11 @@ def test_unresolved_strategy_cannot_reach_dispatcher():
     assert dispatcher.intents == []
 
 
-def test_dispatcher_is_called_only_after_explicitly_satisfied_gate():
+def test_implemented_formula_alone_is_not_sufficient_for_dispatch():
     dispatcher = RecordingDispatcher()
     intent = OrderIntent("i2", "NIFTY-CE", "BUY", 50)
 
-    result = dispatch_order(intent, dispatcher, formula_ids=("F-004",))
+    with pytest.raises(ExecutionBlockedError, match="strategy_promotion_required"):
+        dispatch_order(intent, dispatcher, formula_ids=("F-004",))
 
-    assert result == {"accepted": True, "intent_id": "i2"}
-    assert dispatcher.intents == [intent]
+    assert dispatcher.intents == []
