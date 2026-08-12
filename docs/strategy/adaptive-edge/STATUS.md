@@ -5,10 +5,10 @@
 All active Adaptive Edge implementation work is consolidated on:
 
 ```text
-feature/adaptive-edge-canonical
+feature/adaptive-edge-artifact-resolution
 ```
 
-Older Adaptive Edge branches are historical work branches only. New changes must not be started on them.
+All previous Adaptive Edge feature branches were consolidated and removed from the remote repository. New Adaptive Edge changes must be made only on this branch.
 
 ## Source authority
 
@@ -50,6 +50,7 @@ A40 FEATURE LINEAGE          IMPLEMENTED
 A41 PREDICTION CONTRACT      INTERFACE IMPLEMENTED
 A42 DECISION UTILITY         INTERFACE IMPLEMENTED
 A43 AUTHORIZATION STATE      FRAMEWORK IMPLEMENTED
+A44 EXECUTION STATE          FRAMEWORK IMPLEMENTED
 
 TRUEDATA ADAPTER             BLOCKED ON PROVIDER DOCUMENTATION
 HISTORICAL DATA              BLOCKED ON PROVIDER CONTRACT
@@ -60,7 +61,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, and A43 state-machine framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, and A44 execution/reconciliation state-machine framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
@@ -69,5 +70,5 @@ No learned coefficient, probability threshold, calibration parameter, quantile, 
 ## Current next artifact
 
 ```text
-A44 — Order Construction, Submission and Execution-Reconciliation State Machine
+A45 — Position / Execution Accounting Reconciliation Contract
 ```
