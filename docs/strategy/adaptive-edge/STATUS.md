@@ -12,7 +12,11 @@ See `ARTIFACT_RESOLUTION.md` for the governing recovery and resolution protocol.
 - Strategy semantics separated from SuperTrend and Value Flow Navigator.
 - Machine-readable formula registry established.
 - F-001..F-008 anchored; F-004 implemented.
-- Causal feature layer implemented and carries formula provenance.
+- A38 label-maturity boundary implemented.
+- A39 walk-forward evaluation primitives implemented.
+- A40 feature-lineage framework implemented without inventing concrete strategy features.
+- Causal feature layer now routes through the A40 lineage framework.
+- Feature identity, source references, availability watermark, immutable snapshots, provenance records, explicit quality states, acyclic dependency validation, causal rolling windows, and prior model-state reconstruction are covered by tests.
 - Edge formula interface enforced against the registry.
 - Economic evaluation implemented from registry formula F-004.
 - DynamicMode/RiskState separation preserved in contracts.
@@ -68,6 +72,39 @@ This is a terminal resolution of the current investigation, not a claim that the
 
 `EffectiveRisk_i` and `EffectiveRiskPerUnit` remain explicitly unresolved as strategy semantics. No equivalence with `GrossRisk`, `RiskPerUnit * Q`, or another Sterling engine's risk formula is authorized.
 
+## A40 feature-lineage boundary
+
+A40 is **PARTIALLY IMPLEMENTED**.
+
+Implemented:
+
+```text
+feature identity
+source references
+availability timestamps
+availability watermark
+immutable snapshot
+provenance
+quality states
+multi-source availability
+acyclic dependency graph
+causal rolling-window selection
+prior-state reconstruction
+```
+
+Still blocked:
+
+```text
+actual strategy feature definitions
+source publication latency
+staleness thresholds
+imputation/scaling parameters
+historical universe membership
+TrueData field semantics
+```
+
+No concrete Adaptive Edge feature formula has been introduced by A40.
+
 ## Next unlock
 
 Only two events may move a blocked artifact to `RESOLVED`:
@@ -80,3 +117,7 @@ A mathematically plausible implementation is never an unlock condition.
 ## Execution gate
 
 Adaptive Edge must remain non-executable while any required upstream strategy formula is `RESOLVED-BLOCKED`.
+
+## Next artifact
+
+**A41 — Prediction / Probability Calibration and Decision-Input Contract.**
