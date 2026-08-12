@@ -143,9 +143,12 @@ def reconcile_fill_ids(
     internal_fill_ids: set[str],
     external_fill_ids: set[str],
     *,
+    reconciliation_id: str,
     as_of: datetime,
 ) -> ReconciliationResult:
     """Compare identities only; no provider-specific accounting semantics are inferred."""
+    if not reconciliation_id.strip():
+        raise AccountingReconciliationError("reconciliation_id must not be empty")
     if as_of.tzinfo is None:
         raise AccountingReconciliationError("reconciliation timestamp must be timezone-aware")
     missing_internal = sorted(external_fill_ids - internal_fill_ids)
@@ -156,7 +159,7 @@ def reconcile_fill_ids(
     )
     status = ReconciliationStatus.RECONCILED if not mismatches else ReconciliationStatus.MISMATCH
     return ReconciliationResult(
-        reconciliation_id="fill-id-reconciliation",
+        reconciliation_id=reconciliation_id,
         as_of=as_of,
         status=status,
         mismatches=mismatches,
