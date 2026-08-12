@@ -152,7 +152,15 @@ export function PanelCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Apply / Discard / Reset — only renders when dirty. Same bar for SuperTrend + Navigator. */
+/**
+ * Apply / Discard / Reset. Same bar for SuperTrend + Navigator.
+ *
+ * Apply and Discard are about a DRAFT, so they appear only when there is one.
+ * Reset is not — it restores a saved config to defaults, and that is something you
+ * want most when you have changed nothing and want to start over. Gating the whole
+ * bar on `dirty` made it reachable only by first making an edit you did not want,
+ * which is a strange thing to require before undoing everything.
+ */
 export function SettingsDraftBar({
   dirty,
   saving = false,
@@ -172,8 +180,6 @@ export function SettingsDraftBar({
   applyDisabled?: boolean;
   applyTitle?: string;
 }) {
-  if (!dirty) return null;
-
   const RED = '#c9433e';
   const AMBER = '#b06a13';
 
@@ -184,7 +190,7 @@ export function SettingsDraftBar({
         alignItems: 'center',
         gap: 8,
         flexWrap: 'wrap',
-        padding: '12px 16px',
+        padding: dirty ? '12px 16px' : '8px 16px',
         marginBottom: 16,
         background: '#fff',
         border: `1px solid ${BORDER}`,
@@ -192,67 +198,71 @@ export function SettingsDraftBar({
         boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
-      <span
-        aria-live="polite"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          color: saving ? MUTED : AMBER,
-          fontSize: 10.5,
-          fontWeight: 700,
-          marginRight: 4,
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: saving ? '#c2c2c2' : AMBER,
-          }}
-        />
-        {saving ? 'Saving…' : 'Unsaved changes'}
-      </span>
-      <button
-        type="button"
-        onClick={onApply}
-        disabled={saving || applyDisabled}
-        title={applyTitle}
-        style={{
-          border: 'none',
-          background: ORANGE,
-          color: '#fff',
-          borderRadius: 7,
-          padding: '8px 16px',
-          fontSize: 11.5,
-          fontWeight: 700,
-          cursor: saving || applyDisabled ? 'default' : 'pointer',
-          fontFamily: 'inherit',
-          opacity: saving || applyDisabled ? 0.5 : 1,
-        }}
-      >
-        Apply changes
-      </button>
-      <button
-        type="button"
-        onClick={onDiscard}
-        disabled={saving}
-        style={{
-          border: `1px solid ${BORDER}`,
-          background: '#fff',
-          color: MUTED,
-          borderRadius: 7,
-          padding: '7px 12px',
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        Discard draft
-      </button>
+      {dirty && (
+        <>
+          <span
+            aria-live="polite"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: saving ? MUTED : AMBER,
+              fontSize: 10.5,
+              fontWeight: 700,
+              marginRight: 4,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: saving ? '#c2c2c2' : AMBER,
+              }}
+            />
+            {saving ? 'Saving…' : 'Unsaved changes'}
+          </span>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={saving || applyDisabled}
+            title={applyTitle}
+            style={{
+              border: 'none',
+              background: ORANGE,
+              color: '#fff',
+              borderRadius: 7,
+              padding: '8px 16px',
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: saving || applyDisabled ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: saving || applyDisabled ? 0.5 : 1,
+            }}
+          >
+            Apply changes
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            disabled={saving}
+            style={{
+              border: `1px solid ${BORDER}`,
+              background: '#fff',
+              color: MUTED,
+              borderRadius: 7,
+              padding: '7px 12px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Discard draft
+          </button>
+        </>
+      )}
       <div style={{ flex: 1 }} />
       <button
         type="button"

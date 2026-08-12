@@ -33,6 +33,13 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineSignals: () => ({ data: { rows: [] } }),
 }));
 
+// The rail summarises which engines are running, so ConnectPane itself reads the
+// Navigator config. Unmocked, that hook has no QueryClient and every test here fails
+// before it renders anything.
+vi.mock('../../../hooks/useNavigator', () => ({
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: false } } } }),
+}));
+
 vi.mock('../TradingModePanel', () => ({ TradingModePanel: () => <div>Trading mode controls</div> }));
 vi.mock('../SuperTrendEnginePanel', () => ({ SuperTrendEnginePanel: () => <div>SuperTrend strategy panel</div> }));
 vi.mock('../TradeRulesPanels', () => ({
@@ -55,21 +62,24 @@ describe('ConnectPane settings hub', () => {
   it('uses one category rail and gives each settings family one home', () => {
     render(<ConnectPane />);
 
-    expect(screen.getByRole('heading', { name: 'Setup & Settings' })).toBeInTheDocument();
+    // The page title is now the selected section's own name, under a quiet
+    // "Settings" eyebrow — so the heading tracks where you are rather than
+    // restating the hub on every page.
+    expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Kite settings sections' })).toBeInTheDocument();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
     expect(screen.getByRole('heading', { name: 'Account & Login' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Scan, entry & exit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i }));
     expect(screen.getByRole('heading', { name: 'SuperTrend' })).toBeInTheDocument();
     expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Notifications Kite Telegram alerts/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Notifications\s*Kite Telegram alerts/i }));
     expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
     expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();
     expect(screen.queryByText('Icon picker')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Experience Motion & feedback/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Experience\s*Motion & feedback/i }));
     expect(screen.getByRole('heading', { name: 'Experience' })).toBeInTheDocument();
     expect(screen.getByText('Motion style choices')).toBeInTheDocument();
     expect(screen.getByText('Icon picker')).toBeInTheDocument();
@@ -86,12 +96,12 @@ describe('ConnectPane settings hub', () => {
     // decode a per-row badge to know whether a rule applied to them.
     render(<ConnectPane />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Manual Rules Orders you place/i }));
-    expect(screen.getByRole('heading', { name: 'Manual Rules' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Manual Trade\s*Orders you place/i }));
+    expect(screen.getByRole('heading', { name: 'Manual Trade' })).toBeInTheDocument();
     expect(screen.getByText('Manual rules panel')).toBeInTheDocument();
     expect(screen.queryByText('Automatic rules panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Algo Trade Orders the algo places/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Algo Trade\s*Orders the algo places/i }));
     expect(screen.getByRole('heading', { name: 'Algo Trade' })).toBeInTheDocument();
     expect(screen.getByText('Automatic rules panel')).toBeInTheDocument();
     expect(screen.queryByText('Manual rules panel')).not.toBeInTheDocument();
@@ -106,12 +116,12 @@ describe('ConnectPane settings hub', () => {
     // auto_execute is user-global and Navigator reuses the same placement path,
     // so it never belonged behind a page titled "SuperTrend Engine".
     render(<ConnectPane />);
-    fireEvent.click(screen.getByRole('button', { name: /Trading Mode Paper\/live, manual\/automatic/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Trading Mode\s*Paper\/live, manual\/algo/i }));
     expect(screen.getByRole('heading', { name: 'Trading Mode' })).toBeInTheDocument();
     expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
     expect(screen.getByText('Exchange choices')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Scan, entry & exit/i }));
+    fireEvent.click(screen.getByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i }));
     expect(screen.queryByText('Trading mode controls')).not.toBeInTheDocument();
   });
 
@@ -130,6 +140,6 @@ describe('ConnectPane settings hub', () => {
   it('follows the one-page Trade Rules deep link to the manual half', () => {
     localStorage.setItem('kite_connect_section', 'rules');
     render(<ConnectPane />);
-    expect(screen.getByRole('heading', { name: 'Manual Rules' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Manual Trade' })).toBeInTheDocument();
   });
 });
