@@ -18,9 +18,11 @@ class ExecutionCostError(ValueError):
 class ExecutionCostInput:
     """Explicitly supplied execution-cost components in one economic unit.
 
-    Every field is an input rather than a default. A component that is not
-    supported by the provider/model must be represented by an explicit value
-    supplied by the caller after applicability has been established.
+    Every required component is an input rather than a strategy default.
+    Market impact is explicitly optional because the canonical specification
+    permits it as an additional modeled component; absence means it is not
+    part of this particular cost model, not that its value was silently set
+    to zero by the strategy.
     """
 
     spread_cost: float
@@ -29,7 +31,7 @@ class ExecutionCostInput:
     exchange_charges: float
     taxes: float
     latency_cost: float
-    market_impact: float = 0.0
+    market_impact: float | None = None
 
     def __post_init__(self) -> None:
         values = (
@@ -39,10 +41,11 @@ class ExecutionCostInput:
             self.exchange_charges,
             self.taxes,
             self.latency_cost,
-            self.market_impact,
         )
         if any(value < 0 for value in values):
             raise ExecutionCostError("execution-cost components cannot be negative")
+        if self.market_impact is not None and self.market_impact < 0:
+            raise ExecutionCostError("market impact cannot be negative")
 
     @property
     def total(self) -> float:
@@ -54,5 +57,5 @@ class ExecutionCostInput:
             + self.exchange_charges
             + self.taxes
             + self.latency_cost
-            + self.market_impact
+            + (self.market_impact if self.market_impact is not None else 0.0)
         )
