@@ -51,9 +51,10 @@ A41 PREDICTION CONTRACT      INTERFACE IMPLEMENTED
 A42 DECISION UTILITY         INTERFACE IMPLEMENTED
 A43 AUTHORIZATION STATE      FRAMEWORK IMPLEMENTED
 A44 EXECUTION STATE          FRAMEWORK IMPLEMENTED
+A45 ACCOUNTING RECONCILIATION FRAMEWORK IMPLEMENTED
 
-TRUEDATA ADAPTER             BLOCKED ON PROVIDER DOCUMENTATION
-HISTORICAL DATA              BLOCKED ON PROVIDER CONTRACT
+TRUEDATA ADAPTER             IMPLEMENTED FROM SUPPLIED DOCUMENTATION
+HISTORICAL DATA              PARTIAL — PROVIDER SEMANTICS STILL CONSTRAINED
 OOS VALIDATION               BLOCKED
 PAPER                        BLOCKED
 LIVE                         BLOCKED
@@ -61,7 +62,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, and A44 execution/reconciliation state-machine framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, and A45 accounting-reconciliation framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
@@ -70,5 +71,5 @@ No learned coefficient, probability threshold, calibration parameter, quantile, 
 ## Current next artifact
 
 ```text
-A45 — Position / Execution Accounting Reconciliation Contract
+A46 — Historical Replay / Deterministic State Reconstruction Contract
 ```
