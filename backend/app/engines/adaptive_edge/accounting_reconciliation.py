@@ -8,7 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Mapping
 
 
 class AccountingReconciliationError(ValueError):
@@ -143,8 +142,12 @@ class AccountingLedger:
 def reconcile_fill_ids(
     internal_fill_ids: set[str],
     external_fill_ids: set[str],
+    *,
+    as_of: datetime,
 ) -> ReconciliationResult:
     """Compare identities only; no provider-specific accounting semantics are inferred."""
+    if as_of.tzinfo is None:
+        raise AccountingReconciliationError("reconciliation timestamp must be timezone-aware")
     missing_internal = sorted(external_fill_ids - internal_fill_ids)
     missing_external = sorted(internal_fill_ids - external_fill_ids)
     mismatches = tuple(
@@ -154,7 +157,7 @@ def reconcile_fill_ids(
     status = ReconciliationStatus.RECONCILED if not mismatches else ReconciliationStatus.MISMATCH
     return ReconciliationResult(
         reconciliation_id="fill-id-reconciliation",
-        as_of=datetime.now().astimezone(),
+        as_of=as_of,
         status=status,
         mismatches=mismatches,
     )
