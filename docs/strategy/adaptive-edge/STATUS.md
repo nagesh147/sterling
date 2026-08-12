@@ -1,6 +1,8 @@
 # Adaptive Edge — Current Status
 
-## Current status
+## Original-source status
+
+The original Master Mathematical Specification remains the authority for recovered historical semantics. Several strategy-specific quantities remain unresolved in that original source.
 
 ```text
 SOURCE RECOVERY              COMPLETE
@@ -9,26 +11,24 @@ EXACTNESS AUDIT              COMPLETE
 
 PRICE / VOLUME / DELTA MATH  EXACT FOR IMPLEMENTED OPERATORS
 LIQUIDITY MATH               EXACT
-NORMALIZATION                BASELINE EMPIRICAL CDF IMPLEMENTED / CONTEXT+MIN-DATA UNFROZEN
-DIRECTIONAL PROBABILITY      BASELINE IMPLEMENTED / PARAMETERS UNFROZEN
-LOGISTIC MODEL               PARTIAL — FITTING/OPTIMIZATION UNFROZEN
-SIMILARITY                   PARTIAL — EFFECTIVE-SAMPLE/SELECTION GATE IMPLEMENTED / FULL PROCEDURE UNFROZEN
-BAYESIAN STATE               PARTIAL — EXPLICIT STATE/DECAY BOUNDARY IMPLEMENTED / INITIALIZATION+LEARNING UNFROZEN
-PROBABILITY CALIBRATION      BLOCKED — METHOD/PROTOCOL/PARAMETERS UNDEFINED
-HORIZON DISTRIBUTION         BLOCKED — TARGET/HORIZON/DISTRIBUTION SEMANTICS UNDEFINED
-ECONOMIC COST MODEL          PARTIAL — PROVIDER DISTRIBUTIONS UNRESOLVED
-OPTION SELECTION             PARTIAL — CANDIDATE INPUT DERIVATION UNRESOLVED
+NORMALIZATION                PARTIAL — baseline empirical CDF implemented
+DIRECTIONAL PROBABILITY      PARTIAL — baseline empirical probability implemented
+LOGISTIC MODEL               PARTIAL IN ORIGINAL SOURCE / V2.1 FITTER IMPLEMENTED
+SIMILARITY                   PARTIAL — source-specific selection procedure unresolved
+BAYESIAN STATE               PARTIAL — source-specific initialization/learning unresolved
+PROBABILITY CALIBRATION      BLOCKED IN ORIGINAL SOURCE / V2.1 TEMPERATURE SCALING IMPLEMENTED
+HORIZON DISTRIBUTION         BLOCKED IN ORIGINAL SOURCE / V2.1 EMPIRICAL HORIZON IMPLEMENTED
+ECONOMIC COST MODEL          PARTIAL — provider distributions unresolved
+OPTION SELECTION             PARTIAL — candidate generation unresolved
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
-RISK PER UNIT                EXACT OPERATOR / STRATEGY SEMANTICS BLOCKED
-POSITION SIZING              CONSTRAINT BOUNDARY IMPLEMENTED / EFFECTIVE-RISK SEMANTICS BLOCKED
+RISK PER UNIT                PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
+POSITION SIZING              PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
 ```
 
 ## V2.1 new-definition implementation
 
 A26 recovery established that the repository did not contain complete authoritative definitions for F-101..F-114. The repository's resolution protocol permits a new versioned strategy definition as the alternative unlock path.
-
-That path is now implemented as:
 
 ```text
 A26-ND
@@ -36,15 +36,17 @@ Version: 2.1.0-proposed
 Status: PROPOSED / RESEARCH-ONLY
 ```
 
-The implementation is:
+Implemented strategy modules:
 
 ```text
 backend/app/engines/adaptive_edge/strategy_v21.py
-backend/tests/engines/adaptive_edge/test_strategy_v21.py
+backend/app/engines/adaptive_edge/parameter_fitting.py
+backend/app/engines/adaptive_edge/calibration.py
+backend/app/engines/adaptive_edge/horizon_distribution.py
 backend/app/engines/adaptive_edge/promotion.py
 ```
 
-The following formula family is implemented and registered under version 2.1.0:
+Formula family:
 
 ```text
 F-101  weighted normalized feature score
@@ -63,6 +65,16 @@ F-113  cooldown/new-opportunity re-entry
 F-114  shared-risk multi-position constraint
 ```
 
+Research infrastructure now additionally includes:
+
+```text
+multinomial logistic batch fitting
+L2 regularization
+validation-only temperature calibration
+empirical horizon distribution
+empirical quantile extraction
+```
+
 ## Critical status distinction
 
 ```text
@@ -73,9 +85,7 @@ PROMOTION                  NOT APPROVED
 EXECUTION                  BLOCKED
 ```
 
-Implementation does not imply that the proposed parameters are optimal or economically validated.
-
-The production readiness gate now requires both:
+The production readiness gate requires:
 
 ```text
 all F-101..F-114 = IMPLEMENTED
@@ -87,21 +97,20 @@ The current promotion state is `RESEARCH_ONLY`, so Adaptive Edge remains non-exe
 
 ## Research configuration
 
-The initial V2.1 configuration is explicitly versioned in `StrategyParameters`. It includes the initial research horizon, normalization parameters, edge threshold, mode thresholds, risk multipliers, protection parameters, re-entry constraints, and portfolio constraints.
+The initial V2.1 configuration is explicitly versioned in `StrategyParameters`. Numerical values are research configuration, not recovered historical constants.
 
-These are research parameters, not recovered historical constants.
-
-## Next validation gate
+## Validation gate
 
 ```text
-1. Run the complete Adaptive Edge test suite.
-2. Run walk-forward evaluation over historical data.
-3. Evaluate parameter sensitivity without test leakage.
-4. Evaluate execution-cost sensitivity.
-5. Protect the final holdout.
-6. Produce a validation report and candidate identity.
-7. Explicitly approve promotion only if the pre-declared promotion policy passes.
-8. Only then may the execution gate become authorized.
+1. Run complete Adaptive Edge tests.
+2. Fit only on causal TRAIN partitions.
+3. Calibrate only on VALIDATION partitions.
+4. Evaluate on untouched HOLDOUT data.
+5. Evaluate execution-cost sensitivity.
+6. Evaluate parameter sensitivity and multiple-testing controls.
+7. Produce a versioned validation report.
+8. Explicitly approve promotion only if the pre-declared promotion policy passes.
+9. Only then may the execution gate become authorized.
 ```
 
-No production trade authorization is implied by this implementation commit.
+No production trade authorization is implied by the V2.1 implementation.
