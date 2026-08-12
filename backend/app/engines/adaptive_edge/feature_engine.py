@@ -76,6 +76,7 @@ def build_feature_snapshot(
     }
     return build_lineage_snapshot(
         snapshot_id=f"compat:{observation.isoformat()}:{decision.isoformat()}",
+        observation_time=observation,
         decision_time=decision,
         inputs=lineage_inputs,
         definitions=definitions,
