@@ -27,23 +27,23 @@ EXACTNESS AUDIT              COMPLETE
 
 PRICE / VOLUME / DELTA MATH  EXACT FOR IMPLEMENTED OPERATORS
 LIQUIDITY MATH               EXACT
-NORMALIZATION                PARTIAL
-DIRECTIONAL PROBABILITY      PARTIAL
-LOGISTIC MODEL               PARTIAL
-SIMILARITY                   PARTIAL
-BAYESIAN STATE               PARTIAL
-ECONOMIC COST MODEL          PARTIAL
-OPTION SELECTION             BLOCKED
+NORMALIZATION                PARTIAL — ESTIMATOR/CONTEXT/MIN-DATA POLICY UNFROZEN
+DIRECTIONAL PROBABILITY      BASELINE IMPLEMENTED / PARAMETERS UNFROZEN
+LOGISTIC MODEL               PARTIAL — FITTING/OPTIMIZATION UNFROZEN
+SIMILARITY                   PARTIAL — EFFECTIVE-SAMPLE/SELECTION GATE UNFROZEN
+BAYESIAN STATE               PARTIAL — INITIALIZATION/LEARNING UNFROZEN
+ECONOMIC COST MODEL          PARTIAL — PROVIDER DISTRIBUTIONS UNRESOLVED
+OPTION SELECTION             PARTIAL — CANDIDATE INPUT DERIVATION UNRESOLVED
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
-RISK PER UNIT                EXACT OPERATOR
-POSITION SIZING              PARTIAL
+RISK PER UNIT                EXACT OPERATOR / STRATEGY SEMANTICS BLOCKED
+POSITION SIZING              PARTIAL / EFFECTIVE-RISK SEMANTICS BLOCKED
 CONTINUATION VALUE           EXACT OPERATOR
-PROFIT PROTECTION            PARTIAL
-MONOTONIC STOP               EXACT INVARIANT
+PROFIT PROTECTION            PARTIAL / LEARNED QUANTILE UNRESOLVED
+MONOTONIC STOP               EXACT INVARIANT / UPSTREAM BOUNDARIES UNRESOLVED
 NO RISK EXPANSION            EXACT INVARIANT
 DYNAMIC MODE                 BLOCKED
-ENTRY GATES                  BLOCKED
+ENTRY GATES                  BLOCKED — UPSTREAM DERIVATIONS
 EXIT ORCHESTRATION           BLOCKED
 STATE TRANSITIONS            BLOCKED
 WALK-FORWARD DATA CONTRACT   IMPLEMENTED
@@ -69,10 +69,11 @@ A57 RECOVERY / RESUME        FRAMEWORK IMPLEMENTED
 A58 DECISION/AUTHORIZATION AUDIT CHAIN FRAMEWORK IMPLEMENTED
 A59 EXECUTION BOUNDARY       FRAMEWORK IMPLEMENTED / PROVIDER SEMANTICS BLOCKED
 A60 END-TO-END INVARIANT GATE FRAMEWORK IMPLEMENTED
+A61 EXECUTION/ACCOUNTING INTEGRATION FRAMEWORK IMPLEMENTED
 
 TRUEDATA DOCUMENTATION       RETAINED UNDER truedata-docs/
 TRUEDATA ADAPTER             IMPLEMENTED FROM SUPPLIED DOCUMENTATION
-HISTORICAL DATA              PARTIAL — PROVIDER PROVIDER SEMANTICS STILL CONSTRAINED
+HISTORICAL DATA              PARTIAL — PROVIDER SEMANTICS STILL CONSTRAINED
 OOS VALIDATION               BLOCKED
 PAPER                        BLOCKED
 LIVE                         BLOCKED
@@ -80,14 +81,16 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, A56 operational/trading-state interaction framework, A57 recovery/resume framework, A58 decision/authorization audit-chain framework, A59 execution-boundary framework, and A60 end-to-end invariant gate. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, A56 operational/trading-state interaction framework, A57 recovery/resume framework, A58 decision/authorization audit-chain framework, A59 execution-boundary framework, A60 end-to-end invariant gate, A61 execution/accounting integration, and the source-defined probability baseline. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
 No learned coefficient, probability threshold, calibration parameter, quantile, execution distribution, risk allocation parameter, mode value, or transition rule will be invented merely to make the engine runnable.
 
-## Current next artifact
+## Current next resolution target
 
 ```text
-A61 — End-to-End Execution / Accounting Integration Contract
+Normalization — resolve the source-supported empirical CDF operator
+while keeping context construction, minimum-data policy, and estimator
+selection explicitly parameterized/unfrozen.
 ```
