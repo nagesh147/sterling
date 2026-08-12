@@ -86,10 +86,11 @@ A40  feature availability / snapshot / lineage architecture
 A41  prediction / probability-calibration / decision-input interface
 A42  economic value / expected value / decision-input interface
 A43  decision / eligibility / risk-authorization state-machine framework
+A44  order-intent / submission / fill / reconciliation framework
 A46  historical replay / deterministic state reconstruction
 ```
 
-A40, A41, A42, and A43 remain intentionally interface/structural implementations where upstream strategy semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, payoff functions, execution distributions, EffectiveRisk, risk limits, sizing, authorization duration, thresholds, or horizons.
+A40, A41, A42, A43, and A44 remain intentionally interface/structural implementations where upstream strategy and provider semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, payoff functions, executable-price rules, latency, slippage, broker status mappings, EffectiveRisk, risk limits, sizing, authorization duration, thresholds, or horizons. A44 derives executed quantity only from confirmed immutable fill events and fails closed on overfill or duplicate fill identity.
 
 ## Critical status distinction
 
