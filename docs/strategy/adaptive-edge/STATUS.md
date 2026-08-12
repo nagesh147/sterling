@@ -23,7 +23,7 @@ OPTION SELECTION             PARTIAL — candidate generation unresolved
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
 RISK PER UNIT                PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
-POSITION SIZING               PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
+POSITION SIZING              PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
 ```
 
 ## V2.1 new-definition implementation
@@ -141,24 +141,12 @@ P&L equations
 risk-consumption equations
 ```
 
-Dedicated tests cover these invariants in:
-
-```text
-backend/tests/engines/test_adaptive_edge_accounting_integrity.py
-```
-
 ### A38 label-maturity hardening
 
 A38 now has temporal primitives in:
 
 ```text
 backend/app/engines/adaptive_edge/label_maturity.py
-```
-
-and tests in:
-
-```text
-backend/tests/engines/test_adaptive_edge_label_maturity.py
 ```
 
 The implementation is intentionally limited to the A38 architecture:
@@ -172,7 +160,53 @@ label cannot exist before maturity cutoff
 training eligibility requires maturity <= training cutoff
 ```
 
-It does **not** invent the unresolved A26 target, horizon, positive/negative condition, or label formula. A38 explicitly requires those semantics before executable label construction. 
+It does **not** invent the unresolved A26 target, horizon, positive/negative condition, or label formula.
+
+### Decision-operator closure
+
+The source-defined mathematical decision boundary is now explicit in:
+
+```text
+backend/app/engines/adaptive_edge/decision_operators.py
+```
+
+Implemented without inventing strategy parameters:
+
+```text
+§33  target/stop expected-value operator
+§33  argmax ConservativeEV selection
+§34  non-positive ConservativeEV -> NO_TRADE
+§35  strict conjunctive entry gate
+```
+
+All candidate probabilities, gains, losses, costs, and ConservativeEV values remain explicit validated inputs.
+
+### Global completeness gate
+
+Production readiness is now fail-closed through:
+
+```text
+backend/app/engines/adaptive_edge/completeness_gate.py
+```
+
+The gate separates three concepts:
+
+```text
+operator implemented
+semantic inputs resolved
+strategy promoted
+```
+
+Current unresolved boundaries are explicitly recorded as:
+
+```text
+A37  provider/accounting semantics
+A38  target/horizon label semantics
+A45  provider accounting semantics
+A61  provider execution/accounting semantics
+```
+
+Consequently, naming a strategy version or having all software modules present cannot authorize production execution.
 
 ## Critical status distinction
 
@@ -180,6 +214,8 @@ It does **not** invent the unresolved A26 target, horizon, positive/negative con
 FORMULAS IMPLEMENTED       YES
 STRATEGY DEFINITION        PROPOSED
 CAUSAL INFRASTRUCTURE      IMPLEMENTED AT DEFINED BOUNDARIES
+DECISION OPERATORS         IMPLEMENTED FOR SUPPLIED INPUTS
+COMPLETENESS GATE          FAIL-CLOSED
 WALK-FORWARD VALIDATION    REQUIRED
 PROMOTION                  NOT APPROVED
 EXECUTION                  BLOCKED
@@ -188,16 +224,12 @@ EXECUTION                  BLOCKED
 The production readiness gate requires:
 
 ```text
-all F-101..F-114 = IMPLEMENTED
+all required semantics resolved
 AND
 strategy promotion = APPROVED
 ```
 
 The current promotion state is `RESEARCH_ONLY`, so Adaptive Edge remains non-executable.
-
-## Research configuration
-
-The initial V2.1 configuration is explicitly versioned in `StrategyParameters`. Numerical values are research configuration, not recovered historical constants.
 
 ## Validation gate
 
