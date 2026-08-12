@@ -75,11 +75,26 @@ empirical horizon distribution
 empirical quantile extraction
 ```
 
+## Causal infrastructure status
+
+The V2 causal infrastructure now includes the following implemented boundaries:
+
+```text
+A38  label maturity / outcome-learning boundary
+A39  walk-forward evaluation architecture
+A40  feature availability / snapshot / lineage architecture
+A41  prediction / probability-calibration / decision-input interface
+A46  historical replay / deterministic state reconstruction
+```
+
+A40 and A41 remain intentionally interface-level where upstream strategy semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, thresholds, or horizons.
+
 ## Critical status distinction
 
 ```text
 FORMULAS IMPLEMENTED       YES
 STRATEGY DEFINITION        PROPOSED
+CAUSAL INFRASTRUCTURE      IMPLEMENTED AT DEFINED BOUNDARIES
 WALK-FORWARD VALIDATION    REQUIRED
 PROMOTION                  NOT APPROVED
 EXECUTION                  BLOCKED
