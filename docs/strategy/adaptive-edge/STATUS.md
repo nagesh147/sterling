@@ -87,10 +87,26 @@ A41  prediction / probability-calibration / decision-input interface
 A42  economic value / expected value / decision-input interface
 A43  decision / eligibility / risk-authorization state-machine framework
 A44  order-intent / submission / fill / reconciliation framework
+A45  accounting / execution reconciliation framework
 A46  historical replay / deterministic state reconstruction
+A47  out-of-sample claim-protection primitives
+A48  cycle-level evaluation evidence aggregation
+A49  statistical-dependence / uncertainty framework
+A50  research-selection / multiple-testing registry
+A51  final-holdout protection / claim assembly
+A52  statistical-validity contract
+A53  promotion / claim boundary
+A54  deployment-readiness gate
+A55  operational-control framework
+A56  operational/trading-state interaction framework
+A57  recovery/resume framework
+A58  decision/authorization audit-chain framework
+A59  execution-boundary framework
+A60  end-to-end causal/safety invariant gate
+A61  execution/accounting integration boundary
 ```
 
-A40, A41, A42, A43, and A44 remain intentionally interface/structural implementations where upstream strategy and provider semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, payoff functions, executable-price rules, latency, slippage, broker status mappings, EffectiveRisk, risk limits, sizing, authorization duration, thresholds, or horizons. A44 derives executed quantity only from confirmed immutable fill events and fails closed on overfill or duplicate fill identity.
+A40-A61 are intentionally structural/interface implementations where upstream strategy, provider, statistical, accounting, risk, or deployment semantics remain unresolved. No module in this layer is permitted to manufacture missing strategy constants or provider behavior. In particular, A47-A53 protect research claims but do not declare profitability or statistical significance; A54-A61 remain fail-closed boundaries and do not authorize live execution while upstream promotion and execution requirements remain unresolved.
 
 ## Critical status distinction
 
