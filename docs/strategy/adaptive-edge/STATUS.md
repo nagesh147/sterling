@@ -24,6 +24,9 @@ See `ARTIFACT_RESOLUTION.md` for the governing recovery and resolution protocol.
 - Shared Signals surface remains intact.
 - Repository recovery audit completed for the currently available Sterling artifacts.
 - Artifact-by-artifact resolution protocol added.
+- Final execution gate implemented as a machine-testable fail-closed boundary.
+- Unknown formula IDs fail closed at the execution gate.
+- Edge evaluation now requires the selected strategy formula to be explicitly `IMPLEMENTED`, not merely non-locked.
 
 ## Strategy-specific formula resolution
 
@@ -79,4 +82,21 @@ A mathematically plausible implementation is never an unlock condition.
 
 ## Execution gate
 
-Adaptive Edge must remain non-executable while any required upstream strategy formula is `RESOLVED-BLOCKED`.
+`backend/app/engines/adaptive_edge/execution_gate.py` is the final machine-enforced boundary. It requires every F-101..F-114 formula to be explicitly `IMPLEMENTED` before execution can be authorized.
+
+Current expected state:
+
+```text
+F-101..F-114
+      |
+      v
+RESOLVED-BLOCKED
+      |
+      v
+ExecutionGateStatus.BLOCKED
+      |
+      X
+Execution / broker boundary
+```
+
+No broker/execution adapter may bypass this gate as a workaround for missing strategy semantics.
