@@ -3,7 +3,9 @@
 **Artifact:** A36
 **Version:** 2.0.0-draft
 **Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
-**Implementation:** NONE
+**Market/research data:** TrueData only
+**Trading/execution provider:** Zerodha Kite Connect v3 only
+**Implementation:** PARTIAL — fill-derived lifecycle infrastructure exists; strategy protection semantics remain unresolved
 
 ## Purpose
 
@@ -25,12 +27,19 @@ A36 does not invent stop distances, trailing parameters, targets, holding period
 ## Canonical dependency
 
 ```text
-OrderIntent
-    -> FillEvents
+Adaptive Edge OrderIntent
+    -> Kite Order
+    -> Kite FillEvents
     -> PositionLifecycle
+    -> ProtectionState
+    -> ExitDecision
+    -> Kite ExitOrder
+    -> Kite ExitFill
 ```
 
-Actual position truth comes from confirmed fills, not order intent.
+Actual position truth comes from confirmed Kite fills, not order intent.
+
+TrueData observations may drive protection decisions, but they remain market observations and never prove execution.
 
 ## Position states
 
@@ -52,7 +61,7 @@ A canonical position record must identify:
 position_id
 strategy_version
 instrument_id
-account/portfolio scope
+Kite account/portfolio scope
 opened_at
 closed_at
 current_quantity
@@ -62,32 +71,27 @@ position_state
 provenance
 ```
 
-Exact account/portfolio identifiers depend on the execution/account contract.
+Exact account/netting semantics depend on the Kite/account contract.
 
 ## Position quantity truth
 
-Position quantity is derived from confirmed fills.
-
-Conceptually:
-
 ```text
 PositionQuantity(t)
-    = cumulative signed fill quantity
-      applicable to the position
-      through t
+    = cumulative signed confirmed Kite fill quantity
+      applicable to the position through t
 ```
 
-The exact netting/accounting convention remains a downstream dependency.
+A submitted or accepted order without a fill cannot create position quantity.
 
 ## Opening / reducing / closing
 
 A position enters `OPENING` when execution produces a non-zero fill toward a new position.
 
-A reducing execution decreases an existing position magnitude without fully closing it.
+A reducing execution decreases existing position magnitude without fully closing it.
 
 A position becomes `CLOSED` only when canonical quantity reaches the defined flat state.
 
-A rejected, unfilled, or merely cancelled order cannot create an open or closed position state.
+A rejected, unfilled, or merely cancelled Kite order cannot create an open or closed position state.
 
 ## Protection state
 
@@ -127,7 +131,7 @@ comparison operator
 threshold/parameter
 unit
 activation condition
-reset condition
+reset/update condition
 failure behavior
 policy version
 ```
@@ -154,28 +158,27 @@ No stop rule is selected by convention.
 
 A trailing mechanism requires an explicit causal reference state.
 
-Potential concepts such as highest favorable price, lowest favorable price, maximum unrealized P&L, or volatility-adjusted reference are candidates only, not V2 definitions.
+If introduced, its update timing and favorable-direction behavior must be explicit.
 
-If a trailing rule is later introduced, its update timing and favorable-direction behavior must be explicit.
+Future highs/lows cannot update an earlier protection state.
 
 ## Protection update timing
 
 Every protection update must identify:
 
 ```text
-observation time
+TrueData observation time
 calculation time
 activation time
-execution submission time
+Kite order-submission time
+Kite acknowledgement/fill time
 ```
 
-A protection level cannot use a future high/low merely because it is visible in historical OHLC data.
+These timestamps are distinct.
 
 ## Intrabar ambiguity
 
-If a historical bar contains both a protection trigger and a favorable extreme, bar data alone may not establish event order.
-
-The system must not invent the order from hindsight. The execution/backtest artifact must define a valid resolution rule or mark the observation ambiguous.
+If historical TrueData bar data contains both a protection trigger and a favorable extreme but does not establish event order, the simulator must not invent the order from hindsight. The execution/backtest artifact must define a valid resolution rule or mark the observation ambiguous.
 
 ## Exit decision versus exit execution
 
@@ -189,7 +192,10 @@ ExitDecision
 ExitOrderIntent
         |
         v
-ExitFill
+Kite ExitOrder
+        |
+        v
+Kite ExitFill
 ```
 
 A triggered exit does not prove that the position was actually exited.
@@ -210,23 +216,19 @@ OTHER_EXPLICIT_POLICY
 
 An exit reason cannot be inferred merely from the position losing money.
 
-## Exit versus invalidation
-
-A strategy signal becoming invalid does not automatically mean the position is closed. The protection/exit policy must explicitly define whether invalidation creates an exit decision.
-
 ## Mode changes while positioned
-
-An operating-mode change is not an automatic liquidation:
 
 ```text
 OperatingMode change != Position close
 ```
 
-If mode changes require position management, that relationship must be explicitly defined by position/protection policy.
+If a mode change requires position management, that relationship must be explicitly defined by position/protection policy.
 
 ## Risk authorization while positioned
 
-Revocation or expiry of a new-entry risk authorization does not automatically prove that an existing position must be closed. Existing-position protection is a separate policy decision.
+Revocation or expiry of a new-entry risk authorization does not automatically prove that an existing position must be closed.
+
+Existing-position protection is a separate policy decision.
 
 ## Protection versus sizing risk
 
@@ -242,21 +244,21 @@ Those remain separate artifacts.
 
 ## Realized outcome
 
-A realized outcome is computed only after the relevant exit fills are known. It is downstream of the decision and cannot influence that decision retrospectively.
+A realized outcome is computed only after the relevant Kite exit fills are known. It is downstream of the decision and cannot influence that decision retrospectively.
 
 ## P&L accounting
 
-A36 does not freeze final P&L because exact contract multiplier, fees, taxes, financing, and accounting conventions remain external/contract dependencies. The accounting artifact must define these before production P&L claims.
+A36 does not freeze final P&L because exact contract multiplier, fees, taxes, settlement, and accounting conventions remain external/contract dependencies. The accounting artifact must define these before production P&L claims.
 
 ## Partial exits
 
 ```text
 Position(before)
-    -> ExitFill(q)
+    -> Kite ExitFill(q)
     -> Position(after)
 ```
 
-The remaining position retains its lifecycle and protection state. An exit fill is not a full close unless resulting canonical quantity is flat.
+The remaining position retains its lifecycle and protection state.
 
 ## Protection invalidation
 
@@ -278,73 +280,64 @@ The result must fail closed according to the safety policy; no synthetic protect
 A protection trigger does not guarantee execution at that value:
 
 ```text
-ProtectionTriggerPrice != GuaranteedFillPrice
+ProtectionTriggerPrice != GuaranteedKiteFillPrice
 ```
 
-The actual exit price comes from execution events.
+Actual exit price comes from Kite execution events.
 
 ## Session boundary
 
-A36 does not assume:
-
-```text
-always intraday
-always overnight
-always force-close
-```
-
-Whether positions can cross a session boundary is a later explicit strategy/execution policy.
+A36 does not assume always-intraday, overnight holding, or automatic force-close. The policy must explicitly define session behavior.
 
 ## Expiry and instrument lifecycle
 
-For expiring instruments, expiry is an external contract event. The position policy must explicitly define what happens near or at expiry.
+Expiry is an external contract event. The position policy must explicitly define behavior near/at expiry.
 
-Contract adjustments, suspension, corporate actions, and other lifecycle events require authoritative contract/accounting semantics. The strategy must not infer them from price alone.
+Contract adjustments, suspension, corporate actions, and other lifecycle events require authoritative contract/accounting semantics.
 
 ## State invariants
-
-At all times:
 
 ```text
 CLOSED -> no further normal position reduction events
 NO_POSITION -> no position-specific protection trigger
-position quantity derives from fills
+position quantity derives from Kite fills
 exit decision != exit fill
 mode transition != automatic liquidation
 risk authorization != existing position fact
+TrueData market event != Kite execution event
 ```
 
 Any violation is a state-machine error.
 
 ## Deterministic replay
 
-Given the same ordered fill events, position policy version, protection policy version, and market observations, replay must produce the same position/protection state sequence.
+Given the same ordered TrueData market observations, Kite fill events, position policy version, protection policy version, and event ordering, replay must produce the same position/protection state sequence.
 
 ## Adversarial attacks
 
 ### Future high used for trail
 
 ```text
-bar high at t+1 -> compute trail at t
+TrueData bar high at t+1 -> compute trail at t
 ```
 
-Invalid: direct look-ahead.
+Invalid.
 
 ### Trigger implies fill
 
 ```text
-stop trigger -> assume exit fill at stop
+stop trigger -> assume Kite exit fill at stop
 ```
 
-Invalid: execution must establish the actual fill.
+Invalid.
 
 ### Cancelled exit
 
 ```text
-exit order cancelled -> position closed
+Kite exit order cancelled -> position closed
 ```
 
-Invalid: position remains open unless actual fills establish closure.
+Invalid unless actual Kite fills establish closure.
 
 ### Mode disable
 
@@ -352,7 +345,7 @@ Invalid: position remains open unless actual fills establish closure.
 strategy DISABLED -> automatically close every position
 ```
 
-Invalid unless an explicit position-protection policy defines that transition.
+Invalid unless an explicit protection policy defines that transition.
 
 ### Expiry hindsight
 
@@ -360,15 +353,15 @@ Using knowledge that a contract will expire worthless to alter an earlier protec
 
 ## Implementation gate
 
-A36 cannot become executable protection logic until the protection rule is fully specified, including trigger variable, source, timestamp semantics, threshold, activation/update behavior, and execution interaction.
+A36 cannot become executable protection logic until the protection rule is fully specified, including trigger variable, source, timestamp semantics, threshold, activation/update behavior, and Kite execution interaction.
 
 ## Parameter classes
 
-**Frozen:** fill-derived position truth, lifecycle state separation, protection/position separation, exit decision/fill separation, causal protection updates, explicit reason codes, fail-closed invalid protection.
+**Frozen:** fill-derived position truth; Kite execution authority; TrueData market observation authority; lifecycle state separation; protection/position separation; exit decision/fill separation; causal protection updates; explicit reason codes; fail-closed invalid protection.
 
-**Source-defined:** contract expiry/lifecycle, account netting, execution status semantics.
+**Source-defined:** contract expiry/lifecycle, account netting, Kite execution status semantics.
 
-**Learned:** no protection parameter is learned or selected by A36.
+**Learned:** no protection parameter is selected by A36.
 
 **UNKNOWN:** stop rule, trailing rule, target rule, time exit, session policy, expiry handling, accounting specifics.
 
@@ -377,12 +370,11 @@ A36 cannot become executable protection logic until the protection rule is fully
 A36 becomes `RESOLVED` only when the system can deterministically reconstruct:
 
 ```text
-fills
- -> position state
- -> protection state
+TrueData market observations
+ -> position/protection state
  -> exit decision
- -> exit order
- -> exit fills
+ -> Kite exit order
+ -> Kite exit fills
  -> closed position
  -> realized outcome
 ```
@@ -391,7 +383,7 @@ without future information influencing earlier protection decisions.
 
 ## ARCHITECTURE STATUS
 
-**FROZEN:** position lifecycle; fill-derived position truth; protection/position separation; exit decision/fill separation; causal protection updates; explicit reason codes; fail-closed protection.
+**FROZEN:** TrueData market boundary; Kite execution boundary; position lifecycle; fill-derived position truth; protection/position separation; exit decision/fill separation; causal protection updates; explicit reason codes; fail-closed protection.
 
 **UNRESOLVED:** stop rule; trailing rule; target rule; time exit; session behavior; expiry handling; protection thresholds; exact P&L/accounting semantics.
 
