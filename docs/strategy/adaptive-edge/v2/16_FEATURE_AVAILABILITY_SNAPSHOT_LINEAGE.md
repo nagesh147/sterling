@@ -3,7 +3,7 @@
 **Artifact:** A40  
 **Version:** 2.0.0-draft  
 **Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
-**Implementation:** NONE
+**Implementation:** PARTIAL — feature-lineage framework implemented; concrete strategy features remain blocked
 
 ## 1. Purpose
 
@@ -445,9 +445,31 @@ TrueData field semantics
 
 ## 36. Implementation status
 
-The feature-lineage framework can be implemented without choosing any feature formula.
+The following A40 framework primitives are now implemented in:
 
-Actual feature implementations are blocked until their source definitions are exact.
+```text
+backend/app/engines/adaptive_edge/feature_lineage.py
+```
+
+Implemented without choosing any strategy feature formula:
+
+```text
+FeatureDefinition
+FeatureInput
+FeatureQuality
+SourceReference
+FeatureProvenance
+FeatureSnapshot
+FeatureDependencyGraph
+causal_feature_availability()
+build_feature_snapshot()
+build_causal_rolling_window()
+reconstruct_model_state()
+```
+
+The existing `feature_engine.py` facade now routes through this lineage layer, so the engine's causal feature path uses the same availability and snapshot invariants.
+
+Concrete feature formulas remain blocked.
 
 ## 37. Completion criterion
 
@@ -468,6 +490,8 @@ and reproduce the same snapshot from the declared source versions.
 ## ARCHITECTURE STATUS
 
 **FROZEN:** availability-time causality; immutable feature snapshots; feature versioning; provenance; source-version tracking; missingness/validity states; causal rolling windows; adaptive model-state reconstruction; revision awareness.
+
+**IMPLEMENTED PRIMITIVES:** feature identity; source references; availability watermark; immutable snapshots; provenance records; explicit quality states; multi-source availability; acyclic dependency validation; causal rolling windows; prior-state reconstruction.
 
 **UNRESOLVED:** actual feature definitions; source publication latency; staleness thresholds; imputation/scaling parameters; historical universe membership; TrueData semantics.
 
