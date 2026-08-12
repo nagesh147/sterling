@@ -16,6 +16,8 @@ The original Adaptive Edge artifacts are anchored to commit `38f44f092fc4cd67291
 
 The Master Mathematical Specification is the sole authority for strategy mathematics and behavior. Provisional F-101..F-114 reconstruction is deprecated.
 
+TrueData provider documentation is retained under `truedata-docs/` and is the source authority for TrueData transport/API semantics. It does not override Adaptive Edge strategy specifications.
+
 ## Current status
 
 ```text
@@ -52,7 +54,9 @@ A42 DECISION UTILITY         INTERFACE IMPLEMENTED
 A43 AUTHORIZATION STATE      FRAMEWORK IMPLEMENTED
 A44 EXECUTION STATE          FRAMEWORK IMPLEMENTED
 A45 ACCOUNTING RECONCILIATION FRAMEWORK IMPLEMENTED
+A46 HISTORICAL REPLAY        FRAMEWORK IMPLEMENTED
 
+TRUEDATA DOCUMENTATION       RETAINED UNDER truedata-docs/
 TRUEDATA ADAPTER             IMPLEMENTED FROM SUPPLIED DOCUMENTATION
 HISTORICAL DATA              PARTIAL — PROVIDER SEMANTICS STILL CONSTRAINED
 OOS VALIDATION               BLOCKED
@@ -62,7 +66,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, and A45 accounting-reconciliation framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, and A46 deterministic replay framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
@@ -71,5 +75,5 @@ No learned coefficient, probability threshold, calibration parameter, quantile, 
 ## Current next artifact
 
 ```text
-A46 — Historical Replay / Deterministic State Reconstruction Contract
+A47 — Out-of-Sample Evaluation Result / Claim Protection Contract
 ```
