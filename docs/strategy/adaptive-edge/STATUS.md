@@ -23,7 +23,7 @@ OPTION SELECTION             PARTIAL — candidate generation unresolved
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
 RISK PER UNIT                PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
-POSITION SIZING              PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
+POSITION SIZING               PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
 ```
 
 ## V2.1 new-definition implementation
@@ -107,6 +107,45 @@ A61  execution/accounting integration boundary
 ```
 
 A40-A61 are intentionally structural/interface implementations where upstream strategy, provider, statistical, accounting, risk, or deployment semantics remain unresolved. No module in this layer is permitted to manufacture missing strategy constants or provider behavior. In particular, A47-A53 protect research claims but do not declare profitability or statistical significance; A54-A61 remain fail-closed boundaries and do not authorize live execution while upstream promotion and execution requirements remain unresolved.
+
+### A37 accounting integrity hardening
+
+The existing A37 accounting boundary has now been hardened with explicit immutable source-event provenance in:
+
+```text
+backend/app/engines/adaptive_edge/accounting_integrity.py
+```
+
+The hardening enforces only requirements already frozen by the A37 specification:
+
+```text
+stable source-event identity
+explicit currency identity
+policy/version provenance
+versioned derived-effect lineage
+causal timestamps
+idempotent reprocessing
+identity-conflict rejection
+append-only correction/supersession lineage
+```
+
+It deliberately does **not** invent:
+
+```text
+provider fee semantics
+contract multipliers
+settlement rules
+valuation-price policy
+FX rates
+P&L equations
+risk-consumption equations
+```
+
+Dedicated tests cover these invariants in:
+
+```text
+backend/tests/engines/test_adaptive_edge_accounting_integrity.py
+```
 
 ## Critical status distinction
 
