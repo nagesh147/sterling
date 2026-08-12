@@ -1,3 +1,5 @@
+import pytest
+
 from app.engines.adaptive_edge.edge import EdgeAssessment
 from app.engines.adaptive_edge.economic import evaluate_economics
 from app.engines.adaptive_edge.feature_engine import FeatureInput, build_feature_snapshot
