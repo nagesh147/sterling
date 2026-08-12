@@ -37,9 +37,9 @@ class StrategyFormulaLockedError(RuntimeError):
 
 def evaluate_edge(snapshot: FeatureSnapshot, formula: EdgeFormula) -> EdgeAssessment:
     definition = get_formula(formula.formula_id)
-    if not formula.formula_id.startswith("F-10") or definition.status is FormulaStatus.LOCKED:
+    if not formula.formula_id.startswith("F-10") or definition.status is not FormulaStatus.IMPLEMENTED:
         raise StrategyFormulaLockedError(
-            f"Adaptive Edge formula {formula.formula_id} is locked; exact strategy mathematics must be recovered first"
+            f"Adaptive Edge formula {formula.formula_id} is not executable; exact strategy mathematics must be recovered first"
         )
     if formula.formula_version != definition.version:
         raise StrategyFormulaLockedError(
