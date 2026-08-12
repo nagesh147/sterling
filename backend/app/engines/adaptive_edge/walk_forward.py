@@ -21,6 +21,12 @@ class TestSetContaminatedError(EvaluationContractError):
     """Raised when final-test evidence is allowed to influence selection."""
 
 
+# These are domain types, not pytest test classes, despite their conventional
+# Test* names. Prevent pytest from attempting to collect them when imported by
+# the A39 test module.
+TestSetContaminatedError.__test__ = False
+
+
 class ObservationDisposition(str, Enum):
     TRAIN = "train"
     VALIDATION = "validation"
@@ -190,6 +196,8 @@ class TestUseEvent:
     cycle_id: str
     purpose: str
     influenced_selection: bool
+
+TestUseEvent.__test__ = False
 
 
 @dataclass
