@@ -18,66 +18,80 @@ SIMILARITY                   PARTIAL — source-specific selection procedure unr
 BAYESIAN STATE               PARTIAL — source-specific initialization/learning unresolved
 PROBABILITY CALIBRATION      BLOCKED IN ORIGINAL SOURCE / V2.1 TEMPERATURE SCALING IMPLEMENTED
 HORIZON DISTRIBUTION         BLOCKED IN ORIGINAL SOURCE / V2.1 EMPIRICAL HORIZON IMPLEMENTED
-ECONOMIC COST MODEL          PARTIAL — provider distributions unresolved
-OPTION SELECTION             PARTIAL — candidate generation unresolved
+ECONOMIC COST MODEL          PARTIAL — V2.1 provider/accounting contract defined; empirical cost model remains research
+OPTION SELECTION             PARTIAL — V2.1 causal candidate contract defined; numerical policy remains research
 TARGET/STOP EV               EXACT FOR SUPPLIED VALIDATED INPUTS
 CONSERVATIVE EV              EXACT FOR SUPPLIED LCB
-RISK PER UNIT                PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
-POSITION SIZING              PARTIAL IN ORIGINAL SOURCE / V2.1 SEMANTICS IMPLEMENTED
+RISK PER UNIT                PARTIAL IN ORIGINAL SOURCE / V2.1 semantics defined
+POSITION SIZING              PARTIAL IN ORIGINAL SOURCE / V2.1 semantics defined
 ```
 
-## V2.1 new-definition implementation
+## V2.1 new-definition status
 
-A26 recovery established that the repository did not contain complete authoritative definitions for F-101..F-114. The repository's resolution protocol permits a new versioned strategy definition as the alternative unlock path.
+A26 recovery established that the original repository did not contain a unique complete opportunity/target/horizon definition. The V2.1 new-definition path is now documented rather than hidden inside implementation.
+
+Canonical V2.1 specification closure:
 
 ```text
-A26-ND
-Version: 2.1.0-proposed
-Status: PROPOSED / RESEARCH-ONLY
+A26-ND  docs/strategy/adaptive-edge/v2/21_A26_ND_TARGET_HORIZON_LABEL_DEFINITION.md
+A27-TD  docs/strategy/adaptive-edge/v2/22_A27_TRUEDATA_FIELD_LEVEL_FEATURE_CONTRACT.md
+A28     docs/strategy/adaptive-edge/v2/23_A28_EDGE_PREDICTION_CONTRACT_V21.md
+A29     docs/strategy/adaptive-edge/v2/24_A29_ECONOMIC_VALUE_EXECUTION_COST_CONTRACT_V21.md
+A32     docs/strategy/adaptive-edge/v2/25_A32_EFFECTIVE_RISK_AUTHORIZATION_CONTRACT_V21.md
+A34     docs/strategy/adaptive-edge/v2/26_A34_OPTION_CANDIDATE_SELECTION_CONTRACT_V21.md
+A36     docs/strategy/adaptive-edge/v2/27_A36_POSITION_PROTECTION_AND_SQUARE_OFF_CONTRACT_V21.md
+A37     docs/strategy/adaptive-edge/v2/28_A37_ACCOUNTING_PNL_RECONCILIATION_CONTRACT_V21.md
+A38     docs/strategy/adaptive-edge/v2/29_A38_LABEL_MATURITY_LEARNING_DATASET_CONTRACT_V21.md
+A39     docs/strategy/adaptive-edge/v2/30_A39_WALK_FORWARD_RESEARCH_PROMOTION_CONTRACT_V21.md
+CLOSURE docs/strategy/adaptive-edge/v2/99_V21_CANONICAL_SPECIFICATION_CLOSURE.md
 ```
 
-Implemented strategy modules:
+### V2.1 frozen target family
 
 ```text
-backend/app/engines/adaptive_edge/strategy_v21.py
-backend/app/engines/adaptive_edge/parameter_fitting.py
-backend/app/engines/adaptive_edge/calibration.py
-backend/app/engines/adaptive_edge/horizon_distribution.py
-backend/app/engines/adaptive_edge/promotion.py
+Y_h ∈ {UP, DOWN, NEUTRAL}
+
+Z(t,h) = Return(t,h) / sigma_t
+
+UP       if Z > theta_h
+DOWN     if Z < -theta_h
+NEUTRAL  otherwise
 ```
 
-Formula family:
+The target is defined on the underlying/reference instrument and uses completed TrueData bar closes for deterministic historical reconstruction. No fixed horizon or threshold is invented; those are research quantities selected through the declared walk-forward process.
+
+### V2.1 source boundary
 
 ```text
-F-101  weighted normalized feature score
-F-102  three-state directional edge
-F-103  causal opportunity eligibility
-F-104  volatility/drawdown operating mode
-F-105  monotonic profit protection
-F-106  dynamic risk schedule
-F-107  protection-and-cost risk per unit
-F-108  increment-aligned position sizing
-F-109  directional option selection
-F-110  directional entry trigger
-F-111  protection/target/horizon exit
-F-112  protection parameterization
-F-113  cooldown/new-opportunity re-entry
-F-114  shared-risk multi-position constraint
+Adaptive Edge market/research data = TrueData only
+Adaptive Edge trading/execution    = Zerodha Kite only
+Kite fills                          = execution truth
+Kite positions                      = broker position truth
+Kite order-wise charges             = accounting charge source
 ```
 
-Research infrastructure now additionally includes:
+No fallback market-data provider is permitted.
+
+### V2.1 research architecture
 
 ```text
-multinomial logistic batch fitting
-L2 regularization
-validation-only temperature calibration
-empirical horizon distribution
-empirical quantile extraction
+TrueData
+ -> canonical state
+ -> features
+ -> calibrated directional probability
+ -> economic option candidate evaluation
+ -> risk authorization
+ -> Kite order
+ -> Kite fill
+ -> Kite position/accounting
+ -> future TrueData outcome
+ -> mature label
+ -> walk-forward learning
 ```
 
 ## Causal infrastructure status
 
-The V2 causal infrastructure now includes the following implemented boundaries:
+The V2 causal infrastructure includes:
 
 ```text
 A38  label maturity / outcome-learning boundary
@@ -106,143 +120,85 @@ A60  end-to-end causal/safety invariant gate
 A61  execution/accounting integration boundary
 ```
 
-A40-A61 are intentionally structural/interface implementations where upstream strategy, provider, statistical, accounting, risk, or deployment semantics remain unresolved. No module in this layer is permitted to manufacture missing strategy constants or provider behavior. In particular, A47-A53 protect research claims but do not declare profitability or statistical significance; A54-A61 remain fail-closed boundaries and do not authorize live execution while upstream promotion and execution requirements remain unresolved.
-
-### A37 accounting integrity hardening
-
-The existing A37 accounting boundary has now been hardened with explicit immutable source-event provenance in:
+## Accounting integrity hardening
 
 ```text
 backend/app/engines/adaptive_edge/accounting_integrity.py
 ```
 
-The hardening enforces only requirements already frozen by the A37 specification:
+enforces immutable source-event identity, currency/policy provenance, derived-effect lineage, causal timestamps, idempotent reprocessing, conflict rejection and correction/supersession lineage.
 
-```text
-stable source-event identity
-explicit currency identity
-policy/version provenance
-versioned derived-effect lineage
-causal timestamps
-idempotent reprocessing
-identity-conflict rejection
-append-only correction/supersession lineage
-```
-
-It deliberately does **not** invent:
-
-```text
-provider fee semantics
-contract multipliers
-settlement rules
-valuation-price policy
-FX rates
-P&L equations
-risk-consumption equations
-```
-
-### A38 label-maturity hardening
-
-A38 now has temporal primitives in:
-
-```text
-backend/app/engines/adaptive_edge/label_maturity.py
-```
-
-The implementation is intentionally limited to the A38 architecture:
-
-```text
-feature_available_time <= decision_time
-outcome references immutable decision identity
-outcome cannot precede decision
-mature label requires known maturity time
-label cannot exist before maturity cutoff
-training eligibility requires maturity <= training cutoff
-```
-
-It does **not** invent the unresolved A26 target, horizon, positive/negative condition, or label formula.
-
-### Decision-operator closure
-
-The source-defined mathematical decision boundary is now explicit in:
+## Decision-operator closure
 
 ```text
 backend/app/engines/adaptive_edge/decision_operators.py
 ```
 
-Implemented without inventing strategy parameters:
+implements the source-defined EV/ConservativeEV/entry-gate operators for supplied validated inputs without manufacturing missing strategy parameters.
 
-```text
-§33  target/stop expected-value operator
-§33  argmax ConservativeEV selection
-§34  non-positive ConservativeEV -> NO_TRADE
-§35  strict conjunctive entry gate
-```
-
-All candidate probabilities, gains, losses, costs, and ConservativeEV values remain explicit validated inputs.
-
-### Global completeness gate
-
-Production readiness is now fail-closed through:
+## Global completeness gate
 
 ```text
 backend/app/engines/adaptive_edge/completeness_gate.py
 ```
 
-The gate separates three concepts:
-
-```text
-operator implemented
-semantic inputs resolved
-strategy promoted
-```
-
-Current unresolved boundaries are explicitly recorded as:
-
-```text
-A37  provider/accounting semantics
-A38  target/horizon label semantics
-A45  provider accounting semantics
-A61  provider execution/accounting semantics
-```
-
-Consequently, naming a strategy version or having all software modules present cannot authorize production execution.
+remains fail-closed. Software existence is not equivalent to semantic resolution or promotion.
 
 ## Critical status distinction
 
 ```text
-FORMULAS IMPLEMENTED       YES
-STRATEGY DEFINITION        PROPOSED
-CAUSAL INFRASTRUCTURE      IMPLEMENTED AT DEFINED BOUNDARIES
-DECISION OPERATORS         IMPLEMENTED FOR SUPPLIED INPUTS
-COMPLETENESS GATE          FAIL-CLOSED
+CANONICAL SPECIFICATION    COMPLETE FOR V2.1 RESEARCH DEFINITION
+IMPLEMENTATION             PARTIAL / EXISTING BOUNDARIES
+LEARNED PARAMETERS         NOT YET EMPIRICALLY VALIDATED
+TRUE-DATA DATASET          REQUIRED
+KITE EXECUTION VALIDATION  REQUIRED
 WALK-FORWARD VALIDATION    REQUIRED
 PROMOTION                  NOT APPROVED
-EXECUTION                  BLOCKED
+LIVE EXECUTION             BLOCKED
 ```
 
-The production readiness gate requires:
+## Remaining work is evidence, not invented semantics
+
+The remaining blockers are now empirical/operational:
 
 ```text
-all required semantics resolved
-AND
-strategy promotion = APPROVED
+1. Acquire and version the entitled TrueData historical/live dataset.
+2. Verify exact TrueData timestamp/availability semantics under the actual entitlement.
+3. Freeze the actual research configuration before evaluation.
+4. Run causal walk-forward experiments.
+5. Select horizon/threshold/features/model/cost/risk parameters without holdout contamination.
+6. Evaluate on untouched holdout.
+7. Validate execution-cost sensitivity using Kite execution observations.
+8. Validate risk capacity/drawdown and multi-position behavior.
+9. Validate operational recovery and reconciliation.
+10. Produce promotion evidence.
 ```
 
-The current promotion state is `RESEARCH_ONLY`, so Adaptive Edge remains non-executable.
+No numerical parameter may be promoted merely because it appears reasonable.
 
-## Validation gate
+## Production gate
 
 ```text
-1. Run complete Adaptive Edge tests.
-2. Fit only on causal TRAIN partitions.
-3. Calibrate only on VALIDATION partitions.
-4. Evaluate on untouched HOLDOUT data.
-5. Evaluate execution-cost sensitivity.
-6. Evaluate parameter sensitivity and multiple-testing controls.
-7. Produce a versioned validation report.
-8. Explicitly approve promotion only if the pre-declared promotion policy passes.
-9. Only then may the execution gate become authorized.
+SPECIFICATION COMPLETE
+        AND
+DATA SOURCE CONTRACT VERIFIED
+        AND
+CAUSAL WALK-FORWARD PASSES
+        AND
+HOLDOUT PASSES
+        AND
+COST/RISK SENSITIVITY PASSES
+        AND
+OPERATIONAL GATES PASS
+        AND
+PROMOTION APPROVED
+        |
+        v
+LIVE AUTHORIZATION
 ```
 
-No production trade authorization is implied by the V2.1 implementation.
+Until then:
+
+```text
+LIVE_AUTHORIZATION = FALSE
+```
