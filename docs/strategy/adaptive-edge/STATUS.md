@@ -85,10 +85,11 @@ A39  walk-forward evaluation architecture
 A40  feature availability / snapshot / lineage architecture
 A41  prediction / probability-calibration / decision-input interface
 A42  economic value / expected value / decision-input interface
+A43  decision / eligibility / risk-authorization state-machine framework
 A46  historical replay / deterministic state reconstruction
 ```
 
-A40, A41, and A42 remain intentionally interface/structural implementations where upstream strategy semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, payoff functions, execution distributions, risk limits, thresholds, or horizons. A42 computes only explicitly supplied outcome probabilities/payoffs and ex-ante execution costs and applies explicitly supplied constraints.
+A40, A41, A42, and A43 remain intentionally interface/structural implementations where upstream strategy semantics are unresolved. They do not invent feature formulas, target events, probability semantics, calibration methods, payoff functions, execution distributions, EffectiveRisk, risk limits, sizing, authorization duration, thresholds, or horizons.
 
 ## Critical status distinction
 
