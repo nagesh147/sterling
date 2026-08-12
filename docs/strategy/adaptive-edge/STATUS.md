@@ -65,6 +65,7 @@ A53 PROMOTION / CLAIM BOUNDARY FRAMEWORK IMPLEMENTED
 A54 DEPLOYMENT GATE          FRAMEWORK IMPLEMENTED
 A55 OPERATIONAL CONTROLS     FRAMEWORK IMPLEMENTED
 A56 OPERATIONAL/TRADING STATE FRAMEWORK IMPLEMENTED
+A57 RECOVERY / RESUME        FRAMEWORK IMPLEMENTED
 
 TRUEDATA DOCUMENTATION       RETAINED UNDER truedata-docs/
 TRUEDATA ADAPTER             IMPLEMENTED FROM SUPPLIED DOCUMENTATION
@@ -76,7 +77,7 @@ LIVE                         BLOCKED
 
 ## Consolidation rule
 
-The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, and A56 operational/trading-state interaction framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
+The canonical branch contains the latest usable Adaptive Edge implementation lineage plus source-defined A38/A39/A40 infrastructure, A41 prediction boundary, A42 economic-decision boundary, A43 authorization state-machine framework, A44 execution/reconciliation state-machine framework, A45 accounting-reconciliation framework, A46 deterministic replay framework, A47 out-of-sample claim-protection framework, A48 cycle-level evidence aggregation framework, A49 statistical-dependence/uncertainty framework, A50 research-selection/multiple-testing registry framework, A51 final-holdout/claim-assembly framework, A52 statistical-validity framework, A53 promotion/claim boundary framework, A54 deployment-gate framework, A55 operational-control framework, A56 operational/trading-state interaction framework, and A57 recovery/resume framework. Where older branches conflicted, the later canonical implementation was retained and source-defined infrastructure was integrated without inventing strategy semantics.
 
 ## Governing rule
 
@@ -85,5 +86,5 @@ No learned coefficient, probability threshold, calibration parameter, quantile, 
 ## Current next artifact
 
 ```text
-A57 — Recovery / Resume Semantics Contract
+A58 — Decision / Authorization Audit Chain Contract
 ```
