@@ -6,7 +6,7 @@ It never fabricates missing future observations and never reads execution/P&L.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Sequence
 
@@ -67,9 +67,10 @@ def build_label(
 ) -> OutcomeLabel:
     """Build one causal label from a time-ordered reference-price series.
 
-    The decision observation itself must already be available at its decision time.
-    The terminal observation is future outcome information and is used only for
-    label construction after it becomes available.
+    Presence of the terminal observation in the supplied finalized dataset means
+    the observation is available for research-label construction. Its
+    availability_time is retained as the label maturity timestamp and is not
+    required to equal its market observation timestamp.
     """
     if not observations:
         raise ValueError("observations must not be empty")
@@ -105,19 +106,6 @@ def build_label(
         )
 
     terminal = observations[terminal_index]
-    if terminal.availability_time > terminal.timestamp:
-        return OutcomeLabel(
-            decision.timestamp,
-            decision.timestamp,
-            terminal.timestamp,
-            None,
-            LabelStatus.CENSORED,
-            spec.version,
-            terminal.availability_time,
-            None,
-            "terminal observation is not available at its represented outcome time",
-        )
-
     if terminal.timestamp <= decision.timestamp:
         return OutcomeLabel(
             decision.timestamp,
