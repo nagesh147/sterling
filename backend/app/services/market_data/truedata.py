@@ -33,11 +33,7 @@ class TrueDataToken:
 
 
 class TrueDataHistoricalClient:
-    """TrueData V2.6 historical REST adapter plus documented master APIs.
-
-    Only request contracts explicitly recoverable from the supplied TrueData
-    documentation are implemented. Unknown endpoint semantics fail closed.
-    """
+    """TrueData V2.6 historical REST adapter plus documented master APIs."""
 
     AUTH_URL = "https://auth.truedata.in/token"
     HISTORY_BASE_URL = "https://history.truedata.in"
@@ -53,6 +49,27 @@ class TrueDataHistoricalClient:
     BAR_PER_SECOND = 10
     BAR_PER_MINUTE = 600
     BAR_PER_HOUR = 18000
+
+    DOCUMENTED_BAR_INTERVALS = {
+        "1min",
+        "2min",
+        "3min",
+        "5min",
+        "10min",
+        "15min",
+        "30min",
+        "60min",
+    }
+    DOCUMENTED_LAST_N_BAR_INTERVALS = {
+        "1min",
+        "2min",
+        "3min",
+        "5min",
+        "15min",
+        "30min",
+        "60min",
+        "eod",
+    }
 
     def __init__(
         self,
@@ -134,6 +151,70 @@ class TrueDataHistoricalClient:
             response,
             response_format,
             ("timestamp", "ltp", "volume", "oi", "bid", "bidqty", "ask", "askqty"),
+        )
+
+    async def get_bars(
+        self,
+        symbol: str,
+        start: str,
+        end: str,
+        *,
+        interval: str = "1min",
+        response_format: str = "csv",
+    ) -> list[dict[str, Any]]:
+        if interval not in self.DOCUMENTED_BAR_INTERVALS:
+            raise ValueError(
+                "TrueData V2.6 documents bar intervals: "
+                + ", ".join(sorted(self.DOCUMENTED_BAR_INTERVALS))
+            )
+        response = await self._history_get(
+            "/getbars",
+            {
+                "symbol": symbol,
+                "from": start,
+                "to": end,
+                "response": response_format,
+                "interval": interval,
+            },
+        )
+        return self._records(
+            response,
+            response_format,
+            ("timestamp", "open", "high", "low", "close", "volume", "oi"),
+        )
+
+    async def get_last_bars(
+        self,
+        symbol: str,
+        n: int,
+        *,
+        interval: str = "1min",
+        response_format: str = "csv",
+        bidask: int = 0,
+    ) -> list[dict[str, Any]]:
+        if not 1 <= n <= 200:
+            raise ValueError("TrueData V2.6 documents nbars as 1..200")
+        if interval not in self.DOCUMENTED_LAST_N_BAR_INTERVALS:
+            raise ValueError(
+                "TrueData V2.6 documents last-N-bar intervals: "
+                + ", ".join(sorted(self.DOCUMENTED_LAST_N_BAR_INTERVALS))
+            )
+        if bidask != 0:
+            raise ValueError("TrueData V2.6 documents bidask=0 for last-N bars")
+        response = await self._history_get(
+            "/getlastnbars",
+            {
+                "symbol": symbol,
+                "response": response_format,
+                "nbars": n,
+                "interval": interval,
+                "bidask": 0,
+            },
+        )
+        return self._records(
+            response,
+            response_format,
+            ("timestamp", "open", "high", "low", "close", "volume", "oi"),
         )
 
     async def get_last_ticks(
@@ -247,11 +328,6 @@ class TrueDataHistoricalClient:
         )
         self._raise_market_error(response)
         return response.text if csv_response else self._json(response)
-
-    async def get_bars(self, *args: Any, **kwargs: Any) -> Any:
-        raise TrueDataSpecificationBlocked(
-            "V2.6 lists Bar Data History, but the supplied source does not expose its exact request contract; no endpoint was invented."
-        )
 
     @staticmethod
     def _json(response: httpx.Response) -> dict[str, Any]:
