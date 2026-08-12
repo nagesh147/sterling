@@ -82,7 +82,10 @@ def test_event_envelope_rejects_receipt_before_event() -> None:
 
 def test_event_causal_availability_uses_receipt_time() -> None:
     event_time = Timestamp(value=datetime(2026, 8, 11, 4, 30, tzinfo=UTC))
-    received_time = Timestamp(value=datetime(2026, 8, 11, 4, 30, 500000, tzinfo=UTC))
+    # 500 MILLISECONDS after event_time. datetime's 6th positional argument is
+    # seconds, not microseconds, so 500000 landed in the seconds slot and the
+    # constructor raised before the causality assertions below ever ran.
+    received_time = Timestamp(value=datetime(2026, 8, 11, 4, 30, 0, 500000, tzinfo=UTC))
     event = EventEnvelope(
         event_id=EventID(value="evt-1"),
         event_type="QUOTE",
