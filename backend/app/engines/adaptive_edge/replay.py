@@ -1,73 +1,143 @@
-"""Deterministic replay harness for the reconstructed Adaptive Edge model.
+"""A46 deterministic historical replay and state reconstruction.
 
-This deliberately accepts precomputed causal features rather than fetching
-market data. A data adapter can feed the same rows in backtest or paper mode.
+Replay consumes only immutable, versioned events selected by a manifest. It does
+not retrieve live provider values or invent unavailable strategy parameters.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from datetime import datetime
+from hashlib import sha256
+import json
+from typing import Callable, Sequence
 
-from .model import MarketFeatures, f102_edge_score, f101_feature_score, f103_opportunity
 
-
-@dataclass(frozen=True)
-class ReplayBar:
-    timestamp: str
-    features: MarketFeatures
-    execution_cost: float
+class ReplayError(ValueError):
+    """Raised when a deterministic replay invariant is violated."""
 
 
 @dataclass(frozen=True)
-class ReplayDecision:
-    timestamp: str
-    edge_score: float
-    expected_gross_value: float
-    eligible: bool
-    reason: str
+class ReplayEvent:
+    event_id: str
+    observed_at: datetime
+    sequence_number: int
+    event_type: str
+    payload_fingerprint: str
+    source_version: str
+
+    def __post_init__(self) -> None:
+        for name in ("event_id", "event_type", "payload_fingerprint", "source_version"):
+            if not getattr(self, name).strip():
+                raise ReplayError(f"{name} must not be empty")
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ReplayError("observed_at must be timezone-aware")
+        if self.sequence_number < 0:
+            raise ReplayError("sequence_number must be non-negative")
 
 
 @dataclass(frozen=True)
-class ReplayReport:
-    bars: int
-    eligible_bars: int
-    mean_edge: float
-    total_expected_net_value: float
+class ReplayManifest:
+    manifest_id: str
+    specification_versions: tuple[str, ...]
+    feature_snapshot_ids: tuple[str, ...]
+    model_state_id: str | None
+    event_ids: tuple[str, ...]
+    cutoff: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if not self.manifest_id.strip():
+            raise ReplayError("manifest_id must not be empty")
+        if any(not value.strip() for value in self.specification_versions):
+            raise ReplayError("specification versions must not be empty")
+        if any(not value.strip() for value in self.feature_snapshot_ids):
+            raise ReplayError("feature snapshot IDs must not be empty")
+        if self.model_state_id is not None and not self.model_state_id.strip():
+            raise ReplayError("model_state_id must not be empty when supplied")
+        if any(not value.strip() for value in self.event_ids):
+            raise ReplayError("event IDs must not be empty")
+        if len(set(self.event_ids)) != len(self.event_ids):
+            raise ReplayError("manifest event IDs must be unique")
+        if self.cutoff is not None and (
+            self.cutoff.tzinfo is None or self.cutoff.utcoffset() is None
+        ):
+            raise ReplayError("cutoff must be timezone-aware")
 
 
-def replay(bars: Iterable[ReplayBar]) -> tuple[tuple[ReplayDecision, ...], ReplayReport]:
-    decisions: list[ReplayDecision] = []
-    net_values: list[float] = []
-    edge_values: list[float] = []
+@dataclass(frozen=True)
+class ReplayResult:
+    state: object
+    state_fingerprint: str
+    replay_fingerprint: str
+    event_ids: tuple[str, ...]
 
-    for bar in bars:
-        feature_score = f101_feature_score(bar.features)
-        edge_score = f102_edge_score(feature_score)
-        opportunity = f103_opportunity(
-            edge_score=edge_score,
-            confidence=bar.features.confidence,
-            expected_move=bar.features.expected_move,
-            execution_cost=bar.execution_cost,
+
+def _canonical_fingerprint(value: object) -> str:
+    try:
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
+    except (TypeError, ValueError) as exc:
+        raise ReplayError("value is not deterministically serializable") from exc
+    return sha256(encoded).hexdigest()
+
+
+def _select_events(
+    manifest: ReplayManifest,
+    events: Sequence[ReplayEvent],
+) -> tuple[ReplayEvent, ...]:
+    by_id: dict[str, ReplayEvent] = {}
+    for event in events:
+        if event.event_id in by_id:
+            raise ReplayError(f"duplicate event identity: {event.event_id}")
+        by_id[event.event_id] = event
+
+    missing = [event_id for event_id in manifest.event_ids if event_id not in by_id]
+    if missing:
+        raise ReplayError("missing manifest events: " + ", ".join(missing))
+
+    selected = [by_id[event_id] for event_id in manifest.event_ids]
+    if manifest.cutoff is not None:
+        future = [event.event_id for event in selected if event.observed_at > manifest.cutoff]
+        if future:
+            raise ReplayError("events after replay cutoff: " + ", ".join(future))
+
+    sequence_numbers = [event.sequence_number for event in selected]
+    if len(sequence_numbers) != len(set(sequence_numbers)):
+        raise ReplayError("ambiguous ordering: duplicate sequence number")
+
+    return tuple(sorted(selected, key=lambda e: (e.observed_at, e.sequence_number, e.event_id)))
+
+
+def replay(
+    manifest: ReplayManifest,
+    events: Sequence[ReplayEvent],
+    initial_state: object,
+    reducer: Callable[[object, ReplayEvent], object],
+) -> ReplayResult:
+    """Reconstruct state from exactly the immutable events named by manifest."""
+    ordered = _select_events(manifest, events)
+    state = initial_state
+    fingerprint_parts: list[object] = [
+        manifest.manifest_id,
+        manifest.specification_versions,
+        manifest.feature_snapshot_ids,
+        manifest.model_state_id,
+    ]
+
+    for event in ordered:
+        state = reducer(state, event)
+        fingerprint_parts.append(
+            {
+                "event_id": event.event_id,
+                "observed_at": event.observed_at.isoformat(),
+                "sequence_number": event.sequence_number,
+                "event_type": event.event_type,
+                "payload_fingerprint": event.payload_fingerprint,
+                "source_version": event.source_version,
+            }
         )
-        net_value = opportunity.expected_gross_value - bar.execution_cost
-        edge_values.append(edge_score)
-        net_values.append(net_value if opportunity.eligible else 0.0)
-        decisions.append(
-            ReplayDecision(
-                timestamp=bar.timestamp,
-                edge_score=edge_score,
-                expected_gross_value=opportunity.expected_gross_value,
-                eligible=opportunity.eligible,
-                reason=opportunity.reason,
-            )
-        )
 
-    count = len(decisions)
-    eligible_count = sum(1 for decision in decisions if decision.eligible)
-    report = ReplayReport(
-        bars=count,
-        eligible_bars=eligible_count,
-        mean_edge=(sum(edge_values) / count) if count else 0.0,
-        total_expected_net_value=sum(net_values),
+    return ReplayResult(
+        state=state,
+        state_fingerprint=_canonical_fingerprint(state),
+        replay_fingerprint=_canonical_fingerprint(fingerprint_parts),
+        event_ids=tuple(event.event_id for event in ordered),
     )
-    return tuple(decisions), report
