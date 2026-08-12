@@ -35,7 +35,7 @@ ANCHORS: dict[str, SpecAnchor] = {
     "AE-MATH-PROBABILITY": SpecAnchor("AE-MATH-PROBABILITY", 21, "Directional probability", SOURCE, "probability_engine", "partial"),
     "AE-MATH-LOGISTIC": SpecAnchor("AE-MATH-LOGISTIC", 22, "Regularized multinomial logistic model", SOURCE, "canonical_math", "parameterized"),
     "AE-MATH-EMPIRICAL": SpecAnchor("AE-MATH-EMPIRICAL", 23, "Empirical similarity model", SOURCE, "canonical_math", "parameterized"),
-    "AE-MATH-BAYES": SpecAnchor("AE-MATH-BAYES", 24, "Beta Bayesian state", SOURCE, "canonical_math", "parameterized"),
+    "AE-MATH-BAYES": SpecAnchor("AE-MATH-BAYES", 24, "Beta Bayesian state", SOURCE, "bayesian_state", "partial"),
     "AE-MATH-CALIBRATION": SpecAnchor("AE-MATH-CALIBRATION", 25, "Probability calibration", SOURCE, "calibration_engine", "blocked"),
     "AE-MATH-HORIZON": SpecAnchor("AE-MATH-HORIZON", 28, "Horizon distribution", SOURCE, "probability_engine", "blocked"),
     "AE-MATH-EXECUTION-COST": SpecAnchor("AE-MATH-EXECUTION-COST", 31, "Execution cost", SOURCE, "canonical_math", "parameterized"),
