@@ -33,7 +33,7 @@ def cycle() -> EvaluationCycle:
     return EvaluationCycle(
         cycle_id="c1",
         training=TemporalSpan(dt(1), dt(10)),
-        validation=TemporalSpan(dt(10), dt(13)),
+        validation=TemporalSpan(dt(10), dt(12)),
         test=TemporalSpan(dt(13), dt(16)),
         promotion_time=dt(12, 23),
         feature_policy_version="features-v1",
@@ -80,7 +80,7 @@ def test_cycle_rejects_overlapping_windows_and_late_promotion() -> None:
         EvaluationCycle(
             cycle_id="bad",
             training=TemporalSpan(dt(1), dt(11)),
-            validation=TemporalSpan(dt(10), dt(13)),
+            validation=TemporalSpan(dt(10), dt(12)),
             test=TemporalSpan(dt(13), dt(16)),
         )
 
@@ -88,7 +88,7 @@ def test_cycle_rejects_overlapping_windows_and_late_promotion() -> None:
         EvaluationCycle(
             cycle_id="bad",
             training=TemporalSpan(dt(1), dt(10)),
-            validation=TemporalSpan(dt(10), dt(13)),
+            validation=TemporalSpan(dt(10), dt(12)),
             test=TemporalSpan(dt(13), dt(16)),
             promotion_time=dt(14),
         )
@@ -99,7 +99,7 @@ def test_walk_forward_test_boundaries_must_advance() -> None:
     c2 = EvaluationCycle(
         cycle_id="c2",
         training=TemporalSpan(dt(1), dt(13)),
-        validation=TemporalSpan(dt(13), dt(16)),
+        validation=TemporalSpan(dt(13), dt(15)),
         test=TemporalSpan(dt(16), dt(19)),
         promotion_time=dt(15, 23),
     )
