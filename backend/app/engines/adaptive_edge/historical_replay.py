@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
-from typing import Callable, Generic, Iterable, Mapping, TypeVar
+from typing import Callable, Iterable, TypeVar
 
 
 class HistoricalReplayError(ValueError):
@@ -109,8 +109,9 @@ def replay(
     """Replay exactly the events named by the manifest using a supplied reducer."""
     if not replay_id.strip():
         raise HistoricalReplayError("replay_id must not be empty")
-    by_id: Mapping[str, ReplayEvent] = {event.event_id: event for event in events}
-    if len(by_id) != len(tuple(events)):
+    event_list = tuple(events)
+    by_id = {event.event_id: event for event in event_list}
+    if len(by_id) != len(event_list):
         raise HistoricalReplayError("event IDs must be unique")
     missing = [event_id for event_id in manifest.event_ids if event_id not in by_id]
     if missing:
