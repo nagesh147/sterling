@@ -2,18 +2,27 @@
 
 ## Authority
 
-The sole strategy authority is:
+The original strategy authority remains:
 
 ```text
 Adaptive Order-Flow Options Scalping and Intraday Strategy
 Master Mathematical Specification — Version 1.0
 ```
 
-The provisional F-101..F-114 reconstruction is deprecated and is not a source authority. `RECOVERY.md` explicitly records that those identifiers were a reconstructed v0.1.0 model, not recovered historical mathematics.
+That source does not contain complete authoritative definitions for F-101..F-114.
+
+The new-definition path is explicitly separated:
+
+```text
+Original source recovery: NOT RECOVERED
+V2.1 new strategy definition: 2.1.0-proposed
+```
 
 ## Rule
 
-A component is `EXACT` only when its implemented relationship is directly anchored to the source document **and every required input has a source-defined semantic meaning/provenance** and its tests verify the stated relationship. `PARTIAL` means only part of the source requirement is implemented. `BLOCKED` means the source requirement is known but cannot be implemented faithfully without a missing external contract or learned/validated parameter/method. `REMOVED` means an earlier implementation was deleted because it introduced behavior not supported by the source.
+A component is `EXACT` only when its implemented relationship is directly anchored to the source document and every required input has source-defined semantics/provenance and tests verify the relationship.
+
+A V2.1 component is instead marked `IMPLEMENTED-PROPOSED` when it is fully defined by the explicitly versioned A26-ND strategy proposal but is not claimed as recovered historical mathematics.
 
 ## Traceability
 
@@ -30,58 +39,70 @@ A component is `EXACT` only when its implemented relationship is directly anchor
 | §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: equation exists; exact fitting/optimization method not recovered |
 | §23 | Empirical similarity | `canonical_math.py`, `similarity_selection.py`, `statistics.py` | PARTIAL: operators and explicit effective-sample gate implemented; complete source-defined selection procedure remains unresolved |
 | §24 | Bayesian state | `canonical_math.py`, `bayesian_state.py` | PARTIAL: additive and explicit-decay update boundaries implemented; initialization and learned decay semantics remain unresolved |
-| §25 | Probability calibration | `v2/25_PROBABILITY_CALIBRATION_CONTRACT.md` | BLOCKED: calibration method, calibration protocol, parameters, and acceptance criteria are not source-defined |
-| §28 | Horizon distribution | `v2/28_HORIZON_DISTRIBUTION_CONTRACT.md` | BLOCKED: target/horizon semantics, distribution representation, estimation and validation procedure are unresolved |
-| §31 | Execution cost decomposition | `execution_cost.py`, `economic.py` | PARTIAL: additive provider-neutral boundary implemented; provider-specific distributions, applicability and estimation remain unresolved |
-| §32 | Option selection by ExpectedNetEV | `option_selection.py` | PARTIAL: exact argmax/constraint boundary exists; upstream candidate contract is not yet wired |
+| §25 | Probability calibration | `v2/25_PROBABILITY_CALIBRATION_CONTRACT.md` | BLOCKED: original-source calibration method is undefined |
+| §28 | Horizon distribution | `v2/28_HORIZON_DISTRIBUTION_CONTRACT.md` | BLOCKED: original-source target/horizon semantics are undefined |
+| §31 | Execution cost decomposition | `execution_cost.py`, `economic.py` | PARTIAL: additive provider-neutral boundary implemented; provider-specific distributions remain unresolved |
+| §32 | Option selection by ExpectedNetEV | `option_selection.py`, `test_option_selection.py` | PARTIAL: argmax/constraint boundary implemented; upstream candidate derivation remains unresolved |
 | §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
 | §34 | Conservative EV / no-trade | `target_stop.py` | PARTIAL: relationship/gate exact; confidence-bound estimation remains unresolved |
 | §35 | Entry gates | `entry_gates.py` | EXACT predicate for stated gate conditions; upstream gate-input derivations remain blocked |
-| §36 | Risk per unit / position sizing | `canonical_math.py` | PARTIAL: RiskPerUnit/GrossRisk/position-size relationship exact; `EffectiveRiskPerUnit` semantics unresolved |
+| §36 | Risk per unit / position sizing | `canonical_math.py` | PARTIAL: generic operators exist; original `EffectiveRiskPerUnit` semantics unresolved |
 | §39 | Continuation value | `canonical_math.py` | EXACT operator over supplied expected quantities |
 | §40 | Giveback / profit accounting | `canonical_math.py`, `position_management.py` | PARTIAL: PeakPnL/CurrentPnL/Giveback exact; AllowedGiveback estimator remains blocked |
-| §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | PARTIAL: monotonic operator exact; learned/derived protection inputs remain unresolved |
+| §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | PARTIAL: monotonic operator exact; original learned protection inputs remain unresolved |
 | §42 | No risk expansion | `canonical_math.maximum_accepted_risk` | EXACT invariant |
-| §43 | Dynamic mode | not implemented | BLOCKED: source defines a function of state; exact function not recovered |
-| §46 | Conservative continuation exit | `canonical_math.py` | PARTIAL: exit predicate exact; upstream conservative continuation-value estimator remains blocked |
-| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py` | PARTIAL: causal fold machinery exists; exact fitting/calibration method remains blocked |
-| §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL: NetEV and EV-per-risk relationship exists; `EffectiveRisk_i` semantics/derivation is BLOCKED |
+| §43 | Dynamic mode | `canonical_math.py` | PARTIAL: original function unresolved; V2.1 replacement is explicitly versioned below |
+| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py` | PARTIAL: causal fold machinery exists; exact original fitting/calibration method remains blocked |
+| §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL: NetEV and EV-per-risk relationship exists; original `EffectiveRisk_i` derivation remains blocked |
+
+## V2.1 proposed strategy traceability
+
+| Formula | V2.1 definition | Implementation | Tests | Status |
+|---|---|---|---|---|
+| F-101 | weighted z-score composite bounded by tanh | `strategy_v21.py:f101_feature_score` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-102 | three-state softmax directional edge | `strategy_v21.py:f102_edge_score` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-103 | edge + economics + data-quality + mode eligibility | `strategy_v21.py:f103_opportunity_eligibility` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-104 | volatility/drawdown mode state machine | `strategy_v21.py:f104_dynamic_mode` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-105 | monotonic favorable-direction protection | `strategy_v21.py:f105_profit_protection` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-106 | capped mode/edge dynamic risk | `strategy_v21.py:f106_dynamic_risk` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-107 | protection distance + explicit execution cost | `strategy_v21.py:f107_risk_per_unit` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-108 | floor/increment/max constrained sizing | `strategy_v21.py:f108_position_sizing` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-109 | directional CE/PE + constraint argmax | `strategy_v21.py:f109_instrument_selection` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-110 | directional trigger | `strategy_v21.py:f110_entry_trigger` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-111 | protection/target/horizon exit | `strategy_v21.py:f111_exit_trigger` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-112 | explicit protection parameters | `strategy_v21.py:f112_protection_parameters` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-113 | cooldown + new-opportunity re-entry | `strategy_v21.py:f113_reentry` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-114 | shared risk capacity + max positions | `strategy_v21.py:f114_multi_position_interaction` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+
+## Promotion boundary
+
+```text
+IMPLEMENTED-PROPOSED
+        |
+        v
+walk-forward research
+        |
+        v
+validation report
+        |
+        v
+explicit promotion approval
+        |
+        v
+EXECUTION AUTHORIZED
+```
+
+`promotion.py` currently sets the strategy to `RESEARCH_ONLY`. Therefore implementation of F-101..F-114 does not authorize live execution.
 
 ## Risk-specific recovery conclusion
 
-The repository search recovered `RISK.md`, `RECOVERY.md`, `FORMULAS.md`, and `TRACEABILITY.md`, but did not recover an authoritative definition of:
+The original repository still does not provide an authoritative historical definition of:
 
 ```text
 EffectiveRisk_i
 EffectiveRiskPerUnit
-F-107 historical equation
-F-108 historical equation
+historical F-107
+historical F-108
 ```
 
-`RISK.md` therefore no longer treats F-107/F-108 as recovered equations. `RECOVERY.md` establishes that F-107/F-108 belonged to a reconstructed v0.1.0 model. They cannot be promoted to canonical strategy mathematics.
-
-Consequently, the following substitutions are explicitly prohibited:
-
-```text
-EffectiveRisk_i = GrossRisk
-EffectiveRisk_i = RiskPerUnit × Q
-EffectiveRisk_i = EffectiveRiskPerUnit
-EffectiveRisk_i = abs(EntryPrice - InitialStop)
-```
-
-A new source artifact defining these semantics is required before §66 EV-per-risk can become `EXACT`.
-
-## Removed as non-canonical
-
-The following were removed because they introduced strategy semantics not explicitly supported by the source:
-
-```text
-backend/app/engines/adaptive_edge/contracts.py
-backend/app/engines/adaptive_edge/state.py
-backend/app/engines/adaptive_edge/state_machine.py
-backend/app/engines/adaptive_edge/parameter_fitting.py
-```
-
-## Exactness gate
-
-No subsequent implementation may mark a source row `EXACT` merely because it is mathematically plausible. It must be traceable to the source, every required input must have defined semantics/provenance, and tests must verify the source relationship.
+The V2.1 definitions are explicitly new strategy semantics and must not be described as recovered historical formulas.
