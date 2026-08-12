@@ -102,8 +102,8 @@ def test_feature_quality_states_are_explicit() -> None:
     }
 
 
-def test_rolling_window_excludes_future_available_observations() -> None:
-    observations = (inp("old", 1), inp("current", 9), inp("future", 11))
+def test_rolling_window_excludes_future_and_outside_lookback_observations() -> None:
+    observations = (inp("old", 0), inp("current", 9), inp("future", 11))
     result = build_causal_rolling_window(
         observations,
         decision_time=ts(10),
