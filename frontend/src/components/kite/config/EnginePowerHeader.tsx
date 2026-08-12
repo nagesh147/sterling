@@ -1,13 +1,13 @@
 import React from 'react';
-import { BORDER, MUTED, SOFT, Switch, TEXT } from '../kiteSettingsPrimitives';
+import { BORDER, MUTED, SOFT, Switch, TEXT, settingsCardStyle } from '../kiteSettingsPrimitives';
 
 /**
  * The on/off header every signal engine gets, in the same shape.
  *
  * SuperTrend used to be armed by a switch on one page while Navigator was armed
  * by a switch buried inside its own settings, and Trading Mode offered SuperTrend
- * a toggle but Navigator only a "Configure →" button. Two engines that are peers
- * should not be operated through two different idioms — the reader ends up
+ * a toggle but Navigator only a "Configure \u2192" button. Two engines that are peers
+ * should not be operated through two different idioms \u2014 the reader ends up
  * believing one is the real engine and the other an add-on.
  */
 export function EnginePowerHeader({
@@ -24,8 +24,7 @@ export function EnginePowerHeader({
 }) {
   return (
     <section style={{
-      background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden',
-      marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      ...settingsCardStyle,
       borderLeft: `3px solid ${on ? '#f06428' : '#c9c9c9'}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px' }}>

@@ -1,0 +1,163 @@
+{
+	"info": {
+		"_postman_id": "52f90440-5277-40e9-8ac7-4f646f14fbb9",
+		"name": "TD Greeks",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595"
+	},
+	"item": [
+		{
+			"name": "getOptionChainwithGreeks",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "2tE6teOjNPzaA73aNNiejTLRcdSOLUuqLxw8PMq6MPVSaihWWBrlMcCnz93vMWMklVM7JA0_SpS4SEbxvPFAXqWxBdKtDL3oSSOsaDqoOLKiUh6aleJEuL4RROUAyb449ER5dAGyv6oEOPnhlfC22GHvhKtfhSWUCbZB4tURx44qJrsSatUEz9hED7-D_fyV8_2F4huP3fV4VfBdjtQjmX2U6ZXJIZmz1RaKIThFd4gOlUKMvGIhkgUWr-W9xuMfX6olEkIv-evEoH4jNk838w",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://greeks.truedata.in/api/getOptionChainwithGreeks?symbol=RELIANCE&expiry=25-05-2023&response=csv",
+					"protocol": "https",
+					"host": [
+						"greeks",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOptionChainwithGreeks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "expiry",
+							"value": "25-05-2023"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLTPwithGreeks",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "t5szA2QGlhoP_nLVZPVbNPZhvNM-TdJmzTUZCQX5XM9oS1kTRHPPyGmEpGq5RixJUn23Y7PHiKb8lNO4CxURWnM4gAuiRGr7mB1hBCViD9ka-969_xkjno0ByEgkkcnyMs5WOa7aUtXGEPXokrZnc8QvFy-k9goI1lPRO1HlwTZmFdY2jgiWUSzX_3iIOmrcsu83N_LmFGaQUbk8HKeZwuxFMpaTTcyuyuC1CE6_bAN8YQmatgWjPr00CFyAPWX4PYK3zi6nI9p5_mOWiqyMxA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://greeks.truedata.in/api/getLTPwithGreeks?symbol=RELIANCE&expiry=29-06-2023&strike=2400&series=CE",
+					"protocol": "https",
+					"host": [
+						"greeks",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getLTPwithGreeks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "expiry",
+							"value": "29-06-2023"
+						},
+						{
+							"key": "strike",
+							"value": "2400"
+						},
+						{
+							"key": "series",
+							"value": "CE"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTickHistorywithGreeks",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "FkftV6yX4IaFTBax5ey6fU0dj1jwQ5VR9j2aQOJ4WYotqu_vnbMOeIRz7XNJTLpwPNAmr51e8cTPKSjRxhJQJVaiHBDIbJJDCnIutUxrDzwnhqIySeu8zAtAQjNENHCCxx29pZcNpP4h8LKdkMggYuEtjTt3zNb34Y5xnDITJyJrzPvlzF-q9pK1qM54n-dRdtgB3UlVUHSmQeTtV_gK2Xf5stWSPvWA8KuRRVS26_dEoOYpzJJQ65QMSK1_u1jXoq4iD1PruVDbUyIpaJ-NKA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://greeks.truedata.in/api/getTickHistorywithGreeks?symbol=BANKNIFTY&expiry=29-06-2023&strike=44000&series=CE",
+					"protocol": "https",
+					"host": [
+						"greeks",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getTickHistorywithGreeks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "BANKNIFTY"
+						},
+						{
+							"key": "expiry",
+							"value": "29-06-2023"
+						},
+						{
+							"key": "strike",
+							"value": "44000"
+						},
+						{
+							"key": "series",
+							"value": "CE"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

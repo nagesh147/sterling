@@ -1,82 +1,234 @@
 import React from 'react';
+import { k, tint } from '../../styles/kiteUI';
 
-// Shared design tokens + primitives for Kite settings panels
-// (EngineConfigurationPanel, NavigatorSettingsPanel, …). Extracted to its
-// own module — rather than re-exported from one panel — so panels can
-// mock each other out in tests (as ConnectPane's existing test does for
-// EngineConfigurationPanel) without losing these shared building blocks.
+/**
+ * Settings primitives — compact accordion + Kite system typography.
+ * Section cards match Trading Mode (radius 9, light shadow).
+ */
 
-export const ORANGE = '#f06428';
-export const BORDER = '#e0e0e0';
-export const TEXT = '#444';
-export const MUTED = '#777';
-export const DIM = '#9b9b9b';
-export const SOFT = '#f6f6f7';
-export const ORANGE_SOFT = '#fff5f0';
+export const ORANGE = k.orange;
+export const BORDER = k.border;
+export const TEXT = k.text;
+export const MUTED = k.dim;
+export const DIM = k.dim;
+export const SOFT = k.surface;
+export const ORANGE_SOFT = tint(k.orange, 10);
+
+/** Shared shell — matches Trading Mode cards everywhere in Settings. */
+export const settingsCardStyle: React.CSSProperties = {
+  background: k.bg,
+  border: `1px solid ${k.border}`,
+  borderRadius: 9,
+  marginBottom: 16,
+  boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+  overflow: 'hidden',
+};
 
 export const inputStyle: React.CSSProperties = {
-  width: 104,
-  height: 36,
-  padding: '0 10px',
-  border: `1px solid ${BORDER}`,
-  borderRadius: 7,
-  background: '#fff',
-  color: TEXT,
-  fontFamily: 'inherit',
-  fontSize: 12.5,
+  width: 88,
+  height: 28,
+  padding: '0 8px',
+  border: `1px solid ${k.border}`,
+  borderRadius: 2,
+  background: k.bg,
+  color: k.text,
+  fontFamily: k.fontFamily,
+  fontSize: 12,
   boxSizing: 'border-box',
 };
 
-export function Section({ title, description, summary, defaultOpen = false, children }: {
+/** Accordion section — same card chrome as Trading Mode. */
+export function Section({
+  title, description, summary, defaultOpen = false, headerAction, persistKey, children,
+}: {
   title: string;
   description: string;
   summary: string;
   defaultOpen?: boolean;
+  headerAction?: React.ReactNode;
+  persistKey?: string;
   children: React.ReactNode;
 }) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
+  const storageKey = persistKey ? `kite-settings-section:${persistKey}` : null;
+  const [isOpen, setIsOpen] = React.useState(() => {
+    if (storageKey && typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+      } catch { /* ignore */ }
+    }
+    return defaultOpen;
+  });
+
+  const onToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const next = event.currentTarget.open;
+    setIsOpen(next);
+    if (storageKey) {
+      try { window.localStorage.setItem(storageKey, next ? '1' : '0'); } catch { /* ignore */ }
+    }
+  };
+
+  const META_W = 200;
 
   return (
     <details
+      className="sk-settings-group"
       open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{ borderBottom: `1px solid ${BORDER}` }}
+      onToggle={onToggle}
+      style={{ ...settingsCardStyle, fontFamily: k.fontFamily }}
     >
-      <summary style={{
-        listStyle: 'none', cursor: 'pointer', padding: '17px 18px', display: 'flex',
-        alignItems: 'center', gap: 11, userSelect: 'none', minHeight: 66, boxSizing: 'border-box',
-      }}>
-        <span aria-hidden style={{ width: 18, color: DIM, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'block', color: TEXT, fontSize: 13.5, fontWeight: 700 }}>{title}</span>
-          <span style={{ display: 'block', color: MUTED, fontSize: 11.5, lineHeight: 1.45, marginTop: 3 }}>{description}</span>
+      <summary
+        style={{
+          listStyle: 'none',
+          cursor: 'pointer',
+          display: 'grid',
+          gridTemplateColumns: `14px minmax(0, 1fr) ${META_W}px`,
+          columnGap: 10,
+          alignItems: 'center',
+          padding: '12px 16px',
+          minHeight: 56,
+          userSelect: 'none',
+          background: k.bg,
+          borderLeft: isOpen ? `2px solid ${k.orange}` : '2px solid transparent',
+          boxSizing: 'border-box',
+        }}
+      >
+        <span aria-hidden style={{
+          width: 14, color: isOpen ? k.orange : k.dim, fontSize: 12, fontWeight: 700,
+          lineHeight: 1, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .12s ease',
+          justifySelf: 'center',
+        }}>›</span>
+
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', color: k.text, fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>
+            {title}
+          </span>
+          {description ? (
+            <span style={{
+              display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440,
+              whiteSpace: 'pre-line',
+            }}>
+              {description}
+            </span>
+          ) : null}
         </span>
-        <span className="sk-config-summary" style={{ color: DIM, fontSize: 11, textAlign: 'right', maxWidth: 230 }}>{summary}</span>
+
+        <span
+          className="sk-config-meta"
+          style={{
+            width: META_W,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            gap: headerAction ? 6 : 0,
+            textAlign: 'left',
+            boxSizing: 'border-box',
+          }}
+        >
+          {headerAction ? (
+            <span
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onKeyDown={(e) => e.stopPropagation()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                maxWidth: '100%',
+              }}
+            >
+              {headerAction}
+            </span>
+          ) : null}
+          <span
+            className="sk-config-summary"
+            title={summary || undefined}
+            style={{
+              width: '100%',
+              color: k.dim,
+              fontSize: 10.5,
+              fontWeight: 500,
+              lineHeight: 1.35,
+              paddingTop: headerAction ? 1 : 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              textAlign: 'left',
+            }}
+          >
+            {summary || '\u00a0'}
+          </span>
+        </span>
       </summary>
-      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 47px' }}>{children}</div>
+      <div className="sk-config-section-body" style={{ padding: '2px 16px 12px 16px', background: k.bg }}>
+        {children}
+      </div>
     </details>
   );
 }
 
-export function Field({ label, hint, badge, children }: {
+export function Field({ label, hint, badge, children, wide = false }: {
   label: string;
   hint?: string;
-  /** Rendered beside the label — used for the manual/auto applicability chip. */
   badge?: React.ReactNode;
   children: React.ReactNode;
+  /** Control full-width under the label (choice strips, long option rows). */
+  wide?: boolean;
 }) {
-  // The label column is wide enough for "MANUAL + AUTO" to sit on the title's
-  // line rather than wrapping underneath it.
-  return (
-    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '196px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>
+  const hintStyle: React.CSSProperties = {
+    color: k.dim,
+    fontSize: 10.5,
+    lineHeight: 1.4,
+    maxWidth: 440,
+    userSelect: 'text',
+  };
+
+  if (wide) {
+    return (
+      <div
+        className="sk-config-field sk-config-field--wide"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          padding: '8px 0',
+          fontFamily: k.fontFamily,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}>
+          <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
           {badge}
         </div>
-        {hint && <div style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45, marginTop: 4 }}>{hint}</div>}
+        <div style={{ width: '100%' }}>{children}</div>
+        {hint != null && hint !== '' ? <div style={hintStyle}>{hint}</div> : null}
       </div>
-      <div style={{ minWidth: 0 }}>{children}</div>
+    );
+  }
+
+  return (
+    <div
+      className="sk-config-field"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(88px, max-content)',
+        columnGap: 16,
+        rowGap: 2,
+        alignItems: 'center',
+        padding: '7px 0',
+        fontFamily: k.fontFamily,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: 320, userSelect: 'none' }}>
+        <span style={{ color: k.text, fontSize: 12, fontWeight: 600 }}>{label}</span>
+        {badge}
+      </div>
+      <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+        {children}
+      </div>
+      {hint != null && hint !== '' ? (
+        <div style={{ gridColumn: '1 / -1', ...hintStyle }}>{hint}</div>
+      ) : null}
     </div>
   );
 }
@@ -87,17 +239,47 @@ export function ChoiceRow<T extends string>({ value, options, onChange }: {
   onChange: (value: T) => void;
 }) {
   return (
-    <div style={{ display: 'inline-flex', maxWidth: '100%', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 3, gap: 2, background: SOFT, flexWrap: 'wrap' }}>
-      {options.map((option) => {
+    <div
+      role="group"
+      style={{
+        display: 'flex',
+        width: '100%',
+        maxWidth: '100%',
+        gap: 0,
+        border: `1px solid ${k.border}`,
+        borderRadius: 2,
+        background: k.bg,
+        flexWrap: 'nowrap',
+        fontFamily: k.fontFamily,
+      }}
+    >
+      {options.map((option, i) => {
         const selected = option.value === value;
         return (
-          <button key={option.value} type="button" aria-pressed={selected} title={option.hint} onClick={() => onChange(option.value)} style={{
-            border: 'none', minHeight: 32, borderRadius: 6,
-            background: selected ? '#fff' : 'transparent', color: selected ? TEXT : MUTED,
-            padding: '0 13px', fontSize: 11.5, fontWeight: selected ? 700 : 550,
-            boxShadow: selected ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
-            fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            title={option.hint}
+            onClick={() => onChange(option.value)}
+            style={{
+              flex: '1 1 0',
+              border: 'none',
+              borderLeft: i > 0 ? `1px solid ${k.border}` : 'none',
+              minHeight: 28,
+              borderRadius: 0,
+              background: selected ? k.surface : k.bg,
+              color: selected ? k.text : k.dim,
+              padding: '0 10px',
+              fontSize: 11,
+              fontWeight: selected ? 600 : 500,
+              boxShadow: selected ? `inset 0 -2px 0 ${k.orange}` : 'none',
+              fontFamily: k.fontFamily,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              textAlign: 'center' as const,
+            }}
+          >
             {option.label}
           </button>
         );
@@ -113,13 +295,40 @@ export function Switch({ checked, label, onChange, disabled = false }: {
   disabled?: boolean;
 }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange} disabled={disabled} style={{
-      width: 40, height: 22, borderRadius: 11, border: 'none', padding: 0, flexShrink: 0,
-      position: 'relative', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .55 : 1,
-      background: checked ? ORANGE : '#c7c7c7',
-      transition: 'background .16s ease',
-    }}>
-      <span style={{ position: 'absolute', width: 18, height: 18, borderRadius: 9, top: 2, left: checked ? 20 : 2, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .16s ease' }} />
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onChange}
+      disabled={disabled}
+      style={{
+        width: 34,
+        height: 18,
+        borderRadius: 9,
+        border: 'none',
+        padding: 0,
+        flexShrink: 0,
+        position: 'relative',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        background: checked ? k.orange : '#ccc',
+        transition: 'background .15s ease',
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          width: 14,
+          height: 14,
+          borderRadius: 7,
+          top: 2,
+          left: checked ? 18 : 2,
+          background: k.bg,
+          boxShadow: '0 1px 2px rgba(0,0,0,.15)',
+          transition: 'left .15s ease',
+        }}
+      />
     </button>
   );
 }
@@ -139,25 +348,40 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
   }, [indeterminate]);
 
   return (
-    <label title={hint} style={{
-      minHeight: compact ? 32 : 42,
-      display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', alignItems: 'center', gap: 9,
-      border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#e7c5b7' : BORDER}`,
-      background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fff',
-      color: TEXT, borderRadius: 6, padding: compact ? '4px 7px' : '7px 10px',
-      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .72 : 1, boxSizing: 'border-box',
-    }}>
+    <label
+      title={hint}
+      style={{
+        minHeight: compact ? 26 : 30,
+        display: 'grid',
+        gridTemplateColumns: '14px minmax(0, 1fr)',
+        alignItems: 'center',
+        gap: 8,
+        border: 'none',
+        background: 'transparent',
+        color: k.text,
+        borderRadius: 2,
+        padding: compact ? '2px 0' : '4px 0',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.7 : 1,
+        boxSizing: 'border-box',
+        fontFamily: k.fontFamily,
+      }}
+    >
       <input
         ref={inputRef}
         type="checkbox"
         checked={checked}
         disabled={disabled}
         onChange={() => onChange?.()}
-        style={{ width: 15, height: 15, margin: 0, accentColor: ORANGE }}
+        style={{ width: 13, height: 13, margin: 0, accentColor: k.orange }}
       />
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: compact ? 10.5 : 11.5, fontWeight: checked || indeterminate ? 700 : 550, lineHeight: 1.25 }}>{label}</span>
-        {hint && !compact && <span style={{ display: 'block', marginTop: 2, color: DIM, fontSize: 9.5, lineHeight: 1.3 }}>{hint}</span>}
+        <span style={{ display: 'block', fontSize: compact ? 10 : 12, fontWeight: checked || indeterminate ? 600 : 500, lineHeight: 1.25 }}>
+          {label}
+        </span>
+        {hint && !compact && (
+          <span style={{ display: 'block', marginTop: 1, color: k.dim, fontSize: 10, lineHeight: 1.3 }}>{hint}</span>
+        )}
       </span>
     </label>
   );

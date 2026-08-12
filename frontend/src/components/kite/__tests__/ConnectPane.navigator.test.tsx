@@ -31,6 +31,13 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineSignals: () => ({ data: { rows: [] } }),
 }));
 
+// The rail summarises which engines are running, so ConnectPane itself reads the
+// Navigator config. Unmocked, that hook has no QueryClient and every test here fails
+// before it renders anything.
+vi.mock('../../../hooks/useNavigator', () => ({
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: false } } } }),
+}));
+
 vi.mock('../TradingModePanel', () => ({ TradingModePanel: () => <div>Trading mode controls</div> }));
 vi.mock('../TradeRulesPanels', () => ({
   ManualRulesPanel: () => <div>Manual rules panel</div>,

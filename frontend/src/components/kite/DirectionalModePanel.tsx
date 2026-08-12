@@ -189,6 +189,8 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
   const [lotSize, setLotSize]       = useState(liveLotSize && liveLotSize > 0 ? liveLotSize : 75);
   const [customDelta, setCustomDelta] = useState('');  // delta override input
   const [userEdited, setUserEdited] = useState(false); // once true, stop auto-syncing from live
+  const [showImpact, setShowImpact] = useState(false);
+  const [showProfileHelp, setShowProfileHelp] = useState(false);
 
   // Pre-fill from the live signal when it arrives — but never clobber a value the
   // user has typed themselves.
@@ -230,109 +232,136 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
     <div style={S.card}>
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
-      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        HOW SHOULD AUTO-EXECUTE TRADE THE SIGNAL?
+      <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#444', fontSize: 12, fontWeight: 700 }}>What the algo buys</span>
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
-
-      {/* What this panel controls — and what it does NOT. */}
       <div style={{
-        fontSize: 11, lineHeight: 1.55, color: '#555', marginBottom: 10,
-        padding: '8px 11px', borderRadius: 5,
-        background: cfg.auto_execute ? '#e8f5e9' : '#fff8e1',
-        border: `1px solid ${cfg.auto_execute ? '#a5d6a7' : '#ffe082'}`,
+        display: 'flex', width: '100%', gap: 0, marginBottom: 10,
+        border: '1px solid #e0e0e0', borderRadius: 2, background: '#fff', overflow: 'hidden',
       }}>
-        {cfg.auto_execute ? (
-          <><strong style={{ color: '#2e7d32' }}>AUTO is ON.</strong> The engine will buy the instrument
-            below for each fresh signal. This is purely an <strong>execution</strong> choice — it does
-            <em> not</em> change which signals or strikes you see (set those in the signal table).</>
-        ) : (
-          <><strong style={{ color: '#e65100' }}>You're in MANUAL mode.</strong> These settings only kick in
-            once you switch <strong>SIGNALS → AUTO</strong> above. In MANUAL you pick the strike yourself
-            from each signal (use the Trade Impact Calculator), so the choice below is just pre-configuration.</>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: 2, padding: 3, marginBottom: 14, flexWrap: 'wrap' as const, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
-        {PROFILES.map(p => {
+        {PROFILES.map((p, i) => {
           const active = p.id === activeId;
           return (
             <button
               key={p.id}
+              type="button"
               disabled={busy}
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
-                minHeight: 44, flex: '1 1 88px', padding: '5px 7px', borderRadius: 6,
-                border: 'none',
-                background: active ? '#fff' : 'transparent',
-                boxShadow: active ? 'inset 0 -2px #f06428, 0 1px 2px rgba(0,0,0,.08)' : 'none',
+                flex: 1, minWidth: 0, minHeight: 40, padding: '6px 4px', border: 'none',
+                borderLeft: i > 0 ? '1px solid #e0e0e0' : 'none',
+                background: active ? '#f9f9f9' : '#fff',
+                boxShadow: active ? 'inset 0 -2px 0 #ff5722' : 'none',
                 cursor: busy ? 'default' : 'pointer',
-                textAlign: 'center' as const, transition: 'all 0.15s',
+                textAlign: 'center' as const, fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: active ? 700 : 600, color: active ? '#444' : '#666' }}>{p.label}</div>
-              <div style={{ fontSize: 9, color: '#999', marginTop: 2 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? '#444' : '#9b9b9b' }}>{p.label}</div>
+              <div style={{ fontSize: 9.5, color: '#9b9b9b', marginTop: 1 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
       </div>
 
-      {/* Active profile description card */}
-      <div style={{
-        padding: '11px 12px', borderRadius: 7, marginBottom: 12,
-        background: '#fff8f4', border: '1px solid #ecd1c4', borderLeft: '3px solid #f06428',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>{activeProfile.sublabel}</span>
-          {activeProfile.isExperimental && (
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>
-              EXPERIMENTAL
-            </span>
+      {/* Profile help — hidden until asked */}
+      <div style={{ marginBottom: showProfileHelp ? 10 : 8 }}>
+        <button
+          type="button"
+          onClick={() => setShowProfileHelp((v) => !v)}
+          aria-expanded={showProfileHelp}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showProfileHelp ? '#f06428' : '#888',
+            fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit', padding: '4px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showProfileHelp ? '#f06428' : '#c8c8c8'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, fontWeight: 700, lineHeight: 1,
+              color: showProfileHelp ? '#f06428' : '#888',
+            }}
+          >
+            ?
+          </span>
+          {showProfileHelp ? 'Hide profile help' : `About ${activeProfile.sublabel}`}
+        </button>
+      </div>
+      {showProfileHelp && (
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+            background: '#fff',
+            border: '1px solid #e8e8e8',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#333' }}>{activeProfile.sublabel}</span>
+            {activeProfile.isExperimental && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>EXPERIMENTAL</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.5, marginBottom: 6 }}>{activeProfile.desc}</div>
+          <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45, marginBottom: isFutures ? 0 : 4 }}>
+            {activeProfile.risk}
+          </div>
+          {!isFutures && (
+            <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45 }}>
+              δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing ITM at expiry.
+              {probItm < 40 && ' Most OTM buys expire worthless.'}
+              {probItm >= 40 && probItm < 60 && ' Roughly coin-flip at expiry — you only need a quick move.'}
+              {probItm >= 60 && ' Higher odds, higher premium.'}
+            </div>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
-        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4, marginBottom: isFutures ? 0 : 5 }}>⚡ {activeProfile.risk}</div>
-        {!isFutures && (
-          <div style={{ fontSize: 10, color: '#a65525', lineHeight: 1.4, fontWeight: 600 }}>
-            🎯 δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing in-the-money at expiry.
-            {probItm < 40 && ' Most OTM buys expire worthless — you win big occasionally, lose small often.'}
-            {probItm >= 40 && probItm < 60 && ' Roughly coin-flip odds at expiry, but you only need a quick move, not expiry.'}
-            {probItm >= 60 && ' Favourable odds — you are paying up for a higher-probability position.'}
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Custom delta override */}
+      {/* Target delta — exact δ the algo aims for when picking a strike */}
       {!isFutures && (
-        <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
-          <span style={{ ...S.hint, flexShrink: 0 }}>Custom delta override:</span>
-          <input
-            type="number"
-            style={{
-              ...S.numInput, width: 72,
-              ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
-            }}
-            value={customDelta}
-            placeholder={activeProfile.delta.toFixed(2)}
-            step={0.05} min={0.10} max={0.99}
-            onChange={e => {
-              setCustomDelta(e.target.value);
-              const d = parseFloat(e.target.value);
-              if (d >= 0.10 && d <= 0.99) {
-                const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
-                onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
-              }
-            }}
-            disabled={busy}
-          />
-          {customDelta && (
-            <button
-              style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
-              onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
-            >✕ clear</button>
-          )}
-          <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
-          {!customDelta && <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
+            <span style={{ ...S.hint, flexShrink: 0 }}>Target delta:</span>
+            <input
+              type="number"
+              style={{
+                ...S.numInput, width: 72,
+                ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
+              }}
+              value={customDelta}
+              placeholder={activeProfile.delta.toFixed(2)}
+              step={0.05} min={0.10} max={0.99}
+              onChange={e => {
+                setCustomDelta(e.target.value);
+                const d = parseFloat(e.target.value);
+                if (d >= 0.10 && d <= 0.99) {
+                  const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
+                  onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
+                }
+              }}
+              disabled={busy}
+              aria-label="Target delta"
+            />
+            {customDelta && (
+              <button
+                type="button"
+                style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
+              >✕ clear</button>
+            )}
+            <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
+          </div>
+          <div style={{ ...S.hint, lineHeight: 1.45 }}>
+            {customDelta && parseFloat(customDelta) >= 0.10 && parseFloat(customDelta) <= 0.99
+              ? <>Algo buys the strike <strong>closest to δ {parseFloat(customDelta).toFixed(2)}</strong> — not “above this value”. The OTM / ATM / ITM buttons follow this number.</>
+              : <>Leave blank to use the profile default (now δ {activeProfile.delta.toFixed(2)}). Algo picks the nearest live delta to that target.</>}
+          </div>
         </div>
       )}
 
@@ -384,13 +413,48 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         </>
       )}
 
-      {/* ── 3. Trade impact calculator ─────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={S.section}>TRADE IMPACT CALCULATOR</div>
-      <div style={{ ...S.hint, marginBottom: 10 }}>
+      {/* ── 3. Impact estimate — hidden until the user asks ───────────────── */}
+      <div style={{ marginTop: 4, marginBottom: showImpact ? 0 : 4 }}>
+        <button
+          type="button"
+          onClick={() => setShowImpact((v) => !v)}
+          aria-expanded={showImpact}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showImpact ? '#f06428' : '#777',
+            fontSize: 11.5, fontWeight: 650, fontFamily: 'inherit',
+            padding: '8px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showImpact ? '#f06428' : '#c9c9c9'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700, color: showImpact ? '#f06428' : '#888',
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </span>
+          {showImpact ? 'Hide impact estimate' : 'Estimate impact for this profile'}
+        </button>
+      </div>
+
+      {showImpact && (
+      <div style={{
+        marginBottom: 4, padding: '12px 14px 14px',
+        borderRadius: 8, border: '1px solid #e8e8e8', background: '#fafafa',
+      }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#333', marginBottom: 4 }}>
+        Impact estimate
+      </div>
+      <div style={{ ...S.hint, marginBottom: 12, lineHeight: 1.5 }}>
         {(livePremium || liveLotSize) && !userEdited
-          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to explore other scenarios.</>
-          : <>Adjust the inputs below to see how this profile behaves on your trade.</>}
+          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to try other scenarios. Rough guide only — not a live quote.</>
+          : <>Adjust the inputs to see how this profile behaves. Rough guide only — not a live quote.</>}
       </div>
 
       {/* Simulator inputs */}
@@ -566,13 +630,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <strong>gain</strong> = δ × move captured per share · <strong>cost</strong> = est. premium per share ·
         <strong> ×eff</strong> = ₹ gain per ₹100 of premium (higher = more leverage, but more decay/IV risk).
       </div>
+      </div>
+      )}
 
-      {/* Sections 4 and 5 (entry-quality filters and the risk-infrastructure
-          toggle) were removed on 2026-08-08. They are not vehicle settings, and
-          rendering them here put a SECOND editable control for adx_min,
-          atr_pct_min and wire_risk_infra on the same page as the Automatic
-          Rules copies — with different input bounds, both writing the same
-          field. Those now have exactly one home, in Automatic Rules. */}
+      {/* Entry filters and portfolio risk live only under Algo Trade — not here. */}
 
     </div>
   );

@@ -236,6 +236,10 @@ export interface EngineConfigModel {
   risk_sizing: boolean;
   risk_pct: number;
   max_lots: number;
+  /** Take the smallest lot even when it breaks risk_pct. Off = skip the entry. */
+  allow_min_lot_over_risk?: boolean;
+  /** 1H bars a contract's own last bar may lag the underlying's and still auto-execute. */
+  max_contract_staleness_bars?: number;
   // ── Exit / auto-exec guards (all default off / conservative) ───────────────
   // Square off an option this many calendar days before expiry (0 = off; options only).
   expiry_square_off_days?: number;

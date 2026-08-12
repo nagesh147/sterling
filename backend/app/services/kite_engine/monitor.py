@@ -48,9 +48,19 @@ _exiting: set = set()
 def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None:
     """Book a closed position's realized PnL (INR) into the per-day accumulator that
     backs the INR daily-loss breaker. Long: (exit − entry)·qty; short future: negated.
-    Uses the confirmed fill price when known, else the intended entry premium."""
+    Uses the confirmed fill price when known, else the intended entry premium.
+
+    Exactly once per position, whichever exit path gets here first. Both callers —
+    this module's ``_exit_position`` and the ``on_order_update`` reconciliation — used
+    to guard on ``status`` alone, which does not cover a fill postback arriving while
+    ``_exit_position`` is still inside its placement await: the position is still OPEN
+    there, so both booked it and the day's total came out doubled. The claim is taken
+    here rather than at the call sites so no future exit path has to remember to.
+    """
     entry = float(p.fill_price or p.entry_premium or 0.0)
     if entry <= 0 or not exit_price or p.qty <= 0:
+        return
+    if not pos.claim_realized(uid, p.symbol):
         return
     sign = 1.0 if p.direction == "long" else -1.0
     state.record_realized_pnl(uid, (float(exit_price) - entry) * p.qty * sign)

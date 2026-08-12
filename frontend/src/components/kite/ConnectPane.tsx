@@ -7,8 +7,8 @@ import {
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useNavigatorConfig } from '../../hooks/useNavigator';
 import type { KiteAccount } from '../../types/kite';
-import { ModeToggle } from './ModeToggle';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
@@ -18,7 +18,8 @@ import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
-import { type SectionId, resolveSectionId } from './config/registry';
+import { type SectionId, resolveSectionId, openSettingsSection } from './config/registry';
+import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -35,11 +36,6 @@ const S: Record<string, React.CSSProperties> = {
   err: { color: '#e53935', fontSize: 11, marginTop: 6 },
   ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
 };
-
-const badge = (col: string): React.CSSProperties => ({
-  background: '#f9f9f9', color: col, border: `1px solid ${col}`,
-  padding: '2px 8px', borderRadius: 2, fontSize: 9, fontWeight: 700,
-});
 
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
 function kiteErrorHelp(msg: string): string | null {
@@ -229,68 +225,49 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
   const connected = acc.connected
     && !(status?.account_id === acc.id && status?.connected === false);
-  const isLive = !acc.is_paper;
-
-  // Dot colour: green = live+connected, amber = paper+connected, grey = disconnected
-  const dotColor = connected ? (isLive ? '#4caf50' : '#ff9800') : '#bbb';
-  const modeLabel = connected ? (isLive ? 'LIVE' : 'PAPER') : 'offline';
 
   // Real Zerodha account holder name comes from /status (only for the connected
   // account). Prefer it over the user-chosen label, then fall back to the label.
   const statusName = status?.account_id === acc.id ? status?.user_name : null;
   const kiteId = statusName ? status?.kite_user_id ?? acc.kite_user_id : acc.kite_user_id;
   const displayName = statusName || acc.label;
-  const subText = [kiteId ? `ID ${kiteId}` : null, displayName !== acc.label ? acc.label : null]
-    .filter(Boolean).join(' · ') || acc.api_key_hint || '';
+  // One quiet meta line — no PAPER/LIVE badge (that lives under Trading Mode / expand).
+  const subParts = [
+    kiteId ? `ID ${kiteId}` : (acc.api_key_hint || null),
+    displayName !== acc.label ? acc.label : null,
+    acc.is_active ? 'Active' : null,
+    connected ? 'Connected' : (acc.has_credentials ? 'Not connected' : 'No keys'),
+  ].filter(Boolean);
+  const subText = subParts.join(' · ');
 
-  const avatarColor = isLive && connected ? '#2e7d32' : connected ? '#1565c0' : '#9e9e9e';
-
-  const flipPaperLive = () => {
-    if (isLive) { update.mutate({ id: acc.id, is_paper: true }); return; }
-    if (!acc.has_credentials) return;
-    if (window.confirm(`Switch "${acc.label}" to LIVE? Orders will execute on your real Zerodha account.`)) {
-      update.mutate({ id: acc.id, is_paper: false });
-    }
-  };
 
   return (
-    <div style={{ border: `1px solid ${expanded ? '#d0d0d0' : '#e8e8e8'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden', background: '#fff', transition: 'box-shadow .15s', boxShadow: expanded ? '0 2px 8px rgba(0,0,0,.06)' : 'none' }}>
-      {/* ── Collapsed row ── */}
+    <div style={{
+      border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
+      background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+    }}>
+      {/* ── Collapsed row: name + quiet meta, no status badges ── */}
       <div
         onClick={() => setExpanded((v) => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
-        {/* Avatar */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: '50%', background: avatarColor,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: 0.5,
-          }}>
-            {initials(displayName)}
-          </div>
-          {/* Status LED */}
-          <span style={{
-            position: 'absolute', bottom: 0, right: 0, width: 10, height: 10,
-            borderRadius: '50%', background: dotColor, border: '2px solid #fff',
-            boxShadow: connected ? `0 0 4px ${dotColor}` : undefined,
-          }} />
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%', background: '#e8e8e8', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#666', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
+        }}>
+          {initials(displayName)}
         </div>
-
-        {/* Name + sub-info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, color: '#333', fontSize: 14 }}>{displayName}</span>
-            {acc.is_active && <span style={badge('#f06428')}>ACTIVE</span>}
-          </div>
-          {subText && <div style={{ color: '#999', fontSize: 11, marginTop: 1 }}>{subText}</div>}
+          <div style={{ fontWeight: 700, color: '#444', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
+          {subText ? (
+            <div style={{ color: '#9b9b9b', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
+          ) : null}
         </div>
-
-        {/* Mode badge + chevron */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <span style={{ ...badge(dotColor), fontSize: 9 }}>{modeLabel.toUpperCase()}</span>
-          <span style={{ color: '#ccc', fontSize: 12, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .15s', display: 'inline-block' }}>▼</span>
-        </div>
+        <span aria-hidden style={{
+          color: '#bbb', fontSize: 11, flexShrink: 0,
+          transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s',
+        }}>▼</span>
       </div>
 
       {/* ── Expanded body ── */}
@@ -355,21 +332,22 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
             </div>
           )}
 
-          {/* PAPER / LIVE toggle + key management */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ModeToggle
-              size="sm" left="PAPER" right="LIVE"
-              value={acc.is_paper ? 'left' : 'right'}
-              onSelect={(side) => { if (side === 'left') update.mutate({ id: acc.id, is_paper: true }); else flipPaperLive(); }}
-              leftColor="#387ed1" rightColor="#4caf50"
-              rightDotWhenActive busy={update.isPending}
-              rightDisabled={!acc.has_credentials}
-              rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
-            />
-            {!acc.is_active && <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set active</button>}
-            <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>{test.isPending ? '…' : 'Test connection'}</button>
-            <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>{editKeys ? 'Cancel' : 'Edit keys'}</button>
-            <button style={{ ...S.btnRed, marginLeft: 'auto' }} onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}>Remove</button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {!acc.is_active && (
+              <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set as active</button>
+            )}
+            <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>
+              {test.isPending ? '…' : 'Test'}
+            </button>
+            <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>
+              {editKeys ? 'Cancel' : 'Keys'}
+            </button>
+            <button
+              style={{ ...S.btnRed, marginLeft: 'auto' }}
+              onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}
+            >
+              Remove
+            </button>
           </div>
 
           {test.data && (
@@ -553,16 +531,37 @@ type ConnectSection = SectionId;
 
 type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: string };
 
-const SECTION_DEFS: SectionDef[] = [
-  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection' },
-  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/automatic', group: 'Trading' },
-  { id: 'manualRules', label: 'Manual Rules', eyebrow: 'Orders you place', group: 'Trading' },
-  { id: 'autoRules', label: 'Automatic Rules', eyebrow: 'Orders the engine places', group: 'Trading' },
-  { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines' },
-  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines' },
-  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data', group: 'Platform' },
-  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform' },
-  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform' },
+const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
+  account: <Icons.Settings />,
+  mode: <Icons.Sliders />,
+  manualRules: <Icons.Filter />,
+  autoRules: <Icons.Pulse />,
+  engine: <Icons.Chart />,
+  navigator: <Icons.Pulse />,
+  markets: <Icons.Basket />,
+  notifications: <Icons.Bell />,
+  experience: <Icons.Settings />,
+};
+
+const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
+  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection',
+    pageDescription: 'API credentials and the daily Zerodha session.' },
+  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
+    pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
+  { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
+    pageDescription: 'What happens after you place an order.' },
+  { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading',
+    pageDescription: 'What happens when the algo places an order.' },
+  { id: 'engine', label: 'SuperTrend', eyebrow: 'Scan, entry & exit', group: 'Signal engines',
+    pageDescription: 'Scan, entry and exit for the SuperTrend engine.' },
+  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines',
+    pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
+  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
+    pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
+  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
+    pageDescription: 'Kite signal destinations and Telegram alerts.' },
+  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform',
+    pageDescription: 'Loading, dialogs and transition feel.' },
 ];
 
 function readInitialSection(): ConnectSection {
@@ -595,10 +594,26 @@ function SectionHeading({ title, description }: { title: string; description: st
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const { data: engineCfg } = useEngineConfig();
+  const { data: kiteStatus } = useKiteStatus();
+  const { data: navCfg } = useNavigatorConfig();
   const active = data?.accounts.find((account) => account.is_active);
-  const connected = !!active?.connected;
+  const apiConnected = kiteStatus?.account_id && active && kiteStatus.account_id === active.id
+    ? !!kiteStatus.connected
+    : !!active?.connected;
+  const connected = apiConnected;
   const liveTools = connected && !active?.is_paper;
+  const isPaper = (kiteStatus?.account_id && active && kiteStatus.account_id === active.id)
+    ? !!kiteStatus.is_paper
+    : !!active?.is_paper;
+  const stOn = !!engineCfg?.engine_enabled;
+  const navOn = !!navCfg?.record?.config?.enabled;
+  const enginesRunning = [
+    stOn ? 'SuperTrend' : null,
+    navOn ? 'Navigator' : null,
+  ].filter(Boolean) as string[];
+  const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
+  const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
 
   const select = (next: ConnectSection) => {
     setSection(next);
@@ -615,30 +630,43 @@ export function ConnectPane() {
   }, []);
 
   return (
-    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '28px 30px 48px', background: '#f7f7f8', minHeight: '100%' }}>
-      <header style={{ maxWidth: 1120, margin: '0 auto 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#777', fontSize: 10, fontWeight: 750, letterSpacing: .9, textTransform: 'uppercase' }}>
-            <span aria-hidden style={{ width: 16, height: 2, borderRadius: 1, background: '#f06428' }} />Kite control center
-          </div>
-          <h1 style={{ margin: '6px 0 0', color: '#2f2f2f', fontSize: 24, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & Settings</h1>
-          <p style={{ margin: '8px 0 0', color: '#777', fontSize: 12.5, lineHeight: 1.55, maxWidth: 600 }}>
-            One place for the Zerodha connection, engine behaviour, markets, alerts and app experience.
-          </p>
+    <div className="kite-settings-hub" style={{
+      width: '100%', height: '100%', minHeight: '100%', boxSizing: 'border-box',
+      padding: 0, background: '#ffffff', display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <header style={{
+        flexShrink: 0, width: '100%', boxSizing: 'border-box',
+        padding: '14px 16px 12px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
+      }}>
+        <div style={{
+          color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+          textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
+        }}>
+          Settings
         </div>
-        <div className="kite-settings-status" aria-label="Kite status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end', padding: '7px 10px', borderTop: '1px solid #dedede', borderBottom: '1px solid #dedede' }}>
-          <StatusPill tone={connected ? 'good' : active ? 'warn' : 'quiet'}>
-            {connected ? `${active?.label ?? 'Kite'} connected` : active ? 'Login required' : 'No account'}
-          </StatusPill>
-          <StatusPill tone={engineCfg?.engine_enabled ? 'good' : 'quiet'}>
-            Engine {engineCfg?.engine_enabled ? 'on' : 'off'}
-          </StatusPill>
-          {active && <StatusPill tone={active.is_paper ? 'quiet' : 'warn'}>{active.is_paper ? 'Paper' : 'Live'}</StatusPill>}
-        </div>
+        <h1 style={{
+          margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
+          letterSpacing: '-0.01em', fontFamily: 'inherit',
+        }}>
+          {page.label}
+        </h1>
+        <p style={{
+          margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
+          fontFamily: 'inherit', maxWidth: 560,
+        }}>
+          {page.pageDescription}
+        </p>
       </header>
 
-      <div className="kite-settings-layout" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '218px minmax(0, 1fr)', gap: 26, alignItems: 'start' }}>
-        <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 6, position: 'sticky', top: 14, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <div className="kite-settings-layout" style={{
+        flex: 1, minHeight: 0, width: '100%',
+        display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
+      }}>
+        <nav aria-label="Kite settings sections" style={{
+          background: '#ffffff', borderRight: '1px solid #e0e0e0', padding: '10px 8px 16px',
+          overflowY: 'auto', minHeight: 0,
+        }}>
           {SECTION_DEFS.map((item, index) => {
             const selected = item.id === section;
             const startsGroup = index === 0 || SECTION_DEFS[index - 1].group !== item.group;
@@ -653,14 +681,22 @@ export function ConnectPane() {
                   </div>
                 )}
                 <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                  width: '100%', minHeight: 52, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                  borderRadius: 6, background: selected ? '#fff5f0' : 'transparent',
-                  display: 'flex', alignItems: 'center',
-                  padding: '8px 11px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
+                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
+                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
                 }}>
+                  <span aria-hidden style={{
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: selected ? '#ffe8dc' : '#f4f4f5',
+                    color: selected ? '#f06428' : '#8a8a8a',
+                  }}>
+                    {SECTION_ICONS[item.id]}
+                  </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', color: '#444', fontSize: 12, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
-                    <span style={{ display: 'block', color: '#929292', fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{item.eyebrow}</span>
+                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
                   </span>
                 </button>
               </React.Fragment>
@@ -668,10 +704,12 @@ export function ConnectPane() {
           })}
         </nav>
 
-        <main style={{ minWidth: 0 }}>
+        <main style={{
+          minWidth: 0, minHeight: 0, overflowY: 'auto',
+          padding: '18px 24px 32px', background: '#fff',
+        }}>
           {section === 'account' && (
             <>
-              <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Whether those orders are simulated or real is set under Trading Mode." />
               {isLoading && <div style={S.hint}>Loading accounts…</div>}
               {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
               {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
@@ -684,35 +722,31 @@ export function ConnectPane() {
 
           {section === 'mode' && (
             <>
-              <SectionHeading title="Trading Mode" description="Whether orders are simulated or real, whether you or the engine places them, and which signal engines are running. Everything on this page changes what happens to real money." />
               <TradingModePanel />
+              <KiteExchangeSettingsCard />
             </>
           )}
 
           {section === 'manualRules' && (
             <>
-              <SectionHeading title="Manual Rules" description="What happens to a trade you place yourself. Nothing here can block your order — it decides whether the trade gets a stop and what closes it." />
               <ManualRulesPanel />
             </>
           )}
 
           {section === 'autoRules' && (
             <>
-              <SectionHeading title="Automatic Rules" description="What the engine is allowed to open on your behalf, how big, and what closes it. Inert until automatic execution is armed in Trading Mode." />
               <AutomaticRulesPanel />
             </>
           )}
 
           {section === 'engine' && (
             <>
-              <SectionHeading title="SuperTrend" description="This engine end to end: whether it runs, what it scans, and how it enters and exits. Navigator is configured separately and can run on its own." />
               <SuperTrendEnginePanel />
             </>
           )}
 
           {section === 'navigator' && (
             <>
-              <SectionHeading title="Value-Flow Navigator" description="A peer signal engine alongside SuperTrend, with its own scan settings and its own entry, stop and target. It reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity, and can confirm SuperTrend's setups, find its own, or both. Off by default; it never bypasses any order or risk control." />
               <NavigatorSettingsPanel />
               <NavigatorCalibrationPanel />
             </>
@@ -720,8 +754,6 @@ export function ConnectPane() {
 
           {section === 'markets' && (
             <>
-              <SectionHeading title="Markets & Tools" description="Choose the exchanges Sterling can use, then inspect funds, charges and live ticker subscriptions." />
-              <KiteExchangeSettingsCard />
               {liveTools ? (
                 <><Funds /><MarginCalc /><TickerControl /></>
               ) : (
@@ -735,14 +767,12 @@ export function ConnectPane() {
 
           {section === 'notifications' && (
             <>
-              <SectionHeading title="Notifications" description="Manage only Kite signal destinations here. Crypto/global alerts remain separate." />
               <KiteTelegramPanel />
             </>
           )}
 
           {section === 'experience' && (
             <>
-              <SectionHeading title="Experience" description="Choose how loading, dialogs and transitions feel throughout Kite." />
               <MotionStyleSettings />
               <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
                 <BrandIconPicker />

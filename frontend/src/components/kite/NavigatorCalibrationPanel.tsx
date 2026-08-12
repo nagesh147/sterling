@@ -74,23 +74,36 @@ export function NavigatorCalibrationPanel() {
   const canPromote = !!criteria?.eligible && !!reportId && revision != null && !ready;
 
   return (
-    <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-      <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 800 }}>Calibration &amp; Gate readiness</div>
-            <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>
-              Scores every call Navigator has made against what the market actually did next. Gate mode
-              stays locked until this passes — and even then, promoting is your decision, never automatic.
-            </div>
+    <details
+      style={{
+        background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9,
+        overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      }}
+    >
+      <summary style={{
+        listStyle: 'none', cursor: 'pointer', padding: '12px 16px',
+        display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none',
+        background: '#fff',
+      }}>
+        <span aria-hidden style={{ width: 14, color: DIM, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>›</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>Calibration &amp; Gate readiness</div>
+          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 1, maxWidth: 440 }}>
+            Gate stays locked until calibration passes. Expand to score and promote.
           </div>
-          <span style={{
-            flexShrink: 0, fontSize: 9.5, fontWeight: 700, borderRadius: 4, padding: '3px 9px',
-            color: ready ? GREEN : DIM, background: ready ? '#e8f5e9' : '#f2f2f3',
-            border: `1px solid ${ready ? `${GREEN}55` : BORDER}`,
+        </div>
+        <span className="sk-config-summary" style={{
+            flexShrink: 0, width: 168, color: DIM, fontSize: 10.5, fontWeight: 500,
+            textAlign: 'right', lineHeight: 1.3,
           }}>
-            {ready ? 'Ready — gate unlocked' : 'Not yet calibrated'}
-          </span>
+          {ready ? 'Ready — gate unlocked' : 'Not yet calibrated'}
+        </span>
+      </summary>
+
+      <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '12px 0 0', maxWidth: 440 }}>
+          Scores every call Navigator has made against what the market actually did next. Gate mode
+          stays locked until this passes — and even then, promoting is your decision, never automatic.
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -184,7 +197,7 @@ export function NavigatorCalibrationPanel() {
           </>
         )}
       </div>
-    </section>
+    </details>
   );
 }
 

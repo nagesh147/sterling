@@ -1,0 +1,370 @@
+{
+	"info": {
+		"_postman_id": "abc6c958-0656-4a8c-a85f-674bc41c6703",
+		"name": "TD Mutual Funds",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595"
+	},
+	"item": [
+		{
+			"name": "MF Categories",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getallCategories",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getallCategories"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF AMC List",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "XMfK8KmZYIBJ9uV0TLsRfa7lZi5TBMK04WFSe68zK_tbcL2W_mJsPbkhZkao55PHekKT5UE9ayraph0FoX-ALSUcWxZ36FePVwjY_FN1zB3OvY3GX5Aw0nlhHNEgorDhj5WfqN28svrL7qwGm_pPyreXyVIrbb6yu7tzP19oNhrw-tNW5r6AGJw6BWGd1Nldrs8I4vL9hFR7GpoYrMgJheV-zpWst0q4NiCME-tcM6M90XP5rWSwJl3Go9ojZLDx6V8fgJYL5bYvLftAuq4DWw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://mf.truedata.in/getAMClist?response=csv",
+					"protocol": "https",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAMClist"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Scheme List",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getallSchemes?response=csv",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getallSchemes"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Scheme NAV History",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getNAVHistory?schemeid=933&from=100101&to=240808&response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getNAVHistory"
+					],
+					"query": [
+						{
+							"key": "schemeid",
+							"value": "933"
+						},
+						{
+							"key": "from",
+							"value": "100101"
+						},
+						{
+							"key": "to",
+							"value": "240808"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Scheme Yearly Return",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getYearlyReturnByScheme?schemeid=933&response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getYearlyReturnByScheme"
+					],
+					"query": [
+						{
+							"key": "schemeid",
+							"value": "933"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Daily All Scheme NAV",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getYearlyReturnByScheme?schemeid=933&response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getYearlyReturnByScheme"
+					],
+					"query": [
+						{
+							"key": "schemeid",
+							"value": "933"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Scheme Snapshot**",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getSchemeSnapshot?schemeid=933&response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSchemeSnapshot"
+					],
+					"query": [
+						{
+							"key": "schemeid",
+							"value": "933"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Scheme XIRR**",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/getschemexirr?schemeid=933&from=210101&to=240801response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getschemexirr"
+					],
+					"query": [
+						{
+							"key": "schemeid",
+							"value": "933"
+						},
+						{
+							"key": "from",
+							"value": "210101"
+						},
+						{
+							"key": "to",
+							"value": "240801response=csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "MF Top Scheme By Year**",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "e44SuliRMNsXdY9UQrBxRHhPGaWxCa-K_rPWJdUuTK42nTtxbAuRT-vEvg0t5I2ujyWkuvGeMXxS8xXSym8HrJrjlGf9_0ZMJuhkvLUP58fXHj8jbeQP87iqMFLP3hI3eOxMQsSy3y9OL1wb0zjz6Gb3zdjHH9TTz5F_IGBkJ-f_uJI4Pzwo_m9qWnzMnlJq6QOyYV1hKpfvgH0K27-adqLjRvNbly0k8AkAlZXQpI37AdGCG5JPZ740Hz0CvfcTbATk6VBO8u5TivuF6z2Rug",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "mf.truedata.in/gettopschemebyyear?year=2024&response=csv&comp=false",
+					"host": [
+						"mf",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"gettopschemebyyear"
+					],
+					"query": [
+						{
+							"key": "year",
+							"value": "2024"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

@@ -1,0 +1,1133 @@
+{
+	"info": {
+		"_postman_id": "9449c007-6198-4e0f-bf8d-06dbbe68b8d7",
+		"name": "TD Rest API 1.0 Copy",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595"
+	},
+	"item": [
+		{
+			"name": "getTickData",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "FCWxDfsyfqqogd_aAaNemcmyLz52ikKEi91PCwMpDaC5f0WavdYhfXYmvQvhItqaF3Xu4vixvH18dBIFtKViDpPg5sf8QLmQ4kZ5p9mPqrObci4h2dOKCHDQuAzD6yG_qyphUkSwz-Ui6p9sOVEXZjBPdr101lrBTh0mmMu5ZJoHH-KispyurZ484iRi72xdSkUxjl8dPPnAyIM7ALjrYoE21NaiZ67vZKcW_Mr8MHdLfO7hzx7K_n2e73V17sR1JmyBe_5OoRBmG8hFrZkuLA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getticks?symbol=RELIANCE&bidask=1&from=221014T09:00:00&to=221014T18:30:00&response=csv&comp=false",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getticks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "bidask",
+							"value": "1"
+						},
+						{
+							"key": "from",
+							"value": "221014T09:00:00"
+						},
+						{
+							"key": "to",
+							"value": "221014T18:30:00"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "interval",
+							"value": "30min",
+							"disabled": true
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBarData",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept-encoding": true
+				}
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "HPQg4cNwvilgnOzGnWttiSB4D9RxHqNMyEtrIBCNy1FDaIQxJDb7zPh48aEwNOw8lzsoxqiKp5YhnAQSvlM5it4B7nJEb4VJh9x9vrvNPTV1zeazmbWwbR49B6UuMTphlVrSUiSdZNPO3lFVYQIrCdzA_aVANFGXbVE3w0H4T2AIbtJ6PrwrnoYXDbZ-V7nlFRPFiZt-nZicavj8-NMq2zZOGIBhbv8FVdulisJdMcELOx0_l33Fgri8_Hq-WZ7c7VfuuuCozENWVzanBvc9rQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getbars?symbol=NIFTY 50&from=210129T09:00:00&to=230829T18:30:00&response=csv&interval=eod",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getbars"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "NIFTY 50"
+						},
+						{
+							"key": "from",
+							"value": "210129T09:00:00"
+						},
+						{
+							"key": "to",
+							"value": "230829T18:30:00"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "interval",
+							"value": "eod"
+						},
+						{
+							"key": "delivery",
+							"value": "true",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAllBars",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept-encoding": true
+				}
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "uwDROF6o6BL_ym_v6dxOKBP5gwDokuMR5UTMILntO3o5bdb8BnMWtjukd_cXAKAODXBJPFuWDmvwACx6f1F2UhT7A9c0eCmdXoQiKfBtfA8PO2BOsiBOXs-AuSVomFgX0NNFeP7DuTiy_G64VxvlVdDg_biXHaZjBXRMBJ-9EaQ50m5TK-fnz3fDxS_4ovOOpAkypzoHwb6nR_B-bL-3fTeuHF9S2gRlyLIO-A3T53gpHqXyHo2I-Wiof5KIgDP7K4ZKGus7Rdeue3T9TUq1pA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getAllBars?segment=fo&timestamp=240212T09:15&delivery=true&response=csv&lotsize=true",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllBars"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "fo"
+						},
+						{
+							"key": "timestamp",
+							"value": "240212T09:15"
+						},
+						{
+							"key": "delivery",
+							"value": "true"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "lotsize",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAllTicksForSecond",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept-encoding": true
+				}
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "26MnUmBmu7Xn-w2lum9QTDTblhRH8UzL6jlq_Q7I26okjGrSNA9aZOI12WjjL4ZphuPuEF5McFh7WD5ZtEvhIxQHq4C14r2QBw5qs1mccviKxGPV8G-bsSTtzbzdWagzwFMOGBYRmEkzIOK2l-QqcZcoZBESgtCt5HvRrDgkfl0VLRjJl3E_0vfxu1LNoWqbUb5xStkVFy4IHhufqTRnMUkke8XBohoz7q9x8vFM2K1NqvRo1Y3dj9dxNTggN2qbpXv03ls-OtnY42_ozk5wmw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getAllTicks?segment=eq&timestamp=240328T11:10:05&response=csv&interval=1sec",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllTicks"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "eq"
+						},
+						{
+							"key": "timestamp",
+							"value": "240328T11:10:05"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "interval",
+							"value": "1sec"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBarsForDay",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept-encoding": true
+				}
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "KuhbLD6EczBQrG2gb8qVRkchUosSNUTs0WGvFkL9qTxWMDOgPz9pkkSIzcOdY0lhp4k-FVkX1FW_8WHDsxki-5sdGqTEmH4S0YGKr7KbkWOQYQJVlPJbtl_ywHAIi7eJJKE14chXu3JFsTszzCo--ZTSQSmD0_QYpmNN_swRAIyYrZUwKGxQBVruOi8RxheNdAtqgg5cTSuo8ZmjsxMsnWCJgfVCD6jS9fAlXr6ztsz46t9H2P5rPzhJmHMX3b9hPBpBF0jft_mJxdE0s9Qlyg",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getAllBarsforMin?segment=fo&timestamp=230828T11:10&delivery=true&response=csv&lotsize=true",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllBarsforMin"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "fo"
+						},
+						{
+							"key": "timestamp",
+							"value": "230828T11:10"
+						},
+						{
+							"key": "delivery",
+							"value": "true"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "lotsize",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLastNBars",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "OyvibgfnT0LP9BFNZt7rZvxgJv5immazzR3XHwDFCLeHtZeiTAj5JEltz59WmPRqNzhzABPw7Yeq0zFI9_O-UarUXwuArrgn86TH965uBt_otofSflRMJjEcGWW9lE9v4pSbuqCbkL7jOMSjIZI9jvRHQOvdOnaMD_9rwn5BRrvX5wMw_bixRs1-2Tko2g-NQEXt1PxzRMi2KwuwDNmu61QiKkQH7J0hOy79CLJQHc4dGTQr0V96yV8IncvX6tV-qFCJKfzrYadarg6AOjWdbw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getlastnbars?symbol=SBIN-I&interval=1min&response=csv&bidask=0&comp=false&nbars=150",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getlastnbars"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "SBIN-I"
+						},
+						{
+							"key": "interval",
+							"value": "1min"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "bidask",
+							"value": "0"
+						},
+						{
+							"key": "comp",
+							"value": "false"
+						},
+						{
+							"key": "nbars",
+							"value": "150"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLastNTicks",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "q3KdnNPYpaTnxnF5dgjqzIWGXMQBdTy56lylTTM71xzhTQ40_BwL3ULMqopvTB_K6SI9heCgDbjLKJ3YMMYhi_7lA9DydiTDYGE3KqTqpw1c-GmxJfoZawUJlsLr1Gdw8UC2aUXoXbrkirIhqGJRGIG1kc_IXivO01nb2tVwjEp9YgPFOGB7reeDoGlqptOucB-nj2K4NP1nkVt9Zw7L5oo-iA5L_lPan0_OKV_Km80rvgVMK1Yc7ID-YTPirGIO",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getlastnticks?symbol=ACC&bidask=1&response=csv&nticks=2000&interval=tick",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getlastnticks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "ACC"
+						},
+						{
+							"key": "bidask",
+							"value": "1"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "nticks",
+							"value": "2000"
+						},
+						{
+							"key": "interval",
+							"value": "tick"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBhavCopy",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "7pi1fp30BimfhBDDecR1JrzB81NyTeWOLi0GJppxO6ZvebLNsyX2vgPap0dMdmdqehW1lOBuKysBdjyLTpHUBPdmMr4v6gODCcGQMiez1_qEb7BuPwL0oNrLX-VMhdeKFgUtHm6kZaen3s7fC62G-ktTrJqZQCF6r5c8GyjSC4yFyXMt1ck3wkZY_slGauKKpNQky13ThtEI7jsH3DwfMegUaXvAZeFj2yCs9AYDEox3fyAJAzW1JvqUBpnJi18-yyxh5fODSUKWhh_scxaneQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getbhavcopy?segment=EQ&date=2020-02-18&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getbhavcopy"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "EQ"
+						},
+						{
+							"key": "date",
+							"value": "2020-02-18"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTradedSymbols",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/gettradedsymbols?segment=EQ&date=2020-03-26&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"gettradedsymbols"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "EQ"
+						},
+						{
+							"key": "date",
+							"value": "2020-03-26"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBhavCopyStatus",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "OnQY-S-YkuCuo4zkAmb51Fuj-Ki7Cc_VglUXfdBWFloRxrMWcLIYKfc1hL353FEjQq4Defoaq4GqwIoHPmfdh_nTCgjI9Ks95lHZgxAVeewaCZxcieiQfaKJl8h7uoNwTveD6FFdkaLWaPlK_9ChrEJ0eXLmW3n3YbVleOW7wLiEhK5rZvwvjXR-_8lmLBwo1STrI1lBkHRx27iKzPYQAvURJNiVaqoPcAjgq8ltrxcC0bR8q7U4h3aX4bRQaQrM0HgIGVm2gHSkF-nVaLxc_g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getbhavcopystatus?segment=EQ&response=csv&date=2023-03-24",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getbhavcopystatus"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "EQ"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "date",
+							"value": "2023-03-24"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBhavCopy",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "OnQY-S-YkuCuo4zkAmb51Fuj-Ki7Cc_VglUXfdBWFloRxrMWcLIYKfc1hL353FEjQq4Defoaq4GqwIoHPmfdh_nTCgjI9Ks95lHZgxAVeewaCZxcieiQfaKJl8h7uoNwTveD6FFdkaLWaPlK_9ChrEJ0eXLmW3n3YbVleOW7wLiEhK5rZvwvjXR-_8lmLBwo1STrI1lBkHRx27iKzPYQAvURJNiVaqoPcAjgq8ltrxcC0bR8q7U4h3aX4bRQaQrM0HgIGVm2gHSkF-nVaLxc_g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getbhavcopy?segment=FO&response=csv&date=2023-03-24",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getbhavcopy"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "FO"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "date",
+							"value": "2023-03-24"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLTP",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "Tuo381otvTihKckRN321XyOwp3zIrtIVIpNGU0d_G6Mx6wz7MxtNcmxX-iDkGiNdW5ymiht04Xk6ouLHQ-PyaA9jwDDhhcw76c6jO9u7CQb6_Tp9Xbyd38rYV2e-0Es46-ng-tz35tGTBk5dyk9rNZSPbd2LEhGBORBFAMKssqcUllgu8naOJiUleXMiH9rh0Kehpg8I1R8pqu34Qzz7Gf0C0ZxSs4OZJvGNgqHZkSi9fQ2JNkrKbK3xYe4Vl6Q8ZGlQLPdzbNSdo_tJ0ZvXDA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getlastnticks?symbol=NIFTY-I&bidask=1&response=csv&nticks=1&interval=tick",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getlastnticks"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "NIFTY-I"
+						},
+						{
+							"key": "bidask",
+							"value": "1"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "nticks",
+							"value": "1"
+						},
+						{
+							"key": "interval",
+							"value": "tick"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLTPBulk",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-QIC6T-Nb71PMmIoVHzehMBanyjipkhzp9zRlhtlFN4jgDzrfm5eza0MmkTQMRRr0ERwwTR8BQfw-bANx9MI4K0PpUTo5RldAxTQGfqNlvBjAkn7Xb8kpdqVYfVuOIaXggivF76TODWRxtrBjphUkcApeyGdfbeC2btrb6X7cDQCixIt8MW_ZTJD6Lc4lP95VtrmmV010fPG7OOalltHOQ30Vs5NB1LEdHSbnb60gH6T7DPLdT4p683Uxx81OjehtuNERLUvs9peDoqEBvfw9g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getLTPBulk?symbols=HDFC,NIFTY-I,CRUDEOIL-I,USDINR-I,USDINR-I,RELIANCE,NIFTY 50&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getLTPBulk"
+					],
+					"query": [
+						{
+							"key": "symbols",
+							"value": "HDFC,NIFTY-I,CRUDEOIL-I,USDINR-I,USDINR-I,RELIANCE,NIFTY 50"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get52WeekHL",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "gHcHW_w_fH-9Z-2Wl1bYxRZfnEuZ939zMYvOiC3EFPWp2dWy0YIFHpRmuuG3G0horvLD4KmZArdR1OF6PWafyohKUw_d0FVaGMvSHHYYg_6f-qGG8oLi6o9JbO-FgQf7kn6KPGAS50si9oh0AkMq8QSIsVDxHQvLRvReUz_-M_FI4NqsvSsANvo54x-3i7V1WzB4xoSVDBwRCWlusk-hFTq7jfjsQOx9ih2Di1tYjzu5FyWWIlGVS55OqdX9uX9h5tEtCRC8gr2HKy3CcdrfuQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/get52WeekHL?symbol=RELIANCE&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"get52WeekHL"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndexComponents",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "wDeFawuvXcp_lTK5JjdcIo_Sdfb_7P8GXNQVJMBpPV5xbaZzsX5Cvr9dh2n95U075ouVYRNkiAnqahdnHeGAj44EAU9pWBK8f8Fi5OEVXA2vYGjnmKOtbjCVGBRIXMzBaNJpglsTmeuHy0i59ff7AJ2mYhopDpA_EX5sOB9P3-V4WMA7PaNRmS2lqbyePHouy0tGN4NIv5tY6S43DcDCIcef5e_OiPKbGf28KMXLksjrFIUTrdPqnZSJWT4rv7AdaJem_eP0-xSpVCaE2Qb1lQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getindexcomponents?response=csv&indexname=NIFTY 100",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getindexcomponents"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "indexname",
+							"value": "NIFTY 100",
+							"description": "NIFTY 50, NIFTY BANK,NIFTY FMCG,NIFTY 100,NIFTY INFRA,NIFTY 500,NIFTY MNC,NIFTY REALTY,NIFTY ENERGY,NIFTY MIDCAP 100,NIFTY IT,NIFTY PHARMA,NIFTY MIDCAP 50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTopGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-QIC6T-Nb71PMmIoVHzehMBanyjipkhzp9zRlhtlFN4jgDzrfm5eza0MmkTQMRRr0ERwwTR8BQfw-bANx9MI4K0PpUTo5RldAxTQGfqNlvBjAkn7Xb8kpdqVYfVuOIaXggivF76TODWRxtrBjphUkcApeyGdfbeC2btrb6X7cDQCixIt8MW_ZTJD6Lc4lP95VtrmmV010fPG7OOalltHOQ30Vs5NB1LEdHSbnb60gH6T7DPLdT4p683Uxx81OjehtuNERLUvs9peDoqEBvfw9g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/gettopngainers?segment=NSEEQ&response=csv&topn=50",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"gettopngainers"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "NSEEQ"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "topn",
+							"value": "50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTopLosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-QIC6T-Nb71PMmIoVHzehMBanyjipkhzp9zRlhtlFN4jgDzrfm5eza0MmkTQMRRr0ERwwTR8BQfw-bANx9MI4K0PpUTo5RldAxTQGfqNlvBjAkn7Xb8kpdqVYfVuOIaXggivF76TODWRxtrBjphUkcApeyGdfbeC2btrb6X7cDQCixIt8MW_ZTJD6Lc4lP95VtrmmV010fPG7OOalltHOQ30Vs5NB1LEdHSbnb60gH6T7DPLdT4p683Uxx81OjehtuNERLUvs9peDoqEBvfw9g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/gettopnlosers?segment=NSEEQ&response=csv&topn=50",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"gettopnlosers"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "NSEEQ"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "topn",
+							"value": "50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTopVolumeGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "q3KdnNPYpaTnxnF5dgjqzIWGXMQBdTy56lylTTM71xzhTQ40_BwL3ULMqopvTB_K6SI9heCgDbjLKJ3YMMYhi_7lA9DydiTDYGE3KqTqpw1c-GmxJfoZawUJlsLr1Gdw8UC2aUXoXbrkirIhqGJRGIG1kc_IXivO01nb2tVwjEp9YgPFOGB7reeDoGlqptOucB-nj2K4NP1nkVt9Zw7L5oo-iA5L_lPan0_OKV_Km80rvgVMK1Yc7ID-YTPirGIO",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/gettopnvolumegainers?segment=NSEFUT&response=csv&topn=50",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"gettopnvolumegainers"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "NSEFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "topn",
+							"value": "50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCorpAction",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-QIC6T-Nb71PMmIoVHzehMBanyjipkhzp9zRlhtlFN4jgDzrfm5eza0MmkTQMRRr0ERwwTR8BQfw-bANx9MI4K0PpUTo5RldAxTQGfqNlvBjAkn7Xb8kpdqVYfVuOIaXggivF76TODWRxtrBjphUkcApeyGdfbeC2btrb6X7cDQCixIt8MW_ZTJD6Lc4lP95VtrmmV010fPG7OOalltHOQ30Vs5NB1LEdHSbnb60gH6T7DPLdT4p683Uxx81OjehtuNERLUvs9peDoqEBvfw9g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getcorpaction?symbol=RELIANCE&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getcorpaction"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCorpActionRange",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-QIC6T-Nb71PMmIoVHzehMBanyjipkhzp9zRlhtlFN4jgDzrfm5eza0MmkTQMRRr0ERwwTR8BQfw-bANx9MI4K0PpUTo5RldAxTQGfqNlvBjAkn7Xb8kpdqVYfVuOIaXggivF76TODWRxtrBjphUkcApeyGdfbeC2btrb6X7cDQCixIt8MW_ZTJD6Lc4lP95VtrmmV010fPG7OOalltHOQ30Vs5NB1LEdHSbnb60gH6T7DPLdT4p683Uxx81OjehtuNERLUvs9peDoqEBvfw9g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getcorpactionrange?exdatefrom=2022-01-01&exdateto=2023-03-31&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getcorpactionrange"
+					],
+					"query": [
+						{
+							"key": "exdatefrom",
+							"value": "2022-01-01"
+						},
+						{
+							"key": "exdateto",
+							"value": "2023-03-31"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSymbolExpiryLIst",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "uJJNZNGweDZTufH29c8Ll_tQFdVLGn8d2jsaFF8XyEeBNgBTr4Gmw_FXqqkn48BsNPJL3mUwD7z8vCwaMZ6HqEMI23O4CR-r2Mw5KAIVrB6S5gdHBJYM_7eTQqZQEicHDtq4P1dvobqlrDeWrxSllne1nHpc3pJVgvX3vgMYMhv-RVeWOnAigsIS76nEGeeNYh01LY8afOpl7yd7NwdtZDe7RHApN5-kH7MfX9mIuAJykDf1b-4fsV81nV3eayYb",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getSymbolExpiryList?symbol=RELIANCE&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSymbolExpiryList"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSymbolNameChange",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "-7diewNGZV3UkFNFLXjbAwEXzKa5TrYpSwsiMbLVhDxqfchXNVaOmRWUw3h0n2CWL5wszW38POZvlG_N4f2BcQ95kJdOdi-KI_4h-8eF5clu5w4UuoFzPMxdqi4hH0vkv_Hpw2OO5eMQ0D0-kLiFBoliPJ6jAFbA5-jRpv7bS-WbZ--Gv0sFe85UR28HqlggXSHDX2u-i98H9WxxPjxWqFYmrgpW0dMkE4uNc4ExNMtrpnalyxBZVF3_fe91y5Nk",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getsymbolchangehistory?response=csv&SYMBOL=",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getsymbolchangehistory"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "SYMBOL",
+							"value": ""
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSymbolOptionChain",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getSymbolOptionChain?symbol=NIFTY&expiry=230427&response=csv",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSymbolOptionChain"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "NIFTY"
+						},
+						{
+							"key": "expiry",
+							"value": "230427"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCompanyLogo",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "bsOBM2jTrpv8ZGUCBlLkiobZJ0vevmNLSgfJ1DM80xdhc42NNd9j1pzSzKeFQWfcnGTNojmxSc4z1alxPZXLU2UCUi8W49BcAvYqwz7wzTmjz2_36bJUXKVaQUJo_0b0Au9hOWNibqtjP6c0jNTY6Ku_RCPrCnZITshZ0x4_9ICb7hIFb-HP1JHvKfyQbI28YYeIYD6AQsz3eZ4YxwePL_Q-yBS73kfNqoXv8d5D2L65ra09uzWdh60q8rcNVZ7d3YUz2XsR_3jEHCANl9udlQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://history.truedata.in/getcompanylogo?symbol=afil",
+					"protocol": "https",
+					"host": [
+						"history",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getcompanylogo"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "afil"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

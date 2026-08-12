@@ -9,6 +9,7 @@ from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.scanner import (
     _SIGNAL_RETENTION_MS, KiteEngineScanner, _compile_rows, _copy_prior_leg_snapshot,
+    contract_bar_is_current, live_red_counts,
     _prior_leg_snapshots, _retain_signals, _stamp_leg_premium_stops, attach_strikes,
     drop_forming, evaluate_derivative_contract, evaluate_item, option_order_args,
 )
@@ -582,6 +583,102 @@ async def test_scan_derivatives_invokes_place_cb_for_auto_exec():
     assert calls == [("derivatives", "NIFTY25JUN100CE", 75)]
 
 
+class TestContractStaleness:
+    """"Fired on its own last bar" is not "fired now"."""
+
+    HOUR = 3_600_000
+
+    def test_a_contract_level_with_its_underlying_is_current(self):
+        assert contract_bar_is_current(10 * self.HOUR, 10 * self.HOUR)
+
+    def test_a_contract_ahead_of_its_underlying_is_current(self):
+        # The contract's series can legitimately extend past the underlying's in a
+        # fixture or a partial fetch; only LAG is a staleness signal.
+        assert contract_bar_is_current(12 * self.HOUR, 10 * self.HOUR)
+
+    def test_a_lagging_contract_is_not_current(self):
+        assert not contract_bar_is_current(7 * self.HOUR, 10 * self.HOUR)
+
+    def test_the_allowance_admits_exactly_that_many_bars(self):
+        assert contract_bar_is_current(9 * self.HOUR, 10 * self.HOUR, max_stale_bars=1)
+        assert not contract_bar_is_current(8 * self.HOUR, 10 * self.HOUR, max_stale_bars=1)
+
+    def test_an_unknown_underlying_clock_does_not_block(self):
+        """The underlying candle fetch can fail while a quote-derived spot carries the
+        scan. Refusing every automatic entry then is a bigger action than this guard
+        exists to take."""
+        assert contract_bar_is_current(7 * self.HOUR, 0)
+
+
+def _staleness_harness(fired, under_last_bar_h):
+    """A NIFTY chain where the underlying's last 1H bar lands at ``under_last_bar_h``."""
+    under_start = (under_last_bar_h - 39) * 3_600_000
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return _candles([100.0] * 40, start_ms=under_start)
+            if inst.zerodha_token == 7001:
+                return fired
+            return _candles(list(np.linspace(100, 101, 40)), start_ms=under_start)
+
+    nfo = [
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100CE", "instrument_type": "CE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 75},
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100PE", "instrument_type": "PE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7002, "lot_size": 75},
+    ]
+    deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
+    return FakeClient(), nfo, deriv
+
+
+@pytest.mark.asyncio
+async def test_a_stale_contract_is_shown_but_not_auto_executed():
+    """The illiquid-strike case: the signal is real, the bar it fired on is hours old.
+
+    A market order here fills nowhere near the premium the row is quoting. The row
+    still belongs on the board — the user may want to see it — so only the automatic
+    order is withheld.
+    """
+    fired = _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig(), "long")
+    contract_last_h = fired[-1].timestamp_ms // 3_600_000
+    client, nfo, deriv = _staleness_harness(fired, contract_last_h + 3)  # 3 bars behind
+    calls = []
+
+    async def cb(row, item):
+        calls.append(row.legs[0].option_symbol)
+
+    sc = KiteEngineScanner()
+    await sc.scan(uid="stale1", client=client, universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"],
+                  deriv_universe=deriv, place_cb=cb)
+    snap = sc.snapshot("stale1")
+    assert calls == [], "a 3-bar-stale contract must not auto-execute"
+    assert snap.diag.deriv_fired == 1, "it still counts as fired"
+    assert snap.diag.deriv_stale_skipped == 1
+    assert any(leg.option_symbol == "NIFTY25JUN100CE"
+               for row in snap.rows for leg in row.legs), "and it still shows on the board"
+
+
+@pytest.mark.asyncio
+async def test_the_staleness_allowance_lets_a_thin_strike_through():
+    """Raising the allowance is how someone opts into trading thinner strikes."""
+    fired = _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig(), "long")
+    contract_last_h = fired[-1].timestamp_ms // 3_600_000
+    client, nfo, deriv = _staleness_harness(fired, contract_last_h + 3)
+    calls = []
+
+    async def cb(row, item):
+        calls.append(row.legs[0].option_symbol)
+
+    sc = KiteEngineScanner()
+    await sc.scan(uid="stale2", client=client, universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=SterlingKiteEngineConfig(max_contract_staleness_bars=3),
+                  moneyness=["ATM"], deriv_universe=deriv, place_cb=cb)
+    assert calls == ["NIFTY25JUN100CE"]
+    assert sc.snapshot("stale2").diag.deriv_stale_skipped == 0
+
+
 @pytest.mark.asyncio
 async def test_deriv_index_spot_fallback_quotes_by_display_name():
     """When an index's 1H candle fetch comes back empty, the deriv scan resolves the
@@ -873,6 +970,69 @@ def _wide_ce_pe_chain(base: int):
         nfo.append({"name": "ACME", "tradingsymbol": f"ACME25JUN{s}PE", "instrument_type": "PE",
                     "strike": s, "expiry": "2099-01-01", "instrument_token": tok, "lot_size": 50})
     return nfo
+
+
+class TestTheScanKeepsARedReadingForEveryInstrument:
+    """A signal row exists only where there was an entry TRANSITION.
+
+    Positions routinely outlive the row that opened them, and the red-count exit reads
+    its number off those rows — so it used to freeze for the rest of the trade. The
+    scan computes the regime for every instrument regardless; these pin that the
+    reading is kept, on every scan source, INCLUDING when no signal comes out.
+    """
+
+    @staticmethod
+    def _quiet_client():
+        class FakeClient:
+            async def get_candles(self, inst, resolution, limit):
+                return _candles(list(np.linspace(100, 101, 60)))   # no transition
+        return FakeClient()
+
+    @pytest.mark.asyncio
+    async def test_a_spot_scan_with_no_signal_still_records_one(self):
+        sc = KiteEngineScanner()
+        item = UniverseItem("ACME", "ACME", 100, "NSE", "NFO")
+        await sc.scan(uid="reds1", client=self._quiet_client(), universe=[item],
+                      nfo_rows=[], bfo_rows=[], cfg=SterlingKiteEngineConfig(),
+                      moneyness=["ATM"])
+        snap = sc.snapshot("reds1")
+        assert snap.rows == [], "precondition: this scan emits no signal row"
+        assert "ACME" in snap.underlying_reds
+        assert set(snap.underlying_reds["ACME"]) == {"long", "short"}
+
+    @pytest.mark.asyncio
+    async def test_a_confluence_scan_records_one_too(self):
+        """Confluence is a scan_source of its own — the spot pass never runs under it,
+        so without its own capture an account on confluence would keep the old freeze."""
+        sc = KiteEngineScanner()
+        conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+        await sc.scan(uid="reds2", client=self._quiet_client(), universe=[],
+                      nfo_rows=[], bfo_rows=[], cfg=SterlingKiteEngineConfig(),
+                      moneyness=["ATM"], confluence_universe=conf)
+        assert "ACME" in sc.snapshot("reds2").underlying_reds
+
+    @pytest.mark.asyncio
+    async def test_a_derivatives_scan_records_the_contract_it_charted(self):
+        cfg = SterlingKiteEngineConfig()
+        fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+
+        class FakeClient:
+            async def get_candles(self, inst, resolution, limit):
+                if inst.zerodha_token == 100:
+                    return _candles([100.0] * 60)
+                return fired
+
+        nfo = [{"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100CE", "instrument_type": "CE",
+                "strike": 100, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 75}]
+        deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
+        sc = KiteEngineScanner()
+        await sc.scan(uid="reds3", client=FakeClient(), universe=[], nfo_rows=nfo,
+                      bfo_rows=[], cfg=cfg, moneyness=["ATM"], deriv_universe=deriv)
+        assert "NIFTY25JUN100CE" in sc.snapshot("reds3").contract_reds
+
+    def test_too_few_bars_is_unknown_rather_than_zero(self):
+        """A zero would read as "nothing against us" and disarm the exit."""
+        assert live_red_counts(_candles([100.0] * 3), SterlingKiteEngineConfig()) == {}
 
 
 @pytest.mark.asyncio
@@ -1175,6 +1335,50 @@ def test_compile_rows_is_idempotent_for_grouped_derivative_legs():
     assert seen[0] == seen[1] == seen[2]
     assert seen[0]["INFY26SEP1500CE"] == (42.5, 30.0)
     assert seen[0]["INFY26SEP1520CE"] == (33.0, 22.0)
+
+
+def test_compile_rows_survives_being_fed_its_own_output():
+    """f(f(x)) == f(x) — the property the name above only looked like it covered.
+
+    The test above re-compiles the same RAW list repeatedly, which never exercises a
+    parent row carrying more than one leg. ``held_contract_scan`` does exactly that:
+    it appends held contracts to the ALREADY-compiled ``us.rows`` and re-compiles. The
+    grouping step read ``r.legs[0]`` alone, so every second pass kept the first leg of
+    each group and silently dropped the rest — on a live board that is strikes
+    disappearing from a row, and with them the per-leg red count the exit reads.
+    """
+    rows = [_deriv_row(1000, "INFY26SEP1500CE", 1500, 42.5, 30.0),
+            _deriv_row(2000, "INFY26SEP1520CE", 1520, 33.0, 22.0),
+            _deriv_row(3000, "INFY26SEP1540CE", 1540, 21.0, 15.0)]
+    once = _compile_rows(rows)
+    twice = _compile_rows(once)
+    assert len(twice) == 1
+    assert {leg.option_symbol for leg in twice[0].legs} == {
+        "INFY26SEP1500CE", "INFY26SEP1520CE", "INFY26SEP1540CE"}
+    assert ({leg.option_symbol: (leg.premium_spot, leg.premium_sl) for leg in once[0].legs}
+            == {leg.option_symbol: (leg.premium_spot, leg.premium_sl) for leg in twice[0].legs})
+
+
+def test_compile_rows_appending_a_held_contract_keeps_the_existing_legs():
+    """The held-contract pass merges one new leg into a compiled snapshot."""
+    compiled = _compile_rows([_deriv_row(1000, "INFY26SEP1500CE", 1500, 42.5, 30.0),
+                              _deriv_row(2000, "INFY26SEP1520CE", 1520, 33.0, 22.0)])
+    held = _deriv_row(3000, "INFY26SEP1600CE", 1600, 8.0, 5.0)
+    merged = _compile_rows([*compiled, held])
+    assert len(merged) == 1
+    assert {leg.option_symbol for leg in merged[0].legs} == {
+        "INFY26SEP1500CE", "INFY26SEP1520CE", "INFY26SEP1600CE"}
+
+
+def test_compile_rows_prefers_the_newer_leg_when_a_symbol_repeats():
+    """A re-scanned strike replaces its older copy rather than duplicating it."""
+    compiled = _compile_rows([_deriv_row(1000, "INFY26SEP1500CE", 1500, 42.5, 30.0)])
+    fresher = _deriv_row(5000, "INFY26SEP1500CE", 1500, 51.0, 38.0)
+    merged = _compile_rows([*compiled, fresher])
+    assert len(merged) == 1
+    assert len(merged[0].legs) == 1
+    assert merged[0].legs[0].premium_spot == 51.0
+    assert merged[0].legs[0].premium_sl == 38.0
 
 
 def test_compile_rows_does_not_mutate_its_input_rows():

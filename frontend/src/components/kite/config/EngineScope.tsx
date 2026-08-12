@@ -1,19 +1,8 @@
 import React from 'react';
 import { BORDER, MUTED, ORANGE, SOFT, TEXT } from '../kiteSettingsPrimitives';
 
-/**
- * "Same as SuperTrend" / "Its own", per settings group.
- *
- * The old model had ONE scan-scope switch covering the whole of Navigator's
- * coverage, so a user who wanted Navigator on the same instruments but a
- * different strike ladder had no way to say it — and the settings page claimed
- * things were shared that the backend never shared. Each group now carries its
- * own link control, so "both engines" and "just this one" is a per-group choice
- * rather than one all-or-nothing flag.
- */
-export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Same as SuperTrend', ownLabel = 'Its own', hint }: {
-  /** Names the group this link controls, so two links on one page are
-   *  distinguishable to a screen reader (and to a test). */
+/** Own vs Like SuperTrend — per settings group. */
+export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Like SuperTrend', ownLabel = 'Own', hint }: {
   groupLabel: string;
   linked: boolean;
   onChange: (linked: boolean) => void;
@@ -43,36 +32,36 @@ export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Same as
         display: 'inline-flex', gap: 2, padding: 3,
         border: `1px solid ${BORDER}`, borderRadius: 8, background: SOFT,
       }}>
-        {opt(sharedLabel, linked, true)}
         {opt(ownLabel, !linked, false)}
+        {opt(sharedLabel, linked, true)}
       </div>
-      {hint && <span style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.45 }}>{hint}</span>}
+      {hint && <span style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.45, maxWidth: 280 }}>{hint}</span>}
     </div>
   );
 }
 
-/** A settings group that can either follow the other engine or stand alone. */
-export function ScopedGroup({ title, description, linked, onLinkChange, sharedSummary, hint, children }: {
+/** Follow SuperTrend or own values. Parent Section can host ScopeLink via headerAction + hideLink. */
+export function ScopedGroup({ title, description, linked, onLinkChange, sharedSummary, hint, hideLink = false, children }: {
   title: string;
   description: string;
   linked: boolean;
   onLinkChange: (linked: boolean) => void;
-  /** What the user gets while linked — shown instead of the controls. */
   sharedSummary: React.ReactNode;
   hint?: string;
+  hideLink?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ padding: '15px 0', borderTop: `1px solid ${BORDER}` }}>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ color: TEXT, fontSize: 12.5, fontWeight: 700 }}>{title}</div>
-        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '2px 0 9px' }}>{description}</div>
-        <ScopeLink groupLabel={title} linked={linked} onChange={onLinkChange} hint={hint} />
-      </div>
+    <div style={{ padding: hideLink ? 0 : '4px 0' }}>
+      {!hideLink && (
+        <div style={{ marginBottom: 10 }}>
+          <ScopeLink groupLabel={title} linked={linked} onChange={onLinkChange} hint={hint} />
+        </div>
+      )}
       {linked ? (
         <div style={{
           padding: '9px 11px', borderRadius: 7, background: SOFT,
-          border: `1px solid ${BORDER}`, color: MUTED, fontSize: 11, lineHeight: 1.5,
+          border: `1px solid ${BORDER}`, color: MUTED, fontSize: 11, lineHeight: 1.5, maxWidth: 440,
         }}>
           {sharedSummary}
         </div>
