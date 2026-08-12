@@ -30,9 +30,6 @@ export const AVWAP_DEFAULTS = {
   stop_buffer_atr: 0.15,
   max_stop_distance_atr: 2.00,
   target_r: 2.00,
-  show_session_vwap: true,
-  show_daily_range: true,
-  show_weekly_range: true,
 } as const;
 
 export const RANGES_DEFAULTS = {
@@ -84,7 +81,6 @@ export const FLOW_DEFAULTS = {
   strong_zone: 68.0,
   extreme_zone: 96.0,
   require_for_index_gate: true,
-  allow_na_for_single_stocks: true,
 } as const;
 
 export const GAMMA_DEFAULTS = {
@@ -95,7 +91,6 @@ export const GAMMA_DEFAULTS = {
   min_samples: 30,
   blast_z_min: 3.0,
   acceleration_z_min: 2.0,
-  expiry_profile_enabled: true,
   expiry_profile_start_ist: '14:00',
   require_flow_alignment: true,
   required_for_gate: false,

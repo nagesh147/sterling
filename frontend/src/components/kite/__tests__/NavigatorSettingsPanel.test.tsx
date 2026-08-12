@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { NavigatorSettingsPanel } from '../NavigatorSettingsPanel';
 import type { NavigatorConfigModel } from '../../../types/navigator';
@@ -17,7 +17,6 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       atr_period: 14, relative_volume_period: 20, touch_tolerance_atr: 0.2, min_body_atr: 0.35, min_relative_volume: 1.2,
       breakout_buffer_atr: 0.1, max_extension_atr: 1.5, cooldown_bars: 5, grade_a_plus_min: 85, grade_a_min: 75,
       grade_b_min: 65, stop_buffer_atr: 0.15, max_stop_distance_atr: 2.0, target_r: 2.0,
-      show_session_vwap: true, show_daily_range: true, show_weekly_range: true,
     },
     ranges: {
       method: 'rolling_empirical_quantile_v1', target_coverage: 0.8, daily_lookback_sessions: 120, daily_min_sessions: 60,
@@ -34,12 +33,12 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       manual_expiry: null, manual_atm: null, strike_step_override: null, max_quote_age_seconds: 20, max_sample_gap_seconds: 150,
       min_chain_completeness: 0.8, max_spread_pct: 0.08, warmup_samples: 30, robust_window_samples: 120,
       price_scale_floor: 0.0001, oi_intensity_weight: 0.25, z_scale: 2.0, zero_hysteresis: 10, strong_zone: 68,
-      extreme_zone: 96, require_for_index_gate: true, allow_na_for_single_stocks: true,
+      extreme_zone: 96, require_for_index_gate: true,
     },
     gamma: {
       enabled: true, rate_source: 'manual', risk_free_rate: null, dividend_yield: null, min_iv: 0.01, max_iv: 5.0,
       robust_window_samples: 120, min_samples: 30, blast_z_min: 3.0, acceleration_z_min: 2.0,
-      expiry_profile_enabled: true, expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
+      expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
     },
     expiry_profile: {
       enabled: true, require_expansion: true, min_avwap_grade: 'A', min_abs_flow: 68, max_extension_atr: 1.0, emit_tighten_note: true,
@@ -80,8 +79,15 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
 }));
 
+// Retrying after a revision conflict has to re-read the revision the server holds
+// now, so the panel calls refetch(). It resolves with whatever `queryData` is at
+// that moment, which is how a test moves the server on underneath the draft.
+const refetchConfig = vi.fn(async () => ({ data: queryData }));
+
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: queryData, isLoading: !queryData, error: null }),
+  useNavigatorConfig: () => ({
+    data: queryData, isLoading: !queryData, error: null, refetch: refetchConfig,
+  }),
   useSetNavigatorConfig: () => ({ mutate: setConfig, isPending: false, isError: false, error: null }),
   useResetNavigatorConfig: () => ({ mutate: resetConfig }),
   useValidateNavigatorConfig: () => ({ mutate: vi.fn() }),
@@ -124,6 +130,69 @@ describe('NavigatorSettingsPanel', () => {
     const [body] = setConfig.mock.calls[0];
     expect(body.expected_revision).toBe(1);
     expect(body.config.enabled).toBe(true);
+  });
+
+  it('retrying after a revision conflict actually overwrites', async () => {
+    // The banner says "Reload or Apply to overwrite". `baseRevision` is refreshed
+    // only while !dirty, and a conflict leaves you dirty by definition — so every
+    // retry resent the revision the server had just rejected and 409'd forever.
+    // The user was offered two ways out where only one worked, and the one that
+    // worked (Reload) throws their edits away.
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onError?.(new Error('REVISION_CONFLICT: expected 1, found 2'));
+    });
+    render(<NavigatorSettingsPanel />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    expect(setConfig.mock.calls[0][0].expected_revision).toBe(1);
+    expect(await screen.findByText(/changed elsewhere/i)).toBeInTheDocument();
+
+    // Someone else's write landed; the server is now at revision 2.
+    queryData = makeRecord({}, { revision: 2 });
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onSuccess?.({ record: { ...queryData!.record, revision: 3 } });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    await waitFor(() => expect(setConfig).toHaveBeenCalledTimes(2));
+    expect(refetchConfig).toHaveBeenCalled();
+    expect(setConfig.mock.calls[1][0].expected_revision).toBe(2);
+    expect(setConfig.mock.calls[1][0].config.enabled).toBe(true);
+  });
+
+  it('treats a stocks-only scope with stocks switched off as empty', () => {
+    // The single-stock master switch drops every stock from the universe backend
+    // side, so this scope scans nothing at all. The guard only looked at whether
+    // the stock LIST was populated, so it let Apply through with no warning and
+    // Navigator saved a scope that could never produce a row.
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: false,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.getByText(/scans nothing at all/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
+  });
+
+  it('a stocks-only scope with stocks switched ON is not empty', () => {
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: true,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.queryByText(/scans nothing at all/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).not.toBeDisabled();
   });
 
   it('gate mode is locked until calibration is ready', () => {

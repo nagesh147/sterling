@@ -8,6 +8,7 @@ import {
 } from '../../hooks/useKite';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
+import { hasUnsavedDraft } from './config/unsavedDraftGuard';
 import type { KiteAccount } from '../../types/kite';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
@@ -616,6 +617,15 @@ export function ConnectPane() {
   const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
 
   const select = (next: ConnectSection) => {
+    // Only ONE section is mounted at a time, so navigating away unmounts the panel
+    // and takes its unapplied draft with it — silently. That cost nothing while
+    // every control wrote through immediately, but these pages are draft-and-Apply
+    // now, so a click on the rail can discard a page of edits the user believes
+    // are still pending.
+    if (next !== section && hasUnsavedDraft()
+        && !window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+      return;
+    }
     setSection(next);
     localStorage.setItem('kite_connect_section', next);
   };

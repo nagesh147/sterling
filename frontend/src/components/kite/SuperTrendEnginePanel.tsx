@@ -6,6 +6,7 @@ import {
   BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT,
 } from './kiteSettingsPrimitives';
 import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import {
@@ -27,6 +28,9 @@ export function SuperTrendEnginePanel() {
   const [draft, setDraft] = React.useState<EngineConfigModel | null>(null);
   const [dirty, setDirty] = React.useState(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  // Leaving this section unmounts the panel and the draft with it.
+  useUnsavedDraftGuard('supertrend', dirty);
 
   React.useEffect(() => {
     if (!serverCfg) return;
@@ -52,6 +56,18 @@ export function SuperTrendEnginePanel() {
         setDirty(false);
         notifyOrder({ kind: 'info', title: 'Settings updated', message: 'SuperTrend settings applied.' });
         runScan.mutate();
+      },
+      // Without this a failed save was completely silent: the draft stayed dirty
+      // and nothing anywhere said the write had not landed, so the user reads the
+      // still-showing "Unsaved changes" as their own unfinished edit rather than a
+      // rejected one — and walks away believing the engine took the new settings.
+      onError: (err) => {
+        notifyOrder({
+          kind: 'error',
+          title: 'Settings NOT saved',
+          message: `SuperTrend settings were not applied: ${String(
+            (err as Error)?.message ?? 'the save was rejected')}. Your changes are still here — try Apply again.`,
+        });
       },
     });
   };
@@ -102,6 +118,7 @@ export function SuperTrendEnginePanel() {
         name="SuperTrend"
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
         on={on}
+        liveOn={serverCfg?.engine_enabled ?? on}
         busy={saving}
         onToggle={() => patch({ engine_enabled: !on })}
         runningNote="Scanning, producing signals, and eligible for automatic execution."

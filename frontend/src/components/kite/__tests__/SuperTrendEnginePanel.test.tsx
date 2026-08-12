@@ -171,6 +171,27 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
     );
   });
 
+  it('does not claim the engine is OFF while it is still running', () => {
+    // The power switch is a draft edit like everything else on this page, but the
+    // RUNNING/OFF badge was rendered from that same draft. Flipping the switch
+    // repainted the card to "OFF — Not scanning" while nothing had been sent to
+    // the server: leave the page without applying and the engine is still scanning
+    // and still eligible to auto-execute, having told you it was off.
+    renderPanel();
+    fireEvent.click(screen.getByRole('switch', { name: 'SuperTrend engine' }));
+
+    expect(screen.getByText('RUNNING')).toBeInTheDocument();
+    expect(screen.queryByText('OFF')).not.toBeInTheDocument();
+    expect(screen.getByText(/still running until you apply/i)).toBeInTheDocument();
+  });
+
+  it('shows the engine as OFF once the server says so', () => {
+    cfgData = { ...baseCfg, engine_enabled: false };
+    renderPanel();
+    expect(screen.getByText('OFF')).toBeInTheDocument();
+    expect(screen.queryByText(/until you apply/i)).not.toBeInTheDocument();
+  });
+
   it('does not own sizing or the order guards either', () => {
     renderPanel();
     expect(screen.queryByLabelText(/maximum lots/i)).not.toBeInTheDocument();

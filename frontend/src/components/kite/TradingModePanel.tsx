@@ -2,7 +2,7 @@ import React from 'react';
 import { useEngineConfig, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives';
-import { PanelCard, PanelHeader } from './config/ConfigPrimitives';
+import { PanelCard, PanelSectionHeading } from './config/ConfigPrimitives';
 import { openSettingsSection } from './config/registry';
 import { TradingModeControls } from './TradingModeControls';
 
@@ -62,7 +62,7 @@ export function TradingModePanel() {
       <TradingModeControls />
 
       <PanelCard>
-        <PanelHeader
+        <PanelSectionHeading
           title="What is running"
           description="Which signal engines are active. Turning both off leaves Kite as a normal manual trading platform — market watch, charts and your own orders all still work."
         />

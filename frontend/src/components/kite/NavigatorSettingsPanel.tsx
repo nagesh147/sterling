@@ -3,6 +3,7 @@ import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TE
 import { Icons } from '../../styles/kiteUI';
 import { SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ScopeLink, ScopedGroup } from './config/EngineScope';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
@@ -206,7 +207,7 @@ function set<K extends keyof NavigatorConfigModel>(
 
 
 export function NavigatorSettingsPanel() {
-  const { data, isLoading, error: loadError } = useNavigatorConfig();
+  const { data, isLoading, error: loadError, refetch } = useNavigatorConfig();
   const setConfig = useSetNavigatorConfig();
   const resetConfig = useResetNavigatorConfig();
   const { data: engineCfg } = useEngineConfig();
@@ -216,6 +217,9 @@ export function NavigatorSettingsPanel() {
   const [dirty, setDirty] = React.useState(false);
   const [conflict, setConflict] = React.useState<boolean>(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  // Leaving this section unmounts the panel and the draft with it.
+  useUnsavedDraftGuard('navigator', dirty);
 
   React.useEffect(() => {
     if (!data) return;
@@ -241,10 +245,30 @@ export function NavigatorSettingsPanel() {
     setDirty(true);
   };
 
-  const handleApply = () => {
-    if (baseRevision == null || !draft) return;
-    setConfig.mutate({ config: draft, expected_revision: baseRevision }, {
-      onSuccess: () => setDirty(false),
+  const handleApply = async () => {
+    if (!draft) return;
+    let revision = baseRevision;
+
+    if (conflict) {
+      // The banner offers "Apply to overwrite", and that can only be true if we send
+      // the revision the server holds NOW. `baseRevision` is refreshed only while
+      // !dirty, and a conflict leaves us dirty by definition — so retrying resent the
+      // exact revision the server had just rejected and 409'd forever. The user was
+      // offered a choice (keep my edits, or reload and lose them) where only one side
+      // worked.
+      const fresh = await refetch();
+      const latest = fresh.data?.record?.revision;
+      if (latest == null) return;   // cannot learn it → leave the banner up
+      revision = latest;
+    }
+
+    if (revision == null) return;
+    setConfig.mutate({ config: draft, expected_revision: revision }, {
+      onSuccess: (saved) => {
+        setDirty(false);
+        setConflict(false);
+        setBaseRevision(saved?.record?.revision ?? null);
+      },
       onError: (err) => {
         if (String(err.message).includes('REVISION_CONFLICT')) setConflict(true);
       },
@@ -270,11 +294,20 @@ export function NavigatorSettingsPanel() {
 
   const saveError = setConfig.isError && !conflict ? String(setConfig.error?.message ?? 'save failed') : null;
 
+  // Stocks only count toward a non-empty universe when the single-stock master
+  // switch is on. With it off, `select_scan_universe` drops every stock, so an
+  // indices-empty scope with a full stock list scans NOTHING — and the old check
+  // called that "not empty" because the stock list itself was non-empty, letting
+  // Apply through with no warning.
+  const stocksScanned = (draft.scan_stock_contracts ?? true)
+    && (draft.scan_all_stocks || draft.scan_stocks.length > 0);
   const customScopeEmpty = draft.scan_scope_mode === 'custom'
-    && !draft.scan_indices.length && !draft.scan_stocks.length && !draft.scan_all_stocks;
-  const customScopeCount = draft.scan_all_stocks
-    ? `${draft.scan_indices.length} indices + all stocks`
-    : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
+    && !draft.scan_indices.length && !stocksScanned;
+  const customScopeCount = !stocksScanned
+    ? `${draft.scan_indices.length} indices · no stocks`
+    : draft.scan_all_stocks
+      ? `${draft.scan_indices.length} indices + all stocks`
+      : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
 
   const instrumentsSummary = draft.scan_scope_mode === 'shared'
     ? 'Like SuperTrend'
@@ -299,6 +332,7 @@ export function NavigatorSettingsPanel() {
         name="Value-Flow Navigator"
         tagline="Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity."
         on={draft.enabled}
+        liveOn={data?.record?.config?.enabled ?? draft.enabled}
         busy={setConfig.isPending}
         onToggle={() => patch({ ...draft, enabled: !draft.enabled })}
         runningNote="Reading structure for its instruments. It can confirm SuperTrend setups and find its own."
@@ -609,9 +643,6 @@ export function NavigatorSettingsPanel() {
           <NumField label="Stop buffer (ATR)" value={draft.avwap.stop_buffer_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { stop_buffer_atr: v }))} defaultValue={AVWAP_DEFAULTS.stop_buffer_atr} />
           <NumField label="Max stop distance (ATR)" value={draft.avwap.max_stop_distance_atr} step={0.05} min={0.1} max={20} onChange={(v) => patch(set(draft, 'avwap', { max_stop_distance_atr: v }))} defaultValue={AVWAP_DEFAULTS.max_stop_distance_atr} />
           <NumField label="Target R multiple" value={draft.avwap.target_r} step={0.1} min={0.5} max={10} onChange={(v) => patch(set(draft, 'avwap', { target_r: v }))} defaultValue={AVWAP_DEFAULTS.target_r} />
-          <BoolField label="Show session VWAP" value={draft.avwap.show_session_vwap} onChange={(v) => patch(set(draft, 'avwap', { show_session_vwap: v }))} defaultValue={AVWAP_DEFAULTS.show_session_vwap} />
-          <BoolField label="Show daily range" value={draft.avwap.show_daily_range} onChange={(v) => patch(set(draft, 'avwap', { show_daily_range: v }))} defaultValue={AVWAP_DEFAULTS.show_daily_range} />
-          <BoolField label="Show weekly range" value={draft.avwap.show_weekly_range} onChange={(v) => patch(set(draft, 'avwap', { show_weekly_range: v }))} defaultValue={AVWAP_DEFAULTS.show_weekly_range} />
         </Section>
 
         <Section title="Daily and weekly ranges" description="Frozen projected ranges via rolling weighted quantiles." summary={`${Math.round(draft.ranges.target_coverage * 100)}% target coverage`}>
@@ -669,7 +700,6 @@ export function NavigatorSettingsPanel() {
             <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.flow.strong_zone} / {draft.flow.extreme_zone}</div>
           </Field>
           <BoolField label="Require for index gate" hint="Missing index flow blocks gate eligibility." value={draft.flow.require_for_index_gate} onChange={(v) => patch(set(draft, 'flow', { require_for_index_gate: v }))} defaultValue={FLOW_DEFAULTS.require_for_index_gate} />
-          <BoolField label="Allow N/A for single stocks" value={draft.flow.allow_na_for_single_stocks} onChange={(v) => patch(set(draft, 'flow', { allow_na_for_single_stocks: v }))} defaultValue={FLOW_DEFAULTS.allow_na_for_single_stocks} />
         </Section>
 
         <Section title="Gamma activity" description="Confirmation-only. Never determines direction by itself." summary={draft.gamma.enabled ? 'Enabled' : 'Disabled'}>
@@ -696,7 +726,6 @@ export function NavigatorSettingsPanel() {
           <NumField label="Min samples" value={draft.gamma.min_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { min_samples: v }))} defaultValue={GAMMA_DEFAULTS.min_samples} />
           <NumField label="Blast Z min" value={draft.gamma.blast_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { blast_z_min: v }))} defaultValue={GAMMA_DEFAULTS.blast_z_min} />
           <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} defaultValue={GAMMA_DEFAULTS.acceleration_z_min} />
-          <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} defaultValue={GAMMA_DEFAULTS.expiry_profile_enabled} />
           <Field label="Expiry profile start (IST)">
             <input
               className="nav-settings-input"

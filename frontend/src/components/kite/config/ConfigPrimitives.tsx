@@ -106,12 +106,17 @@ export function ConfigNote({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Floating save indicator — never pushes layout. */
-export function PanelHeader({ title, description, saving }: {
-  title?: string;
-  description?: string;
-  saving?: boolean;
-}) {
+/**
+ * Floating save indicator — never pushes layout.
+ *
+ * This used to be a section heading and was repurposed into a save chip, but it
+ * kept accepting `title`/`description` and silently ignored them. TradingModePanel
+ * was still calling it that way, so the "What is running" heading and its
+ * explanation vanished from the page and the two engine rows were left unlabelled.
+ * The props are gone so that misuse is a compile error rather than a blank space.
+ * For a real heading, use `PanelSectionHeading` below.
+ */
+export function PanelHeader({ saving }: { saving?: boolean }) {
   if (saving !== true) return null;
 
   return (
@@ -140,6 +145,23 @@ export function PanelHeader({ title, description, saving }: {
         width: 6, height: 6, borderRadius: '50%', background: ORANGE,
       }} />
       Saving…
+    </div>
+  );
+}
+
+/** A plain heading + explanation at the top of a panel card. */
+export function PanelSectionHeading({ title, description }: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div style={{ padding: '16px 18px 8px' }}>
+      <h3 style={{ margin: 0, color: TEXT, fontSize: 13, fontWeight: 800 }}>{title}</h3>
+      {description && (
+        <p style={{ margin: '5px 0 0', color: MUTED, fontSize: 11.5, lineHeight: 1.5, maxWidth: 620 }}>
+          {description}
+        </p>
+      )}
     </div>
   );
 }

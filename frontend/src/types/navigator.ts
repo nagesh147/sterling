@@ -33,9 +33,6 @@ export interface AvwapConfig {
   stop_buffer_atr: number;
   max_stop_distance_atr: number;
   target_r: number;
-  show_session_vwap: boolean;
-  show_daily_range: boolean;
-  show_weekly_range: boolean;
 }
 
 export interface RangesConfig {
@@ -93,7 +90,6 @@ export interface FlowConfig {
   strong_zone: number;
   extreme_zone: number;
   require_for_index_gate: boolean;
-  allow_na_for_single_stocks: boolean;
 }
 
 export interface GammaConfig {
@@ -107,7 +103,6 @@ export interface GammaConfig {
   min_samples: number;
   blast_z_min: number;
   acceleration_z_min: number;
-  expiry_profile_enabled: boolean;
   expiry_profile_start_ist: string;
   require_flow_alignment: boolean;
   required_for_gate: boolean;

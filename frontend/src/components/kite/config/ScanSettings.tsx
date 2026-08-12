@@ -125,6 +125,12 @@ export function InstrumentsGroup({
                 </div>
               </div>
             ))}
+            {!stockRegistry?.length && (
+              // Without this, a failed or empty registry renders an empty box that
+              // reads as "no stocks are eligible" rather than "we could not load
+              // the list" — and the user curates a scope from nothing.
+              <div style={{ color: DIM, fontSize: 11 }}>Stock universe unavailable.</div>
+            )}
           </div>
         </Field>
       )}
@@ -188,7 +194,11 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
     const next = indexExpiries.includes(expiry)
       ? indexExpiries.filter((x) => x !== expiry)
       : [...indexExpiries, expiry];
-    onChange({ scan_expiries_indices: next.length ? next : ['weekly'] });
+    // Falling back to BOTH, not to weekly. Unticking your last remaining cycle is
+    // "I did not mean to leave this empty", not "put me on weeklies" — and weekly
+    // and monthly contracts do not behave alike, so silently moving someone from
+    // one to the other is a real change of position dressed as a no-op.
+    onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
   };
 
   return (
