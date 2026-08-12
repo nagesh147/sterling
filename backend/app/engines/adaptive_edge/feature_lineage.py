@@ -73,12 +73,6 @@ class FeatureInput:
     def __post_init__(self) -> None:
         _require_aware(self.observation_time, "observation time")
         _require_aware(self.availability_time, "availability time")
-        if self.availability_time < self.observation_time:
-            # A source may publish later than observation, but not before the
-            # observation itself in this canonical event model.
-            raise FeatureLineageError(
-                f"availability_time precedes observation_time for {self.name}"
-            )
 
 
 @dataclass(frozen=True)
@@ -204,6 +198,7 @@ def causal_feature_availability(inputs: Iterable[FeatureInput]) -> datetime:
 def build_feature_snapshot(
     *,
     snapshot_id: str,
+    observation_time: datetime,
     decision_time: datetime,
     inputs: Sequence[FeatureInput],
     definitions: Mapping[str, FeatureDefinition],
@@ -215,6 +210,7 @@ def build_feature_snapshot(
     """Construct an immutable, causally valid snapshot without computing a strategy formula."""
     if not snapshot_id.strip():
         raise FeatureLineageError("snapshot_id must not be empty")
+    _require_aware(observation_time, "observation time")
     _require_aware(decision_time, "decision time")
     if not inputs:
         raise FeatureLineageError("feature snapshot requires at least one input")
@@ -234,11 +230,6 @@ def build_feature_snapshot(
 
     values = {item.name: item.value for item in inputs}
     available_at = {item.name: item.availability_time for item in inputs}
-    source_event_ids = tuple(
-        event_id
-        for item in inputs
-        for event_id in item.source.source_event_ids
-    )
     dataset_versions = tuple(
         dict.fromkeys(
             [*source_versions]
@@ -249,7 +240,6 @@ def build_feature_snapshot(
             ]
         )
     )
-    transformation = tuple(dict.fromkeys(transformation_versions))
 
     provenance = tuple(
         FeatureProvenance(
@@ -268,14 +258,14 @@ def build_feature_snapshot(
 
     snapshot = FeatureSnapshot(
         snapshot_id=snapshot_id,
-        observation_time=max(item.observation_time for item in inputs),
+        observation_time=observation_time,
         decision_time=decision_time,
         values=values,
         available_at=available_at,
         definitions=definitions,
         provenance=provenance,
         source_versions=dataset_versions,
-        transformation_versions=transformation,
+        transformation_versions=tuple(dict.fromkeys(transformation_versions)),
         availability_watermark=watermark,
         quality_state=quality_state,
         formula_ids=tuple(formula_ids),
@@ -314,8 +304,15 @@ def reconstruct_model_state(
 ) -> object | None:
     """Return the latest prior state available at the decision boundary."""
     _require_aware(decision_time, "decision time")
-    prior = [state for timestamp, state in states if _require_aware(timestamp, "state time") <= decision_time]
-    return prior[-1] if prior else None
+    prior = [
+        (timestamp, state)
+        for timestamp, state in states
+        if _require_aware(timestamp, "state time") <= decision_time
+    ]
+    if not prior:
+        return None
+    prior.sort(key=lambda item: item[0])
+    return prior[-1][1]
 
 
 def _require_aware(value: datetime, label: str) -> datetime:
