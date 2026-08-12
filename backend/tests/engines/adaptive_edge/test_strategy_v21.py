@@ -70,7 +70,7 @@ def test_f106_dynamic_risk_is_capped_and_disabled_is_zero():
 
 def test_f107_risk_per_unit_includes_explicit_costs():
     p = StrategyParameters(minimum_risk_per_unit=0.01)
-    assert f107_risk_per_unit(entry_price=100, protection_price=98, contract_multiplier=50, entry_cost_per_unit=0.1, exit_cost_per_unit=0.1, p=p) == pytest.approx(102)
+    assert f107_risk_per_unit(entry_price=100, protection_price=98, contract_multiplier=50, entry_cost_per_unit=0.1, exit_cost_per_unit=0.1, p=p) == pytest.approx(110)
 
 
 def test_f108_sizing_never_exceeds_authorized_risk():
