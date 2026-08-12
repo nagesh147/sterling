@@ -1,11 +1,7 @@
 import httpx
 import pytest
 
-from app.services.market_data.truedata import (
-    TrueDataHistoricalClient,
-    TrueDataNoDataError,
-    TrueDataSpecificationBlocked,
-)
+from app.services.market_data.truedata import TrueDataHistoricalClient, TrueDataNoDataError
 
 
 @pytest.mark.asyncio
@@ -59,11 +55,7 @@ async def test_get_ticks_uses_documented_history_contract():
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     adapter = TrueDataHistoricalClient("user", "secret", client=client)
-    rows = await adapter.get_ticks(
-        "NIFTY-I",
-        "260812T09:15:00",
-        "260812T09:30:00",
-    )
+    rows = await adapter.get_ticks("NIFTY-I", "260812T09:15:00", "260812T09:30:00")
     await client.aclose()
 
     assert rows == [{"timestamp": "2026-08-12T09:15:00", "ltp": "100.5", "volume": "20", "oi": "3"}]
@@ -73,6 +65,70 @@ async def test_get_ticks_uses_documented_history_contract():
     assert "to=260812T09%3A30%3A00" in seen["url"]
     assert "response=csv" in seen["url"]
     assert seen["authorization"] == "bearer token-1"
+
+
+@pytest.mark.asyncio
+async def test_get_bars_uses_documented_history_contract():
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        if request.url.path.endswith("/token"):
+            return httpx.Response(
+                200,
+                json={"access_token": "token-1", "token_type": "bearer", "expires_in": 3600},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            text="timestamp,open,high,low,close,volume,oi\n2026-08-12T09:15:00,100,101,99,100.5,20,3\n",
+            request=request,
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    adapter = TrueDataHistoricalClient("user", "secret", client=client)
+    rows = await adapter.get_bars("NIFTY-I", "260812T09:15:00", "260812T09:30:00", interval="1min")
+    await client.aclose()
+
+    assert rows == [{
+        "timestamp": "2026-08-12T09:15:00",
+        "open": "100",
+        "high": "101",
+        "low": "99",
+        "close": "100.5",
+        "volume": "20",
+        "oi": "3",
+    }]
+    assert "/getbars" in seen["url"]
+    assert "symbol=NIFTY-I" in seen["url"]
+    assert "interval=1min" in seen["url"]
+    assert "response=csv" in seen["url"]
+
+
+@pytest.mark.asyncio
+async def test_get_bars_rejects_undocumented_interval():
+    adapter = TrueDataHistoricalClient(
+        "user",
+        "secret",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(500))),
+    )
+    with pytest.raises(ValueError, match="bar intervals"):
+        await adapter.get_bars("NIFTY-I", "260812T09:15:00", "260812T09:30:00", interval="4min")
+    await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_last_bars_enforces_documented_bounds_and_bidask():
+    adapter = TrueDataHistoricalClient(
+        "user",
+        "secret",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(500))),
+    )
+    with pytest.raises(ValueError, match="1..200"):
+        await adapter.get_last_bars("NIFTY-I", 201)
+    with pytest.raises(ValueError, match="bidask=0"):
+        await adapter.get_last_bars("NIFTY-I", 10, bidask=1)
+    await adapter.aclose()
 
 
 @pytest.mark.asyncio
@@ -103,15 +159,3 @@ async def test_no_data_is_explicit():
     with pytest.raises(TrueDataNoDataError):
         await adapter.get_ticks("NIFTY-I", "260812T09:15:00", "260812T09:30:00")
     await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_bar_history_is_not_invented():
-    adapter = TrueDataHistoricalClient(
-        "user",
-        "secret",
-        client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(500))),
-    )
-    with pytest.raises(TrueDataSpecificationBlocked):
-        await adapter.get_bars("NIFTY-I", "1m")
-    await adapter.aclose()
