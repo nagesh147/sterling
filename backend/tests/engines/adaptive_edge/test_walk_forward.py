@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 
@@ -35,7 +35,7 @@ def cycle() -> EvaluationCycle:
         training=TemporalSpan(dt(1), dt(10)),
         validation=TemporalSpan(dt(10), dt(13)),
         test=TemporalSpan(dt(13), dt(16)),
-        promotion_time=dt(13),
+        promotion_time=dt(12, 23),
         feature_policy_version="features-v1",
         label_policy_version="labels-vUNKNOWN",
         model_policy_version="model-v1",
@@ -101,7 +101,7 @@ def test_walk_forward_test_boundaries_must_advance() -> None:
         training=TemporalSpan(dt(1), dt(13)),
         validation=TemporalSpan(dt(13), dt(16)),
         test=TemporalSpan(dt(16), dt(19)),
-        promotion_time=dt(16),
+        promotion_time=dt(15, 23),
     )
     validate_walk_forward_sequence([c1, c2])
 
