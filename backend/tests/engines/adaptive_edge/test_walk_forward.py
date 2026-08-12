@@ -12,6 +12,7 @@ from app.engines.adaptive_edge.walk_forward import (
     HoldoutStatus,
     ObservationDisposition,
     ResearchRegistry,
+    TemporalSpan,
     TestSetContaminatedError,
     TestUseEvent,
     assign_observation,
