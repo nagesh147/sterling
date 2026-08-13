@@ -1,12 +1,12 @@
 # A128 — Instrument & Contract Identity Specification
 
 **Status:** CANONICAL / IMPLEMENTATION SOURCE OF TRUTH  
-**Version:** 1.0  
-**Depends on:** A75 canonical market events; A127 execution lifecycle and broker adapter contract.
+**Version:** 1.1  
+**Depends on:** A75 canonical market events; A127 Execution Lifecycle and Broker Adapter Contract.
 
 ## 1. Purpose
 
-A128 defines exactly what an instrument/contract is. A display or provider symbol is never sufficient identity.
+A128 defines exactly what an instrument/contract is. A display or provider symbol is never sufficient canonical identity.
 
 ```text
 CANONICAL CONTRACT
@@ -62,9 +62,9 @@ current contract metadata applied to old fills
 
 ## 4. Venue and segment
 
-Venue and segment are mandatory. The initial execution scope is NSE equity/derivatives.
+Venue and segment are mandatory. Initial execution scope is NSE equity/derivatives.
 
-The same display symbol can represent different instruments across venues or segments; therefore symbol-only identity is invalid.
+The same display symbol can represent different instruments across venues or segments; symbol-only identity is invalid.
 
 ## 5. Effective dating and causality
 
@@ -85,36 +85,51 @@ contract = resolve(instrument_id, event_timestamp)
 
 Never use the newest contract master to reinterpret historical events. This prevents look-ahead and historical contract corruption.
 
-## 6. Provider mapping
+## 6. Kite instrument mapping
+
+Kite Connect's instrument dump provides:
 
 ```text
-Canonical Instrument
-        |
-        +--> Dhan security_id
-        +--> Dhan trading_symbol
-        +--> TrueData symbol / symbol_id
-        +--> NSE exchange symbol
+instrument_token
+exchange_token
+tradingsymbol
+name
+expiry
+strike
+tick_size
+lot_size
+instrument_type
+segment
+exchange
 ```
 
-Mappings are effective-dated. Provider identifier changes cannot mutate canonical identity.
+Kite explicitly recommends `exchange + tradingsymbol` as the storage key rather than relying on `instrument_token`, because instrument tokens can be reused for different derivative instruments after expiry. citeturn2view0
 
-Dhan's documented instrument master supplies Security IDs and fields including exchange, segment, underlying, trading symbol, lot size, expiry, strike, option type, tick size and buy/sell indicator. These are provider facts mapped into the canonical contract.
+Therefore:
+
+```text
+canonical instrument_id
+        |
+        +--> Kite exchange
+        +--> Kite tradingsymbol
+        +--> Kite instrument_token
+```
+
+Kite identifiers are provider/exchange mappings, not the canonical identity.
 
 ## 7. Authority precedence
 
-For NSE derivatives:
+For NSE contracts:
 
 ```text
-NSE contract rules
+NSE effective contract rules
     >
-Dhan provider metadata
+Kite instrument metadata
     >
-provider display/trading symbol
+provider/display symbol parsing
 ```
 
-A conflict between exchange contract rules and provider metadata blocks the affected instrument until reconciled.
-
-NSE publishes contract information, permitted lot sizes and quantity-freeze information. These are external facts, not learned parameters.
+A conflict between authoritative exchange contract rules and Kite metadata blocks the affected instrument until reconciled.
 
 ## 8. Lot size
 
@@ -126,7 +141,7 @@ lot_size = effective contract metadata at execution time
 
 No automatic quantity rounding is permitted.
 
-NSE periodically revises derivative market lots. Therefore a value observed today must not be hard-coded as the permanent lot size of an underlying.
+Historical events retain the lot size effective for their contract version.
 
 ## 9. Tick size
 
@@ -134,7 +149,7 @@ Tick size is the minimum permitted price increment of the effective contract.
 
 Invalid price increments are rejected rather than silently rounded.
 
-Exchange contract rules are authoritative; broker metadata is a provider mapping.
+Exchange rules are authoritative; Kite provides the execution mapping.
 
 ## 10. Quantity constraints
 
@@ -148,7 +163,7 @@ quantity_freeze
 
 They are not interchangeable.
 
-If quantity violates the effective contract constraint:
+If quantity violates an effective contract/exchange constraint:
 
 ```text
 EXECUTION_INELIGIBLE
@@ -177,8 +192,6 @@ CE
 PE
 ```
 
-Provider forms such as CALL/PUT are adapter mappings.
-
 Therefore:
 
 ```text
@@ -186,7 +199,7 @@ NIFTY 25000 CE != NIFTY 25100 CE
 NIFTY 25000 CE != NIFTY 25000 PE
 ```
 
-Strike and option type are identity components, not merely descriptive fields.
+Strike and option type are identity components, not descriptive fields.
 
 ## 12. Expiry
 
@@ -286,20 +299,21 @@ requested side permitted
 contract version recorded
 ```
 
-Failure blocks execution. The adapter must not invent or silently repair contract semantics.
+Failure blocks execution. No provider adapter may invent or silently repair contract semantics.
 
 ## 18. Dependency contract
 
 | Dependency | Authority | Consumer | Failure |
 |---|---|---|---|
-| Contract definition | NSE | contract registry | block affected instrument |
+| NSE contract definition | NSE | contract registry | block affected instrument |
 | Lot size | NSE effective contract | risk/execution | reject quantity |
 | Tick size | NSE contract rules | execution | reject price |
-| Tradability | exchange/broker | execution | unknown/block |
-| Dhan Security ID | Dhan | broker adapter | mapping failure |
-| Dhan trading symbol | Dhan | broker adapter | mapping failure |
-| TrueData symbol ID | TrueData | data adapter | data unavailable |
-| Underlying mapping | NSE/Dhan | all consumers | ambiguous identity |
+| Tradability | exchange/Kite | execution | unknown/block |
+| Kite instrument mapping | Kite instrument dump | broker adapter | mapping failure |
+| Kite instrument token | Kite | market-data adapter | mapping failure |
+| Underlying mapping | NSE/Kite | all consumers | ambiguous identity |
+
+Kite's instrument dump is generated daily, so it is a reference-data input rather than a realtime tradability guarantee. citeturn2view0
 
 ## 19. Frozen vs dynamic
 
@@ -309,7 +323,7 @@ Frozen architecture:
 identity is explicit
 identity is time-effective
 provider identifiers are mappings
-exchange rules outrank provider display metadata
+exchange rules outrank provider metadata
 lot/tick/expiry are metadata, not strategy constants
 historical events use historical contract versions
 unknown contract state blocks execution
@@ -337,14 +351,14 @@ The contract must survive:
 symbol collision across venues
 expiry rollover
 lot-size revision
-provider symbol change
-stale instrument master
+Kite instrument-token reuse
+stale daily instrument dump
 invalid strike
 expired option
 future contract metadata leaking into history
 invalid tick increment
 quantity above freeze
-provider/exchange contradiction
+NSE/Kite metadata contradiction
 ```
 
 Required result is explicit resolution failure or execution block. Silent substitution is forbidden.
@@ -360,7 +374,7 @@ FROZEN:
 - venue/segment identity
 - effective-dated contract resolution
 - derivative/option identity
-- provider mapping boundary
+- Kite provider mapping boundary
 - exchange-over-provider precedence
 - lot/tick/quantity validation semantics
 - tradability state
@@ -376,8 +390,8 @@ INTENTIONALLY DYNAMIC:
 - effective tick sizes
 - active expiries
 - tradability
-- provider Security IDs
-- provider symbol mappings
+- Kite instrument tokens
+- Kite trading-symbol mappings
 
 BLOCKERS:
 None.
