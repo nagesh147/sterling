@@ -380,6 +380,34 @@ on is never realised.
 
 ## Unverified claims, worth checking (highest damage first)
 
+> **Verification status as of 2026-08-13.** Nine of these were re-checked against the code
+> as it stands. **All nine were already closed** — this section is largely historical, and
+> the entries below should be read as leads to verify, not as a backlog to work through.
+> Everything here predates four rounds of protection work; see
+> `kite_protection_hardening_2026-08-06.md`.
+>
+> | Claim | Status | Closed by |
+> |---|---|---|
+> | `[critical]` orphaned GTT on reject / external exit (L383) | closed | live paths + `_reconcile_orphan_stops` |
+> | `[critical]` `stop_mode="both"` double sell (L406) | closed | `_exit_position` cancels before selling |
+> | `[critical]` GTT on a PENDING entry (L430) | closed | reject cancels, partial resizes |
+> | `[critical]` zero premium → unprotected BUY (L459) | closed | auto-exec aborts; log reports what was armed |
+> | `[critical]` red count from the entry-bar chip (L487) | closed | `current_reds` + `signal_direction` |
+> | `[high]` 1-lot floor makes `risk_pct` advisory (L513) | closed | `blocked=True` + `_blocked()` at every call site |
+> | `[high]` `_compile_rows` not idempotent (L586) | closed | copies rather than mutates |
+> | `[medium]` GTT's flat 18% IV ≠ the on-screen stop (L867) | closed | `_effective_iv` solves from the quote |
+> | `[medium]` futures sent an underlying-domain trigger (L754) | closed | `_futures_entry_and_stop` + `pos_expiry` |
+>
+> Each is now pinned by a test that fails when the fix is reverted. Two were fixed in the
+> module but unpinned on the **caller** path, which is where the earlier rounds went wrong;
+> those tests are the ones worth keeping.
+>
+> **Still unverified**, and the thread worth pulling next: auto-exec passes
+> `spot=float(row.spot)` into the premium translation while the board uses
+> `row.underlying_spot or row.spot`. For a derivatives-source row those differ — `spot`
+> carries the option premium there, and `place_cb` runs on the raw row before grouping.
+> Adjacent to `[medium]` L908.
+
 ### [critical] A rejected entry or an externally-filled exit closes the position but never cancels the broker GTT — an armed SELL is orphaned at Zerodha
 
 `backend/app/services/kite_engine/monitor.py:95`
