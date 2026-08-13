@@ -59,7 +59,7 @@ class _FakeClient:
     def __init__(self, cancel_error: str | None = None, *, gtt_status: str = "active",
                  ltp: float = 0.0, move_fails: bool = False, order_history: list | None = None,
                  gtt_book: list | None = None, order_book: list | None = None,
-                 book_error: str | None = None):
+                 book_error: str | None = None, net_positions: dict | None = None):
         self.sells: list = []
         self.cancelled: list = []
         self.gtts: list = []
@@ -73,6 +73,9 @@ class _FakeClient:
         self.gtt_book = gtt_book or []
         self.order_book = order_book or []
         self.book_error = book_error
+        #: GET /portfolio/positions. Default: the broker still holds everything, so a
+        #: test must opt IN to "the position is gone" rather than get it by accident.
+        self.net_positions = net_positions if net_positions is not None else {"net": []}
 
     async def get_gtts(self):
         self.calls.append("get_gtts")
@@ -130,6 +133,12 @@ class _FakeClient:
     async def get_order_history(self, order_id):
         self.calls.append("order_history")
         return self.order_history
+
+    async def get_positions_raw(self):
+        self.calls.append("positions")
+        if self.book_error == "positions":
+            raise RuntimeError("positions unreachable")
+        return self.net_positions
 
 
 @pytest.fixture(autouse=True)
@@ -2193,3 +2202,169 @@ class TestTheTranslationIsFedTheUnderlyingNotThePremium:
 
         assert seen.get("spot") == 3010.0, (
             f"the translation was handed {seen.get('spot')} as the underlying level")
+
+
+# ── the other end of the trade: an exit we were never told about ──────────────
+
+class TestClosedPositionsAreReconciled:
+    """`_reconcile_pending_positions` recovers an ENTRY whose postback was lost. This
+    is the mirror at the exit, and it is the more dangerous half.
+
+    An exit fills at Zerodha — a GTT firing, a square-off in the Kite app, or the exit
+    the monitor deliberately stood down for when it could not confirm a cancel — and
+    we hear about it only through an order postback. Miss that message and the registry
+    still believes we hold the position. The board lies, the auto-open slot stays
+    blocked forever, and the expiry square-off, the time stop and the tick monitor
+    will each place a SELL for something the account no longer owns: a naked short.
+    """
+
+    @staticmethod
+    def _open(uid, *, qty=50, gtt_id=555, guard="NIFTY24JUN24000CE"):
+        pos.reset(uid)
+        return pos.register(pos.OpenPosition(
+            uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=qty, lot_size=50, entry_premium=100.0, fill_price=100.0,
+            stop_premium=80.0, order_id="E1", status=pos.OPEN, gtt_id=gtt_id,
+            guard_key=guard))
+
+    @staticmethod
+    def _net(qty, *, sell_price=0.0):
+        """Kite keeps a squared-off position in `net` with quantity 0 for the rest of
+        the day — that row, not its absence, is what says it closed."""
+        return {"net": [{"tradingsymbol": "NIFTY24JUN24000CE", "exchange": "NFO",
+                         "quantity": qty, "sell_price": sell_price}]}
+
+    @pytest.mark.asyncio
+    async def test_a_position_the_broker_no_longer_holds_is_closed(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c1")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        cleared: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open",
+                            lambda uid, key: cleared.append(key))
+
+        await ksvc._reconcile_closed_positions(client, "c1")
+
+        held = pos.get("c1", "NIFTY24JUN24000CE")
+        assert held.status == pos.CLOSED
+        assert "reconciled closed at broker" in held.exit_reason
+        assert cleared == ["NIFTY24JUN24000CE"], "the auto-open slot stayed blocked"
+        assert client.cancelled == [555], "our trigger was left resting over nothing"
+
+    @pytest.mark.asyncio
+    async def test_it_never_places_an_order(self, monkeypatch):
+        """Reconciliation repairs bookkeeping. Selling on the strength of a positions
+        read — which can be stale or wrong — is exactly what must not happen here."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c2")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c2")
+
+        assert client.sells == []
+
+    @pytest.mark.asyncio
+    async def test_the_exit_price_is_taken_from_the_broker_not_invented(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c3")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        booked: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+        monkeypatch.setattr(ksvc.state, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        await ksvc._reconcile_closed_positions(client, "c3")
+
+        # (142.5 − 100.0) × 50
+        assert booked == [pytest.approx(2125.0)]
+
+    @pytest.mark.asyncio
+    async def test_no_exit_price_means_no_fabricated_pnl(self, monkeypatch):
+        """A wrong realized number feeds the daily-loss breaker. Closing the position
+        is the urgent part; guessing what it closed at is not."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c4")
+        client = _FakeClient(net_positions=self._net(0))  # no sell_price
+        booked: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+        monkeypatch.setattr(ksvc.state, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        await ksvc._reconcile_closed_positions(client, "c4")
+
+        assert pos.get("c4", "NIFTY24JUN24000CE").status == pos.CLOSED
+        assert booked == []
+
+    @pytest.mark.asyncio
+    async def test_a_still_held_position_is_left_alone(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c5")
+        client = _FakeClient(net_positions=self._net(50))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c5")
+
+        assert pos.get("c5", "NIFTY24JUN24000CE").status == pos.OPEN
+        assert client.cancelled == []
+
+    @pytest.mark.asyncio
+    async def test_a_symbol_absent_from_the_book_is_not_evidence_of_a_close(self, monkeypatch):
+        """A carry-over position, or simply a symbol the day's book does not list, must
+        not be closed on absence — only a present row with quantity 0 proves an exit."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c6")
+        client = _FakeClient(net_positions={"net": []})
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c6")
+
+        assert pos.get("c6", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_failed_positions_read_changes_nothing(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c7")
+        client = _FakeClient(book_error="positions")
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c7")
+
+        assert pos.get("c7", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_partial_exit_elsewhere_resizes_rather_than_closes(self, monkeypatch):
+        """Overselling on the next exit is the failure being prevented: the trail and
+        the GTT must be sized to what is actually held."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c8", qty=150)
+        client = _FakeClient(net_positions=self._net(50))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c8")
+
+        held = pos.get("c8", "NIFTY24JUN24000CE")
+        assert (held.status, held.qty) == (pos.OPEN, 50)
+
+    @pytest.mark.asyncio
+    async def test_a_pending_entry_is_left_to_its_own_reconciler(self, monkeypatch):
+        """A PENDING entry legitimately has no holding yet — closing it on that basis
+        would delete a position that is about to exist."""
+        from app.services.kite_engine import service as ksvc
+
+        p = self._open("c9")
+        pos.register(p.__class__(**{**p.__dict__, "status": pos.PENDING}))
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c9")
+
+        assert pos.get("c9", "NIFTY24JUN24000CE").status == pos.PENDING
