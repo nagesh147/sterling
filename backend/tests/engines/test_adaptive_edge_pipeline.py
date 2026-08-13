@@ -30,10 +30,17 @@ def test_future_feature_is_rejected():
 
 
 def test_timestamp_comparison_is_semantic_not_lexical():
+    # Override the helper's UTC decision time with +05:30 so the test exercises
+    # semantic instant comparison rather than string ordering.
+    kwargs = {
+        **_snapshot_kwargs(),
+        "observation_cutoff_time": "2026-08-11T10:00:00+05:30",
+        "decision_time": "2026-08-11T10:00:00+05:30",
+    }
     # 09:00 UTC is after 10:00 +05:30 (04:30 UTC), despite lexical ordering.
     with pytest.raises(ValueError, match="lookahead detected"):
         build_feature_snapshot(
-            **_snapshot_kwargs(),
+            **kwargs,
             inputs=[FeatureInput("x", 1.0, "2026-08-11T09:00:00+00:00")],
         )
 
