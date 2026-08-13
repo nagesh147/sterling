@@ -1993,3 +1993,113 @@ class TestASessionlessClientCannotManufactureEvidence:
         paper = KiteClient(api_key="ak", access_token="", is_paper=True)
         assert await paper.get_gtts() == []
         assert await paper.get_orders() == []
+
+
+# ── 25. the risk cap has to stop the ORDER, not just the sizer ────────────────
+
+class _CapitalClient(_QuotingClient):
+    """A broker that answers a margins call, so risk sizing has a real budget to
+    compare against. Without one, available_fo_capital returns 0 and the sizer
+    deliberately keeps the 1-lot floor rather than halt every entry on an API blip."""
+
+    def __init__(self, ltp: float = 90.0, capital: float = 50_000.0):
+        super().__init__(ltp=ltp)
+        self.capital = capital
+
+    async def get_margins(self, segment="equity"):
+        return {"available": {"live_balance": self.capital}}
+
+
+class TestTheRiskCapBlocksTheEntryNotJustTheSize:
+    """`size_position` refuses when one lot already breaks risk_pct, returning
+    blocked=True and qty 0. That is only half the guarantee: `qty` still holds the
+    un-risk-sized default from the signal args, so a caller that read only `qty > 0`
+    would place the very order the cap just refused. The sizer is well covered; the
+    CALLER path was not, and that is exactly where the two previous rounds of this
+    work went wrong — right module, wrong path."""
+
+    @staticmethod
+    def _cfg(uid, **over):
+        from app.services.kite_engine import state
+        cfg = state.get_config(uid).model_dump()
+        cfg.update({"risk_sizing": True, "risk_pct": 0.1, "max_lots": 10}, **{})
+        cfg.update(over)
+        from app.engines.sterling_kite_engine.schemas import EngineConfigModel
+        return state.set_config(uid, EngineConfigModel(**cfg))
+
+    @pytest.mark.asyncio
+    async def test_an_over_budget_signal_places_no_order(self):
+        from app.services.kite_engine import service, state
+        state.reset("cap1")
+        pos.reset("cap1")
+        # ₹50,000 × 0.1% = ₹50 of budget against a 250-lot option risking far more.
+        self._cfg("cap1")
+        client = _CapitalClient(ltp=90.0, capital=50_000.0)
+
+        await service._make_place_cb(client, "cap1")(_spot_row(), None)
+
+        assert client.placed == [], (
+            "the sizer refused every size that honours risk_pct, and the entry went in "
+            "anyway at the un-risk-sized default")
+        kinds = [e.kind for e in state.activity("cap1")]
+        assert "order_blocked" in kinds and "order_placed" not in kinds
+
+    @pytest.mark.asyncio
+    async def test_the_block_says_what_to_change(self):
+        from app.services.kite_engine import service, state
+        state.reset("cap2")
+        pos.reset("cap2")
+        self._cfg("cap2")
+
+        await service._make_place_cb(_CapitalClient(), "cap2")(_spot_row(), None)
+
+        msg = next(e.message for e in state.activity("cap2") if e.kind == "order_blocked")
+        assert "Risk per trade" in msg and "minimum lot" in msg, (
+            f"a refusal the user cannot act on is a dead end: {msg}")
+
+    @pytest.mark.asyncio
+    async def test_allow_min_lot_over_risk_takes_the_smallest_lot(self):
+        """The escape hatch is a deliberate choice, not the default — and it must
+        actually reach the order."""
+        from app.services.kite_engine import service, state
+        state.reset("cap3")
+        pos.reset("cap3")
+        self._cfg("cap3", allow_min_lot_over_risk=True)
+
+        client = _CapitalClient(ltp=90.0, capital=50_000.0)
+        await service._make_place_cb(client, "cap3")(_spot_row(), None)
+
+        assert len(client.placed) == 1, "the opt-in did not reach the order path"
+        assert client.placed[0][2] == 250, "should take exactly one lot"
+
+    @pytest.mark.asyncio
+    async def test_a_comfortable_budget_still_trades(self):
+        """The cap must not become a blanket halt."""
+        from app.services.kite_engine import service, state
+        state.reset("cap4")
+        pos.reset("cap4")
+        self._cfg("cap4", risk_pct=50.0)
+
+        client = _CapitalClient(ltp=90.0, capital=50_000_000.0)
+        await service._make_place_cb(client, "cap4")(_spot_row(), None)
+
+        assert len(client.placed) == 1
+
+    @pytest.mark.asyncio
+    async def test_unknown_capital_does_not_halt_every_entry(self):
+        """A failed margins call returns 0. Reading that as "over budget" would turn a
+        transient broker outage into a silent stop on all automatic entries — which
+        looks exactly like the engine being broken."""
+        from app.services.kite_engine import service, state
+        state.reset("cap5")
+        pos.reset("cap5")
+        self._cfg("cap5")
+
+        class _NoMargins(_QuotingClient):
+            async def get_margins(self, segment="equity"):
+                raise RuntimeError("margins unavailable")
+
+        client = _NoMargins(ltp=90.0)
+        await service._make_place_cb(client, "cap5")(_spot_row(), None)
+
+        assert len(client.placed) == 1, "a margins outage must not halt entries"
