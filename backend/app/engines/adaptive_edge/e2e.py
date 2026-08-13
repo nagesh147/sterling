@@ -1,8 +1,8 @@
 """End-to-end Adaptive Edge orchestration contracts.
 
 This module composes existing canonical boundaries. It does not invent locked
-strategy mathematics. Any unresolved strategy formula or downstream contract
-fails closed through the supplied implementation boundary.
+strategy mathematics or lifecycle parameters. Downstream contracts are injected
+so unresolved policy remains fail-closed rather than silently defaulted.
 """
 from __future__ import annotations
 
@@ -96,6 +96,18 @@ class PositionState:
 
 
 @dataclass(frozen=True)
+class LifecycleEvaluation:
+    evaluation_id: str
+    position_id: str
+    lifecycle_version: str
+    lifecycle_state: str
+    protection_state: str
+    action: str
+    reason: str
+    evaluated_at: str
+
+
+@dataclass(frozen=True)
 class AuditRecord:
     sequence: int
     stage: str
@@ -116,6 +128,7 @@ class E2ETrace:
     order: OrderIntent | None
     execution: ExecutionEvent | None
     position: PositionState | None
+    lifecycle: LifecycleEvaluation | None
     audit: tuple[AuditRecord, ...]
     execution_gate: ExecutionGateDecision
 
@@ -153,6 +166,10 @@ class PositionProjector(Protocol):
     def project(self, event: ExecutionEvent) -> PositionState: ...
 
 
+class LifecycleEngine(Protocol):
+    def evaluate(self, position: PositionState, event: CanonicalMarketEvent) -> LifecycleEvaluation: ...
+
+
 class AuditLedger:
     """Append-only causal ledger for deterministic replay and audit."""
 
@@ -178,6 +195,7 @@ def run_e2e(
     order_factory: OrderIntentFactory,
     execution_adapter: ExecutionAdapter,
     position_projector: PositionProjector,
+    lifecycle_engine: LifecycleEngine,
     execution_cost: float,
     minimum_net_value: float = 0.0,
     required_formula_ids: tuple[str, ...] | None = None,
@@ -204,7 +222,10 @@ def run_e2e(
     formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
     gate = evaluate_execution_gate(formula_ids)
     if not gate.authorized:
-        return E2ETrace(event, snapshot, prediction, None, None, None, None, None, None, None, None, audit.records(), gate)
+        return E2ETrace(
+            event, snapshot, prediction, None, None, None, None, None, None, None, None, None,
+            audit.records(), gate,
+        )
 
     edge = evaluate_edge(snapshot, edge_formula)
     if edge.opportunity_id != prediction.opportunity_id:
@@ -220,7 +241,10 @@ def run_e2e(
     audit.append("decision", decision.decision_id, prediction.prediction_id)
 
     if not decision.eligible:
-        return E2ETrace(event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, audit.records(), gate)
+        return E2ETrace(
+            event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None,
+            audit.records(), gate,
+        )
 
     authorization = risk_authorizer.authorize(decision)
     if authorization.decision_id != decision.decision_id:
@@ -251,5 +275,12 @@ def run_e2e(
         raise ValueError("position execution identity mismatch")
     audit.append("position", position.position_id, execution.execution_event_id)
 
-    return E2ETrace(event, snapshot, prediction, edge, economics, decision, authorization,
-                    instrument, order, execution, position, audit.records(), gate)
+    lifecycle = lifecycle_engine.evaluate(position, event)
+    if lifecycle.position_id != position.position_id:
+        raise ValueError("lifecycle position identity mismatch")
+    audit.append("lifecycle", lifecycle.evaluation_id, position.position_id)
+
+    return E2ETrace(
+        event, snapshot, prediction, edge, economics, decision, authorization,
+        instrument, order, execution, position, lifecycle, audit.records(), gate,
+    )
