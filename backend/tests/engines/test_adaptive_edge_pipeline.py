@@ -1,4 +1,4 @@
-from app.engines.adaptive_edge.edge import EdgeAssessment, StrategyFormulaLockedError
+from app.engines.adaptive_edge.edge import EdgeAssessment
 from app.engines.adaptive_edge.economic import evaluate_economics
 from app.engines.adaptive_edge.feature_engine import FeatureInput, InstrumentContext, build_feature_snapshot
 import pytest
@@ -21,6 +21,23 @@ def test_future_feature_is_rejected():
             **_snapshot_kwargs(),
             inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00+00:00")],
         )
+
+
+def test_timestamp_comparison_is_semantic_not_lexical():
+    with pytest.raises(ValueError, match="lookahead detected"):
+        build_feature_snapshot(
+            **_snapshot_kwargs(),
+            inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00+05:30")],
+        )
+
+
+def test_snapshot_mappings_are_immutable():
+    snapshot = build_feature_snapshot(
+        **_snapshot_kwargs(),
+        inputs=[FeatureInput("x", 1.0, "2026-08-11T09:59:00+00:00")],
+    )
+    with pytest.raises(TypeError):
+        snapshot.values["x"] = 2.0
 
 
 def test_expected_net_value_is_gross_minus_cost():
