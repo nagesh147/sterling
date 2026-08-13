@@ -2103,3 +2103,93 @@ class TestTheRiskCapBlocksTheEntryNotJustTheSize:
         await service._make_place_cb(client, "cap5")(_spot_row(), None)
 
         assert len(client.placed) == 1, "a margins outage must not halt entries"
+
+
+# ── 26. the premium translation needs UNDERLYING-domain inputs ────────────────
+
+class TestTheTranslationIsFedTheUnderlyingNotThePremium:
+    """`_resolve_premium_stop` carries a SuperTrend level on the UNDERLYING's chart into
+    a premium via delta, so both its `spot` and `trail_level` must be underlying-domain
+    numbers. A derivatives-source row has neither: its ST ran on the contract's own
+    premium series, so `spot` is that premium (place_cb sees the raw row, before
+    grouping zeroes it) and `stop_loss` is a premium level too.
+
+    Normal derivatives rows never reach this — their leg carries premium_spot/premium_sl
+    so entry_px and stop_px are already set. A leg that arrived without them (a legacy
+    cached row) did fall through, and priced a ₹90 premium against a ₹3000 strike: the
+    vol solve fails, delta collapses to the ±0.5 fallback, and the resulting invented
+    number became the broker's trigger."""
+
+    @staticmethod
+    def _deriv_row_without_premium_stop():
+        from app.engines.sterling_kite_engine.schemas import (
+            AlignmentChip, EngineSignalRow, OptionLeg)
+        return EngineSignalRow(
+            underlying="RELIANCE", token=111, exchange="NFO", regime="BULL",
+            alignment=AlignmentChip(fast=1, mid=1, slow=1),
+            direction="long", option_type="CE", source="derivatives",
+            legs=[OptionLeg(moneyness="ATM", option_type="CE",
+                            option_symbol="RELIANCE25JUN3000CE", strike=3000.0,
+                            expiry="2026-06-26", lot_size=250)],  # no premium_spot/_sl
+            spot=90.0,                 # the CONTRACT's premium, not an index level
+            underlying_spot=3010.0,    # the underlying, captured separately
+            stop_loss=70.0,            # a PREMIUM stop, not an underlying trail
+            score=85.0, timestamp_ms=1000)
+
+    @pytest.mark.asyncio
+    async def test_a_derivatives_row_with_no_leg_premium_stop_is_refused(self):
+        from app.services.kite_engine import service, state
+        state.reset("dm1")
+        pos.reset("dm1")
+        client = _QuotingClient(ltp=90.0)
+
+        await service._make_place_cb(client, "dm1")(
+            self._deriv_row_without_premium_stop(), None)
+
+        assert client.placed == [], (
+            "opened a position whose broker trigger was derived by pricing a premium "
+            "as if it were the underlying")
+        kinds = [e.kind for e in state.activity("dm1")]
+        assert "order_blocked" in kinds and "order_placed" not in kinds
+
+    @pytest.mark.asyncio
+    async def test_a_spot_row_still_translates_and_trades(self):
+        """The guard must be narrow: a spot-source row's levels ARE underlying-domain,
+        which is the case the translation exists for."""
+        from app.services.kite_engine import service, state
+        state.reset("dm2")
+        pos.reset("dm2")
+        client = _QuotingClient(ltp=90.0)
+
+        await service._make_place_cb(client, "dm2")(_spot_row(), None)
+
+        assert len(client.placed) == 1
+        _sym, _side, _size, stop_loss = client.placed[0]
+        assert stop_loss is not None and stop_loss > 0
+
+    @pytest.mark.asyncio
+    async def test_the_translation_is_given_the_underlying_spot(self):
+        """Pins the input itself, so the board and auto-exec cannot drift apart on
+        which number they call 'spot'."""
+        from app.services.kite_engine import service, state
+        state.reset("dm3")
+        pos.reset("dm3")
+        seen = {}
+
+        async def _spy(client, **kw):
+            seen.update(kw)
+            return 90.0, 70.0, 0.5
+
+        row = _spot_row()
+        row.underlying_spot = 3010.0
+        row.spot = 3010.0
+        import app.services.kite_engine.service as svc
+        orig = svc._resolve_premium_stop
+        svc._resolve_premium_stop = _spy
+        try:
+            await service._make_place_cb(_QuotingClient(), "dm3")(row, None)
+        finally:
+            svc._resolve_premium_stop = orig
+
+        assert seen.get("spot") == 3010.0, (
+            f"the translation was handed {seen.get('spot')} as the underlying level")

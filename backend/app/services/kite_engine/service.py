@@ -670,10 +670,36 @@ def _make_place_cb(client, uid: str):
                 pos_expiry = str(leg.expiry or "")
                 target_px = float(getattr(leg, "premium_target", 0.0) or 0.0)
                 if entry_px <= 0 or stop_px <= 0:
+                    # The translation is UNDERLYING → premium: it carries a SuperTrend
+                    # level on the underlying's chart into a premium via delta. Two
+                    # inputs therefore have to be in the underlying's domain, and on a
+                    # derivatives-source row neither one is. There, `spot` holds the
+                    # CONTRACT's premium (the ST ran on its own premium series, and
+                    # place_cb sees the raw row before grouping zeroes it) and
+                    # `stop_loss` is a premium level too. Feeding those in prices a
+                    # ₹90 premium against a ₹3000 strike: the vol solve fails, delta
+                    # collapses to the ±0.5 fallback, and the "stop" is an invented
+                    # number that then becomes the broker's trigger.
+                    #
+                    # A derivatives row needs no translation — its leg already carries
+                    # the premium stop. If that is missing (a legacy cached leg), there
+                    # is nothing here to derive it from, and leaving stop_px at 0 lets
+                    # the no-stop-no-trade guard refuse the entry rather than arm a
+                    # fabricated one. `underlying_spot` matches what the board feeds
+                    # `_stamp_leg_premium_stops`, so the two stay in step.
+                    under_spot = float(getattr(row, "underlying_spot", 0.0) or 0.0)
+                    if row.source == "derivatives":
+                        state.log(uid, "order_blocked",
+                                  f"{trade_symbol}: derivatives signal carries no premium "
+                                  f"stop on its leg, and its levels are not in the "
+                                  f"underlying's domain to derive one — auto-entry skipped")
+                        return
+                    if under_spot <= 0:
+                        under_spot = float(row.spot or 0.0)
                     entry_px, stop_px, pos_delta = await _resolve_premium_stop(
                         client, exch=trade_exchange, symbol=trade_symbol,
                         strike=pos_strike, expiry=pos_expiry, option_type=row.option_type,
-                        spot=float(row.spot), trail_level=float(row.stop_loss or row.spot))
+                        spot=under_spot, trail_level=float(row.stop_loss or under_spot))
 
         # ── risk sizing ───────────────────────────────────────────────────────
         # No longer byte-identical to the pre-risk-cap behaviour, in one direction:
