@@ -1,36 +1,37 @@
 # A127 — Execution Lifecycle and Broker Adapter Contract
 
 **Status:** CANONICAL / IMPLEMENTATION SOURCE OF TRUTH  
-**Version:** 1.1  
-**Scope:** Execution intent, broker order lifecycle, fills, cancellation/modification, reconciliation, execution uncertainty, position truth, execution-market-data boundary, and auditability.
+**Version:** 1.2  
+**Depends on:** A126 Adaptive Trade Horizon, Position Protection & Lifecycle Contract; canonical instrument, risk, economics and market-event contracts.  
+**Execution integration:** Zerodha Kite Connect v3.  
+**Scope:** Execution intent, order lifecycle, fills, cancellation/modification, execution uncertainty, reconciliation, broker position truth, executable-price semantics, session authority, charges/margin, and auditability.
 
-**Depends on:** A126 Adaptive Trade Horizon, Position Protection & Lifecycle Contract and canonical instrument, risk, economics, market-event and decision contracts.
+## 1. Purpose
 
-**Selected production adapters:** DhanHQ API v2 for execution; TrueData Market Data API for execution-time market data; NSE official market calendar for NSE session authority.
-
-**Does not define:** signal generation, horizon selection, thesis evaluation, protection thresholds, sizing, profitability logic, or learned trading parameters.
-
----
-
-## 1. Core boundary
+A127 is the boundary between an already-authorized Adaptive Edge decision and external execution.
 
 ```text
-DECISION -> EXECUTION INTENT -> INSTRUCTION -> ORDER -> BROKER EVENT -> FILL -> POSITION EFFECT -> RECONCILIATION
+DECISION
+  -> EXECUTION INTENT
+  -> EXECUTION INSTRUCTION
+  -> KITE ORDER REQUEST
+  -> BROKER / EXCHANGE OBSERVATION
+  -> FILL(S)
+  -> POSITION EFFECT
+  -> RECONCILIATION
 ```
 
 These are distinct facts:
 
 ```text
 INTENT != ORDER
-ORDER != ACK
-ACK != FILL
-FILL != POSITION
+ORDER ACCEPTED != ORDER EXECUTED
+ORDER != FILL
+FILL != POSITION SNAPSHOT
 POSITION != THESIS
 ```
 
-A127 translates an already-authorized action and observes what actually happened. It does not decide whether the strategy should trade.
-
----
+A127 does not decide whether the strategy should trade, change horizon, alter protection, or resize an authorized trade.
 
 ## 2. Canonical entities
 
@@ -46,26 +47,23 @@ PositionObservation
 ReconciliationRecord
 ```
 
-Every economic action has immutable lineage:
+Required lineage:
 
 ```text
 source_decision_id
- -> intent_id
- -> order_id
- -> correlation_id
- -> broker_order_id
- -> exchange_order_id
- -> exchange_trade_id
- -> position_effect
+  -> intent_id
+      -> canonical_order_id
+          -> kite_order_id
+              -> exchange_order_id
+                  -> trade_id
+                      -> position_effect
 ```
 
-Provider identifiers are evidence and lineage; they are not strategy semantics.
+Kite `order_id`, `exchange_order_id`, `trade_id`, `instrument_token`, and `guid` are preserved as provider/exchange evidence. They do not replace canonical internal identity.
 
----
+## 3. Immutable execution intent
 
-## 3. Intent contract
-
-Minimum intent semantics:
+Minimum semantics:
 
 ```text
 intent_id
@@ -87,20 +85,18 @@ configuration_version
 Invariants:
 
 ```text
-intent_id unique
-intent immutable after publication
+intent_id is unique
+intent is immutable after publication
 quantity >= 0
 valid_until >= created_at
-instrument_id resolves to canonical instrument identity
+instrument_id resolves uniquely
 ```
 
-No silent quantity, side, validity, or economic-purpose mutation is permitted.
-
----
+No silent side, quantity, validity, instrument, or economic-purpose mutation is allowed.
 
 ## 4. Execution instruction
 
-Canonical semantics:
+Canonical broker-independent semantics:
 
 ```text
 instrument_id
@@ -113,73 +109,67 @@ time_in_force
 execution_constraints
 ```
 
-The adapter must never silently convert order semantics:
+The Kite adapter must not silently convert:
 
 ```text
 LIMIT -> MARKET
-STOP -> MARKET
+SL -> MARKET
 requested quantity -> rounded quantity
 ```
 
-Any semantic change requires explicit upstream authorization.
+Any economically meaningful change requires a new/explicitly authorized instruction.
 
----
+## 5. Kite Connect v3 capability contract
 
-## 5. DhanHQ v2 execution contract
-
-DhanHQ v2 documents:
+Kite Connect v3 documents:
 
 ```text
-POST /orders
-PUT /orders/{order-id}
-DELETE /orders/{order-id}
-GET /orders
-GET /orders/{order-id}
-GET /orders/external/{correlation-id}
-GET /trades
-GET /trades/{order-id}
-GET /positions
-DELETE /positions
+POST /orders/:variety
+PUT  /orders/:variety/:order_id
+DELETE /orders/:variety/:order_id
+GET  /orders
+GET  /orders/:order_id
+GET  /trades
+GET  /orders/:order_id/trades
+GET  /portfolio/positions
+GET  /portfolio/holdings
+POST /margins/orders
+POST /margins/basket
+POST /charges/orders
+GET  /instruments
+GET  /quote
+GET  /quote/ohlc
+GET  /quote/ltp
 ```
 
-Documented order types include:
+Kite documents regular orders and order modification/cancellation while an order is open/pending. A successful order-placement API response returns an `order_id` but explicitly does **not** guarantee execution; true status must be obtained from order state/history or asynchronous postbacks. citeturn2view2
+
+Therefore the broker contract is now resolved as:
 
 ```text
-LIMIT
-MARKET
-STOP_LOSS
-STOP_LOSS_MARKET
+BROKER = ZERODHA KITE CONNECT v3
 ```
 
-Documented validity includes:
+No Dhan-specific semantics are part of Adaptive Edge.
+
+## 6. Authentication/session dependency
+
+Kite Connect requires an API key/secret and access-token session. A `403`/`TokenException` indicates an expired/invalidated session and requires re-login. The exchange-regulated daily login requirement is therefore an operational prerequisite, not a trading parameter. citeturn3search0turn3search5
+
+Canonical behavior:
 
 ```text
-DAY
-IOC
+SESSION_INVALID
+    -> trading disabled
+    -> no blind authentication retry
+    -> operational re-authentication required
 ```
 
-Dhan also documents order identifiers, exchange order identifiers, correlation IDs, exchange trade IDs, filled quantity, remaining quantity, traded price and average traded price.
+The execution layer must never interpret session failure as order rejection.
 
-Dhan requires static IP for order placement, modification and cancellation. Access tokens are documented as 24-hour tokens; API-key authentication can generate access tokens. These are infrastructure prerequisites, not strategy variables.
+## 7. Order state model
 
-Dhan order API limits are documented as 10 requests/sec, 250/min, 1000/hour and 7000/day; modifications are capped at 25 per order.
-
----
-
-## 6. Dhan state normalization
-
-Dhan-native states include:
-
-```text
-TRANSIT
-PENDING
-REJECTED
-CANCELLED
-TRADED
-EXPIRED
-```
-
-Canonical states are:
+Canonical states:
 
 ```text
 INTENT_CREATED
@@ -198,29 +188,30 @@ REJECTED
 UNKNOWN
 ```
 
-`TRANSIT` is not rejection. It means the order has not yet reached the exchange according to Dhan's documented semantics.
+Kite documents common statuses including `OPEN`, `COMPLETE`, `CANCELLED`, `REJECTED`, plus transient states such as validation/registration/cancellation pending states. The raw Kite status is retained and mapped to the canonical state. citeturn2view2
 
-Forbidden ordinary transitions include:
+Forbidden ordinary transitions:
 
 ```text
 FILLED -> WORKING
 CANCELLED -> WORKING
 REJECTED -> FILLED
 EXPIRED -> PARTIALLY_FILLED
-FILLED -> CANCELLED
 ```
 
-Contradictory later evidence creates reconciliation/correction events; it never overwrites history.
+A contradictory later observation becomes a reconciliation/correction event; historical observations are never overwritten.
 
----
+## 8. Ambiguous submission / idempotency
 
-## 7. Ambiguous submission and idempotency
+Kite explicitly states that successful placement only means the request was registered with its OMS; it does not mean the order reached the exchange or executed. citeturn1search0
+
+Therefore:
 
 ```text
-submit -> timeout
+API timeout / network failure
+        !=
+order rejected
 ```
-
-does **not** mean rejection.
 
 Canonical state:
 
@@ -232,49 +223,60 @@ Recovery:
 
 ```text
 SUBMISSION_UNKNOWN
- -> query order/correlation state
- -> query trade book
- -> query position
- -> reconcile
+  -> query order book/history
+  -> query order trades
+  -> query current positions
+  -> reconcile
 ```
 
-Dhan's `correlationId` is frozen as a lineage/query identifier, **not** as an assumed broker-side idempotency guarantee.
+Kite's `guid` is explicitly documented as an unusable request identifier to avoid order duplication, so A127 does not depend on it as a broker idempotency guarantee. citeturn1search0
 
-Blind resubmission while an economically equivalent action is unresolved is forbidden.
+**Frozen safety rule:** no blind resubmission of an economically equivalent action while the previous submission is unresolved.
 
----
+## 9. Partial fills
 
-## 8. Partial fills
+Kite order data exposes:
 
-Dhan exposes total quantity, traded/fill quantity, remaining quantity, traded price and average traded price.
+```text
+quantity
+filled_quantity
+pending_quantity
+cancelled_quantity
+average_price
+```
+
+Kite trade data exposes `trade_id`, `order_id`, filled quantity, average price and fill timestamp. citeturn1search0
 
 Canonical invariants:
 
 ```text
 0 <= filled_quantity <= accepted_quantity <= requested_quantity
-remaining_quantity >= 0
-filled_quantity + remaining_quantity = accepted_quantity
+pending_quantity >= 0
+cancelled_quantity >= 0
 ```
 
-A first fill creates actual exposure immediately.
+The exact reconciliation equation must account for modifications and broker order history; it must not be inferred from a single current snapshot when historical events are available.
+
+A first fill creates actual exposure:
 
 ```text
-PARTIAL_FILL -> POSITION_SUPERVISION
+PARTIALLY_FILLED
+    -> POSITION_SUPERVISION
 ```
 
-A partial fill is never treated as merely an incomplete signal.
+## 10. Cancellation and modification
 
----
+Kite permits cancellation/modification of open or pending orders. Cancellation is asynchronous and must be treated as a request, not proof of cancellation. citeturn1search0
 
-## 9. Cancellation and modification
-
-Cancellation is asynchronous:
+Canonical lifecycle:
 
 ```text
-CANCEL_REQUESTED -> CANCEL_PENDING -> CANCELLED
-                              \-> PARTIALLY_FILLED
-                              \-> FILLED
-                              \-> UNKNOWN
+CANCEL_REQUESTED
+    -> CANCEL_PENDING
+        -> CANCELLED
+        -> PARTIALLY_FILLED
+        -> FILLED
+        -> UNKNOWN
 ```
 
 Therefore:
@@ -284,134 +286,126 @@ cancel_requested != cancelled
 cancelled != flat
 ```
 
-Dhan supports modification of pending orders. A modification is recorded as an immutable event even when the broker retains the same order ID.
+A modification creates an immutable modification event even if Kite retains the same `order_id`.
 
-```text
-original order state
- -> MODIFICATION_EVENT
- -> new effective order state
-```
+## 11. Fill identity and timestamps
 
-The historical order state is never erased.
-
----
-
-## 10. Execution timestamps
-
-Preserve distinct timestamps:
+Preserve:
 
 ```text
 decision_time
 intent_time
 submission_time
-broker_create_time
-exchange_time
-broker_update_time
-fill_time
+order_timestamp
+exchange_timestamp
+exchange_update_timestamp
+fill_timestamp
 receipt_time
 reconciliation_time
 ```
 
-Dhan exposes create/update/exchange timestamps; TrueData exposes market-event timestamps.
+Kite explicitly exposes order timestamp, exchange timestamp, exchange-update timestamp and trade fill timestamp. citeturn1search0
 
-No timestamp may be relabeled. Missing authoritative timestamps remain `UNKNOWN`.
+No timestamp may be relabeled.
+
+Causal rule:
+
+```text
+event_time <= receipt_time
+```
+
+when authoritative event time exists. If it does not, retain `UNKNOWN`; do not fabricate it.
 
 Network arrival order is not economic event order.
 
----
+## 12. Executable-price semantics
 
-## 11. Executable-price contract
+Kite full quotes provide exchange-timestamped quote snapshots with bid/ask market depth. Kite WebSocket full mode provides five bid and five offer levels and an exchange timestamp. citeturn2view0turn2view1
 
-TrueData real-time tick streaming documents:
-
-```text
-timestamp
-LTP
-LTQ
-OI
-Bid
-Bid Qty
-Ask
-Ask Qty
-```
-
-Therefore canonical executable references are:
+Canonical execution reference:
 
 ```text
-BUY -> ask
-SELL -> bid
+BUY  -> best available offer/ask at the observation timestamp
+SELL -> best available bid at the observation timestamp
 ```
 
-when the quote is present, valid and within the configured freshness policy.
+For a market order, this is a **reference**, not a guaranteed fill price.
 
-LTP is **not** a fallback for canonical executable-price decisions.
+For a limit order, the submitted limit price is the execution constraint; actual fill price remains authoritative.
 
-Missing/stale/invalid quote state produces:
+LTP is never substituted for an unavailable bid/ask when the system is making an executable-price assessment.
+
+If quote data is:
+
+```text
+missing
+stale
+malformed
+crossed/invalid
+```
+
+then:
 
 ```text
 DATA_UNCERTAIN
 ```
 
-rather than an invented price.
+must be emitted.
 
-The numerical freshness threshold remains operational configuration and must be validated independently of trading P&L.
+## 13. Quote freshness
 
----
-
-## 12. TrueData market-data boundary
-
-TrueData is the selected execution-time market-data source. Its documented real-time stream supplies L1 bid/ask and timestamp fields; its one-minute stream supplies timestamped OHLC/volume/OI; its option-chain capabilities include real-time chain and Greeks.
-
-A127 consumes only observations available at or before the decision time:
+The semantic requirement is frozen:
 
 ```text
-event_timestamp <= decision_time
+quote_timestamp <= decision_time
+quote must satisfy freshness policy
 ```
 
-Future bars, future quotes, future OI, future Greeks, future fills and future outcomes are forbidden inputs to earlier decisions.
+The exact freshness threshold remains an operational configuration parameter because it depends on measured provider latency, clock synchronization, network behavior and execution conditions.
 
----
+It must be selected through operational validation, not optimized against strategy P&L.
 
-## 13. Position authority
+## 14. Market-data authority boundary
 
-For strategy history:
+For execution-time executable quotes, the selected source is Kite market data because Kite exposes exchange-timestamped quote/depth data and the same provider boundary as execution. citeturn2view0turn2view1
+
+Other market-data providers may exist upstream for research/historical data, but A127 does not mix their quote semantics into broker execution truth.
+
+This avoids a hidden cross-provider timestamp/identity dependency.
+
+## 15. Position authority
+
+Kite's positions API exposes current `net` positions and `day` activity. `net` represents the actual current net position portfolio. citeturn1search1
+
+Authority is domain-specific:
 
 ```text
-internal canonical decision = authority
+strategy decision/history -> internal canonical system
+actual broker exposure   -> Kite position state
+execution event          -> canonical event derived from provider evidence
 ```
 
-For actual external exposure:
+A local position projection can never override confirmed broker exposure.
 
-```text
-Dhan broker position = authority
-```
-
-Position effect is derived from actual fills, then reconciled against the broker position.
-
-```text
-EXIT_REQUESTED != EXIT_FILLED
-FLATTEN_REQUESTED != FLAT_CONFIRMED
-```
-
----
-
-## 14. Reconciliation
+## 16. Reconciliation
 
 Mandatory comparison:
 
 ```text
+internal intents
 internal orders
 internal fills
 internal position effects
 
 vs
 
-Dhan order book
-Dhan trade book
-Dhan positions
+Kite order book
+Kite order history
+Kite trade book
+Kite positions
 ```
 
-Outcomes:
+Canonical outcomes:
 
 ```text
 CONSISTENT
@@ -424,150 +418,154 @@ IDENTITY_MISMATCH
 AMBIGUOUS
 ```
 
-The stream is a low-latency observation channel. REST order/trade/position queries are the reconciliation mechanism. No event channel is treated as infallible.
+Kite order history is explicitly transient/day-scoped, so reconciliation records must be persisted internally during the session; the system must not assume the broker retains an indefinitely queryable historical order book. citeturn1search0
 
----
+Live order postbacks/WebSocket order messages are low-latency observations. REST queries are used for reconciliation. Kite documents both asynchronous postbacks and REST order/trade retrieval. citeturn0search2turn2view1
 
-## 15. Flatten and emergency execution
+## 17. Flatten semantics
 
-`FLATTEN` means reducing actual exposure toward zero.
+Kite does not provide a magic "make this strategy flat" semantic that can replace canonical execution. Exiting a position is done by placing the opposite order with the same product as the existing position. citeturn1search1
 
 Canonical sequence:
 
 ```text
 FLATTEN_REQUESTED
- -> cancel conflicting working orders where required
- -> obtain broker position
- -> submit offsetting order
- -> observe fills
- -> reconcile
- -> FLAT_CONFIRMED
-```
-
-Dhan also exposes an Exit All Positions API. It is an emergency capability, not a substitute for canonical execution lineage.
-
-Emergency exits may bypass ordinary strategy-generation gates but never bypass:
-
-```text
-identity validation
-instrument validation
-broker capability validation
-duplicate-submission protection
-fill observation
-reconciliation
-```
-
----
-
-## 16. Instrument dependency resolution
-
-A127 consumes canonical instrument identity rather than a raw symbol string.
-
-Required contract fields are:
-
-```text
-exchange
-segment
-security_id
-instrument_type
-underlying_security_id
-underlying_symbol
-trading_symbol
-lot_size
-expiry_date
-strike_price
-option_type
-tick_size
-expiry_flag
-buy_sell_indicator
-```
-
-Dhan's instrument master documents these fields and provides Security IDs plus derivative attributes. The provider trading symbol is therefore a mapping, not canonical identity.
-
-This dependency is resolved for A127; A128 will define the canonical instrument contract itself.
-
----
-
-## 17. Options execution
-
-For an option order, the execution identity must preserve:
-
-```text
-underlying
-expiry
-strike
-CE/PE
-lot_size
-quantity
-tick_size
-security_id
-```
-
-Dhan order updates/instrument master expose these contract attributes. Dhan option-chain data exposes security ID, bid/ask, quantities, volume, OI and Greeks.
-
-Greeks and option-chain state are upstream economic observations. Actual fill price remains the execution truth.
-
----
-
-## 18. Charges and realized economics
-
-No arbitrary brokerage/tax formulas are frozen in A127.
-
-Dhan trade-history/statement data documents actual recorded fields for:
-
-```text
-SEBI tax
-STT
-brokerage
-service tax / applicable tax field
-exchange transaction charges
-stamp duty
+  -> identify actual broker position
+  -> cancel conflicting working orders where required
+  -> submit offsetting order with correct product
+  -> observe fills
+  -> reconcile
+  -> FLAT_CONFIRMED
 ```
 
 Therefore:
 
 ```text
-REALIZED_EXECUTION_COST = broker-recorded final charges
+FLATTEN_REQUESTED != FLAT
 ```
 
-Pre-trade margin/brokerage estimates may be used for eligibility/economics, but never replace final recorded charges.
+Emergency flattening remains permitted after the A126 cutoff.
 
----
+## 18. Product consistency
 
-## 19. Funds and margin
+Kite documents that a position has a margin product and that an exit order with a different product can be treated as a new position rather than an exit. citeturn1search1
 
-Dhan exposes fund limits and a margin calculator. These are execution-eligibility observations, not alpha inputs.
+Therefore `position_product` is an execution-critical field.
 
-Insufficient funds/margin may reject execution. The adapter must not silently reduce quantity; resizing requires explicit upstream authorization.
-
----
-
-## 20. Session authority and cutoff
-
-NSE's official market-timing documentation specifies normal equity-derivatives trading from 09:15 to 15:30.
-
-A126 remains authoritative:
+Invariant:
 
 ```text
-NORMAL_TRADING_CUTOFF = authoritative_session_close - 45 minutes
+EXIT_ORDER.product == POSITION.product
 ```
 
-For the normal NSE equity-derivatives session this evaluates to 14:45, but implementation must derive the value from the session calendar.
+unless an explicit product-conversion operation has been authorized.
+
+This is now frozen and is not left to implementation convention.
+
+## 19. Options execution
+
+A127 consumes the canonical instrument identity from the instrument contract layer.
+
+For an option, execution must preserve:
+
+```text
+venue
+segment
+underlying
+expiry
+strike
+CE/PE
+lot_size
+tick_size
+quantity
+provider instrument identity
+```
+
+Kite's instrument master provides `instrument_token`, `tradingsymbol`, `expiry`, `strike`, `tick_size`, `lot_size`, `instrument_type`, `segment` and `exchange`. citeturn2view0
+
+No option contract may be inferred from a display string when authoritative instrument metadata is available.
+
+## 20. Instrument identity boundary
+
+A127 does not own canonical instrument identity; it consumes it.
+
+The broker adapter maps the canonical instrument to Kite's required:
+
+```text
+exchange
+tradingsymbol
+instrument_token
+```
+
+Kite itself recommends `exchange + tradingsymbol` as the storage key rather than relying on `instrument_token`, because exchange instrument tokens can be reused for different derivative instruments after expiry. citeturn2view0
+
+This creates an explicit dependency on A128 without making A127 responsible for defining A128.
+
+## 21. Session authority and cutoff
+
+NSE documents equity-derivatives normal market hours as:
+
+```text
+09:15 -> 15:30
+```
+
+and trade modification end time as 16:15. citeturn1search6
+
+A126 remains authoritative for the Adaptive Edge cutoff:
+
+```text
+strategy_cutoff = authoritative_session_close - 45 minutes
+```
+
+For the normal NSE equity-derivatives session this evaluates to 14:45.
+
+The implementation must derive this from a session-calendar contract rather than hard-code 14:45 globally.
 
 At cutoff:
 
 ```text
-new entries = forbidden
-new additions = forbidden
-horizon upgrades = forbidden
-normal strategy exposure = targeted to flat
+new entries       = forbidden
+new additions     = forbidden
+horizon upgrades  = forbidden
+normal exposure   = targeted toward flat
 ```
 
-Emergency exits remain permitted after cutoff.
+Emergency exits remain permitted where the market and broker permit them.
 
----
+## 22. Charges and realized execution economics
 
-## 21. Error taxonomy
+Kite provides order-wise charge calculation and documents charge components including:
+
+```text
+transaction tax
+exchange turnover charge
+SEBI turnover charge
+brokerage
+stamp duty
+GST
+```
+
+The charge API can calculate order-wise charges, while final realized accounting must use the authoritative recorded trade/contract-note/statement data available to the account. citeturn2view4
+
+A127 therefore freezes:
+
+```text
+REALIZED_EXECUTION_COST = authoritative recorded broker charges
+```
+
+No arbitrary tax or brokerage formula is embedded in strategy logic.
+
+## 23. Funds and margin
+
+Kite exposes order and basket margin calculation, including margin components and estimated order charges. citeturn0search0
+
+These are execution-eligibility observations, not alpha inputs.
+
+Insufficient margin/funds may prevent execution. The adapter must not silently reduce quantity. Any resizing requires an explicit upstream execution policy.
+
+## 24. Authentication, transport and error taxonomy
+
+Canonical errors:
 
 ```text
 VALIDATION_ERROR
@@ -586,23 +584,43 @@ RECONCILIATION_ERROR
 UNKNOWN_ERROR
 ```
 
-Provider-native codes/messages are retained as evidence.
+Kite documents `TokenException`, `OrderException`, `InputException`, `MarginException`, `HoldingException`, `NetworkException`, `DataException` and `GeneralException`, plus HTTP 400/403/404/429/5xx behaviors. citeturn3search0
 
-Transport failure is never silently converted to business rejection.
+Provider errors are preserved as evidence and mapped into canonical categories.
 
----
+Transport failure is never silently mapped to order rejection.
 
-## 22. Audit contract
+## 25. Rate limits
 
-Every execution event records, where applicable:
+Kite documents:
+
+```text
+quote API       1 request/sec
+historical      3 requests/sec
+order placement 10 requests/sec
+other endpoints 10 requests/sec
+400 orders/minute
+10 orders/sec
+5000 orders/day/user/API key
+25 modifications/order
+```
+
+These are infrastructure constraints, not strategy parameters. citeturn3search0
+
+Emergency execution must not enter an uncontrolled retry loop under rate limiting.
+
+## 26. Audit contract
+
+Every economically meaningful execution event records, where applicable:
 
 ```text
 audit_id
+source_decision_id
 intent_id
-order_id
-broker_order_id
+canonical_order_id
+kite_order_id
 exchange_order_id
-exchange_trade_id
+trade_id
 event_type
 previous_state
 new_state
@@ -615,93 +633,119 @@ configuration_version
 provider_reference
 ```
 
-Credentials, access tokens and secrets are never persisted in audit data.
+Secrets, API keys, access tokens and authentication material are never persisted in execution audit records.
 
----
+## 27. Causal integrity
 
-## 23. Frozen architecture analysis
-
-Frozen and internally consistent:
+For a decision at time `t`:
 
 ```text
-intent/order/fill/position separation
-immutable intent
-stable lineage
-broker anti-corruption boundary
-DhanHQ v2 execution adapter
-TrueData execution-market-data adapter
-NSE session authority
-bid/ask executable-price semantics
-no LTP fallback for executable-price decisions
-partial-fill exposure
-asynchronous cancel
-immutable event history
-stream + REST reconciliation
-broker position authority for external exposure
-emergency flatten path
-actual broker-recorded charges
-causal timestamp rules
-no future-data consumption
-no blind retry
+only observations available at or before t may influence it
 ```
 
-No frozen item creates a circular dependency with A126. A127 observes execution; A126 owns lifecycle/thesis/protection decisions.
+Forbidden inputs to an earlier decision include:
 
----
+```text
+future quote
+future order state
+future fill
+future position
+future contract metadata
+future session state
+future outcome
+```
 
-## 24. Operational configuration vs learned parameters
+Execution timestamps are observations; they cannot be used retrospectively to make an earlier decision appear valid.
 
-Operational configuration, deliberately not learned from trading P&L:
+## 28. Frozen architecture review
+
+The following are now frozen and mutually consistent:
+
+```text
+execution intent/order/fill/position separation
+immutable intent
+stable execution lineage
+Kite Connect v3 broker adapter boundary
+Kite execution-time quote/depth boundary
+partial-fill semantics
+ambiguous submission handling
+cancellation/modification lifecycle
+product-consistent exits
+broker position authority
+stream + REST reconciliation
+flatten semantics
+emergency execution
+NSE session authority
+actual recorded execution charges
+causal timestamps
+reproducible audit trail
+no backward information leakage
+provider-specific isolation
+```
+
+No Dhan, TrueData, or other broker-specific execution semantics are part of A127.
+
+## 29. Intentionally configurable, not learned
+
+These remain operational configuration:
 
 ```text
 quote freshness threshold
 network timeout
 bounded retry/backoff
-stream reconnect policy
+WebSocket reconnect policy
 REST reconciliation cadence
+health/recovery thresholds
 ```
 
-Trading parameters remain outside A127:
+They must be validated for reliability/safety, not selected by maximizing strategy P&L.
+
+Trading parameters remain upstream and unfrozen:
 
 ```text
 stop distance
-trailing formula
+trailing logic
+horizon thresholds
 promotion/downgrade thresholds
 profit-lock thresholds
-maximum holding duration
-continuation-edge thresholds
+continuation thresholds
 ```
 
-No arbitrary numerical trading value is introduced here.
+## 30. Hostile review
 
----
-
-## 25. Final hostile attack
-
-The architecture must survive:
+A127 must survive:
 
 ```text
-submit -> timeout -> broker accepted
-cancel -> fill -> cancel acknowledgement
-partial fill -> strategy exit
-stream disconnect -> missing event
-REST unavailable -> uncertain broker state
-broker position != internal position
-exit rejected
-cutoff reached with residual position
-provider quote stale
-provider quote missing
-provider symbol changed
-duplicate event
-out-of-order event
+order request accepted by OMS but response lost
+order accepted but not sent to exchange
+partial fill during cancellation
+fill arriving after cancellation request
+duplicate postback
+out-of-order postback
+WebSocket disconnect
+REST outage
+broker position != internal projection
+exit order uses wrong product
+session expires during execution
+rate limit during emergency exit
+market quote becomes stale
+instrument token reused after derivative expiry
+provider symbol mismatch
 future timestamp supplied to earlier decision
-invalid lot/tick/expiry
-rate limit during emergency
 ```
 
-Required behavior in every case is explicit uncertainty, reconciliation, or emergency execution. No case permits the system to invent a fill, invent a flat position, silently mutate an intent, or use future information.
+Required result is explicit uncertainty, reconciliation, or emergency handling.
 
----
+Never:
+
+```text
+invent a fill
+invent a flat position
+blindly resubmit an unresolved order
+silently resize
+silently change order type
+use future information
+```
 
 # Architecture Status
 
@@ -710,22 +754,24 @@ ARCHITECTURE STATUS:
 COMPLETE
 
 FROZEN:
-- execution lifecycle
-- intent/order/fill/position separation
-- DhanHQ v2 execution boundary
-- TrueData L1 execution-data boundary
-- NSE session authority
-- broker/exchange identity lineage
-- partial-fill accounting
-- cancellation/modification semantics
-- ambiguous-submission protection
-- reconciliation architecture
+- execution intent/order/fill/position separation
+- stable execution identity and lineage
+- Zerodha Kite Connect v3 execution boundary
+- Kite order/trade/position reconciliation
+- partial-fill semantics
+- ambiguous submission handling
+- cancellation/replacement lifecycle
+- product-consistent exits
 - broker position authority
-- executable bid/ask semantics
+- Kite executable bid/ask semantics
+- session/calendar authority boundary
+- flatten semantics
+- emergency execution
 - actual recorded execution charges
-- causal timestamps and data ordering
-- emergency flatten semantics
-- provider isolation
+- causal timestamps
+- audit/reproducibility
+- no backward information leakage
+- broker-specific adapter isolation
 
 UNRESOLVED:
 None at architectural-contract level.
@@ -733,13 +779,13 @@ None at architectural-contract level.
 INTENTIONALLY UNFROZEN:
 - numerical quote freshness threshold
 - infrastructure timeout/backoff/reconnect values
-- all strategy-owned numerical trading parameters
+- strategy-owned numerical parameters
 
 BLOCKERS:
 None for specification work.
 
-IMPLEMENTATION GATE:
-Before live-money activation, controlled integration tests must verify documented Dhan/TrueData behavior and every hostile scenario above. This is verification of a complete contract, not an unresolved architectural dependency.
+PRODUCTION IMPLEMENTATION GATE:
+The architectural contract is complete. Live-money activation still requires controlled Kite integration tests, session/authentication tests, order/fill race tests, reconciliation tests, rate-limit tests, and emergency-exit tests. These are verification gates for a complete specification, not unresolved dependencies.
 
 NEXT ARTIFACT:
 A128 — Instrument & Contract Identity Specification
