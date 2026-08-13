@@ -1,13 +1,10 @@
-"""Causal, versioned feature snapshot boundary for Adaptive Edge.
-
-This module intentionally contains no strategy-specific indicator formula. The
-feature definitions must be promoted from the canonical strategy specification
-with formula IDs before becoming executable strategy logic.
-"""
+"""Causal, versioned feature snapshot boundary for Adaptive Edge."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import Mapping, Sequence
 
 
@@ -53,55 +50,55 @@ class FeatureSnapshot:
     statuses: Mapping[str, FeatureStatus]
     available_at: Mapping[str, str]
     formula_ids: tuple[str, ...] = ()
-    provenance: Mapping[str, FeatureProvenance] = None  # type: ignore[assignment]
+    provenance: Mapping[str, FeatureProvenance] = field(default_factory=dict)
     instrument_context: InstrumentContext | None = None
 
     def __post_init__(self) -> None:
-        if self.provenance is None:
-            object.__setattr__(self, "provenance", {})
+        if self.instrument_context is None or not self.instrument_context.instrument_id:
+            raise ValueError("canonical instrument identity is required")
         names = set(self.values)
         if names != set(self.statuses) or names != set(self.available_at):
             raise ValueError("feature values, statuses, and availability must have identical keys")
         if set(self.provenance) != names:
             raise ValueError("every feature must have provenance")
-        if self.instrument_context is None or not self.instrument_context.instrument_id:
-            raise ValueError("canonical instrument identity is required")
+        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+        object.__setattr__(self, "statuses", MappingProxyType(dict(self.statuses)))
+        object.__setattr__(self, "available_at", MappingProxyType(dict(self.available_at)))
+        object.__setattr__(self, "provenance", MappingProxyType(dict(self.provenance)))
         self.assert_causal(self.decision_time)
 
     def assert_causal(self, decision_time: str) -> None:
-        """Fail closed if any feature claims availability after decision time."""
+        decision = _parse_timestamp(decision_time)
         for name, available_at in self.available_at.items():
-            if available_at > decision_time:
+            if _parse_timestamp(available_at) > decision:
                 raise ValueError(f"lookahead detected for feature {name}: {available_at} > {decision_time}")
 
-    def assert_compatible(
-        self,
-        *,
-        strategy_version: str,
-        feature_set_version: str,
-    ) -> None:
+    def assert_compatible(self, *, strategy_version: str, feature_set_version: str) -> None:
         if self.strategy_version != strategy_version:
             raise ValueError("unsupported strategy version")
         if self.feature_set_version != feature_set_version:
             raise ValueError("unsupported feature-set version")
 
 
-def build_feature_snapshot(
-    *,
-    snapshot_id: str,
-    strategy_version: str,
-    feature_set_version: str,
-    observation_cutoff_time: str,
-    inputs: list[FeatureInput],
-    decision_time: str,
-    instrument_context: InstrumentContext,
-    formula_ids: Sequence[str] = (),
-) -> FeatureSnapshot:
+def _parse_timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"invalid canonical timestamp: {value}") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"timestamp must include timezone: {value}")
+    return parsed
+
+
+def build_feature_snapshot(*, snapshot_id: str, strategy_version: str, feature_set_version: str,
+                           observation_cutoff_time: str, inputs: list[FeatureInput],
+                           decision_time: str, instrument_context: InstrumentContext,
+                           formula_ids: Sequence[str] = ()) -> FeatureSnapshot:
     values = {item.name: item.value for item in inputs}
     statuses = {item.name: item.status for item in inputs}
     available_at = {item.name: item.available_at for item in inputs}
     provenance = {item.name: item.provenance for item in inputs}
-    snapshot = FeatureSnapshot(
+    return FeatureSnapshot(
         snapshot_id=snapshot_id,
         strategy_version=strategy_version,
         feature_set_version=feature_set_version,
@@ -114,4 +111,3 @@ def build_feature_snapshot(
         provenance=provenance,
         instrument_context=instrument_context,
     )
-    return snapshot
