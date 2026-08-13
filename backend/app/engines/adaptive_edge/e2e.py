@@ -7,12 +7,16 @@ fails closed through the supplied implementation boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, Mapping, Protocol, TypeVar
+from typing import Mapping, Protocol
 
 from .edge import EdgeAssessment, EdgeFormula, evaluate_edge
 from .economic import EconomicAssessment, evaluate_economics
 from .event_boundary import CanonicalMarketEvent
-from .execution_gate import ExecutionGateDecision, evaluate_execution_gate
+from .execution_gate import (
+    ExecutionGateDecision,
+    REQUIRED_STRATEGY_FORMULAS,
+    evaluate_execution_gate,
+)
 from .feature_engine import FeatureSnapshot
 
 
@@ -37,6 +41,7 @@ class PredictionEvidence:
 class DecisionEligibility:
     eligible: bool
     reason: str
+    decision_id: str
     snapshot_id: str
     prediction_id: str
     opportunity_id: str
@@ -128,13 +133,8 @@ class FeatureBuilder(Protocol):
 
 
 class DecisionEngine(Protocol):
-    def assess(
-        self,
-        snapshot: FeatureSnapshot,
-        prediction: PredictionEvidence,
-        edge: EdgeAssessment,
-        economics: EconomicAssessment,
-    ) -> DecisionEligibility: ...
+    def assess(self, snapshot: FeatureSnapshot, prediction: PredictionEvidence,
+               edge: EdgeAssessment, economics: EconomicAssessment) -> DecisionEligibility: ...
 
 
 class RiskAuthorizer(Protocol):
@@ -157,9 +157,6 @@ class PositionProjector(Protocol):
     def project(self, event: ExecutionEvent) -> PositionState: ...
 
 
-T = TypeVar("T")
-
-
 class AuditLedger:
     """Append-only causal ledger for deterministic replay and audit."""
 
@@ -167,9 +164,7 @@ class AuditLedger:
         self._records: list[AuditRecord] = []
 
     def append(self, stage: str, object_id: str, *parent_ids: str) -> None:
-        self._records.append(
-            AuditRecord(len(self._records), stage, object_id, tuple(parent_ids))
-        )
+        self._records.append(AuditRecord(len(self._records), stage, object_id, tuple(parent_ids)))
 
     def records(self) -> tuple[AuditRecord, ...]:
         return tuple(self._records)
@@ -189,13 +184,12 @@ def run_e2e(
     position_projector: PositionProjector,
     execution_cost: float,
     minimum_net_value: float = 0.0,
-    required_formula_ids: tuple[str, ...] = (),
+    required_formula_ids: tuple[str, ...] | None = None,
 ) -> E2ETrace:
     """Run one candidate through the complete dependency graph.
 
-    The orchestration is deliberately dependency-injected. It supplies no
-    strategy formula, risk schedule, option-selection rule, quantity rule, or
-    lifecycle parameter of its own.
+    No strategy formula, risk schedule, option-selection rule, quantity rule,
+    or lifecycle parameter is supplied by this orchestrator.
     """
     audit = AuditLedger()
     audit.append("market_event", event.record_id)
@@ -204,44 +198,61 @@ def run_e2e(
     audit.append("feature_snapshot", snapshot.snapshot_id, event.record_id)
 
     prediction = prediction_engine.predict(snapshot)
+    if prediction.snapshot_id != snapshot.snapshot_id:
+        raise ValueError("prediction snapshot identity mismatch")
+    if prediction.prediction_time != snapshot.decision_time:
+        raise ValueError("prediction time must equal snapshot decision time")
     audit.append("prediction", prediction.prediction_id, snapshot.snapshot_id)
 
     edge = evaluate_edge(snapshot, edge_formula)
+    if edge.opportunity_id != prediction.opportunity_id:
+        raise ValueError("edge opportunity identity mismatch")
     audit.append("edge", edge.opportunity_id, prediction.prediction_id, snapshot.snapshot_id)
 
-    economics = evaluate_economics(
-        edge,
-        execution_cost=execution_cost,
-        minimum_net_value=minimum_net_value,
-    )
+    economics = evaluate_economics(edge, execution_cost=execution_cost, minimum_net_value=minimum_net_value)
     audit.append("economics", edge.opportunity_id, edge.opportunity_id)
 
     decision = decision_engine.assess(snapshot, prediction, edge, economics)
-    audit.append("decision", decision.opportunity_id, prediction.prediction_id)
+    if decision.snapshot_id != snapshot.snapshot_id or decision.prediction_id != prediction.prediction_id:
+        raise ValueError("decision causal identity mismatch")
+    audit.append("decision", decision.decision_id, prediction.prediction_id)
 
-    if not decision.eligible:
-        return E2ETrace(
-            event, snapshot, prediction, edge, economics, decision,
-            None, None, None, None, None, audit.records(),
-            evaluate_execution_gate(required_formula_ids),
-        )
+    formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
+    gate = evaluate_execution_gate(formula_ids)
 
-    gate = evaluate_execution_gate(required_formula_ids)
-    if not gate.authorized:
+    if not decision.eligible or not gate.authorized:
         return E2ETrace(
             event, snapshot, prediction, edge, economics, decision,
             None, None, None, None, None, audit.records(), gate,
         )
 
     authorization = risk_authorizer.authorize(decision)
-    audit.append("risk_authorization", authorization.intent_id, decision.opportunity_id)
+    if authorization.decision_id != decision.decision_id:
+        raise ValueError("authorization decision identity mismatch")
+    audit.append("risk_authorization", authorization.intent_id, decision.decision_id)
+
     instrument = instrument_selector.select(authorization)
+    if instrument.intent_id != authorization.intent_id:
+        raise ValueError("instrument authorization identity mismatch")
     audit.append("instrument", instrument.selection_id, authorization.intent_id)
+
     order = order_factory.create(instrument)
+    if order.selection_id != instrument.selection_id or order.instrument_id != instrument.instrument_id:
+        raise ValueError("order instrument identity mismatch")
+    if order.quantity <= 0:
+        raise ValueError("order quantity must be positive")
+    if not order.idempotency_key:
+        raise ValueError("order intent requires idempotency key")
     audit.append("order_intent", order.order_intent_id, instrument.selection_id)
+
     execution = execution_adapter.submit(order)
+    if execution.order_intent_id != order.order_intent_id:
+        raise ValueError("execution order identity mismatch")
     audit.append("execution_event", execution.execution_event_id, order.order_intent_id)
+
     position = position_projector.project(execution)
+    if position.source_execution_event_id != execution.execution_event_id:
+        raise ValueError("position execution identity mismatch")
     audit.append("position", position.position_id, execution.execution_event_id)
 
     return E2ETrace(
