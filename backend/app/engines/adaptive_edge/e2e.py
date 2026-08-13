@@ -12,11 +12,7 @@ from typing import Mapping, Protocol
 from .edge import EdgeAssessment, EdgeFormula, evaluate_edge
 from .economic import EconomicAssessment, evaluate_economics
 from .event_boundary import CanonicalMarketEvent
-from .execution_gate import (
-    ExecutionGateDecision,
-    REQUIRED_STRATEGY_FORMULAS,
-    evaluate_execution_gate,
-)
+from .execution_gate import ExecutionGateDecision, REQUIRED_STRATEGY_FORMULAS, evaluate_execution_gate
 from .feature_engine import FeatureSnapshot
 
 
@@ -186,10 +182,11 @@ def run_e2e(
     minimum_net_value: float = 0.0,
     required_formula_ids: tuple[str, ...] | None = None,
 ) -> E2ETrace:
-    """Run one candidate through the complete dependency graph.
+    """Run one candidate through every currently authorized layer.
 
-    No strategy formula, risk schedule, option-selection rule, quantity rule,
-    or lifecycle parameter is supplied by this orchestrator.
+    The execution gate is evaluated before any locked strategy formula is
+    invoked. Therefore unresolved mathematics stop the path deterministically
+    instead of allowing an implementation to substitute invented behavior.
     """
     audit = AuditLedger()
     audit.append("market_event", event.record_id)
@@ -204,6 +201,11 @@ def run_e2e(
         raise ValueError("prediction time must equal snapshot decision time")
     audit.append("prediction", prediction.prediction_id, snapshot.snapshot_id)
 
+    formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
+    gate = evaluate_execution_gate(formula_ids)
+    if not gate.authorized:
+        return E2ETrace(event, snapshot, prediction, None, None, None, None, None, None, None, None, audit.records(), gate)
+
     edge = evaluate_edge(snapshot, edge_formula)
     if edge.opportunity_id != prediction.opportunity_id:
         raise ValueError("edge opportunity identity mismatch")
@@ -217,14 +219,8 @@ def run_e2e(
         raise ValueError("decision causal identity mismatch")
     audit.append("decision", decision.decision_id, prediction.prediction_id)
 
-    formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
-    gate = evaluate_execution_gate(formula_ids)
-
-    if not decision.eligible or not gate.authorized:
-        return E2ETrace(
-            event, snapshot, prediction, edge, economics, decision,
-            None, None, None, None, None, audit.records(), gate,
-        )
+    if not decision.eligible:
+        return E2ETrace(event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, audit.records(), gate)
 
     authorization = risk_authorizer.authorize(decision)
     if authorization.decision_id != decision.decision_id:
@@ -255,8 +251,5 @@ def run_e2e(
         raise ValueError("position execution identity mismatch")
     audit.append("position", position.position_id, execution.execution_event_id)
 
-    return E2ETrace(
-        event, snapshot, prediction, edge, economics, decision,
-        authorization, instrument, order, execution, position,
-        audit.records(), gate,
-    )
+    return E2ETrace(event, snapshot, prediction, edge, economics, decision, authorization,
+                    instrument, order, execution, position, audit.records(), gate)
