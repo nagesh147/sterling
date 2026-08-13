@@ -10,6 +10,7 @@ from .e2e import AuditRecord, E2ETrace
 EXPECTED_STAGES = (
     "market_event", "feature_snapshot", "prediction", "edge", "economics", "decision",
     "risk_authorization", "instrument", "order_intent", "execution_event", "position",
+    "lifecycle",
 )
 
 
@@ -37,4 +38,5 @@ def validate_audit_chain(records: Iterable[AuditRecord]) -> ReplayResult:
 
 
 def replay_trace(trace: E2ETrace) -> ReplayResult:
+    """Validate the captured trace without recomputing unresolved strategy math."""
     return validate_audit_chain(trace.audit)
