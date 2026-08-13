@@ -41,6 +41,7 @@ from .fetcher import (
     KiteHistoricalFetcher,
     KitelakeFatal,
     KitelakeInputError,
+    KitelakeInstrumentRejected,
     chunk_range,
 )
 from .ratelimit import AdaptiveLimiter
@@ -177,7 +178,7 @@ async def run_download(
             log = _EventLog(None)
 
         stats = {
-            "done": 0, "empty": 0, "failed": 0, "rows": 0, "bytes": 0,
+            "done": 0, "empty": 0, "failed": 0, "skipped": 0, "rows": 0, "bytes": 0,
             "requests": 0, "skipped_existing": len(instruments) * len(chunks) - len(pending),
         }
         started = time.perf_counter()
@@ -254,6 +255,15 @@ async def run_download(
                         stopping.set()
                         log.write(event="fatal", token=token, error=str(exc)[:400])
                         return
+                    except KitelakeInstrumentRejected as exc:
+                        # Kite will never serve this instrument. Recording it 'skipped'
+                        # rather than 'failed' keeps --retry-failed from spending a
+                        # request on it on every future run.
+                        man.mark_chunk(token, interval, item["chunk_from"], "skipped", error=str(exc))
+                        stats["skipped"] += 1
+                        log.write(event="chunk_skipped", token=token,
+                                  chunk_from=item["chunk_from"], error=str(exc)[:300])
+                        continue
                     except KitelakeInputError as exc:
                         man.mark_chunk(token, interval, item["chunk_from"], "failed", error=str(exc))
                         stats["failed"] += 1

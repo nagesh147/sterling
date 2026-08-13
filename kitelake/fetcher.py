@@ -48,6 +48,7 @@ __all__ = [
     "KitelakeAuthError",
     "KitelakePermissionError",
     "KitelakeInputError",
+    "KitelakeInstrumentRejected",
     "KitelakeRateLimited",
     "KitelakeTransportError",
     "KiteHistoricalFetcher",
@@ -73,6 +74,16 @@ class KitelakePermissionError(KitelakeFatal):
 
 class KitelakeInputError(KitelakeError):
     """This particular request was malformed or unsupported. Not retried."""
+
+
+class KitelakeInstrumentRejected(KitelakeInputError):
+    """Kite will not serve historical data for this instrument, ever.
+
+    Distinct from a malformed request: the instrument itself is the problem (SME scrips
+    and some delisted contracts answer ``"invalid token"`` with a valid session). Chunks
+    that hit this are recorded ``skipped`` rather than ``failed``, so ``--retry-failed``
+    does not spend requests re-asking on every run.
+    """
 
 
 class KitelakeRateLimited(KitelakeError):
@@ -112,8 +123,27 @@ def chunk_range(frm: date, to: date, interval: str) -> list[tuple[date, date]]:
 
 # ─── Response classification ─────────────────────────────────────────────────
 #: Messages that mean "your credentials are the problem", whatever the HTTP code.
+#: Deliberately narrow, and it must STAY narrow.
+#:
+#: Kite's ``"invalid token" (HTTP 400, InputException)`` does **not** mean the access
+#: token — it means the *instrument* token in the URL path is not one it will serve
+#: historical data for (SME scrips like SWARAJ-SM return it with a perfectly valid
+#: session). Broadening this pattern to a bare ``\btoken\b`` was tried and was strictly
+#: worse: it turned one unsupported instrument into a fatal abort of a 40,000-chunk run.
+#: Verified by probing both at once — NIFTY 50 returned 375 candles while SWARAJ-SM
+#: returned "invalid token" on the same connection.
+#:
+#: So only match phrasings that name the *credential*, and let the instrument case fall
+#: through to :class:`KitelakeInstrumentRejected` below.
 _AUTH_HINTS = re.compile(
     r"api_key|access_token|token\s*exception|invalid\s+session|expired", re.IGNORECASE
+)
+
+#: A 400 that means "this instrument will never work", as distinct from "this request was
+#: malformed". Retrying either is pointless, but only this one should stop us re-asking on
+#: every subsequent run.
+_INSTRUMENT_REJECTED = re.compile(
+    r"invalid\s+token|invalid\s+instrument|instrument_token", re.IGNORECASE
 )
 _PERMISSION_HINTS = re.compile(
     r"not\s+(?:subscribed|entitled|authorised|authorized)|permission|insufficient\s+permission|"
@@ -142,6 +172,11 @@ def _classify(status: int, message: str, error_type: str) -> KitelakeError:
     if status == 429:
         return KitelakeRateLimited(f"{msg} (HTTP 429)")
     if status == 400:
+        if _INSTRUMENT_REJECTED.search(msg):
+            return KitelakeInstrumentRejected(
+                f"{msg} (HTTP 400, {etype or 'no error_type'}) — Kite does not serve "
+                "historical data for this instrument; skipping it permanently"
+            )
         return KitelakeInputError(f"{msg} (HTTP 400, {etype or 'no error_type'})")
     if status >= 500:
         return KitelakeTransportError(f"{msg} (HTTP {status})")

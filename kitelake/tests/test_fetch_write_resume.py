@@ -16,6 +16,7 @@ import pytest
 
 from kitelake.config import Credentials
 from kitelake.fetcher import (
+    KitelakeInstrumentRejected,
     KiteHistoricalFetcher,
     KitelakeAuthError,
     KitelakeInputError,
@@ -606,3 +607,91 @@ class TestOrchestrator:
             body = path.read_text()
             assert "test_token" not in body
             assert "access_token" not in body
+
+
+class TestObservedErrorMessages:
+    """Classification of every error phrasing the live API has actually returned.
+
+    The trap this pins down: Kite's ``"invalid token" (HTTP 400, InputException)`` does
+    NOT mean the access token. It means the *instrument* token in the URL is one it will
+    not serve historical data for — SME scrips such as SWARAJ-SM return it on a perfectly
+    valid session. Proven by probing both on the same connection: NIFTY 50 returned 375
+    candles while SWARAJ-SM returned "invalid token".
+
+    Treating it as a credential error was tried and was strictly worse than the original
+    behaviour: it turned one unsupported instrument into a fatal abort of a 40,000-chunk
+    run. These tests exist so nobody "fixes" it that way again.
+    """
+
+    OBSERVED = [
+        # instrument-level rejection — must NOT be fatal, and must not be retried forever
+        (400, "invalid token", "InputException", KitelakeInstrumentRejected),
+        (400, "instrument_token is invalid", "InputException", KitelakeInstrumentRejected),
+        (400, "Invalid instrument_token 999", "InputException", KitelakeInstrumentRejected),
+        # credential problems — fatal, abort the run
+        (400, "Invalid `api_key` or `access_token`.", "InputException", KitelakeAuthError),
+        (403, "Incorrect `api_key` or `access_token`.", "TokenException", KitelakeAuthError),
+        (400, "Token is invalid or has expired", "InputException", KitelakeAuthError),
+        # entitlement
+        (403, "app is not subscribed to historical data", "PermissionException",
+         KitelakePermissionError),
+        # ordinary malformed request — per-chunk, retryable via --retry-failed
+        (400, "interval is not valid", "InputException", KitelakeInputError),
+        (400, "from date is greater than to date", "InputException", KitelakeInputError),
+    ]
+
+    @pytest.mark.parametrize("status,message,error_type,expected", OBSERVED)
+    def test_observed_messages_classify_correctly(
+        self, status: int, message: str, error_type: str, expected: type
+    ) -> None:
+        from kitelake.fetcher import _classify
+
+        assert type(_classify(status, message, error_type)) is expected
+
+    def test_instrument_rejection_is_never_fatal(self) -> None:
+        """One unserviceable SME scrip must not take down a 40,000-chunk run."""
+        from kitelake.fetcher import KitelakeFatal, _classify
+
+        err = _classify(400, "invalid token", "InputException")
+        assert isinstance(err, KitelakeInstrumentRejected)
+        assert not isinstance(err, KitelakeFatal)
+
+    @pytest.mark.asyncio
+    async def test_rejected_instrument_is_skipped_not_failed(self, lake: Path) -> None:
+        """'skipped' so --retry-failed does not spend a request on it every single run."""
+        import pyarrow as pa
+
+        from kitelake.download import run_download
+        from kitelake.instruments import INSTRUMENT_SCHEMA, write_instrument_master
+        from kitelake.manifest import Manifest
+
+        write_instrument_master(pa.table({
+            "instrument_token": [999001], "exchange_token": [1],
+            "tradingsymbol": ["SWARAJ-SM"], "name": ["SWARAJ SME"], "last_price": [0.0],
+            "expiry": [None], "strike": [0.0], "tick_size": [0.05], "lot_size": [1],
+            "instrument_type": ["EQ"], "segment": ["NSE"], "exchange": ["NSE"],
+        }, schema=INSTRUMENT_SCHEMA))
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json=_err("invalid token", "InputException"))
+
+        summary = await run_download(
+            "NSE:SWARAJ-SM", "minute", date(2026, 6, 1), date(2026, 8, 13),
+            transport=httpx.MockTransport(handler), rate=1000,
+            progress=lambda _e: None,
+        )
+        assert summary["fatal"] is None, "must not abort the run"
+        assert summary["failed"] == 0
+        assert summary["skipped"] > 0
+        with Manifest() as man:
+            stats = man.stats("minute")
+        assert stats["chunks_by_status"].get("failed", 0) == 0
+        assert stats["chunks_by_status"]["skipped"] == stats["chunks_total"]
+        # 'skipped' counts as settled, so a later --retry-failed re-asks nothing.
+        assert man_pending_is_empty()
+
+def man_pending_is_empty() -> bool:
+    from kitelake.manifest import Manifest
+
+    with Manifest() as man:
+        return man.pending_chunks("minute", retry_failed=True) == []
