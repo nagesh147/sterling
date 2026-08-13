@@ -176,7 +176,7 @@ class TestBrowse:
 
 
 class TestVolumes:
-    def test_enumerates_real_mounts(self, no_lake) -> None:
+    def test_enumerates_real_mounts(self, no_lake, real_mounts) -> None:
         volumes = V.list_volumes()
         assert volumes, "at least the root filesystem must be found"
         assert any(v.path == "/" for v in volumes)
@@ -185,10 +185,124 @@ class TestVolumes:
             assert isinstance(vol.writable, bool)
             assert vol.free_gib == round(vol.free_bytes / 2**30, 2)
 
-    def test_scan_is_fast(self, no_lake) -> None:
+    def test_scan_is_fast(self, no_lake, real_mounts) -> None:
         """It runs behind an 8-second UI poll, so it must stay cheap."""
         import time
 
         start = time.perf_counter()
         V.list_volumes()
         assert time.perf_counter() - start < 2.0
+
+
+class TestRegistryConcurrency:
+    """Regression tests for a real production failure (2026-08-13).
+
+    ``resolve_root()`` runs on every parquet write, and it refreshes the registry. The
+    registry used a single fixed ``roots.json.tmp``, so concurrent download workers raced:
+    one won the ``os.replace`` and the others raised FileNotFoundError. Because that ran
+    inside the write path, it marked two genuine data chunks (BSL, HINDPETRO) as failed.
+    """
+
+    def test_concurrent_resolution_never_raises(self, tmp_path: Path, monkeypatch) -> None:
+        import concurrent.futures
+
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+        V.adopt_root(tmp_path / "Lake", label="USB")
+
+        def hammer(_i: int) -> str:
+            # Mirrors what each download worker does before writing a parquet file.
+            return str(V.bars_dir())
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            results = list(pool.map(hammer, range(200)))
+        assert len({*results}) == 1, "all workers must agree on the bars directory"
+
+    def test_each_write_uses_a_distinct_temp_name(self, tmp_path: Path, monkeypatch) -> None:
+        """Locks in the fix for the shipped race, without depending on thread timing.
+
+        The bug was a single fixed ``roots.json.tmp`` shared by every writer: with several
+        download workers resolving paths at once, one won the ``os.replace`` and the rest
+        raised FileNotFoundError — which is what killed the BSL and HINDPETRO chunks on
+        2026-08-13. Asserting the temp path differs per write is deterministic and fails
+        against the old implementation, where both writes named the same file.
+        """
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+        V.adopt_root(tmp_path / "Lake")
+
+        seen: list[str] = []
+        real_replace = os.replace
+
+        def spy(src, dst, *a, **kw):
+            seen.append(Path(src).name)
+            return real_replace(src, dst, *a, **kw)
+
+        monkeypatch.setattr(V.os, "replace", spy)
+        for _ in range(5):
+            V._write_registry(V.registry())
+
+        assert len(seen) == 5
+        assert len(set(seen)) == 5, f"temp names must be unique per write, got {seen}"
+        assert "roots.json.tmp" not in seen, "the shared temp name is the bug"
+
+    def test_failed_write_leaves_no_temp_file(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+        V.adopt_root(tmp_path / "Lake")
+        cfg = tmp_path / "cfg"
+
+        def boom(src, dst, *a, **kw):
+            raise OSError(2, "No such file or directory")
+
+        monkeypatch.setattr(V.os, "replace", boom)
+        with pytest.raises(OSError):
+            V._write_registry(V.registry())
+        assert not list(cfg.glob("*.tmp")), "a failed write must clean up after itself"
+        # The previous good registry must survive untouched.
+        assert json.loads((cfg / "roots.json").read_text())["known"]
+
+    def test_registry_refresh_is_skipped_when_nothing_changed(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Without this, a download rewrites the registry thousands of times."""
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+        V.adopt_root(tmp_path / "Lake")
+        registry_file = tmp_path / "cfg" / "roots.json"
+        before = registry_file.stat().st_mtime_ns
+        for _ in range(50):
+            V.resolve_root()
+        assert registry_file.stat().st_mtime_ns == before, "hot path must not rewrite it"
+
+    def test_unwritable_registry_does_not_break_reads(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Bookkeeping must never take down the data path — the actual bug's blast radius."""
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+        V.adopt_root(tmp_path / "Lake", label="USB")
+
+        def boom(_reg: dict) -> Path:
+            raise OSError(2, "No such file or directory")
+
+        monkeypatch.setattr(V, "_write_registry", boom)
+        # Force the path to change so _remember actually attempts a write.
+        import os as _os
+
+        _os.rename(tmp_path / "Lake", tmp_path / "Renamed")
+        assert V.bars_dir().is_dir(), "a failed registry write must not break path resolution"
+
+    def test_adopt_still_surfaces_a_registry_failure(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Advisory on the hot path, but strict when the user explicitly chose a folder."""
+        monkeypatch.setenv("KITELAKE_CONFIG_DIR", str(tmp_path / "cfg"))
+        monkeypatch.delenv("KITELAKE_ROOT", raising=False)
+
+        def boom(_reg: dict) -> Path:
+            raise OSError(13, "Permission denied")
+
+        monkeypatch.setattr(V, "_write_registry", boom)
+        with pytest.raises(OSError):
+            V.adopt_root(tmp_path / "Lake", label="USB")

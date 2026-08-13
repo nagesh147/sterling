@@ -11,6 +11,34 @@ import pytest
 
 
 @pytest.fixture
+def real_mounts() -> bool:
+    """Opt in to the host's actual mounted volumes.
+
+    Only for tests that are genuinely *about* volume enumeration. Everything else runs
+    with mounts stubbed out — see :func:`hermetic_mounts`.
+    """
+    return True
+
+
+@pytest.fixture(autouse=True)
+def hermetic_mounts(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide the host's real volumes from lake discovery.
+
+    Without this the suite is not hermetic, and it bit us for real: once a stamped lake
+    existed on the developer's USB drive, ``_resolve``'s last-resort sweep found it and
+    eleven "no lake configured" tests started reporting ``available=True``. A test suite
+    whose result depends on which drives happen to be plugged in cannot be trusted, so
+    mount scanning is stubbed everywhere except in tests that ask for ``real_mounts``.
+    """
+    if "real_mounts" in request.fixturenames:
+        return
+    from kitelake import volume
+
+    monkeypatch.setattr(volume, "_mounts", lambda: [])
+    monkeypatch.setattr(volume, "_by_uuid_map", lambda: {})
+
+
+@pytest.fixture
 def lake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """An isolated, stamped lake plus an isolated config dir.
 

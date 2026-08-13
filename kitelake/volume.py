@@ -209,29 +209,72 @@ def registry() -> dict[str, Any]:
 
 
 def _write_registry(reg: dict[str, Any]) -> Path:
+    """Atomically replace the registry.
+
+    The temp name carries the pid **and** a random suffix. A single fixed
+    ``roots.json.tmp`` looks atomic but is not concurrency-safe: with several download
+    workers resolving paths at once, they all write the same temp file and only the first
+    ``os.replace`` finds it — the rest raise FileNotFoundError. That actually happened,
+    and because ``resolve_root()`` sits on the parquet write path it took two real data
+    chunks down with it (BSL and HINDPETRO, 2026-08-13).
+    """
     path = config_dir() / "roots.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(reg, indent=2) + "\n")
-    os.replace(tmp, path)  # atomic: a crash never leaves a truncated registry
+    tmp = path.with_name(f"roots.json.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        tmp.write_text(json.dumps(reg, indent=2) + "\n")
+        os.replace(tmp, path)  # atomic: a crash never leaves a truncated registry
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return path
 
 
 def _remember(
-    stamp: LakeStamp, root: Path, *, volume_uuid: str = "", make_active: bool = False
+    stamp: LakeStamp,
+    root: Path,
+    *,
+    volume_uuid: str = "",
+    make_active: bool = False,
+    required: bool = False,
 ) -> None:
-    """Record (or refresh) a lake in the registry, self-healing its path."""
+    """Record (or refresh) a lake in the registry, self-healing its path.
+
+    ``required=False`` (the default, used by path resolution) makes this advisory: the
+    registry is bookkeeping about *where* the lake is, so failing to update it must never
+    fail the caller's actual work. ``required=True`` is for the explicit
+    adopt/activate/forget commands, where persisting the choice *is* the job.
+    """
     reg = registry()
     known = [e for e in reg["known"] if isinstance(e, dict)]
     entry = next((e for e in known if e.get("lake_id") == stamp.lake_id), None)
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(timezone.utc)
+
+    # Skip the write entirely when nothing material changed. resolve_root() runs on every
+    # parquet write, so without this the registry is rewritten thousands of times per
+    # download — pure churn, and every one of those writes is a chance to race.
+    if entry is not None and not make_active:
+        unchanged = (
+            entry.get("last_path") == str(root)
+            and entry.get("label") == stamp.label
+            and (not volume_uuid or entry.get("volume_uuid") == volume_uuid)
+        )
+        if unchanged:
+            try:
+                seen = datetime.fromisoformat(str(entry.get("last_seen") or ""))
+            except ValueError:
+                seen = None
+            # Refresh last_seen at most hourly; it is a diagnostic, not a guarantee.
+            if seen is not None and (now - seen).total_seconds() < 3600:
+                return
+
     if entry is None:
         entry = {"lake_id": stamp.lake_id}
         known.append(entry)
     entry.update(
         label=stamp.label,
         last_path=str(root),
-        last_seen=now,
+        last_seen=now.isoformat(timespec="seconds"),
     )
     # Only overwrite a known volume_uuid when we actually learned one.
     if volume_uuid:
@@ -240,7 +283,11 @@ def _remember(
     reg["known"] = known
     if make_active or not reg.get("active_lake_id"):
         reg["active_lake_id"] = stamp.lake_id
-    _write_registry(reg)
+    try:
+        _write_registry(reg)
+    except OSError:
+        if required:
+            raise
 
 
 # ─── Volume enumeration ──────────────────────────────────────────────────────
@@ -662,7 +709,9 @@ def adopt_root(
         if str(root) == mnt or str(root).startswith(mnt.rstrip("/") + "/"):
             if len(mnt) > len(best):  # deepest matching mount wins
                 best, vol_uuid = mnt, _device_uuid(device)
-    _remember(stamp, root, volume_uuid=vol_uuid, make_active=make_active)
+    # required=True: persisting the user's explicit choice IS the job here, so a failed
+    # registry write must surface rather than be swallowed like the advisory hot-path one.
+    _remember(stamp, root, volume_uuid=vol_uuid, make_active=make_active, required=True)
     return lake_status()
 
 
