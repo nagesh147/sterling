@@ -76,7 +76,13 @@ def verify_file(path: str | Path) -> dict[str, Any]:
     }
     try:
         result["bytes"] = path.stat().st_size
-        table = pq.read_table(path)
+        # ParquetFile(...).read(), NOT pq.read_table(). The lake stores bars under
+        # Hive-style directories (interval=…/exchange=…/segment=…), and read_table
+        # infers those keys and APPENDS them as columns — so every real file came
+        # back with 10 fields against BAR_SCHEMA's 7 and failed the schema check
+        # below. That made `verify` condemn the entire lake, including files it had
+        # just written itself. ParquetFile reads the physical file only.
+        table = pq.ParquetFile(path).read()
     except Exception as exc:
         result["error"] = f"unreadable: {type(exc).__name__}: {exc}"
         result["failures"] = ["schema"]
