@@ -31,7 +31,18 @@ class CanonicalOrderIntent:
     created_at: str
 
     def fingerprint(self) -> str:
-        value = "|".join((self.order_intent_id, self.selection_id, self.instrument_id, self.side, str(self.quantity), self.intent_version))
+        value = "|".join(
+            (
+                self.order_intent_id,
+                self.selection_id,
+                self.instrument_id,
+                self.side,
+                str(self.quantity),
+                self.intent_version,
+                self.idempotency_key,
+                self.created_at,
+            )
+        )
         return sha256(value.encode("utf-8")).hexdigest()
 
     def validate(self) -> None:
