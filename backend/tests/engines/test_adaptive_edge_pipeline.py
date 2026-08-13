@@ -1,18 +1,25 @@
-from dataclasses import dataclass
-
-import pytest
-
 from app.engines.adaptive_edge.edge import EdgeAssessment, StrategyFormulaLockedError
 from app.engines.adaptive_edge.economic import evaluate_economics
-from app.engines.adaptive_edge.feature_engine import FeatureInput, build_feature_snapshot
+from app.engines.adaptive_edge.feature_engine import FeatureInput, InstrumentContext, build_feature_snapshot
+import pytest
+
+
+def _snapshot_kwargs():
+    return dict(
+        snapshot_id="snap-1",
+        strategy_version="strategy-1",
+        feature_set_version="features-1",
+        observation_cutoff_time="2026-08-11T10:00:00+00:00",
+        decision_time="2026-08-11T10:00:00+00:00",
+        instrument_context=InstrumentContext("NIFTY"),
+    )
 
 
 def test_future_feature_is_rejected():
     with pytest.raises(ValueError, match="lookahead detected"):
         build_feature_snapshot(
-            observation_time="2026-08-11T10:00:00",
-            inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00")],
-            decision_time="2026-08-11T10:00:00",
+            **_snapshot_kwargs(),
+            inputs=[FeatureInput("x", 1.0, "2026-08-11T10:01:00+00:00")],
         )
 
 
