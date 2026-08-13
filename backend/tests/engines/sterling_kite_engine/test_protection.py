@@ -147,6 +147,7 @@ def _no_network(monkeypatch):
         return {"ok": True}
     monkeypatch.setattr(_ticker_manager, "unsubscribe", _noop)
     monkeypatch.setattr(_ticker_manager, "subscribe", _noop)
+    monitor.forget_holdings()
     monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
                         lambda *a, **k: None)
     # The "what became of this GTT?" answer is cached for 15s per (uid, symbol, trigger).
@@ -191,7 +192,10 @@ class TestBrokerStopWinsThePriceRace:
 
         await monitor.on_tick("p2", 777, 79.0, client=client)
 
-        assert client.calls == ["cancel", "sell"]
+        # Order, not an exact list — the exit path also reads the portfolio before
+        # selling (see "never sell what we do not hold"). What matters here is that
+        # the cancel precedes the sell; cancelling after it cannot prevent anything.
+        assert client.calls.index("cancel") < client.calls.index("sell")
         assert client.cancelled == [555]
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
         assert pos.get("p2", "NIFTY24JUN24000CE").status == pos.CLOSED
@@ -220,7 +224,8 @@ class TestBrokerStopWinsThePriceRace:
         out = await monitor.on_tick("p4", 777, 79.0, client=client)
 
         assert out == "NIFTY24JUN24000CE"
-        assert client.calls == ["sell"]
+        assert "cancel" not in client.calls, "there was no trigger to cancel"
+        assert "sell" in client.calls
 
 
 # ── 2. the orphaned GTT ───────────────────────────────────────────────────────
@@ -966,10 +971,11 @@ class TestAMissingTriggerIsProvedNotGuessed:
             "was ever going to exit this position, so standing down abandons it"
         )
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
-        assert client.calls[:5] == ["cancel", "get_gtt", "get_gtts", "get_orders", "sell"], (
+        assert client.calls[:4] == ["cancel", "get_gtt", "get_gtts", "get_orders"], (
             "the two confirming reads must both happen, and only after the cheap one fails"
         )
-        assert client.calls[5:] == ["cancel"], "the post-sell orphan chase still runs"
+        # then the holdings check, the sell, and the post-sell orphan chase
+        assert client.calls[4:] == ["positions", "sell", "cancel"]
 
     @pytest.mark.asyncio
     async def test_a_filled_exit_in_the_order_book_still_blocks_our_sell(self):
@@ -2368,3 +2374,93 @@ class TestClosedPositionsAreReconciled:
         await ksvc._reconcile_closed_positions(client, "c9")
 
         assert pos.get("c9", "NIFTY24JUN24000CE").status == pos.PENDING
+
+
+# ── the last guard: never sell what we do not hold ────────────────────────────
+
+class TestTheExitChecksWhatItIsSelling:
+    """Everything above reasons about the broker's TRIGGER. None of it notices a
+    position closed with no trigger involved at all — squared off in the Kite app, or
+    an exit whose postback was lost before the next scan's reconcile pass. On the next
+    tick through the stop the monitor would SELL a position the account no longer owns,
+    which opens a naked short. Asking what we hold is the only guard that depends on
+    neither a postback nor the GTT bookkeeping.
+    """
+
+    @staticmethod
+    def _net(qty, symbol="NIFTY24JUN24000CE"):
+        return {"net": [{"tradingsymbol": symbol, "exchange": "NFO", "quantity": qty}]}
+
+    @pytest.mark.asyncio
+    async def test_a_position_closed_elsewhere_is_reconciled_not_sold(self):
+        _held("h1", gtt_id=0)
+        client = _FakeClient(net_positions=self._net(0))
+
+        out = await monitor.on_tick("h1", 777, 79.0, client=client)
+
+        assert out is None
+        assert client.sells == [], "sold a position the account no longer held"
+        held = pos.get("h1", "NIFTY24JUN24000CE")
+        assert held.status == pos.CLOSED
+        assert "holds none" in held.exit_reason
+
+    @pytest.mark.asyncio
+    async def test_a_partial_exit_elsewhere_clamps_the_sell(self):
+        """Selling the registry's larger figure would short the difference."""
+        _held("h2", gtt_id=0, qty=150)
+        client = _FakeClient(net_positions=self._net(50))
+
+        await monitor.on_tick("h2", 777, 79.0, client=client)
+
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_symbol_absent_from_the_book_still_exits(self):
+        """Absence is not evidence — a position carried from a previous day has no row
+        in today's book. Refusing to exit on that would strand a real position."""
+        _held("h3", gtt_id=0)
+        client = _FakeClient(net_positions={"net": []})
+
+        out = await monitor.on_tick("h3", 777, 79.0, client=client)
+
+        assert out == "NIFTY24JUN24000CE"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_portfolio_still_exits(self):
+        """Fail OPEN. A stop that will not fire because a read timed out is a worse
+        outcome than the double-sell this check is guarding against."""
+        _held("h4", gtt_id=0)
+        client = _FakeClient(book_error="positions")
+
+        out = await monitor.on_tick("h4", 777, 79.0, client=client)
+
+        assert out == "NIFTY24JUN24000CE"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_the_portfolio_is_read_once_across_a_burst_of_ticks(self):
+        """The exit path is tick-driven; a collapsing premium delivers many ticks a
+        second. One portfolio read per tick would add latency to a stop and earn a
+        rate limit."""
+        _held("h5", gtt_id=0, stop=80.0)
+        client = _FakeClient(net_positions=self._net(50))
+
+        for _ in range(5):
+            await monitor.on_tick("h5", 777, 85.0, client=client)  # above the stop
+        # not a breach, so no probe at all yet
+        assert client.calls.count("positions") == 0
+
+        await monitor.on_tick("h5", 777, 79.0, client=client)
+        assert client.calls.count("positions") == 1
+
+    @pytest.mark.asyncio
+    async def test_our_own_sell_invalidates_the_cached_read(self):
+        _held("h6", gtt_id=0)
+        client = _FakeClient(net_positions=self._net(50))
+
+        await monitor.on_tick("h6", 777, 79.0, client=client)
+
+        assert monitor._holdings_probe.get("h6") is None, (
+            "a cached portfolio that predates our own SELL would misreport the next check"
+        )
