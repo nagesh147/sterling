@@ -94,7 +94,7 @@ describe('AdaptiveEdgePane', () => {
     expect(screen.getAllByText('AT_LVN').length).toBeGreaterThan(0);
     expect(screen.getByText('LEGS')).toBeInTheDocument();
     expect(screen.getByText('DAILY LEDGER')).toBeInTheDocument();
-    expect(screen.getByText('FORMULA REGISTRY')).toBeInTheDocument();
+    expect(screen.getByText('BUILDING BLOCKS')).toBeInTheDocument();
   });
 
   it('opens Adaptive Edge settings from the desk', () => {

@@ -66,7 +66,7 @@ function Detail({ row }: { row: AdaptiveEdgeRow }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(130px, 1fr))', gap: 10 }}>
         <Cell label="Observation" value={new Date(row.observationTime).toLocaleTimeString()} />
         <Cell label="Feature quality" value={row.featureQuality || '—'} />
-        <Cell label="Edge formula" value={row.formulaIds?.find((x) => x.startsWith('F-10')) || '—'} />
+        <Cell label="Score" value="Adaptive Edge" />
         <Cell label="Decision" value={row.decision} />
         <Cell label="Gross value" value={fmtMoney(row.expectedGrossValue)} align="right" />
         <Cell label="Execution cost" value={fmtMoney(row.executionCost)} align="right" />

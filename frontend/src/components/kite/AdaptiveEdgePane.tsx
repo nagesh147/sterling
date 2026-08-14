@@ -14,9 +14,42 @@ const MODES = ['MICRO', 'SCALP', 'EXTENDED_SCALP', 'INTRADAY'] as const;
 const THESES = ['THESIS_STRONG', 'THESIS_VALID', 'THESIS_WEAKENING', 'THESIS_INVALID'] as const;
 const STAGES = ['P0_RISK_CONTROLLED', 'P1_BREAKEVEN_PROTECTED', 'P2_PROFIT_PROTECTED', 'P3_AGGRESSIVE_TRAIL'] as const;
 
+const LABEL: Record<string, string> = {
+  TRIAL_NOT_A197_QUALITY: 'Trial quality',
+  RESEARCH_PLACEHOLDER_SPLITS: 'Trial split',
+  RESEARCH_HOLDOUT_NOT_LIVE: 'Trial holdout',
+  RESEARCH_CODE_PRESENT_REGISTRY_LOCKED: 'Present, locked',
+  SPEC_GAP: 'Not recovered',
+  RESEARCH_NOT_LIVE: 'Display only',
+  formula_registry_locked: 'Formula lock',
+  execution_gate_blocked: 'Orders',
+  kite_disconnected: 'Kite',
+  recovered_research_path: 'Core path',
+  opportunity_modes: 'Modes',
+  management_ladders: 'Management',
+  tbt_structure: 'Structure',
+  a197_dataset: 'History',
+  parameter_freeze: 'Calibration file',
+  f102_f103_numeric: 'Extra entry checks',
+  'F-101': 'Score',
+  'F-102': 'Entry extra',
+  'F-103': 'Session extra',
+  'F-104': 'Modes',
+  'F-105': 'Thesis',
+  'F-106': 'Overlays',
+  'F-107': 'Risk per unit',
+  'F-108': 'Size',
+  'F-109': 'Entry extra',
+  'F-110': 'Session extra',
+  'F-111': 'Exits',
+  'F-112': 'Stops',
+  'F-113': 'Re-entry',
+  'F-114': 'One position',
+};
+
 function pretty(value: string | null | undefined) {
   if (!value) return '—';
-  return value.split('_').join(' ');
+  return LABEL[value] ?? value.split('_').join(' ');
 }
 
 function fmt(v: number | null | undefined, d = 2) {
@@ -128,7 +161,7 @@ function boardRow(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow {
     protectionState: session.last_protection_stage,
     decision: (session.last_position_quantity ?? 0) > 0 ? 'HOLD' : session.exits ? 'EXIT' : 'REJECT',
     reason: data.live_trading ? undefined : 'Display only',
-    formulaIds: ['F-101', 'F-007', 'F-008', 'F-002', 'F-003'],
+    formulaIds: [],
   };
 }
 
@@ -238,7 +271,7 @@ export function AdaptiveEdgePane() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
               <Card title="QUALITY">
-                <KV k="Status" v={asText(quality.status)} />
+                <KV k="Status" v={pretty(typeof quality.status === 'string' ? quality.status : null)} />
                 <KV k="LI valid" v={fmt(asNum(quality.li_valid_rate), 3)} />
                 <KV k="Missing scores" v={fmt(asNum(quality.missing_score_rate), 4)} />
                 <KV k="Missing LI" v={asText(quality.missing_liquidity_imbalance)} />
@@ -254,7 +287,7 @@ export function AdaptiveEdgePane() {
                 <KV k="History" v={coverage.meets_a197 ? 'ready' : 'waiting'} />
               </Card>
               <Card title="WALK-FORWARD">
-                <KV k="Label" v={asText(walk.label)} />
+                <KV k="Label" v={pretty(typeof walk.label === 'string' ? walk.label : null)} />
                 <KV k="Train" v={asText(walk.train)} />
                 <KV k="Validation" v={asText(walk.validation)} />
                 <KV k="Test" v={asText(walk.test)} />
@@ -262,7 +295,7 @@ export function AdaptiveEdgePane() {
                 <KV k="Overlap" v={walk.train_test_overlap ? 'yes' : 'no'} />
               </Card>
               <Card title="HOLDOUT">
-                <KV k="Label" v={asText(holdout.label)} />
+                <KV k="Label" v={pretty(typeof holdout.label === 'string' ? holdout.label : null)} />
                 <KV k="Entries" v={asText(holdout.entries)} />
                 <KV k="Exits" v={asText(holdout.exits)} />
                 <KV k="Test bars" v={asText(holdout.test_bar_count)} />
@@ -297,7 +330,7 @@ export function AdaptiveEdgePane() {
                         <td style={{ padding: '6px 8px' }}>{asText(leg.quantity)}</td>
                       </tr>
                     ))}
-                    {!legs.length && <tr><td colSpan={9} style={{ padding: 12, color: C.muted }}>No research legs yet. Run the research E2E script to populate this board.</td></tr>}
+                    {!legs.length && <tr><td colSpan={9} style={{ padding: 12, color: C.muted }}>No legs in the last snapshot yet.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -333,7 +366,7 @@ export function AdaptiveEdgePane() {
                     v={`${pretty(item.previous_mode)} → ${pretty(item.new_mode)} · ${fmt(item.favorable_points, 1)} pts`}
                   />
                 ))}
-                {!transitions.length && <div style={{ color: C.muted, fontSize: 12 }}>No mode transitions in the last artifact.</div>}
+                {!transitions.length && <div style={{ color: C.muted, fontSize: 12 }}>No mode transitions in the last snapshot.</div>}
               </Card>
             </div>
 
@@ -343,11 +376,11 @@ export function AdaptiveEdgePane() {
                   <KV key={item.name} k={pretty(item.name)} v={item.ready ? 'ready' : 'blocked'} />
                 ))}
               </Card>
-              <Card title="FORMULA REGISTRY">
+              <Card title="BUILDING BLOCKS">
                 {formulas.map(([id, row]) => (
-                  <KV key={id} k={id} v={pretty(row.status)} />
+                  <KV key={id} k={pretty(id)} v={pretty(row.status)} />
                 ))}
-                {!formulas.length && <div style={{ color: C.muted, fontSize: 12 }}>No formula table in the last artifact.</div>}
+                {!formulas.length && <div style={{ color: C.muted, fontSize: 12 }}>No building-block table in the last snapshot.</div>}
               </Card>
             </div>
           </>

@@ -28,7 +28,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
       protectionState: data.session.last_protection_stage,
       decision: (data.session.last_position_quantity ?? 0) > 0 ? 'HOLD' : data.session.exits ? 'EXIT' : 'REJECT',
       reason: 'Display only',
-      formulaIds: ['F-101', 'F-007', 'F-008'],
+      formulaIds: [],
     }];
   }, [snapshot.data]);
 
