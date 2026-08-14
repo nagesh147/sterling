@@ -10,6 +10,7 @@
 > - **Implementation Status**: **NOT AUTHORIZED**
 > - **A196 Strategy Decision Matrix**: **UNCHANGED**
 > - **A201 DeltaVelocity Audit**: **PARKED** (`DeltaVelocity` = `UNAVAILABLE FROM TRUEDATA`)
+> - **A206 (later)**: C-DV removes DeltaVelocity from the F-101 *subset*. This audit file is unchanged as a historical readiness record.
 > - **Overall Verdict**: **`PARTIALLY READY`**
 > - **Purpose**: Performs a rigorous readiness audit of the remaining proposed F-101 feature inputs (`LogReturn`, `VolatilityRatio`, `LiquidityImbalance`) against canonical strategy specifications and TrueData capabilities. Does **NOT** modify strategy definitions, invent formulas/proxies, calibrate parameters, unlock `F-101`, or modify production Python code.
 

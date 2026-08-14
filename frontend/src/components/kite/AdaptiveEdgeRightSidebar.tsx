@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
-import { AdaptiveEdgePanel } from './AdaptiveEdgePanel';
+import { AdaptiveEdgePanel, type AdaptiveEdgeRow } from './AdaptiveEdgePanel';
+import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { k } from '../../styles/kiteUI';
 
 interface Props {
@@ -10,6 +11,26 @@ interface Props {
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props) {
   const [engine, setEngine] = useState<'signals' | 'adaptive_edge'>('signals');
+  const snapshot = useAdaptiveEdgeSnapshot();
+  const rows: AdaptiveEdgeRow[] = useMemo(() => {
+    const data = snapshot.data;
+    if (!data) return [];
+    return [{
+      id: 'research-last',
+      instrument: data.settings.symbol,
+      observationTime: Date.now(),
+      featureQuality: data.software_complete ? 'RESEARCH COMPLETE' : 'INCOMPLETE',
+      mode: data.session.last_mode,
+      quantity: data.session.last_position_quantity,
+      currentPnl: data.session.current_pnl,
+      peakPnl: data.session.peak_pnl,
+      profitGiveback: data.session.profit_giveback,
+      protectionState: data.session.last_protection_stage,
+      decision: (data.session.last_position_quantity ?? 0) > 0 ? 'HOLD' : data.session.exits ? 'EXIT' : 'REJECT',
+      reason: 'RESEARCH_NOT_LIVE',
+      formulaIds: ['F-101', 'F-007', 'F-008'],
+    }];
+  }, [snapshot.data]);
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: k.bg }}>
@@ -32,7 +53,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
         {engine === 'signals' ? (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         ) : (
-          <AdaptiveEdgePanel rows={[]} />
+          <AdaptiveEdgePanel rows={rows} />
         )}
       </div>
     </div>

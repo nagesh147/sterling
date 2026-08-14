@@ -34,7 +34,8 @@ To perform `F-101` calibration without data contamination, the input dataset mus
 - **Asset-Class Scope**: `INDEX_OPTION` (NIFTY 50 Index and NIFTY Liquid Options).
 - **Bar Interval**: 1-minute OHLCV + Open Interest bars.
 - **Required Market Fields**: `open`, `high`, `low`, `close`, `volume`, `oi`.
-- **Required Derived Variables**: LogReturn ($r_t$), LiquidityImbalance ($\text{LI}_t$), DeltaVelocity ($\delta v_t$), VolatilityRatio ($\text{VR}_t$).
+- **Required Derived Variables**: LogReturn ($r_t$), LiquidityImbalance ($\text{LI}_t$), VolatilityRatio ($\text{VR}_t$).  
+  (`DeltaVelocity` **removed from F-101 requirements by A206 C-DV**. No proxy. **Minimum Historical Coverage below is NOT shortened.**)
 - **Timestamp Integrity**: All observations must contain UTC ISO-8601 timestamps satisfying `available_at` $\ge$ `event_time`.
 - **Missing-Data Threshold**: Maximum missing bar rate $< 0.1\%$ per training fold; missing fields produce `FeatureStatus.MISSING`.
 - **Minimum Historical Coverage**: 6 calendar months (approx. 120 trading days / $\sim 45,000$ 1-minute bars).
@@ -75,8 +76,15 @@ Parameters estimated over the full dataset $\text{Estimate}(\text{FullDataset})$
 
 ## 5. Feature Subset Evaluation Protocol
 
-### 5.1 Proposed Subset Vector (`PROPOSED DESIGN`)
-$$\mathbf{x}_{\text{F101}} = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{DeltaVelocity}(t), \text{VolatilityRatio}(t) \big)^T$$
+### 5.1 Proposed Subset Vector (`PROPOSED DESIGN`, **superseded for DV by A206**)
+
+Historical A197 4-vector (record only):
+
+$$\mathbf{x}_{\text{F101}}^{\text{A196}} = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{DeltaVelocity}(t), \text{VolatilityRatio}(t) \big)^T$$
+
+**Authorized after C-DV:**
+
+$$\mathbf{x}_{\text{F101}}^{\text{A206}} = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{VolatilityRatio}(t) \big)^T$$
 
 ### 5.2 Subset Elimination & Screening Rules (`STRATEGY DECISION`)
 Before freezing a feature $x_i$ into the subset:

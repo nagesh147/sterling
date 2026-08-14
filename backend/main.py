@@ -1807,6 +1807,9 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.navigator import router as navigator_router
     app.include_router(navigator_router, prefix="/api/v1")
 
+    from app.api.v1.endpoints.adaptive_edge import router as adaptive_edge_router
+    app.include_router(adaptive_edge_router, prefix="/api/v1")
+
     # Offline market-data lake (kitelake). Storage is relocatable — typically a removable
     # drive — so these endpoints report an absent volume as data, never as an error.
     from app.api.v1.endpoints.datalake import router as datalake_router

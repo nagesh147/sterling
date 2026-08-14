@@ -6,11 +6,26 @@ immutable CanonicalMarketEvent objects crossing into the Adaptive Edge boundary.
 from __future__ import annotations
 
 import hashlib
-import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Mapping
+from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from app.engines.adaptive_edge.event_boundary import CanonicalEventBoundary, CanonicalMarketEvent
+
+# NSE session clock in TrueData samples is naive and matches Asia/Kolkata, not UTC.
+_PROVIDER_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def _optional_float(record: Mapping[str, Any], key: str) -> float | None:
+    if key not in record:
+        return None
+    value = record.get(key)
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid TrueData numeric field {key}: {value}") from exc
 
 
 class TrueDataMarketDataAdapter:
@@ -18,40 +33,47 @@ class TrueDataMarketDataAdapter:
 
     SOURCE_NAME = "truedata"
     SOURCE_VERSION = "2.6"
+    PROVIDER_TIMEZONE = "Asia/Kolkata"
 
     @classmethod
     def format_iso_timestamp(cls, raw_ts: str) -> str:
-        """Parse raw TrueData timestamp string to ISO-8601 string with UTC timezone offset."""
+        """Parse a TrueData timestamp to UTC ISO-8601.
+
+        Naive strings are interpreted as Asia/Kolkata (NSE session clock).
+        Strings that already carry an offset are preserved, then converted to UTC.
+        """
         if not raw_ts:
             raise ValueError("Raw timestamp cannot be empty")
 
-        clean_ts = raw_ts.strip().replace("Z", "+00:00")
-        dt: datetime
+        clean_ts = raw_ts.strip()
+        dt: datetime | None = None
 
-        # Handle various documented TrueData formats:
-        # e.g., "2026-08-14 12:00:00", "2026-08-14T12:00:00", "2026-08-14 12:00:00.123456"
-        for fmt in (
-            "%Y-%m-%d %H:%M:%S.%f",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S.%f",
-            "%Y-%m-%dT%H:%M:%S",
-            "%d/%m/%Y %H:%M:%S",
-        ):
+        if clean_ts.endswith("Z") or "+" in clean_ts[10:] or clean_ts.count("-") > 2:
             try:
-                dt = datetime.strptime(clean_ts, fmt)
-                dt = dt.replace(tzinfo=timezone.utc)
-                return dt.isoformat()
+                dt = datetime.fromisoformat(clean_ts.replace("Z", "+00:00"))
             except ValueError:
-                continue
+                dt = None
 
-        # Fallback to datetime.fromisoformat if already ISO formatted
-        try:
-            dt = datetime.fromisoformat(clean_ts)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.isoformat()
-        except ValueError as exc:
-            raise ValueError(f"Invalid TrueData timestamp format: {raw_ts}") from exc
+        if dt is None:
+            for fmt in (
+                "%Y-%m-%d %H:%M:%S.%f",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S.%f",
+                "%Y-%m-%dT%H:%M:%S",
+                "%d/%m/%Y %H:%M:%S",
+            ):
+                try:
+                    dt = datetime.strptime(clean_ts, fmt)
+                    break
+                except ValueError:
+                    continue
+
+        if dt is None:
+            raise ValueError(f"Invalid TrueData timestamp format: {raw_ts}")
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_PROVIDER_TZ)
+        return dt.astimezone(timezone.utc).isoformat()
 
     @classmethod
     def create_bar_event(
@@ -121,7 +143,13 @@ class TrueDataMarketDataAdapter:
         if available_at_iso < event_time_iso:
             available_at_iso = event_time_iso
 
-        record_id = f"TD-TICK-{symbol}-{hashlib.sha256((symbol + event_time_iso + str(sequence)).encode()).hexdigest()[:12]}"
+        ordinal = 0 if sequence is None else sequence
+        record_id = (
+            "TD-TICK-"
+            + symbol
+            + "-"
+            + hashlib.sha256(f"{symbol}|{event_time_iso}|{ordinal}".encode()).hexdigest()[:12]
+        )
 
         return CanonicalEventBoundary.create(
             record_id=record_id,
@@ -132,19 +160,21 @@ class TrueDataMarketDataAdapter:
             source=cls.SOURCE_NAME,
             source_version=cls.SOURCE_VERSION,
             payload={
-                "ltp": float(tick_record.get("ltp", 0.0)),
-                "volume": float(tick_record.get("volume", 0.0)),
-                "oi": float(tick_record.get("oi", 0.0)),
-                "bid": float(tick_record.get("bid", 0.0)) if "bid" in tick_record else None,
-                "bidqty": float(tick_record.get("bidqty", 0.0)) if "bidqty" in tick_record else None,
-                "ask": float(tick_record.get("ask", 0.0)) if "ask" in tick_record else None,
-                "askqty": float(tick_record.get("askqty", 0.0)) if "askqty" in tick_record else None,
+                "ltp": _optional_float(tick_record, "ltp") or 0.0,
+                "volume": _optional_float(tick_record, "volume") or 0.0,
+                "oi": _optional_float(tick_record, "oi") or 0.0,
+                "bid": _optional_float(tick_record, "bid"),
+                "bidqty": _optional_float(tick_record, "bidqty"),
+                "ask": _optional_float(tick_record, "ask"),
+                "askqty": _optional_float(tick_record, "askqty"),
             },
             source_timestamp=event_time_iso,
             receipt_timestamp=receipt_time_iso,
-            sequence=sequence,
+            sequence=ordinal,
             provenance={
                 "provider": "TrueData",
                 "feed_type": "historical_tick",
+                "provider_timezone": cls.PROVIDER_TIMEZONE,
+                "provider_timestamp": raw_time,
             },
         )

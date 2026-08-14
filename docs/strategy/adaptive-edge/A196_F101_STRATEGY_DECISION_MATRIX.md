@@ -9,6 +9,7 @@
 > - **Execution Gate**: `BLOCKED`
 > - **Implementation Status**: **NOT AUTHORIZED**
 > - **Purpose**: Resolves the four core strategy-design decisions for `F-101` (Feature Subset, Aggregation, Calibration Scope, Validation Criteria) and identifies temporal governance alignments against canonical specifications. Does **NOT** unlock `F-101` or authorize implementation code.
+> - **SUBSET SUPERSESSION (2026-08-14)**: Strategy Lead **C-DV** via [`A206`](A206_F101_STRATEGY_LEAD_LI_A_AND_CDV_DECISION.md) **removes `DeltaVelocity` from the F-101 subset**. No proxy. The Exact Math Spec operator is unchanged. Current authorized vector: \((\mathrm{LogReturn},\ \mathrm{LiquidityImbalance},\ \mathrm{VolatilityRatio})\).
 
 ---
 
@@ -34,7 +35,7 @@ Every normative statement in this document is strictly classified under one of f
 | `V-INST-006` | OpenInterest | OI (Contracts) | TrueData Bar | Raw Observed | Bar End | YES (OI Delta transform) | Raw OI non-stationary | **EXCLUDED** (Replaced by OI change) |
 | `V-FTR-003` | LogReturn | $r_t = \ln(P_t / P_{t-1})$ (Unitless) | `Exact Math Spec` | Primitive Derived | Bar End | YES (Robust scaling) | Target: `F-102` Directional Edge | **SELECTED** (Core Directional Input) |
 | `V-MKT-005/006` | LiquidityImbalance | $\text{LI}_t = \frac{Q^B - Q^A}{Q^B + Q^A} \in [-1, +1]$ | `Exact Math Spec` | Primitive Derived | Quote Event | NO (Self-bounded $[-1, +1]$) | Target: `F-102`, `F-109` Option Selection | **SELECTED** (Order Book Imbalance Input) |
-| `V-FTR-001` | DeltaVelocity | $\delta v_t = \frac{\Delta_W(t) - \Delta_W(t-\Delta W)}{\Delta W}$ | `Exact Math Spec` | Primitive Derived | Event Window | YES (Robust scaling) | Target: `F-102` Flow Acceleration | **SELECTED** (Order Flow Impulse Input) |
+| `V-FTR-001` | DeltaVelocity | $\delta v_t = \frac{\Delta_W(t) - \Delta_W(t-\Delta W)}{\Delta W}$ | `Exact Math Spec` | Primitive Derived | Event Window | YES (Robust scaling) | Target: `F-102` Flow Acceleration | **SUPERSEDED by A206 C-DV — REMOVED from F-101 subset (no proxy)** |
 | `V-FTR-002` | VolatilityRatio | $VR_t = \frac{\sigma_{\text{short}}}{\sigma_{\text{long}}}$ (Ratio) | `Exact Math Spec` | Primitive Derived | Rolling Window | YES (Location / Scale) | Target: `F-104` Mode, `F-106` Risk | **SELECTED** (Volatility State Input) |
 | `V-OR-001/003` | OpeningRangeWidth | Price Range (Points) | `Variable Registry` | Derived State | Post-OR Completion | YES | Regime classification | **EXCLUDED** (Regime state, downstream) |
 | `V-SES-004` | SessionElapsedTime | Time (Seconds) | `Variable Registry` | Derived State | Clock Event | NO | Intraday seasonality filter | **EXCLUDED** (Session state, downstream) |
@@ -43,8 +44,15 @@ Every normative statement in this document is strictly classified under one of f
 
 ### 2.2 Detailed Subset Justification (`STRATEGY DECISION`)
 
-#### Proposed F-101 Subset ($\mathbf{x}_{\text{F101}}$) (`PROPOSED DESIGN`)
-$$\mathbf{x}_{\text{F101}}(t) = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{DeltaVelocity}(t), \text{VolatilityRatio}(t) \big)^T$$
+#### Proposed F-101 Subset ($\mathbf{x}_{\text{F101}}$) (`PROPOSED DESIGN`, **subset superseded by A206**)
+
+Historical A196 4-vector (record only):
+
+$$\mathbf{x}_{\text{F101}}^{\text{A196}}(t) = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{DeltaVelocity}(t), \text{VolatilityRatio}(t) \big)^T$$
+
+**Authorized after C-DV (`A206`):**
+
+$$\mathbf{x}_{\text{F101}}^{\text{A206}}(t) = \big( \text{LogReturn}(t), \text{LiquidityImbalance}(t), \text{VolatilityRatio}(t) \big)^T$$
 
 - **Why Selected**:
   1. **Dimensionless & Complementary**: Covers directional price momentum (`LogReturn`), order book liquidity imbalance (`LiquidityImbalance`), institutional trade flow impulse (`DeltaVelocity`), and volatility regime expansion (`VolatilityRatio`).
@@ -162,7 +170,7 @@ The canonical document [`WALK-FORWARD WINDOW, PURGE AND EMBARGO SPECIFICATION.md
 
 | Decision Area | Current Status | Canonical Constraint | Candidate Options | Recommended Option (`PROPOSED DESIGN`) | Rationale | Approval Required |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Feature Subset** | Unfrozen | Must be causal, unitless, non-redundant | A. All raw features<br>B. Subset $\mathbf{x}_{\text{F101}}$ | **Option B**: `(LogReturn, LiquidityImbalance, DeltaVelocity, VolatilityRatio)` | Eliminates multicollinearity & non-stationarity | Strategy Lead |
+| **1. Feature Subset** | **Superseded by A206 C-DV** | Must be causal, unitless, non-redundant | A. All raw features<br>B. 4-vector including DV<br>C-DV. 3-vector without DV | **A206**: `(LogReturn, LiquidityImbalance, VolatilityRatio)` | DV removed by Strategy Lead; no proxy | Strategy Lead (executed) |
 | **2. Aggregation Operator** | Unfrozen | Must preserve determinism & causality | A. Linear weighted<br>B. Median/IQR + Tanh<br>C. Non-linear Kernel | **Option B**: Robust standardization + Tanh bounding | Resists outliers, outputs bounded $(-1, +1)$ | Strategy Lead |
 | **3. Calibration Scope** | Unfrozen | Must prevent cross-asset distortion | A. Universal<br>B. Asset-Class<br>C. Symbol-Specific | **Option B**: Asset-Class Specific (`INDEX_OPTION`) | Sufficient sample size without scale bias | Strategy Lead |
 | **4. Acceptance Criteria** | Unfrozen | Must enforce technical & economic gates | A. Technical only<br>B. Tech + Economic Gates | **Option B**: Dual-gate validation | Guarantees safety & strategy advantage | Strategy Lead |
@@ -173,13 +181,13 @@ The canonical document [`WALK-FORWARD WINDOW, PURGE AND EMBARGO SPECIFICATION.md
 
 ### 8.1 Justified & Frozen Design Choices (`PROPOSED DESIGN`)
 1. **Input Interface**: Consumes `FeatureSnapshot` at decision time $t$.
-2. **Feature Subset**: 4-variable vector $\mathbf{x}_{\text{F101}} = (\text{LogReturn}, \text{LiquidityImbalance}, \text{DeltaVelocity}, \text{VolatilityRatio})^T$.
+2. **Feature Subset**: **A206** 3-variable vector $\mathbf{x}_{\text{F101}} = (\text{LogReturn}, \text{LiquidityImbalance}, \text{VolatilityRatio})^T$. (`DeltaVelocity` removed; no proxy.)
 3. **Operator Pipeline**: Two-Stage Median/IQR Robust Scaling + Tanh Soft-Bounding.
 4. **Causality & Replay Contract**: 100% $\text{available\_at} \le \text{decision\_time}$; bitwise deterministic replay hash match.
 5. **Temporal Partitioning**: Dynamic $\tau_{\text{purge}} = H_{\max}$ and autocorrelation-derived $\tau_{\text{embargo}}$.
 
 ### 8.2 Unresolved Items Pending Strategy Lead Approval (`OPEN DECISION`)
-1. Formal sign-off on 4-variable feature subset vector.
+1. Formal sign-off on feature subset: **done for C-DV** (A206). 3-vector is the authorized subset.
 2. Sign-off on Asset-Class Calibration Scope (`INDEX_OPTION`).
 3. Out-of-sample economic gain threshold sign-off ($> +2.5\%$).
 4. Execution of walk-forward parameter calibration script on historical NIFTY dataset to generate `f101_parameters_v1.json`.

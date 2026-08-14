@@ -16,6 +16,8 @@ import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
+import { DataLakeSettingsPanel } from '../datalake/DataLakeSettingsPanel';
+import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -541,9 +543,11 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   autoRules: <Icons.Pulse />,
   engine: <Icons.Chart />,
   navigator: <Icons.Pulse />,
+  adaptiveEdge: <Icons.Chart />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
+  dataLake: <Icons.Settings />,
 };
 
 const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
@@ -561,12 +565,16 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Scan, entry and exit for the SuperTrend engine.' },
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines',
     pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
+  { id: 'adaptiveEdge', label: 'Adaptive Edge', eyebrow: 'Score, modes, TBT structure & protection', group: 'Signal engines',
+    pageDescription: 'Research policy for Adaptive Edge. Does not unlock live Kite orders.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
     pageDescription: 'Kite signal destinations and Telegram alerts.' },
   { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', group: 'Platform',
     pageDescription: 'Loading, dialogs and transition feel.' },
+  { id: 'dataLake', label: 'Offline Data', eyebrow: 'Where history is stored', group: 'Platform',
+    pageDescription: 'The folder holding downloaded market history, what is in it, and how to fetch more.' },
 ];
 
 function readInitialSection(): ConnectSection {
@@ -772,6 +780,12 @@ export function ConnectPane() {
             </>
           )}
 
+          {section === 'adaptiveEdge' && (
+            <>
+              <AdaptiveEdgeSettingsPanel />
+            </>
+          )}
+
           {section === 'markets' && (
             <>
               {liveTools ? (
@@ -788,6 +802,12 @@ export function ConnectPane() {
           {section === 'notifications' && (
             <>
               <KiteTelegramPanel />
+            </>
+          )}
+
+          {section === 'dataLake' && (
+            <>
+              <DataLakeSettingsPanel />
             </>
           )}
 

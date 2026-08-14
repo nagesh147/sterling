@@ -24,7 +24,8 @@ import type {
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
   | 'account' | 'truedata' | 'mode' | 'manualRules' | 'autoRules'
-  | 'engine' | 'navigator' | 'markets' | 'notifications' | 'experience';
+  | 'engine' | 'navigator' | 'adaptiveEdge' | 'markets' | 'notifications' | 'experience'
+  | 'dataLake';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
 export type Applies = 'manual' | 'auto' | 'both';
@@ -423,7 +424,7 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
 
 export const SECTION_IDS: SectionId[] = [
   'account', 'truedata', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
-  'markets', 'notifications', 'experience',
+  'adaptiveEdge', 'markets', 'notifications', 'experience', 'dataLake',
 ];
 
 export function isSectionId(value: unknown): value is SectionId {

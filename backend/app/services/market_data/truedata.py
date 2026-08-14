@@ -382,8 +382,13 @@ class TrueDataHistoricalClient:
             raise TrueDataError(
                 f"TrueData history HTTP {response.status_code}: {response.text[:500]}"
             )
-        if response.text.strip().startswith("No Data exists for"):
-            raise TrueDataNoDataError(response.text.strip())
+        text = response.text.strip().strip('"')
+        lowered = text.lower()
+        # v2.6 PDF: "No Data exists for <Symbol>". Live body uses "No data exists".
+        if lowered.startswith("no data exists for"):
+            raise TrueDataNoDataError(text)
+        if "segment not subscribed" in lowered:
+            raise TrueDataError(text)
 
     @staticmethod
     def _raise_market_error(response: httpx.Response) -> None:

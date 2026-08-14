@@ -10,6 +10,7 @@
 > - **Implementation Status**: **NOT AUTHORIZED**
 > - **A196 Strategy Decision Matrix**: **UNCHANGED**
 > - **A201 DeltaVelocity Audit**: **PARKED** (`DeltaVelocity` = `UNAVAILABLE FROM TRUEDATA`)
+> - **A206 (later)**: C-DV removes DeltaVelocity from the F-101 subset. VR lookbacks remain `[UNFROZEN]`. This audit is unchanged.
 > - **A202 Remaining Feature Audit**: **UNCHANGED**
 > - **Final Verdict**: **`READY FOR HYPERPARAMETER SELECTION`**
 > - **Purpose**: Audits and establishes the formal parameter governance, classification, temporal constraints, leakage controls, and walk-forward selection protocol for `VolatilityRatio` lookback parameters ($W_{\text{short}}, W_{\text{long}}$). Does **NOT** assign numerical values, modify strategy matrices, calibrate parameters, unlock `F-101`, or modify production Python code.

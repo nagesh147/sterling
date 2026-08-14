@@ -52,6 +52,8 @@ vi.mock('../KiteTelegramPanel', () => ({
 }));
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
+vi.mock('../AdaptiveEdgeSettingsPanel', () => ({ AdaptiveEdgeSettingsPanel: () => <div>Adaptive Edge settings panel</div> }));
+vi.mock('../../datalake/DataLakeSettingsPanel', () => ({ DataLakeSettingsPanel: () => <div>Offline data settings</div> }));
 
 describe('ConnectPane settings hub', () => {
   beforeEach(() => {
@@ -89,6 +91,16 @@ describe('ConnectPane settings hub', () => {
     render(<ConnectPane />);
     ['Connection', 'Trading', 'Signal engines', 'Platform']
       .forEach((group) => expect(screen.getByText(group)).toBeInTheDocument());
+  });
+
+  it('places Adaptive Edge next to Value-Flow Navigator', () => {
+    render(<ConnectPane />);
+    const navigator = screen.getByRole('button', { name: /Value-Flow Navigator AVWAP, volatility & options flow/i });
+    const adaptive = screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i });
+    expect(navigator.compareDocumentPosition(adaptive) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(adaptive);
+    expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
+    expect(screen.getByText('Adaptive Edge settings panel')).toBeInTheDocument();
   });
 
   it('gives manual and automatic rules separate homes, not one filtered page', () => {

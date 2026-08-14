@@ -37,7 +37,7 @@ def test_bar_event_mapping_and_causality():
 
     assert event.event_type == "bar"
     assert event.instrument_id == "NIFTY26AUGFUT"
-    assert event.event_time == "2026-08-14T12:00:00+00:00"
+    assert event.event_time == "2026-08-14T06:30:00+00:00"
     assert event.available_at == "2026-08-14T12:00:01+00:00"
     assert event.available_at >= event.event_time  # Causal invariant
     assert event.source == "truedata"

@@ -46,6 +46,8 @@ vi.mock('../TradeRulesPanels', () => ({
 vi.mock('../SuperTrendEnginePanel', () => ({ SuperTrendEnginePanel: () => <div>SuperTrend strategy panel</div> }));
 vi.mock('../NavigatorSettingsPanel', () => ({ NavigatorSettingsPanel: () => <div>Navigator settings panel</div> }));
 vi.mock('../NavigatorCalibrationPanel', () => ({ NavigatorCalibrationPanel: () => <div>Navigator calibration panel</div> }));
+vi.mock('../AdaptiveEdgeSettingsPanel', () => ({ AdaptiveEdgeSettingsPanel: () => <div>Adaptive Edge settings panel</div> }));
+vi.mock('../../datalake/DataLakeSettingsPanel', () => ({ DataLakeSettingsPanel: () => <div>Offline data settings</div> }));
 vi.mock('../KiteTelegramPanel', () => ({
   KiteTelegramPanel: () => <div>Kite alert destinations</div>,
   BrandIconPicker: () => <div>Icon picker</div>,
@@ -68,5 +70,13 @@ describe('ConnectPane — Navigator settings section', () => {
     expect(screen.getByText('Navigator settings panel')).toBeInTheDocument();
     // Not copied into the existing engine form
     expect(screen.queryByText('SuperTrend strategy panel')).not.toBeInTheDocument();
+  });
+
+  it('has an Adaptive Edge rail item next to Value-Flow Navigator', () => {
+    render(<ConnectPane />);
+    expect(screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i }));
+    expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
+    expect(screen.getByText('Adaptive Edge settings panel')).toBeInTheDocument();
   });
 });

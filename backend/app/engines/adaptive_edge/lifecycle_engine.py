@@ -51,6 +51,12 @@ class OverlayState(str, Enum):
     LIQUIDITY_STRESS = "LIQUIDITY_STRESS"
     DATA_UNCERTAINTY = "DATA_UNCERTAINTY"
     ECONOMIC_COLLAPSE = "ECONOMIC_COLLAPSE"
+    FLOW_AGAINST = "FLOW_AGAINST"
+    OUTSIDE_VALUE = "OUTSIDE_VALUE"
+    AGAINST_VWAP = "AGAINST_VWAP"
+    OUTSIDE_OR = "OUTSIDE_OR"
+    VALUE_MIGRATION_AGAINST = "VALUE_MIGRATION_AGAINST"
+    AT_LVN = "AT_LVN"
     EMERGENCY = "EMERGENCY"
 
 
@@ -116,6 +122,9 @@ class LifecycleEvidence:
     data_certain: bool = True
     is_emergency: bool = False
     session_cutoff_reached: bool = False
+    protective_stop_hit: bool = False
+    trailing_hit: bool = False
+    profit_lock_hit: bool = False
     current_profit_r: float = 0.0
     suggested_protection: ProtectionState | None = None
 
@@ -202,6 +211,39 @@ class A126LifecycleEngine:
             )
             self.is_active = False
             return self._build_eval(eval_id, "FLAT", LifecycleAction.EXIT_SESSION_CUTOFF, "cutoff_flattening", event_time)
+
+        # 3b. A177 protection authorities. Session cutoff above cannot be suppressed.
+        if evidence.protective_stop_hit:
+            self._record_transition(
+                event_time,
+                trigger="PROTECTIVE_STOP",
+                reason_code="protective_stop_hit",
+                evidence=evidence,
+            )
+            self.is_active = False
+            return self._build_eval(eval_id, "FLAT", LifecycleAction.EXIT_HARD_STOP, "protective_stop_hit", event_time)
+        if evidence.profit_lock_hit:
+            self._record_transition(
+                event_time,
+                trigger="PROFIT_LOCK",
+                reason_code="profit_lock_hit",
+                evidence=evidence,
+            )
+            self.is_active = False
+            return self._build_eval(
+                eval_id, "FLAT", LifecycleAction.EXIT_PROFIT_PROTECTION, "profit_lock_hit", event_time
+            )
+        if evidence.trailing_hit:
+            self._record_transition(
+                event_time,
+                trigger="TRAILING_PROTECTION",
+                reason_code="trailing_hit",
+                evidence=evidence,
+            )
+            self.is_active = False
+            return self._build_eval(
+                eval_id, "FLAT", LifecycleAction.EXIT_PROFIT_PROTECTION, "trailing_hit", event_time
+            )
 
         # 4. Thesis Invalidation -> Immediate Exit
         if evidence.thesis_state == ThesisState.THESIS_INVALID or not evidence.thesis_valid:
