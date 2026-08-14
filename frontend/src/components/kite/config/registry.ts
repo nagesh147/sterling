@@ -23,7 +23,7 @@ import type {
 // Exported so the board and other panes can deep-link without duplicating the
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
-  | 'account' | 'mode' | 'manualRules' | 'autoRules'
+  | 'account' | 'truedata' | 'mode' | 'manualRules' | 'autoRules'
   | 'engine' | 'navigator' | 'markets' | 'notifications' | 'experience';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
@@ -422,7 +422,7 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
 };
 
 export const SECTION_IDS: SectionId[] = [
-  'account', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
+  'account', 'truedata', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
   'markets', 'notifications', 'experience',
 ];
 

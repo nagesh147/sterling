@@ -101,6 +101,18 @@ class TrueDataHistoricalClient:
             },
         )
         payload = self._json(response)
+        if response.status_code >= 400 and payload.get("error") == "unsupported_grant_type":
+            # Documented PDF specifies "passoword", but live OAuth server expects "password"
+            response = await self._client.post(
+                self.AUTH_URL,
+                data={
+                    "username": self._username,
+                    "password": self._password,
+                    "grant_type": "password",
+                },
+            )
+            payload = self._json(response)
+
         if response.status_code >= 400 or "access_token" not in payload:
             detail = payload.get("error_description") or payload.get("error") or response.text
             raise TrueDataAuthError(str(detail))

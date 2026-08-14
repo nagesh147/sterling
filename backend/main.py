@@ -1791,6 +1791,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")
 
+    # TrueData market data provider endpoints
+    from app.api.v1.endpoints.truedata import router as truedata_router
+    app.include_router(truedata_router, prefix="/api/v1")
+
     # Kite-exclusive Sterling Kite Engine options engine (scanner + advisory/auto-exec)
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")

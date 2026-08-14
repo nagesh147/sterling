@@ -212,7 +212,7 @@ def run_e2e(
     decision = decision_engine.assess(snapshot, prediction, edge, economics)
     if decision.snapshot_id != snapshot.snapshot_id or decision.prediction_id != prediction.prediction_id:
         raise ValueError("decision causal identity mismatch")
-    audit.append("decision", decision.decision_id, prediction.prediction_id)
+    audit.append("decision", decision.decision_id, edge.opportunity_id, prediction.prediction_id)
 
     if not decision.eligible:
         return E2ETrace(event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None, audit.records(), gate)

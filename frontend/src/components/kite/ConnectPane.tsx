@@ -20,6 +20,7 @@ import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
 import { type SectionId, resolveSectionId, openSettingsSection } from './config/registry';
+import { TrueDataCredentialsPanel } from '../truedata/TrueDataCredentialsPanel';
 import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
@@ -534,6 +535,7 @@ type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: s
 
 const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   account: <Icons.Settings />,
+  truedata: <Icons.Pulse />,
   mode: <Icons.Sliders />,
   manualRules: <Icons.Filter />,
   autoRules: <Icons.Pulse />,
@@ -547,6 +549,8 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
 const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection', group: 'Connection',
     pageDescription: 'API credentials and the daily Zerodha session.' },
+  { id: 'truedata', label: 'TrueData Feed', eyebrow: 'Market data connection', group: 'Connection',
+    pageDescription: 'Encrypted TrueData credentials for historical and real-time market data.' },
   { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
     pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
@@ -727,6 +731,12 @@ export function ConnectPane() {
               <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
                 Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
               </div>
+            </>
+          )}
+
+          {section === 'truedata' && (
+            <>
+              <TrueDataCredentialsPanel />
             </>
           )}
 
