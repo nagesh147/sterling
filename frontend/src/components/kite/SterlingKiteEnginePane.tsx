@@ -233,7 +233,12 @@ function legHasExited(
 // — for spot rows that carry no per-leg premium/stop — the row's scan-time flag. Shared
 // by the card visuals and the Active-now/history bucketing so they never disagree.
 function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
-  if (row.source !== 'derivatives') return rowIsLive(row);
+  // Gated on whether the row actually CARRIES a premium plan, not on source ==
+  // 'derivatives'. A confluence row carries one too (the card's own `hasPremium` says
+  // so), and it was excluded here — so the "Active now" bucket and the footer
+  // live-count used the frozen scan flag while the card body reconciled every leg
+  // against the live LTP. The row said running while its own legs all read ended.
+  if (!hasPremiumSnapshot(row)) return rowIsLive(row);
   return row.legs.some(
     (l) => !legHasExited(l, rowIsLive(row), quotes?.[`${row.exchange}:${(l as any).option_symbol}`]?.last_price ?? null),
   );
@@ -418,7 +423,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   const publishMarkers = useSignalMarkers((m) => m.publish);
   const clearMarkers = useSignalMarkers((m) => m.clear);
   React.useEffect(() => {
-    const rowKey = String(row.token);
+    // The row's identity, not its instrument's. `String(row.token)` collided for
+    // exactly the rows the board is designed to show side by side — a re-entry on the
+    // same contract, and a bull row next to a bear row in `both` mode — so the last
+    // card to render owned the markers and the first card to unmount cleared them.
+    const rowKey = `${row.source ?? 'spot'}:${row.token}:${row.option_type}:${row.timestamp_ms}`;
     const entries: Record<string, Marker> = {};
     for (const sym of bestRRSyms) {
       const key = `${row.exchange}:${sym}`;
@@ -430,7 +439,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
     }
     publishMarkers(rowKey, entries);
     return () => clearMarkers(rowKey);
-  }, [bestRRSyms, bestDeltaSyms, row.exchange, row.token, publishMarkers, clearMarkers]);
+  }, [bestRRSyms, bestDeltaSyms, row.exchange, row.token, row.option_type, row.timestamp_ms,
+      row.source, publishMarkers, clearMarkers]);
 
   // Legs always render grouped and ordered ITM → ATM → OTM, regardless of "Best
   // only" — the fixed order makes a card scannable at a glance whether it's
@@ -2305,7 +2315,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 {!isCollapsed && (
                   <div className="kv-rows">
                     {group.rows.map((row) => (
-                      <div key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
+                      <div key={`${row.source ?? 'spot'}:${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
                         <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
                           scanSource={cfg?.scan_source} signalMode={signalMode}
                           showPremiumColumns={showSignalPremiumColumns}

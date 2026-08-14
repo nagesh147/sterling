@@ -213,3 +213,50 @@ describe('why a trade ended', () => {
     expect(screen.queryByText('412.35%')).not.toBeInTheDocument();
   });
 });
+
+describe('audit leads closed out', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('does not park a confluence row in Active now once its legs have traded through', async () => {
+    // Lead 14. The bucket and the footer live-count keyed off source ==
+    // 'derivatives', so a CONFLUENCE row — which carries a premium plan just the same —
+    // kept the frozen scan flag while the card body reconciled each leg against the
+    // live LTP. The row said running while its own legs all read ended.
+    mockPane(
+      [makeRow({ source: 'confluence', leg: { premium_spot: 1131.15, premium_sl: 1000.6, entry_sl: 694.2 } })],
+      { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
+    );
+    await renderPane();
+    expect(screen.queryByText('Active now')).not.toBeInTheDocument();
+  });
+
+  it('keeps a confluence row in Active now while its legs are above the trail', async () => {
+    mockPane(
+      [makeRow({ source: 'confluence', leg: { premium_spot: 964.95, premium_sl: 845.85, entry_sl: 801.97 } })],
+      { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
+    );
+    await renderPane();
+    expect(screen.getByText('Active now')).toBeInTheDocument();
+  });
+
+  it('gives two rows on the same contract their own marker slots', async () => {
+    // Leads 13/18. Markers were published under String(row.token), which is shared by
+    // exactly the rows the board is designed to show together — a re-entry on the same
+    // contract, and a bull row beside a bear row. Last card rendered owned the markers;
+    // first card unmounted cleared them.
+    const { useSignalMarkers } = await import('../../../store/useSignalMarkers');
+    useSignalMarkers.setState({ markers: {} } as any);
+    mockPane([
+      makeRow({ timestamp_ms: 1_785_404_700_000, leg: { premium_spot: 900, premium_sl: 800 } }),
+      makeRow({ timestamp_ms: 1_785_408_300_000, leg: { premium_spot: 950, premium_sl: 850 } }),
+    ]);
+    await renderPane();
+    const keys = Object.keys(useSignalMarkers.getState().byRow);
+    expect(keys).toHaveLength(2);
+    expect(keys.some((k) => k.endsWith(':1785404700000'))).toBe(true);
+    expect(keys.some((k) => k.endsWith(':1785408300000'))).toBe(true);
+  });
+});

@@ -18,64 +18,94 @@ reproduced and pinned with a test myself.
 
 * **FIXED** — I verified it in the code myself, fixed it, and pinned it with a test.
 * **CONFIRMED, NOT FIXED** — I verified it; the fix is a decision for you, not a bug fix.
-* **UNVERIFIED CLAIM** — a finder's claim with a concrete scenario, *not* independently
-  verified by me and *not* refuted. Treat as a lead to check, not as a known defect.
+* **UNVERIFIED CLAIM** — a finder's claim, not independently verified and not refuted.
+  **No row carries this status any more** — see the close-out below; every one was
+  re-read against the code and resolved into one of:
+* **CLOSED** — was real, is handled by code shipped since the sweep.
+* **NEEDS DECISION** — real, but the remedy is a product choice rather than a bug fix.
+* **REFUTED** — never true as stated; the note says what was misread.
 
 Raw finder output (full evidence, quoted code, scenarios) is in the workflow journal:
 `~/.claude/projects/-home-nageshmadaram-Sterling/*/subagents/workflows/wf_16196edd-b06/journal.jsonl`
+
+## Close-out (2026-08-14)
+
+Every lead above was re-read against the code as it stands today, ten days after the
+sweep. The line numbers in the claims are stale; the verdicts are not.
+
+| Verdict | Count | What it means |
+|---|---|---|
+| CLOSED | 14 | Was real, is handled by code shipped since — usually with a test pinning it |
+| FIXED | 6 | Still real when re-read. Fixed in this pass, with a test |
+| NEEDS DECISION | 9 | Real, but the remedy is a product choice, not a bug fix |
+| REFUTED | 2 | Never true as stated |
+
+The six fixed here: the mid-exit fill that booked realized PnL twice (10); markers keyed
+by a shared instrument token so re-entry rows fought over them (13, 18); confluence rows
+sitting in "Active now" while their own legs read ended (14); expiry-day greeks collapsing
+on the frontend while the detail pane still showed them (15); a React row key that let a
+SuperTrend and a Navigator row for one bar collide (24); and badge copy that still
+described the formula it no longer uses (31).
+
+The nine NEEDS DECISION entries are the honest residue. Three of them (7, 12, and the
+"which spot" half of 19) are the same underlying question: for a signal that is still
+running days later, is the board showing HISTORY — the strike and premium as of the
+trigger — or a TRADEABLE-NOW roll priced at today's LTP? Each half was decided
+separately and they now point opposite ways. Whichever is chosen, both halves have to
+move together.
 
 ## Summary
 
 | Sev | Impact | Where | Finding | Status |
 |---|---|---|---|---|
-| critical | live money | `backend/app/services/kite_engine/monitor.py:95` | A rejected entry or an externally-filled exit closes the position but never cancels the broker GTT — an armed SELL is orphaned at Zerodha | UNVERIFIED CLAIM |
-| critical | live money | `backend/app/services/kite_engine/service.py:548` | stop_mode="both" (default) arms the broker GTT and the tick monitor at the IDENTICAL trigger — a stop-out fires both and sells 2x qty, leaving a naked short option | UNVERIFIED CLAIM |
+| critical | live money | `backend/app/services/kite_engine/monitor.py:95` | A rejected entry or an externally-filled exit closes the position but never cancels the broker GTT — an armed SELL is orphaned at Zerodha | CLOSED |
+| critical | live money | `backend/app/services/kite_engine/service.py:548` | stop_mode="both" (default) arms the broker GTT and the tick monitor at the IDENTICAL trigger — a stop-out fires both and sells 2x qty, leaving a naked short option | CLOSED |
 | critical | wrong number on screen | `backend/app/services/kite_engine/detail.py:113` | On expiry day (0 DTE) every leg's greeks are fabricated intrinsic values, so ✝/▲ crown the deepest-ITM leg and the ATM/OTM strikes show δ 0.00 and +₹0 projected gain | FIXED |
-| critical | live money | `backend/app/services/kite_engine/monitor.py:115` | Protective GTT is placed on a PENDING (unfilled) entry and is never cancelled when the entry is REJECTED/CANCELLED → resting naked-short SELL at Zerodha | UNVERIFIED CLAIM |
-| critical | live money | `backend/app/services/kite_engine/service.py:548` | When the entry premium quote returns 0 the auto-exec still BUYs, gets NO GTT and NO monitor stop, and the activity log claims "[both stop+monitor]" | UNVERIFIED CLAIM |
-| critical | live money | `backend/app/services/kite_engine/service.py:748` | Live red-count is read from the ENTRY-BAR alignment chip, so every PE (bear) auto-exec position is market-sold on the first tick after the first post-entry scan | UNVERIFIED CLAIM |
+| critical | live money | `backend/app/services/kite_engine/monitor.py:115` | Protective GTT is placed on a PENDING (unfilled) entry and is never cancelled when the entry is REJECTED/CANCELLED → resting naked-short SELL at Zerodha | CLOSED |
+| critical | live money | `backend/app/services/kite_engine/service.py:548` | When the entry premium quote returns 0 the auto-exec still BUYs, gets NO GTT and NO monitor stop, and the activity log claims "[both stop+monitor]" | CLOSED |
+| critical | live money | `backend/app/services/kite_engine/service.py:748` | Live red-count is read from the ENTRY-BAR alignment chip, so every PE (bear) auto-exec position is market-sold on the first tick after the first post-entry scan | CLOSED |
 | critical | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:344` | A brand-new Navigator signal renders as "ended" — the board reads is_active only, but origination emits is_fresh=true / is_active=false | FIXED |
 | high | live money | `backend/app/services/kite_engine/service.py:84` | Manual orders from the signal board get zero protection — positions.register has exactly one call site and it is the auto-exec path only | CONFIRMED, NOT FIXED |
-| high | live money | `backend/app/services/kite_engine/sizing.py:374` | The 1-lot floor makes risk_pct advisory, not a cap: a 1% setting routinely takes ~15% of capital on one index option trade | UNVERIFIED CLAIM |
+| high | live money | `backend/app/services/kite_engine/sizing.py:374` | The 1-lot floor makes risk_pct advisory, not a cap: a 1% setting routinely takes ~15% of capital on one index option trade | NEEDS DECISION |
 | high | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:132` | The ▲ "highest delta" badge crowns legs whose greeks are degenerate (iv=0 → delta exactly ±1.00) on all three detail-page sites; the iv>0 gate exists at only one of four badge sites | FIXED |
 | high | wrong number on screen | `frontend/src/components/kite/impactMath.ts:29` | The ✝ "best reward-to-risk" score reduces to 1 + γ·m/(2\|δ\|), a monotone function of strike — so the badge is deterministically the cheapest strike in the bucket (always the farthest OTM), not a reward:risk comparison, and it ignores the leg's real premium stop and target | FIXED |
 | high | wrong number on screen | `backend/app/engines/sterling_kite_engine/exits.py:39` | An ENDED row's stop is frozen at the exit bar, not at the level that was breached — it can fall all the way back to the ENTRY bar's line, so the board prints "TSL 163.97" next to a "TSL exit ≤ 581.44" chip | FIXED |
 | high | live money | `backend/app/services/kite_engine/detail.py:78` | Clicking a Navigator row opens a SuperTrend row's detail: build_detail falls back to any row with the same token before it ever consults Navigator, and Navigator rows reuse the underlying's instrument token | FIXED |
-| high | wrong number on screen | `backend/app/services/kite_engine/expiry_series_runtime.py:234` | Retained (non-fresh) spot rows resolve their strike ladder at TODAY's spot but stamp the entry premium from the signal bar — fake Entry, fake P&L, wrong moneyness label | UNVERIFIED CLAIM |
-| high | live money | `backend/app/services/kite_engine/greeks.py:98` | premium_stop_from_move clamps to 0 at realistic trail distances, and stop_px==0 silently means NO broker GTT, NO monitor stop and NO risk sizing — a naked long option | UNVERIFIED CLAIM |
-| high | wrong number on screen | `backend/app/services/kite_engine/held_contract_scan.py:215` | _compile_rows is not idempotent over already-grouped rows; held_contract_scan re-runs it and silently drops every derivative leg except the first | UNVERIFIED CLAIM |
-| high | live money | `backend/app/services/kite_engine/monitor.py:92` | `on_order_update` guards double-booking on status only, not on the `_exiting` claim — the monitor's own exit fill can be booked twice while `_exit_position` is still awaiting the GTT cancel | UNVERIFIED CLAIM |
-| high | live money | `backend/app/services/kite_engine/monitor.py:112` | Partial fills are never read: `filled_quantity` is ignored, so both the GTT and the monitor exit the intended quantity, and a CANCELLED-after-partial entry abandons a live position | UNVERIFIED CLAIM |
+| high | wrong number on screen | `backend/app/services/kite_engine/expiry_series_runtime.py:234` | Retained (non-fresh) spot rows resolve their strike ladder at TODAY's spot but stamp the entry premium from the signal bar — fake Entry, fake P&L, wrong moneyness label | NEEDS DECISION |
+| high | live money | `backend/app/services/kite_engine/greeks.py:98` | premium_stop_from_move clamps to 0 at realistic trail distances, and stop_px==0 silently means NO broker GTT, NO monitor stop and NO risk sizing — a naked long option | CLOSED |
+| high | wrong number on screen | `backend/app/services/kite_engine/held_contract_scan.py:215` | _compile_rows is not idempotent over already-grouped rows; held_contract_scan re-runs it and silently drops every derivative leg except the first | CLOSED |
+| high | live money | `backend/app/services/kite_engine/monitor.py:92` | `on_order_update` guards double-booking on status only, not on the `_exiting` claim — the monitor's own exit fill can be booked twice while `_exit_position` is still awaiting the GTT cancel | FIXED |
+| high | live money | `backend/app/services/kite_engine/monitor.py:112` | Partial fills are never read: `filled_quantity` is ignored, so both the GTT and the monitor exit the intended quantity, and a CANCELLED-after-partial entry abandons a live position | CLOSED |
 | high | live money | `backend/app/services/kite_engine/service.py:84` | Manual BUY from the signal board creates a position with no stop, no monitor and no expiry square-off, while the same pane displays SL / TSL / Target for the leg | CONFIRMED, NOT FIXED |
-| high | wrong number on screen | `backend/app/services/navigator/service.py:454` | A still-running Navigator-originated row re-stamps its trigger time, entry premium, stop, target and even its strike to the LATEST bar on every scan — its Entry can never show open P&L | UNVERIFIED CLAIM |
+| high | wrong number on screen | `backend/app/services/navigator/service.py:454` | A still-running Navigator-originated row re-stamps its trigger time, entry premium, stop, target and even its strike to the LATEST bar on every scan — its Entry can never show open P&L | NEEDS DECISION |
 | high | wrong number on screen | `frontend/src/components/kite/SignalDetailPane.tsx:640` | ▲ 'highest delta' is ranked on ungated \|delta\| in the detail pane, impact calculator and premium breakdown, so a leg whose IV could not be solved (delta hardcoded ±1.00) always wins the badge | FIXED |
 | high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:493` | The ✝ badge is scoped per ITM/ATM/OTM bucket in the card but globally in the detail pane, and with the shipped 3-strike default ladder every leg wins both badges — the watchlist/ticker then shows three contradictory 'best' contracts for one signal | FIXED |
-| high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:532` | Signal markers are keyed by row.token, which is NOT unique per row — the watchlist/ticker ✝▲ ends up on the last-rendered row's strike, including a dead signal's | UNVERIFIED CLAIM |
+| high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:532` | Signal markers are keyed by row.token, which is NOT unique per row — the watchlist/ticker ✝▲ ends up on the last-rendered row's strike, including a dead signal's | FIXED |
 | high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:908` | Option-leg "Chg. %" renders Kite's absolute rupee net_change with a % sign (the exact bug just fixed 400 lines above for the underlying) | FIXED |
-| high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:347` | Confluence rows: "Active now" bucket and the footer live-count ignore the live-LTP stop reconciliation the card itself applies, so a row says "running" while its own body says every leg ended | UNVERIFIED CLAIM |
+| high | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:347` | Confluence rows: "Active now" bucket and the footer live-count ignore the live-LTP stop reconciliation the card itself applies, so a row says "running" while its own body says every leg ended | FIXED |
 | high | wrong number on screen | `frontend/src/components/kite/impactMath.ts:29` | The ✝ 'reward:risk' number is algebraically 1 + γ·m/(2δ) — a convexity ratio that can never fall below 1:1 and is monotone in strike, so the badge deterministically crowns the cheapest/furthest-OTM strike regardless of price | FIXED |
-| high | wrong number on screen | `frontend/src/utils/computeGreeks.ts:129` | On expiry day the card's client-side greeks get dte = 0, so EVERY leg is 'unsolved' and the board loses all ✝/▲ badges and all Δ readouts — while the detail pane still shows them | UNVERIFIED CLAIM |
-| medium | latent or dead | `backend/app/services/kite_engine/service.py:380` | Futures vehicle sends an UNDERLYING-domain price as the futures contract's entry, stop and GTT trigger, and stores no expiry so it is never squared off | UNVERIFIED CLAIM |
-| medium | wrong number on screen | `frontend/src/components/kite/SignalMarker.tsx:17` | Badge scoping contradicts itself across panes: the board computes ✝/▲ PER moneyness bucket (up to 3 of each per signal) but the watchlist/ticker marker, the detail leg list and the calculator all present a single winner "among this signal's strikes" | UNVERIFIED CLAIM |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:525` | Watchlist/ticker markers are published under `String(row.token)`, which collides for the re-entry rows the board is explicitly designed to show — last card wins, and one card unmounting clears the markers of the others | UNVERIFIED CLAIM |
-| medium | live money | `backend/app/services/kite_engine/scanner.py:925` | Derivatives-source is_fresh is measured against the CONTRACT's own last candle, so an illiquid strike with a stale last bar fires auto-exec as a live trigger | UNVERIFIED CLAIM |
+| high | wrong number on screen | `frontend/src/utils/computeGreeks.ts:129` | On expiry day the card's client-side greeks get dte = 0, so EVERY leg is 'unsolved' and the board loses all ✝/▲ badges and all Δ readouts — while the detail pane still shows them | FIXED |
+| medium | latent or dead | `backend/app/services/kite_engine/service.py:380` | Futures vehicle sends an UNDERLYING-domain price as the futures contract's entry, stop and GTT trigger, and stores no expiry so it is never squared off | REFUTED |
+| medium | wrong number on screen | `frontend/src/components/kite/SignalMarker.tsx:17` | Badge scoping contradicts itself across panes: the board computes ✝/▲ PER moneyness bucket (up to 3 of each per signal) but the watchlist/ticker marker, the detail leg list and the calculator all present a single winner "among this signal's strikes" | CLOSED |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:525` | Watchlist/ticker markers are published under `String(row.token)`, which collides for the re-entry rows the board is explicitly designed to show — last card wins, and one card unmounting clears the markers of the others | FIXED |
+| medium | live money | `backend/app/services/kite_engine/scanner.py:925` | Derivatives-source is_fresh is measured against the CONTRACT's own last candle, so an illiquid strike with a stale last bar fires auto-exec as a live trigger | NEEDS DECISION |
 | medium | gap missing feature | `backend/app/services/kite_engine/scanner.py:177` | No code path anywhere exits at a target — Navigator's row.target / leg.premium_target are display-only | CONFIRMED, NOT FIXED |
-| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:734` | A failed GTT trail move is silent: the board and registry show the tightened stop while the broker stop stays at the entry level | UNVERIFIED CLAIM |
-| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:153` | The GTT actually placed uses a flat 18% IV while the board's SL/TSL backs IV out of the entry premium — the broker stop is not the stop on screen | UNVERIFIED CLAIM |
-| medium | wrong number on screen | `backend/app/services/kite_engine/signal_board_runtime.py:427` | Confluence entry premium is overwritten with the STILL-FORMING 1H bar's close, so the Entry column repaints every 5 minutes and diverges from the entry actually recorded for the order | UNVERIFIED CLAIM |
+| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:734` | A failed GTT trail move is silent: the board and registry show the tightened stop while the broker stop stays at the entry level | CLOSED |
+| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:153` | The GTT actually placed uses a flat 18% IV while the board's SL/TSL backs IV out of the entry premium — the broker stop is not the stop on screen | NEEDS DECISION |
+| medium | wrong number on screen | `backend/app/services/kite_engine/signal_board_runtime.py:427` | Confluence entry premium is overwritten with the STILL-FORMING 1H bar's close, so the Entry column repaints every 5 minutes and diverges from the entry actually recorded for the order | CLOSED |
 | medium | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:120` | SignalImpactCalculator crowns legs with NO price data: `recommended` and `bestDeltaSym` skip the premium > 0 filter that its three sibling badge sites apply | FIXED |
-| medium | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:93` | For 'derivatives' rows the ✝ ranking and the Impact Calculator's "Risk to stop" are built on a fabricated 1R, because row.stop_loss is a PREMIUM level fed into an UNDERLYING stop-distance — the leg's real premium stop is ignored | UNVERIFIED CLAIM |
+| medium | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:93` | For 'derivatives' rows the ✝ ranking and the Impact Calculator's "Risk to stop" are built on a fabricated 1R, because row.stop_loss is a PREMIUM level fed into an UNDERLYING stop-distance — the leg's real premium stop is ignored | CLOSED |
 | medium | gap missing feature | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:549` | The 'Best ✝▲' quick-toggle hides nothing under the default 3-strike ladder — it claims to drop the middle of the ladder while keeping every leg | ADDRESSED |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1915` | Board row key omits `source`, so a SuperTrend row and a Navigator row for the same underlying/bar collide — one silently disappears mid-scan | UNVERIFIED CLAIM |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1915` | Board row key omits `source`, so a SuperTrend row and a Navigator row for the same underlying/bar collide — one silently disappears mid-scan | FIXED |
 | medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:892` | Chg % column renders Kite's absolute `net_change` (rupees) with a % sign, and blanks the Chg column, whenever the contract has no previous close | FIXED |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1027` | Navigator rows print the same number in SL and TSL, under a tooltip describing a SuperTrend ratchet the row does not have | UNVERIFIED CLAIM |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1992` | The "re-entry" badge is computed after lens filtering, so switching lenses can hide the original entry and make a re-arm look like an independent new setup | UNVERIFIED CLAIM |
-| low | latent or dead | `backend/app/services/kite_engine/service.py:513` | The `stop_loss` handed to place_order_option is silently discarded by the client — the entry order carries no broker stop at all | UNVERIFIED CLAIM |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1027` | Navigator rows print the same number in SL and TSL, under a tooltip describing a SuperTrend ratchet the row does not have | NEEDS DECISION |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1992` | The "re-entry" badge is computed after lens filtering, so switching lenses can hide the original entry and make a re-arm look like an independent new setup | NEEDS DECISION |
+| low | latent or dead | `backend/app/services/kite_engine/service.py:513` | The `stop_loss` handed to place_order_option is silently discarded by the client — the entry order carries no broker stop at all | REFUTED |
 | low | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:553` | The "Best ✝▲" quick-toggle silently becomes a no-op whenever no leg has a solvable IV (market closed, quotes not yet loaded), while the chip stays lit as if it were filtering | ADDRESSED |
-| low | latent or dead | `backend/app/engines/sterling_kite_engine/regime.py:74` | exit_aligned_trail rides trail_value_for_threshold, which ignores whether that line is still aligned — once the line flips, the 'trail' sits on the wrong side of price | UNVERIFIED CLAIM |
-| low | wrong number on screen | `backend/app/services/kite_engine/scanner.py:176` | premium_stop_from_move mixes price domains: row.spot is a RAW close while row.stop_loss is a Heikin-Ashi SuperTrend level | UNVERIFIED CLAIM |
-| low | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:513` | The card ranks only the legs it is currently showing, so turning "Ended" off moves the ✝/▲ to a different strike than the detail pane crowns for the same signal | UNVERIFIED CLAIM |
-| low | latent or dead | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:504` | Badge tooltips and the card's own comments describe a per-bucket "reward-to-risk" that the shared selector explicitly is not | UNVERIFIED CLAIM |
+| low | latent or dead | `backend/app/engines/sterling_kite_engine/regime.py:74` | exit_aligned_trail rides trail_value_for_threshold, which ignores whether that line is still aligned — once the line flips, the 'trail' sits on the wrong side of price | NEEDS DECISION |
+| low | wrong number on screen | `backend/app/services/kite_engine/scanner.py:176` | premium_stop_from_move mixes price domains: row.spot is a RAW close while row.stop_loss is a Heikin-Ashi SuperTrend level | CLOSED |
+| low | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:513` | The card ranks only the legs it is currently showing, so turning "Ended" off moves the ✝/▲ to a different strike than the detail pane crowns for the same signal | CLOSED |
+| low | latent or dead | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:504` | Badge tooltips and the card's own comments describe a per-bucket "reward-to-risk" that the shared selector explicitly is not | FIXED |
 
 ## Fixed in this pass
 

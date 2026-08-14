@@ -53,6 +53,25 @@ def _select_distinct_from_atm(rows, *, spot: float, want_call: bool, moneyness: 
 
 @wraps(_original_resolve_option_legs)
 def _resolve_with_fresh_trigger_spot(row, option_rows, **kwargs):
+    """Fresh rows resolve their ladder at the TRIGGER spot; retained rows at today's.
+
+    UNRESOLVED CONFLICT (audit lead 7, 2026-08-04 — left deliberately, see
+    docs/kite_signal_audit_2026-08-04.md). Two decisions were each made on purpose and
+    point opposite ways:
+
+      * a RETAINED row resolves its ladder at today's spot, so its candidate strikes
+        are ones you could actually trade now — pinned by
+        `test_resolve_option_legs_uses_selected_listed_series_and_latest_spot`;
+      * `_stamp_spot_leg_premiums` stamps each leg's entry premium from the SIGNAL
+        bar, because "today's LTP is not what a signal from three sessions ago entered
+        at, and stamping it would invent an entry price and a fake P&L".
+
+    Together they describe different trades: a NIFTY long triggered at 24,000 with
+    spot now 25,100 gets a leg labelled ATM 25100 priced at what that strike closed at
+    when it was 1,100 points OTM. Each half is defensible; the PAIR is not, and which
+    one gives way is a product decision (coherent history vs. a tradeable-now roll
+    priced at today's LTP) rather than something to settle in a compat shim.
+    """
     if getattr(row, "is_fresh", False):
         kwargs["latest_spot"] = None
     return _original_resolve_option_legs(row, option_rows, **kwargs)
