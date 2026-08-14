@@ -306,3 +306,78 @@ class TestRegistryConcurrency:
         monkeypatch.setattr(V, "_write_registry", boom)
         with pytest.raises(OSError):
             V.adopt_root(tmp_path / "Lake", label="USB")
+
+
+class TestShortfallRepair:
+    """Detecting and requeueing lost writes.
+
+    A live run silently discarded 21,062,425 candles across 1,394 instruments to a
+    read-modify-write race in the writer. The chunks stayed marked ``done``, so resume
+    would never have refetched them — the lake would have looked finished while being 12%
+    short. These tests pin the detection and the recovery.
+    """
+
+    def test_detects_a_shortfall(self, lake: Path) -> None:
+        from datetime import date as _date
+
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            man.plan_chunks(1, "minute", [(_date(2026, 2, 13), _date(2026, 4, 13)),
+                                          (_date(2026, 4, 14), _date(2026, 6, 12))])
+            man.mark_chunk(1, "minute", _date(2026, 2, 13), "done", rows=45_000)
+            man.mark_chunk(1, "minute", _date(2026, 4, 14), "done", rows=45_000)
+            # Only one chunk's worth survived on disk — the other was clobbered.
+            man.upsert_symbol(1, "minute", tradingsymbol="CLOBBERED", rows=45_000, status="ok")
+
+            short = man.shortfall("minute")
+            assert len(short) == 1
+            assert short[0]["tradingsymbol"] == "CLOBBERED"
+            assert short[0]["missing"] == 45_000
+
+    def test_healthy_instrument_is_not_flagged(self, lake: Path) -> None:
+        from datetime import date as _date
+
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            man.plan_chunks(2, "minute", [(_date(2026, 2, 13), _date(2026, 4, 13))])
+            man.mark_chunk(2, "minute", _date(2026, 2, 13), "done", rows=45_750)
+            man.upsert_symbol(2, "minute", tradingsymbol="FINE", rows=45_750, status="ok")
+            assert man.shortfall("minute") == []
+
+    def test_min_missing_filters_dedup_noise(self, lake: Path) -> None:
+        """candles_to_table drops duplicates, so a tiny gap is expected, not a lost write."""
+        from datetime import date as _date
+
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            man.plan_chunks(3, "minute", [(_date(2026, 2, 13), _date(2026, 4, 13))])
+            man.mark_chunk(3, "minute", _date(2026, 2, 13), "done", rows=45_752)
+            man.upsert_symbol(3, "minute", tradingsymbol="NOISY", rows=45_750, status="ok")
+            assert len(man.shortfall("minute", min_missing=1)) == 1
+            assert man.shortfall("minute", min_missing=100) == []
+
+    def test_reset_requeues_every_chunk(self, lake: Path) -> None:
+        from datetime import date as _date
+
+        from kitelake.manifest import Manifest
+
+        chunks = [(_date(2026, 2, 13), _date(2026, 4, 13)), (_date(2026, 4, 14), _date(2026, 6, 12))]
+        with Manifest() as man:
+            man.plan_chunks(4, "minute", chunks)
+            for a, _b in chunks:
+                man.mark_chunk(4, "minute", a, "done", rows=45_000)
+            assert man.pending_chunks("minute") == []
+
+            assert man.reset_instruments("minute", [4]) == 2
+            pending = man.pending_chunks("minute")
+            assert len(pending) == 2, "both chunks must be refetched"
+            assert man.stats("minute")["candles"] == 0, "row counts are cleared too"
+
+    def test_reset_with_no_tokens_is_a_noop(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            assert man.reset_instruments("minute", []) == 0

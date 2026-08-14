@@ -561,6 +561,48 @@ def cmd_ticks(args: argparse.Namespace) -> int:
     return _OK
 
 
+def cmd_repair(args: argparse.Namespace) -> int:
+    """Find instruments whose stored rows fall short of what was fetched, and requeue them."""
+    from .manifest import Manifest
+
+    with Manifest() as man:
+        short = man.shortfall(args.interval, min_missing=args.min_missing)
+        if not short:
+            print(f"No shortfall detected for interval={args.interval}. "
+                  "Stored rows match what the ledger says was fetched.")
+            return _OK
+
+        missing = sum(r["missing"] for r in short)
+        print(f"{len(short):,} instruments are missing {missing:,} candles that the ledger "
+              f"records as fetched.")
+        print("This is the signature of a lost write: the chunks are marked done, so a plain")
+        print("resume would skip them and the lake would look complete.\n")
+        rows = [
+            [r["tradingsymbol"] or r["instrument_token"], f"{r['fetched_rows']:,}",
+             f"{r['stored_rows']:,}", f"{r['missing']:,}"]
+            for r in short[: args.limit]
+        ]
+        print(_table(rows, ["symbol", "fetched", "on disk", "missing"]))
+        if len(short) > args.limit:
+            print(f"… and {len(short) - args.limit:,} more")
+
+        if args.dry_run:
+            print("\n--dry-run: nothing changed. Re-run without it to requeue these chunks.")
+            return _OK
+
+        tokens = [int(r["instrument_token"]) for r in short]
+        reset = man.reset_instruments(args.interval, tokens)
+        stats = man.stats(args.interval)
+
+    print(f"\nrequeued {reset:,} chunks across {len(tokens):,} instruments")
+    print(f"ledger now {stats['pct_complete']}% complete "
+          f"({stats['chunks_remaining']:,} chunks to fetch)")
+    print("\nThe parquet files are left in place — merge de-duplicates on timestamp, so the")
+    print("refetch fills the holes instead of duplicating what survived. Now run:")
+    print(f"  kitelake download --tiers --interval {args.interval} --from … --to …")
+    return _OK
+
+
 def cmd_clean(args: argparse.Namespace) -> int:
     from .writer import clean_staging
 
@@ -700,6 +742,16 @@ def build_parser() -> argparse.ArgumentParser:
     ta.add_argument("--date")
     ta.add_argument("--exchange", default="NSE")
     ta.set_defaults(func=cmd_ticks)
+
+    p = sub.add_parser(
+        "repair", help="requeue instruments whose stored rows fall short of what was fetched"
+    )
+    p.add_argument("--interval", default="minute")
+    p.add_argument("--min-missing", type=int, default=1,
+                   help="ignore shortfalls smaller than this (dedup noise)")
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_repair)
 
     p = sub.add_parser("clean", help="remove stale staging files")
     p.add_argument("--older-than", type=float, default=3600)
