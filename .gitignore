@@ -111,3 +111,18 @@ kite-data
 .venv-kitelake/
 kitelake/**/__pycache__/
 kitelake/.pytest_cache/
+
+# ── never commit these ───────────────────────────────────────────────────────
+# This remote is PUBLIC. sterling_paper.db carries exchange_configs.api_key and
+# exchange_configs.api_secret (plaintext — note the column is NOT *_enc), plus
+# kite_accounts and truedata_credentials. Committing it publishes live credentials.
+# Untracked below with `git rm --cached`, which leaves the local file untouched.
+sterling_paper.db
+sterling_paper.db-*
+backend/sterling_paper.db
+# .env holds real credentials once filled in; .env.example documents the key list.
+backend/.env
+.env
+# tooling / scratch output
+.playwright-mcp/
+youtube-transcript/
