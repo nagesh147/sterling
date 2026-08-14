@@ -471,3 +471,120 @@ class TestSymbolsPage:
             _, day_total = man.symbols_page("day", limit=50)
             assert minute_total == 3
             assert day_total == 1
+
+
+class TestDownloadLock:
+    """Single-writer guard across processes.
+
+    BarWriter's per-file lock is a threading.Lock in module state, so it only covers one
+    process's own workers. Two `kitelake download` processes share nothing and race exactly
+    as the threads used to — that race already destroyed 21 million candles once, and it is
+    easy to trigger by accident because `setsid nohup … &` makes bash print "Done" the
+    instant setsid forks, so a healthy download looks finished.
+
+    flock is per open-file-description, so two locks in one process conflict just as two
+    processes would — which is what makes this testable without spawning subprocesses.
+    """
+
+    def test_second_holder_is_refused(self, lake: Path) -> None:
+        from kitelake.runlock import DownloadInProgress, download_lock
+
+        with download_lock(note="first"):
+            with pytest.raises(DownloadInProgress) as err:
+                with download_lock(note="second"):
+                    pass
+        message = str(err.value)
+        assert "already running" in message
+        assert str(os.getpid()) in message, "must name the process holding it"
+        assert "kitelake status" in message, "must say how to check on the running one"
+
+    def test_lock_is_released_on_exit(self, lake: Path) -> None:
+        from kitelake.runlock import download_lock
+
+        with download_lock(note="first"):
+            pass
+        with download_lock(note="second"):  # must not raise
+            pass
+
+    def test_lock_is_released_on_exception(self, lake: Path) -> None:
+        from kitelake.runlock import download_lock
+
+        with pytest.raises(RuntimeError):
+            with download_lock(note="boom"):
+                raise RuntimeError("download blew up")
+        with download_lock(note="after"):  # the lock must not be stuck
+            pass
+
+    def test_holder_is_reported(self, lake: Path) -> None:
+        from kitelake.runlock import current_holder, download_lock
+
+        assert current_holder() is None, "no lock file yet"
+        with download_lock(note="mine"):
+            holder = current_holder()
+            assert holder is not None
+            assert holder["pid"] == os.getpid()
+            assert holder["note"] == "mine"
+            assert holder["alive"] is True
+
+    def test_lock_lives_in_the_lake_so_it_is_per_lake(self, lake: Path) -> None:
+        """Two different lakes may legitimately download at the same time."""
+        from kitelake.runlock import LOCK_NAME, download_lock
+
+        with download_lock():
+            assert (lake / "manifest" / LOCK_NAME).exists()
+
+    @pytest.mark.asyncio
+    async def test_run_download_refuses_a_second_run(self, lake: Path) -> None:
+        """End to end: the orchestrator itself, not just the primitive."""
+        import httpx
+        import pyarrow as pa
+
+        from kitelake.download import DownloadInProgress, run_download
+        from kitelake.instruments import INSTRUMENT_SCHEMA, write_instrument_master
+        from kitelake.runlock import download_lock
+
+        write_instrument_master(pa.table({
+            "instrument_token": [738561], "exchange_token": [2885],
+            "tradingsymbol": ["RELIANCE"], "name": ["RELIANCE"], "last_price": [0.0],
+            "expiry": [None], "strike": [0.0], "tick_size": [0.05], "lot_size": [1],
+            "instrument_type": ["EQ"], "segment": ["NSE"], "exchange": ["NSE"],
+        }, schema=INSTRUMENT_SCHEMA))
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"status": "success", "data": {"candles": []}})
+
+        from datetime import date as _date
+
+        with download_lock(note="pretend another process"):
+            with pytest.raises(DownloadInProgress):
+                await run_download(
+                    "NSE:RELIANCE", "minute", _date(2026, 6, 1), _date(2026, 8, 14),
+                    transport=httpx.MockTransport(handler), rate=1000,
+                    progress=lambda _e: None,
+                )
+
+    @pytest.mark.asyncio
+    async def test_dry_run_is_not_blocked(self, lake: Path) -> None:
+        """A dry run issues no requests and writes nothing, so it must not need the lock."""
+        import httpx
+        import pyarrow as pa
+
+        from kitelake.download import run_download
+        from kitelake.instruments import INSTRUMENT_SCHEMA, write_instrument_master
+        from kitelake.runlock import download_lock
+
+        write_instrument_master(pa.table({
+            "instrument_token": [738561], "exchange_token": [2885],
+            "tradingsymbol": ["RELIANCE"], "name": ["RELIANCE"], "last_price": [0.0],
+            "expiry": [None], "strike": [0.0], "tick_size": [0.05], "lot_size": [1],
+            "instrument_type": ["EQ"], "segment": ["NSE"], "exchange": ["NSE"],
+        }, schema=INSTRUMENT_SCHEMA))
+
+        from datetime import date as _date
+
+        with download_lock(note="a run in progress"):
+            summary = await run_download(
+                "NSE:RELIANCE", "minute", _date(2026, 6, 1), _date(2026, 8, 14),
+                dry_run=True, progress=lambda _e: None,
+            )
+        assert summary["dry_run"] is True

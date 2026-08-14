@@ -70,10 +70,15 @@ def _show_unavailable(status: Any) -> int:
 def _guarded(fn, *args: Any, **kwargs: Any) -> int:
     """Run a command, converting expected failures into readable messages."""
     from .config import CredentialsMissing
+    from .download import DownloadInProgress
     from .volume import LakeUnavailable, lake_status
 
     try:
         return fn(*args, **kwargs)
+    except DownloadInProgress as exc:
+        # Refusing a second writer is correct behaviour, not a crash — print the guidance.
+        print(str(exc), file=sys.stderr)
+        return _ERR
     except LakeUnavailable:
         return _show_unavailable(lake_status())
     except CredentialsMissing as exc:
