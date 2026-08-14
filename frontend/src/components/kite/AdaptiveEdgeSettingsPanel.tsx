@@ -58,19 +58,20 @@ export function AdaptiveEdgeSettingsPanel() {
       />
       <EnginePowerHeader
         name="Adaptive Edge"
-        tagline="Research policy for the TBT score, modes, protection and structure. Enabling this does not place Kite orders."
+        tagline="Score, modes, protection and structure."
         on={draft.enabled}
-        liveOn={false}
+        liveOn={!!data?.settings.enabled}
         busy={save.isPending}
         onToggle={() => patch({ enabled: !draft.enabled })}
-        runningNote="Research display is on. ExecutionGate stays blocked until F-101 is unlocked."
-        offNote="Research display is off. The last snapshot can still be inspected."
+        runningNote="The Adaptive Edge board is on."
+        offNote="The Adaptive Edge board is off. The last snapshot can still be inspected."
       />
 
-      <div style={{ margin: '0 0 16px', padding: '10px 12px', borderRadius: 8, background: '#fff8f3', border: '1px solid #f3d7c6', color: '#8a4b22', fontSize: 12, lineHeight: 1.5 }}>
-        Live Kite routing stays off. These numbers are an explicit research policy, not a frozen A197 file and not recovered F-104 / F-112.
-        {invalid && <div style={{ marginTop: 6, color: '#c9433e' }}>{invalid}</div>}
-      </div>
+      {invalid && (
+        <div style={{ margin: '0 0 16px', padding: '10px 12px', borderRadius: 8, background: '#fff6f5', border: '1px solid #f0d2c2', color: '#c9433e', fontSize: 12, lineHeight: 1.5 }}>
+          {invalid}
+        </div>
+      )}
 
       <Section title="Instrument & windows" description="Trial F-101 lookbacks. Not a production freeze." summary={`${draft.symbol} · ${draft.w_short}/${draft.w_long}`} persistKey="ae-windows" defaultOpen>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '4px 2px 10px' }}>

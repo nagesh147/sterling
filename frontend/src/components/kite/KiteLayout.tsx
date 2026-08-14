@@ -27,7 +27,7 @@ import {
   type WorkspaceSlotId,
 } from './workspaceLayout';
 
-export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'connect' | 'help';
+export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
@@ -114,6 +114,7 @@ function fmtNext(ms: number): string {
 }
 
 function titleCase(value: string): string {
+  if (value === 'adaptiveEdge') return 'Adaptive Edge';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 

@@ -16,12 +16,11 @@ import { InstrumentLabel } from './InstrumentLabel';
 import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
 import { KiteSettingsPopover } from './KiteSettingsPopover';
 import { EnginePositionsPane } from './EnginePositionsPane';
-import { AdaptiveEdgePane } from './AdaptiveEdgePane';
 import type { InstrumentTab } from './InstrumentPane';
 
 const C = {
   text: '#444', muted: '#9b9b9b', border: '#ededed', hover: '#fafafa',
-  blue: '#387ed1', green: '#4caf50', red: '#df514c', orange: '#ff5722',
+  blue: '#387ed1', green: '#4caf50', red: '#df514c',
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -76,16 +75,7 @@ function PositionInfo({ position, onClose }: { position: any; onClose: () => voi
   );
 }
 
-function readDesk(): 'positions' | 'adaptive' {
-  try {
-    return localStorage.getItem('kite_positions_desk') === 'adaptive' ? 'adaptive' : 'positions';
-  } catch {
-    return 'positions';
-  }
-}
-
 export function PositionsPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, tab: InstrumentTab | 'chart' | 'option-chain') => void }) {
-  const [desk, setDesk] = useState<'positions' | 'adaptive'>(readDesk);
   const { data: response } = useKitePositions(true);
   const brokerRows = response?.net ?? [];
   const symbols = useMemo(() => Array.from(new Set(brokerRows.map((p: any) => `${p.exchange}:${p.tradingsymbol}`))), [brokerRows]);
@@ -181,33 +171,6 @@ export function PositionsPane({ onOpenInstrument }: { onOpenInstrument?: (symbol
         .pos-menu-item:hover{background:#f5f5f5}.pos-menu-item.disabled{color:#bbb;cursor:not-allowed}.pos-menu-sep{height:1px;background:${C.border};margin:4px 0}
       `}</style>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-        <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
-          {([
-            { id: 'positions' as const, label: 'Positions' },
-            { id: 'adaptive' as const, label: 'Adaptive Edge' },
-          ]).map((tab) => {
-            const on = desk === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setDesk(tab.id);
-                  try { localStorage.setItem('kite_positions_desk', tab.id); } catch { /* ignore */ }
-                }}
-                style={{
-                  padding: '8px 14px', border: 0, background: 'transparent', cursor: 'pointer',
-                  fontSize: 13, fontWeight: on ? 650 : 400, color: on ? C.orange : C.muted,
-                  borderBottom: on ? `2px solid ${C.orange}` : '2px solid transparent', marginBottom: -1,
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-        {desk === 'adaptive' && <div style={{ margin: '0 -24px -32px' }}><AdaptiveEdgePane /></div>}
-        {desk === 'positions' && <>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 400 }}>Positions <span style={{ color: C.muted }}>({rows.length})</span> <span style={{ color: C.green, fontSize: 11, marginLeft: 7 }}>{openRows.length} open</span></h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap' }}>
@@ -243,7 +206,6 @@ export function PositionsPane({ onOpenInstrument }: { onOpenInstrument?: (symbol
         <div style={{ marginTop: 18, borderTop: `1px solid ${C.border}` }}><button onClick={() => setHistoryOpen((x) => !x)} style={{ width: '100%', padding: '13px 0', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: C.text, fontSize: 12 }}>Day&apos;s history {historyOpen ? '⌃' : '⌄'}</button>{historyOpen && <div style={{ color: C.muted, fontSize: 11, paddingBottom: 14 }}>{closedRows.length} closed position{closedRows.length === 1 ? '' : 's'} with realised P&amp;L are included in the table. Only the {openRows.length} non-zero quantity row{openRows.length === 1 ? '' : 's'} are open.</div>}</div>
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 18 }}><h3 style={{ fontSize: 12, fontWeight: 400 }}>Breakdown</h3>{rows.filter((p: any) => num(p.pnl) !== 0).sort((a: any, b: any) => num(a.pnl) - num(b.pnl)).map((p: any) => { const max = Math.max(...rows.map((x: any) => Math.abs(num(x.pnl))), 1); const w = `${Math.max(1, Math.abs(num(p.pnl)) / max * 100)}%`; return <div key={`b:${keyOf(p)}`} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', alignItems: 'center', gap: 10, marginBottom: 8 }}><div style={{ textAlign: 'right', color: '#777', fontSize: 9 }}><InstrumentLabel symbol={p.tradingsymbol} /> ({p.product})</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', position: 'relative', height: 7 }}><div style={{ display: 'flex', justifyContent: 'flex-end' }}>{num(p.pnl) < 0 && <span style={{ width: w, background: C.red }} />}</div><div>{num(p.pnl) > 0 && <span style={{ display: 'block', width: w, height: 7, background: C.blue }} />}</div><i style={{ position: 'absolute', left: '50%', width: 1, top: -1, bottom: -1, background: '#ddd' }} /></div></div>; })}</div>
         <details open={engineOpen} onToggle={(e) => setEngineOpen((e.currentTarget as HTMLDetailsElement).open)} style={{ borderTop: `1px solid ${C.border}`, marginTop: 22, paddingTop: 10 }}><summary style={{ cursor: 'pointer', fontSize: 12 }}>Engine Positions</summary><EnginePositionsPane /></details>
-        </>}
       </div>
 
       {menu && menuPosition && <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', top: menu.top, left: menu.left, width: 190, background: '#fff', border: `1px solid ${C.border}`, boxShadow: '0 5px 18px rgba(0,0,0,.18)', zIndex: 1300, padding: '5px 0', borderRadius: 3 }}>
