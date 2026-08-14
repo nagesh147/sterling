@@ -1,5 +1,13 @@
+from app.engines.adaptive_edge.broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
 from app.engines.adaptive_edge.edge import EdgeAssessment
 from app.engines.adaptive_edge.economic import evaluate_economics
+from app.engines.adaptive_edge.execution_adapter import (
+    CanonicalExecutionStatus,
+    CanonicalOrderIntent,
+    ExecutionAdapter,
+)
+from app.engines.adaptive_edge.execution_event_registry import ExecutionEventRegistry
+from app.engines.adaptive_edge.execution_gateway import ExecutionGateway
 from app.engines.adaptive_edge.feature_engine import (
     FeatureInput,
     FeatureProvenance,
@@ -30,8 +38,7 @@ def test_future_feature_is_rejected():
 
 
 def test_timestamp_comparison_is_semantic_not_lexical():
-    # Use a distinct snapshot decision time with a non-zero offset. 09:00 UTC
-    # is after 10:00 +05:30 (04:30 UTC), despite lexical ordering.
+    # 09:00 UTC is after 10:00 +05:30 (04:30 UTC), despite lexical ordering.
     kwargs = {**_snapshot_kwargs(), "decision_time": "2026-08-11T10:00:00+05:30"}
     with pytest.raises(ValueError, match="lookahead detected"):
         build_feature_snapshot(
@@ -113,3 +120,85 @@ def test_missing_gross_value_fails_economic_gate():
     result = evaluate_economics(edge, execution_cost=0.0)
     assert result.eligible is False
     assert result.reason == "missing_expected_gross_value"
+
+
+class FakeTransport:
+    def __init__(self):
+        self.submissions = []
+
+    def submit(self, intent: CanonicalOrderIntent) -> str:
+        self.submissions.append(intent)
+        return f"broker-{intent.order_intent_id}"
+
+
+def _gateway():
+    transport = FakeTransport()
+    gateway = ExecutionGateway(
+        ExecutionAdapter(transport),
+        BrokerEventMapper({"COMPLETE": CanonicalExecutionStatus.FILLED}),
+        ExecutionEventRegistry(),
+    )
+    return gateway, transport
+
+
+def _intent():
+    return CanonicalOrderIntent(
+        "oi-1",
+        "sel-1",
+        "NIFTY-OPT-1",
+        "BUY",
+        50,
+        "1",
+        "idem-1",
+        "2026-08-14T00:00:00+00:00",
+    )
+
+
+def test_execution_gateway_separates_submission_and_execution():
+    gateway, transport = _gateway()
+    broker_id = gateway.submit(_intent())
+    assert broker_id == "broker-oi-1"
+    assert len(transport.submissions) == 1
+
+    event = gateway.receive(
+        BrokerExecutionEvent(
+            "be-1",
+            "oi-1",
+            "COMPLETE",
+            "2026-08-14T00:00:01+00:00",
+            broker_id,
+            50,
+            120.5,
+        )
+    )
+    assert event.event_type is CanonicalExecutionStatus.FILLED
+    assert event.filled_quantity == 50
+    assert event.fill_price == 120.5
+
+
+def test_execution_gateway_unknown_status_fails_closed():
+    gateway, _ = _gateway()
+    event = gateway.receive(
+        BrokerExecutionEvent(
+            "be-u",
+            "oi-1",
+            "UNKNOWN_PROVIDER_STATUS",
+            "2026-08-14T00:00:01+00:00",
+        )
+    )
+    assert event.event_type is CanonicalExecutionStatus.UNKNOWN
+
+
+def test_execution_gateway_replay_is_idempotent():
+    gateway, _ = _gateway()
+    event = BrokerExecutionEvent(
+        "be-r",
+        "oi-1",
+        "COMPLETE",
+        "2026-08-14T00:00:01+00:00",
+        filled_quantity=50,
+        fill_price=120.5,
+    )
+    first = gateway.receive(event)
+    second = gateway.receive(event)
+    assert first == second
