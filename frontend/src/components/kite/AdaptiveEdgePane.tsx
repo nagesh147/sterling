@@ -127,7 +127,7 @@ function boardRow(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow {
     profitGiveback: session.profit_giveback ?? null,
     protectionState: session.last_protection_stage,
     decision: (session.last_position_quantity ?? 0) > 0 ? 'HOLD' : session.exits ? 'EXIT' : 'REJECT',
-    reason: data.live_trading ? undefined : 'RESEARCH_NOT_LIVE · ExecutionGate blocked · F-101 LOCKED',
+    reason: data.live_trading ? undefined : 'Display only',
     formulaIds: ['F-101', 'F-007', 'F-008', 'F-002', 'F-003'],
   };
 }
@@ -153,16 +153,16 @@ export function AdaptiveEdgePane() {
           <div>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 400, color: C.text }}>Adaptive Edge</h2>
             <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>
-              Research path · {data?.settings.symbol ?? 'NIFTY-I'} TBT · live orders stay off until TrueData premium + unlock
+              {data?.settings.symbol ?? 'NIFTY-I'} · tick-by-tick board
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {data ? (
               <>
-                <Chip label={data.software_complete ? 'SOFTWARE COMPLETE' : 'INCOMPLETE'} ok={data.software_complete} />
-                <Chip label={data.production_gate_authorized ? 'GATE OPEN' : 'GATE BLOCKED'} tone={data.production_gate_authorized ? 'bad' : 'warn'} />
-                <Chip label={data.meets_a197 ? 'A197 MET' : 'A197 WAITING'} ok={data.meets_a197} />
-                <Chip label={data.live_trading ? 'LIVE' : 'RESEARCH NOT LIVE'} tone={data.live_trading ? 'bad' : 'quiet'} />
+                <Chip label={data.software_complete ? 'BOARD READY' : 'BOARD INCOMPLETE'} ok={data.software_complete} />
+                <Chip label={data.production_gate_authorized ? 'ORDERS ON' : 'ORDERS OFF'} tone={data.production_gate_authorized ? 'bad' : 'warn'} />
+                <Chip label={data.meets_a197 ? 'HISTORY READY' : 'WAITING ON HISTORY'} ok={data.meets_a197} />
+                <Chip label={data.live_trading ? 'LIVE' : 'DISPLAY ONLY'} tone={data.live_trading ? 'bad' : 'quiet'} />
               </>
             ) : (
               <Chip label={isLoading ? 'LOADING' : 'NO SNAPSHOT'} tone="quiet" />
@@ -174,10 +174,6 @@ export function AdaptiveEdgePane() {
               Settings
             </button>
           </div>
-        </div>
-
-        <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: '#fff8f3', border: '1px solid #f3d7c6', color: '#8a4b22', fontSize: 12, lineHeight: 1.5 }}>
-          ExecutionGate stays blocked. Enabling Adaptive Edge in Connect settings does not place Kite orders, write <code>f101_parameters_v1.json</code>, or treat this trial as A197.
         </div>
 
         {isLoading && <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Loading Adaptive Edge snapshot…</div>}

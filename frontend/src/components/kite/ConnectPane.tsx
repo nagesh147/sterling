@@ -566,7 +566,7 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow', group: 'Signal engines',
     pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
   { id: 'adaptiveEdge', label: 'Adaptive Edge', eyebrow: 'Score, modes, TBT structure & protection', group: 'Signal engines',
-    pageDescription: 'Research policy for Adaptive Edge. Does not unlock live Kite orders.' },
+    pageDescription: 'Score, modes, structure and protection.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',

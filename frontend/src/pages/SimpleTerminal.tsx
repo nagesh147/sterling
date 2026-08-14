@@ -193,6 +193,15 @@ export function SimpleTerminal() {
     setKiteNav(nav);
     window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: nav }));
   };
+
+  useEffect(() => {
+    const onNav = (event: Event) => {
+      const next = (event as CustomEvent<NavItem>).detail;
+      if (typeof next === 'string') setKiteNav(next);
+    };
+    window.addEventListener('kite-nav-click', onNav);
+    return () => window.removeEventListener('kite-nav-click', onNav);
+  }, []);
   const [showCryptoTab, setShowCryptoTab] = useState(readCryptoTabVisible);
 
   useEffect(() => {
@@ -258,20 +267,29 @@ export function SimpleTerminal() {
             {/* Kite nav items — pushed to the right when KITE tab is active */}
             {activeTopTab === 'kite' && (
               <>
-                {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'data', 'connect', 'help'] as NavItem[]).map((nav) => (
+                {([
+                  { id: 'dashboard' as const, label: 'Dashboard' },
+                  { id: 'orders' as const, label: 'Orders' },
+                  { id: 'holdings' as const, label: 'Holdings' },
+                  { id: 'positions' as const, label: 'Positions' },
+                  { id: 'more' as const, label: 'More' },
+                  { id: 'data' as const, label: 'Data' },
+                  { id: 'adaptiveEdge' as const, label: 'Adaptive Edge' },
+                  { id: 'connect' as const, label: 'Connect' },
+                  { id: 'help' as const, label: 'Help' },
+                ]).map((item) => (
                   <button
-                    key={nav}
-                    onClick={() => handleKiteNav(nav)}
+                    key={item.id}
+                    onClick={() => handleKiteNav(item.id)}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      fontFamily: 'inherit', fontSize: 13, fontWeight: kiteNav === nav ? 500 : 400,
-                      textTransform: 'capitalize',
-                      color: kiteNav === nav ? '#f06428' : '#444',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: kiteNav === item.id ? 500 : 400,
+                      color: kiteNav === item.id ? '#f06428' : '#444',
                       padding: '0 9px', height: '100%',
                       transition: 'color .15s ease',
                     }}
                   >
-                    {nav === 'more' ? 'More' : nav}
+                    {item.label}
                   </button>
                 ))}
                 <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 8px' }} />
