@@ -53,27 +53,29 @@ def _select_distinct_from_atm(rows, *, spot: float, want_call: bool, moneyness: 
 
 @wraps(_original_resolve_option_legs)
 def _resolve_with_fresh_trigger_spot(row, option_rows, **kwargs):
-    """Fresh rows resolve their ladder at the TRIGGER spot; retained rows at today's.
+    """Resolve EVERY row's strike ladder at the spot its signal triggered at.
 
-    UNRESOLVED CONFLICT (audit lead 7, 2026-08-04 — left deliberately, see
-    docs/kite_signal_audit_2026-08-04.md). Two decisions were each made on purpose and
-    point opposite ways:
+    RESOLVED 2026-08-14 (audit lead 7). This used to apply to fresh rows only, so a
+    RETAINED row — and `_retain_signals` keeps a still-running entry however old —
+    picked its strikes around TODAY's spot while `_stamp_spot_leg_premiums` stamped
+    each leg's entry premium from the SIGNAL bar. The two halves described different
+    trades: a NIFTY long triggered at 24,000 with spot now 25,100 got a leg labelled
+    ATM 25100, priced at what that strike closed at when it was 1,100 points out of
+    the money — an entry nobody could have taken, and a P&L computed against it.
 
-      * a RETAINED row resolves its ladder at today's spot, so its candidate strikes
-        are ones you could actually trade now — pinned by
-        `test_resolve_option_legs_uses_selected_listed_series_and_latest_spot`;
-      * `_stamp_spot_leg_premiums` stamps each leg's entry premium from the SIGNAL
-        bar, because "today's LTP is not what a signal from three sessions ago entered
-        at, and stamping it would invent an entry price and a fake P&L".
+    Both halves were deliberate, and they had to be reconciled one way or the other.
+    HISTORY wins, for the reason the premium half was decided that way in the first
+    place: this board must never show a number you could not have transacted at. A
+    retained row represents a position taken at the trigger, so its strike, its
+    moneyness label, its entry premium and its P&L all have to describe that one
+    moment. Resolving the ladder at today's spot turned a running-position row into a
+    shopping list that still carried an entry price.
 
-    Together they describe different trades: a NIFTY long triggered at 24,000 with
-    spot now 25,100 gets a leg labelled ATM 25100 priced at what that strike closed at
-    when it was 1,100 points OTM. Each half is defensible; the PAIR is not, and which
-    one gives way is a product decision (coherent history vs. a tradeable-now roll
-    priced at today's LTP) rather than something to settle in a compat shim.
+    The tradeable-now question is a real one, and it is answered somewhere better: the
+    detail pane and the order window quote the LIVE chain, which is where you go to
+    act on a signal that is still running.
     """
-    if getattr(row, "is_fresh", False):
-        kwargs["latest_spot"] = None
+    kwargs["latest_spot"] = None
     return _original_resolve_option_legs(row, option_rows, **kwargs)
 
 

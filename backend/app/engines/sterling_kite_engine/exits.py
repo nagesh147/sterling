@@ -28,9 +28,24 @@ def trail_level(r, direction: str, entry_i: int, at_i: int,
     ``exit_aligned_trail`` on: the line whose flip is the ``exit_mode``-th red, so the
     stop breach coincides with the red count instead of the tightest line pre-empting
     it. Falls back to the entry bar's ``trail_target`` line when no aligned line remains.
+
+    The threshold line is used ONLY while it is still aligned (audit lead 28). Once a
+    SuperTrend flips it jumps to the other side of price, so an unguarded
+    ``trail_value_for_threshold`` put the stop above a long's price and the very next
+    bar "breached" it. That fires at the WRONG count: under ``three_red`` the threshold
+    line is the slow one, and slow can flip while fast and mid are still green — one
+    red, not three — so the trade exited immediately under the setting whose entire
+    purpose is to wait for three. Falling back to the tightest still-aligned line keeps
+    the intent (do not let the fast line pre-empt the counter) without ever resting the
+    stop on the wrong side of price; when NO line is aligned the count has reached three
+    and the red-count rule is what ends the trade anyway.
     """
     if getattr(cfg, "exit_aligned_trail", False):
-        value = r.trail_value_for_threshold(at_i, get_exit_threshold(cfg.exit_mode))
+        threshold = get_exit_threshold(cfg.exit_mode)
+        name = {1: "fast", 2: "mid", 3: "slow"}.get(int(threshold), "fast")
+        aligned = r.green_lines(direction, at_i)
+        value = (r.trail_value_for_threshold(at_i, threshold) if name in aligned
+                 else r.best_trail_line_value(direction, at_i))
     else:
         value = r.best_trail_line_value(direction, at_i)
     if value > 0:
