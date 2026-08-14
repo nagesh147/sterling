@@ -540,7 +540,15 @@ def lake_status(explicit: str | Path | None = None) -> LakeStatus:
         volumes = list_volumes(scan_lakes=True)
     except Exception:  # pragma: no cover - defensive; scanning must never break status
         volumes = []
-    candidates = [v.to_dict() for v in volumes if v.writable and v.free_bytes > 2**30]
+    # Include drives that already hold a lake even when their root is not writable: a
+    # root-owned mount point (normal on a freshly formatted USB stick) does not stop us
+    # reopening a lake that already exists inside it. Filtering those out hid the very
+    # drive the user was trying to pick.
+    candidates = [
+        v.to_dict()
+        for v in volumes
+        if (v.writable or v.lake_at) and v.free_bytes > 2**30
+    ]
     reg = registry()
     known = [e for e in reg["known"] if isinstance(e, dict)]
 
