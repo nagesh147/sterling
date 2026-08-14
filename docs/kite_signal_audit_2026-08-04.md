@@ -35,19 +35,19 @@ sweep. The line numbers in the claims are stale; the verdicts are not.
 
 | Verdict | Count | What it means |
 |---|---|---|
-| CLOSED | 14 | Was real, is handled by code shipped since — usually with a test pinning it |
-| FIXED | 6 | Still real when re-read. Fixed in this pass, with a test |
-| NEEDS DECISION | 9 | Real, but the remedy is a product choice, not a bug fix |
+| CLOSED | 16 | Was real, is handled by code shipped since — usually with a test pinning it |
+| FIXED | 8 | Still real when re-read. Fixed in this pass, with a test |
+| NEEDS DECISION | 5 | Real, but the remedy is a product choice, not a bug fix |
 | REFUTED | 2 | Never true as stated |
 
-The six fixed here: the mid-exit fill that booked realized PnL twice (10); markers keyed
+The eight fixed here: the mid-exit fill that booked realized PnL twice (10); markers keyed
 by a shared instrument token so re-entry rows fought over them (13, 18); confluence rows
 sitting in "Active now" while their own legs read ended (14); expiry-day greeks collapsing
 on the frontend while the detail pane still showed them (15); a React row key that let a
 SuperTrend and a Navigator row for one bar collide (24); and badge copy that still
 described the formula it no longer uses (31).
 
-The nine NEEDS DECISION entries are the honest residue. Three of them (7, 12, and the
+The five NEEDS DECISION entries are the honest residue. Three of them (7, 12, and the
 "which spot" half of 19) are the same underlying question: for a signal that is still
 running days later, is the board showing HISTORY — the strike and premium as of the
 trigger — or a TRADEABLE-NOW roll priced at today's LTP? Each half was decided
@@ -91,15 +91,15 @@ move together.
 | medium | live money | `backend/app/services/kite_engine/scanner.py:925` | Derivatives-source is_fresh is measured against the CONTRACT's own last candle, so an illiquid strike with a stale last bar fires auto-exec as a live trigger | NEEDS DECISION |
 | medium | gap missing feature | `backend/app/services/kite_engine/scanner.py:177` | No code path anywhere exits at a target — Navigator's row.target / leg.premium_target are display-only | CONFIRMED, NOT FIXED |
 | medium | wrong number on screen | `backend/app/services/kite_engine/service.py:734` | A failed GTT trail move is silent: the board and registry show the tightened stop while the broker stop stays at the entry level | CLOSED |
-| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:153` | The GTT actually placed uses a flat 18% IV while the board's SL/TSL backs IV out of the entry premium — the broker stop is not the stop on screen | NEEDS DECISION |
+| medium | wrong number on screen | `backend/app/services/kite_engine/service.py:153` | The GTT actually placed uses a flat 18% IV while the board's SL/TSL backs IV out of the entry premium — the broker stop is not the stop on screen | pinned by 73e5df08 `Pin that the stop on screen is the stop actually placed` |
 | medium | wrong number on screen | `backend/app/services/kite_engine/signal_board_runtime.py:427` | Confluence entry premium is overwritten with the STILL-FORMING 1H bar's close, so the Entry column repaints every 5 minutes and diverges from the entry actually recorded for the order | CLOSED |
 | medium | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:120` | SignalImpactCalculator crowns legs with NO price data: `recommended` and `bestDeltaSym` skip the premium > 0 filter that its three sibling badge sites apply | FIXED |
 | medium | wrong number on screen | `frontend/src/components/kite/SignalImpactCalculator.tsx:93` | For 'derivatives' rows the ✝ ranking and the Impact Calculator's "Risk to stop" are built on a fabricated 1R, because row.stop_loss is a PREMIUM level fed into an UNDERLYING stop-distance — the leg's real premium stop is ignored | CLOSED |
 | medium | gap missing feature | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:549` | The 'Best ✝▲' quick-toggle hides nothing under the default 3-strike ladder — it claims to drop the middle of the ladder while keeping every leg | ADDRESSED |
 | medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1915` | Board row key omits `source`, so a SuperTrend row and a Navigator row for the same underlying/bar collide — one silently disappears mid-scan | FIXED |
 | medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:892` | Chg % column renders Kite's absolute `net_change` (rupees) with a % sign, and blanks the Chg column, whenever the contract has no previous close | FIXED |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1027` | Navigator rows print the same number in SL and TSL, under a tooltip describing a SuperTrend ratchet the row does not have | NEEDS DECISION |
-| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1992` | The "re-entry" badge is computed after lens filtering, so switching lenses can hide the original entry and make a re-arm look like an independent new setup | NEEDS DECISION |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1027` | Navigator rows print the same number in SL and TSL, under a tooltip describing a SuperTrend ratchet the row does not have | the TSL cell reads "—" for a Navigator row and says why; the single level stays in the SL column |
+| medium | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:1992` | The "re-entry" badge is computed after lens filtering, so switching lenses can hide the original entry and make a re-arm look like an independent new setup | computed over all rows, not the filtered set — whether an entry is the original is a fact about the trend, not about the lens |
 | low | latent or dead | `backend/app/services/kite_engine/service.py:513` | The `stop_loss` handed to place_order_option is silently discarded by the client — the entry order carries no broker stop at all | REFUTED |
 | low | wrong number on screen | `frontend/src/components/kite/SterlingKiteEnginePane.tsx:553` | The "Best ✝▲" quick-toggle silently becomes a no-op whenever no leg has a solvable IV (market closed, quotes not yet loaded), while the chip stays lit as if it were filtering | ADDRESSED |
 | low | latent or dead | `backend/app/engines/sterling_kite_engine/regime.py:74` | exit_aligned_trail rides trail_value_for_threshold, which ignores whether that line is still aligned — once the line flips, the 'trail' sits on the wrong side of price | NEEDS DECISION |

@@ -933,22 +933,35 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            );
                          case 'sl':
                            // Initial hard stop at the entry bar (fast ST line), static.
+                           // A Navigator row has no SuperTrend behind it — its level comes
+                           // from the AVWAP proposal — so naming one there described a
+                           // mechanism the row does not have.
                            return (
-                             <Tip text="Initial stop at entry (fast SuperTrend line)">
+                             <Tip text={row.source === 'navigator'
+                               ? 'Stop from the AVWAP proposal that originated this signal'
+                               : 'Initial stop at entry (fast SuperTrend line)'}>
                                <span data-testid="leg-sl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                                </span>
                              </Tip>
                            );
-                         case 'tsl':
+                         case 'tsl': {
                            // Live ratcheting trail stop (tightens as ST lines flip red).
+                           // A Navigator row does not ratchet: it holds ONE level for the
+                           // life of the trade. Repeating that level here made the board
+                           // claim a trail it does not run, so the cell reads "—" and says
+                           // why — the level itself is in the SL column beside it.
+                           const isNav = row.source === 'navigator';
                            return (
-                             <Tip text="Trailing stop — ratchets tighter as SuperTrend lines flip red">
+                             <Tip text={isNav
+                               ? 'Navigator signals do not trail — the single stop is in the SL column'
+                               : 'Trailing stop — ratchets tighter as SuperTrend lines flip red'}>
                                <span data-testid="leg-tsl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                                 {slPx != null ? slPx.toFixed(1) : '—'}
+                                 {isNav ? '—' : (slPx != null ? slPx.toFixed(1) : '—')}
                                </span>
                              </Tip>
                            );
+                         }
                          case 'exit':
                            // Red-counter progress toward the auto-exit rule (row-level).
                            return (
@@ -1760,16 +1773,22 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // different entry prices; it is really one trend re-arming, and auto-exec's
   // one-position guard only ever takes the first. Mark the later ones so the board says
   // which entry is the original.
+  //
+  // Computed over `rows`, NOT `filteredRows`: whether an entry is the original is a
+  // fact about the trend, not about what the current lens happens to show. Reading the
+  // filtered set meant a lens that hid the first entry promoted the second to
+  // "original", so a re-arm at a much worse price presented as an independent new
+  // setup — the exact misreading this badge exists to prevent.
   const originalEntryMs = React.useMemo(() => {
     const earliest = new Map<string, number>();
-    for (const r of filteredRows) {
+    for (const r of rows) {
       if (!r.is_active) continue;  // ended rows are history, not a competing entry
       const key = `${r.underlying}|${r.direction}|${r.source ?? 'spot'}`;
       const prev = earliest.get(key);
       if (prev == null || r.timestamp_ms < prev) earliest.set(key, r.timestamp_ms);
     }
     return earliest;
-  }, [filteredRows]);
+  }, [rows]);
 
   // Live quotes are needed BEFORE bucketing so a position that has exited between scans
   // (live premium through its stop) drops out of "Active now" instead of lingering there

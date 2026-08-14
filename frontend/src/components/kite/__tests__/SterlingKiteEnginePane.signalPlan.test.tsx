@@ -259,4 +259,21 @@ describe('audit leads closed out', () => {
     expect(keys.some((k) => k.endsWith(':1785404700000'))).toBe(true);
     expect(keys.some((k) => k.endsWith(':1785408300000'))).toBe(true);
   });
+  it('does not print a trail for a Navigator row, which does not trail', async () => {
+    // Lead 25. A Navigator signal holds ONE level from its AVWAP proposal. Repeating
+    // it in the TSL column under a "ratchets as SuperTrend lines flip red" tooltip
+    // described a mechanism the row does not have.
+    mockPane([makeRow({ source: 'navigator', leg: { premium_spot: 320, premium_sl: 255, entry_sl: 255 } })]);
+    await renderPane();
+    const tsl = screen.getAllByTestId('leg-tsl');
+    expect(tsl.every((cell) => cell.textContent === '—')).toBe(true);
+    // the level itself still shows, once, in SL
+    expect(screen.getAllByTestId('leg-sl').some((c) => c.textContent === '255.0')).toBe(true);
+  });
+
+  it('still shows a trail for a SuperTrend row', async () => {
+    mockPane([makeRow({ source: 'derivatives', leg: { premium_spot: 320, premium_sl: 255, entry_sl: 210 } })]);
+    await renderPane();
+    expect(screen.getAllByTestId('leg-tsl').some((c) => c.textContent === '255.0')).toBe(true);
+  });
 });
