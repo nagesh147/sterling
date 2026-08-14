@@ -285,6 +285,51 @@ class Manifest:
             cur = self._conn.execute(sql, params)
         return cur.rowcount or 0
 
+    #: Columns the symbols page may be ordered by. Whitelisted because the value is
+    #: interpolated into SQL — never accept a caller's string directly.
+    _SYMBOL_SORTS = {"rows", "bytes", "tradingsymbol", "first_ts", "last_ts"}
+
+    def symbols_page(
+        self,
+        interval: str,
+        *,
+        search: str = "",
+        sort: str = "rows",
+        limit: int = 200,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """One page of stored instruments, plus the total matching count.
+
+        Paginating in SQL rather than loading every row and slicing in Python: the UI polls
+        this, and reading all 7,400+ rows off a USB drive per request was enough to make the
+        API sluggish under a handful of concurrent callers.
+        """
+        if sort not in self._SYMBOL_SORTS:
+            sort = "rows"
+        descending = sort in {"rows", "bytes", "first_ts", "last_ts"}
+        where = ["interval = ?", "rows > 0"]
+        params: list[Any] = [interval]
+        if search:
+            where.append("(tradingsymbol LIKE ? COLLATE NOCASE OR CAST(instrument_token AS TEXT) = ?)")
+            params.extend([f"%{search}%", search])
+        clause = " AND ".join(where)
+
+        total = int(
+            self._conn.execute(
+                f"SELECT COUNT(*) FROM symbols WHERE {clause}", params
+            ).fetchone()[0]
+            or 0
+        )
+        rows = self._conn.execute(
+            f"""SELECT instrument_token, tradingsymbol, exchange, segment, interval,
+                       rows, bytes, first_ts, last_ts
+                  FROM symbols WHERE {clause}
+                 ORDER BY {sort} {'DESC' if descending else 'ASC'}
+                 LIMIT ? OFFSET ?""",
+            (*params, int(limit), int(offset)),
+        ).fetchall()
+        return [dict(r) for r in rows], total
+
     def shortfall(self, interval: str, *, min_missing: int = 1) -> list[dict[str, Any]]:
         """Instruments holding fewer rows than their chunks reported fetching.
 

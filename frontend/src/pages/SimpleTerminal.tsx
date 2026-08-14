@@ -258,7 +258,7 @@ export function SimpleTerminal() {
             {/* Kite nav items — pushed to the right when KITE tab is active */}
             {activeTopTab === 'kite' && (
               <>
-                {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect', 'help'] as NavItem[]).map((nav) => (
+                {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'data', 'connect', 'help'] as NavItem[]).map((nav) => (
                   <button
                     key={nav}
                     onClick={() => handleKiteNav(nav)}

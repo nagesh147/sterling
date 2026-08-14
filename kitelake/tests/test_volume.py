@@ -381,3 +381,93 @@ class TestShortfallRepair:
 
         with Manifest() as man:
             assert man.reset_instruments("minute", []) == 0
+
+
+class TestSymbolsPage:
+    """SQL-side pagination for the data browser.
+
+    The UI polls this. Loading every stored row and slicing in Python meant reading 7,400+
+    rows off the removable drive per request, which was slow enough to degrade the whole
+    API under a few concurrent callers.
+    """
+
+    def _seed(self, man, n: int = 30) -> None:
+        for i in range(n):
+            man.upsert_symbol(
+                1000 + i, "minute", tradingsymbol=f"SYM{i:03d}", exchange="NSE",
+                rows=1000 - i, bytes=100 * (1000 - i), status="ok",
+                first_ts="2026-02-13T03:45:00+00:00", last_ts="2026-08-13T09:59:00+00:00",
+            )
+        # A zero-row symbol is a placeholder, not stored data — it must never be listed.
+        man.upsert_symbol(9999, "minute", tradingsymbol="EMPTYONE", rows=0, status="ok")
+
+    def test_paginates_and_reports_total(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, total = man.symbols_page("minute", limit=10, offset=0)
+            assert total == 30, "total counts every match, not just this page"
+            assert len(page) == 10
+            second, _ = man.symbols_page("minute", limit=10, offset=10)
+            assert {r["instrument_token"] for r in page}.isdisjoint(
+                {r["instrument_token"] for r in second}
+            ), "pages must not overlap"
+
+    def test_excludes_zero_row_symbols(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, total = man.symbols_page("minute", limit=100)
+            assert total == 30
+            assert all(r["rows"] > 0 for r in page)
+            assert "EMPTYONE" not in {r["tradingsymbol"] for r in page}
+
+    def test_default_sort_is_biggest_first(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, _ = man.symbols_page("minute", limit=5, sort="rows")
+            assert [r["rows"] for r in page] == sorted((r["rows"] for r in page), reverse=True)
+
+    def test_sort_by_symbol_is_ascending(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, _ = man.symbols_page("minute", limit=5, sort="tradingsymbol")
+            names = [r["tradingsymbol"] for r in page]
+            assert names == sorted(names)
+
+    def test_search_matches_symbol_and_token(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, total = man.symbols_page("minute", search="SYM01")
+            assert total == 10 and all("SYM01" in r["tradingsymbol"] for r in page)
+            exact, total_tok = man.symbols_page("minute", search="1005")
+            assert total_tok == 1 and exact[0]["instrument_token"] == 1005
+
+    def test_unknown_sort_falls_back_instead_of_injecting(self, lake: Path) -> None:
+        """The sort column is interpolated into SQL, so it must be whitelisted."""
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man)
+            page, _ = man.symbols_page("minute", sort="rows; DROP TABLE symbols", limit=3)
+            assert len(page) == 3, "a bogus sort must degrade to the default, not error"
+            assert man.symbols_page("minute", limit=1)[1] == 30, "table still intact"
+
+    def test_other_intervals_are_not_mixed_in(self, lake: Path) -> None:
+        from kitelake.manifest import Manifest
+
+        with Manifest() as man:
+            self._seed(man, n=3)
+            man.upsert_symbol(7001, "day", tradingsymbol="DAILY", rows=120, status="ok")
+            _, minute_total = man.symbols_page("minute", limit=50)
+            _, day_total = man.symbols_page("day", limit=50)
+            assert minute_total == 3
+            assert day_total == 1

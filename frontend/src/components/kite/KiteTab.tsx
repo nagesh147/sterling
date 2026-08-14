@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { KiteLayout, NavItem, MoreTab } from './KiteLayout';
+import { DataLakePane } from './DataLakePane';
 import { KiteDashboard } from './KiteDashboard';
 import { SterlingWatchListWithHoldingsSync } from './SterlingWatchListWithHoldingsSync';
 import { MarketDataPane } from './MarketDataPane';
@@ -160,6 +161,7 @@ export function KiteTab() {
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
+    else if (nav === 'data') content = <DataLakePane />;
     else if (nav === 'connect') content = <ConnectPane />;
     else if (nav === 'help') content = <HelpPane />;
   }
