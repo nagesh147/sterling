@@ -1,17 +1,21 @@
 """End-to-end Adaptive Edge orchestration contracts.
 
-This module composes existing canonical boundaries. It does not invent locked
-strategy mathematics or lifecycle parameters. Downstream contracts are injected
-so unresolved policy remains fail-closed rather than silently defaulted.
+This module composes canonical boundaries. It does not invent locked strategy
+mathematics or lifecycle parameters. Submission and execution are separate
+causal events: an order submission yields a broker reference; a broker event
+is independently normalized into a canonical execution event.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Mapping, Protocol
 
+from .broker_event_mapper import BrokerExecutionEvent
 from .edge import EdgeAssessment, EdgeFormula, evaluate_edge
 from .economic import EconomicAssessment, evaluate_economics
 from .event_boundary import CanonicalMarketEvent
+from .execution_adapter import CanonicalExecutionEvent, CanonicalOrderIntent
+from .execution_gateway import ExecutionGateway
 from .execution_gate import ExecutionGateDecision, REQUIRED_STRATEGY_FORMULAS, evaluate_execution_gate
 from .feature_engine import FeatureSnapshot
 
@@ -63,29 +67,6 @@ class SelectedInstrument:
 
 
 @dataclass(frozen=True)
-class OrderIntent:
-    order_intent_id: str
-    selection_id: str
-    instrument_id: str
-    side: str
-    quantity: int
-    intent_version: str
-    idempotency_key: str
-    created_at: str
-
-
-@dataclass(frozen=True)
-class ExecutionEvent:
-    execution_event_id: str
-    order_intent_id: str
-    event_type: str
-    event_time: str
-    broker_reference: str | None = None
-    filled_quantity: int = 0
-    fill_price: float | None = None
-
-
-@dataclass(frozen=True)
 class PositionState:
     position_id: str
     instrument_id: str
@@ -125,8 +106,8 @@ class E2ETrace:
     decision: DecisionEligibility | None
     authorization: AuthorizedTradeIntent | None
     instrument: SelectedInstrument | None
-    order: OrderIntent | None
-    execution: ExecutionEvent | None
+    order: CanonicalOrderIntent | None
+    execution: CanonicalExecutionEvent | None
     position: PositionState | None
     lifecycle: LifecycleEvaluation | None
     audit: tuple[AuditRecord, ...]
@@ -155,15 +136,11 @@ class InstrumentSelector(Protocol):
 
 
 class OrderIntentFactory(Protocol):
-    def create(self, instrument: SelectedInstrument) -> OrderIntent: ...
-
-
-class ExecutionAdapter(Protocol):
-    def submit(self, order: OrderIntent) -> ExecutionEvent: ...
+    def create(self, instrument: SelectedInstrument) -> CanonicalOrderIntent: ...
 
 
 class PositionProjector(Protocol):
-    def project(self, event: ExecutionEvent) -> PositionState: ...
+    def project(self, event: CanonicalExecutionEvent) -> PositionState: ...
 
 
 class LifecycleEngine(Protocol):
@@ -193,18 +170,18 @@ def run_e2e(
     risk_authorizer: RiskAuthorizer,
     instrument_selector: InstrumentSelector,
     order_factory: OrderIntentFactory,
-    execution_adapter: ExecutionAdapter,
+    execution_gateway: ExecutionGateway,
     position_projector: PositionProjector,
     lifecycle_engine: LifecycleEngine,
     execution_cost: float,
     minimum_net_value: float = 0.0,
     required_formula_ids: tuple[str, ...] | None = None,
+    broker_event: BrokerExecutionEvent | None = None,
 ) -> E2ETrace:
     """Run one candidate through every currently authorized layer.
 
     The execution gate is evaluated before any locked strategy formula is
-    invoked. Therefore unresolved mathematics stop the path deterministically
-    instead of allowing an implementation to substitute invented behavior.
+    invoked. Unresolved mathematics therefore stop the path deterministically.
     """
     audit = AuditLedger()
     audit.append("market_event", event.record_id)
@@ -222,10 +199,7 @@ def run_e2e(
     formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
     gate = evaluate_execution_gate(formula_ids)
     if not gate.authorized:
-        return E2ETrace(
-            event, snapshot, prediction, None, None, None, None, None, None, None, None, None,
-            audit.records(), gate,
-        )
+        return E2ETrace(event, snapshot, prediction, None, None, None, None, None, None, None, None, None, audit.records(), gate)
 
     edge = evaluate_edge(snapshot, edge_formula)
     if edge.opportunity_id != prediction.opportunity_id:
@@ -241,10 +215,7 @@ def run_e2e(
     audit.append("decision", decision.decision_id, prediction.prediction_id)
 
     if not decision.eligible:
-        return E2ETrace(
-            event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None,
-            audit.records(), gate,
-        )
+        return E2ETrace(event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None, audit.records(), gate)
 
     authorization = risk_authorizer.authorize(decision)
     if authorization.decision_id != decision.decision_id:
@@ -265,7 +236,11 @@ def run_e2e(
         raise ValueError("order intent requires idempotency key")
     audit.append("order_intent", order.order_intent_id, instrument.selection_id)
 
-    execution = execution_adapter.submit(order)
+    execution_gateway.submit(order)
+    if broker_event is None:
+        raise ValueError("broker execution event is required; submission is not execution")
+
+    execution = execution_gateway.receive(broker_event)
     if execution.order_intent_id != order.order_intent_id:
         raise ValueError("execution order identity mismatch")
     audit.append("execution_event", execution.execution_event_id, order.order_intent_id)
@@ -280,7 +255,5 @@ def run_e2e(
         raise ValueError("lifecycle position identity mismatch")
     audit.append("lifecycle", lifecycle.evaluation_id, position.position_id)
 
-    return E2ETrace(
-        event, snapshot, prediction, edge, economics, decision, authorization,
-        instrument, order, execution, position, lifecycle, audit.records(), gate,
-    )
+    return E2ETrace(event, snapshot, prediction, edge, economics, decision, authorization,
+                    instrument, order, execution, position, lifecycle, audit.records(), gate)
