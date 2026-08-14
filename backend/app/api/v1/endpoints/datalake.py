@@ -486,6 +486,45 @@ def bars(
     }
 
 
+@router.get("/hot")
+def hot(
+    limit: int = Query(60, ge=1, le=2000),
+    greeks_only: bool = Query(False),
+    _user: UserContext = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Live enriched quotes from a tick pipeline running *in this process*.
+
+    The hot store is in-process memory, so this only returns data when the pipeline was
+    started inside the backend. A pipeline run from the CLI has its own store that this
+    process cannot see — that is a real limitation of choosing memory over Redis, and
+    ``running: false`` says so plainly rather than looking like an empty market.
+    """
+    try:
+        _kitelake()
+        from kitelake.pipeline import get_pipeline  # noqa: PLC0415
+    except Exception as exc:
+        return {"running": False, "reason": str(exc).splitlines()[0], "quotes": []}
+
+    pipe = get_pipeline()
+    if pipe is None:
+        return {
+            "running": False,
+            "reason": "No tick pipeline is running in the backend process.",
+            "hint": "Ticks are only hot for the process that ingests them. Start one in-process, "
+                    "or run `kitelake pipe` and read it there with `kitelake hot`.",
+            "quotes": [],
+        }
+    try:
+        return {
+            "running": True,
+            "status": pipe.status(),
+            "quotes": pipe.snapshot(limit=limit, with_greeks_only=greeks_only),
+        }
+    except Exception as exc:
+        logger.warning("datalake hot failed: %s", exc)
+        return {"running": False, "reason": f"Could not read the hot store: {exc}", "quotes": []}
+
+
 def _import_or_400() -> Any:
     """Like :func:`_kitelake` but for mutating endpoints, where a 500/400 is appropriate."""
     try:
