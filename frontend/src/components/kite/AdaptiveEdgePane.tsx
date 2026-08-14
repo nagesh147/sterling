@@ -109,7 +109,7 @@ function boardRow(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow {
     id: 'research-last',
     instrument: data.settings.symbol,
     observationTime: Date.now(),
-    featureQuality: data.software_complete ? 'RESEARCH COMPLETE' : 'INCOMPLETE',
+    featureQuality: data.software_complete ? 'BOARD READY' : 'INCOMPLETE',
     edgeScore: null,
     edgeConfidence: null,
     expectedGrossValue: data.settings.stop_points,
@@ -251,7 +251,7 @@ export function AdaptiveEdgePane() {
                 <KV k="Bars" v={asText(coverage.bar_count)} />
                 <KV k="Ticks" v={asText(coverage.tick_count)} />
                 <KV k="Valid scores" v={asText(coverage.valid_scores)} />
-                <KV k="A197" v={coverage.meets_a197 ? 'yes' : 'no'} />
+                <KV k="History" v={coverage.meets_a197 ? 'ready' : 'waiting'} />
               </Card>
               <Card title="WALK-FORWARD">
                 <KV k="Label" v={asText(walk.label)} />
@@ -271,7 +271,7 @@ export function AdaptiveEdgePane() {
               </Card>
             </div>
 
-            <Card title="RESEARCH LEGS" wide>
+            <Card title="LEGS" wide>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, fontSize: 11, color: C.muted }}>
                 <span>{legs.length} legs · showing {visibleLegs.length}</span>
                 {legs.length > 12 && (

@@ -19,7 +19,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
       id: 'research-last',
       instrument: data.settings.symbol,
       observationTime: Date.now(),
-      featureQuality: data.software_complete ? 'RESEARCH COMPLETE' : 'INCOMPLETE',
+      featureQuality: data.software_complete ? 'BOARD READY' : 'INCOMPLETE',
       mode: data.session.last_mode,
       quantity: data.session.last_position_quantity,
       currentPnl: data.session.current_pnl,
@@ -27,7 +27,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
       profitGiveback: data.session.profit_giveback,
       protectionState: data.session.last_protection_stage,
       decision: (data.session.last_position_quantity ?? 0) > 0 ? 'HOLD' : data.session.exits ? 'EXIT' : 'REJECT',
-      reason: 'RESEARCH_NOT_LIVE',
+      reason: 'Display only',
       formulaIds: ['F-101', 'F-007', 'F-008'],
     }];
   }, [snapshot.data]);

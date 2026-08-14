@@ -73,7 +73,7 @@ export function AdaptiveEdgeSettingsPanel() {
         </div>
       )}
 
-      <Section title="Instrument & windows" description="Trial F-101 lookbacks. Not a production freeze." summary={`${draft.symbol} · ${draft.w_short}/${draft.w_long}`} persistKey="ae-windows" defaultOpen>
+      <Section title="Instrument & windows" description="Symbol and volatility lookback windows." summary={`${draft.symbol} · ${draft.w_short}/${draft.w_long}`} persistKey="ae-windows" defaultOpen>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '4px 2px 10px' }}>
           <Field label="Symbol" hint="TrueData symbol, usually NIFTY-I.">
             <input style={{ ...inputStyle, width: 120 }} value={draft.symbol} onChange={(e) => patch({ symbol: e.target.value })} />
@@ -87,7 +87,7 @@ export function AdaptiveEdgeSettingsPanel() {
         </div>
       </Section>
 
-      <Section title="Structure" description="Session profile bin and opening-range window. Research convention, not a recovered F-formula." summary={`${draft.tick_size} pt · IB ${draft.ib_minutes}m`} persistKey="ae-structure">
+      <Section title="Structure" description="Profile bin size and opening-range length." summary={`${draft.tick_size} pt · IB ${draft.ib_minutes}m`} persistKey="ae-structure">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '4px 2px 10px' }}>
           <Field label="Tick size" hint="Profile bin size in points.">
             <input style={inputStyle} type="number" value={draft.tick_size} onChange={(e) => patch({ tick_size: Number(e.target.value) })} />
@@ -98,7 +98,7 @@ export function AdaptiveEdgeSettingsPanel() {
         </div>
       </Section>
 
-      <Section title="Protection policy" description="Explicit A177 distances. Not recovered F-112." summary={`${draft.stop_points} / ${draft.trail_points} / ${draft.profit_lock_activation_points}`} persistKey="ae-protection">
+      <Section title="Protection policy" description="Hard stop, trail, and profit-lock distances." summary={`${draft.stop_points} / ${draft.trail_points} / ${draft.profit_lock_activation_points}`} persistKey="ae-protection">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '4px 2px 10px' }}>
           <Field label="Stop points" hint="Hard stop from entry.">
             <input style={inputStyle} type="number" value={draft.stop_points} onChange={(e) => patch({ stop_points: Number(e.target.value) })} />
@@ -115,7 +115,7 @@ export function AdaptiveEdgeSettingsPanel() {
         </div>
       </Section>
 
-      <Section title="Mode rungs" description="MICRO to SCALP to EXTENDED_SCALP to INTRADAY. Explicit research policy, not learned F-104." summary={`${draft.persistence_bars} bars · ${draft.scalp_favorable_points}/${draft.extended_favorable_points}/${draft.intraday_favorable_points}`} persistKey="ae-modes">
+      <Section title="Mode rungs" description="Open profit needed to step MICRO to SCALP to EXTENDED SCALP to INTRADAY." summary={`${draft.persistence_bars} bars · ${draft.scalp_favorable_points}/${draft.extended_favorable_points}/${draft.intraday_favorable_points}`} persistKey="ae-modes">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '4px 2px 10px' }}>
           <Field label="Persistence bars" hint="Hysteresis before a mode change.">
             <input style={inputStyle} type="number" value={draft.persistence_bars} onChange={(e) => patch({ persistence_bars: Number(e.target.value) })} />
@@ -134,8 +134,8 @@ export function AdaptiveEdgeSettingsPanel() {
 
       <Section
         title="Readiness"
-        description="Live snapshot of what the research path has and what stays blocked."
-        summary={snapshot.data?.software_complete ? 'software complete · gate blocked' : 'waiting on snapshot'}
+        description="What the last snapshot has and what is still waiting."
+        summary={snapshot.data?.software_complete ? 'board ready · orders off' : 'waiting on snapshot'}
         persistKey="ae-readiness"
       >
         <div style={{ padding: '4px 2px 10px', display: 'grid', gap: 6 }}>

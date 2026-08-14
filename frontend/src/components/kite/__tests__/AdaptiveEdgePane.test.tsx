@@ -86,13 +86,13 @@ describe('AdaptiveEdgePane', () => {
   it('renders the research desk from the last snapshot', () => {
     render(<AdaptiveEdgePane />);
     expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
-    expect(screen.getByText('BOARD READY')).toBeInTheDocument();
+    expect(screen.getAllByText('BOARD READY').length).toBeGreaterThan(0);
     expect(screen.getByText('ORDERS OFF')).toBeInTheDocument();
     expect(screen.getByText('WAITING ON HISTORY')).toBeInTheDocument();
     expect(screen.getByText('DISPLAY ONLY')).toBeInTheDocument();
     expect(screen.getByText(/MICRO · 28/)).toBeInTheDocument();
     expect(screen.getAllByText('AT_LVN').length).toBeGreaterThan(0);
-    expect(screen.getByText('RESEARCH LEGS')).toBeInTheDocument();
+    expect(screen.getByText('LEGS')).toBeInTheDocument();
     expect(screen.getByText('DAILY LEDGER')).toBeInTheDocument();
     expect(screen.getByText('FORMULA REGISTRY')).toBeInTheDocument();
   });
