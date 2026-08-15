@@ -119,3 +119,100 @@ async def get_bars(
         raise HTTPException(502, str(exc)) from exc
     finally:
         await client.aclose()
+
+
+@router.get("/ticks")
+async def get_ticks(
+    symbol: str = Query(...),
+    start: str = Query(..., alias="from"),
+    end: str = Query(..., alias="to"),
+    bidask: int = Query(1, ge=0, le=1),
+    user: UserContext = Depends(get_current_user),
+):
+    """Fetch historical ticks and return as list of CanonicalMarketEvents."""
+    acct = _require_active(user)
+    client = truedata_service.build_client(acct)
+    try:
+        raw_ticks = await client.get_ticks(symbol, start, end, bidask=bidask)
+        events = [
+            truedata_service.TrueDataMarketDataAdapter.create_tick_event(symbol, t, sequence=idx).payload
+            for idx, t in enumerate(raw_ticks)
+        ]
+        return {"symbol": symbol, "count": len(events), "events": events}
+    except truedata_service.TrueDataError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    finally:
+        await client.aclose()
+
+
+@router.get("/structure")
+async def get_structure(
+    symbol: str = Query(...),
+    start: str = Query(..., alias="from"),
+    end: str = Query(..., alias="to"),
+    tick_size: float = Query(1.0, gt=0),
+    user: UserContext = Depends(get_current_user),
+):
+    """Calculate causal market profile, volume profile, VWAP, and CVD structure for any symbol."""
+    from app.engines.adaptive_edge.structure import build_structure_series
+
+    acct = _require_active(user)
+    client = truedata_service.build_client(acct)
+    try:
+        raw_bars = await client.get_bars(symbol, start, end, interval="1min")
+        bar_events = [
+            truedata_service.TrueDataMarketDataAdapter.create_bar_event(symbol, b, sequence=idx)
+            for idx, b in enumerate(raw_bars)
+        ]
+        try:
+            raw_ticks = await client.get_ticks(symbol, start, end, bidask=1)
+        except truedata_service.TrueDataNoDataError:
+            raw_ticks = []
+        tick_events = [
+            truedata_service.TrueDataMarketDataAdapter.create_tick_event(symbol, t, sequence=idx)
+            for idx, t in enumerate(raw_ticks)
+        ]
+        series = build_structure_series(bar_events, tick_events, tick_size=tick_size)
+        snapshots = [
+            {
+                "close": s.close,
+                "vwap": s.vwap,
+                "poc": s.poc,
+                "vah": s.vah,
+                "val": s.val,
+                "vpoc": s.vpoc,
+                "vp_vah": s.vp_vah,
+                "vp_val": s.vp_val,
+                "cvd": s.cvd,
+                "bar_delta": s.bar_delta,
+                "buy_volume": s.buy_volume,
+                "sell_volume": s.sell_volume,
+                "spread": s.spread,
+                "location": s.location,
+                "flow_sign": s.flow_sign,
+                "session_open": s.session_open,
+                "ib_high": s.ib_high,
+                "ib_low": s.ib_low,
+                "ib_complete": s.ib_complete,
+                "or_location": s.or_location,
+                "vwap_location": s.vwap_location,
+                "poc_migration": s.poc_migration,
+                "hvn": list(s.hvn),
+                "lvn": list(s.lvn),
+                "nearest_hvn": s.nearest_hvn,
+                "nearest_lvn": s.nearest_lvn,
+            }
+            for s in series
+        ]
+        return {
+            "symbol": symbol,
+            "bar_count": len(bar_events),
+            "tick_count": len(tick_events),
+            "structure": snapshots[-1] if snapshots else None,
+            "snapshots_count": len(snapshots),
+        }
+    except truedata_service.TrueDataError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    finally:
+        await client.aclose()
+

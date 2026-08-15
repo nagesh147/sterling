@@ -74,3 +74,25 @@ def test_environment_variable_fallback(monkeypatch):
     assert active is not None
     assert active.username == "env_user"
     assert active.password == "env_pass"
+
+
+def test_truedata_settings_and_status_endpoints():
+    from starlette.testclient import TestClient
+    from main import app
+
+    client = TestClient(app)
+    # GET settings
+    r = client.get("/api/v1/truedata/settings")
+    assert r.status_code == 200
+    assert "data_source" in r.json()
+
+    # POST settings
+    r = client.post("/api/v1/truedata/settings", json={"data_source": "truedata"})
+    assert r.status_code == 200
+    assert r.json()["data_source"] == "truedata"
+
+    # GET status
+    r = client.get("/api/v1/truedata/status")
+    assert r.status_code == 200
+    assert "connected" in r.json()
+
