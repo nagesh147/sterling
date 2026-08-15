@@ -14,7 +14,7 @@ from app.services.kite_engine.greeks import (
     bs_price,
     premium_stop_from_move,
 )
-from app.services.kite_engine.strikes import chain_rows_for, pick_strikes
+from app.services.kite_engine.strikes import chain_rows_for, filter_liquid_contracts, pick_strikes
 from .protection import get_horizon_protection_policy
 
 AE_DEFAULT_LADDER = ("ITM2", "ITM1", "ATM", "OTM1", "OTM2")
@@ -261,6 +261,8 @@ def expand_spot_signal(
         wanted = AE_DEFAULT_LADDER
     current = today or date.today()
     chain = _as_chain(option_rows, option_name, current)
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+    chain = filter_liquid_contracts(chain, is_stock=is_stock)
     if not chain:
         return _labeled_ladder(
             spot=spot,
