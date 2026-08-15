@@ -5,7 +5,7 @@ Does not connect Kite. Does not unlock F-101..F-114.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Sequence
 
@@ -167,6 +167,14 @@ class ResearchSessionLeg:
     exit_time: str | None
     flattened: bool
     quantity: int
+    symbol: str = "NIFTY-I"
+    side: str = "BUY"
+    entry_price: float | None = None
+    exit_price: float | None = None
+    stop_price: float | None = None
+    trail_price: float | None = None
+    lock_price: float | None = None
+    entry_score: float | None = None
     entry_mode: str = "MICRO"
     exit_mode: str | None = None
     peak_mode: str = "MICRO"
@@ -175,6 +183,9 @@ class ResearchSessionLeg:
     overlays: tuple[str, ...] = ()
     operating_mode: str = "active"
     horizon: str = "IMPULSE"
+    entry_poc: float | None = None
+    entry_vwap: float | None = None
+    entry_cvd: float | None = None
 
 
 @dataclass(frozen=True)
@@ -660,6 +671,13 @@ def run_research_session(
         audit.append("order_intent", opened.order.order_intent_id, f"RESEARCH-{opened.order.order_intent_id}")
         audit.append("execution_event", f"SIMFILL-{opened.order.order_intent_id}", opened.order.order_intent_id)
         audit.append("accounting", f"MARK-{opened.order.order_intent_id}", opened.order.order_intent_id)
+        entry_id = opened.order.order_intent_id.removeprefix("RESEARCH-")
+        entry_row = next(row for row in rows if row.bar_record_id == entry_id)
+        entry_structure = (
+            structure_series[entry_row.bar_index]
+            if 0 <= entry_row.bar_index < len(structure_series)
+            else None
+        )
         raw_legs.append(
             ResearchSessionLeg(
                 session_date=session_date_ist(opened.order.created_at),
@@ -667,10 +685,15 @@ def run_research_session(
                 exit_time=None,
                 flattened=False,
                 quantity=opened.order.quantity,
+                symbol=symbol,
+                side=opened.order.side,
+                entry_price=opened.fill_price,
+                entry_score=entry_row.result.score,
+                entry_poc=None if entry_structure is None else entry_structure.poc,
+                entry_vwap=None if entry_structure is None else entry_structure.vwap,
+                entry_cvd=None if entry_structure is None else entry_structure.cvd,
             )
         )
-        entry_id = opened.order.order_intent_id.removeprefix("RESEARCH-")
-        entry_row = next(row for row in rows if row.bar_record_id == entry_id)
         signed = 1.0 if opened.order.side == "BUY" else -1.0
         if opened.accounting is not None:
             pnl_history.append(opened.accounting.current_pnl)
@@ -703,6 +726,20 @@ def run_research_session(
             if protection_policy is not None
             else None
         )
+        last_stop = None
+        last_trail = None
+        last_lock = None
+        if protector is not None and opened.fill_price is not None:
+            opened_protection = protector.update(opened.fill_price)
+            last_stop = opened_protection.stop_price
+            last_trail = opened_protection.trail_price
+            last_lock = opened_protection.lock_price
+            raw_legs[-1] = replace(
+                raw_legs[-1],
+                stop_price=last_stop,
+                trail_price=last_trail,
+                lock_price=last_lock,
+            )
         mode_engine = (
             OpportunityModeEngine(mode_policy, started_at=opened.order.created_at)
             if mode_policy is not None
@@ -721,6 +758,10 @@ def run_research_session(
             cutoff = a126_session_cutoff_reached(row.decision_time)
             mark = float(bar_events[row.bar_index].payload["close"])
             decision = protector.update(mark) if protector is not None else None
+            if decision is not None:
+                last_stop = decision.stop_price
+                last_trail = decision.trail_price
+                last_lock = decision.lock_price
             mode_decision: ModeDecision | None = None
             if mode_engine is not None:
                 current_fav = (mark - opened.fill_price) * signed
@@ -883,13 +924,15 @@ def run_research_session(
                     else:
                         stage = "protection_exit"
                     audit.append(stage, f"EXIT-{row.bar_record_id}", close_order.order_intent_id)
-                    raw_legs[-1] = ResearchSessionLeg(
-                        session_date=raw_legs[-1].session_date,
-                        entry_time=raw_legs[-1].entry_time,
+                    raw_legs[-1] = replace(
+                        raw_legs[-1],
                         exit_time=row.decision_time,
                         flattened=True,
                         quantity=last_qty,
-                        entry_mode=raw_legs[-1].entry_mode,
+                        exit_price=close_ref.price,
+                        stop_price=last_stop,
+                        trail_price=last_trail,
+                        lock_price=last_lock,
                         exit_mode=last_mode_name,
                         peak_mode=peak_mode.value,
                         thesis=last_mgmt.thesis.value if last_mgmt else raw_legs[-1].thesis,
@@ -922,15 +965,13 @@ def run_research_session(
             all_mode_records.extend(mode_engine.records)
             last_mode_seen = last_mode_name
             if not flattened:
-                raw_legs[-1] = ResearchSessionLeg(
-                    session_date=raw_legs[-1].session_date,
-                    entry_time=raw_legs[-1].entry_time,
-                    exit_time=raw_legs[-1].exit_time,
-                    flattened=False,
-                    quantity=raw_legs[-1].quantity,
-                    entry_mode=raw_legs[-1].entry_mode,
+                raw_legs[-1] = replace(
+                    raw_legs[-1],
                     exit_mode=last_mode_name,
                     peak_mode=peak_mode.value,
+                    stop_price=last_stop,
+                    trail_price=last_trail,
+                    lock_price=last_lock,
                     thesis=last_mgmt.thesis.value if last_mgmt else raw_legs[-1].thesis,
                     protection_stage=(
                         last_mgmt.protection_stage.value

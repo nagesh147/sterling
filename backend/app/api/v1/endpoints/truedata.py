@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
@@ -51,6 +52,30 @@ async def update_credentials(
 async def delete_credentials(account_id: str, user: UserContext = Depends(get_current_user)) -> None:
     if not truedata_service.delete(user.user_id, account_id):
         raise HTTPException(404, "TrueData credential not found")
+
+
+class TrueDataSettingsModel(BaseModel):
+    data_source: str = "truedata"  # "truedata" | "zerodhakite"
+
+
+@router.get("/settings")
+async def get_settings(user: UserContext = Depends(get_current_user)) -> TrueDataSettingsModel:
+    from app.services.db import get_config
+    src = get_config("market_data_source") or "truedata"
+    if src not in ("truedata", "zerodhakite"):
+        src = "truedata"
+    return TrueDataSettingsModel(data_source=src)
+
+
+@router.post("/settings")
+async def update_settings(
+    body: TrueDataSettingsModel,
+    user: UserContext = Depends(get_current_user),
+) -> TrueDataSettingsModel:
+    from app.services.db import set_config
+    src = body.data_source if body.data_source in ("truedata", "zerodhakite") else "truedata"
+    set_config("market_data_source", src)
+    return TrueDataSettingsModel(data_source=src)
 
 
 @router.get("/status")

@@ -3,10 +3,12 @@ import {
   useAddTrueDataCredential,
   useDeleteTrueDataCredential,
   useTrueDataCredentials,
+  useTrueDataSettings,
   useTrueDataStatus,
   useUpdateTrueDataCredential,
+  useUpdateTrueDataSettings,
 } from '../../hooks/useTrueData';
-import type { TrueDataCredential } from '../../types/truedata';
+import type { MarketDataSource, TrueDataCredential } from '../../types/truedata';
 
 const S: Record<string, React.CSSProperties> = {
   card: {
@@ -189,7 +191,7 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
             </button>
           </div>
 
-          {edit && (
+          {edit ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div>
                 <label style={S.label}>LABEL</label>
@@ -229,33 +231,163 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
                   onChange={(e) => setPort(Number(e.target.value))}
                 />
               </div>
-              <button
-                style={S.btnGreen}
-                disabled={update.isPending}
-                onClick={() =>
-                  update.mutate(
-                    {
-                      id: cred.id,
-                      label: label.trim() || cred.label,
-                      ...(username.trim() ? { username: username.trim() } : {}),
-                      ...(password.trim() ? { password: password.trim() } : {}),
-                      realtime_port: port,
-                    },
-                    {
-                      onSuccess: () => {
-                        setEdit(false);
-                        setUsername('');
-                        setPassword('');
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button
+                  style={S.btnGreen}
+                  disabled={update.isPending}
+                  onClick={() =>
+                    update.mutate(
+                      {
+                        id: cred.id,
+                        label: label.trim() || cred.label,
+                        ...(username.trim() ? { username: username.trim() } : {}),
+                        ...(password.trim() ? { password: password.trim() } : {}),
+                        realtime_port: port,
                       },
-                    }
-                  )
-                }
-              >
-                {update.isPending ? 'Saving…' : 'Save Changes'}
-              </button>
+                      {
+                        onSuccess: () => {
+                          setEdit(false);
+                          setUsername('');
+                          setPassword('');
+                        },
+                      }
+                    )
+                  }
+                >
+                  {update.isPending ? 'SAVING…' : 'SAVE CHANGES'}
+                </button>
+                <button
+                  style={S.btn}
+                  onClick={() => {
+                    setEdit(false);
+                    setLabel(cred.label);
+                    setUsername('');
+                    setPassword('');
+                  }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  style={{ ...S.btnRed, marginLeft: 'auto' }}
+                  onClick={() => {
+                    if (window.confirm(`Remove TrueData feed "${cred.label}"?`)) del.mutate(cred.id);
+                  }}
+                >
+                  DELETE
+                </button>
+              </div>
               {update.error && <div style={S.err}>✗ {update.error.message}</div>}
             </div>
+          ) : (
+            <div style={{ marginTop: 14, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
+              <div><strong>Port:</strong> {cred.realtime_port || 8082}</div>
+              <div><strong>Status:</strong> {cred.connected ? 'Connected' : 'Not Connected'}</div>
+              <div><strong>Configured:</strong> {new Date(cred.created_at_ms).toLocaleDateString()}</div>
+            </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DataSourceSelector() {
+  const { data: settings } = useTrueDataSettings();
+  const update = useUpdateTrueDataSettings();
+  const currentSource: MarketDataSource = settings?.data_source ?? 'truedata';
+
+  const setSource = (source: MarketDataSource) => {
+    if (source !== currentSource && !update.isPending) {
+      update.mutate({ data_source: source });
+    }
+  };
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={S.title}>PRIMARY MARKET DATA SOURCE</div>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 750,
+            letterSpacing: '0.05em',
+            padding: '2px 8px',
+            borderRadius: 4,
+            background: currentSource === 'truedata' ? 'rgba(240, 100, 40, 0.12)' : 'rgba(56, 126, 209, 0.12)',
+            color: currentSource === 'truedata' ? '#f06428' : '#387ed1',
+            border: currentSource === 'truedata' ? '1px solid rgba(240, 100, 40, 0.3)' : '1px solid rgba(56, 126, 209, 0.3)',
+          }}
+        >
+          {currentSource === 'truedata' ? 'ACTIVE: TRUEDATA' : 'ACTIVE: ZERODHA KITE'}
+        </span>
+      </div>
+
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 14, lineHeight: 1.5 }}>
+        Choose whether Adaptive Edge, orderflow indicators, and market scanners ingest live data from TrueData or Zerodha Kite.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {/* TrueData Option Card */}
+        <div
+          onClick={() => setSource('truedata')}
+          style={{
+            border: `1.5px solid ${currentSource === 'truedata' ? '#f06428' : '#e0e0e0'}`,
+            borderRadius: 8,
+            padding: 14,
+            background: currentSource === 'truedata' ? 'rgba(240, 100, 40, 0.04)' : '#fff',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <input
+              type="radio"
+              name="market_data_source"
+              checked={currentSource === 'truedata'}
+              onChange={() => setSource('truedata')}
+              style={{ cursor: 'pointer', accentColor: '#f06428' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'truedata' ? '#f06428' : '#333' }}>
+              TrueData Feed (Recommended)
+            </span>
+          </div>
+          <div style={{ fontSize: 11.5, color: '#777', lineHeight: 1.45, marginLeft: 22 }}>
+            Institutional tick-level data, Level 2 orderbook, and CVD/VWAP analytics for NIFTY-I and BANKNIFTY-I.
+          </div>
+        </div>
+
+        {/* Zerodha Kite Option Card */}
+        <div
+          onClick={() => setSource('zerodhakite')}
+          style={{
+            border: `1.5px solid ${currentSource === 'zerodhakite' ? '#387ed1' : '#e0e0e0'}`,
+            borderRadius: 8,
+            padding: 14,
+            background: currentSource === 'zerodhakite' ? 'rgba(56, 126, 209, 0.04)' : '#fff',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <input
+              type="radio"
+              name="market_data_source"
+              checked={currentSource === 'zerodhakite'}
+              onChange={() => setSource('zerodhakite')}
+              style={{ cursor: 'pointer', accentColor: '#387ed1' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'zerodhakite' ? '#387ed1' : '#333' }}>
+              Zerodha Kite Feed
+            </span>
+          </div>
+          <div style={{ fontSize: 11.5, color: '#777', lineHeight: 1.45, marginLeft: 22 }}>
+            Direct broker WebSocket option quote ticks, spot OHLC snapshots, and SuperTrend scans from Kite Connect.
+          </div>
+        </div>
+      </div>
+      {update.isPending && (
+        <div style={{ fontSize: 11, color: '#888', marginTop: 10, fontStyle: 'italic' }}>
+          Updating data source preference…
         </div>
       )}
     </div>
@@ -270,48 +402,48 @@ function AddTrueDataCredential() {
   const [password, setPassword] = useState('');
   const [port, setPort] = useState(8082);
 
-  if (!open)
+  if (!open) {
     return (
       <button style={S.btnGreen} onClick={() => setOpen(true)}>
-        + ADD TRUEDATA CREDENTIAL
+        + ADD TRUEDATA CREDENTIALS
       </button>
     );
+  }
 
   return (
     <div style={S.card}>
-      <div style={S.title}>ADD TRUEDATA CREDENTIAL</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={S.title}>NEW TRUEDATA FEED CREDENTIALS</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label style={S.label}>LABEL</label>
+          <label style={S.label}>FEED LABEL</label>
           <input
             style={S.input}
             value={label}
             onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Primary TrueData Feed"
           />
         </div>
         <div>
-          <label style={S.label}>USERNAME / LOGIN ID</label>
+          <label style={S.label}>TRUEDATA USERNAME</label>
           <input
             style={S.input}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="TrueData Username"
-            autoComplete="off"
           />
         </div>
         <div>
-          <label style={S.label}>PASSWORD</label>
+          <label style={S.label}>TRUEDATA PASSWORD</label>
           <input
             style={S.input}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="TrueData Password"
-            autoComplete="new-password"
           />
         </div>
         <div>
-          <label style={S.label}>REALTIME WEBSOCKET PORT</label>
+          <label style={S.label}>REALTIME PORT (DEFAULT: 8082)</label>
           <input
             style={S.input}
             type="number"
@@ -322,13 +454,13 @@ function AddTrueDataCredential() {
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
           <button
             style={S.btnGreen}
-            disabled={add.isPending || !username.trim() || !password.trim()}
+            disabled={add.isPending || !username || !password}
             onClick={() =>
               add.mutate(
                 {
                   label: label.trim() || 'My TrueData Feed',
                   username: username.trim(),
-                  password: password.trim(),
+                  password,
                   realtime_port: port,
                 },
                 {
@@ -359,6 +491,8 @@ export function TrueDataCredentialsPanel() {
 
   return (
     <div>
+      <DataSourceSelector />
+
       <div style={S.card}>
         <div style={S.title}>TRUEDATA MARKET DATA STATUS</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

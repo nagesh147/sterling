@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
-import { AdaptiveEdgePanel, type AdaptiveEdgeRow } from './AdaptiveEdgePanel';
+import { AdaptiveEdgePanel, rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { k } from '../../styles/kiteUI';
 
@@ -12,25 +12,15 @@ interface Props {
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props) {
   const [engine, setEngine] = useState<'signals' | 'adaptive_edge'>('signals');
   const snapshot = useAdaptiveEdgeSnapshot();
-  const rows: AdaptiveEdgeRow[] = useMemo(() => {
-    const data = snapshot.data;
-    if (!data) return [];
-    return [{
-      id: 'research-last',
-      instrument: data.settings.symbol,
-      observationTime: Date.now(),
-      featureQuality: data.software_complete ? 'BOARD READY' : 'INCOMPLETE',
-      mode: data.session.last_mode,
-      quantity: data.session.last_position_quantity,
-      currentPnl: data.session.current_pnl,
-      peakPnl: data.session.peak_pnl,
-      profitGiveback: data.session.profit_giveback,
-      protectionState: data.session.last_protection_stage,
-      decision: (data.session.last_position_quantity ?? 0) > 0 ? 'HOLD' : data.session.exits ? 'EXIT' : 'REJECT',
-      reason: 'Display only',
-      formulaIds: [],
-    }];
-  }, [snapshot.data]);
+  const rows = useMemo(() => (snapshot.data ? rowsFromSnapshot(snapshot.data) : []), [snapshot.data]);
+
+  useEffect(() => {
+    const onNav = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === 'adaptiveEdge') setEngine('adaptive_edge');
+    };
+    window.addEventListener('kite-nav-click', onNav);
+    return () => window.removeEventListener('kite-nav-click', onNav);
+  }, []);
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: k.bg }}>
@@ -49,7 +39,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
         </button>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: engine === 'adaptive_edge' ? '0 10px 12px' : 0 }}>
         {engine === 'signals' ? (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         ) : (
@@ -59,3 +49,4 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
     </div>
   );
 }
+

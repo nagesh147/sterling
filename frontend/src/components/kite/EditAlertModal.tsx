@@ -32,8 +32,14 @@ export function EditAlertModal({ alert, onClose }: { alert: KiteAlert; onClose: 
         </div>
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={{ fontSize: 12, color: '#9b9b9b' }}>Threshold
-            <input type="number" step={0.05} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }} />
+            <input
+              type="number"
+              step={0.05}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }}
+            />
           </label>
           {error && <div style={{ color: k.red, fontSize: 12 }}>{error}</div>}
         </div>

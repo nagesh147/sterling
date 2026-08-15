@@ -33,3 +33,9 @@ export interface TrueDataStatus {
   username_hint?: string;
   message: string;
 }
+
+export type MarketDataSource = 'truedata' | 'zerodhakite';
+
+export interface TrueDataSettings {
+  data_source: MarketDataSource;
+}

@@ -1,206 +1,124 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
-import { AdaptiveEdgePanel, type AdaptiveEdgeRow } from './AdaptiveEdgePanel';
+import {
+  AdaptiveEdgePanel,
+  fmt,
+  formatModeBadge,
+  historyRowsFromSnapshot,
+  rowsFromSnapshot,
+  watchedSignals,
+  when,
+  type AdaptiveEdgeRow,
+} from './AdaptiveEdgePanel';
+import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
+import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
 import { openSettingsSection } from './config/registry';
-import type { AdaptiveEdgeLeg, AdaptiveEdgeSnapshot } from '../../types/adaptiveEdge';
+import type { InstrumentTab } from './InstrumentPane';
 
 const C = {
-  text: '#444', muted: '#9b9b9b', border: '#ededed', green: '#4caf50', red: '#df514c',
-  amber: '#e6a23c', blue: '#387ed1', orange: '#f06428', surface: '#fafafa',
+  text: '#444', muted: '#9b9b9b', border: '#ededed', green: '#4caf50',
+  blue: '#387ed1', orange: '#f06428',
 };
 
-const MODES = ['MICRO', 'SCALP', 'EXTENDED_SCALP', 'INTRADAY'] as const;
-const THESES = ['THESIS_STRONG', 'THESIS_VALID', 'THESIS_WEAKENING', 'THESIS_INVALID'] as const;
-const STAGES = ['P0_RISK_CONTROLLED', 'P1_BREAKEVEN_PROTECTED', 'P2_PROFIT_PROTECTED', 'P3_AGGRESSIVE_TRAIL'] as const;
-
-const LABEL: Record<string, string> = {
-  TRIAL_NOT_A197_QUALITY: 'Trial quality',
-  RESEARCH_PLACEHOLDER_SPLITS: 'Trial split',
-  RESEARCH_HOLDOUT_NOT_LIVE: 'Trial holdout',
-  RESEARCH_CODE_PRESENT_REGISTRY_LOCKED: 'Present, locked',
-  SPEC_GAP: 'Not recovered',
-  RESEARCH_NOT_LIVE: 'Display only',
-  formula_registry_locked: 'Formula lock',
-  execution_gate_blocked: 'Orders',
-  kite_disconnected: 'Kite',
-  recovered_research_path: 'Core path',
-  opportunity_modes: 'Modes',
-  management_ladders: 'Management',
-  tbt_structure: 'Structure',
-  a197_dataset: 'History',
-  parameter_freeze: 'Calibration file',
-  f102_f103_numeric: 'Extra entry checks',
-  'F-101': 'Score',
-  'F-102': 'Entry extra',
-  'F-103': 'Session extra',
-  'F-104': 'Modes',
-  'F-105': 'Thesis',
-  'F-106': 'Overlays',
-  'F-107': 'Risk per unit',
-  'F-108': 'Size',
-  'F-109': 'Entry extra',
-  'F-110': 'Session extra',
-  'F-111': 'Exits',
-  'F-112': 'Stops',
-  'F-113': 'Re-entry',
-  'F-114': 'One position',
-};
-
-function pretty(value: string | null | undefined) {
-  if (!value) return '—';
-  return LABEL[value] ?? value.split('_').join(' ');
+function chartSymbol(symbol: string) {
+  if (symbol === 'NIFTY-I' || symbol === 'NIFTY' || symbol === 'NIFTY 50') return 'NSE:NIFTY 50';
+  if (symbol === 'BANKNIFTY-I' || symbol === 'BANKNIFTY' || symbol === 'NIFTY BANK') return 'NSE:NIFTY BANK';
+  if (symbol === 'FINNIFTY-I' || symbol === 'FINNIFTY' || symbol === 'NIFTY FIN SERVICE') return 'NSE:NIFTY FIN SERVICE';
+  if (symbol === 'SENSEX-I' || symbol === 'SENSEX') return 'BSE:SENSEX';
+  return symbol.includes(':') ? symbol : `NSE:${symbol}`;
 }
 
-function fmt(v: number | null | undefined, d = 2) {
-  return v == null || !Number.isFinite(v) ? '—' : v.toFixed(d);
-}
-
-function asNum(v: unknown) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-
-function asText(v: unknown) {
-  return v == null ? '—' : String(v);
-}
-
-function when(value: string | null | undefined) {
-  if (!value) return '—';
-  const dt = new Date(value);
-  return Number.isNaN(dt.getTime()) ? value : dt.toLocaleString('en-IN', { hour12: false });
-}
-
-function Chip({ label, ok, tone }: { label: string; ok?: boolean; tone?: 'good' | 'warn' | 'bad' | 'quiet' }) {
-  const color = tone === 'good' || ok === true ? C.green
-    : tone === 'bad' ? C.red
-    : tone === 'quiet' ? C.muted
-    : C.amber;
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, border: `1px solid ${color}44`, background: `${color}12`, color, fontSize: 10, fontWeight: 700 }}>
-      <i style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
-      {label}
-    </span>
-  );
-}
-
-function Card({ title, children, wide }: { title: string; children: React.ReactNode; wide?: boolean }) {
-  return (
-    <section style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, background: '#fff', minWidth: 0, gridColumn: wide ? '1 / -1' : undefined }}>
-      <div style={{ fontSize: 10, letterSpacing: '.08em', color: C.muted, fontWeight: 700, marginBottom: 10 }}>{title}</div>
-      {children}
-    </section>
-  );
-}
-
-function KV({ k: key, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-      <span style={{ color: C.muted }}>{key}</span>
-      <strong style={{ color: C.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{v ?? '—'}</strong>
+    <div style={{ minWidth: 88 }}>
+      <div style={{ fontSize: 10, color: C.muted, letterSpacing: '.04em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ marginTop: 2, fontSize: 14, fontWeight: 650, fontVariantNumeric: 'tabular-nums', color: C.text }}>{value}</div>
     </div>
   );
 }
 
-function Ladder({ items, current, counts }: { items: readonly string[]; current?: string | null; counts?: Record<string, number> }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      {items.map((item) => {
-        const on = current === item;
-        return (
-          <span
-            key={item}
-            style={{
-              padding: '5px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.03em',
-              border: `1px solid ${on ? C.orange : C.border}`,
-              background: on ? 'rgba(240,100,40,.08)' : C.surface,
-              color: on ? C.orange : C.muted,
-            }}
-          >
-            {pretty(item)}{counts?.[item] != null ? ` · ${counts[item]}` : ''}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-function tableHead(cols: string[]) {
-  return (
-    <thead>
-      <tr>
-        {cols.map((h) => (
-          <th key={h} style={{ textAlign: 'left', color: C.muted, fontWeight: 500, padding: '6px 8px', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{h}</th>
-        ))}
-      </tr>
-    </thead>
-  );
-}
-
-function boardRow(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow {
-  const session = data.session;
-  return {
-    id: 'research-last',
-    instrument: data.settings.symbol,
-    observationTime: Date.now(),
-    featureQuality: data.software_complete ? 'BOARD READY' : 'INCOMPLETE',
-    edgeScore: null,
-    edgeConfidence: null,
-    expectedGrossValue: data.settings.stop_points,
-    executionCost: 0,
-    expectedNetValue: data.settings.stop_points,
-    economicallyEligible: true,
-    mode: session.last_mode,
-    authorizedRisk: data.settings.stop_points,
-    consumedRisk: session.current_pnl ?? null,
-    quantity: session.last_position_quantity,
-    entryPrice: null,
-    ltp: session.last_poc ?? null,
-    currentPnl: session.current_pnl ?? null,
-    peakPnl: session.peak_pnl ?? null,
-    profitGiveback: session.profit_giveback ?? null,
-    protectionState: session.last_protection_stage,
-    decision: (session.last_position_quantity ?? 0) > 0 ? 'HOLD' : session.exits ? 'EXIT' : 'REJECT',
-    reason: data.live_trading ? undefined : 'Display only',
-    formulaIds: [],
-  };
-}
-
-export function AdaptiveEdgePane() {
+export function AdaptiveEdgePane({
+  onOpenChart,
+}: {
+  onOpenChart?: (symbol: string, tab: InstrumentTab | 'chart' | 'option-chain') => void;
+}) {
   const { data, isLoading, error, refetch, isFetching } = useAdaptiveEdgeSnapshot();
-  const [showAllLegs, setShowAllLegs] = useState(false);
+  const board = data ? rowsFromSnapshot(data) : [];
+  const history = data ? historyRowsFromSnapshot(data) : [];
+  const watched = data ? watchedSignals(data) : [];
+  const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const visible = useMemo(() => {
+    if (filter === 'closed') {
+      const closedHistory = history.filter((row) => !row.open);
+      return closedHistory.length ? closedHistory : board.filter((row) => !row.open);
+    }
+    if (filter === 'open') return board.filter((row) => row.open);
+    return board;
+  }, [board, filter, history]);
+
+  useEffect(() => {
+    if (!visible.some((row) => row.id === selectedId)) {
+      setSelectedId(visible[0]?.id ?? null);
+    }
+  }, [visible, selectedId]);
+
+  const selected: AdaptiveEdgeRow | undefined = visible.find((row) => row.id === selectedId) ?? visible[0];
   const session = data?.session;
-  const row = data ? boardRow(data) : null;
-  const legs = data?.legs ?? [];
-  const visibleLegs = showAllLegs ? legs : legs.slice(-12);
-  const transitions = useMemo(() => (data?.mode_transitions ?? []).slice(-8).reverse(), [data?.mode_transitions]);
-  const formulas = Object.entries(data?.formula_table ?? {});
-  const quality = data?.quality ?? {};
   const coverage = data?.coverage ?? {};
-  const holdout = data?.holdout ?? {};
-  const walk = data?.walk_forward ?? {};
+  const scannedNames = Array.from(new Set((data?.signals ?? []).filter((item) => item.scanned).map((item) => item.underlying)));
+  const allNames = Array.from(new Set((data?.signals ?? []).map((item) => item.underlying)));
+  const watchedNames = (scannedNames.length ? scannedNames : allNames).join(', ') || (data?.settings.symbol ?? 'NIFTY-I');
+  const days = typeof coverage.trading_days === 'number' ? coverage.trading_days : null;
+  const skipped = session?.blocked_pyramid ?? 0;
+  const taken = history.length || board.length;
+  const openCount = board.filter((row) => row.open).length;
 
   return (
-    <div style={{ padding: '18px 24px 32px', width: '100%', boxSizing: 'border-box', fontFamily: k.fontFamily }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 16 }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: k.fontFamily, background: '#fff' }}>
+      <style>{`@media (max-width: 860px) { .ae-desk { grid-template-columns: 1fr !important; } }`}</style>
+      <div style={{ background: '#fafafa', borderBottom: `1px solid ${C.border}`, padding: '7px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 11, color: C.muted, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, letterSpacing: '0.04em', color: C.orange, background: 'rgba(240,100,40,.1)', border: '1px solid rgba(240,100,40,.25)', borderRadius: 3, padding: '1px 6px', fontSize: 10 }}>
+            RESEARCH DESK · NOT LIVE
+          </span>
+          <span>
+            Adaptive Edge is <strong style={{ color: C.text }}>not live</strong>, <strong style={{ color: C.text }}>not calibrated</strong>, and <strong style={{ color: C.text }}>not multi-index</strong> in the AE sense. That gap is the design, not a bug. NIFTY uses causal replay; other symbols are spot scans with borrowed SuperTrend direction.
+          </span>
+        </div>
+        <div style={{ whiteSpace: 'nowrap', fontSize: 10.5, color: C.muted }}>
+          Unlock: TrueData tick history → /getticks → A197 → F-101..F-114 → ExecutionGate
+        </div>
+      </div>
+
+      <div style={{ flexShrink: 0, padding: '14px 22px 12px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 400, color: C.text }}>Adaptive Edge</h2>
-            <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>
-              {data?.settings.symbol ?? 'NIFTY-I'} · tick-by-tick board
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {data ? (
-              <>
-                <Chip label={data.software_complete ? 'BOARD READY' : 'BOARD INCOMPLETE'} ok={data.software_complete} />
-                <Chip label={data.production_gate_authorized ? 'ORDERS ON' : 'ORDERS OFF'} tone={data.production_gate_authorized ? 'bad' : 'warn'} />
-                <Chip label={data.meets_a197 ? 'HISTORY READY' : 'WAITING ON HISTORY'} ok={data.meets_a197} />
-                <Chip label={data.live_trading ? 'LIVE' : 'DISPLAY ONLY'} tone={data.live_trading ? 'bad' : 'quiet'} />
-              </>
-            ) : (
-              <Chip label={isLoading ? 'LOADING' : 'NO SNAPSHOT'} tone="quiet" />
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.text }}>Adaptive Edge</h2>
+            <p style={{ margin: '5px 0 0', fontSize: 12, color: C.muted, maxWidth: 760, lineHeight: 1.5 }}>
+              {isLoading && 'Loading the last scan…'}
+              {error && `Could not load the last scan: ${(error as Error).message}`}
+              {data && (
+                <>
+                  Scanned <strong style={{ color: C.text, fontWeight: 650 }}>{watchedNames}</strong>
+                  {days != null && <> across {days} session{days === 1 ? '' : 's'}</>}.
+                  {openCount ? ` ${openCount} option row${openCount === 1 ? '' : 's'} still open.` : ''}
+                </>
+              )}
+            </p>
+            {data && (
+              <AdaptiveEdgeMetricsStrip
+                session={session}
+                watched={watched}
+                taken={typeof session?.entries === 'number' ? session.entries : taken}
+                skipped={typeof skipped === 'number' ? skipped : 0}
+              />
             )}
-            <button type="button" onClick={() => refetch()} style={{ border: `1px solid ${C.border}`, background: '#fff', borderRadius: 4, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => refetch()} style={{ border: `1px solid ${C.border}`, background: '#fff', borderRadius: 4, padding: '6px 10px', fontSize: 11, cursor: 'pointer' }}>
               {isFetching ? 'Refreshing…' : 'Refresh'}
             </button>
             <button type="button" onClick={() => openSettingsSection('adaptiveEdge')} style={{ border: 0, background: 'transparent', color: C.blue, fontSize: 11, cursor: 'pointer' }}>
@@ -208,183 +126,205 @@ export function AdaptiveEdgePane() {
             </button>
           </div>
         </div>
+      </div>
 
-        {isLoading && <div style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>Loading Adaptive Edge snapshot…</div>}
-        {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 12 }}>Could not load snapshot: {String((error as Error).message)}</div>}
+      <div className="ae-desk" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(360px, 1.15fr) minmax(280px, .85fr)', overflow: 'hidden' }}>
+        <section style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
+            {([
+              { id: 'all' as const, label: `All ${board.length}` },
+              { id: 'open' as const, label: `Open ${openCount}` },
+              { id: 'closed' as const, label: `Closed ${history.filter((row) => !row.open).length || board.filter((row) => !row.open).length}` },
+            ]).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setFilter(item.id)}
+                style={{
+                  border: `1px solid ${filter === item.id ? C.orange : C.border}`,
+                  background: filter === item.id ? 'rgba(240,100,40,.08)' : '#fff',
+                  color: filter === item.id ? C.orange : C.muted,
+                  borderRadius: 99, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <AdaptiveEdgePanel
+              rows={visible}
+              selectedId={selected?.id}
+              onSelect={(row) => setSelectedId(row.id)}
+            />
+          </div>
+        </section>
 
-        {data && (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
-              <Card title="MODE LADDER">
-                <Ladder items={MODES} current={session?.last_mode} counts={data.mode_counts} />
-                <div style={{ marginTop: 10 }}>
-                  <KV k="Horizon" v={pretty(session?.last_horizon)} />
-                  <KV k="Posture" v={pretty(session?.last_operating_mode)} />
-                  <KV k="Lifecycle" v={pretty(session?.lifecycle_action)} />
+        <aside style={{ minWidth: 0, minHeight: 0, overflow: 'auto', padding: 16, background: '#fcfcfc' }}>
+          {!selected && <div style={{ color: C.muted, fontSize: 12 }}>Select a setup to see the numbers and the chart.</div>}
+          {selected && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: C.muted, letterSpacing: '.04em', textTransform: 'uppercase' }}>This setup</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(() => {
+                      const badge = formatModeBadge(
+                        selected.entryMode,
+                        selected.origin,
+                        selected.peakMode,
+                        selected.currentMode,
+                        selected.modeUpgraded,
+                        selected.modeDowngraded,
+                        selected.modePath,
+                        selected.modeHistory,
+                      );
+                      return (
+                        <span
+                          title={badge.title}
+                          style={{
+                            fontSize: 9.5,
+                            fontWeight: 750,
+                            letterSpacing: '0.04em',
+                            padding: '2px 6px',
+                            borderRadius: 3,
+                            background: badge.bg,
+                            color: badge.color,
+                            border: badge.border,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
+                    {selected.origin === 'adaptive_edge' ? (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: 'rgba(240,100,40,.12)', color: k.orange, border: '1px solid rgba(240,100,40,.25)' }}>
+                        AE RESEARCH (NIFTY)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 3, background: 'rgba(65,132,243,.10)', color: k.blue, border: '1px solid rgba(65,132,243,.25)' }}>
+                        SPOT SCAN (ST)
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </Card>
-              <Card title="THESIS / PROTECTION">
-                <Ladder items={THESES} current={session?.last_thesis} />
-                <div style={{ height: 8 }} />
-                <Ladder items={STAGES} current={session?.last_protection_stage} />
-                <div style={{ marginTop: 10 }}>
-                  <KV k="Peak P&L" v={fmt(session?.peak_pnl)} />
-                  <KV k="Giveback" v={fmt(session?.profit_giveback)} />
+                <div style={{ marginTop: 4, fontSize: 16, fontWeight: 650, color: C.text }}>{selected.instrument}</div>
+                <div style={{ marginTop: 4, fontSize: 12, color: C.muted }}>
+                  {selected.entryTime ? new Date(selected.entryTime).toLocaleString('en-IN') : '—'}
+                  {selected.exitTime ? ` → ${new Date(selected.exitTime).toLocaleString('en-IN')}` : ' · still open'}
                 </div>
-              </Card>
-              <Card title="STRUCTURE / TBT">
-                <KV k="POC" v={fmt(session?.last_poc, 1)} />
-                <KV k="VWAP" v={fmt(session?.last_vwap, 2)} />
-                <KV k="Location" v={pretty(session?.last_location)} />
-                <KV k="Opening range" v={pretty(session?.last_or_location)} />
-                <KV k="POC walk" v={pretty(session?.last_poc_migration)} />
-                <KV k="CVD" v={fmt(session?.last_cvd, 0)} />
-                <KV k="Bar delta" v={fmt(session?.last_bar_delta, 0)} />
-              </Card>
-              <Card title="SESSION">
-                <KV k="Entries" v={session?.entries} />
-                <KV k="Exits" v={session?.exits} />
-                <KV k="Re-entries" v={session?.reentries} />
-                <KV k="Pyramid blocked" v={session?.blocked_pyramid} />
-                <KV k="Qty" v={session?.last_position_quantity} />
-                <KV k="Current P&L" v={fmt(session?.current_pnl)} />
-              </Card>
-            </div>
-
-            {!!session?.last_overlays?.length && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                {session.last_overlays.map((name) => (
-                  <span key={name} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: '#fff6f0', color: '#c05621', border: '1px solid #f0d2c2' }}>{name}</span>
-                ))}
               </div>
-            )}
 
-            {!!data.incomplete_reasons.length && (
-              <Card title="INCOMPLETE">
-                {data.incomplete_reasons.map((reason) => <KV key={reason} k="reason" v={reason} />)}
-              </Card>
-            )}
+              {(() => {
+                const badge = formatModeBadge(
+                  selected.entryMode,
+                  selected.origin,
+                  selected.peakMode,
+                  selected.currentMode,
+                  selected.modeUpgraded,
+                  selected.modeDowngraded,
+                  selected.modePath,
+                  selected.modeHistory,
+                );
+                return (
+                  <div style={{ padding: '8px 12px', background: badge.bg, border: badge.border, borderRadius: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 750, color: badge.color, letterSpacing: '.04em' }}>
+                        {badge.isUpgraded ? `▲ SIGNAL UPGRADED: ${badge.label}` : badge.isDowngraded ? `▼ SIGNAL DOWNGRADED: ${badge.label}` : `SIGNAL TYPE: ${badge.label}`}
+                      </span>
+                      <span style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>{selected.horizon || 'IMPULSE'}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.text, marginTop: 3 }}>
+                      {badge.title}
+                    </div>
+                    {badge.history && badge.history.length > 1 && (
+                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px dashed ${badge.isDowngraded ? 'rgba(239, 68, 68, 0.3)' : 'rgba(22, 163, 74, 0.3)'}`, fontSize: 10.5, color: badge.isDowngraded ? '#991b1b' : '#166534', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <strong>Lifecycle Path:</strong>
+                          {badge.history.map((step, idx) => (
+                            <span key={step} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ padding: '1px 5px', borderRadius: 3, background: idx === badge.history!.length - 1 ? (badge.isDowngraded ? 'rgba(239,68,68,.2)' : 'rgba(22,163,74,.2)') : 'rgba(0,0,0,.06)', fontWeight: 700 }}>
+                                {step}
+                              </span>
+                              {idx < badge.history!.length - 1 && (
+                                <span style={{ color: C.muted, fontWeight: 700 }}>{badge.isDowngraded ? '↘' : '↗'}</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, marginTop: 2 }}>
+                          <span><strong>Entry:</strong> {badge.entryLabel}</span>
+                          <span><strong>Current:</strong> {badge.promotedLabel}</span>
+                          <span><strong>Trigger:</strong> {badge.isDowngraded ? 'Giveback / decay protection' : 'Continuous favorable expansion'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 14, minHeight: 240 }}>
-              <AdaptiveEdgePanel rows={row ? [row] : []} selectedId={row?.id} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
-              <Card title="QUALITY">
-                <KV k="Status" v={pretty(typeof quality.status === 'string' ? quality.status : null)} />
-                <KV k="LI valid" v={fmt(asNum(quality.li_valid_rate), 3)} />
-                <KV k="Missing scores" v={fmt(asNum(quality.missing_score_rate), 4)} />
-                <KV k="Missing LI" v={asText(quality.missing_liquidity_imbalance)} />
-                <KV k="Missing VR" v={asText(quality.missing_volatility_ratio)} />
-                <KV k="Max quote lag s" v={asText(quality.max_li_quote_lag_seconds)} />
-              </Card>
-              <Card title="COVERAGE">
-                <KV k="Symbol" v={asText(coverage.symbol)} />
-                <KV k="Days" v={asText(coverage.trading_days)} />
-                <KV k="Bars" v={asText(coverage.bar_count)} />
-                <KV k="Ticks" v={asText(coverage.tick_count)} />
-                <KV k="Valid scores" v={asText(coverage.valid_scores)} />
-                <KV k="History" v={coverage.meets_a197 ? 'ready' : 'waiting'} />
-              </Card>
-              <Card title="WALK-FORWARD">
-                <KV k="Label" v={pretty(typeof walk.label === 'string' ? walk.label : null)} />
-                <KV k="Train" v={asText(walk.train)} />
-                <KV k="Validation" v={asText(walk.validation)} />
-                <KV k="Test" v={asText(walk.test)} />
-                <KV k="Ineligible" v={asText(walk.ineligible)} />
-                <KV k="Overlap" v={walk.train_test_overlap ? 'yes' : 'no'} />
-              </Card>
-              <Card title="HOLDOUT">
-                <KV k="Label" v={pretty(typeof holdout.label === 'string' ? holdout.label : null)} />
-                <KV k="Entries" v={asText(holdout.entries)} />
-                <KV k="Exits" v={asText(holdout.exits)} />
-                <KV k="Test bars" v={asText(holdout.test_bar_count)} />
-                <KV k="Train params only" v={holdout.used_train_params_only ? 'yes' : 'no'} />
-                <KV k="Complete" v={holdout.software_complete ? 'yes' : 'no'} />
-              </Card>
-            </div>
-
-            <Card title="LEGS" wide>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, fontSize: 11, color: C.muted }}>
-                <span>{legs.length} legs · showing {visibleLegs.length}</span>
-                {legs.length > 12 && (
-                  <button type="button" onClick={() => setShowAllLegs((v) => !v)} style={{ border: 0, background: 'transparent', color: C.blue, cursor: 'pointer' }}>
-                    {showAllLegs ? 'Show latest 12' : 'Show all'}
-                  </button>
-                )}
+              {(() => {
+                const liveLtp = selected.ltp;
+                const entryDiff = (liveLtp != null && selected.entry != null) ? liveLtp - selected.entry : null;
+                const entryVal = selected.entry != null
+                  ? `${fmt(selected.entry)}${entryDiff != null && Math.abs(entryDiff) > 0.001 ? ` (${entryDiff > 0 ? '+' : ''}${fmt(entryDiff)})` : ''}`
+                  : '—';
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                    <Metric label="Entry" value={entryVal} />
+                    <Metric label="SL" value={fmt(selected.sl)} />
+                    <Metric label="TSL" value={fmt(selected.tsl)} />
+                    <Metric label="Exit" value={fmt(selected.exit)} />
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                <Metric label="Spot" value={fmt(selected.spotEntry, 0)} />
+                <Metric label="Spot SL" value={fmt(selected.spotSl, 0)} />
+                <Metric label="Spot TSL" value={fmt(selected.spotTsl, 0)} />
+                <Metric label="LTP" value={fmt(selected.ltp)} />
               </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  {tableHead(['Date', 'Entry', 'Exit', 'Path', 'Horizon', 'Thesis', 'Protection', 'Overlays', 'Qty'])}
-                  <tbody>
-                    {visibleLegs.map((leg: AdaptiveEdgeLeg, index) => (
-                      <tr key={`${leg.entry_time ?? index}`}>
-                        <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{asText(leg.session_date)}</td>
-                        <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{when(leg.entry_time)}</td>
-                        <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{when(leg.exit_time)}</td>
-                        <td style={{ padding: '6px 8px' }}>{pretty(leg.entry_mode)} → {pretty(leg.peak_mode)} → {pretty(leg.exit_mode)}</td>
-                        <td style={{ padding: '6px 8px' }}>{pretty(leg.horizon)}</td>
-                        <td style={{ padding: '6px 8px' }}>{pretty(leg.thesis)}</td>
-                        <td style={{ padding: '6px 8px' }}>{pretty(leg.protection_stage)}</td>
-                        <td style={{ padding: '6px 8px' }}>{(leg.overlays ?? []).join(', ') || '—'}</td>
-                        <td style={{ padding: '6px 8px' }}>{asText(leg.quantity)}</td>
-                      </tr>
-                    ))}
-                    {!legs.length && <tr><td colSpan={9} style={{ padding: 12, color: C.muted }}>No legs in the last snapshot yet.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            <div style={{ height: 14 }} />
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: 14 }}>
-              <Card title="DAILY LEDGER">
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    {tableHead(['Date', 'Entries', 'Exits', 'Flat', 'Qty'])}
-                    <tbody>
-                      {(data.daily as Array<Record<string, unknown>>).map((day) => (
-                        <tr key={String(day.session_date)}>
-                          <td style={{ padding: '6px 8px' }}>{asText(day.session_date)}</td>
-                          <td style={{ padding: '6px 8px' }}>{asText(day.entries)}</td>
-                          <td style={{ padding: '6px 8px' }}>{asText(day.exits)}</td>
-                          <td style={{ padding: '6px 8px' }}>{day.flattened ? 'yes' : 'no'}</td>
-                          <td style={{ padding: '6px 8px' }}>{asText(day.last_quantity)}</td>
-                        </tr>
-                      ))}
-                      {!data.daily.length && <tr><td colSpan={5} style={{ padding: 12, color: C.muted }}>No daily ledger yet.</td></tr>}
-                    </tbody>
-                  </table>
+              {selected.origin === 'adaptive_edge' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                  <Metric label="Score" value={fmt(selected.score)} />
+                  <Metric label="POC" value={fmt(selected.poc, 0)} />
+                  <Metric label="VWAP" value={fmt(selected.vwap)} />
+                  <Metric label="CVD" value={fmt(selected.cvd, 0)} />
                 </div>
-              </Card>
-              <Card title="RECENT MODE WALKS">
-                {transitions.map((item, index) => (
-                  <KV
-                    key={`${item.timestamp ?? index}`}
-                    k={when(item.timestamp)}
-                    v={`${pretty(item.previous_mode)} → ${pretty(item.new_mode)} · ${fmt(item.favorable_points, 1)} pts`}
-                  />
-                ))}
-                {!transitions.length && <div style={{ color: C.muted, fontSize: 12 }}>No mode transitions in the last snapshot.</div>}
-              </Card>
-            </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: C.muted, fontStyle: 'italic', padding: '6px 8px', background: '#f5f5f5', borderRadius: 4, border: `1px solid ${C.border}` }}>
+                  Spot scan: direction borrowed from SuperTrend. No AE causal model, POC, or CVD evaluated.
+                </div>
+              )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-              <Card title="READINESS">
-                {(data.readiness || []).map((item) => (
-                  <KV key={item.name} k={pretty(item.name)} v={item.ready ? 'ready' : 'blocked'} />
-                ))}
-              </Card>
-              <Card title="BUILDING BLOCKS">
-                {formulas.map(([id, row]) => (
-                  <KV key={id} k={pretty(id)} v={pretty(row.status)} />
-                ))}
-                {!formulas.length && <div style={{ color: C.muted, fontSize: 12 }}>No building-block table in the last snapshot.</div>}
-              </Card>
+              {selected.resolutionReason && (
+                <p style={{ margin: 0, fontSize: 12, color: C.muted }}>{selected.resolutionReason}</p>
+              )}
+              {selected.whyClosed && (
+                <p style={{ margin: 0, fontSize: 12, color: C.muted }}>{selected.whyClosed}</p>
+              )}
+
+              <div style={{ flex: 1, minHeight: 240 }}>
+                <AdaptiveEdgeSetupChart
+                  symbol={selected.tapeSymbol || selected.underlying}
+                  entryTime={selected.entryTime}
+                  exitTime={selected.exitTime}
+                />
+              </div>
+
+              {onOpenChart && (
+                <button
+                  type="button"
+                  onClick={() => onOpenChart(chartSymbol(selected.tapeSymbol || selected.underlying), 'chart')}
+                  style={{ alignSelf: 'flex-start', border: 0, background: 'transparent', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                >
+                  Open full chart
+                </button>
+              )}
             </div>
-          </>
-        )}
+          )}
+        </aside>
       </div>
     </div>
   );

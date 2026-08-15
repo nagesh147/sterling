@@ -75,3 +75,24 @@ async def test_truedata_routes_are_registered_and_reachable(client):
     status_after = resp_status_after.json()
     assert status_after["is_active"] is True
     assert status_after["username_hint"] == "td****99"
+
+
+@pytest.mark.asyncio
+async def test_truedata_settings_data_source_selection(client):
+    # Default is truedata
+    resp = await client.get("/api/v1/truedata/settings")
+    assert resp.status_code == 200
+    assert resp.json()["data_source"] == "truedata"
+
+    # Update to zerodhakite
+    resp_update = await client.post(
+        "/api/v1/truedata/settings",
+        json={"data_source": "zerodhakite"},
+    )
+    assert resp_update.status_code == 200
+    assert resp_update.json()["data_source"] == "zerodhakite"
+
+    # Verify persisted
+    resp_check = await client.get("/api/v1/truedata/settings")
+    assert resp_check.status_code == 200
+    assert resp_check.json()["data_source"] == "zerodhakite"

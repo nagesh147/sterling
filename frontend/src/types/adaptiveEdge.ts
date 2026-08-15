@@ -1,6 +1,15 @@
 export interface AdaptiveEdgeSettings {
   enabled: boolean;
   symbol: string;
+  symbols: string[];
+  scan_source: 'spot' | 'derivatives' | 'both' | 'confluence';
+  scan_indices: string[];
+  scan_stocks: string[];
+  scan_all_stocks: boolean;
+  scan_stock_contracts: boolean;
+  strike_moneyness: string[];
+  scan_expiries: Array<'weekly' | 'monthly'>;
+  scan_expiries_indices: Array<'weekly' | 'monthly'>;
   w_short: number;
   w_long: number;
   stop_points: number;
@@ -52,6 +61,14 @@ export interface AdaptiveEdgeLeg {
   session_date?: string | null;
   entry_time?: string | null;
   exit_time?: string | null;
+  symbol?: string | null;
+  side?: string | null;
+  entry_price?: number | null;
+  exit_price?: number | null;
+  stop_price?: number | null;
+  trail_price?: number | null;
+  lock_price?: number | null;
+  entry_score?: number | null;
   entry_mode?: string | null;
   exit_mode?: string | null;
   peak_mode?: string | null;
@@ -62,6 +79,62 @@ export interface AdaptiveEdgeLeg {
   overlays?: string[];
   quantity?: number | null;
   flattened?: boolean | null;
+  entry_poc?: number | null;
+  entry_vwap?: number | null;
+  entry_cvd?: number | null;
+}
+
+export type AdaptiveEdgeOrigin = 'adaptive_edge' | 'spot_scan';
+
+export interface AdaptiveEdgeOptionLeg {
+  moneyness: string;
+  option_type: string;
+  option_symbol: string;
+  strike: number;
+  expiry: string | null;
+  lot_size: number | null;
+  token: number | null;
+  exchange: string;
+  entry_premium: number | null;
+  stop_premium: number | null;
+  trail_premium: number | null;
+  ltp: number | null;
+  resolution_reason: string | null;
+}
+
+export interface AdaptiveEdgeSignal {
+  id: string;
+  underlying: string;
+  tape_symbol: string;
+  side: string | null;
+  option_type: string | null;
+  spot_entry: number | null;
+  spot_exit: number | null;
+  spot_sl: number | null;
+  spot_tsl: number | null;
+  entry_time: string | null;
+  exit_time: string | null;
+  score: number | null;
+  poc: number | null;
+  vwap: number | null;
+  cvd: number | null;
+  scanned: boolean;
+  skip_reason: string | null;
+  scan_origin?: AdaptiveEdgeOrigin | string | null;
+  flattened: boolean;
+  quantity: number | null;
+  overlays: string[];
+  thesis: string | null;
+  entry_mode: string | null;
+  current_mode?: string | null;
+  peak_mode?: string | null;
+  exit_mode?: string | null;
+  horizon?: string | null;
+  mode_upgraded?: boolean;
+  mode_downgraded?: boolean;
+  mode_path?: string | null;
+  mode_history?: string[];
+  legs: AdaptiveEdgeOptionLeg[];
 }
 
 export interface AdaptiveEdgeModeTransition {
@@ -89,6 +162,7 @@ export interface AdaptiveEdgeSnapshot {
   readiness: AdaptiveEdgeReadiness[];
   session: AdaptiveEdgeSession;
   legs: AdaptiveEdgeLeg[];
+  signals?: AdaptiveEdgeSignal[];
   daily: Array<Record<string, unknown>>;
   quality: Record<string, unknown> | null;
   holdout: Record<string, unknown> | null;

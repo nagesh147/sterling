@@ -33,8 +33,14 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
 
   const field = (label: string, value: number | string, onChange: (v: string) => void, type: 'text' | 'number' = 'number') => (
     <label style={{ fontSize: 12, color: '#9b9b9b' }}>{label}
-      <input type={type} step={type === 'number' ? 0.05 : undefined} value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }} />
+      <input
+        type={type}
+        step={type === 'number' ? 0.05 : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+        style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }}
+      />
     </label>
   );
 

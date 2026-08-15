@@ -4,10 +4,31 @@ import type {
   TrueDataCredential,
   TrueDataCredentialCreate,
   TrueDataCredentialUpdate,
+  TrueDataSettings,
   TrueDataStatus,
 } from '../types/truedata';
 
 const TD = '/api/v1/truedata';
+
+export function useTrueDataSettings() {
+  return useQuery<TrueDataSettings>({
+    queryKey: ['truedata-settings'],
+    queryFn: () => api.get<TrueDataSettings>(`${TD}/settings`),
+    staleTime: 10_000,
+  });
+}
+
+export function useUpdateTrueDataSettings() {
+  const qc = useQueryClient();
+  return useMutation<TrueDataSettings, Error, TrueDataSettings>({
+    mutationFn: (body) => api.post<TrueDataSettings>(`${TD}/settings`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['truedata-settings'] });
+      qc.invalidateQueries({ queryKey: ['truedata-status'] });
+      qc.invalidateQueries({ queryKey: ['adaptive-edge-snapshot'] });
+    },
+  });
+}
 
 export function useTrueDataCredentials() {
   return useQuery<TrueDataCredential[]>({

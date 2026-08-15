@@ -3,6 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { AdaptiveEdgePane } from '../AdaptiveEdgePane';
 
+const optionLegs = [
+  { moneyness: 'ITM2', option_type: 'CE', option_symbol: 'NIFTY25AUG24400CE', strike: 24400, expiry: '2026-08-27', lot_size: 75, token: 1, exchange: 'NSE', entry_premium: 210.4, stop_premium: 162.1, trail_premium: 184.2, ltp: 210.4, resolution_reason: null },
+  { moneyness: 'ITM1', option_type: 'CE', option_symbol: 'NIFTY25AUG24450CE', strike: 24450, expiry: '2026-08-27', lot_size: 75, token: 2, exchange: 'NSE', entry_premium: 198.2, stop_premium: 151.0, trail_premium: 172.4, ltp: 198.2, resolution_reason: null },
+  { moneyness: 'ATM', option_type: 'CE', option_symbol: 'NIFTY25AUG24500CE', strike: 24500, expiry: '2026-08-27', lot_size: 75, token: 3, exchange: 'NSE', entry_premium: 186.4, stop_premium: 142.1, trail_premium: 161.8, ltp: 186.4, resolution_reason: null },
+  { moneyness: 'OTM1', option_type: 'CE', option_symbol: 'NIFTY25AUG24550CE', strike: 24550, expiry: '2026-08-27', lot_size: 75, token: 4, exchange: 'NSE', entry_premium: 174.1, stop_premium: 131.0, trail_premium: 150.2, ltp: 174.1, resolution_reason: null },
+  { moneyness: 'OTM2', option_type: 'CE', option_symbol: 'NIFTY25AUG24600CE', strike: 24600, expiry: '2026-08-27', lot_size: 75, token: 5, exchange: 'NSE', entry_premium: 161.8, stop_premium: 120.4, trail_premium: 138.6, ltp: 161.8, resolution_reason: null },
+];
+
 const snapshot = {
   label: 'RESEARCH_NOT_LIVE',
   software_complete: true,
@@ -13,6 +21,9 @@ const snapshot = {
   settings: {
     enabled: true,
     symbol: 'NIFTY-I',
+    symbols: ['NIFTY-I', 'BANKNIFTY-I', 'FINNIFTY-I', 'SENSEX-I'],
+    scan_indices: ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX'],
+    strike_moneyness: ['ITM2', 'ITM1', 'ATM', 'OTM1', 'OTM2'],
     w_short: 5,
     w_long: 15,
     stop_points: 80,
@@ -26,7 +37,7 @@ const snapshot = {
     tick_size: 1,
     ib_minutes: 15,
   },
-  readiness: [{ name: 'execution_gate_blocked', ready: true, detail: 'blocked' }],
+  readiness: [],
   session: {
     entries: 42,
     exits: 41,
@@ -51,12 +62,17 @@ const snapshot = {
     lifecycle_action: 'HOLD',
     last_position_quantity: 1,
     exit_fill_price: null,
-    audit_stages: ['opportunity'],
+    audit_stages: [],
   },
   legs: [{
     session_date: '2026-08-14',
     entry_time: '2026-08-14T08:38:00+00:00',
     exit_time: null,
+    symbol: 'NIFTY-I',
+    side: 'BUY',
+    entry_price: 24500,
+    stop_price: 24420,
+    trail_price: 24460,
     entry_mode: 'MICRO',
     exit_mode: 'MICRO',
     peak_mode: 'MICRO',
@@ -67,14 +83,66 @@ const snapshot = {
     quantity: 1,
     flattened: false,
   }],
-  daily: [{ session_date: '2026-08-14', entries: 6, exits: 5, flattened: false, last_quantity: 1 }],
-  quality: { status: 'TRIAL_NOT_A197_QUALITY', li_valid_rate: 1, missing_score_rate: 0.005 },
-  holdout: { label: 'RESEARCH_HOLDOUT_NOT_LIVE', entries: 21, software_complete: true },
+  signals: [
+    {
+      id: 'NIFTY-I-2026-08-14T08:38:00+00:00',
+      underlying: 'NIFTY 50',
+      tape_symbol: 'NIFTY-I',
+      side: 'BUY',
+      option_type: 'CE',
+      spot_entry: 24500,
+      spot_exit: null,
+      spot_sl: 24420,
+      spot_tsl: 24460,
+      entry_time: '2026-08-14T08:38:00+00:00',
+      exit_time: null,
+      score: 0.62,
+      poc: 24405,
+      vwap: 24409.83,
+      cvd: 32055,
+      scanned: true,
+      skip_reason: null,
+      flattened: false,
+      quantity: 1,
+      overlays: ['AT_LVN'],
+      thesis: 'THESIS_VALID',
+      entry_mode: 'MICRO',
+      legs: optionLegs,
+    },
+    {
+      id: 'BANKNIFTY-I-unscanned',
+      underlying: 'NIFTY BANK',
+      tape_symbol: 'BANKNIFTY-I',
+      side: null,
+      option_type: null,
+      spot_entry: null,
+      spot_exit: null,
+      spot_sl: null,
+      spot_tsl: null,
+      entry_time: null,
+      exit_time: null,
+      score: null,
+      poc: null,
+      vwap: null,
+      cvd: null,
+      scanned: false,
+      skip_reason: 'no tape',
+      flattened: true,
+      quantity: 0,
+      overlays: [],
+      thesis: null,
+      entry_mode: null,
+      legs: [],
+    },
+  ],
+  daily: [],
+  quality: null,
+  holdout: null,
   coverage: { symbol: 'NIFTY-I', trading_days: 7, bar_count: 2577, meets_a197: false },
-  walk_forward: { label: 'RESEARCH_PLACEHOLDER_SPLITS', train: 909, validation: 581, test: 1077, ineligible: 5, train_test_overlap: false },
-  mode_counts: { MICRO: 28, SCALP: 30, EXTENDED_SCALP: 21, INTRADAY: 11 },
-  mode_transitions: [{ timestamp: '2026-08-14T08:35:00+00:00', previous_mode: 'INTRADAY', new_mode: 'EXTENDED_SCALP', favorable_points: 91 }],
-  formula_table: { 'F-101': { status: 'RESEARCH_CODE_PRESENT_REGISTRY_LOCKED', reason: 'locked' } },
+  walk_forward: null,
+  mode_counts: {},
+  mode_transitions: [],
+  formula_table: {},
   incomplete_reasons: [],
 };
 
@@ -82,19 +150,30 @@ vi.mock('../../../hooks/useAdaptiveEdge', () => ({
   useAdaptiveEdgeSnapshot: () => ({ data: snapshot, isLoading: false, error: null, refetch: vi.fn(), isFetching: false }),
 }));
 
+vi.mock('../../../hooks/useKite', () => ({
+  useKiteQuote: () => ({ data: {} }),
+}));
+
+vi.mock('../AdaptiveEdgeSetupChart', () => ({
+  AdaptiveEdgeSetupChart: () => <div>Setup chart</div>,
+}));
+
 describe('AdaptiveEdgePane', () => {
-  it('renders the research desk from the last snapshot', () => {
+  it('shows option legs with entry sl tsl time and governance banner', () => {
     render(<AdaptiveEdgePane />);
     expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
-    expect(screen.getAllByText('BOARD READY').length).toBeGreaterThan(0);
-    expect(screen.getByText('ORDERS OFF')).toBeInTheDocument();
-    expect(screen.getByText('WAITING ON HISTORY')).toBeInTheDocument();
-    expect(screen.getByText('DISPLAY ONLY')).toBeInTheDocument();
-    expect(screen.getByText(/MICRO · 28/)).toBeInTheDocument();
-    expect(screen.getAllByText('AT_LVN').length).toBeGreaterThan(0);
-    expect(screen.getByText('LEGS')).toBeInTheDocument();
-    expect(screen.getByText('DAILY LEDGER')).toBeInTheDocument();
-    expect(screen.getByText('BUILDING BLOCKS')).toBeInTheDocument();
+    expect(screen.getByText(/RESEARCH DESK · NOT LIVE/)).toBeInTheDocument();
+    expect(screen.getByText(/That gap is the design, not a bug/)).toBeInTheDocument();
+    expect(screen.getByText('NIFTY25AUG24500CE')).toBeInTheDocument();
+    expect(screen.getAllByText('ATM').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Entry').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SL').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TSL').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/24,405/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/NIFTY BANK · no tape/)).toBeInTheDocument();
+    expect(screen.getAllByText(/AE RESEARCH/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Taken as MICRO/)).toBeNull();
+    expect(screen.getByText('Setup chart')).toBeInTheDocument();
   });
 
   it('opens Adaptive Edge settings from the desk', () => {

@@ -163,7 +163,7 @@ export function KiteTab() {
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
     else if (nav === 'data') content = <DataLakePane />;
-    else if (nav === 'adaptiveEdge') content = <AdaptiveEdgePane />;
+    else if (nav === 'adaptiveEdge') content = <AdaptiveEdgePane onOpenChart={handleOpenInstrument} />;
     else if (nav === 'connect') content = <ConnectPane />;
     else if (nav === 'help') content = <HelpPane />;
   }

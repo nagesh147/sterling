@@ -6,8 +6,14 @@ import { TrueDataCredentialsPanel } from '../TrueDataCredentialsPanel';
 const addMutate = vi.fn();
 const deleteMutate = vi.fn();
 const updateMutate = vi.fn();
+const updateSettingsMutate = vi.fn();
 
 vi.mock('../../../hooks/useTrueData', () => ({
+  useTrueDataSettings: () => ({
+    data: { data_source: 'truedata' },
+    isLoading: false,
+  }),
+  useUpdateTrueDataSettings: () => ({ mutate: updateSettingsMutate, isPending: false }),
   useTrueDataCredentials: () => ({
     data: [
       {
@@ -44,6 +50,19 @@ describe('TrueDataCredentialsPanel', () => {
     addMutate.mockClear();
     deleteMutate.mockClear();
     updateMutate.mockClear();
+    updateSettingsMutate.mockClear();
+  });
+
+  it('renders data source selector with TrueData and Zerodha options', () => {
+    render(<TrueDataCredentialsPanel />);
+    expect(screen.getByText('PRIMARY MARKET DATA SOURCE')).toBeInTheDocument();
+    expect(screen.getByText('ACTIVE: TRUEDATA')).toBeInTheDocument();
+    expect(screen.getByText('TrueData Feed (Recommended)')).toBeInTheDocument();
+    expect(screen.getByText('Zerodha Kite Feed')).toBeInTheDocument();
+
+    const kiteOption = screen.getByText('Zerodha Kite Feed');
+    fireEvent.click(kiteOption);
+    expect(updateSettingsMutate).toHaveBeenCalledWith({ data_source: 'zerodhakite' });
   });
 
   it('renders status card without exposing raw credentials', () => {
@@ -56,10 +75,10 @@ describe('TrueDataCredentialsPanel', () => {
 
   it('allows clicking add button to reveal form with password input', () => {
     render(<TrueDataCredentialsPanel />);
-    const addBtn = screen.getByRole('button', { name: '+ ADD TRUEDATA CREDENTIAL' });
+    const addBtn = screen.getByRole('button', { name: '+ ADD TRUEDATA CREDENTIALS' });
     fireEvent.click(addBtn);
 
-    expect(screen.getByText('ADD TRUEDATA CREDENTIAL')).toBeInTheDocument();
+    expect(screen.getByText('NEW TRUEDATA FEED CREDENTIALS')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('TrueData Username')).toBeInTheDocument();
     
     const passInput = screen.getByPlaceholderText('TrueData Password') as HTMLInputElement;

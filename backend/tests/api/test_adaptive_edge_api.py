@@ -25,3 +25,39 @@ def test_settings_round_trip_and_snapshot_shape():
     assert "readiness" in payload
     assert "mode_counts" in payload
     assert "formula_table" in payload
+    assert "signals" in payload
+    assert payload["production_gate_authorized"] is False
+
+
+def test_settings_accepts_universe_and_ladder():
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    client = TestClient(app)
+    body = client.get("/api/v1/adaptive-edge/settings").json()["settings"]
+    body["scan_indices"] = ["NIFTY 50", "NIFTY BANK"]
+    body["strike_moneyness"] = ["ITM2", "ITM1", "ATM", "OTM1", "OTM2"]
+    put = client.put("/api/v1/adaptive-edge/settings", json=body)
+    assert put.status_code == 200
+    assert put.json()["live_trading"] is False
+    assert put.json()["settings"]["strike_moneyness"] == ["ITM2", "ITM1", "ATM", "OTM1", "OTM2"]
+    assert put.json()["settings"]["symbols"] == ["NIFTY-I", "BANKNIFTY-I"]
+    assert put.json()["settings"]["symbol"] == "NIFTY-I"
+
+
+def test_settings_accepts_engine_scope_fields():
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    client = TestClient(app)
+    body = client.get("/api/v1/adaptive-edge/settings").json()["settings"]
+    body["scan_source"] = "spot"
+    body["scan_stock_contracts"] = False
+    body["scan_all_stocks"] = False
+    body["scan_stocks"] = []
+    body["scan_expiries_indices"] = ["weekly", "monthly"]
+    put = client.put("/api/v1/adaptive-edge/settings", json=body)
+    assert put.status_code == 200
+    saved = put.json()["settings"]
+    assert saved["scan_source"] == "spot"
+    assert saved["scan_stock_contracts"] is False
+    assert saved["scan_expiries"] == ["weekly", "monthly"]
+    assert put.json()["live_trading"] is False

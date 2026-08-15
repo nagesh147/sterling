@@ -407,6 +407,48 @@ def test_a126_cutoff_flattens_open_position():
     assert session.incomplete_reasons == ()
 
 
+def test_session_leg_persists_prices_and_side():
+    from app.engines.adaptive_edge.protection import ProtectionPolicy
+    from app.engines.adaptive_edge.research_e2e import run_research_session
+
+    bars, ticks = _session()
+    late = "2026-08-13T09:20:00+00:00"
+    bars = list(bars) + [
+        CanonicalMarketEvent(
+            record_id="LATE",
+            event_type="bar",
+            instrument_id="NIFTY-I",
+            event_time=late,
+            available_at=late,
+            source="truedata",
+            source_version="2.6",
+            payload={"open": 130.0, "high": 130.0, "low": 130.0, "close": 130.0, "volume": 1.0, "oi": 1.0},
+        )
+    ]
+    ticks = list(ticks) + [_tick(late, 80.0, 20.0, 99)]
+    session = run_research_session(
+        symbol="NIFTY-I",
+        bar_events=bars,
+        tick_events=ticks,
+        params=trial_identity_parameters(w_short=5, w_long=10),
+        bar_sequence_hash="bar",
+        tick_sequence_hash="tick",
+        protection_policy=ProtectionPolicy(
+            label="test",
+            protective_stop_points=25.0,
+            trail_points=10.0,
+        ),
+    )
+    assert session.legs
+    leg = session.legs[0]
+    assert leg.symbol == "NIFTY-I"
+    assert leg.side in {"BUY", "SELL"}
+    assert leg.entry_price is not None
+    assert leg.exit_price is not None
+    assert leg.stop_price is not None
+    assert leg.trail_price is not None
+
+
 def test_research_folds_do_not_overlap_train_and_test():
     from app.engines.adaptive_edge.research_pipeline import (
         ResearchWalkForwardSpec,

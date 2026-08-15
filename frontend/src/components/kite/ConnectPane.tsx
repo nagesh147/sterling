@@ -44,6 +44,9 @@ const S: Record<string, React.CSSProperties> = {
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
 function kiteErrorHelp(msg: string): string | null {
   const m = (msg || '').toLowerCase();
+  if (m.includes('generating `request_token`') || m.includes('generating request_token') || m.includes('re-initiating login') || m.includes('generalexception')) {
+    return 'This error comes directly from Zerodha Kite. Top fix: Check developers.kite.trade to ensure your Kite Connect app subscription is Active (renewed). Also verify API Key and try in an Incognito window.';
+  }
   if (m.includes('not enabled for the app') || m.includes('user is not enabled')) {
     return 'This comes from Zerodha, not Kite Engine. Sign in with the exact User ID that owns the Kite Connect app (+ TOTP). A subscription activated today can take ~15–30 min to enable login — wait, then retry. If it persists, raise a Kite Connect support ticket.';
   }
@@ -57,6 +60,135 @@ function kiteErrorHelp(msg: string): string | null {
     return 'The API key was rejected. Confirm it matches your active Kite Connect app’s key (EDIT KEYS).';
   }
   return null;
+}
+
+function KiteTroubleshooter() {
+  const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'gen_err' | 'not_enabled' | 'token_expired'>('gen_err');
+
+  return (
+    <div style={{ marginTop: 12, marginBottom: 12, border: '1px solid #e2e4e8', borderRadius: 6, background: '#fafbfc', overflow: 'hidden' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '8px 12px',
+          background: 'transparent',
+          border: 0,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 11.5,
+          fontWeight: 650,
+          color: '#444',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: '#f06428', fontWeight: 800 }}>⚡</span>
+          <span>Kite Login Troubleshooter & Step-by-Step Fixes</span>
+        </span>
+        <span style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>{open ? 'Hide ▲' : 'Show Guide ▼'}</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: '10px 12px 14px', borderTop: '1px solid #e8e8e8', background: '#fff' }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            {[
+              { id: 'gen_err' as const, label: '“Error generating request_token”' },
+              { id: 'not_enabled' as const, label: '“User is not enabled”' },
+              { id: 'token_expired' as const, label: '“Token expired / Checksum error”' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  border: `1px solid ${activeTab === tab.id ? '#f06428' : '#e0e0e0'}`,
+                  background: activeTab === tab.id ? 'rgba(240,100,40,.08)' : '#fafafa',
+                  color: activeTab === tab.id ? '#f06428' : '#666',
+                  borderRadius: 4,
+                  padding: '3px 8px',
+                  fontSize: 10.5,
+                  fontWeight: activeTab === tab.id ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'gen_err' && (
+            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: '#c9433e', marginBottom: 6, fontSize: 11 }}>
+                Directly from Zerodha’s Auth Gateway (kite.zerodha.com)
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <li>
+                  <strong>Check Subscription Status:</strong> Log into{' '}
+                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer" style={{ color: '#387ed1', textDecoration: 'underline' }}>
+                    developers.kite.trade
+                  </a>
+                  . Ensure your Kite Connect app status is <strong>Active</strong> (monthly credits active). If expired, renew subscription.
+                </li>
+                <li>
+                  <strong>Verify API Key & Secret:</strong> Re-copy the exact API Key into Sterling’s <em>Edit Keys</em> and confirm there are no leading or trailing spaces.
+                </li>
+                <li>
+                  <strong>Use Incognito / Private Window:</strong> Bypasses stale cookies and active session collisions on kite.zerodha.com.
+                </li>
+                <li>
+                  <strong>Client ID Match:</strong> Sign in with the exact Zerodha User ID associated with the developer app.
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {activeTab === 'not_enabled' && (
+            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: '#f06428', marginBottom: 6, fontSize: 11 }}>
+                Account Authentication & Ownership
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <li>
+                  <strong>Check Developer Account ID:</strong> The Zerodha user ID you log in with must be the exact account that created the app on developers.kite.trade.
+                </li>
+                <li>
+                  <strong>Wait for Propagation:</strong> A newly created app or newly paid subscription can take 15–30 minutes to propagate to Zerodha’s login servers.
+                </li>
+                <li>
+                  <strong>Raise Zerodha Ticket:</strong> If it persists after 30 minutes, raise a ticket at support.zerodha.com under Kite Connect.
+                </li>
+              </ol>
+            </div>
+          )}
+
+          {activeTab === 'token_expired' && (
+            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: '#387ed1', marginBottom: 6, fontSize: 11 }}>
+                Token Handshake & Checksum
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <li>
+                  <strong>Single-Use Tokens:</strong> A <code>request_token</code> expires in ~2 minutes and cannot be reused. Click <em>Open Kite Login</em> again to get a fresh token.
+                </li>
+                <li>
+                  <strong>Verify API Secret:</strong> A checksum error indicates that the API Secret in Sterling does not match the app on developers.kite.trade.
+                </li>
+                <li>
+                  <strong>Enable 1-Click Auto-Connect:</strong> Set the Redirect URL in developers.kite.trade to <code>http://localhost:8000/api/v1/kite/callback</code> for automatic connection without copy-pasting.
+                </li>
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Legacy LoginFlow removed — merged into AccountCard below.
@@ -116,15 +248,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
         </button>
         <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
       </div>
-      <details style={{ marginBottom: 10 }}>
-        <summary style={{ ...S.hint, cursor: 'pointer' }}>Kite says “user is not enabled for the app”?</summary>
-        <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
-          That error is from Zerodha, not Kite Engine — the API key is valid, but your login isn’t enabled for the app yet.
-          Sign in with the exact <strong>User ID that owns the Kite Connect app</strong> (+ TOTP). A subscription activated
-          today can take ~15–30 min to propagate — wait and retry in an incognito window. If it persists, raise a
-          Kite Connect support ticket at support.zerodha.com.
-        </div>
-      </details>
+      <KiteTroubleshooter />
       <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
         ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
         <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
@@ -317,7 +441,17 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
               </div>
               <label style={S.label}>2 · Paste request_token (manual)</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
+                <input
+                  style={S.input}
+                  value={reqToken}
+                  onChange={(e) => setReqToken(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && reqToken.trim() && !gen.isPending) {
+                      gen.mutate({ request_token: reqToken.trim(), account_id: acc.id }, { onSuccess: () => { setReqToken(''); setShowRelogin(false); } });
+                    }
+                  }}
+                  placeholder="request_token from redirect URL"
+                />
                 <button
                   style={S.btnGreen}
                   disabled={!reqToken.trim() || gen.isPending}
@@ -362,8 +496,39 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
           {editKeys && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <input style={S.input} placeholder="New API key (blank = keep)" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
-              <input style={S.input} type="password" placeholder="New API secret (blank = keep)" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password" />
+              <input
+                style={S.input}
+                placeholder="New API key (blank = keep)"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !update.isPending) {
+                    update.mutate({
+                      id: acc.id,
+                      ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+                      ...(apiSecret.trim() ? { api_secret: apiSecret.trim() } : {}),
+                    }, { onSuccess: () => { setEditKeys(false); setApiKey(''); setApiSecret(''); } });
+                  }
+                }}
+                autoComplete="off"
+              />
+              <input
+                style={S.input}
+                type="password"
+                placeholder="New API secret (blank = keep)"
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !update.isPending) {
+                    update.mutate({
+                      id: acc.id,
+                      ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+                      ...(apiSecret.trim() ? { api_secret: apiSecret.trim() } : {}),
+                    }, { onSuccess: () => { setEditKeys(false); setApiKey(''); setApiSecret(''); } });
+                  }
+                }}
+                autoComplete="new-password"
+              />
               <button
                 style={S.btnGreen}
                 disabled={update.isPending}
@@ -392,19 +557,56 @@ function AddAccount() {
   const [apiSecret, setApiSecret] = useState('');
   const [paper, setPaper] = useState(true);
 
+  const submitAdd = () => {
+    if (add.isPending || !apiKey.trim()) return;
+    add.mutate(
+      { label, api_key: apiKey.trim(), api_secret: apiSecret.trim(), is_paper: paper },
+      { onSuccess: () => { setOpen(false); setApiKey(''); setApiSecret(''); } }
+    );
+  };
+
   if (!open) return <button style={S.btnGreen} onClick={() => setOpen(true)}>+ ADD KITE ACCOUNT</button>;
   return (
     <div style={S.card}>
       <div style={S.title}>ADD KITE ACCOUNT</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div><label style={S.label}>LABEL</label><input style={S.input} value={label} onChange={(e) => setLabel(e.target.value)} /></div>
-        <div><label style={S.label}>API KEY</label><input style={S.input} value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Kite Connect API key" autoComplete="off" /></div>
-        <div><label style={S.label}>API SECRET</label><input style={S.input} type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} placeholder="Kite Connect API secret" autoComplete="new-password" /></div>
+        <div>
+          <label style={S.label}>LABEL</label>
+          <input
+            style={S.input}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submitAdd(); }}
+          />
+        </div>
+        <div>
+          <label style={S.label}>API KEY</label>
+          <input
+            style={S.input}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submitAdd(); }}
+            placeholder="Kite Connect API key"
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <label style={S.label}>API SECRET</label>
+          <input
+            style={S.input}
+            type="password"
+            value={apiSecret}
+            onChange={(e) => setApiSecret(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submitAdd(); }}
+            placeholder="Kite Connect API secret"
+            autoComplete="new-password"
+          />
+        </div>
         <label style={{ ...S.label, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
           <input type="checkbox" checked={paper} onChange={(e) => setPaper(e.target.checked)} /> Paper mode (no live trades)
         </label>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={S.btnGreen} disabled={add.isPending || !apiKey.trim()} onClick={() => add.mutate({ label, api_key: apiKey.trim(), api_secret: apiSecret.trim(), is_paper: paper }, { onSuccess: () => { setOpen(false); setApiKey(''); setApiSecret(''); } })}>
+          <button style={S.btnGreen} disabled={add.isPending || !apiKey.trim()} onClick={submitAdd}>
             {add.isPending ? 'ADDING…' : 'ADD'}
           </button>
           <button style={S.btn} onClick={() => setOpen(false)}>CANCEL</button>
@@ -424,44 +626,46 @@ function MarginCalc() {
   const [considerPos, setConsiderPos] = useState(false);
   const [latched, setLatched] = useState<any>(null);
 
-  const calc = () => {
-    let orders: any[];
-    try { orders = JSON.parse(json); } catch { return; }
-    if (method === 'order') orderMargin.mutate(orders, { onSuccess: setLatched });
-    else if (method === 'basket') basketMargin.mutate({ orders, consider_positions: considerPos }, { onSuccess: setLatched });
-    else orderCharges.mutate(orders, { onSuccess: setLatched });
+  const calculate = () => {
+    try {
+      const parsed = JSON.parse(json);
+      if (method === 'order') orderMargin.mutate(parsed, { onSuccess: setLatched });
+      else if (method === 'basket') basketMargin.mutate({ orders: parsed, consider_positions: considerPos }, { onSuccess: setLatched });
+      else if (method === 'charges') orderCharges.mutate(parsed, { onSuccess: setLatched });
+    } catch {
+      alert('Invalid JSON');
+    }
   };
 
-  const result = (method === 'order' ? orderMargin : method === 'basket' ? basketMargin : orderCharges);
-  const label = method === 'order' ? 'ORDER MARGIN' : method === 'basket' ? 'BASKET MARGIN' : 'CHARGES';
+  const busy = orderMargin.isPending || basketMargin.isPending || orderCharges.isPending;
 
   return (
     <div style={S.card}>
       <div style={S.title}>MARGIN & CHARGES CALCULATOR</div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         {(['order', 'basket', 'charges'] as const).map((m) => (
-          <button key={m} style={{ ...S.btn, background: method === m ? '#f1f1f1' : S.btn.background, color: method === m ? '#387ed1' : S.btn.color }} onClick={() => setMethod(m)}>
-            {m === 'order' ? 'Order Margin' : m === 'basket' ? 'Basket Margin' : 'Charges'}
+          <button key={m} style={method === m ? S.btnGreen : S.btn} onClick={() => { setMethod(m); setLatched(null); }}>
+            {m.toUpperCase()}
           </button>
         ))}
+      </div>
+      <textarea
+        style={{ ...S.input, minHeight: 70, fontFamily: 'monospace', fontSize: 11, padding: 8 }}
+        value={json}
+        onChange={(e) => setJson(e.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
         {method === 'basket' && (
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: '#9b9b9b' }}>
+          <label style={{ ...S.label, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
             <input type="checkbox" checked={considerPos} onChange={(e) => setConsiderPos(e.target.checked)} /> Consider positions
           </label>
         )}
-      </div>
-      <textarea
-        style={{ background: '#fff', color: '#444', border: `1px solid #dcdcdc`, borderRadius: 7, padding: 10, fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
-        value={json}
-        onChange={(e) => setJson(e.target.value)}
-        rows={5}
-      />
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-        <button style={S.btnGreen} onClick={calc} disabled={result.isPending}>{result.isPending ? '…' : `CALCULATE ${label}`}</button>
-        {result.error && <span style={S.err}>✗ {result.error.message}</span>}
+        <button style={S.btnGreen} onClick={calculate} disabled={busy}>
+          {busy ? <ButtonLoader /> : 'CALCULATE'}
+        </button>
       </div>
       {latched && (
-        <pre style={{ background: '#f9f9f9', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 10, marginTop: 10, fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 300 }}>
+        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 5, fontSize: 11, overflow: 'auto', maxHeight: 200, marginTop: 8 }}>
           {JSON.stringify(latched, null, 2)}
         </pre>
       )}
@@ -469,12 +673,20 @@ function MarginCalc() {
   );
 }
 
-function TickerControl() {
+function Ticker() {
   const { data: ts } = useKiteTickerStatus(true);
   const sub = useKiteTickerSubscribe();
   const unsub = useKiteTickerUnsubscribe();
   const [tokens, setTokens] = useState('');
   const [mode, setMode] = useState('quote');
+
+  const submitSubscribe = () => {
+    if (sub.isPending) return;
+    sub.mutate({
+      instrument_tokens: tokens.split(',').map(Number).filter((n) => !isNaN(n)),
+      mode,
+    });
+  };
 
   return (
     <div style={S.card}>
@@ -489,7 +701,13 @@ function TickerControl() {
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
           <label style={S.label}>Tokens (comma-separated)</label>
-          <input style={{ ...S.input, width: 260 }} value={tokens} onChange={(e) => setTokens(e.target.value)} placeholder="408065, 356865, 1270529" />
+          <input
+            style={{ ...S.input, width: 260 }}
+            value={tokens}
+            onChange={(e) => setTokens(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submitSubscribe(); }}
+            placeholder="408065, 356865, 1270529"
+          />
         </div>
         <div>
           <label style={S.label}>Mode</label>
@@ -499,10 +717,7 @@ function TickerControl() {
         </div>
         <button
           style={S.btnGreen}
-          onClick={() => sub.mutate({
-            instrument_tokens: tokens.split(',').map(Number).filter((n) => !isNaN(n)),
-            mode,
-          })}
+          onClick={submitSubscribe}
           disabled={sub.isPending}
         >SUBSCRIBE</button>
         <button
@@ -789,7 +1004,7 @@ export function ConnectPane() {
           {section === 'markets' && (
             <>
               {liveTools ? (
-                <><Funds /><MarginCalc /><TickerControl /></>
+                <><Funds /><MarginCalc /><Ticker /></>
               ) : (
                 <div style={S.card}>
                   <div style={S.title}>LIVE ACCOUNT TOOLS</div>
