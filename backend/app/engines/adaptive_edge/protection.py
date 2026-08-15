@@ -116,3 +116,55 @@ class ProtectionEngine:
             lock_active=self.lock_active,
             reason=reason,
         )
+
+
+def get_horizon_protection_policy(
+    horizon: str,
+    base_stop_points: float,
+    atr_points: float = 10.0,
+) -> ProtectionPolicy:
+    """Generate dynamic protection policy calibrated to active horizon mode."""
+    mode = str(horizon).upper()
+    atr = max(1.0, float(atr_points))
+    stop = max(0.5, float(base_stop_points))
+
+    if mode in ("IMPULSE", "MICRO"):
+        return ProtectionPolicy(
+            label="MICRO_IMPULSE",
+            protective_stop_points=stop,
+            trail_points=max(0.5, 0.6 * atr),
+            profit_lock_activation_points=max(1.0, 1.2 * atr),
+            profit_lock_offset_points=max(0.5, 0.4 * atr),
+        )
+    elif mode in ("TACTICAL", "SCALP"):
+        return ProtectionPolicy(
+            label="TACTICAL_SCALP",
+            protective_stop_points=stop * 1.3,
+            trail_points=max(1.0, 1.2 * atr),
+            profit_lock_activation_points=max(2.0, 2.5 * atr),
+            profit_lock_offset_points=max(1.0, 0.9 * atr),
+        )
+    elif mode in ("INTRADAY_SWING", "EXTENDED_SCALP"):
+        return ProtectionPolicy(
+            label="EXTENDED_SWING",
+            protective_stop_points=stop * 1.8,
+            trail_points=max(1.5, 2.0 * atr),
+            profit_lock_activation_points=max(3.5, 4.0 * atr),
+            profit_lock_offset_points=max(1.5, 1.8 * atr),
+        )
+    elif mode in ("SESSION_TREND", "INTRADAY", "SESSION_EXTENSION"):
+        return ProtectionPolicy(
+            label="SESSION_TREND",
+            protective_stop_points=stop * 2.5,
+            trail_points=max(2.0, 3.2 * atr),
+            profit_lock_activation_points=max(5.0, 6.0 * atr),
+            profit_lock_offset_points=max(2.5, 2.8 * atr),
+        )
+    else:
+        return ProtectionPolicy(
+            label="DEFAULT",
+            protective_stop_points=stop,
+            trail_points=max(1.0, atr),
+            profit_lock_activation_points=max(2.0, 2.0 * atr),
+            profit_lock_offset_points=max(0.8, 0.8 * atr),
+        )

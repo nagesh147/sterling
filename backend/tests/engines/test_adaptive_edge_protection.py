@@ -181,3 +181,31 @@ def test_production_readiness_stays_blocked_for_live():
     assert board["a197_dataset"].ready is False
     assert board["parameter_freeze"].ready is False
     assert board["formula_registry_locked"].ready is True
+
+
+def test_get_horizon_protection_policy_scales_by_mode():
+    from app.engines.adaptive_edge.protection import get_horizon_protection_policy
+
+    micro = get_horizon_protection_policy("MICRO", base_stop_points=10.0, atr_points=10.0)
+    assert micro.label == "MICRO_IMPULSE"
+    assert micro.protective_stop_points == 10.0
+    assert micro.trail_points == 6.0
+
+    scalp = get_horizon_protection_policy("SCALP", base_stop_points=10.0, atr_points=10.0)
+    assert scalp.label == "TACTICAL_SCALP"
+    assert scalp.protective_stop_points == 13.0
+    assert scalp.trail_points == 12.0
+
+    intra = get_horizon_protection_policy("INTRADAY", base_stop_points=10.0, atr_points=10.0)
+    assert intra.label == "SESSION_TREND"
+    assert intra.protective_stop_points == 25.0
+    assert intra.trail_points == 32.0
+
+
+def test_check_session_cutoff():
+    from app.engines.adaptive_edge.lifecycle_engine import check_session_cutoff
+
+    # Before 14:45 IST (e.g. 11:30 IST)
+    assert check_session_cutoff("2026-08-13T06:00:00Z") is False  # 11:30 IST
+    # After 14:45 IST (e.g. 14:50 IST = 09:20 UTC)
+    assert check_session_cutoff("2026-08-13T09:20:00Z") is True

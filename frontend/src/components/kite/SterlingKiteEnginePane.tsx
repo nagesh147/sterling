@@ -1885,7 +1885,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const groups: Record<string, typeof filteredRows> = {
-      "Today": [], "Yesterday": [], "Last week": [], "Last 15 days": [],
+      "Today": [], "Yesterday": [], "Last week": [], "Last 15 days": [], "Older": [],
     };
     for (const r of history) {
       const d = new Date(r.timestamp_ms);
@@ -1896,10 +1896,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       else if (diffDays === 1) label = "Yesterday";
       else if (diffDays >= 2 && diffDays <= 7) label = "Last week";
       else if (diffDays >= 8 && diffDays <= 15) label = "Last 15 days";
-      else continue;
+      else label = "Older";
       groups[label].push(r);
     }
-    for (const label of ["Today", "Yesterday", "Last week", "Last 15 days"]) {
+    for (const label of ["Today", "Yesterday", "Last week", "Last 15 days", "Older"]) {
       if (groups[label].length) {
         buckets.push({ label: `${label} (ended)`, rows: applyUserSort(groups[label]) });
       }

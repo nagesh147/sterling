@@ -206,6 +206,37 @@ def pick_strike(
     )
 
 
+def filter_liquid_contracts(
+    rows: Sequence[dict],
+    *,
+    is_stock: bool = False,
+    max_spread_pct: float | None = None,
+    min_volume: int = 0,
+    min_oi: int = 0,
+) -> list[dict]:
+    """Filter out illiquid options, especially wide-spread monthly stock contracts."""
+    if not rows:
+        return []
+    threshold = max_spread_pct if max_spread_pct is not None else (3.5 if is_stock else 1.0)
+    filtered = []
+    for r in rows:
+        bid = float(r.get("bid") or 0.0)
+        ask = float(r.get("ask") or 0.0)
+        vol = int(r.get("volume") or 0)
+        oi = int(r.get("oi") or 0)
+        if min_volume > 0 and vol < min_volume:
+            continue
+        if min_oi > 0 and oi < min_oi:
+            continue
+        if bid > 0 and ask > 0:
+            mid = (bid + ask) / 2.0
+            spread_pct = ((ask - bid) / mid) * 100.0 if mid > 0 else 0.0
+            if spread_pct > threshold:
+                continue
+        filtered.append(r)
+    return filtered if filtered else list(rows)
+
+
 def _default_series(expiry_types: Sequence[ExpiryType]) -> dict[ExpiryType, Sequence[int]]:
     """Legacy callers get all supported user-facing series without extra wiring."""
     return {

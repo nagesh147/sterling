@@ -407,3 +407,24 @@ class A126LifecycleEngine:
             reason=reason,
             evaluated_at=evaluated_at,
         )
+
+
+def check_session_cutoff(as_of: str | int | float | None = None) -> bool:
+    """Check if market time has reached the 14:45 IST normal trading cutoff."""
+    from datetime import datetime, timezone, timedelta, time as dtime
+    ist = timezone(timedelta(hours=5, minutes=30))
+    if as_of is None:
+        now = datetime.now(ist)
+    elif isinstance(as_of, (int, float)):
+        now = datetime.fromtimestamp(as_of / 1000 if as_of > 1e11 else as_of, ist)
+    elif isinstance(as_of, str):
+        try:
+            now = datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(ist)
+        except Exception:
+            return False
+    else:
+        return False
+
+    current_time = now.time()
+    cutoff_start = dtime(14, 45)
+    return current_time >= cutoff_start

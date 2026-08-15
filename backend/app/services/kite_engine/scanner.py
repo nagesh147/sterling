@@ -38,7 +38,7 @@ from app.services.kite_engine.greeks import (
 )
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
-    ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
+    ExpiryType, OptionPick, chain_rows_for, filter_liquid_contracts, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
 from app.services.kite_engine import state
@@ -481,6 +481,8 @@ def attach_strikes(
     """
     today = today or datetime.now(_IST).date()
     chain = chain_rows_for(option_rows, option_name, today)
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+    chain = filter_liquid_contracts(chain, is_stock=is_stock)
     ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
                          moneynesses=ordered, expiry_types=expiry_types, today=today)

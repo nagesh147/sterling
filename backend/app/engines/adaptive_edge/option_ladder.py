@@ -15,6 +15,7 @@ from app.services.kite_engine.greeks import (
     premium_stop_from_move,
 )
 from app.services.kite_engine.strikes import chain_rows_for, pick_strikes
+from .protection import get_horizon_protection_policy
 
 AE_DEFAULT_LADDER = ("ITM2", "ITM1", "ATM", "OTM1", "OTM2")
 ALLOWED_MONEYNESS = {
