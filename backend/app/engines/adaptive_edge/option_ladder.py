@@ -139,14 +139,19 @@ def _stamp_premiums(
     dte_days: float,
     stop_points: float | None,
     trail_points: float | None,
+    iv: float | None = None,
+    option_name: str = "",
 ) -> tuple[float | None, float | None, float | None]:
     if spot <= 0 or strike <= 0:
         return None, None, None
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"} if option_name else False
+    eff_iv = iv if (iv is not None and iv > 0) else (0.32 if is_stock else _IV_ASSUMPTION)
+    eff_dte = max(dte_days, 1.0)
     premium = bs_price(
         spot=spot,
         strike=strike,
-        dte_days=max(dte_days, 1.0),
-        iv=_IV_ASSUMPTION,
+        dte_days=eff_dte,
+        iv=eff_iv,
         option_type=option_type,
     )
     if premium <= 0:
@@ -154,8 +159,8 @@ def _stamp_premiums(
     greeks = black_scholes_greeks(
         spot=spot,
         strike=strike,
-        dte_days=max(dte_days, 1.0),
-        iv=_IV_ASSUMPTION,
+        dte_days=eff_dte,
+        iv=eff_iv,
         option_type=option_type,
     )
     stop_premium = None
@@ -194,6 +199,9 @@ def _labeled_ladder(
     atm = round(spot / step) * step
     option_type = "CE" if side == "BUY" else "PE"
     exchange = OPTION_EXCHANGE.get(option_name.upper(), "NSE")
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+    default_dte = 20.0 if is_stock else 7.0
+    default_iv = 0.32 if is_stock else _IV_ASSUMPTION
     legs: list[AdaptiveEdgeOptionLeg] = []
     for moneyness in moneynesses:
         depth = 0
@@ -208,18 +216,22 @@ def _labeled_ladder(
             side=side,
             strike=strike,
             option_type=option_type,
-            dte_days=7.0,
+            dte_days=default_dte,
             stop_points=stop_points,
             trail_points=trail_points,
+            iv=default_iv,
+            option_name=option_name,
         )
         ltp_prem, _, _ = _stamp_premiums(
             spot=current_spot if (current_spot is not None and current_spot > 0) else spot,
             side=side,
             strike=strike,
             option_type=option_type,
-            dte_days=7.0,
+            dte_days=default_dte,
             stop_points=stop_points,
             trail_points=trail_points,
+            iv=default_iv,
+            option_name=option_name,
         )
         legs.append(
             AdaptiveEdgeOptionLeg(
@@ -320,6 +332,7 @@ def expand_spot_signal(
             dte_days=float(pick.dte or 7),
             stop_points=stop_points,
             trail_points=trail_points,
+            option_name=option_name,
         )
         ltp_prem, _, _ = _stamp_premiums(
             spot=current_spot if (current_spot is not None and current_spot > 0) else spot,
@@ -329,6 +342,7 @@ def expand_spot_signal(
             dte_days=float(pick.dte or 7),
             stop_points=stop_points,
             trail_points=trail_points,
+            option_name=option_name,
         )
         legs.append(
             AdaptiveEdgeOptionLeg(

@@ -34,7 +34,7 @@ from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.services.kite_engine.greeks import (
-    black_scholes_greeks, implied_vol, premium_stop_from_move,
+    black_scholes_greeks, bs_price, implied_vol, premium_stop_from_move,
 )
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
@@ -763,8 +763,21 @@ class KiteEngineScanner:
                     ]
                     if candidates:
                         entry_px = float(max(candidates, key=lambda c: int(c.timestamp_ms)).close)
+                    elif candles and not row.is_fresh:
+                        entry_px = float(candles[0].open or candles[0].close)
                 except Exception as exc:  # noqa: BLE001
                     log.debug("kite-engine spot premium history fail %s: %s", leg.option_symbol, exc)
+            if entry_px <= 0 and not row.is_fresh and (row.spot or 0) > 0 and leg.strike:
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                iv_est = 0.32 if is_stock else 0.18
+                dte = _dte_from_expiry(leg.expiry, row.timestamp_ms)
+                entry_px = bs_price(
+                    spot=float(row.spot),
+                    strike=float(leg.strike),
+                    dte_days=max(dte, 1.0),
+                    iv=iv_est,
+                    option_type=leg.option_type,
+                )
             if entry_px > 0:
                 leg.premium_spot = entry_px
                 _stamp_leg_premium_stops(row, leg)
