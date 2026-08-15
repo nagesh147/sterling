@@ -615,6 +615,7 @@ def build_snapshot_signals(
             spot_sl = spot_sl if spot_sl is not None else policy_sl
             spot_tsl = spot_tsl if spot_tsl is not None else policy_tsl
         spot_entry = _num(raw.get("entry_price")) or spot
+        spot_exit = _num(raw.get("exit_price"))
         live_row = live.get(underlying_for(tape)) or {}
         live_spot = _num(live_row.get("underlying_spot")) or _num(live_row.get("spot"))
         current_spot = live_spot or spot_exit or _num(session.get("exit_fill_price")) or _num(session.get("last_vwap")) or spot_entry
