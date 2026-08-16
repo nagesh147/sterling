@@ -50,7 +50,7 @@ export function AdaptiveEdgePositionCalculator({
   currentLtp,
   optionType = 'CE',
 }: Props) {
-  const initialLotSize = useMemo(() => getInstrumentLotSize(symbol), [symbol]);
+  const lotSize = useMemo(() => getInstrumentLotSize(symbol), [symbol]);
   const baseEntry = defaultEntryPrice ?? currentLtp ?? 100;
   const baseSl = defaultSl ?? Number((baseEntry * 0.8).toFixed(2));
   const baseTsl = defaultTsl ?? baseEntry;
@@ -58,7 +58,6 @@ export function AdaptiveEdgePositionCalculator({
 
   // Editable State
   const [numLots, setNumLots] = useState<number>(1);
-  const [lotSize, setLotSize] = useState<number>(initialLotSize);
   const [entryPrice, setEntryPrice] = useState<number>(baseEntry);
   const [slPrice, setSlPrice] = useState<number>(baseSl);
   const [tslPrice, setTslPrice] = useState<number>(baseTsl);
@@ -66,7 +65,6 @@ export function AdaptiveEdgePositionCalculator({
 
   const isCustomized =
     numLots !== 1 ||
-    lotSize !== initialLotSize ||
     entryPrice !== baseEntry ||
     slPrice !== baseSl ||
     tslPrice !== baseTsl ||
@@ -74,7 +72,6 @@ export function AdaptiveEdgePositionCalculator({
 
   const resetDefaults = () => {
     setNumLots(1);
-    setLotSize(initialLotSize);
     setEntryPrice(baseEntry);
     setSlPrice(baseSl);
     setTslPrice(baseTsl);
@@ -250,29 +247,31 @@ export function AdaptiveEdgePositionCalculator({
           </div>
         </div>
 
-        {/* Lot Size */}
+        {/* Lot Size (Fixed Exchange Contract Spec) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <label style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
             Lot Size
           </label>
-          <input
-            type="number"
-            min={1}
-            step={5}
-            value={lotSize}
-            onChange={(e) => setLotSize(Math.max(1, Number(e.target.value)))}
+          <div
             style={{
               height: 22,
-              padding: '0 6px',
-              fontSize: 11,
-              fontWeight: 500,
+              padding: '0 8px',
+              fontSize: 11.5,
+              fontWeight: 600,
               borderRadius: 2,
               border: `1px solid ${k.border}`,
-              background: k.bg,
+              background: k.surfaceHover,
               color: k.text,
-              outline: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              userSelect: 'none',
+              fontVariantNumeric: 'tabular-nums',
             }}
-          />
+            title="Exchange-fixed contract lot size"
+          >
+            {lotSize}
+          </div>
         </div>
 
         {/* Entry Price */}
