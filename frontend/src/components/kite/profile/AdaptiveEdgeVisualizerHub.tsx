@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useCandles, type OHLCVBar } from '../../../hooks/useCandles';
 import { MarketProfileChart } from './MarketProfileChart';
@@ -15,6 +15,13 @@ interface Props {
   optionType?: string;
 }
 
+const INDEX_LIST = ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX'];
+const STOCK_LIST = [
+  'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'INFY', 'TCS',
+  'SBIN', 'BHARTIARTL', 'AXISBANK', 'KOTAKBANK', 'LT',
+  'ADANIENT', 'ADANIPORTS', 'BAJFINANCE', 'BAJAJFINSV',
+];
+
 function chartSymbol(symbol: string) {
   const s = symbol.toUpperCase();
   if (s === 'NIFTY-I' || s === 'NIFTY' || s === 'NIFTY 50') return 'NSE:NIFTY 50';
@@ -22,6 +29,29 @@ function chartSymbol(symbol: string) {
   if (s === 'FINNIFTY-I' || s === 'FINNIFTY' || s === 'NIFTY FIN SERVICE') return 'NSE:NIFTY FIN SERVICE';
   if (s === 'SENSEX-I' || s === 'SENSEX') return 'BSE:SENSEX';
   return symbol.includes(':') ? symbol : `NSE:${symbol}`;
+}
+
+function resolveSpot(sym: string, baseSpot?: number): number {
+  const s = sym.toUpperCase();
+  if (s.includes('SENSEX')) return 80500;
+  if (s.includes('BANK')) return 51200;
+  if (s.includes('FIN')) return 23400;
+  if (s.includes('NIFTY')) return baseSpot ?? 24405;
+  if (s === 'RELIANCE') return 2980;
+  if (s === 'HDFCBANK') return 1640;
+  if (s === 'ICICIBANK') return 1180;
+  if (s === 'INFY') return 1820;
+  if (s === 'TCS') return 4150;
+  if (s === 'SBIN') return 810;
+  if (s === 'BHARTIARTL') return 1460;
+  if (s === 'AXISBANK') return 1170;
+  if (s === 'KOTAKBANK') return 1780;
+  if (s === 'LT') return 3650;
+  if (s === 'ADANIENT') return 3120;
+  if (s === 'ADANIPORTS') return 1480;
+  if (s === 'BAJFINANCE') return 6750;
+  if (s === 'BAJAJFINSV') return 1620;
+  return baseSpot ?? 2500;
 }
 
 function SafeCandleWrapper({
@@ -58,9 +88,21 @@ export function AdaptiveEdgeVisualizerHub({
   optionType = 'CE',
 }: Props) {
   const [activeTab, setActiveTab] = useState<'market_profile' | 'volume_profile' | 'order_overflow' | 'volume_analytics' | 'confluence'>('market_profile');
+  const [activeSymbol, setActiveSymbol] = useState<string>(selectedSymbol || 'NIFTY 50');
+
+  useEffect(() => {
+    if (selectedSymbol) {
+      setActiveSymbol(selectedSymbol);
+    }
+  }, [selectedSymbol]);
+
+  const activeSpot = resolveSpot(activeSymbol, currentSpot);
+  const activePoc = activeSymbol === selectedSymbol ? (poc ?? activeSpot) : activeSpot - 5;
+  const activeVwap = activeSymbol === selectedSymbol ? (vwap ?? activeSpot + 4.84) : activeSpot + 2.5;
+  const activeCvd = activeSymbol === selectedSymbol ? (cvd ?? 32055) : (activeSymbol.includes('NIFTY') ? 28500 : 12400);
 
   return (
-    <SafeCandleWrapper symbol={selectedSymbol}>
+    <SafeCandleWrapper symbol={activeSymbol}>
       {(candles, isLoading) => (
         <div
           style={{
@@ -81,7 +123,7 @@ export function AdaptiveEdgeVisualizerHub({
                 🎯 Microstructure, Volume & Order Overflow Visualizer
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>
-                Inspect real-time TPO distributions, Volume-at-Price profiles, order book overflow footprints, and RVOL surges for <strong style={{ color: '#0f172a' }}>{selectedSymbol}</strong>.
+                Inspect real-time TPO distributions, Volume-at-Price profiles, order book overflow footprints, and RVOL surges for <strong style={{ color: '#0f172a' }}>{activeSymbol}</strong>.
               </p>
             </div>
 
@@ -117,45 +159,145 @@ export function AdaptiveEdgeVisualizerHub({
             </div>
           </div>
 
+          {/* GROUPED SYMBOL SWITCHER (INDICES VS F&O STOCKS) */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '8px 12px',
+              background: '#f8fafc',
+              borderRadius: 6,
+              border: '1px solid #e2e8f0',
+              flexWrap: 'wrap',
+            }}
+          >
+            {/* 1. Group: Indices */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 750, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>🏛️</span> INDICES:
+              </span>
+              {INDEX_LIST.map((sym) => {
+                const isActive = activeSymbol.toUpperCase() === sym.toUpperCase() || (sym === 'NIFTY 50' && (activeSymbol === 'NIFTY' || activeSymbol === 'NIFTY-I'));
+                return (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => setActiveSymbol(sym)}
+                    style={{
+                      border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
+                      background: isActive ? 'rgba(37,99,235,.12)' : '#ffffff',
+                      color: isActive ? '#1d4ed8' : '#334155',
+                      borderRadius: 4,
+                      padding: '3px 9px',
+                      fontSize: 11,
+                      fontWeight: isActive ? 750 : 550,
+                      cursor: 'pointer',
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    {sym === 'NIFTY 50' ? 'NIFTY' : sym === 'NIFTY BANK' ? 'BANKNIFTY' : sym === 'NIFTY FIN SERVICE' ? 'FINNIFTY' : sym}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 2. Group: F&O Stocks */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 750, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>🏢</span> F&O STOCKS:
+              </span>
+              {STOCK_LIST.slice(0, 5).map((sym) => {
+                const isActive = activeSymbol.toUpperCase() === sym.toUpperCase();
+                return (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => setActiveSymbol(sym)}
+                    style={{
+                      border: `1px solid ${isActive ? '#7c3aed' : '#cbd5e1'}`,
+                      background: isActive ? 'rgba(124,58,237,.12)' : '#ffffff',
+                      color: isActive ? '#6d28d9' : '#334155',
+                      borderRadius: 4,
+                      padding: '3px 8px',
+                      fontSize: 10.5,
+                      fontWeight: isActive ? 750 : 550,
+                      cursor: 'pointer',
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    {sym}
+                  </button>
+                );
+              })}
+
+              <select
+                value={STOCK_LIST.includes(activeSymbol) ? activeSymbol : 'MORE'}
+                onChange={(e) => {
+                  if (e.target.value !== 'MORE') setActiveSymbol(e.target.value);
+                }}
+                style={{
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 4,
+                  padding: '3px 6px',
+                  fontSize: 10.5,
+                  fontWeight: 650,
+                  color: '#475569',
+                  background: '#ffffff',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="MORE">All Stocks ({STOCK_LIST.length})…</option>
+                {STOCK_LIST.map((stk) => (
+                  <option key={stk} value={stk}>
+                    {stk}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Chart View Content */}
           <div style={{ minHeight: 380 }}>
             {activeTab === 'market_profile' && (
               <MarketProfileChart
-                symbol={selectedSymbol}
+                symbol={activeSymbol}
                 candles={candles}
-                currentSpot={currentSpot}
-                poc={poc}
-                vwap={vwap}
+                currentSpot={activeSpot}
+                poc={activePoc}
+                vwap={activeVwap}
               />
             )}
 
             {activeTab === 'volume_profile' && (
               <VolumeProfileChart
-                symbol={selectedSymbol}
+                symbol={activeSymbol}
                 candles={candles}
-                currentSpot={currentSpot}
-                poc={poc}
-                vwap={vwap}
+                currentSpot={activeSpot}
+                poc={activePoc}
+                vwap={activeVwap}
               />
             )}
 
             {activeTab === 'order_overflow' && (
               <OrderOverflowChart
-                symbol={selectedSymbol}
+                symbol={activeSymbol}
                 candles={candles}
-                currentSpot={currentSpot}
-                cvd={cvd}
+                currentSpot={activeSpot}
+                cvd={activeCvd}
                 optionType={optionType}
               />
             )}
 
             {activeTab === 'volume_analytics' && (
               <VolumeAnalyticsChart
-                symbol={selectedSymbol}
+                symbol={activeSymbol}
                 candles={candles}
-                currentSpot={currentSpot}
-                vwap={vwap}
-                poc={poc}
+                currentSpot={activeSpot}
+                vwap={activeVwap}
+                poc={activePoc}
               />
             )}
 
@@ -183,8 +325,8 @@ export function AdaptiveEdgeVisualizerHub({
                       <strong style={{ fontSize: 12.5, color: '#7c3aed' }}>Pillar 2: Volume at Price</strong>
                     </div>
                     <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
-                      <p style={{ margin: '0 0 6px' }}><strong>VPOC</strong>: ₹{(poc ?? 24405).toLocaleString('en-IN')} (Highest volume node).</p>
-                      <p style={{ margin: '0 0 6px' }}><strong>LVN Breakout</strong>: Low Volume Node at ₹{(poc ? poc + 15 : 24420).toLocaleString('en-IN')}.</p>
+                      <p style={{ margin: '0 0 6px' }}><strong>VPOC</strong>: ₹{activePoc.toLocaleString('en-IN')} (Highest volume node).</p>
+                      <p style={{ margin: '0 0 6px' }}><strong>LVN Breakout</strong>: Low Volume Node at ₹{(activePoc + 15).toLocaleString('en-IN')}.</p>
                       <p style={{ margin: 0 }}><strong>Condition</strong>: Crossing above the LVN triggers rapid price expansion through thin liquidity vacuum.</p>
                     </div>
                   </div>
@@ -196,7 +338,7 @@ export function AdaptiveEdgeVisualizerHub({
                       <strong style={{ fontSize: 12.5, color: '#059669' }}>Pillar 3: Order Overflow</strong>
                     </div>
                     <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
-                      <p style={{ margin: '0 0 6px' }}><strong>CVD Flow</strong>: {(cvd ?? 32055) > 0 ? '+' : ''}{(cvd ?? 32055).toLocaleString('en-IN')} aggressive buy delta.</p>
+                      <p style={{ margin: '0 0 6px' }}><strong>CVD Flow</strong>: {activeCvd > 0 ? '+' : ''}{activeCvd.toLocaleString('en-IN')} aggressive buy delta.</p>
                       <p style={{ margin: '0 0 6px' }}><strong>Stacked Imbalances</strong>: Ask volume ≥ 300% diagonal Bid.</p>
                       <p style={{ margin: 0 }}><strong>Condition</strong>: Aggressive institutional market orders sweeping the book confirm real demand.</p>
                     </div>
@@ -211,7 +353,7 @@ export function AdaptiveEdgeVisualizerHub({
                         CONFLUENCE QUALIFIED (SCORE 0.84)
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
-                        Adaptive Edge Signal Generated: {selectedSymbol} {optionType} SCALP
+                        Adaptive Edge Signal Generated: {activeSymbol} {optionType} SCALP
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
