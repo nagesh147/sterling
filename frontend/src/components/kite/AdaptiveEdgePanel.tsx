@@ -601,7 +601,7 @@ function StatCard({
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
-        minWidth: 85,
+        minWidth: 80,
       }}
     >
       <div style={{ fontSize: 9.5, fontWeight: 650, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -625,14 +625,17 @@ export function AdaptiveEdgePanel({
   selectedId,
   onSelect,
   onInspectSymbol,
+  inlineExpand = false,
 }: {
   rows: AdaptiveEdgeRow[];
   quotes?: Record<string, any>;
   selectedId?: string | null;
   onSelect?: (row: AdaptiveEdgeRow) => void;
   onInspectSymbol?: (symbol: string) => void;
+  inlineExpand?: boolean;
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopy = (e: React.MouseEvent, instrument: string, id: string) => {
@@ -686,6 +689,7 @@ export function AdaptiveEdgePanel({
 
   const renderRow = (row: AdaptiveEdgeRow, rIdx: number) => {
     const selected = row.id === selectedId;
+    const isExpanded = inlineExpand && expandedRowId === row.id;
     const liveLtp = resolveLiveLtp(row, quotes);
     const entryDiff = liveLtp != null && row.entry != null ? liveLtp - row.entry : null;
 
@@ -703,364 +707,373 @@ export function AdaptiveEdgePanel({
     const isCE = row.optionType === 'CE';
     const isProfit = entryDiff != null && entryDiff > 0;
 
+    const onRowClick = () => {
+      if (inlineExpand) {
+        setExpandedRowId((prev) => (prev === row.id ? null : row.id));
+      }
+      onSelect?.(row);
+    };
+
     return (
       <React.Fragment key={row.id}>
         <tr
-          onClick={() => onSelect?.(row)}
+          onClick={onRowClick}
           style={{
-            background: selected
+            background: selected || isExpanded
               ? C.selectedBg
               : rIdx % 2 === 1
               ? '#fafafa'
               : '#ffffff',
-          cursor: 'pointer',
-          borderBottom: `1px solid ${C.border}`,
-          transition: 'background 0.12s ease',
-          borderLeft: selected ? `3px solid ${C.selectedBorder}` : '3px solid transparent',
-        }}
-      >
-        {/* 1. Instrument & Underlying */}
-        <td style={{ padding: '8px 12px 8px 24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
-            <span style={{ fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
-              {row.instrument}
-            </span>
-            {row.origin === 'adaptive_edge' ? (
-              <span
-                title="Origin: Adaptive Edge Microstructure Model"
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  background: C.orangeBg,
-                  color: C.orange,
-                  border: `1px solid ${C.orangeBorder}`,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                AE RESEARCH
+            cursor: 'pointer',
+            borderBottom: `1px solid ${C.border}`,
+            transition: 'background 0.12s ease',
+            borderLeft: selected || isExpanded ? `3px solid ${C.selectedBorder}` : '3px solid transparent',
+          }}
+        >
+          {/* 1. Instrument & Underlying */}
+          <td style={{ padding: '8px 12px 8px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+              <span style={{ fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
+                {row.instrument}
               </span>
-            ) : (
-              <span
-                title="Origin: Spot Scan (SuperTrend Direction)"
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  background: C.blueBg,
-                  color: C.blue,
-                  border: `1px solid ${C.blueBorder}`,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                SPOT SCAN (ST)
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <span style={{ fontSize: 11, color: C.muted }}>{row.underlying}</span>
-            {onInspectSymbol && (
-              <button
-                type="button"
-                title={`Open Market Profile & Order Flow charts for ${row.underlying}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onInspectSymbol(row.underlying);
-                }}
-                style={{
-                  border: `1px solid ${C.blueBorder}`,
-                  background: C.blueBg,
-                  color: C.blueText,
-                  borderRadius: 3,
-                  padding: '1px 5px',
-                  fontSize: 9.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                🌊 Chart
-              </button>
-            )}
-          </div>
-        </td>
-
-        {/* 2. Mode Badge */}
-        <td style={{ padding: '8px 12px' }}>
-          <span
-            title={badge.title}
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.02em',
-              padding: '2px 7px',
-              borderRadius: 4,
-              background: badge.bg,
-              color: badge.color,
-              border: badge.border,
-              whiteSpace: 'nowrap',
-              display: 'inline-block',
-            }}
-          >
-            {badge.label}
-          </span>
-        </td>
-
-        {/* 3. Exchange */}
-        <td style={{ padding: '8px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
-          {row.exchange}
-        </td>
-
-        {/* 4. Leg & Option Strike */}
-        <td style={{ padding: '8px 12px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 750,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: isCE ? C.emeraldBg : C.roseBg,
-                color: isCE ? C.emeraldText : C.roseText,
-                border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
-              }}
-            >
-              {row.optionType || 'CE'}
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 650, color: C.text }}>
-              {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
-            </span>
-          </div>
-        </td>
-
-        {/* 5. Entry & MTM */}
-        <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-          <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>
-            {fmt(row.entry)}
-          </div>
-          {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                fontVariantNumeric: 'tabular-nums',
-                marginTop: 1,
-                color: isProfit ? C.emeraldText : C.roseText,
-              }}
-            >
-              <span>
-                ({entryDiff > 0 ? '+' : ''}
-                {fmt(entryDiff)})
-              </span>
-            </div>
-          )}
-        </td>
-
-        {/* 6. Protective SL */}
-        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted, fontWeight: 600 }}>
-          {fmt(row.sl)}
-        </td>
-
-        {/* 7. Trailing SL */}
-        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
-          {fmt(row.tsl)}
-        </td>
-
-        {/* 8. Exit Price */}
-        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
-          {fmt(row.exit)}
-        </td>
-
-        {/* 9. Current LTP */}
-        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
-          {fmt(liveLtp)}
-        </td>
-
-        {/* 10. Timestamp */}
-        <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
-          {when(row.entryTime)}
-        </td>
-
-        {/* 11. Status */}
-        <td style={{ padding: '8px 12px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: row.open ? '#10b981' : '#94a3b8',
-              }}
-            />
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: row.open ? '#059669' : '#64748b',
-              }}
-            >
-              {row.open ? 'Open' : 'Closed'}
-            </span>
-          </div>
-        </td>
-      </tr>
-
-      {/* Expanded Row Detail Drawer */}
-      {selected && (
-        <tr key={`${row.id}-details`} style={{ background: '#f8fafc', borderBottom: `2px solid ${C.border}` }}>
-          <td colSpan={COLUMNS.length} style={{ padding: '14px 20px 18px 24px', background: '#f8fafc' }}>
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-                background: '#ffffff',
-                border: `1px solid ${C.border}`,
-                borderRadius: 8,
-                padding: 16,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-              }}
-            >
-              {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                  🎯 Option Strike Execution (₹ Premiums)
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
-                  <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={C.text} />
-                  <StatCard label="Stop (SL)" value={`₹${fmt(row.sl)}`} color={C.muted} />
-                  <StatCard label="Trail (TSL)" value={`₹${fmt(row.tsl)}`} color={C.orangeText} />
-                  <StatCard label="Exit" value={row.exit ? `₹${fmt(row.exit)}` : '—'} color={C.muted} />
-                  <StatCard
-                    label="Current LTP"
-                    value={`₹${fmt(liveLtp)}`}
-                    subvalue={
-                      entryDiff != null
-                        ? `${entryDiff >= 0 ? '+' : ''}${fmt(entryDiff)} pts`
-                        : undefined
-                    }
-                    color={
-                      entryDiff != null
-                        ? entryDiff >= 0
-                          ? C.emeraldText
-                          : C.roseText
-                        : C.text
-                    }
-                    bg={
-                      entryDiff != null
-                        ? entryDiff >= 0
-                          ? C.emeraldBg
-                          : C.roseBg
-                        : '#ffffff'
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* 2. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                  🌊 Spot Microstructure & Order Flow Anchor
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
-                  <StatCard label="Spot Entry" value={`₹${fmt(row.spotEntry ?? (row.underlying.includes('BANK') ? 51200 : 24465), 0)}`} color={C.text} />
-                  <StatCard label="Spot SL" value={`₹${fmt(row.spotSl ?? (row.underlying.includes('BANK') ? 51120 : 24385), 0)}`} color={C.muted} />
-                  <StatCard label="Spot TSL" value={`₹${fmt(row.spotTsl ?? (row.underlying.includes('BANK') ? 51160 : 24425), 0)}`} color={C.orangeText} />
-                  <StatCard label="POC Anchor" value={`₹${fmt(row.poc ?? (row.underlying.includes('BANK') ? 51180 : 24405), 0)}`} color={C.purpleText} />
-                  <StatCard label="Session VWAP" value={`₹${fmt(row.vwap ?? (row.underlying.includes('BANK') ? 51190.5 : 24406.92))}`} color={C.blueText} />
-                  <StatCard label="Order Flow CVD" value={`${(row.cvd ?? 39075) > 0 ? '+' : ''}${fmt(row.cvd ?? 39075, 0)}`} color={C.emeraldText} />
-                  <StatCard label="Model Score" value={row.score != null ? `${fmt(row.score, 2)}` : '0.09'} color={C.text} />
-                  <StatCard label="Horizon" value={row.horizon || 'IMPULSE'} color={C.muted} />
-                </div>
-              </div>
-
-              {/* 3. VISUALIZER AREA CHART & BOUNDS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    📈 Price Trajectory & Execution Bounds
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: C.muted }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <span style={{ width: 8, height: 2, background: '#2563eb' }} /> Entry
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <span style={{ width: 8, height: 2, background: '#ef4444' }} /> SL
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <span style={{ width: 8, height: 2, background: '#f59e0b' }} /> TSL
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ height: 220, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                  <AdaptiveEdgeSetupChart
-                    symbol={row.underlying || row.instrument}
-                    entryTime={row.entryTime}
-                    exitTime={row.exitTime}
-                    spotEntry={row.spotEntry}
-                    spotSl={row.spotSl}
-                    spotTsl={row.spotTsl}
-                    spotExit={row.spotExit}
-                    isBullish={row.optionType === 'CE'}
-                  />
-                </div>
-              </div>
-
-              {/* 4. ACTIONS */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingTop: 2 }}>
-                {onInspectSymbol && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onInspectSymbol(row.underlying);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '8px 14px',
-                      background: C.blue,
-                      color: '#ffffff',
-                      border: 0,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 650,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    📈 Open Interactive Chart
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={(e) => handleCopy(e, row.instrument, row.id)}
+              {row.origin === 'adaptive_edge' ? (
+                <span
+                  title="Origin: Adaptive Edge Microstructure Model"
                   style={{
-                    padding: '8px 14px',
-                    background: '#ffffff',
-                    color: C.text,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    background: C.orangeBg,
+                    color: C.orange,
+                    border: `1px solid ${C.orangeBorder}`,
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {copiedId === row.id ? '✓ Copied!' : '📋 Copy Symbol'}
-                </button>
+                  AE RESEARCH
+                </span>
+              ) : (
+                <span
+                  title="Origin: Spot Scan (SuperTrend Direction)"
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    background: C.blueBg,
+                    color: C.blue,
+                    border: `1px solid ${C.blueBorder}`,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  SPOT SCAN (ST)
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>
+                {row.underlying}
+              </span>
+              {row.strike != null && (
+                <span style={{ fontSize: 10.5, color: C.dim, fontVariantNumeric: 'tabular-nums' }}>
+                  ₹{fmt(row.strike, 0)}
+                </span>
+              )}
+            </div>
+          </td>
+
+          {/* 2. Type & Mode */}
+          <td style={{ padding: '8px 12px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 11,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  background: isCE ? C.emeraldBg : C.roseBg,
+                  color: isCE ? C.emeraldText : C.roseText,
+                  border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
+                  display: 'inline-block',
+                }}
+              >
+                {row.optionType || 'CE'}
+              </span>
+              <span
+                title={badge.title}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: badge.bg,
+                  color: badge.color,
+                  border: badge.border,
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}
+              >
+                {badge.label}
+              </span>
+            </div>
+          </td>
+
+          {/* 3. Exchange */}
+          <td style={{ padding: '8px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
+            {row.exchange}
+          </td>
+
+          {/* 4. Leg & Option Strike */}
+          <td style={{ padding: '8px 12px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 750,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  background: isCE ? C.emeraldBg : C.roseBg,
+                  color: isCE ? C.emeraldText : C.roseText,
+                  border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
+                  display: 'inline-block',
+                }}
+              >
+                {row.optionType || 'CE'}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: C.text }}>
+                {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
+              </span>
+            </div>
+          </td>
+
+          {/* 5. Entry & MTM */}
+          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+            <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>
+              {fmt(row.entry)}
+            </div>
+            {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  fontVariantNumeric: 'tabular-nums',
+                  marginTop: 1,
+                  color: isProfit ? C.emeraldText : C.roseText,
+                }}
+              >
+                <span>
+                  ({entryDiff > 0 ? '+' : ''}
+                  {fmt(entryDiff)})
+                </span>
               </div>
+            )}
+          </td>
+
+          {/* 6. Stop Loss (SL) */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}>
+            {fmt(row.sl)}
+          </td>
+
+          {/* 7. Trailing Stop (TSL) */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
+            {fmt(row.tsl)}
+          </td>
+
+          {/* 8. Exit Price */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
+            {fmt(row.exit)}
+          </td>
+
+          {/* 9. Current LTP */}
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
+            {fmt(liveLtp)}
+          </td>
+
+          {/* 10. Timestamp */}
+          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
+            {when(row.entryTime)}
+          </td>
+
+          {/* 11. Status */}
+          <td style={{ padding: '8px 12px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: row.open ? '#10b981' : '#94a3b8',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  color: row.open ? '#059669' : '#64748b',
+                }}
+              >
+                {row.open ? 'Open' : 'Closed'}
+              </span>
             </div>
           </td>
         </tr>
-      )}
-    </React.Fragment>
-  );
+
+        {/* Expanded Row Detail Drawer (Right Sidebar Mode) */}
+        {isExpanded && (
+          <tr key={`${row.id}-details`} style={{ background: '#f8fafc', borderBottom: `2px solid ${C.border}` }}>
+            <td colSpan={COLUMNS.length} style={{ padding: '14px 16px 18px', background: '#f8fafc' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  background: '#ffffff',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  padding: 16,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                }}
+              >
+                {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                    🎯 Option Strike Execution (₹ Premiums)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
+                    <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={C.text} />
+                    <StatCard label="Stop (SL)" value={`₹${fmt(row.sl)}`} color={C.muted} />
+                    <StatCard label="Trail (TSL)" value={`₹${fmt(row.tsl)}`} color={C.orangeText} />
+                    <StatCard label="Exit" value={row.exit ? `₹${fmt(row.exit)}` : '—'} color={C.muted} />
+                    <StatCard
+                      label="Current LTP"
+                      value={`₹${fmt(liveLtp)}`}
+                      subvalue={
+                        entryDiff != null
+                          ? `${entryDiff >= 0 ? '+' : ''}${fmt(entryDiff)} pts`
+                          : undefined
+                      }
+                      color={
+                        entryDiff != null
+                          ? entryDiff >= 0
+                            ? C.emeraldText
+                            : C.roseText
+                          : C.text
+                      }
+                      bg={
+                        entryDiff != null
+                          ? entryDiff >= 0
+                            ? C.emeraldBg
+                            : C.roseBg
+                          : '#ffffff'
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* 2. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                    🌊 Spot Microstructure & Order Flow Anchor
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
+                    <StatCard label="Spot Entry" value={`₹${fmt(row.spotEntry ?? (row.underlying.includes('BANK') ? 51200 : 24465), 0)}`} color={C.text} />
+                    <StatCard label="Spot SL" value={`₹${fmt(row.spotSl ?? (row.underlying.includes('BANK') ? 51120 : 24385), 0)}`} color={C.muted} />
+                    <StatCard label="Spot TSL" value={`₹${fmt(row.spotTsl ?? (row.underlying.includes('BANK') ? 51160 : 24425), 0)}`} color={C.orangeText} />
+                    <StatCard label="POC Anchor" value={`₹${fmt(row.poc ?? (row.underlying.includes('BANK') ? 51180 : 24405), 0)}`} color={C.purpleText} />
+                    <StatCard label="Session VWAP" value={`₹${fmt(row.vwap ?? (row.underlying.includes('BANK') ? 51190.5 : 24406.92))}`} color={C.blueText} />
+                    <StatCard label="Order Flow CVD" value={`${(row.cvd ?? 39075) > 0 ? '+' : ''}${fmt(row.cvd ?? 39075, 0)}`} color={C.emeraldText} />
+                    <StatCard label="Model Score" value={row.score != null ? `${fmt(row.score, 2)}` : '0.09'} color={C.text} />
+                    <StatCard label="Horizon" value={row.horizon || 'IMPULSE'} color={C.muted} />
+                  </div>
+                </div>
+
+                {/* 3. VISUALIZER AREA CHART & BOUNDS */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      📈 Price Trajectory & Execution Bounds
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: C.muted }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 8, height: 2, background: '#2563eb' }} /> Entry
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 8, height: 2, background: '#ef4444' }} /> SL
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 8, height: 2, background: '#f59e0b' }} /> TSL
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ height: 200, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+                    <AdaptiveEdgeSetupChart
+                      symbol={row.underlying || row.instrument}
+                      entryTime={row.entryTime}
+                      exitTime={row.exitTime}
+                      spotEntry={row.spotEntry}
+                      spotSl={row.spotSl}
+                      spotTsl={row.spotTsl}
+                      spotExit={row.spotExit}
+                      isBullish={row.optionType === 'CE'}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. ACTIONS */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingTop: 2 }}>
+                  {onInspectSymbol && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onInspectSymbol(row.underlying);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 14px',
+                        background: C.blue,
+                        color: '#ffffff',
+                        border: 0,
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 650,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      📈 Open Interactive Chart
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleCopy(e, row.instrument, row.id)}
+                    style={{
+                      padding: '8px 14px',
+                      background: '#ffffff',
+                      color: C.text,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {copiedId === row.id ? '✓ Copied!' : '📋 Copy Symbol'}
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
   };
 
   return (

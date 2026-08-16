@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { AdaptiveEdgePanel, resolveLiveLtp, rowsFromSnapshot } from '../AdaptiveEdgePanel';
 import type { AdaptiveEdgeSnapshot } from '../../../types/adaptiveEdge';
+
+vi.mock('../AdaptiveEdgeSetupChart', () => ({
+  AdaptiveEdgeSetupChart: () => <div>Setup chart</div>,
+}));
 
 const snapshot = {
   settings: { symbol: 'NIFTY-I' },
@@ -274,5 +278,28 @@ describe('AdaptiveEdgePanel', () => {
     expect(aeRow?.whyClosed).toContain('gave back too much of the peak');
     expect(stRow?.whyClosed).toContain('spot scan ended');
     expect(stRow?.whyClosed).not.toContain('gave back too much of the peak');
+  });
+
+  it('expands option strike execution and microstructure drawer on row click when inlineExpand is true', () => {
+    const rows = rowsFromSnapshot(snapshot as unknown as AdaptiveEdgeSnapshot);
+    render(<AdaptiveEdgePanel rows={rows} inlineExpand={true} />);
+
+    // Initially drawer is not visible
+    expect(screen.queryByText(/Option Strike Execution/)).toBeNull();
+
+    // Click on row
+    const rowEl = screen.getByText('NIFTY25AUG24500CE').closest('tr')!;
+    fireEvent.click(rowEl);
+
+    // Drawer should now be visible
+    expect(screen.getByText(/Option Strike Execution/)).toBeInTheDocument();
+    expect(screen.getByText(/Spot Microstructure & Order Flow Anchor/)).toBeInTheDocument();
+    expect(screen.getByText(/Price Trajectory & Execution Bounds/)).toBeInTheDocument();
+    expect(screen.getByText('Setup chart')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Symbol/ })).toBeInTheDocument();
+
+    // Clicking row again collapses drawer
+    fireEvent.click(rowEl);
+    expect(screen.queryByText(/Option Strike Execution/)).toBeNull();
   });
 });
