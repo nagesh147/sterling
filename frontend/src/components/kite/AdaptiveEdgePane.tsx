@@ -619,6 +619,10 @@ export function AdaptiveEdgePane({
                 rows={visible}
                 selectedId={selected?.id}
                 onSelect={(row) => setSelectedId(row.id)}
+                onInspectSymbol={(sym) => {
+                  setSymbolFilter(sym);
+                  setViewMode('charts');
+                }}
               />
             </div>
           </section>

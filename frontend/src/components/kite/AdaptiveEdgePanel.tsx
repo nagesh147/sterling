@@ -531,11 +531,13 @@ export function AdaptiveEdgePanel({
   quotes,
   selectedId,
   onSelect,
+  onInspectSymbol,
 }: {
   rows: AdaptiveEdgeRow[];
   quotes?: Record<string, any>;
   selectedId?: string | null;
   onSelect?: (row: AdaptiveEdgeRow) => void;
+  onInspectSymbol?: (symbol: string) => void;
 }) {
   const isIndex = (r: AdaptiveEdgeRow) => {
     const u = r.underlying.toUpperCase();
@@ -627,7 +629,31 @@ export function AdaptiveEdgePanel({
               </span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{row.underlying}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: C.muted }}>{row.underlying}</span>
+            {onInspectSymbol && (
+              <button
+                type="button"
+                title={`Open Market Profile & Order Flow charts for ${row.underlying}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onInspectSymbol(row.underlying);
+                }}
+                style={{
+                  border: `1px solid ${C.blueBorder}`,
+                  background: C.blueBg,
+                  color: C.blueText,
+                  borderRadius: 3,
+                  padding: '1px 5px',
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                🌊 Chart
+              </button>
+            )}
+          </div>
         </td>
 
         {/* 2. Mode Badge */}

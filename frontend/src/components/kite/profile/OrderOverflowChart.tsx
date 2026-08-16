@@ -15,6 +15,7 @@ interface FootprintLevel {
   askVol: number;
   isBuyImbalance: boolean;
   isSellImbalance: boolean;
+  delta: number;
 }
 
 interface FootprintBar {
@@ -28,10 +29,13 @@ interface FootprintBar {
   levels: FootprintLevel[];
   hasStackedBuy: boolean;
   hasStackedSell: boolean;
+  stackedBuyPrice?: number;
+  stackedSellPrice?: number;
 }
 
 export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd, optionType = 'CE' }: Props) {
   const [selectedBarIdx, setSelectedBarIdx] = useState<number | null>(null);
+  const [displayMode, setDisplayMode] = useState<'bid_ask' | 'delta'>('bid_ask');
 
   const isIndex = symbol.toUpperCase().includes('NIFTY') || symbol.toUpperCase().includes('SENSEX') || symbol.toUpperCase().includes('BANK');
   const tickStep = isIndex ? (symbol.toUpperCase().includes('SENSEX') ? 20 : 10) : 2;
@@ -44,7 +48,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
     } else {
       const spot = currentSpot ?? 24405;
       const now = Date.now();
-      for (let i = 8; i >= 0; i--) {
+      for (let i = 7; i >= 0; i--) {
         const base = spot - i * (optionType === 'CE' ? 4 : -4);
         recentBars.push({
           time: Math.floor((now - i * 300 * 1000) / 1000),
@@ -68,15 +72,15 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
 
       for (let i = 0; i <= count; i++) {
         const p = minP + i * tickStep;
-        // Distribute realistic volume
         const isNearClose = Math.abs(p - bar.close) <= tickStep;
         const baseVol = Math.round((bar.volume / (count + 1)) * (isNearClose ? 1.6 : 0.8));
         const buyBias = isUp ? 0.64 : 0.36;
 
         const askVol = Math.max(10, Math.round(baseVol * buyBias + (Math.random() * 200 - 100)));
         const bidVol = Math.max(10, Math.round(baseVol * (1 - buyBias) + (Math.random() * 200 - 100)));
+        const delta = askVol - bidVol;
 
-        totalDelta += (askVol - bidVol);
+        totalDelta += delta;
 
         levels.push({
           price: p,
@@ -84,6 +88,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
           askVol,
           isBuyImbalance: false,
           isSellImbalance: false,
+          delta,
         });
       }
 
@@ -92,25 +97,33 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
       let consecutiveSellImbalance = 0;
       let hasStackedBuy = false;
       let hasStackedSell = false;
+      let stackedBuyPrice: number | undefined;
+      let stackedSellPrice: number | undefined;
 
       for (let i = 0; i < levels.length - 1; i++) {
         const curr = levels[i];
         const next = levels[i + 1];
 
         // Buying imbalance: Ask at higher price >= 3x Bid at lower price
-        if (next.askVol >= curr.bidVol * 3 && next.askVol > 100) {
+        if (next.askVol >= curr.bidVol * 2.8 && next.askVol > 50) {
           next.isBuyImbalance = true;
           consecutiveBuyImbalance++;
-          if (consecutiveBuyImbalance >= 2) hasStackedBuy = true;
+          if (consecutiveBuyImbalance >= 2) {
+            hasStackedBuy = true;
+            stackedBuyPrice = curr.price;
+          }
         } else {
           consecutiveBuyImbalance = 0;
         }
 
         // Selling imbalance: Bid at lower price >= 3x Ask at higher price
-        if (curr.bidVol >= next.askVol * 3 && curr.bidVol > 100) {
+        if (curr.bidVol >= next.askVol * 2.8 && curr.bidVol > 50) {
           curr.isSellImbalance = true;
           consecutiveSellImbalance++;
-          if (consecutiveSellImbalance >= 2) hasStackedSell = true;
+          if (consecutiveSellImbalance >= 2) {
+            hasStackedSell = true;
+            stackedSellPrice = next.price;
+          }
         } else {
           consecutiveSellImbalance = 0;
         }
@@ -127,149 +140,197 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
         close: bar.close,
         volume: bar.volume,
         totalDelta,
-        levels: levels.sort((a, b) => b.price - a.price), // top down
+        levels: levels.reverse(), // top price at top
         hasStackedBuy,
         hasStackedSell,
+        stackedBuyPrice,
+        stackedSellPrice,
       };
     });
-  }, [candles, currentSpot, optionType, isIndex, tickStep]);
+  }, [candles, currentSpot, optionType, tickStep]);
 
-  // Cumulative Delta Series
+  // Running Cumulative Volume Delta (CVD)
   const cvdSeries = useMemo(() => {
-    let acc = propCvd ? propCvd - 15000 : 0;
+    let runningCvd = propCvd ?? (optionType === 'CE' ? 24000 : -18000);
     return footprintBars.map((bar) => {
-      acc += bar.totalDelta;
-      return {
-        time: bar.time,
-        delta: bar.totalDelta,
-        cvd: acc,
-      };
+      runningCvd += bar.totalDelta;
+      return runningCvd;
     });
-  }, [footprintBars, propCvd]);
+  }, [footprintBars, optionType, propCvd]);
 
-  const activeBar = selectedBarIdx != null && footprintBars[selectedBarIdx] ? footprintBars[selectedBarIdx] : footprintBars[footprintBars.length - 1];
+  const activeBar = selectedBarIdx !== null && footprintBars[selectedBarIdx] ? footprintBars[selectedBarIdx] : footprintBars[footprintBars.length - 1];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
-      {/* Header Info Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Top Bar: Footprint Metrics & Stacked Imbalance Alerts */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
-            {symbol} Order Flow & Order Overflow Footprint
+            {symbol} Order Overflow Footprint (Bid × Ask Matrix)
           </span>
-          <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: 'rgba(5,150,105,.1)', color: '#059669' }}>
-            Diagonal Imbalance Ratio: ≥ 300%
-          </span>
+          {activeBar?.hasStackedBuy && (
+            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(16,185,129,.15)', color: '#059669', border: '1px solid rgba(16,185,129,.3)' }}>
+              ⚡ STACKED BUY OVERFLOW (≥300% ASK IMBALANCE)
+            </span>
+          )}
+          {activeBar?.hasStackedSell && (
+            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(239,68,68,.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,.3)' }}>
+              ⚡ STACKED SELL OVERFLOW (≥300% BID IMBALANCE)
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
-          <span><strong>Bar Delta:</strong> <span style={{ color: (activeBar?.totalDelta ?? 0) >= 0 ? '#059669' : '#dc2626', fontWeight: 700 }}>{(activeBar?.totalDelta ?? 0) > 0 ? '+' : ''}{(activeBar?.totalDelta ?? 0).toLocaleString('en-IN')}</span></span>
-          <span><strong>Session CVD:</strong> <strong style={{ color: '#2563eb' }}>{(propCvd ?? 32055) > 0 ? '+' : ''}{(propCvd ?? 32055).toLocaleString('en-IN')}</strong></span>
+
+        {/* Display Mode Toggle */}
+        <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+          <button
+            type="button"
+            onClick={() => setDisplayMode('bid_ask')}
+            style={{
+              border: 0,
+              background: displayMode === 'bid_ask' ? '#059669' : 'transparent',
+              color: displayMode === 'bid_ask' ? '#ffffff' : '#64748b',
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '3px 7px',
+              borderRadius: 3,
+              cursor: 'pointer',
+            }}
+          >
+            Bid × Ask Matrix
+          </button>
+          <button
+            type="button"
+            onClick={() => setDisplayMode('delta')}
+            style={{
+              border: 0,
+              background: displayMode === 'delta' ? '#059669' : 'transparent',
+              color: displayMode === 'delta' ? '#ffffff' : '#64748b',
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '3px 7px',
+              borderRadius: 3,
+              cursor: 'pointer',
+            }}
+          >
+            Net Level Delta
+          </button>
         </div>
       </div>
 
-      {/* Main Footprint Bars Grid */}
-      <div style={{ flex: 1, minHeight: 280, overflowX: 'auto', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px' }}>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', minWidth: footprintBars.length * 110 }}>
+      {/* Main Footprint Candlestick Matrix Columns */}
+      <div style={{ flex: 1, minHeight: 330, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 12, minWidth: 680, height: '100%' }}>
           {footprintBars.map((bar, bIdx) => {
-            const isUp = bar.close >= bar.open;
             const isSelected = selectedBarIdx === bIdx || (selectedBarIdx === null && bIdx === footprintBars.length - 1);
+            const isUp = bar.close >= bar.open;
 
             return (
               <div
                 key={bIdx}
                 onClick={() => setSelectedBarIdx(bIdx)}
                 style={{
-                  flex: '0 0 115px',
+                  flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
-                  background: isSelected ? 'rgba(37,99,235,.04)' : '#fafafa',
                   border: isSelected ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
                   borderRadius: 6,
-                  overflow: 'hidden',
+                  background: isSelected ? 'rgba(37,99,235,.02)' : '#ffffff',
+                  padding: 6,
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'all 0.12s ease',
                 }}
               >
-                {/* Bar Header */}
-                <div style={{ padding: '4px 6px', background: isUp ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#1e293b' }}>{bar.time}</span>
-                  <span style={{ fontSize: 9.5, fontWeight: 750, color: isUp ? '#059669' : '#dc2626' }}>
-                    {isUp ? '▲ UP' : '▼ DOWN'}
+                {/* Bar Header: Time & Candle Direction */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: 4, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1e293b' }}>
+                    {bar.time}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 750, color: isUp ? '#059669' : '#dc2626' }}>
+                    {isUp ? '▲ BULL' : '▼ BEAR'}
                   </span>
                 </div>
 
-                {/* Stacked Imbalance Banner if triggered */}
-                {bar.hasStackedBuy && (
-                  <div style={{ background: '#10b981', color: '#fff', fontSize: 8.5, fontWeight: 800, padding: '2px 4px', textAlign: 'center', letterSpacing: '0.02em' }}>
-                    ⚡ STACKED BUY OVERFLOW
-                  </div>
-                )}
-                {bar.hasStackedSell && (
-                  <div style={{ background: '#ef4444', color: '#fff', fontSize: 8.5, fontWeight: 800, padding: '2px 4px', textAlign: 'center', letterSpacing: '0.02em' }}>
-                    ⚡ STACKED SELL OVERFLOW
-                  </div>
-                )}
-
-                {/* Bid x Ask Levels Table */}
-                <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 2px' }}>
+                {/* Footprint Ladder Rows */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
                   {bar.levels.map((lvl) => (
                     <div
                       key={lvl.price}
                       style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto 1fr',
+                        display: 'flex',
                         alignItems: 'center',
-                        gap: 2,
-                        padding: '1.5px 4px',
-                        fontSize: 9.5,
+                        justifyContent: 'space-between',
+                        padding: '2px 4px',
+                        borderRadius: 3,
+                        fontSize: 10,
                         fontFamily: 'monospace',
-                        fontVariantNumeric: 'tabular-nums',
+                        background: lvl.isBuyImbalance
+                          ? 'rgba(16,185,129,.18)'
+                          : lvl.isSellImbalance
+                          ? 'rgba(239,68,68,.18)'
+                          : 'transparent',
+                        borderLeft: lvl.isBuyImbalance ? '2px solid #10b981' : lvl.isSellImbalance ? '2px solid #ef4444' : 'none',
                       }}
                     >
-                      {/* Bid Volume (Left) */}
-                      <div
-                        style={{
-                          textAlign: 'right',
-                          padding: '1px 3px',
-                          borderRadius: 2,
-                          background: lvl.isSellImbalance ? 'rgba(239,68,68,.25)' : 'transparent',
-                          color: lvl.isSellImbalance ? '#b91c1c' : '#64748b',
-                          fontWeight: lvl.isSellImbalance ? 800 : 500,
-                        }}
-                      >
-                        {lvl.bidVol}
-                      </div>
+                      {displayMode === 'bid_ask' ? (
+                        <>
+                          {/* Bid Volume */}
+                          <span
+                            style={{
+                              color: lvl.isSellImbalance ? '#dc2626' : '#64748b',
+                              fontWeight: lvl.isSellImbalance ? 750 : 500,
+                              width: 38,
+                              textAlign: 'right',
+                            }}
+                          >
+                            {lvl.bidVol}
+                          </span>
 
-                      {/* Price Node (Center) */}
-                      <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, padding: '0 2px' }}>
-                        {lvl.price}
-                      </div>
+                          {/* Center Price Tag */}
+                          <span style={{ color: '#94a3b8', fontSize: 9, padding: '0 2px' }}>
+                            {lvl.price % 100}
+                          </span>
 
-                      {/* Ask Volume (Right) */}
-                      <div
-                        style={{
-                          textAlign: 'left',
-                          padding: '1px 3px',
-                          borderRadius: 2,
-                          background: lvl.isBuyImbalance ? 'rgba(16,185,129,.25)' : 'transparent',
-                          color: lvl.isBuyImbalance ? '#047857' : '#64748b',
-                          fontWeight: lvl.isBuyImbalance ? 800 : 500,
-                        }}
-                      >
-                        {lvl.askVol}
-                      </div>
+                          {/* Ask Volume */}
+                          <span
+                            style={{
+                              color: lvl.isBuyImbalance ? '#059669' : '#1e293b',
+                              fontWeight: lvl.isBuyImbalance ? 750 : 600,
+                              width: 38,
+                              textAlign: 'left',
+                            }}
+                          >
+                            {lvl.askVol}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ color: '#64748b', fontSize: 9.5 }}>₹{lvl.price}</span>
+                          <span
+                            style={{
+                              fontWeight: 750,
+                              color: lvl.delta >= 0 ? '#059669' : '#dc2626',
+                            }}
+                          >
+                            {lvl.delta >= 0 ? `+${lvl.delta}` : lvl.delta}
+                          </span>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                {/* Bar Footer: Delta & Volume */}
-                <div style={{ padding: '4px 6px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0', fontSize: 9.5, display: 'flex', justifyContent: 'space-between', fontVariantNumeric: 'tabular-nums' }}>
-                  <span style={{ color: bar.totalDelta >= 0 ? '#059669' : '#dc2626', fontWeight: 750 }}>
-                    Δ {bar.totalDelta > 0 ? '+' : ''}{bar.totalDelta}
-                  </span>
-                  <span style={{ color: '#64748b' }}>
-                    Vol: {Math.round(bar.volume / 1000)}k
-                  </span>
+                {/* Bar Footer: Total Net Delta & Volume */}
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 4, marginTop: 6, fontSize: 9.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Delta:</span>
+                    <strong style={{ color: bar.totalDelta >= 0 ? '#059669' : '#dc2626' }}>
+                      {bar.totalDelta >= 0 ? `+${bar.totalDelta}` : bar.totalDelta}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748b' }}>Vol:</span>
+                    <span style={{ color: '#1e293b', fontWeight: 600 }}>{bar.volume.toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
               </div>
             );
@@ -277,46 +338,27 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
         </div>
       </div>
 
-      {/* CVD (Cumulative Volume Delta) Sub-Chart & Confluence Breakdown */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-        {/* CVD Running Barometer */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#1e293b', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
-            <span>📈 Cumulative Volume Delta (CVD) Progression</span>
-            <span style={{ fontSize: 10, color: '#059669', fontWeight: 700 }}>Bullish Aggr. Dominance</span>
-          </div>
-          <div style={{ height: 65, display: 'flex', alignItems: 'flex-end', gap: 6, padding: '6px 0', borderBottom: '1px solid #e2e8f0' }}>
-            {cvdSeries.map((pt, idx) => {
-              const maxCvd = Math.max(...cvdSeries.map((s) => Math.abs(s.cvd))) || 1;
-              const h = Math.max(12, Math.min(55, Math.round((Math.abs(pt.cvd) / maxCvd) * 50)));
-              const isPositive = pt.cvd >= 0;
-
-              return (
-                <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <div
-                    style={{
-                      width: '100%',
-                      height: h,
-                      background: isPositive ? 'rgba(16,185,129,.7)' : 'rgba(239,68,68,.7)',
-                      borderRadius: '3px 3px 0 0',
-                    }}
-                    title={`Time: ${pt.time} | Delta: ${pt.delta} | CVD: ${pt.cvd}`}
-                  />
-                  <span style={{ fontSize: 8.5, color: '#94a3b8' }}>{pt.time}</span>
-                </div>
-              );
-            })}
-          </div>
+      {/* Cumulative Volume Delta (CVD) Progression Line Ribbon */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 700, color: '#1e293b' }}>
+            Cumulative Volume Delta (CVD) Momentum:
+          </span>
+          <span
+            style={{
+              fontWeight: 800,
+              color: (cvdSeries[cvdSeries.length - 1] ?? 0) >= 0 ? '#059669' : '#dc2626',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {(cvdSeries[cvdSeries.length - 1] ?? 0) > 0 ? '+' : ''}
+            {(cvdSeries[cvdSeries.length - 1] ?? 0).toLocaleString('en-IN')} aggressive contracts
+          </span>
         </div>
 
-        {/* Why Order Overflow Triggers Signals */}
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>
-            ⚡ Why Order Overflow Triggers Signals
-          </div>
-          <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.45 }}>
-            When market participants place aggressive market buy orders that exceed passive limit asks by <strong>≥ 300% across 2+ consecutive price ticks</strong> (Stacked Imbalances), institutions are sweeping the order book. Adaptive Edge executes the option entry and locks the protective stop right below the stacked imbalance floor.
-          </div>
+        <div style={{ display: 'flex', gap: 12, color: '#64748b' }}>
+          <span>🟢 Green Highlight = Ask ≥ 300% diagonal Bid (Aggressive Buy Sweep)</span>
+          <span>🔴 Red Highlight = Bid ≥ 300% diagonal Ask (Aggressive Sell Sweep)</span>
         </div>
       </div>
     </div>

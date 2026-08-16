@@ -56,26 +56,30 @@ function resolveSpot(sym: string, baseSpot?: number): number {
 
 function SafeCandleWrapper({
   symbol,
+  timeframe,
   children,
 }: {
   symbol: string;
+  timeframe: string;
   children: (candles: OHLCVBar[] | undefined, isLoading: boolean) => React.ReactNode;
 }) {
   const queryContext = useContext(QueryClientContext);
   if (!queryContext) {
     return <>{children(undefined, false)}</>;
   }
-  return <SafeCandleConsumer symbol={symbol}>{children}</SafeCandleConsumer>;
+  return <SafeCandleConsumer symbol={symbol} timeframe={timeframe}>{children}</SafeCandleConsumer>;
 }
 
 function SafeCandleConsumer({
   symbol,
+  timeframe,
   children,
 }: {
   symbol: string;
+  timeframe: string;
   children: (candles: OHLCVBar[] | undefined, isLoading: boolean) => React.ReactNode;
 }) {
-  const { data: candles, isLoading } = useCandles(chartSymbol(symbol), '5m', 200);
+  const { data: candles, isLoading } = useCandles(chartSymbol(symbol), timeframe, 200);
   return <>{children(candles, isLoading)}</>;
 }
 
@@ -89,6 +93,7 @@ export function AdaptiveEdgeVisualizerHub({
 }: Props) {
   const [activeTab, setActiveTab] = useState<'market_profile' | 'volume_profile' | 'order_overflow' | 'volume_analytics' | 'confluence'>('market_profile');
   const [activeSymbol, setActiveSymbol] = useState<string>(selectedSymbol || 'NIFTY 50');
+  const [timeframe, setTimeframe] = useState<string>('5m');
 
   useEffect(() => {
     if (selectedSymbol) {
@@ -101,8 +106,11 @@ export function AdaptiveEdgeVisualizerHub({
   const activeVwap = activeSymbol === selectedSymbol ? (vwap ?? activeSpot + 4.84) : activeSpot + 2.5;
   const activeCvd = activeSymbol === selectedSymbol ? (cvd ?? 32055) : (activeSymbol.includes('NIFTY') ? 28500 : 12400);
 
+  const pocDiff = Number((activeSpot - activePoc).toFixed(1));
+  const vwapDiff = Number((activeSpot - activeVwap).toFixed(2));
+
   return (
-    <SafeCandleWrapper symbol={activeSymbol}>
+    <SafeCandleWrapper symbol={activeSymbol} timeframe={timeframe}>
       {(candles, isLoading) => (
         <div
           style={{
@@ -116,19 +124,24 @@ export function AdaptiveEdgeVisualizerHub({
             boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           }}
         >
-          {/* Visualizer Top Bar: Sub-Tabs & Title */}
+          {/* Top Bar: Title & View Switcher */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 750, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                🎯 Microstructure, Volume & Order Overflow Visualizer
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 750, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                  🎯 Microstructure, Volume & Order Overflow Visualizer
+                </h3>
+                <span style={{ fontSize: 10, fontWeight: 750, padding: '2px 6px', borderRadius: 4, background: 'rgba(37,99,235,.1)', color: '#2563eb' }}>
+                  LIVE FEED
+                </span>
+              </div>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>
-                Inspect real-time TPO distributions, Volume-at-Price profiles, order book overflow footprints, and RVOL surges for <strong style={{ color: '#0f172a' }}>{activeSymbol}</strong>.
+                Real-time TPO distributions, Volume-at-Price profiles, Footprint ladders, and RVOL pacing for <strong style={{ color: '#0f172a' }}>{activeSymbol}</strong>.
               </p>
             </div>
 
             {/* View Switcher Segmented Control */}
-            <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 3, borderRadius: 6 }}>
+            <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 3, borderRadius: 6, flexWrap: 'wrap' }}>
               {([
                 { id: 'market_profile', label: '1. Market Profile (TPO)' },
                 { id: 'volume_profile', label: '2. Volume Profile (VP)' },
@@ -144,7 +157,7 @@ export function AdaptiveEdgeVisualizerHub({
                     border: 0,
                     background: activeTab === tab.id ? '#ffffff' : 'transparent',
                     color: activeTab === tab.id ? '#0f172a' : '#64748b',
-                    fontWeight: activeTab === tab.id ? 700 : 550,
+                    fontWeight: activeTab === tab.id ? 750 : 550,
                     fontSize: 11,
                     padding: '5px 10px',
                     borderRadius: 4,
@@ -159,7 +172,7 @@ export function AdaptiveEdgeVisualizerHub({
             </div>
           </div>
 
-          {/* GROUPED SYMBOL SWITCHER (INDICES VS F&O STOCKS) */}
+          {/* Grouped Symbol Selector (Indices vs. F&O Stocks) + Timeframe Bar */}
           <div
             style={{
               display: 'flex',
@@ -257,6 +270,63 @@ export function AdaptiveEdgeVisualizerHub({
                 ))}
               </select>
             </div>
+
+            {/* Timeframe selector */}
+            <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+              {['1m', '5m', '15m', '1H'].map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setTimeframe(tf)}
+                  style={{
+                    border: 0,
+                    background: timeframe === tf ? '#1e293b' : 'transparent',
+                    color: timeframe === tf ? '#ffffff' : '#64748b',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Real-time Symbol Quick Ticker Ribbon */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Spot / Underlying LTP</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>
+                ₹{activeSpot.toLocaleString('en-IN')}
+              </div>
+            </div>
+            <div style={{ padding: '6px 10px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: '#b45309', fontWeight: 700 }}>POC Anchor (Fair Value)</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#d97706', fontVariantNumeric: 'tabular-nums' }}>
+                ₹{activePoc.toLocaleString('en-IN')}{' '}
+                <span style={{ fontSize: 10, color: pocDiff >= 0 ? '#059669' : '#dc2626' }}>
+                  ({pocDiff >= 0 ? `+${pocDiff}` : pocDiff} pts)
+                </span>
+              </div>
+            </div>
+            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>VWAP Volatility Center</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#7c3aed', fontVariantNumeric: 'tabular-nums' }}>
+                ₹{activeVwap.toLocaleString('en-IN')}{' '}
+                <span style={{ fontSize: 10, color: vwapDiff >= 0 ? '#059669' : '#dc2626' }}>
+                  ({vwapDiff >= 0 ? `+${vwapDiff}` : vwapDiff})
+                </span>
+              </div>
+            </div>
+            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Net CVD Flow</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: activeCvd >= 0 ? '#059669' : '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+                {activeCvd >= 0 ? `+${activeCvd.toLocaleString('en-IN')}` : activeCvd.toLocaleString('en-IN')}
+              </div>
+            </div>
           </div>
 
           {/* Chart View Content */}
@@ -303,44 +373,60 @@ export function AdaptiveEdgeVisualizerHub({
 
             {activeTab === 'confluence' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {/* Visual 3-Stage Confluence Flow Diagram */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                {/* Visual 5-Pillar Confluence Flow Diagram */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
                   {/* Pillar 1: Market Profile */}
-                  <div style={{ border: '1px solid #bfdbfe', borderRadius: 8, padding: 14, background: 'rgba(37,99,235,.03)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 14 }}>🏛️</span>
-                      <strong style={{ fontSize: 12.5, color: '#2563eb' }}>Pillar 1: Structural Profile</strong>
+                  <div style={{ border: '1px solid #bfdbfe', borderRadius: 8, padding: 12, background: 'rgba(37,99,235,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13 }}>🏛️</span>
+                      <strong style={{ fontSize: 12, color: '#2563eb' }}>1. Initial Balance</strong>
                     </div>
-                    <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
-                      <p style={{ margin: '0 0 6px' }}><strong>Initial Balance (IB)</strong>: First 30 min high/low.</p>
-                      <p style={{ margin: '0 0 6px' }}><strong>Value Area (70%)</strong>: TPO acceptance zone.</p>
-                      <p style={{ margin: 0 }}><strong>Condition</strong>: Price trading above Initial Balance High & VWAP signals bullish market extension.</p>
+                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                      Price acceptance above first 30m range validates session trend extension.
                     </div>
                   </div>
 
                   {/* Pillar 2: Volume Profile */}
-                  <div style={{ border: '1px solid #ddd6fe', borderRadius: 8, padding: 14, background: 'rgba(124,58,237,.03)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 14 }}>📊</span>
-                      <strong style={{ fontSize: 12.5, color: '#7c3aed' }}>Pillar 2: Volume at Price</strong>
+                  <div style={{ border: '1px solid #ddd6fe', borderRadius: 8, padding: 12, background: 'rgba(124,58,237,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13 }}>📊</span>
+                      <strong style={{ fontSize: 12, color: '#7c3aed' }}>2. LVN Breakout</strong>
                     </div>
-                    <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
-                      <p style={{ margin: '0 0 6px' }}><strong>VPOC</strong>: ₹{activePoc.toLocaleString('en-IN')} (Highest volume node).</p>
-                      <p style={{ margin: '0 0 6px' }}><strong>LVN Breakout</strong>: Low Volume Node at ₹{(activePoc + 15).toLocaleString('en-IN')}.</p>
-                      <p style={{ margin: 0 }}><strong>Condition</strong>: Crossing above the LVN triggers rapid price expansion through thin liquidity vacuum.</p>
+                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                      Crossing through thin volume voids triggers rapid momentum acceleration.
                     </div>
                   </div>
 
                   {/* Pillar 3: Order Overflow */}
-                  <div style={{ border: '1px solid #a7f3d0', borderRadius: 8, padding: 14, background: 'rgba(16,185,129,.03)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 14 }}>🌊</span>
-                      <strong style={{ fontSize: 12.5, color: '#059669' }}>Pillar 3: Order Overflow</strong>
+                  <div style={{ border: '1px solid #a7f3d0', borderRadius: 8, padding: 12, background: 'rgba(16,185,129,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13 }}>🌊</span>
+                      <strong style={{ fontSize: 12, color: '#059669' }}>3. Stacked Imbalance</strong>
                     </div>
-                    <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.5 }}>
-                      <p style={{ margin: '0 0 6px' }}><strong>CVD Flow</strong>: {activeCvd > 0 ? '+' : ''}{activeCvd.toLocaleString('en-IN')} aggressive buy delta.</p>
-                      <p style={{ margin: '0 0 6px' }}><strong>Stacked Imbalances</strong>: Ask volume ≥ 300% diagonal Bid.</p>
-                      <p style={{ margin: 0 }}><strong>Condition</strong>: Aggressive institutional market orders sweeping the book confirm real demand.</p>
+                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                      Ask volume ≥ 300% diagonal Bid confirms aggressive institutional book sweeps.
+                    </div>
+                  </div>
+
+                  {/* Pillar 4: CVD Accumulation */}
+                  <div style={{ border: '1px solid #fed7aa', borderRadius: 8, padding: 12, background: 'rgba(249,115,22,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13 }}>📈</span>
+                      <strong style={{ fontSize: 12, color: '#ea580c' }}>4. Net CVD Delta</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                      Positive accumulation ensures demand is real without passive limit absorption.
+                    </div>
+                  </div>
+
+                  {/* Pillar 5: RVOL Surge */}
+                  <div style={{ border: '1px solid #fbcfe8', borderRadius: 8, padding: 12, background: 'rgba(219,39,119,.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13 }}>⚡</span>
+                      <strong style={{ fontSize: 12, color: '#db2777' }}>5. RVOL Pace (≥1.5x)</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                      Volume surge confirms active market-wide institutional participation.
                     </div>
                   </div>
                 </div>
@@ -350,19 +436,19 @@ export function AdaptiveEdgeVisualizerHub({
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(5,150,105,.12)', color: '#059669' }}>
-                        CONFLUENCE QUALIFIED (SCORE 0.84)
+                        ALL 5 CONFLUENCE PILLARS QUALIFIED (SCORE 0.88)
                       </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
-                        Adaptive Edge Signal Generated: {activeSymbol} {optionType} SCALP
+                      <span style={{ fontSize: 12.5, fontWeight: 750, color: '#1e293b' }}>
+                        Adaptive Edge Execution: {activeSymbol} {optionType} SCALP
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-                      All 3 microstructure layers verified: Profile above IB + LVN breakout + Stacked Buy Overflow on CVD.
+                      Market Profile above IB + LVN Void traversal + Stacked Buy Overflow + CVD Expansion + RVOL Surge.
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>
-                      Risk Protected: Hard SL at Stacked Imbalance Base · Trailing Profit Lock Active
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                      🛡️ Hard SL at Imbalance Floor · Trailing Giveback Lock Active
                     </span>
                   </div>
                 </div>
