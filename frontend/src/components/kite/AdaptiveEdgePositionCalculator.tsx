@@ -123,44 +123,88 @@ export function AdaptiveEdgePositionCalculator({
           background: '#ffffff',
           border: `1px solid ${k.border}`,
           borderRadius: 4,
-          padding: '10px 14px',
+          padding: '12px 14px',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
+          flexDirection: 'column',
+          gap: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: k.text }}>Position Sizing & Trade Plan</span>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 500,
-              padding: '1px 6px',
-              borderRadius: 2,
-              background: optionType === 'CE' ? `${k.green}18` : `${k.red}18`,
-              color: optionType === 'CE' ? k.green : k.red,
-            }}
-          >
-            {optionType}
-          </span>
+        {/* Header Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Position Sizing & Trade Plan
+            </span>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 500,
+                padding: '1px 6px',
+                borderRadius: 2,
+                background: optionType === 'CE' ? `${k.green}18` : `${k.red}18`,
+                color: optionType === 'CE' ? k.green : k.red,
+              }}
+            >
+              {optionType}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isCustomized && (
+              <button
+                type="button"
+                onClick={resetDefaults}
+                style={{
+                  fontSize: 11,
+                  color: k.blue,
+                  background: 'transparent',
+                  border: 0,
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                }}
+              >
+                Reset Defaults
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
+              {totalQty} Qty ({numLots} {numLots === 1 ? 'Lot' : 'Lots'} × {lotSize})
+            </span>
+          </div>
         </div>
 
-        {/* Inputs controls strip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          {/* Lots */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 11.5, color: k.dim }}>Lots</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        {/* 5-Column Responsive Inputs Strip */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+            gap: 8,
+          }}
+        >
+          {/* Lots Stepper */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Lots
+            </label>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                border: `1px solid ${k.border}`,
+                borderRadius: 3,
+                height: 26,
+                background: '#ffffff',
+                overflow: 'hidden',
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setNumLots((prev) => Math.max(1, prev - 1))}
                 style={{
-                  width: 20,
-                  height: 22,
-                  borderRadius: 2,
-                  border: `1px solid ${k.border}`,
+                  width: 24,
+                  height: '100%',
+                  border: 0,
+                  borderRight: `1px solid ${k.border}`,
                   background: k.surface,
                   color: k.text,
                   fontSize: 12,
@@ -171,7 +215,7 @@ export function AdaptiveEdgePositionCalculator({
                   padding: 0,
                 }}
               >
-                -
+                −
               </button>
               <input
                 type="number"
@@ -180,26 +224,26 @@ export function AdaptiveEdgePositionCalculator({
                 value={numLots}
                 onChange={(e) => setNumLots(Math.max(1, Number(e.target.value)))}
                 style={{
-                  width: 36,
-                  height: 22,
-                  padding: '0 2px',
-                  fontSize: 11.5,
-                  borderRadius: 2,
-                  border: `1px solid ${k.border}`,
-                  background: '#ffffff',
+                  flex: 1,
+                  minWidth: 26,
+                  height: '100%',
+                  border: 0,
+                  background: 'transparent',
                   color: k.text,
+                  fontSize: 11.5,
                   textAlign: 'center',
                   outline: 'none',
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               />
               <button
                 type="button"
                 onClick={() => setNumLots((prev) => prev + 1)}
                 style={{
-                  width: 20,
-                  height: 22,
-                  borderRadius: 2,
-                  border: `1px solid ${k.border}`,
+                  width: 24,
+                  height: '100%',
+                  border: 0,
+                  borderLeft: `1px solid ${k.border}`,
                   background: k.surface,
                   color: k.text,
                   fontSize: 12,
@@ -215,115 +259,101 @@ export function AdaptiveEdgePositionCalculator({
             </div>
           </div>
 
-          {/* Entry */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 11.5, color: k.dim }}>Entry (₹)</label>
+          {/* Entry Price */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Entry (₹)
+            </label>
             <input
               type="number"
               step={0.05}
               value={entryPrice}
               onChange={(e) => setEntryPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
               style={{
-                width: 68,
-                height: 22,
+                height: 26,
                 padding: '0 6px',
                 fontSize: 11.5,
-                borderRadius: 2,
+                borderRadius: 3,
                 border: `1px solid ${k.border}`,
                 background: '#ffffff',
                 color: k.text,
                 outline: 'none',
+                fontVariantNumeric: 'tabular-nums',
               }}
             />
           </div>
 
-          {/* SL */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 11.5, color: k.dim }}>SL (₹)</label>
+          {/* Stop Loss (SL) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              SL (₹)
+            </label>
             <input
               type="number"
               step={0.05}
               value={slPrice}
               onChange={(e) => setSlPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
               style={{
-                width: 68,
-                height: 22,
+                height: 26,
                 padding: '0 6px',
                 fontSize: 11.5,
-                borderRadius: 2,
+                borderRadius: 3,
                 border: `1px solid ${k.border}`,
                 background: '#ffffff',
                 color: k.text,
                 outline: 'none',
+                fontVariantNumeric: 'tabular-nums',
               }}
             />
           </div>
 
-          {/* TSL */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 11.5, color: k.dim }}>TSL (₹)</label>
+          {/* Trailing Stop (TSL) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              TSL (₹)
+            </label>
             <input
               type="number"
               step={0.05}
               value={tslPrice}
               onChange={(e) => setTslPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
               style={{
-                width: 68,
-                height: 22,
+                height: 26,
                 padding: '0 6px',
                 fontSize: 11.5,
-                borderRadius: 2,
+                borderRadius: 3,
                 border: `1px solid ${k.border}`,
                 background: '#ffffff',
                 color: k.orange,
                 outline: 'none',
+                fontVariantNumeric: 'tabular-nums',
               }}
             />
           </div>
 
           {/* Target */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 11.5, color: k.dim }}>Target (₹)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Target (₹)
+            </label>
             <input
               type="number"
               step={0.05}
               value={targetPrice}
               onChange={(e) => setTargetPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
               style={{
-                width: 68,
-                height: 22,
+                height: 26,
                 padding: '0 6px',
                 fontSize: 11.5,
-                borderRadius: 2,
+                borderRadius: 3,
                 border: `1px solid ${k.border}`,
                 background: '#ffffff',
                 color: k.purple,
                 outline: 'none',
+                fontVariantNumeric: 'tabular-nums',
               }}
             />
           </div>
-
-          {isCustomized && (
-            <button
-              type="button"
-              onClick={resetDefaults}
-              style={{
-                fontSize: 11,
-                color: k.blue,
-                background: 'transparent',
-                border: 0,
-                cursor: 'pointer',
-                padding: 0,
-                textDecoration: 'underline',
-              }}
-            >
-              Reset Defaults
-            </button>
-          )}
-
-          <span style={{ fontSize: 11.5, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-            {totalQty} Qty ({numLots} {numLots === 1 ? 'Lot' : 'Lots'} × {lotSize})
-          </span>
         </div>
       </div>
 
