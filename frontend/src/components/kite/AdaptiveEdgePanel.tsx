@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
+import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { k, tint } from '../../styles/kiteUI';
 import type {
   AdaptiveEdgeHorizon,
@@ -926,6 +927,17 @@ export function AdaptiveEdgePanel({
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                 }}
               >
+                {/* 0. INTERACTIVE POSITION SIZING & P&L CALCULATOR */}
+                <AdaptiveEdgePositionCalculator
+                  symbol={row.underlying || row.instrument}
+                  defaultEntryPrice={row.entry}
+                  defaultSl={row.sl}
+                  defaultTsl={row.tsl}
+                  defaultExit={row.exit}
+                  currentLtp={liveLtp}
+                  optionType={row.optionType}
+                />
+
                 {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>

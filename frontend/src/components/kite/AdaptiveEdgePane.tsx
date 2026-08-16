@@ -12,6 +12,7 @@ import {
 } from './AdaptiveEdgePanel';
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
+import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { AdaptiveEdgeDashboard } from './AdaptiveEdgeDashboard';
 import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
 import { openSettingsSection } from './config/registry';
@@ -660,7 +661,18 @@ export function AdaptiveEdgePane({
                     </div>
                   </div>
 
-                  {/* 2. OPTION PREMIUM EXECUTION CLUSTER */}
+                  {/* 2. INTERACTIVE POSITION SIZING & P&L CALCULATOR */}
+                  <AdaptiveEdgePositionCalculator
+                    symbol={selected.underlying || selected.instrument}
+                    defaultEntryPrice={selected.entry}
+                    defaultSl={selected.sl}
+                    defaultTsl={selected.tsl}
+                    defaultExit={selected.exit}
+                    currentLtp={selected.ltp}
+                    optionType={selected.optionType}
+                  />
+
+                  {/* 3. OPTION PREMIUM EXECUTION CLUSTER */}
                   <div
                     style={{
                       background: k.bg,
