@@ -656,7 +656,7 @@ export function AdaptiveEdgePane({
             >
               {!selected && (
                 <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-                  Select a trade setup from the table to view real-time microstructure, risk parameters, and the chart.
+                  Select a trade setup from the table to view real-time microstructure, risk parameters, and position sizing plan.
                 </div>
               )}
 
@@ -738,10 +738,12 @@ export function AdaptiveEdgePane({
 
                   {/* 2. INTERACTIVE POSITION SIZING & P&L CALCULATOR */}
                   <AdaptiveEdgePositionCalculator
+                    key={selected.id}
                     symbol={selected.underlying || selected.instrument}
                     tradingsymbol={selected.instrument}
                     exchange={selected.exchange || 'NFO'}
                     expiry={selected.expiry}
+                    lotSize={selected.lotSize}
                     defaultEntryPrice={selected.entry}
                     defaultSl={selected.sl}
                     defaultTsl={selected.tsl}

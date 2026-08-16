@@ -421,6 +421,7 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     ltp: leg.ltp ?? leg.entry_premium ?? null,
     strike: leg.strike,
     expiry: leg.expiry ?? null,
+    lotSize: leg.lot_size ?? null,
     entryTime: signal.entry_time ?? null,
     exitTime: signal.exit_time ?? null,
     open,
@@ -544,6 +545,7 @@ export interface AdaptiveEdgeRow {
   ltp: number | null;
   strike: number | null;
   expiry?: string | null;
+  lotSize?: number | null;
   entryTime: string | null;
   exitTime: string | null;
   open: boolean;
@@ -940,7 +942,12 @@ export function AdaptiveEdgePanel({
               >
                 {/* 0. INTERACTIVE POSITION SIZING & P&L CALCULATOR */}
                 <AdaptiveEdgePositionCalculator
+                  key={row.id}
                   symbol={row.underlying || row.instrument}
+                  tradingsymbol={row.instrument}
+                  exchange={row.exchange || 'NFO'}
+                  expiry={row.expiry}
+                  lotSize={row.lotSize}
                   defaultEntryPrice={row.entry}
                   defaultSl={row.sl}
                   defaultTsl={row.tsl}

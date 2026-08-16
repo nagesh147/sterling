@@ -38,6 +38,7 @@ interface Props {
   tradingsymbol?: string;
   exchange?: string;
   expiry?: string | null;
+  lotSize?: number | null;
   defaultEntryPrice?: number | null;
   defaultSl?: number | null;
   defaultTsl?: number | null;
@@ -52,6 +53,7 @@ export function AdaptiveEdgePositionCalculator({
   tradingsymbol,
   exchange = 'NFO',
   expiry,
+  lotSize: propLotSize,
   defaultEntryPrice,
   defaultSl,
   defaultTsl,
@@ -62,7 +64,10 @@ export function AdaptiveEdgePositionCalculator({
 }: Props) {
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [copied, setCopied] = useState(false);
-  const lotSize = useMemo(() => getInstrumentLotSize(symbol), [symbol]);
+  const lotSize = useMemo(
+    () => (propLotSize != null && propLotSize > 0 ? propLotSize : getInstrumentLotSize(symbol)),
+    [propLotSize, symbol],
+  );
   const baseEntry = roundToTick(defaultEntryPrice ?? currentLtp ?? 100) ?? 100;
   const baseSl = roundToTick(defaultSl ?? (baseEntry * 0.8)) ?? Number((baseEntry * 0.8).toFixed(2));
   const baseTsl = roundToTick(defaultTsl ?? baseEntry) ?? baseEntry;
