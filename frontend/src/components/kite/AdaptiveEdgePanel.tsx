@@ -382,13 +382,14 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
   const eMode = leg.entry_mode ?? 'MICRO';
   const pMode = leg.peak_mode ?? eMode;
   const cMode = leg.exit_mode ?? pMode;
+  const exch = tape.toUpperCase().includes('SENSEX') ? 'BSE' : 'NSE';
   return {
     id: `${leg.entry_time ?? 'leg'}-${index}`,
     parentId: `${leg.entry_time ?? 'leg'}-${index}`,
     kind: 'spot',
     origin: 'adaptive_edge',
     instrument: tape,
-    exchange: '—',
+    exchange: exch,
     moneyness: 'SPOT',
     optionType: (leg.side === 'SELL' ? 'PE' : 'CE'),
     entry: leg.entry_price ?? null,
