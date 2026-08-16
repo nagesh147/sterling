@@ -69,7 +69,7 @@ export function OrderWindow({ options, onClose }: Props) {
   const lot = effectiveLot(instr.lotSize);
   const carryProduct = defaultProduct(instr.exchange);
 
-  const [tab, setTab] = useState<Tab>('quick');
+  const [tab, setTab] = useState<Tab>(options.initialSlPct != null || options.initialTgtPct != null ? 'regular' : 'quick');
   const [side, setSide] = useState<Side>(initialSide);
   const [product, setProduct] = useState<Product>(productHint || carryProduct);
   const [orderType, setOrderType] = useState<OrderType>(instr.lastPrice > 0 ? 'LIMIT' : 'MARKET');
@@ -348,7 +348,7 @@ export function OrderWindow({ options, onClose }: Props) {
 
             {/* Body (no scroll) */}
             {tab === 'quick' ? (
-              <div style={{ padding: '18px 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ padding: '18px 16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {qtyField}
                 {quickPriceField}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -357,6 +357,16 @@ export function OrderWindow({ options, onClose }: Props) {
                   </label>
                   <span style={{ fontSize: 12, color: k.dim }}>{qtySub}</span>
                 </div>
+
+                {/* Protective GTT on Quick tab */}
+                {product !== 'MIS' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: `1px solid ${k.border}`, paddingTop: 12, fontSize: 12 }}>
+                    <GttIcon />
+                    <PctToggle accent={accent} label="Stoploss" on={slOn} setOn={setSlOn} pct={slPct} setPct={setSlPct} defaultPct={-5} />
+                    <PctToggle accent={accent} label="Target" on={tgtOn} setOn={setTgtOn} pct={tgtPct} setPct={setTgtPct} defaultPct={5} />
+                    <span style={{ marginLeft: 'auto', color: k.dim, display: 'flex', cursor: 'help' }} title="Automatically create a GTT for the position on order completion"><Icons.Info /></span>
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 22 }}>
