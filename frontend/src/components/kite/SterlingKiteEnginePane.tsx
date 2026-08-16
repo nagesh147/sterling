@@ -20,6 +20,7 @@ import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
+import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 
 interface Props {
@@ -706,7 +707,47 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     q, leg.lot_size ?? null,
                   );
                   return (
-                    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 4 }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <AdaptiveEdgePositionCalculator
+                        symbol={leg.option_symbol || row.underlying}
+                        defaultEntryPrice={gEntry}
+                        defaultSl={slPx}
+                        defaultTsl={slPx}
+                        defaultExit={null}
+                        currentLtp={lastPx}
+                        optionType={leg.option_type as 'CE' | 'PE'}
+                      />
+                      <div
+                        style={{
+                          background: k.bg,
+                          border: `1px solid ${k.border}`,
+                          borderRadius: 3,
+                          padding: '6px 8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Option Strike Execution (₹ Premiums)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: 4 }}>
+                          <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Entry</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>{gEntry != null ? `₹${gEntry.toFixed(2)}` : '—'}</span>
+                          </div>
+                          <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{slPx != null ? `₹${slPx.toFixed(2)}` : '—'}</span>
+                          </div>
+                          <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Current LTP</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: gDiff != null ? (gDiff >= 0 ? k.green : k.red) : k.text, fontVariantNumeric: 'tabular-nums' }}>
+                              {lastPx != null ? `₹${lastPx.toFixed(2)}` : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                       <QuoteDetail
                         sym={sym}
                         q={q}
@@ -1093,7 +1134,85 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   q, leg.lot_size ?? null,
                 );
                 return (
-                  <div onClick={(e) => e.stopPropagation()}>
+                  <div onClick={(e) => e.stopPropagation()} style={{ background: k.surface, borderBottom: `1px solid ${k.border}`, padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* 1. POSITION SIZING & P&L CALCULATOR */}
+                    <AdaptiveEdgePositionCalculator
+                      symbol={leg.option_symbol || row.underlying}
+                      defaultEntryPrice={entryPx}
+                      defaultSl={initSlPx ?? slPx}
+                      defaultTsl={slPx}
+                      defaultExit={targetPx}
+                      currentLtp={lastPx}
+                      optionType={leg.option_type as 'CE' | 'PE'}
+                    />
+
+                    {/* 2. OPTION STRIKE EXECUTION (₹ PREMIUMS) CLUSTER */}
+                    <div
+                      style={{
+                        background: k.bg,
+                        border: `1px solid ${k.border}`,
+                        borderRadius: 4,
+                        padding: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Option Strike Execution (₹ Premiums)
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 6 }}>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Entry</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
+                            {entryPx != null ? `₹${entryPx.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
+                            {(initSlPx ?? slPx) != null ? `₹${(initSlPx ?? slPx)!.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Trail (TSL)</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
+                            {slPx != null ? `₹${slPx.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Exit</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: exitColor, fontVariantNumeric: 'tabular-nums' }}>
+                            {legExitState || '—'}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            background: entryDiff != null ? (entryDiff >= 0 ? `${k.green}10` : `${k.red}10`) : k.surface,
+                            border: `1px solid ${entryDiff != null ? (entryDiff >= 0 ? k.green : k.red) : k.border}30`,
+                            borderRadius: 3,
+                            padding: '6px 8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 2,
+                          }}
+                        >
+                          <span style={{ fontSize: 9, fontWeight: 600, color: entryDiff != null ? (entryDiff >= 0 ? k.green : k.red) : k.dim, textTransform: 'uppercase' }}>
+                            Current LTP
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: entryDiff != null ? (entryDiff >= 0 ? k.green : k.red) : k.text, fontVariantNumeric: 'tabular-nums' }}>
+                            {lastPx != null ? `₹${lastPx.toFixed(2)}` : '—'}
+                          </span>
+                          {entryDiff != null && (
+                            <span style={{ fontSize: 9.5, fontWeight: 600, color: entryDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+                              {entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)} pts
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. MARKET DEPTH & EXECUTION ACTIONS */}
                     <QuoteDetail 
                       sym={sym} 
                       q={q} 

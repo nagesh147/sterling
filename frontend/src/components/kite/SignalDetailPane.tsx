@@ -11,6 +11,7 @@ import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
 import { NavigatorEvidencePanel } from './NavigatorEvidencePanel';
 import { selectBestLegs, stopDistance } from './impactMath';
+import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -222,7 +223,18 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
       })()}
 
       {showDepth && (
-        <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.bg }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderTop: `1px solid ${k.border}`, background: k.surface }}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <AdaptiveEdgePositionCalculator
+              symbol={leg.option_symbol || underlying}
+              defaultEntryPrice={leg.entry_premium}
+              defaultSl={leg.initial_stop_premium}
+              defaultTsl={leg.trail_stop_premium}
+              defaultExit={leg.target_premium}
+              currentLtp={lastPx}
+              optionType={leg.option_symbol.toUpperCase().endsWith('PE') ? 'PE' : 'CE'}
+            />
+          </div>
           <div style={{ display: 'flex' }}>
             <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               <QuoteDetail 
