@@ -229,3 +229,52 @@ def test_snapshot_scans_stock_contracts_when_enabled():
     assert "INFY" in by_name
     assert by_name["INFY"]["scanned"] is False
     assert by_name["INFY"]["skip_reason"] == "no tape"
+
+
+def test_build_vertical_spread():
+    from app.engines.adaptive_edge.option_ladder import (
+        AdaptiveEdgeOptionLeg,
+        build_vertical_spread,
+    )
+
+    long_leg = AdaptiveEdgeOptionLeg(
+        moneyness="ATM",
+        option_type="CE",
+        option_symbol="NIFTY26AUG24500CE",
+        strike=24500.0,
+        expiry="2026-08-27",
+        lot_size=25,
+        token=1001,
+        exchange="NSE",
+        entry_premium=150.0,
+        stop_premium=100.0,
+        trail_premium=120.0,
+        ltp=152.0,
+        resolution_reason=None,
+    )
+    short_leg = AdaptiveEdgeOptionLeg(
+        moneyness="OTM2",
+        option_type="CE",
+        option_symbol="NIFTY26AUG24600CE",
+        strike=24600.0,
+        expiry="2026-08-27",
+        lot_size=25,
+        token=1002,
+        exchange="NSE",
+        entry_premium=90.0,
+        stop_premium=60.0,
+        trail_premium=75.0,
+        ltp=91.0,
+        resolution_reason=None,
+    )
+
+    spread = build_vertical_spread(long_leg, short_leg)
+    assert spread is not None
+    assert spread.spread_type == "BULL_CALL_SPREAD"
+    assert spread.net_debit == 60.0  # 150 - 90
+    assert spread.width == 100.0     # 24600 - 24500
+    assert spread.max_risk == 60.0
+    assert spread.max_reward == 40.0 # 100 - 60
+    assert spread.risk_reward_ratio == 0.67
+    assert spread.as_dict()["spread_type"] == "BULL_CALL_SPREAD"
+
