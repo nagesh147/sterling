@@ -998,7 +998,7 @@ export function AdaptiveEdgePanel({
                     </div>
                   </div>
 
-                  <div style={{ height: 200, border: `1px solid ${k.border}`, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: 200, width: '100%', borderRadius: 3, border: `1px solid ${k.border}`, overflow: 'hidden', position: 'relative' }}>
                     <AdaptiveEdgeSetupChart
                       symbol={row.underlying || row.instrument}
                       entryTime={row.entryTime}
@@ -1013,7 +1013,7 @@ export function AdaptiveEdgePanel({
                 </div>
 
                 {/* 4. ACTIONS */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingTop: 2 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                   {onInspectSymbol && (
                     <button
                       type="button"
@@ -1023,21 +1023,30 @@ export function AdaptiveEdgePanel({
                       }}
                       style={{
                         flex: 1,
-                        padding: '7px 14px',
+                        height: 34,
+                        padding: '0 14px',
                         background: k.blue,
                         color: '#ffffff',
                         border: 0,
                         borderRadius: 3,
-                        fontSize: 11.5,
-                        fontWeight: 600,
+                        fontSize: 12,
+                        fontWeight: 500,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 6,
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.15s ease',
                       }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#3367d6'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = k.blue; }}
                     >
-                      Open Interactive Chart
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 3v18h18" />
+                        <path d="M18 9l-5 5-4-4-6 6" />
+                      </svg>
+                      <span>Open Interactive Chart</span>
                     </button>
                   )}
 
@@ -1045,17 +1054,30 @@ export function AdaptiveEdgePanel({
                     type="button"
                     onClick={(e) => handleCopy(e, row.instrument, row.id)}
                     style={{
-                      padding: '7px 14px',
+                      height: 34,
+                      padding: '0 14px',
                       background: k.bg,
                       color: k.text,
                       border: `1px solid ${k.border}`,
                       borderRadius: 3,
-                      fontSize: 11.5,
-                      fontWeight: 600,
+                      fontSize: 12,
+                      fontWeight: 500,
                       cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = k.surfaceHover; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = k.bg; }}
                   >
-                    {copiedId === row.id ? '✓ Copied' : 'Copy Symbol'}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
+                    <span>{copiedId === row.id ? 'Copied' : 'Copy Symbol'}</span>
                   </button>
                 </div>
               </div>

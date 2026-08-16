@@ -736,7 +736,7 @@ export function AdaptiveEdgePane({
                       padding: 12,
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 6,
+                      gap: 8,
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -756,7 +756,7 @@ export function AdaptiveEdgePane({
                       </div>
                     </div>
 
-                    <div style={{ height: 180 }}>
+                    <div style={{ height: 200, width: '100%', borderRadius: 3, border: `1px solid ${k.border}`, overflow: 'hidden', position: 'relative' }}>
                       <AdaptiveEdgeSetupChart
                         symbol={selected.underlying || selected.instrument}
                         entryTime={selected.entryTime}
@@ -771,44 +771,66 @@ export function AdaptiveEdgePane({
                   </div>
 
                   {/* 5. QUICK ACTIONS FOOTER */}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                     <button
                       type="button"
                       onClick={() => onOpenChart?.(chartSymbol(selected.underlying || selected.instrument), 'chart')}
                       style={{
                         flex: 1,
-                        padding: '7px 12px',
+                        height: 34,
+                        padding: '0 14px',
                         background: k.blue,
                         color: '#ffffff',
                         border: 0,
                         borderRadius: 3,
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: 500,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 6,
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.15s ease',
                       }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#3367d6'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = k.blue; }}
                     >
-                      Open Interactive Chart
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 3v18h18" />
+                        <path d="M18 9l-5 5-4-4-6 6" />
+                      </svg>
+                      <span>Open Interactive Chart</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleCopy(selected.instrument)}
                       style={{
-                        padding: '7px 12px',
+                        height: 34,
+                        padding: '0 14px',
                         background: k.bg,
                         color: k.text,
                         border: `1px solid ${k.border}`,
                         borderRadius: 3,
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: 500,
                         cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s ease',
                       }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = k.surfaceHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = k.bg; }}
                     >
-                      {copiedNotification ? '✓ Copied' : 'Copy Symbol'}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                      </svg>
+                      <span>{copiedNotification ? 'Copied' : 'Copy Symbol'}</span>
                     </button>
                   </div>
                 </div>

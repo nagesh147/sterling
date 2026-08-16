@@ -233,16 +233,14 @@ export function AdaptiveEdgeSetupChart({
     <div
       style={{
         position: 'relative',
+        width: '100%',
         height: '100%',
-        minHeight: 230,
+        minHeight: 0,
         background: '#ffffff',
-        border: `1px solid rgba(226, 232, 240, 0.8)`,
-        borderRadius: 8,
         overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
       }}
     >
-      <div ref={host} style={{ position: 'absolute', inset: 0 }} />
+      <div ref={host} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       {isLoading && (
         <div
           style={{
