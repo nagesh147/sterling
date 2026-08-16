@@ -275,6 +275,7 @@ export function SimpleTerminal() {
                   { id: 'more' as const, label: 'More' },
                   { id: 'data' as const, label: 'Data' },
                   { id: 'adaptiveEdge' as const, label: 'Adaptive Edge' },
+                  { id: 'backtest' as const, label: 'Backtest' },
                   { id: 'connect' as const, label: 'Connect' },
                   { id: 'help' as const, label: 'Help' },
                 ]).map((item) => (

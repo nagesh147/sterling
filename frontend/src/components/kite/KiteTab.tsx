@@ -41,6 +41,7 @@ import { k } from '../../styles/kiteUI';
 import type { SignalChartData } from '../../types/kiteEngine';
 import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 import { AdaptiveEdgePane } from './AdaptiveEdgePane';
+import { UnifiedBacktestPane } from '../backtest/UnifiedBacktestPane';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -164,6 +165,7 @@ export function KiteTab() {
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
     else if (nav === 'data') content = <DataLakePane />;
     else if (nav === 'adaptiveEdge') content = <AdaptiveEdgePane onOpenChart={handleOpenInstrument} />;
+    else if (nav === 'backtest') content = <UnifiedBacktestPane />;
     else if (nav === 'connect') content = <ConnectPane />;
     else if (nav === 'help') content = <HelpPane />;
   }
