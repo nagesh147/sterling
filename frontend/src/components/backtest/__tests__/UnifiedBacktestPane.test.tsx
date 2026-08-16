@@ -48,11 +48,15 @@ function renderComponent() {
 }
 
 describe('UnifiedBacktestPane', () => {
-  it('renders strategy selector, presets, parameters, data source options, and run button', () => {
+  it('renders strategy selector, dynamic mode, presets, parameters, data source options, and run button', () => {
     renderComponent();
 
     expect(screen.getByText(/REAL DATA:/i)).toBeInTheDocument();
     expect(screen.getByText('NIFTY 50 • Adaptive Edge Intraday')).toBeInTheDocument();
+    expect(screen.getByText(/Execution & Risk Mode/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dynamic \(Live\)/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Manual Override/i })).toBeInTheDocument();
+    expect(screen.getByText(/⚡ Dynamic Risk Engine Active/i)).toBeInTheDocument();
     expect(screen.getByText(/Historical Data Source/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Zerodha Kite/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /TrueData/i })).toBeInTheDocument();
@@ -60,6 +64,22 @@ describe('UnifiedBacktestPane', () => {
     expect(screen.getByText(/Indian F&O Friction Engine/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Run Backtest/i })).toBeInTheDocument();
     expect(screen.getByText('Ready to Run Real-Data Backtest')).toBeInTheDocument();
+  });
+
+  it('allows toggling between Dynamic Autonomous mode and Manual Override', () => {
+    renderComponent();
+
+    const manualBtn = screen.getByRole('button', { name: /Manual Override/i });
+    const dynamicBtn = screen.getByRole('button', { name: /Dynamic \(Live\)/i });
+
+    // Click Manual Override
+    fireEvent.click(manualBtn);
+    expect(screen.getByText('Stop (SL)')).toBeInTheDocument();
+    expect(screen.getByText('Target (TP)')).toBeInTheDocument();
+
+    // Click Dynamic back
+    fireEvent.click(dynamicBtn);
+    expect(screen.getByText(/⚡ Dynamic Risk Engine Active/i)).toBeInTheDocument();
   });
 
   it('allows toggling between Zerodha Kite and TrueData sources', () => {

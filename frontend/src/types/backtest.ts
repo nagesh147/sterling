@@ -28,6 +28,7 @@ export interface UnifiedBacktestRequest {
   strategy: string;
   symbol: string;
   data_source?: 'kite' | 'truedata' | 'auto';
+  dynamic_mode?: boolean;
   timeframe: string;
   lookback_days: number;
   starting_capital: number;
@@ -48,10 +49,14 @@ export interface BacktestTrade {
   trade_id: number;
   entry_time: string;
   exit_time: string;
+  symbol?: string;
   direction: 'LONG' | 'SHORT';
   entry_price: number;
   exit_price: number;
   qty: number;
+  sl_points?: number;
+  tp_points?: number;
+  reward_to_risk?: number;
   gross_pnl: number;
   friction_cost: number;
   net_pnl: number;

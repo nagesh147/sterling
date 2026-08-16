@@ -122,11 +122,12 @@ def calculate_bollinger_bands(
 
 
 def generate_strategy_signals(
-    df: pd.DataFrame, strategy: str, params: Dict[str, Any]
+    df: pd.DataFrame, strategy: str, params: Optional[Dict[str, Any]] = None
 ) -> Tuple[pd.Series, pd.Series]:
     """
     Returns (long_signals: pd.Series[bool], short_signals: pd.Series[bool])
     """
+    params = params or {}
     n = len(df)
     long_signals = pd.Series(False, index=df.index)
     short_signals = pd.Series(False, index=df.index)
@@ -296,22 +297,35 @@ def run_unified_backtest(
                 current_trade["mae"] = max(current_trade["mae"], adverse)
                 current_trade["mfe"] = max(current_trade["mfe"], favorable)
 
-                # Check Trailing SL upgrade
-                if req.trail_points and (bar_close - entry_price) >= req.trail_points:
-                    new_tsl = bar_close - req.trail_points
-                    if new_tsl > tsl_price:
-                        current_trade["tsl_price"] = new_tsl
-                        tsl_price = new_tsl
+                # Dynamic or manual trailing stop upgrade
+                if getattr(req, "dynamic_mode", True):
+                    # Step 1: Break-even lock at 1.0R
+                    sl_d = current_trade.get("sl_dist", curr_atr * 1.5)
+                    if current_trade["mfe"] >= sl_d * 1.0:
+                        be_price = (entry_price + sl_d * 0.15) if direction == "LONG" else (entry_price - sl_d * 0.15)
+                        if direction == "LONG" and be_price > tsl_price:
+                            current_trade["tsl_price"] = be_price
+                            tsl_price = be_price
+                        elif direction == "SHORT" and be_price < tsl_price:
+                            current_trade["tsl_price"] = be_price
+                            tsl_price = be_price
 
-            else:  # SHORT
-                adverse = max(0.0, bar_high - entry_price)
-                favorable = max(0.0, entry_price - bar_low)
-                current_trade["mae"] = max(current_trade["mae"], adverse)
-                current_trade["mfe"] = max(current_trade["mfe"], favorable)
+                    # Step 2: Dynamic ATR Trailing beyond 1.8R
+                    if current_trade["mfe"] >= sl_d * 1.8:
+                        if direction == "LONG":
+                            dyn_tsl = bar_close - (curr_atr * 0.8)
+                            if dyn_tsl > tsl_price:
+                                current_trade["tsl_price"] = dyn_tsl
+                                tsl_price = dyn_tsl
+                        else:
+                            dyn_tsl = bar_close + (curr_atr * 0.8)
+                            if dyn_tsl < tsl_price:
+                                current_trade["tsl_price"] = dyn_tsl
+                                tsl_price = dyn_tsl
 
-                if req.trail_points and (entry_price - bar_close) >= req.trail_points:
-                    new_tsl = bar_close + req.trail_points
-                    if new_tsl < tsl_price:
+                elif req.trail_points and (bar_close - entry_price if direction == "LONG" else entry_price - bar_close) >= req.trail_points:
+                    new_tsl = (bar_close - req.trail_points) if direction == "LONG" else (bar_close + req.trail_points)
+                    if (direction == "LONG" and new_tsl > tsl_price) or (direction == "SHORT" and new_tsl < tsl_price):
                         current_trade["tsl_price"] = new_tsl
                         tsl_price = new_tsl
 
@@ -388,15 +402,24 @@ def run_unified_backtest(
                 capital = round(capital + net_pnl, 2)
                 high_water_mark = max(high_water_mark, capital)
 
+                sl_d = current_trade.get("sl_dist", round(abs(entry_price - sl_price), 2))
+                tp_d = current_trade.get("tp_dist", round(abs(tp_price - entry_price), 2))
+                pts_captured = (exit_price - entry_price) if direction == "LONG" else (entry_price - exit_price)
+                rr_achieved = round(pts_captured / sl_d, 2) if sl_d > 0 else 0.0
+
                 trades.append(
                     BacktestTradeLog(
                         trade_id=len(trades) + 1,
                         entry_time=current_trade["entry_time"],
                         exit_time=curr_dt_str,
+                        symbol=req.symbol,
                         direction=direction,
                         entry_price=round(entry_price, 2),
                         exit_price=round(exit_price, 2),
                         qty=total_qty,
+                        sl_points=round(sl_d, 2),
+                        tp_points=round(tp_d, 2),
+                        reward_to_risk=rr_achieved,
                         gross_pnl=round(gross_pnl, 2),
                         friction_cost=total_friction,
                         net_pnl=net_pnl,
@@ -419,9 +442,21 @@ def run_unified_backtest(
                 # Entry fill on next bar open (or current close + slippage)
                 entry_fill = bar_close + (req.slippage_points if is_long else -req.slippage_points)
 
-                # Stop & Target points
-                stop_dist = req.stop_points if req.stop_points and req.stop_points > 0 else (curr_atr * 1.5)
-                target_dist = req.target_points if req.target_points and req.target_points > 0 else (stop_dist * 2.0)
+                # Dynamic or manual Stop & Target points
+                if getattr(req, "dynamic_mode", True):
+                    lookback_w = min(5, i)
+                    if is_long:
+                        swing_low = df["low"].iloc[i - lookback_w : i + 1].min()
+                        structure_sl = entry_fill - swing_low
+                        stop_dist = max(curr_atr * 1.5, structure_sl, entry_fill * 0.003)
+                    else:
+                        swing_high = df["high"].iloc[i - lookback_w : i + 1].max()
+                        structure_sl = swing_high - entry_fill
+                        stop_dist = max(curr_atr * 1.5, structure_sl, entry_fill * 0.003)
+                    target_dist = stop_dist * 2.2
+                else:
+                    stop_dist = req.stop_points if req.stop_points and req.stop_points > 0 else (curr_atr * 1.5)
+                    target_dist = req.target_points if req.target_points and req.target_points > 0 else (stop_dist * 2.0)
 
                 sl_price = (entry_fill - stop_dist) if is_long else (entry_fill + stop_dist)
                 tp_price = (entry_fill + target_dist) if is_long else (entry_fill - target_dist)
@@ -434,6 +469,8 @@ def run_unified_backtest(
                     "sl_price": sl_price,
                     "tp_price": tp_price,
                     "tsl_price": sl_price,
+                    "sl_dist": stop_dist,
+                    "tp_dist": target_dist,
                     "mae": 0.0,
                     "mfe": 0.0,
                 }

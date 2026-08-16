@@ -31,6 +31,7 @@ export function UnifiedBacktestPane() {
   const [strategy, setStrategy] = useState('adaptive_edge');
   const [symbol, setSymbol] = useState('NIFTY 50');
   const [dataSource, setDataSource] = useState<'kite' | 'truedata'>('kite');
+  const [dynamicMode, setDynamicMode] = useState(true);
   const [timeframe, setTimeframe] = useState('5m');
   const [lookbackDays, setLookbackDays] = useState(30);
   const [startingCapital, setStartingCapital] = useState(100000);
@@ -65,13 +66,14 @@ export function UnifiedBacktestPane() {
       strategy,
       symbol,
       data_source: dataSource,
+      dynamic_mode: dynamicMode,
       timeframe,
       lookback_days: lookbackDays,
       starting_capital: startingCapital,
       num_lots: numLots,
-      stop_points: stopPoints,
-      target_points: targetPoints,
-      trail_points: trailPoints,
+      stop_points: dynamicMode ? undefined : stopPoints,
+      target_points: dynamicMode ? undefined : targetPoints,
+      trail_points: dynamicMode ? undefined : trailPoints,
       slippage_points: slippagePoints,
       brokerage_per_order: brokerage,
       stt_pct: sttPct,
@@ -98,10 +100,14 @@ export function UnifiedBacktestPane() {
       'Trade ID',
       'Entry Time',
       'Exit Time',
+      'Symbol',
       'Direction',
       'Entry Price',
       'Exit Price',
       'Qty',
+      'Dynamic SL (pts)',
+      'Dynamic TP (pts)',
+      'R:R Achieved',
       'Gross PnL (INR)',
       'Friction (INR)',
       'Net PnL (INR)',
@@ -114,10 +120,14 @@ export function UnifiedBacktestPane() {
       t.trade_id,
       t.entry_time,
       t.exit_time,
+      t.symbol || result.symbol,
       t.direction,
       t.entry_price,
       t.exit_price,
       t.qty,
+      t.sl_points ?? '',
+      t.tp_points ?? '',
+      t.reward_to_risk ?? '',
       t.gross_pnl,
       t.friction_cost,
       t.net_pnl,
@@ -169,9 +179,60 @@ export function UnifiedBacktestPane() {
       {/* ── Main Content Area ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* ── Left Sidebar: Strategy & Parameters Config ── */}
-        <div style={{ width: 320, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
+        <div style={{ width: 330, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             ⚙️ Strategy & Engine Parameters
+          </div>
+
+          {/* Execution Mode: Dynamic vs Manual */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
+              Execution & Risk Mode
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setDynamicMode(true)}
+                style={{
+                  padding: '7px 8px',
+                  borderRadius: 4,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  border: dynamicMode ? '2px solid #f06428' : '1px solid #ddd',
+                  background: dynamicMode ? 'rgba(240,100,40,0.08)' : '#fafafa',
+                  color: dynamicMode ? '#f06428' : '#666',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>⚡</span> Dynamic (Live)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDynamicMode(false)}
+                style={{
+                  padding: '7px 8px',
+                  borderRadius: 4,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  border: !dynamicMode ? '2px solid #333' : '1px solid #ddd',
+                  background: !dynamicMode ? '#eee' : '#fafafa',
+                  color: !dynamicMode ? '#111' : '#666',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>⚙️</span> Manual Override
+              </button>
+            </div>
           </div>
 
           {/* Data Source Picker (Kite vs TrueData) */}
@@ -250,12 +311,13 @@ export function UnifiedBacktestPane() {
               <select
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
               >
                 <option value="NIFTY 50">NIFTY 50</option>
-                <option value="NIFTY BANK">NIFTY BANK</option>
+                <option value="NIFTY BANK">BANKNIFTY</option>
                 <option value="NIFTY FIN SERVICE">FINNIFTY</option>
                 <option value="SENSEX">SENSEX</option>
+                <option value="ALL_INDICES">🌐 All Indian Indices</option>
                 <option value="RELIANCE">RELIANCE</option>
                 <option value="HDFCBANK">HDFCBANK</option>
                 <option value="INFY">INFY</option>
@@ -271,20 +333,20 @@ export function UnifiedBacktestPane() {
               <select
                 value={timeframe}
                 onChange={(e) => setTimeframe(e.target.value)}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
               >
-                <option value="1m">1 Minute</option>
+                <option value="5m">5 Minute (Scalp)</option>
+                <option value="15m">15 Minute (Intraday)</option>
                 <option value="3m">3 Minute</option>
-                <option value="5m">5 Minute</option>
-                <option value="15m">15 Minute</option>
+                <option value="1m">1 Minute</option>
                 <option value="30m">30 Minute</option>
-                <option value="1h">1 Hour</option>
-                <option value="day">1 Day</option>
+                <option value="1h">1 Hour (Trend)</option>
+                <option value="day">1 Day (Positional)</option>
               </select>
             </div>
           </div>
 
-          {/* Lookback Days & Starting Capital */}
+          {/* Lookback Days & Capital */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -329,41 +391,51 @@ export function UnifiedBacktestPane() {
 
           {/* Stop, Target & Trailing */}
           <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 10 }}>
-              🛡️ Risk & Exit Boundaries (Points)
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8 }}>
+              🛡️ Risk & Exit Boundaries
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Stop (SL)</label>
-                <input
-                  type="number"
-                  value={stopPoints ?? ''}
-                  placeholder="Auto ATR"
-                  onChange={(e) => setStopPoints(e.target.value ? Number(e.target.value) : undefined)}
-                  style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
-                />
+
+            {dynamicMode ? (
+              <div style={{ background: 'rgba(240,100,40,0.06)', border: '1px solid rgba(240,100,40,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: '#444', lineHeight: 1.45 }}>
+                <div style={{ fontWeight: 700, color: '#f06428', marginBottom: 3 }}>⚡ Dynamic Risk Engine Active</div>
+                <div>• <strong>Stop Loss (SL)</strong>: Auto-calculated per bar via Dynamic ATR & Swing Pivots.</div>
+                <div>• <strong>Profit Target (TP)</strong>: Auto-expanded to 1:2.2+ R:R.</div>
+                <div>• <strong>Trailing SL (TSL)</strong>: Auto-locks Break-Even at 1.0R and trails at 0.8×ATR for 1:3–1:6+ runners.</div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Target (TP)</label>
-                <input
-                  type="number"
-                  value={targetPoints ?? ''}
-                  placeholder="Auto 2R"
-                  onChange={(e) => setTargetPoints(e.target.value ? Number(e.target.value) : undefined)}
-                  style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
-                />
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Stop (SL)</label>
+                  <input
+                    type="number"
+                    value={stopPoints ?? ''}
+                    placeholder="Points"
+                    onChange={(e) => setStopPoints(e.target.value ? Number(e.target.value) : undefined)}
+                    style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Target (TP)</label>
+                  <input
+                    type="number"
+                    value={targetPoints ?? ''}
+                    placeholder="Points"
+                    onChange={(e) => setTargetPoints(e.target.value ? Number(e.target.value) : undefined)}
+                    style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Trail (TSL)</label>
+                  <input
+                    type="number"
+                    value={trailPoints ?? ''}
+                    placeholder="Points"
+                    onChange={(e) => setTrailPoints(e.target.value ? Number(e.target.value) : undefined)}
+                    style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
+                  />
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Trail (TSL)</label>
-                <input
-                  type="number"
-                  value={trailPoints ?? ''}
-                  placeholder="Disabled"
-                  onChange={(e) => setTrailPoints(e.target.value ? Number(e.target.value) : undefined)}
-                  style={{ width: '100%', padding: '6px 6px', fontSize: 12, borderRadius: 4, border: `1px solid ${k.border}`, boxSizing: 'border-box' }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Friction & Costs */}
@@ -420,7 +492,7 @@ export function UnifiedBacktestPane() {
                 Ready to Run Real-Data Backtest
               </div>
               <div style={{ fontSize: 13, maxWidth: 450, textAlign: 'center', lineHeight: 1.5 }}>
-                Select a preset or customize your strategy parameters on the left, then click <strong>Run Backtest</strong> to evaluate performance on genuine historical candles.
+                Select a preset or customize your strategy parameters on the left, then click <strong>Run Backtest</strong> to evaluate performance on genuine historical candles with dynamic ATR risk and trailing stops.
               </div>
             </div>
           )}
@@ -431,7 +503,7 @@ export function UnifiedBacktestPane() {
               <div style={{ fontSize: 15, fontWeight: 600, color: '#333', marginBottom: 4 }}>
                 Fetching Historical Candles & Simulating Executions…
               </div>
-              <div style={{ fontSize: 12 }}>Calculating Black-Scholes greeks, fee ledgers, and MAE/MFE diagnostics</div>
+              <div style={{ fontSize: 12 }}>Calculating dynamic ATR risk boundaries, fee ledgers, and MAE/MFE diagnostics</div>
             </div>
           )}
 
@@ -668,11 +740,12 @@ export function UnifiedBacktestPane() {
                           <th style={{ padding: '8px 10px' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Entry Time</th>
                           <th style={{ padding: '8px 10px' }}>Exit Time</th>
+                          <th style={{ padding: '8px 10px' }}>Symbol</th>
                           <th style={{ padding: '8px 10px' }}>Side</th>
                           <th style={{ padding: '8px 10px' }}>Entry</th>
                           <th style={{ padding: '8px 10px' }}>Exit</th>
-                          <th style={{ padding: '8px 10px' }}>Gross P&L</th>
-                          <th style={{ padding: '8px 10px' }}>Friction</th>
+                          <th style={{ padding: '8px 10px' }}>Dynamic SL / TP</th>
+                          <th style={{ padding: '8px 10px' }}>R:R</th>
                           <th style={{ padding: '8px 10px' }}>Net P&L</th>
                           <th style={{ padding: '8px 10px' }}>MAE / MFE</th>
                           <th style={{ padding: '8px 10px' }}>Exit Reason</th>
@@ -686,15 +759,18 @@ export function UnifiedBacktestPane() {
                               <td style={{ padding: '8px 10px', color: '#888' }}>{t.trade_id}</td>
                               <td style={{ padding: '8px 10px' }}>{t.entry_time.replace('T', ' ').substring(5, 16)}</td>
                               <td style={{ padding: '8px 10px' }}>{t.exit_time.replace('T', ' ').substring(5, 16)}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#444' }}>{t.symbol || result.symbol}</td>
                               <td style={{ padding: '8px 10px', fontWeight: 700, color: t.direction === 'LONG' ? '#2e7d32' : '#c62828' }}>
                                 {t.direction}
                               </td>
                               <td style={{ padding: '8px 10px' }}>₹{t.entry_price}</td>
                               <td style={{ padding: '8px 10px' }}>₹{t.exit_price}</td>
-                              <td style={{ padding: '8px 10px', color: t.gross_pnl >= 0 ? '#2e7d32' : '#c62828' }}>
-                                {fmtCurr(t.gross_pnl)}
+                              <td style={{ padding: '8px 10px', fontSize: 11.5, color: '#555' }}>
+                                {t.sl_points ? `${t.sl_points} / ${t.tp_points ?? '-'}` : '-'}
                               </td>
-                              <td style={{ padding: '8px 10px', color: '#888' }}>₹{t.friction_cost}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: 700, color: (t.reward_to_risk ?? 0) >= 1.5 ? '#2e7d32' : ((t.reward_to_risk ?? 0) <= 0 ? '#c62828' : '#333') }}>
+                                {t.reward_to_risk !== undefined ? `1:${t.reward_to_risk}R` : '-'}
+                              </td>
                               <td style={{ padding: '8px 10px', fontWeight: 700, color: isWin ? '#2e7d32' : '#c62828' }}>
                                 {fmtCurr(t.net_pnl)} ({t.return_pct}%)
                               </td>
@@ -704,8 +780,8 @@ export function UnifiedBacktestPane() {
                               <td style={{ padding: '8px 10px' }}>
                                 <span style={{
                                   fontSize: 10.5, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
-                                  background: t.exit_reason === 'TARGET' ? 'rgba(46,125,50,0.12)' : (t.exit_reason === 'STOP_LOSS' ? 'rgba(198,40,40,0.12)' : '#eee'),
-                                  color: t.exit_reason === 'TARGET' ? '#2e7d32' : (t.exit_reason === 'STOP_LOSS' ? '#c62828' : '#555'),
+                                  background: t.exit_reason === 'TARGET' ? 'rgba(46,125,50,0.12)' : (t.exit_reason === 'TRAILING_STOP' ? 'rgba(25,118,210,0.12)' : (t.exit_reason === 'STOP_LOSS' ? 'rgba(198,40,40,0.12)' : '#eee')),
+                                  color: t.exit_reason === 'TARGET' ? '#2e7d32' : (t.exit_reason === 'TRAILING_STOP' ? '#1976d2' : (t.exit_reason === 'STOP_LOSS' ? '#c62828' : '#555')),
                                 }}>
                                   {t.exit_reason}
                                 </span>
