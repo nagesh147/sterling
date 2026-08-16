@@ -173,6 +173,53 @@ export function AdaptiveEdgePane({
   const openCount = board.filter((row) => row.open).length;
   const closedCount = history.filter((row) => !row.open).length || board.filter((row) => !row.open).length;
 
+  const symbolCounts = useMemo(() => {
+    let list: AdaptiveEdgeRow[] = [];
+    if (statusFilter === 'closed') {
+      const closedHistory = history.filter((row) => !row.open);
+      list = closedHistory.length ? closedHistory : board.filter((row) => !row.open);
+    } else if (statusFilter === 'open') {
+      list = board.filter((row) => row.open);
+    } else {
+      list = board;
+    }
+
+    const counts: Record<string, number> = {
+      ALL: list.length,
+      'NIFTY 50': 0,
+      'NIFTY BANK': 0,
+      'NIFTY FIN SERVICE': 0,
+      SENSEX: 0,
+      STOCKS: 0,
+    };
+
+    list.forEach((r) => {
+      const u = r.underlying.toUpperCase();
+      if (u.includes('BANKNIFTY') || u.includes('NIFTY BANK')) {
+        counts['NIFTY BANK']++;
+      } else if (u.includes('FINNIFTY') || u.includes('FIN SERVICE')) {
+        counts['NIFTY FIN SERVICE']++;
+      } else if (u.includes('NIFTY')) {
+        counts['NIFTY 50']++;
+      } else if (u.includes('SENSEX')) {
+        counts.SENSEX++;
+      } else {
+        counts.STOCKS++;
+      }
+    });
+
+    return counts;
+  }, [board, history, statusFilter]);
+
+  const symbolFilterItems = [
+    { id: 'ALL', label: 'All', count: symbolCounts.ALL },
+    { id: 'NIFTY 50', label: 'NIFTY', count: symbolCounts['NIFTY 50'] },
+    { id: 'NIFTY BANK', label: 'BANKNIFTY', count: symbolCounts['NIFTY BANK'] },
+    { id: 'NIFTY FIN SERVICE', label: 'FINNIFTY', count: symbolCounts['NIFTY FIN SERVICE'] },
+    { id: 'SENSEX', label: 'SENSEX', count: symbolCounts.SENSEX },
+    { id: 'STOCKS', label: 'F&O Equities', count: symbolCounts.STOCKS },
+  ];
+
   // Track configured vs scanned instruments to show real-time background scanning queue
   const allConfiguredSymbols = useMemo(() => {
     const list: string[] = [];
@@ -527,35 +574,26 @@ export function AdaptiveEdgePane({
                 ))}
               </div>
 
-              {/* Symbol Quick Filter Chips */}
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {['ALL', 'NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX', 'STOCKS'].map((sym) => (
+              {/* Symbol Segmented Control */}
+              <div style={{ display: 'flex', gap: 2, background: k.surfaceHover, padding: 2, borderRadius: 3, flexWrap: 'wrap' }}>
+                {symbolFilterItems.map((item) => (
                   <button
-                    key={sym}
+                    key={item.id}
                     type="button"
-                    onClick={() => setSymbolFilter(sym)}
+                    onClick={() => setSymbolFilter(item.id)}
                     style={{
-                      border: `1px solid ${symbolFilter === sym ? k.blue : k.border}`,
-                      background: symbolFilter === sym ? `${k.blue}12` : k.bg,
-                      color: symbolFilter === sym ? k.blue : k.dim,
-                      borderRadius: 99,
-                      padding: '2px 8px',
-                      fontSize: 10.5,
-                      fontWeight: symbolFilter === sym ? 600 : 400,
+                      border: 0,
+                      background: symbolFilter === item.id ? k.bg : 'transparent',
+                      color: symbolFilter === item.id ? k.text : k.dim,
+                      fontWeight: symbolFilter === item.id ? 600 : 400,
+                      borderRadius: 2,
+                      padding: '3px 8px',
+                      fontSize: 11,
                       cursor: 'pointer',
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {sym === 'ALL'
-                      ? 'All'
-                      : sym === 'NIFTY 50'
-                      ? 'NIFTY'
-                      : sym === 'NIFTY BANK'
-                      ? 'BANKNIFTY'
-                      : sym === 'NIFTY FIN SERVICE'
-                      ? 'FINNIFTY'
-                      : sym === 'STOCKS'
-                      ? 'F&O Equities'
-                      : sym}
+                    {item.label} {item.count}
                   </button>
                 ))}
               </div>
