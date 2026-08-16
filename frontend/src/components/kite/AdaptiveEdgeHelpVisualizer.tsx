@@ -87,12 +87,22 @@ const STEPS: StepDetail[] = [
 export function AdaptiveEdgeHelpVisualizer() {
   const [activeStep, setActiveStep] = useState<number>(1);
   
-  // Interactive Simulation Sandbox State
+  // ── Editable Parameters for Realtime Simulation & PnL ──
+  const [lotSize, setLotSize] = useState<number>(25); // Nifty standard lot
+  const [numLots, setNumLots] = useState<number>(2); // 2 lots = 50 qty
+  const [entryPrice, setEntryPrice] = useState<number>(504.35);
+  const [initialSl, setInitialSl] = useState<number>(380.55);
+  const [exitTarget, setExitTarget] = useState<number>(620.00);
+  const [tslOffset, setTslOffset] = useState<number>(30.0); // trail distance in pts
+  const [beTrigger, setBeTrigger] = useState<number>(20.0); // break-even profit threshold in pts
+
+  // ── Interactive Simulation Sandbox State ──
   const [simSpot, setSimSpot] = useState<number>(24465);
   const baseSpot = 24465;
   const spotDiff = simSpot - baseSpot;
 
   // Derived simulation metrics
+  const totalQty = Math.max(1, lotSize * numLots);
   const simCvd = Math.round(39075 + spotDiff * 850);
   const simModelScore = Math.min(0.98, Math.max(0.05, 0.62 + (spotDiff / 100) * 0.35));
   
@@ -115,12 +125,36 @@ export function AdaptiveEdgeHelpVisualizer() {
   }
 
   // Option Strike Simulation (Delta ≈ 0.55)
-  const optionEntry = 504.35;
-  const optionLtp = Math.max(280, Number((optionEntry + spotDiff * 0.55).toFixed(2)));
-  const optionDiff = Number((optionLtp - optionEntry).toFixed(2));
-  const optionSl = 380.55;
-  // Trailing stop ratchets upward as price advances
-  const optionTsl = Number((Math.max(473.48, optionEntry + Math.max(0, spotDiff * 0.45) - 30)).toFixed(2));
+  const currentLtp = Math.max(10, Number((entryPrice + spotDiff * 0.55).toFixed(2)));
+  const ptsDiff = Number((currentLtp - entryPrice).toFixed(2));
+  const ptsPct = Number(((ptsDiff / entryPrice) * 100).toFixed(2));
+  const netPnlUsd = Number((ptsDiff * totalQty).toFixed(2));
+
+  // Dynamic Trailing Stop Loss (TSL) Logic:
+  // 1. If gain < beTrigger: TSL stays at initial hard SL
+  // 2. If gain >= beTrigger: TSL ratchets to at least Break-Even (entryPrice)
+  // 3. As price advances further: TSL ratchets up to (currentLtp - tslOffset), ratcheting higher only!
+  let dynamicTsl = initialSl;
+  if (ptsDiff >= beTrigger) {
+    dynamicTsl = Math.max(entryPrice, currentLtp - tslOffset);
+  }
+  dynamicTsl = Number(dynamicTsl.toFixed(2));
+
+  // Locked-In Profit / Defined Risk at TSL
+  const tslPtsDiff = Number((dynamicTsl - entryPrice).toFixed(2));
+  const tslPnl = Number((tslPtsDiff * totalQty).toFixed(2));
+  const isRiskFree = dynamicTsl >= entryPrice;
+
+  // Max Capital at Risk (Initial)
+  const initialRiskPts = Math.max(0, entryPrice - initialSl);
+  const maxRiskAmount = Number((initialRiskPts * totalQty).toFixed(2));
+
+  // Max Potential Target Profit
+  const targetProfitPts = Math.max(0, exitTarget - entryPrice);
+  const maxTargetAmount = Number((targetProfitPts * totalQty).toFixed(2));
+
+  // Current Risk-to-Reward (R:R)
+  const currentRR = initialRiskPts > 0 ? (ptsDiff / initialRiskPts).toFixed(2) : '1.00';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: k.fontFamily }}>
@@ -156,7 +190,7 @@ export function AdaptiveEdgeHelpVisualizer() {
               letterSpacing: '0.04em',
             }}
           >
-            END-TO-END WORKFLOW
+            END-TO-END WORKFLOW & PNL SIMULATOR
           </span>
         </div>
         <p style={{ fontSize: 12, color: k.text, lineHeight: 1.6, margin: 0, opacity: 0.9 }}>
@@ -369,7 +403,7 @@ export function AdaptiveEdgeHelpVisualizer() {
         </div>
       </div>
 
-      {/* ── Interactive Live Simulation Sandbox ── */}
+      {/* ── Interactive Live Simulation Sandbox & Editable PnL Model ── */}
       <div
         style={{
           background: k.bg,
@@ -384,16 +418,19 @@ export function AdaptiveEdgeHelpVisualizer() {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: k.blue, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              🎮 Interactive Sandbox Simulation
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14 }}>🎮</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: k.text }}>
+                Interactive Sandbox Simulation & Real-Time P&L Engine
+              </span>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: k.text }}>
-              Test Live Market Microstructure Reaction (NIFTY 50 @ ₹24,465)
+            <div style={{ fontSize: 11, color: k.dim, marginTop: 2 }}>
+              Edit lot size, entry, hard SL, exit target, and trailing stop parameters to test how TSL protects and locks in live profits.
             </div>
           </div>
 
           {/* Quick Preset Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
             <button
               type="button"
               onClick={() => setSimSpot(24465)}
@@ -461,16 +498,205 @@ export function AdaptiveEdgeHelpVisualizer() {
           </div>
         </div>
 
+        {/* ── Editable Configuration Panel (Lot Size, Entry, SL, Target, TSL Offset) ── */}
+        <div
+          style={{
+            background: k.surface,
+            border: `1px solid ${k.border}`,
+            borderRadius: 4,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            ⚙️ Editable Trade & Execution Parameters:
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
+              gap: 10,
+            }}
+          >
+            {/* Lot Size & Number of Lots */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                Lots × Lot Size
+              </label>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={numLots}
+                  onChange={(e) => setNumLots(Math.max(1, Number(e.target.value)))}
+                  style={{
+                    width: 48,
+                    padding: '4px 6px',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    borderRadius: 3,
+                    border: `1px solid ${k.border}`,
+                    background: k.bg,
+                    color: k.text,
+                    textAlign: 'center',
+                  }}
+                />
+                <span style={{ fontSize: 11, color: k.dim }}>×</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={5}
+                  value={lotSize}
+                  onChange={(e) => setLotSize(Math.max(1, Number(e.target.value)))}
+                  style={{
+                    width: 48,
+                    padding: '4px 6px',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    borderRadius: 3,
+                    border: `1px solid ${k.border}`,
+                    background: k.bg,
+                    color: k.text,
+                    textAlign: 'center',
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: 9.5, color: k.dim }}>= <b>{totalQty}</b> total Qty</span>
+            </div>
+
+            {/* Entry Premium */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                Entry Premium (₹)
+              </label>
+              <input
+                type="number"
+                step={0.5}
+                value={entryPrice}
+                onChange={(e) => setEntryPrice(Number(e.target.value))}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: `1px solid ${k.border}`,
+                  background: k.bg,
+                  color: k.text,
+                }}
+              />
+              <span style={{ fontSize: 9.5, color: k.blue }}>Strike Entry Price</span>
+            </div>
+
+            {/* Initial Protective Hard SL */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                Initial Hard SL (₹)
+              </label>
+              <input
+                type="number"
+                step={0.5}
+                value={initialSl}
+                onChange={(e) => setInitialSl(Number(e.target.value))}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: `1px solid ${k.border}`,
+                  background: k.bg,
+                  color: k.text,
+                }}
+              />
+              <span style={{ fontSize: 9.5, color: k.red }}>Max Risk: -₹{maxRiskAmount.toLocaleString('en-IN')}</span>
+            </div>
+
+            {/* Exit Target / Take Profit */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                Exit Target (₹)
+              </label>
+              <input
+                type="number"
+                step={0.5}
+                value={exitTarget}
+                onChange={(e) => setExitTarget(Number(e.target.value))}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: `1px solid ${k.border}`,
+                  background: k.bg,
+                  color: k.text,
+                }}
+              />
+              <span style={{ fontSize: 9.5, color: k.green }}>Max Gain: +₹{maxTargetAmount.toLocaleString('en-IN')}</span>
+            </div>
+
+            {/* Trailing Stop Offset (pts) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                TSL Trail Offset (pts)
+              </label>
+              <input
+                type="number"
+                step={5}
+                min={5}
+                value={tslOffset}
+                onChange={(e) => setTslOffset(Math.max(5, Number(e.target.value)))}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: `1px solid ${k.border}`,
+                  background: k.bg,
+                  color: k.text,
+                }}
+              />
+              <span style={{ fontSize: 9.5, color: k.orange }}>Trail Buffer</span>
+            </div>
+
+            {/* Break-Even Trigger (pts) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+                Break-Even Trigger (pts)
+              </label>
+              <input
+                type="number"
+                step={5}
+                min={5}
+                value={beTrigger}
+                onChange={(e) => setBeTrigger(Math.max(5, Number(e.target.value)))}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  border: `1px solid ${k.border}`,
+                  background: k.bg,
+                  color: k.text,
+                }}
+              />
+              <span style={{ fontSize: 9.5, color: k.purple }}>Risk-Free @ +{beTrigger} pts</span>
+            </div>
+          </div>
+        </div>
+
         {/* Spot Price Slider Control */}
         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
             <span style={{ fontWeight: 650, color: k.text }}>
-              Simulated Underlying Spot Price: <span style={{ color: k.blue, fontWeight: 750 }}>₹{simSpot.toLocaleString('en-IN')}</span>
+              Simulated Spot Price: <span style={{ color: k.blue, fontWeight: 750 }}>₹{simSpot.toLocaleString('en-IN')}</span>
               <span style={{ marginLeft: 6, fontWeight: 600, color: spotDiff >= 0 ? k.green : k.red }}>
                 ({spotDiff >= 0 ? '+' : ''}{spotDiff} pts)
               </span>
             </span>
-            <span style={{ color: k.dim, fontSize: 10.5 }}>Range: ₹24,400 — ₹24,580</span>
+            <span style={{ color: k.dim, fontSize: 10.5 }}>Simulated Option Delta: Δ 0.55</span>
           </div>
           <input
             type="range"
@@ -483,120 +709,208 @@ export function AdaptiveEdgeHelpVisualizer() {
           />
         </div>
 
-        {/* Live Reaction Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-          {/* Microstructure CVD */}
+        {/* ── Real-Time P&L & TSL Reaction Dashboard ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+          
+          {/* Current Option LTP */}
           <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Order Flow CVD</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: simCvd >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
-              {simCvd >= 0 ? '+' : ''}{simCvd.toLocaleString('en-IN')}
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Live Option LTP</div>
+            <div style={{ fontSize: 14, fontWeight: 750, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+              ₹{currentLtp.toFixed(2)}
             </div>
-            <div style={{ fontSize: 9.5, color: k.dim, marginTop: 1 }}>Aggressive Delta</div>
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: ptsDiff >= 0 ? k.green : k.red, marginTop: 1 }}>
+              {ptsDiff >= 0 ? '+' : ''}{ptsDiff.toFixed(2)} pts ({ptsPct >= 0 ? '+' : ''}{ptsPct}%)
+            </div>
           </div>
 
-          {/* Model Conviction Score */}
-          <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Model Score</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
-              {simModelScore.toFixed(2)}
+          {/* Net Unrealized MTM PnL */}
+          <div
+            style={{
+              background: ptsDiff >= 0 ? `${k.green}10` : `${k.red}10`,
+              border: `1px solid ${ptsDiff >= 0 ? k.green : k.red}40`,
+              borderRadius: 3,
+              padding: '8px 10px',
+            }}
+          >
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: ptsDiff >= 0 ? k.green : k.red, textTransform: 'uppercase' }}>
+              Unrealized MTM P&L
             </div>
-            <div style={{ fontSize: 9.5, color: k.green, fontWeight: 600, marginTop: 1 }}>THESIS VALID</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+              {netPnlUsd >= 0 ? '+' : ''}₹{netPnlUsd.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+            <div style={{ fontSize: 9.5, color: ptsDiff >= 0 ? k.green : k.red, fontWeight: 600, marginTop: 1 }}>
+              {ptsDiff >= 0 ? 'PROFIT' : 'LOSS'} ({totalQty} Qty)
+            </div>
           </div>
 
-          {/* Active Mode Escalator */}
+          {/* Ratcheting Trailing Stop (TSL) */}
+          <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
+              Ratcheted TSL
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 750, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
+              ₹{dynamicTsl.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.dim, fontWeight: isRiskFree ? 700 : 400, marginTop: 1 }}>
+              {isRiskFree ? '🛡️ RISK-FREE LOCK' : `Initial SL: ₹${initialSl}`}
+            </div>
+          </div>
+
+          {/* Protected / Locked-In Profit at TSL */}
+          <div
+            style={{
+              background: isRiskFree ? `${k.green}0a` : `${k.red}0a`,
+              border: `1px solid ${isRiskFree ? k.green : k.red}30`,
+              borderRadius: 3,
+              padding: '8px 10px',
+            }}
+          >
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: isRiskFree ? k.green : k.red, textTransform: 'uppercase' }}>
+              {isRiskFree ? '🔒 Locked Profit @ TSL' : '⚠️ Defined Risk @ TSL'}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 750, color: isRiskFree ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+              {tslPnl >= 0 ? '+' : ''}₹{tslPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.red, fontWeight: 600, marginTop: 1 }}>
+              {isRiskFree ? `${tslPtsDiff > 0 ? `+${tslPtsDiff} pts` : 'Break-Even (0 risk)'}` : `Max Loss: -₹${Math.abs(tslPnl).toLocaleString('en-IN')}`}
+            </div>
+          </div>
+
+          {/* Risk-Reward & Mode */}
           <div style={{ background: `${simModeColor}10`, border: `1px solid ${simModeColor}40`, borderRadius: 3, padding: '8px 10px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: simModeColor, textTransform: 'uppercase' }}>Active Mode</div>
+            <div style={{ fontSize: 9.5, fontWeight: 600, color: simModeColor, textTransform: 'uppercase' }}>
+              Mode & R:R Ratio
+            </div>
             <div style={{ fontSize: 13, fontWeight: 750, color: simModeColor }}>
               {simModeBadge}
             </div>
-            <div style={{ fontSize: 9.5, color: simModeColor, opacity: 0.8, marginTop: 1 }}>{simMode} Horizon</div>
-          </div>
-
-          {/* Option Contract LTP */}
-          <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>24500 CE LTP</div>
-            <div style={{ fontSize: 13, fontWeight: 750, color: optionDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
-              ₹{optionLtp.toFixed(2)}
-            </div>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: optionDiff >= 0 ? k.green : k.red, marginTop: 1 }}>
-              {optionDiff >= 0 ? '+' : ''}{optionDiff.toFixed(2)} pts
+            <div style={{ fontSize: 9.5, color: simModeColor, fontWeight: 600, marginTop: 1 }}>
+              R:R: <b>{currentRR}R</b>
             </div>
           </div>
+        </div>
 
-          {/* Protective Trail Stop (TSL) */}
-          <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Ratcheting Trail (TSL)</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
-              ₹{optionTsl.toFixed(2)}
+        {/* ── Visual TSL Progression Ladder & Timeline Explainer ── */}
+        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            🪜 How Trailing Stop Loss (TSL) Protects You Step-by-Step:
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+            
+            {/* Step 1 */}
+            <div style={{ background: k.bg, border: `1px solid ${currentLtp < entryPrice + beTrigger ? k.blue : k.border}`, borderRadius: 4, padding: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: k.blue }}>PHASE 1: TRADE INCEPTION</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>Entry @ ₹{entryPrice}</div>
+              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
+                Initial Hard SL placed at <b>₹{initialSl}</b>. Maximum capital risk defined as <b>-₹{maxRiskAmount.toLocaleString('en-IN')}</b>.
+              </div>
             </div>
-            <div style={{ fontSize: 9.5, color: k.dim, marginTop: 1 }}>Initial SL: ₹{optionSl}</div>
+
+            {/* Step 2 */}
+            <div style={{ background: k.bg, border: `1px solid ${currentLtp >= entryPrice + beTrigger && currentLtp < entryPrice + tslOffset + 15 ? k.green : k.border}`, borderRadius: 4, padding: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: k.green }}>PHASE 2: BREAK-EVEN RATCHET</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>LTP crosses +{beTrigger} pts (₹{(entryPrice + beTrigger).toFixed(2)})</div>
+              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
+                TSL automatically jumps to <b>₹{entryPrice}</b>. Trade is now <b>100% Risk-Free</b> (Capital is fully preserved).
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div style={{ background: k.bg, border: `1px solid ${currentLtp >= entryPrice + tslOffset + 15 && currentLtp < exitTarget ? k.orange : k.border}`, borderRadius: 4, padding: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: k.orange }}>PHASE 3: PROFIT TRAILING</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>LTP climbs further (e.g. ₹{(entryPrice + 50).toFixed(2)})</div>
+              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
+                TSL ratchets up continuously behind price (LTP - {tslOffset} pts). Automatically locks in guaranteed profit on any pullback.
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div style={{ background: k.bg, border: `1px solid ${currentLtp >= exitTarget ? k.purple : k.border}`, borderRadius: 4, padding: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: k.purple }}>PHASE 4: EXIT / TARGET</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>Target @ ₹{exitTarget} or TSL Trigger</div>
+              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
+                Clean 100% automated rule-based exit when target is reached or when price reverses into the ratcheted TSL.
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Pictorial Execution Bounds Visualizer */}
         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               📈 Real-Time Premium Trajectory & Bounds Visualizer
             </span>
-            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: k.dim }}>
+            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: k.dim, flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 8, height: 2, background: k.blue }} /> Entry: ₹{optionEntry}
+                <span style={{ width: 8, height: 2, background: k.blue }} /> Entry: ₹{entryPrice}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 8, height: 2, background: k.red }} /> Hard SL: ₹{optionSl}
+                <span style={{ width: 8, height: 2, background: k.red }} /> Hard SL: ₹{initialSl}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 8, height: 2, background: k.orange }} /> Ratcheting Trail (TSL): ₹{optionTsl}
+                <span style={{ width: 8, height: 2, background: k.orange }} /> Ratcheted Trail (TSL): ₹{dynamicTsl}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 8, height: 2, background: k.green }} /> Live LTP: ₹{optionLtp}
+                <span style={{ width: 8, height: 2, background: k.purple }} /> Target: ₹{exitTarget}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 8, height: 2, background: ptsDiff >= 0 ? k.green : k.red }} /> Live LTP: ₹{currentLtp}
               </span>
             </div>
           </div>
 
           {/* SVG Price Trajectory Infographic */}
-          <div style={{ width: '100%', height: 140, background: '#ffffff', border: `1px solid ${k.border}`, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-            <svg width="100%" height="100%" viewBox="0 0 500 140" preserveAspectRatio="none" style={{ display: 'block' }}>
+          <div style={{ width: '100%', height: 160, background: '#ffffff', border: `1px solid ${k.border}`, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+            <svg width="100%" height="100%" viewBox="0 0 500 160" preserveAspectRatio="none" style={{ display: 'block' }}>
               {/* Background Value Area Grid */}
               <line x1="0" y1="30" x2="500" y2="30" stroke="#f1f1f1" strokeDasharray="3 3" />
-              <line x1="0" y1="70" x2="500" y2="70" stroke="#f1f1f1" strokeDasharray="3 3" />
-              <line x1="0" y1="110" x2="500" y2="110" stroke="#f1f1f1" strokeDasharray="3 3" />
+              <line x1="0" y1="65" x2="500" y2="65" stroke="#f1f1f1" strokeDasharray="3 3" />
+              <line x1="0" y1="100" x2="500" y2="100" stroke="#f1f1f1" strokeDasharray="3 3" />
+              <line x1="0" y1="135" x2="500" y2="135" stroke="#f1f1f1" strokeDasharray="3 3" />
+
+              {/* Target line */}
+              <line x1="0" y1="25" x2="500" y2="25" stroke={k.purple} strokeWidth="1.5" strokeDasharray="3 3" />
+              <text x="8" y="21" fill={k.purple} fontSize="9" fontWeight="700">Target ₹{exitTarget} (+₹{maxTargetAmount.toLocaleString('en-IN')})</text>
 
               {/* Hard SL line */}
-              <line x1="0" y1="120" x2="500" y2="120" stroke={k.red} strokeWidth="1.5" strokeDasharray="4 4" />
-              <text x="8" y="116" fill={k.red} fontSize="9" fontWeight="600">SL ₹{optionSl}</text>
+              <line x1="0" y1="140" x2="500" y2="140" stroke={k.red} strokeWidth="1.5" strokeDasharray="4 4" />
+              <text x="8" y="136" fill={k.red} fontSize="9" fontWeight="600">Hard SL ₹{initialSl} (-₹{maxRiskAmount.toLocaleString('en-IN')})</text>
 
               {/* Entry line */}
-              <line x1="0" y1="75" x2="500" y2="75" stroke={k.blue} strokeWidth="1.5" />
-              <text x="8" y="71" fill={k.blue} fontSize="9" fontWeight="600">Entry ₹{optionEntry}</text>
+              <line x1="0" y1="90" x2="500" y2="90" stroke={k.blue} strokeWidth="1.5" />
+              <text x="8" y="86" fill={k.blue} fontSize="9" fontWeight="600">Entry ₹{entryPrice}</text>
 
               {/* Ratcheting TSL line */}
               {(() => {
-                // Map TSL to y-coord (500=30, 380=120)
-                const tslY = Math.max(35, Math.min(115, 120 - ((optionTsl - 380) / (560 - 380)) * 85));
+                // Map TSL to y-coord (620=25, 380=140)
+                const tslY = Math.max(30, Math.min(140, 140 - ((dynamicTsl - initialSl) / (exitTarget - initialSl)) * 115));
                 return (
                   <>
-                    <line x1="200" y1={tslY} x2="500" y2={tslY} stroke={k.orange} strokeWidth="2" strokeDasharray="3 3" />
-                    <text x="210" y={tslY - 4} fill={k.orange} fontSize="9" fontWeight="700">Trail (TSL) ₹{optionTsl}</text>
+                    <line x1="180" y1={tslY} x2="500" y2={tslY} stroke={k.orange} strokeWidth="2" strokeDasharray="3 3" />
+                    <text x="190" y={tslY - 4} fill={k.orange} fontSize="9.5" fontWeight="750">
+                      Ratcheted TSL ₹{dynamicTsl} ({tslPnl >= 0 ? `+₹${tslPnl.toLocaleString('en-IN')}` : `-₹${Math.abs(tslPnl).toLocaleString('en-IN')}`})
+                    </text>
                   </>
                 );
               })()}
 
               {/* Price trajectory curve */}
               {(() => {
-                const targetY = Math.max(20, Math.min(130, 75 - ((optionLtp - optionEntry) / 80) * 50));
+                const targetY = Math.max(15, Math.min(145, 90 - ((currentLtp - entryPrice) / (exitTarget - entryPrice)) * 65));
+                const strokeColor = ptsDiff >= 0 ? k.green : k.red;
                 return (
                   <>
                     <path
-                      d={`M 0 85 Q 120 80, 240 75 T 400 ${(75 + targetY) / 2} T 480 ${targetY}`}
+                      d={`M 0 100 Q 120 95, 240 90 T 380 ${(90 + targetY) / 2} T 475 ${targetY}`}
                       fill="none"
-                      stroke={optionDiff >= 0 ? k.green : k.red}
+                      stroke={strokeColor}
                       strokeWidth="2.5"
                     />
-                    <circle cx="480" cy={targetY} r="5" fill={optionDiff >= 0 ? k.green : k.red} />
-                    <text x="440" y={Math.max(16, targetY - 8)} fill={optionDiff >= 0 ? k.green : k.red} fontSize="10" fontWeight="750">
-                      LTP ₹{optionLtp}
+                    <circle cx="475" cy={targetY} r="5.5" fill={strokeColor} />
+                    <text x="410" y={Math.max(16, targetY - 8)} fill={strokeColor} fontSize="10.5" fontWeight="800">
+                      LTP ₹{currentLtp} ({netPnlUsd >= 0 ? '+' : ''}₹{netPnlUsd.toLocaleString('en-IN')})
                     </text>
                   </>
                 );

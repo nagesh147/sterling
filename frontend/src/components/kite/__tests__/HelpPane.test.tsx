@@ -38,7 +38,10 @@ describe('HelpPane', () => {
     expect(screen.getAllByText(/Tape & Order Flow Ingestion/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Microstructure & POC Anchors/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Dynamic Scalp Escalation & Risk Matrix/)).toBeInTheDocument();
-    expect(screen.getByText(/Interactive Sandbox Simulation/)).toBeInTheDocument();
+    expect(screen.getByText(/Interactive Sandbox Simulation & Real-Time P&L Engine/)).toBeInTheDocument();
+    expect(screen.getByText(/Editable Trade & Execution Parameters/)).toBeInTheDocument();
+    expect(screen.getByText(/Unrealized MTM P&L/)).toBeInTheDocument();
+    expect(screen.getByText(/How Trailing Stop Loss \(TSL\) Protects You Step-by-Step/)).toBeInTheDocument();
     expect(screen.getByText(/Real-Time Premium Trajectory & Bounds Visualizer/)).toBeInTheDocument();
   });
 });
