@@ -937,45 +937,10 @@ export function AdaptiveEdgePanel({
                   defaultExit={row.exit}
                   currentLtp={liveLtp}
                   optionType={row.optionType}
+                  exitState={row.open ? 'HOLD' : (row.whyClosed || 'CLOSED')}
                 />
 
-                {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    Option Strike Execution (₹ Premiums)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
-                    <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={k.text} />
-                    <StatCard
-                      label="Current LTP"
-                      value={`₹${fmt(liveLtp)}`}
-                      subvalue={
-                        entryDiff != null
-                          ? `${entryDiff >= 0 ? '+' : ''}${fmt(entryDiff)} pts`
-                          : undefined
-                      }
-                      color={
-                        entryDiff != null
-                          ? entryDiff >= 0
-                            ? k.green
-                            : k.red
-                          : k.text
-                      }
-                      bg={
-                        entryDiff != null
-                          ? entryDiff >= 0
-                            ? `${k.green}12`
-                            : `${k.red}12`
-                          : k.bg
-                      }
-                    />
-                    <StatCard label="Stop (SL)" value={`₹${fmt(row.sl)}`} color={k.dim} />
-                    <StatCard label="Trail (TSL)" value={`₹${fmt(row.tsl)}`} color={k.orange} />
-                    <StatCard label="Exit" value={row.exit ? `₹${fmt(row.exit)}` : '—'} color={k.dim} />
-                  </div>
-                </div>
-
-                {/* 2. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
+                {/* 1. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
                     Spot Microstructure & Order Flow Anchor

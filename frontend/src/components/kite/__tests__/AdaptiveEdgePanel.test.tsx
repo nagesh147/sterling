@@ -285,14 +285,14 @@ describe('AdaptiveEdgePanel', () => {
     render(<AdaptiveEdgePanel rows={rows} inlineExpand={true} />);
 
     // Initially drawer is not visible
-    expect(screen.queryByText(/Option Strike Execution/)).toBeNull();
+    expect(screen.queryByText(/Position Sizing & Trade Plan/)).toBeNull();
 
     // Click on row
     const rowEl = screen.getByText('NIFTY25AUG24500CE').closest('tr')!;
     fireEvent.click(rowEl);
 
     // Drawer should now be visible
-    expect(screen.getByText(/Option Strike Execution/)).toBeInTheDocument();
+    expect(screen.getByText(/Position Sizing & Trade Plan/)).toBeInTheDocument();
     expect(screen.getByText(/Spot Microstructure & Order Flow Anchor/)).toBeInTheDocument();
     expect(screen.getByText(/Price Trajectory & Execution Bounds/)).toBeInTheDocument();
     expect(screen.getByText('Setup chart')).toBeInTheDocument();
@@ -300,6 +300,6 @@ describe('AdaptiveEdgePanel', () => {
 
     // Clicking row again collapses drawer
     fireEvent.click(rowEl);
-    expect(screen.queryByText(/Option Strike Execution/)).toBeNull();
+    expect(screen.queryByText(/Position Sizing & Trade Plan/)).toBeNull();
   });
 });

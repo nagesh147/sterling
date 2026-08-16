@@ -39,6 +39,25 @@ export function fmtTick(val: number | null | undefined, tickSize = 0.05): string
   return rounded.toFixed(2);
 }
 
+/** Safe INR currency format: +₹5,957.50 / -₹43.75 / ₹12,608.75 */
+export function fmtINR(val: number | null | undefined, options: { decimals?: number; showSign?: boolean } = {}): string {
+  if (val == null || !Number.isFinite(val)) return '—';
+  const decimals = options.decimals ?? 2;
+  const isNegative = val < 0;
+  const absVal = Math.abs(val);
+  const formatted = absVal.toLocaleString('en-IN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  if (isNegative) {
+    return `-₹${formatted}`;
+  }
+  if (options.showSign && val > 0) {
+    return `+₹${formatted}`;
+  }
+  return `₹${formatted}`;
+}
+
 /** Safe currency format */
 export function fmtUSD(val: number | null | undefined, decimals = 0): string {
   if (val == null || !isFinite(val)) return '—';
