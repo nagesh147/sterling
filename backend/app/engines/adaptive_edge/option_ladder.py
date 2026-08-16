@@ -324,12 +324,14 @@ def expand_spot_signal(
             )
             legs.extend(labeled)
             continue
+        default_dte = 20.0 if is_stock else 7.0
+        eff_dte = float(pick.dte or default_dte)
         premium, stop_prem, trail_prem = _stamp_premiums(
             spot=spot,
             side=side,
             strike=pick.strike,
             option_type=pick.option_type,
-            dte_days=float(pick.dte or 7),
+            dte_days=eff_dte,
             stop_points=stop_points,
             trail_points=trail_points,
             option_name=option_name,
@@ -339,7 +341,7 @@ def expand_spot_signal(
             side=side,
             strike=pick.strike,
             option_type=pick.option_type,
-            dte_days=float(pick.dte or 7),
+            dte_days=eff_dte,
             stop_points=stop_points,
             trail_points=trail_points,
             option_name=option_name,
@@ -781,6 +783,7 @@ def build_snapshot_signals(
                 "overlays": list(row.get("overlays") or []),
                 "thesis": row.get("thesis"),
                 "entry_mode": "INTRADAY",
+                "current_mode": "INTRADAY",
                 "peak_mode": "INTRADAY",
                 "exit_mode": None if open_row else "INTRADAY",
                 "mode_upgraded": False,
