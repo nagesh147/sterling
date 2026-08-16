@@ -111,13 +111,11 @@ export function AdaptiveEdgePositionCalculator({
   return (
     <div
       style={{
-        background: '#f9f9f9',
-        border: `1px solid ${k.border}`,
-        borderRadius: 4,
+        background: '#ffffff',
         padding: '12px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 10,
         fontFamily: k.fontFamily,
       }}
     >
@@ -166,23 +164,21 @@ export function AdaptiveEdgePositionCalculator({
         </div>
       </div>
 
-      {/* ── INTERACTIVE INPUT CONTROLS BAR ── */}
+      {/* ── SLEEK MINIMALIST INPUTS ROW ── */}
       <div
         style={{
-          background: k.bg,
-          border: `1px solid ${k.border}`,
-          borderRadius: 3,
-          padding: '8px 12px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-          gap: 12,
+          display: 'flex',
           alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+          paddingBottom: 10,
+          borderBottom: `1px solid ${k.border}`,
         }}
       >
         {/* Lots Stepper */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <label style={{ fontSize: 11, color: k.dim }}>Lots</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 11, color: k.dim, whiteSpace: 'nowrap' }}>Lots</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <button
               type="button"
               onClick={() => setNumLots((prev) => Math.max(1, prev - 1))}
@@ -211,14 +207,14 @@ export function AdaptiveEdgePositionCalculator({
               value={numLots}
               onChange={(e) => setNumLots(Math.max(1, Number(e.target.value)))}
               style={{
-                width: 40,
+                width: 38,
                 height: 22,
                 padding: '0 2px',
                 fontSize: 11.5,
                 fontWeight: 600,
                 borderRadius: 2,
                 border: `1px solid ${k.border}`,
-                background: k.bg,
+                background: '#ffffff',
                 color: k.text,
                 textAlign: 'center',
                 outline: 'none',
@@ -249,21 +245,22 @@ export function AdaptiveEdgePositionCalculator({
         </div>
 
         {/* Entry Price */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <label style={{ fontSize: 11, color: k.dim }}>Entry Price (₹)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: k.dim, whiteSpace: 'nowrap' }}>Entry (₹)</label>
           <input
             type="number"
             step={0.05}
             value={entryPrice}
             onChange={(e) => setEntryPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
+              width: 72,
               height: 22,
               padding: '0 6px',
               fontSize: 11.5,
               fontWeight: 600,
               borderRadius: 2,
               border: `1px solid ${k.border}`,
-              background: k.bg,
+              background: '#ffffff',
               color: k.text,
               outline: 'none',
             }}
@@ -271,21 +268,22 @@ export function AdaptiveEdgePositionCalculator({
         </div>
 
         {/* Stop Loss (SL) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <label style={{ fontSize: 11, color: k.dim }}>Stop Loss (₹)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: k.dim, whiteSpace: 'nowrap' }}>SL (₹)</label>
           <input
             type="number"
             step={0.05}
             value={slPrice}
             onChange={(e) => setSlPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
+              width: 72,
               height: 22,
               padding: '0 6px',
               fontSize: 11.5,
               fontWeight: 500,
               borderRadius: 2,
               border: `1px solid ${k.border}`,
-              background: k.bg,
+              background: '#ffffff',
               color: k.text,
               outline: 'none',
             }}
@@ -293,21 +291,22 @@ export function AdaptiveEdgePositionCalculator({
         </div>
 
         {/* Trailing Stop (TSL) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <label style={{ fontSize: 11, color: k.dim }}>Trail (TSL) (₹)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: k.dim, whiteSpace: 'nowrap' }}>TSL (₹)</label>
           <input
             type="number"
             step={0.05}
             value={tslPrice}
             onChange={(e) => setTslPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
+              width: 72,
               height: 22,
               padding: '0 6px',
               fontSize: 11.5,
               fontWeight: 500,
               borderRadius: 2,
               border: `1px solid ${k.border}`,
-              background: k.bg,
+              background: '#ffffff',
               color: k.orange,
               outline: 'none',
             }}
@@ -315,21 +314,22 @@ export function AdaptiveEdgePositionCalculator({
         </div>
 
         {/* Target Exit */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <label style={{ fontSize: 11, color: k.dim }}>Target (₹)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 11, color: k.dim, whiteSpace: 'nowrap' }}>Target (₹)</label>
           <input
             type="number"
             step={0.05}
             value={targetPrice}
             onChange={(e) => setTargetPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
+              width: 72,
               height: 22,
               padding: '0 6px',
               fontSize: 11.5,
               fontWeight: 500,
               borderRadius: 2,
               border: `1px solid ${k.border}`,
-              background: k.bg,
+              background: '#ffffff',
               color: k.purple,
               outline: 'none',
             }}
@@ -337,175 +337,165 @@ export function AdaptiveEdgePositionCalculator({
         </div>
       </div>
 
-      {/* ── GROUPED KEY STATS (ZERODHA KITE STYLE) ── */}
+      {/* ── 3 CLEAN METRIC COLUMNS (BORDERLESS SECTIONS WITH VERTICAL DIVIDERS) ── */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: 12,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+          gap: 0,
         }}
       >
-        {/* GROUP 1: POSITION & LIVE MTM */}
+        {/* COLUMN 1: POSITION & LIVE MTM */}
         <div
           style={{
-            background: k.bg,
-            border: `1px solid ${k.border}`,
-            borderRadius: 3,
-            padding: '10px 14px',
+            paddingRight: 16,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: 6,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, borderBottom: `1px solid ${k.border}`, paddingBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4, borderBottom: `1px solid ${k.border}` }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.blue }} />
             <span style={{ fontSize: 10.5, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Position & Live MTM
+              Position & MTM
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Capital deployed</span>
               <span style={{ color: k.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtINR(totalInvestment)}
               </span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Current LTP</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: coveredPoints >= 0 ? k.green : k.red, fontWeight: 600 }}>
                   ₹{fmtTick(liveLtp)}
                 </span>
-                <span style={{ color: coveredPoints >= 0 ? k.green : k.red, marginLeft: 6, fontSize: 11 }}>
+                <span style={{ color: coveredPoints >= 0 ? k.green : k.red, fontSize: 11 }}>
                   ({coveredPoints >= 0 ? '+' : ''}{fmtTick(coveredPoints)} pts · {coveredPct >= 0 ? '+' : ''}{coveredPct.toFixed(2)}%)
                 </span>
-              </span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Points covered</span>
               <span style={{ color: coveredPoints >= 0 ? k.green : k.red, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                 {coveredPoints >= 0 ? '+' : ''}{fmtTick(coveredPoints)} pts ({coveredPct >= 0 ? '+' : ''}{coveredPct.toFixed(2)}%)
               </span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Unrealized MTM P&L</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: unrealizedPnl >= 0 ? k.green : k.red, fontWeight: 600 }}>
                   {fmtINR(unrealizedPnl, { showSign: true })}
                 </span>
-                <span style={{ color: unrealizedPnl >= 0 ? k.green : k.red, marginLeft: 6, fontSize: 11 }}>
+                <span style={{ color: unrealizedPnl >= 0 ? k.green : k.red, fontSize: 11 }}>
                   ({isProfit ? 'PROFIT' : 'DRAWDOWN'} · {realizedRR}R)
                 </span>
-              </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* GROUP 2: RISK & STOP PROTECTION */}
+        {/* COLUMN 2: RISK & STOP PROTECTION */}
         <div
           style={{
-            background: k.bg,
-            border: `1px solid ${k.border}`,
-            borderRadius: 3,
-            padding: '10px 14px',
+            borderLeft: `1px solid ${k.border}`,
+            paddingLeft: 16,
+            paddingRight: 16,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: 6,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, borderBottom: `1px solid ${k.border}`, paddingBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4, borderBottom: `1px solid ${k.border}` }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.red }} />
             <span style={{ fontSize: 10.5, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Risk & Stop Protection
+              Risk & Stops
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Stop (SL)</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: k.text, fontWeight: 500 }}>₹{fmtTick(slPrice)}</span>
-                <span style={{ color: k.dim, marginLeft: 6, fontSize: 11 }}>(-{fmtTick(slDistance)} pts)</span>
-              </span>
+                <span style={{ color: k.dim, fontSize: 11 }}>(-{fmtTick(slDistance)} pts)</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Defined SL risk</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: k.red, fontWeight: 600 }}>{fmtINR(-maxRiskAmount)}</span>
-                <span style={{ color: k.dim, marginLeft: 6, fontSize: 11 }}>(-{fmtINR(riskPerLot)}/lot)</span>
-              </span>
+                <span style={{ color: k.dim, fontSize: 11 }}>(-{fmtINR(riskPerLot)}/lot)</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Trail (TSL)</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: isRiskFree ? k.green : k.orange, fontWeight: 500 }}>₹{fmtTick(tslPrice)}</span>
-                <span style={{ color: isRiskFree ? k.green : k.dim, marginLeft: 6, fontSize: 11 }}>
+                <span style={{ color: isRiskFree ? k.green : k.dim, fontSize: 11 }}>
                   ({isRiskFree ? (tslDistance > 0 ? `+${fmtTick(tslDistance)} pts locked` : 'Break-Even') : 'Trail'})
                 </span>
-              </span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>{isRiskFree ? 'TSL locked profit' : 'TSL risk buffer'}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: isRiskFree ? k.green : k.orange, fontWeight: 600 }}>
                   {fmtINR(tslPnl, { showSign: true })}
                 </span>
-                <span style={{ color: k.dim, marginLeft: 6, fontSize: 11 }}>@ ₹{fmtTick(tslPrice)}</span>
-              </span>
+                <span style={{ color: k.dim, fontSize: 11 }}>@ ₹{fmtTick(tslPrice)}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* GROUP 3: TARGET & EXIT STRATEGY */}
+        {/* COLUMN 3: TARGET & EXIT STRATEGY */}
         <div
           style={{
-            background: k.bg,
-            border: `1px solid ${k.border}`,
-            borderRadius: 3,
-            padding: '10px 14px',
+            borderLeft: `1px solid ${k.border}`,
+            paddingLeft: 16,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: 6,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, borderBottom: `1px solid ${k.border}`, paddingBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4, borderBottom: `1px solid ${k.border}` }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.purple }} />
             <span style={{ fontSize: 10.5, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Target & Exit Strategy
+              Target & Exit
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Target price</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: k.purple, fontWeight: 500 }}>₹{fmtTick(targetPrice)}</span>
-                <span style={{ color: k.dim, marginLeft: 6, fontSize: 11 }}>
-                  (+{fmtTick(targetDistance)} pts)
-                </span>
-              </span>
+                <span style={{ color: k.dim, fontSize: 11 }}>(+{fmtTick(targetDistance)} pts)</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Target reward</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: k.purple, fontWeight: 600 }}>{fmtINR(targetReward, { showSign: true })}</span>
-                <span style={{ color: k.dim, marginLeft: 6, fontSize: 11 }}>
-                  (1 : {riskRewardRatio} R)
-                </span>
-              </span>
+                <span style={{ color: k.dim, fontSize: 11 }}>(1 : {riskRewardRatio} R)</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', minHeight: 20 }}>
               <span style={{ color: k.dim }}>Exit status</span>
-              <span style={{ color: exitState && exitState.includes('red') ? k.orange : k.text, fontWeight: 500 }}>
+              <span style={{ color: exitState && exitState.includes('red') ? k.orange : k.text, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
                 {exitState || 'Trailing SuperTrend'}
               </span>
             </div>
