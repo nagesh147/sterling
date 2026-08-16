@@ -159,19 +159,16 @@ vi.mock('../AdaptiveEdgeSetupChart', () => ({
 }));
 
 describe('AdaptiveEdgePane', () => {
-  it('shows option legs with entry sl tsl time and governance banner', () => {
+  it('shows option legs with entry sl tsl time and clean header ribbon', () => {
     render(<AdaptiveEdgePane />);
     expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
-    expect(screen.getByText(/RESEARCH DESK · NOT LIVE/)).toBeInTheDocument();
-    expect(screen.getByText(/That gap is the design, not a bug/)).toBeInTheDocument();
+    expect(screen.getByText('RESEARCH DESK')).toBeInTheDocument();
     expect(screen.getByText('NIFTY25AUG24500CE')).toBeInTheDocument();
     expect(screen.getAllByText('ATM').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Entry').length).toBeGreaterThan(0);
     expect(screen.getAllByText('SL').length).toBeGreaterThan(0);
     expect(screen.getAllByText('TSL').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/24,405/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/NIFTY BANK · no tape/)).toBeInTheDocument();
-    expect(screen.getAllByText(/AE RESEARCH/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Taken as MICRO/)).toBeNull();
     expect(screen.getAllByText('Setup chart').length).toBeGreaterThan(0);
   });

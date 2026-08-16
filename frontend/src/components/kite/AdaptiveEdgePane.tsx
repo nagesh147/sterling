@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import {
@@ -8,7 +8,6 @@ import {
   historyRowsFromSnapshot,
   rowsFromSnapshot,
   watchedSignals,
-  when,
   type AdaptiveEdgeRow,
 } from './AdaptiveEdgePanel';
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
@@ -18,35 +17,6 @@ import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
 import { openSettingsSection } from './config/registry';
 import type { InstrumentTab } from './InstrumentPane';
 
-const C = {
-  text: '#1e293b',
-  muted: '#64748b',
-  dim: '#94a3b8',
-  border: '#e2e8f0',
-  surface: '#ffffff',
-  surfaceSubtle: '#f8fafc',
-  emerald: '#10b981',
-  emeraldBg: 'rgba(16, 185, 129, 0.08)',
-  emeraldBorder: 'rgba(16, 185, 129, 0.25)',
-  emeraldText: '#047857',
-  blue: '#2563eb',
-  blueBg: 'rgba(37, 99, 235, 0.08)',
-  blueBorder: 'rgba(37, 99, 235, 0.25)',
-  blueText: '#1d4ed8',
-  orange: '#f06428',
-  orangeBg: 'rgba(240, 100, 40, 0.08)',
-  orangeBorder: 'rgba(240, 100, 40, 0.25)',
-  orangeText: '#c2410c',
-  purple: '#7c3aed',
-  purpleBg: 'rgba(124, 58, 237, 0.08)',
-  purpleBorder: 'rgba(124, 58, 237, 0.25)',
-  purpleText: '#6d28d9',
-  rose: '#f43f5e',
-  roseBg: 'rgba(244, 63, 94, 0.08)',
-  roseBorder: 'rgba(244, 63, 94, 0.25)',
-  roseText: '#be123c',
-};
-
 function chartSymbol(symbol: string) {
   if (symbol === 'NIFTY-I' || symbol === 'NIFTY' || symbol === 'NIFTY 50') return 'NSE:NIFTY 50';
   if (symbol === 'BANKNIFTY-I' || symbol === 'BANKNIFTY' || symbol === 'NIFTY BANK') return 'NSE:NIFTY BANK';
@@ -55,49 +25,12 @@ function chartSymbol(symbol: string) {
   return symbol.includes(':') ? symbol : `NSE:${symbol}`;
 }
 
-export function playNotificationSound(type: 'upgrade' | 'downgrade' | 'exit') {
-  try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    const now = ctx.currentTime;
-    if (type === 'upgrade') {
-      osc.frequency.setValueAtTime(587.33, now); // D5
-      osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.15); // A5
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-      osc.start(now);
-      osc.stop(now + 0.35);
-    } else if (type === 'downgrade') {
-      osc.frequency.setValueAtTime(523.25, now); // C5
-      osc.frequency.exponentialRampToValueAtTime(392.00, now + 0.2); // G4
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-      osc.start(now);
-      osc.stop(now + 0.35);
-    } else {
-      osc.frequency.setValueAtTime(440, now);
-      gain.gain.setValueAtTime(0.08, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    }
-  } catch {
-    // Audio context not allowed without interaction
-  }
-}
-
 function StatCard({
   label,
   value,
   subvalue,
-  color = C.text,
-  bg = C.surfaceSubtle,
+  color = k.text,
+  bg = k.surface,
 }: {
   label: string;
   value: string;
@@ -109,23 +42,23 @@ function StatCard({
     <div
       style={{
         background: bg,
-        border: `1px solid ${C.border}`,
-        borderRadius: 6,
-        padding: '8px 12px',
+        border: `1px solid ${k.border}`,
+        borderRadius: 4,
+        padding: '8px 10px',
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
-        minWidth: 90,
+        minWidth: 80,
       }}
     >
-      <div style={{ fontSize: 10, fontWeight: 650, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         {label}
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: 750, color, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
       {subvalue && (
-        <div style={{ fontSize: 10, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ fontSize: 10, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
           {subvalue}
         </div>
       )}
@@ -152,13 +85,38 @@ export function AdaptiveEdgePane({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
 
-  // Available unique symbols for quick filtering
-  const symbolList = useMemo(() => {
-    const symbols = new Set<string>();
-    board.forEach((r) => symbols.add(r.underlying));
-    history.forEach((r) => symbols.add(r.underlying));
-    return Array.from(symbols);
-  }, [board, history]);
+  // Inspector Resizing & Collapse state
+  const [inspectorWidth, setInspectorWidth] = useState<number>(380);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState<boolean>(false);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeRef.current = { startX: e.clientX, startWidth: inspectorWidth };
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !resizeRef.current) return;
+      const delta = resizeRef.current.startX - e.clientX;
+      const newWidth = Math.max(280, Math.min(650, resizeRef.current.startWidth + delta));
+      setInspectorWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      setIsResizing(false);
+      resizeRef.current = null;
+    };
+    if (isResizing) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isResizing]);
 
   const visible = useMemo(() => {
     let list: AdaptiveEdgeRow[] = [];
@@ -243,97 +201,31 @@ export function AdaptiveEdgePane({
         display: 'flex',
         flexDirection: 'column',
         fontFamily: k.fontFamily,
-        background: '#ffffff',
+        background: k.bg,
       }}
     >
-      <style>{`
-        @media (max-width: 880px) { .ae-desk-split { grid-template-columns: 1fr !important; } }
-      `}</style>
-
-      {/* TOP GOVERNANCE BANNER */}
-      <div
-        style={{
-          background: isAuthorized ? 'rgba(16, 185, 129, 0.04)' : '#f8fafc',
-          borderBottom: `1px solid ${C.border}`,
-          padding: '6px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          fontSize: 11,
-          color: C.muted,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontWeight: 750,
-              letterSpacing: '0.04em',
-              color: isAuthorized ? C.emeraldText : C.orangeText,
-              background: isAuthorized ? C.emeraldBg : C.orangeBg,
-              border: `1px solid ${isAuthorized ? C.emeraldBorder : C.orangeBorder}`,
-              borderRadius: 4,
-              padding: '2px 7px',
-              fontSize: 10,
-            }}
-          >
-            {isAuthorized ? 'MULTI-INDEX ACTIVE · AUTHORIZED' : 'RESEARCH DESK · NOT LIVE'}
-          </span>
-          <span>
-            {isAuthorized ? (
-              <>
-                Adaptive Edge is <strong style={{ color: C.text }}>live & authorized</strong> across{' '}
-                <strong style={{ color: C.text }}>NIFTY, BANKNIFTY, FINNIFTY, SENSEX</strong>, and watched F&O equities with native Order Flow & dynamic opportunity modes.
-              </>
-            ) : (
-              <>
-                Adaptive Edge is <strong style={{ color: C.text }}>not live</strong>, <strong style={{ color: C.text }}>not calibrated</strong>, and <strong style={{ color: C.text }}>not multi-index</strong> in the AE sense. That gap is the design, not a bug. NIFTY uses causal replay; other symbols are spot scans with borrowed SuperTrend direction.
-              </>
-            )}
-          </span>
-        </div>
-        <div style={{ whiteSpace: 'nowrap', fontSize: 10.5, color: isAuthorized ? C.emeraldText : C.muted, fontWeight: 550 }}>
-          {isAuthorized
-            ? 'TrueData Ingestion → Multi-Day Calibration → Risk & Execution Formulas → ExecutionGate Authorized'
-            : 'Unlock: TrueData tick history → /getticks → A197 → F-101..F-114 → ExecutionGate'}
-        </div>
-      </div>
-
-      {/* HEADER COMMAND STRIP */}
-      <div style={{ flexShrink: 0, padding: '12px 20px 10px', borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {/* ── HEADER COMMAND STRIP ── */}
+      <div style={{ flexShrink: 0, padding: '12px 18px 10px', borderBottom: `1px solid ${k.border}`, background: k.bg }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: k.text, letterSpacing: '-0.01em' }}>
                 Adaptive Edge
               </h2>
               <span
                 style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  background: C.purpleBg,
-                  color: C.purpleText,
-                  border: `1px solid ${C.purpleBorder}`,
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  padding: '1px 6px',
+                  borderRadius: 2,
+                  background: isAuthorized ? `${k.green}15` : `${k.blue}15`,
+                  color: isAuthorized ? k.green : k.blue,
                 }}
               >
-                PRO DESK
+                {isAuthorized ? 'LIVE DESK' : 'RESEARCH DESK'}
               </span>
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: C.muted, maxWidth: 820, lineHeight: 1.5 }}>
-              {isLoading && 'Loading live scan snapshots…'}
-              {error && `Could not load scan: ${(error as Error).message}`}
-              {data && (
-                <>
-                  Scanned <strong style={{ color: C.text, fontWeight: 650 }}>{watchedNames}</strong>
-                  {days != null && <> across {days} session{days === 1 ? '' : 's'}</>}.
-                  {openCount ? ` ${openCount} option row${openCount === 1 ? '' : 's'} still open.` : ''}
-                </>
-              )}
-            </p>
-
+            
             {data && (
               <AdaptiveEdgeMetricsStrip
                 session={session}
@@ -351,15 +243,14 @@ export function AdaptiveEdgePane({
               type="button"
               onClick={() => refetch()}
               style={{
-                border: `1px solid ${C.border}`,
-                background: '#ffffff',
-                borderRadius: 6,
-                padding: '6px 12px',
-                fontSize: 11.5,
-                fontWeight: 600,
-                color: C.text,
+                border: `1px solid ${k.border}`,
+                background: k.bg,
+                borderRadius: 3,
+                padding: '5px 10px',
+                fontSize: 11,
+                fontWeight: 500,
+                color: k.text,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease',
               }}
             >
               {isFetching ? 'Refreshing…' : 'Refresh'}
@@ -368,13 +259,13 @@ export function AdaptiveEdgePane({
               type="button"
               onClick={() => openSettingsSection('adaptiveEdge')}
               style={{
-                border: `1px solid ${C.blueBorder}`,
-                background: C.blueBg,
-                color: C.blueText,
-                borderRadius: 6,
-                padding: '6px 12px',
-                fontSize: 11.5,
-                fontWeight: 650,
+                border: `1px solid ${k.blue}`,
+                background: k.bg,
+                color: k.blue,
+                borderRadius: 3,
+                padding: '5px 10px',
+                fontSize: 11,
+                fontWeight: 500,
                 cursor: 'pointer',
               }}
             >
@@ -384,15 +275,15 @@ export function AdaptiveEdgePane({
         </div>
       </div>
 
-      {/* TOP VIEW SWITCHER TABS */}
+      {/* ── TOP VIEW SWITCHER TABS ── */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderBottom: `1px solid ${C.border}`,
-          background: '#f8fafc',
-          padding: '0 20px',
+          borderBottom: `1px solid ${k.border}`,
+          background: k.bg,
+          padding: '0 18px',
           flexWrap: 'wrap',
           gap: 8,
         }}
@@ -405,12 +296,12 @@ export function AdaptiveEdgePane({
               setViewMode('signals');
             }}
             style={{
-              padding: '10px 16px',
+              padding: '9px 14px',
               border: 0,
-              borderBottom: viewMode === 'signals' ? `2px solid ${C.orange}` : '2px solid transparent',
+              borderBottom: viewMode === 'signals' ? `2px solid ${k.blue}` : '2px solid transparent',
               background: 'transparent',
-              color: viewMode === 'signals' ? C.orangeText : C.muted,
-              fontWeight: viewMode === 'signals' ? 750 : 550,
+              color: viewMode === 'signals' ? k.text : k.dim,
+              fontWeight: viewMode === 'signals' ? 600 : 400,
               fontSize: 12,
               cursor: 'pointer',
               display: 'flex',
@@ -418,15 +309,15 @@ export function AdaptiveEdgePane({
               gap: 6,
             }}
           >
-            <span>⚡ Live Signals & Strike Ladder</span>
+            <span>Signals & Strikes</span>
             <span
               style={{
                 fontSize: 10,
-                padding: '1px 6px',
+                padding: '1px 5px',
                 borderRadius: 99,
-                background: viewMode === 'signals' ? C.orangeBg : '#e2e8f0',
-                color: viewMode === 'signals' ? C.orangeText : C.muted,
-                fontWeight: 700,
+                background: viewMode === 'signals' ? `${k.blue}15` : k.surfaceHover,
+                color: viewMode === 'signals' ? k.blue : k.dim,
+                fontWeight: 600,
               }}
             >
               {board.length}
@@ -437,40 +328,34 @@ export function AdaptiveEdgePane({
             type="button"
             onClick={() => setViewMode('dashboard')}
             style={{
-              padding: '10px 16px',
+              padding: '9px 14px',
               border: 0,
-              borderBottom: viewMode === 'dashboard' ? `2px solid ${C.blue}` : '2px solid transparent',
+              borderBottom: viewMode === 'dashboard' ? `2px solid ${k.blue}` : '2px solid transparent',
               background: 'transparent',
-              color: viewMode === 'dashboard' ? C.blueText : C.muted,
-              fontWeight: viewMode === 'dashboard' ? 750 : 550,
+              color: viewMode === 'dashboard' ? k.text : k.dim,
+              fontWeight: viewMode === 'dashboard' ? 600 : 400,
               fontSize: 12,
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
             }}
           >
-            <span>📊 Strategy Dashboard</span>
+            Strategy Analytics
           </button>
 
           <button
             type="button"
             onClick={() => setViewMode('charts')}
             style={{
-              padding: '10px 16px',
+              padding: '9px 14px',
               border: 0,
-              borderBottom: viewMode === 'charts' ? `2px solid ${C.purpleText}` : '2px solid transparent',
+              borderBottom: viewMode === 'charts' ? `2px solid ${k.blue}` : '2px solid transparent',
               background: 'transparent',
-              color: viewMode === 'charts' ? C.purpleText : C.muted,
-              fontWeight: viewMode === 'charts' ? 750 : 550,
+              color: viewMode === 'charts' ? k.text : k.dim,
+              fontWeight: viewMode === 'charts' ? 600 : 400,
               fontSize: 12,
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
             }}
           >
-            <span>🌊 Market Profile, VP & Order Overflow Charts</span>
+            Market Profile & Charts
           </button>
         </div>
 
@@ -483,31 +368,51 @@ export function AdaptiveEdgePane({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                padding: '5px 10px',
-                fontSize: 11.5,
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                background: '#ffffff',
-                color: C.text,
+                padding: '4px 8px',
+                fontSize: 11,
+                border: `1px solid ${k.border}`,
+                borderRadius: 3,
+                background: k.bg,
+                color: k.text,
                 outline: 'none',
-                width: 190,
+                width: 170,
               }}
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                style={{ border: 0, background: 'transparent', color: C.muted, cursor: 'pointer', fontSize: 12 }}
+                style={{ border: 0, background: 'transparent', color: k.dim, cursor: 'pointer', fontSize: 11 }}
               >
                 ✕
               </button>
             )}
+
+            {/* Collapse/Expand Inspector Toggle */}
+            <button
+              type="button"
+              onClick={() => setInspectorCollapsed((prev) => !prev)}
+              title={inspectorCollapsed ? 'Show Inspector' : 'Collapse Inspector (Full Width Table)'}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                fontWeight: 500,
+                border: `1px solid ${k.border}`,
+                borderRadius: 3,
+                background: inspectorCollapsed ? k.surfaceHover : k.bg,
+                color: k.dim,
+                cursor: 'pointer',
+                marginLeft: 4,
+              }}
+            >
+              {inspectorCollapsed ? 'Show Inspector' : 'Hide Inspector'}
+            </button>
           </div>
         )}
       </div>
 
       {viewMode === 'charts' ? (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 18, background: '#f8fafc' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16, background: k.bg }}>
           <AdaptiveEdgeVisualizerHub
             selectedSymbol={inspectSymbol || selected?.underlying || selected?.instrument || 'NIFTY 50'}
             currentSpot={selected?.spotEntry ?? 24405}
@@ -527,23 +432,23 @@ export function AdaptiveEdgePane({
         </div>
       ) : (
         <div
-          className="ae-desk-split"
           style={{
             flex: 1,
             minHeight: 0,
-            display: 'grid',
-            gridTemplateColumns: 'minmax(420px, 1.25fr) minmax(320px, 0.75fr)',
+            display: 'flex',
+            position: 'relative',
             overflow: 'hidden',
           }}
         >
-          {/* LEFT COLUMN: SIGNALS & LADDER TABLE */}
+          {/* ── LEFT COLUMN: SIGNALS & LADDER TABLE ── */}
           <section
             style={{
+              flex: 1,
               minWidth: 0,
               minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
-              borderRight: `1px solid ${C.border}`,
+              background: k.bg,
             }}
           >
             {/* SUB-FILTER BAR */}
@@ -554,13 +459,13 @@ export function AdaptiveEdgePane({
                 justifyContent: 'space-between',
                 gap: 8,
                 padding: '8px 16px',
-                borderBottom: `1px solid ${C.border}`,
-                background: '#ffffff',
+                borderBottom: `1px solid ${k.border}`,
+                background: k.bg,
                 flexWrap: 'wrap',
               }}
             >
               {/* Status Segmented Control */}
-              <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 2, borderRadius: 6 }}>
+              <div style={{ display: 'flex', gap: 2, background: k.surfaceHover, padding: 2, borderRadius: 3 }}>
                 {([
                   { id: 'all' as const, label: `All ${board.length}` },
                   { id: 'open' as const, label: `Open ${openCount}` },
@@ -572,14 +477,13 @@ export function AdaptiveEdgePane({
                     onClick={() => setStatusFilter(item.id)}
                     style={{
                       border: 0,
-                      background: statusFilter === item.id ? '#ffffff' : 'transparent',
-                      color: statusFilter === item.id ? C.text : C.muted,
-                      fontWeight: statusFilter === item.id ? 700 : 550,
-                      borderRadius: 4,
-                      padding: '4px 10px',
+                      background: statusFilter === item.id ? k.bg : 'transparent',
+                      color: statusFilter === item.id ? k.text : k.dim,
+                      fontWeight: statusFilter === item.id ? 600 : 400,
+                      borderRadius: 2,
+                      padding: '3px 8px',
                       fontSize: 11,
                       cursor: 'pointer',
-                      boxShadow: statusFilter === item.id ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
                     }}
                   >
                     {item.label}
@@ -595,18 +499,18 @@ export function AdaptiveEdgePane({
                     type="button"
                     onClick={() => setSymbolFilter(sym)}
                     style={{
-                      border: `1px solid ${symbolFilter === sym ? C.blue : C.border}`,
-                      background: symbolFilter === sym ? C.blueBg : '#ffffff',
-                      color: symbolFilter === sym ? C.blueText : C.muted,
+                      border: `1px solid ${symbolFilter === sym ? k.blue : k.border}`,
+                      background: symbolFilter === sym ? `${k.blue}12` : k.bg,
+                      color: symbolFilter === sym ? k.blue : k.dim,
                       borderRadius: 99,
                       padding: '2px 8px',
                       fontSize: 10.5,
-                      fontWeight: symbolFilter === sym ? 700 : 500,
+                      fontWeight: symbolFilter === sym ? 600 : 400,
                       cursor: 'pointer',
                     }}
                   >
                     {sym === 'ALL'
-                      ? 'All Underlyings'
+                      ? 'All'
                       : sym === 'NIFTY 50'
                       ? 'NIFTY'
                       : sym === 'NIFTY BANK'
@@ -635,260 +539,286 @@ export function AdaptiveEdgePane({
             </div>
           </section>
 
-          {/* RIGHT COLUMN: DETAILED SETUP INSPECTOR */}
-          <aside
-            style={{
-              minWidth: 0,
-              minHeight: 0,
-              overflow: 'auto',
-              padding: 16,
-              background: '#f8fafc',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-            }}
-          >
-            {!selected && (
-              <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontSize: 13 }}>
-                Select a trade setup from the table to view real-time microstructure, risk parameters, and the chart.
-              </div>
-            )}
+          {/* ── DRAGGABLE COLUMN SPLITTER RESIZER ── */}
+          {!inspectorCollapsed && (
+            <div
+              onMouseDown={startResize}
+              title="Drag to resize inspector width"
+              style={{
+                width: 6,
+                cursor: 'col-resize',
+                background: isResizing ? k.blue : k.border,
+                transition: 'background 0.15s ease',
+                zIndex: 10,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div style={{ width: 2, height: 24, background: k.dim, borderRadius: 1, opacity: 0.5 }} />
+            </div>
+          )}
 
-            {selected && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {/* 1. HERO SETUP CARD */}
-                <div
-                  style={{
-                    background: '#ffffff',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    padding: 16,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                      Selected Setup Inspector
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {selectedBadge && (
+          {/* ── RIGHT COLUMN: DETAILED SETUP INSPECTOR ── */}
+          {!inspectorCollapsed && (
+            <aside
+              style={{
+                width: inspectorWidth,
+                flexShrink: 0,
+                minWidth: 280,
+                maxWidth: 650,
+                minHeight: 0,
+                overflow: 'auto',
+                padding: 14,
+                background: k.surface,
+                borderLeft: `1px solid ${k.border}`,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              {!selected && (
+                <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
+                  Select a trade setup from the table to view real-time microstructure, risk parameters, and the chart.
+                </div>
+              )}
+
+              {selected && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* 1. SETUP HEADER CARD */}
+                  <div
+                    style={{
+                      background: k.bg,
+                      border: `1px solid ${k.border}`,
+                      borderRadius: 4,
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Selected Setup
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {selectedBadge && (
+                          <span
+                            title={selectedBadge.title}
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: 600,
+                              padding: '1px 5px',
+                              borderRadius: 2,
+                              background: selectedBadge.bg,
+                              color: selectedBadge.color,
+                              border: selectedBadge.border,
+                            }}
+                          >
+                            {selectedBadge.label}
+                          </span>
+                        )}
                         <span
-                          title={selectedBadge.title}
                           style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: 4,
-                            background: selectedBadge.bg,
-                            color: selectedBadge.color,
-                            border: selectedBadge.border,
+                            fontSize: 9.5,
+                            fontWeight: 600,
+                            padding: '1px 5px',
+                            borderRadius: 2,
+                            background: selected.origin === 'adaptive_edge' ? `${k.orange}15` : `${k.blue}15`,
+                            color: selected.origin === 'adaptive_edge' ? k.orange : k.blue,
                           }}
                         >
-                          {selectedBadge.label}
+                          {selected.origin === 'adaptive_edge' ? 'AE' : 'SCAN'}
                         </span>
-                      )}
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '2px 7px',
-                          borderRadius: 4,
-                          background: selected.origin === 'adaptive_edge' ? C.orangeBg : C.blueBg,
-                          color: selected.origin === 'adaptive_edge' ? C.orangeText : C.blueText,
-                          border: `1px solid ${selected.origin === 'adaptive_edge' ? C.orangeBorder : C.blueBorder}`,
-                        }}
-                      >
-                        {selected.origin === 'adaptive_edge' ? 'AE RESEARCH' : 'SPOT SCAN'}
-                      </span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: k.text }}>
+                        {selected.instrument}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '1px 5px',
+                            borderRadius: 2,
+                            background: selected.optionType === 'CE' ? `${k.green}18` : `${k.red}18`,
+                            color: selected.optionType === 'CE' ? k.green : k.red,
+                          }}
+                        >
+                          {selected.optionType}
+                        </span>
+                        <span style={{ fontSize: 11, color: k.dim }}>
+                          {selected.moneyness}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 3, fontSize: 11, color: k.dim }}>
+                      {selected.entryTime ? new Date(selected.entryTime).toLocaleTimeString('en-IN') : '—'}
+                      {selected.exitTime ? ` → ${new Date(selected.exitTime).toLocaleTimeString('en-IN')}` : ' · Open'}
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ fontSize: 17, fontWeight: 750, color: C.text, letterSpacing: '-0.01em' }}>
-                      {selected.instrument}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: 3,
-                          background: selected.optionType === 'CE' ? C.emeraldBg : C.roseBg,
-                          color: selected.optionType === 'CE' ? C.emeraldText : C.roseText,
-                          border: `1px solid ${selected.optionType === 'CE' ? C.emeraldBorder : C.roseBorder}`,
-                        }}
-                      >
-                        {selected.optionType}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: C.muted }}>
-                        {selected.moneyness}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 4, fontSize: 11.5, color: C.muted }}>
-                    {selected.entryTime ? new Date(selected.entryTime).toLocaleString('en-IN') : '—'}
-                    {selected.exitTime ? ` → ${new Date(selected.exitTime).toLocaleString('en-IN')}` : ' · Currently Open'}
-                  </div>
-                </div>
-
-                {/* 2. OPTION PREMIUM EXECUTION CLUSTER */}
-                <div
-                  style={{
-                    background: '#ffffff',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    padding: 16,
-                  }}
-                >
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
-                    🎯 Option Strike Execution (₹ Premiums)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))', gap: 8 }}>
-                    <StatCard label="Entry" value={`₹${fmt(selected.entry)}`} color={C.text} />
-                    <StatCard label="Stop (SL)" value={`₹${fmt(selected.sl)}`} color={C.muted} />
-                    <StatCard label="Trail (TSL)" value={`₹${fmt(selected.tsl)}`} color={C.orangeText} />
-                    <StatCard label="Exit" value={selected.exit ? `₹${fmt(selected.exit)}` : '—'} color={C.muted} />
-                    <StatCard
-                      label="Current LTP"
-                      value={`₹${fmt(selected.ltp)}`}
-                      subvalue={
-                        selected.entry != null && selected.ltp != null
-                          ? `${selected.ltp - selected.entry >= 0 ? '+' : ''}${fmt(selected.ltp - selected.entry)} pts`
-                          : undefined
-                      }
-                      color={
-                        selected.entry != null && selected.ltp != null
-                          ? selected.ltp >= selected.entry
-                            ? C.emeraldText
-                            : C.roseText
-                          : C.text
-                      }
-                      bg={
-                        selected.entry != null && selected.ltp != null
-                          ? selected.ltp >= selected.entry
-                            ? C.emeraldBg
-                            : C.roseBg
-                          : C.surfaceSubtle
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* 3. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
-                <div
-                  style={{
-                    background: '#ffffff',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    padding: 16,
-                  }}
-                >
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
-                    🌊 Spot Microstructure & Order Flow Anchor
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
-                    <StatCard label="Spot Entry" value={`₹${fmt(selected.spotEntry, 0)}`} color={C.text} />
-                    <StatCard label="Spot SL" value={`₹${fmt(selected.spotSl, 0)}`} color={C.muted} />
-                    <StatCard label="Spot TSL" value={`₹${fmt(selected.spotTsl, 0)}`} color={C.orangeText} />
-                    <StatCard label="POC Anchor" value={`₹${fmt(selected.poc, 0)}`} color={C.purpleText} />
-                    <StatCard label="Session VWAP" value={`₹${fmt(selected.vwap)}`} color={C.blueText} />
-                    <StatCard label="Order Flow CVD" value={`${(selected.cvd ?? 0) > 0 ? '+' : ''}${fmt(selected.cvd, 0)}`} color={C.emeraldText} />
-                    <StatCard label="Model Score" value={selected.score != null ? `${fmt(selected.score, 2)}` : '0.84'} color={C.text} />
-                    <StatCard label="Horizon" value={selected.horizon || 'IMPULSE'} color={C.muted} />
-                  </div>
-                </div>
-
-                {/* 4. VISUALIZER AREA CHART */}
-                <div
-                  style={{
-                    background: '#ffffff',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    padding: 16,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      📈 Price Trajectory & Execution Bounds
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: C.muted }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#2563eb' }} /> Entry
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#ef4444' }} /> SL
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#f59e0b' }} /> TSL
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ height: 240 }}>
-                    <AdaptiveEdgeSetupChart
-                      symbol={selected.underlying || selected.instrument}
-                      entryTime={selected.entryTime}
-                      exitTime={selected.exitTime}
-                      spotEntry={selected.spotEntry}
-                      spotSl={selected.spotSl}
-                      spotTsl={selected.spotTsl}
-                      spotExit={selected.spotExit}
-                      isBullish={selected.optionType === 'CE'}
-                    />
-                  </div>
-                </div>
-
-                {/* 5. QUICK ACTIONS FOOTER */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenChart?.(chartSymbol(selected.underlying || selected.instrument), 'chart')}
+                  {/* 2. OPTION PREMIUM EXECUTION CLUSTER */}
+                  <div
                     style={{
-                      flex: 1,
-                      padding: '8px 14px',
-                      background: C.blue,
-                      color: '#ffffff',
-                      border: 0,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 650,
-                      cursor: 'pointer',
+                      background: k.bg,
+                      border: `1px solid ${k.border}`,
+                      borderRadius: 4,
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                      Option Strike Execution (₹ Premiums)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 6 }}>
+                      <StatCard label="Entry" value={`₹${fmt(selected.entry)}`} color={k.text} />
+                      <StatCard label="Stop (SL)" value={`₹${fmt(selected.sl)}`} color={k.dim} />
+                      <StatCard label="Trail (TSL)" value={`₹${fmt(selected.tsl)}`} color={k.orange} />
+                      <StatCard label="Exit" value={selected.exit ? `₹${fmt(selected.exit)}` : '—'} color={k.dim} />
+                      <StatCard
+                        label="Current LTP"
+                        value={`₹${fmt(selected.ltp)}`}
+                        subvalue={
+                          selected.entry != null && selected.ltp != null
+                            ? `${selected.ltp - selected.entry >= 0 ? '+' : ''}${fmt(selected.ltp - selected.entry)} pts`
+                            : undefined
+                        }
+                        color={
+                          selected.entry != null && selected.ltp != null
+                            ? selected.ltp >= selected.entry
+                              ? k.green
+                              : k.red
+                            : k.text
+                        }
+                        bg={
+                          selected.entry != null && selected.ltp != null
+                            ? selected.ltp >= selected.entry
+                              ? `${k.green}10`
+                              : `${k.red}10`
+                            : k.surface
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
+                  <div
+                    style={{
+                      background: k.bg,
+                      border: `1px solid ${k.border}`,
+                      borderRadius: 4,
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                      Spot Microstructure & Order Flow Anchor
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 6 }}>
+                      <StatCard label="Spot Entry" value={`₹${fmt(selected.spotEntry, 0)}`} color={k.text} />
+                      <StatCard label="Spot SL" value={`₹${fmt(selected.spotSl, 0)}`} color={k.dim} />
+                      <StatCard label="Spot TSL" value={`₹${fmt(selected.spotTsl, 0)}`} color={k.orange} />
+                      <StatCard label="POC Anchor" value={`₹${fmt(selected.poc, 0)}`} color={k.purple} />
+                      <StatCard label="Session VWAP" value={`₹${fmt(selected.vwap)}`} color={k.blue} />
+                      <StatCard label="Order Flow CVD" value={`${(selected.cvd ?? 0) > 0 ? '+' : ''}${fmt(selected.cvd, 0)}`} color={k.green} />
+                      <StatCard label="Model Score" value={selected.score != null ? `${fmt(selected.score, 2)}` : '0.84'} color={k.text} />
+                      <StatCard label="Horizon" value={selected.horizon || 'IMPULSE'} color={k.dim} />
+                    </div>
+                  </div>
+
+                  {/* 4. VISUALIZER AREA CHART */}
+                  <div
+                    style={{
+                      background: k.bg,
+                      border: `1px solid ${k.border}`,
+                      borderRadius: 4,
+                      padding: 12,
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      flexDirection: 'column',
                       gap: 6,
                     }}
                   >
-                    📈 Open Interactive Chart
-                  </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Price Trajectory & Execution Bounds
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: k.dim }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ width: 8, height: 2, background: k.blue }} /> Entry
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ width: 8, height: 2, background: k.red }} /> SL
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ width: 8, height: 2, background: k.orange }} /> TSL
+                        </span>
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(selected.instrument)}
-                    style={{
-                      padding: '8px 14px',
-                      background: '#ffffff',
-                      color: C.text,
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {copiedNotification ? '✓ Copied!' : '📋 Copy Symbol'}
-                  </button>
+                    <div style={{ height: 180 }}>
+                      <AdaptiveEdgeSetupChart
+                        symbol={selected.underlying || selected.instrument}
+                        entryTime={selected.entryTime}
+                        exitTime={selected.exitTime}
+                        spotEntry={selected.spotEntry}
+                        spotSl={selected.spotSl}
+                        spotTsl={selected.spotTsl}
+                        spotExit={selected.spotExit}
+                        isBullish={selected.optionType === 'CE'}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 5. QUICK ACTIONS FOOTER */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenChart?.(chartSymbol(selected.underlying || selected.instrument), 'chart')}
+                      style={{
+                        flex: 1,
+                        padding: '7px 12px',
+                        background: k.blue,
+                        color: '#ffffff',
+                        border: 0,
+                        borderRadius: 3,
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      Open Interactive Chart
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(selected.instrument)}
+                      style={{
+                        padding: '7px 12px',
+                        background: k.bg,
+                        color: k.text,
+                        border: `1px solid ${k.border}`,
+                        borderRadius: 3,
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {copiedNotification ? '✓ Copied' : 'Copy Symbol'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </aside>
+              )}
+            </aside>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+export default AdaptiveEdgePane;

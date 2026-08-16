@@ -164,36 +164,34 @@ export function AdaptiveEdgeHelpVisualizer() {
         style={{
           background: `linear-gradient(135deg, ${tint(k.blue, 6)} 0%, ${tint(k.purple, 6)} 100%)`,
           border: `1px solid ${k.border}`,
-          borderRadius: 6,
-          padding: '18px 22px',
+          borderRadius: 4,
+          padding: '16px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 8,
+          gap: 6,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🌊</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: k.text, letterSpacing: '-0.01em' }}>
+            <span style={{ fontSize: 14, fontWeight: 650, color: k.text, letterSpacing: '-0.01em' }}>
               Adaptive Edge — Hybrid Microstructure & Scalp Engine
             </span>
           </div>
           <span
             style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: 3,
-              background: `${k.blue}18`,
+              fontSize: 9.5,
+              fontWeight: 600,
+              padding: '2px 7px',
+              borderRadius: 2,
+              background: `${k.blue}15`,
               color: k.blue,
-              border: `1px solid ${k.blue}40`,
               letterSpacing: '0.04em',
             }}
           >
             END-TO-END WORKFLOW & PNL SIMULATOR
           </span>
         </div>
-        <p style={{ fontSize: 12, color: k.text, lineHeight: 1.6, margin: 0, opacity: 0.9 }}>
+        <p style={{ fontSize: 12, color: k.text, lineHeight: 1.5, margin: 0, opacity: 0.9 }}>
           Unlike standard indicators that only look at lagging bar closes, <b>Adaptive Edge</b> reads the live <b>order flow tape</b>, 
           <b> volume footprint imbalances</b>, and <b>anchored VWAP / POC structures</b>. It automatically translates spot momentum 
           into high-conviction options execution with real-time dynamic trailing stops and multi-stage mode escalation.
@@ -202,8 +200,8 @@ export function AdaptiveEdgeHelpVisualizer() {
 
       {/* ── Pictorial Architecture Pipeline Ribbon ── */}
       <div>
-        <div style={{ fontSize: 11, fontWeight: 650, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
-          ⚡ End-to-End Architectural Pipeline (Click stage to inspect)
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+          End-to-End Architectural Pipeline (Click stage to inspect)
         </div>
         <div
           style={{
@@ -344,18 +342,18 @@ export function AdaptiveEdgeHelpVisualizer() {
           gap: 14,
         }}
       >
-        <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          📊 Dynamic Scalp Escalation & Risk Matrix
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Dynamic Scalp Escalation & Risk Matrix
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {/* Mode 1: MICRO */}
           <div style={{ background: `${k.blue}0a`, border: `1px solid ${k.blue}30`, borderRadius: 4, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: k.blue }}>1. MICRO</span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, background: `${k.blue}18`, color: k.blue, padding: '1px 5px', borderRadius: 2 }}>1.0R</span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: k.blue }}>1. MICRO</span>
+              <span style={{ fontSize: 9.5, fontWeight: 600, background: `${k.blue}18`, color: k.blue, padding: '1px 5px', borderRadius: 2 }}>1.0R</span>
             </div>
-            <div style={{ fontSize: 11, color: k.text, fontWeight: 600 }}>Quick Impulse Scalp</div>
+            <div style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Quick Impulse Scalp</div>
             <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4 }}>
               Entry triggered on initial tape CVD impulse. Hard initial stop with quick 1R profit objective.
             </div>
@@ -364,10 +362,10 @@ export function AdaptiveEdgeHelpVisualizer() {
           {/* Mode 2: SCALP */}
           <div style={{ background: `${k.green}0a`, border: `1px solid ${k.green}30`, borderRadius: 4, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: k.green }}>2. SCALP (↗)</span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, background: `${k.green}18`, color: k.green, padding: '1px 5px', borderRadius: 2 }}>&gt;1.5R</span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: k.green }}>2. SCALP (↗)</span>
+              <span style={{ fontSize: 9.5, fontWeight: 600, background: `${k.green}18`, color: k.green, padding: '1px 5px', borderRadius: 2 }}>&gt;1.5R</span>
             </div>
-            <div style={{ fontSize: 11, color: k.text, fontWeight: 600 }}>Momentum Expansion</div>
+            <div style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Momentum Expansion</div>
             <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4 }}>
               Dynamic upgrade when volume delta exceeds baseline without liquidity absorption resistance.
             </div>
@@ -376,10 +374,10 @@ export function AdaptiveEdgeHelpVisualizer() {
           {/* Mode 3: EXTENDED */}
           <div style={{ background: `${k.purple}0a`, border: `1px solid ${k.purple}30`, borderRadius: 4, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: k.purple }}>3. EXTENDED (↗)</span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, background: `${k.purple}18`, color: k.purple, padding: '1px 5px', borderRadius: 2 }}>&gt;2.5R</span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: k.purple }}>3. EXTENDED (↗)</span>
+              <span style={{ fontSize: 9.5, fontWeight: 600, background: `${k.purple}18`, color: k.purple, padding: '1px 5px', borderRadius: 2 }}>&gt;2.5R</span>
             </div>
-            <div style={{ fontSize: 11, color: k.text, fontWeight: 600 }}>Trend Continuation</div>
+            <div style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Trend Continuation</div>
             <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4 }}>
               Value Area breakout sustained by institutional volume flow. Trailing stop ratchets to lock in 1R+.
             </div>
@@ -388,10 +386,10 @@ export function AdaptiveEdgeHelpVisualizer() {
           {/* Mode 4: INTRADAY */}
           <div style={{ background: `${k.orange}0a`, border: `1px solid ${k.orange}30`, borderRadius: 4, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: k.orange }}>4. INTRADAY (↗)</span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, background: `${k.orange}18`, color: k.orange, padding: '1px 5px', borderRadius: 2 }}>&gt;4.0R</span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: k.orange }}>4. INTRADAY (↗)</span>
+              <span style={{ fontSize: 9.5, fontWeight: 600, background: `${k.orange}18`, color: k.orange, padding: '1px 5px', borderRadius: 2 }}>&gt;4.0R</span>
             </div>
-            <div style={{ fontSize: 11, color: k.text, fontWeight: 600 }}>Full Session Runner</div>
+            <div style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Full Session Runner</div>
             <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4 }}>
               Full structural trend day. Trailing stop protects open runner until trend exhausts or TSL hit.
             </div>
@@ -399,7 +397,7 @@ export function AdaptiveEdgeHelpVisualizer() {
         </div>
 
         <div style={{ fontSize: 11, color: k.dim, lineHeight: 1.5, background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '8px 12px' }}>
-          🛡️ <b>Defensive Decay Guard (↘):</b> When momentum decays or CVD stalls, the badge dynamically reflects decay (e.g. <code>INTRADAY ↘ SCALP ↘ MICRO</code>) and automatically tightens the trailing stop to lock in peak unrealized gains.
+          <b>Defensive Decay Guard (↘):</b> When momentum decays or CVD stalls, the badge dynamically reflects decay (e.g. <code>INTRADAY ↘ SCALP ↘ MICRO</code>) and automatically tightens the trailing stop to lock in peak unrealized gains.
         </div>
       </div>
 
@@ -408,19 +406,17 @@ export function AdaptiveEdgeHelpVisualizer() {
         style={{
           background: k.bg,
           border: `1px solid ${k.border}`,
-          borderRadius: 6,
-          padding: '20px',
+          borderRadius: 4,
+          padding: '18px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          gap: 14,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 14 }}>🎮</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: k.text }}>
+              <span style={{ fontSize: 14, fontWeight: 650, color: k.text }}>
                 Interactive Sandbox Simulation & Real-Time P&L Engine
               </span>
             </div>
@@ -437,7 +433,7 @@ export function AdaptiveEdgeHelpVisualizer() {
               style={{
                 padding: '4px 8px',
                 fontSize: 10.5,
-                fontWeight: 600,
+                fontWeight: 500,
                 borderRadius: 3,
                 border: `1px solid ${k.border}`,
                 background: simSpot === 24465 ? k.surfaceHover : k.bg,
@@ -453,7 +449,7 @@ export function AdaptiveEdgeHelpVisualizer() {
               style={{
                 padding: '4px 8px',
                 fontSize: 10.5,
-                fontWeight: 600,
+                fontWeight: 500,
                 borderRadius: 3,
                 border: `1px solid ${k.green}40`,
                 background: `${k.green}10`,
@@ -469,7 +465,7 @@ export function AdaptiveEdgeHelpVisualizer() {
               style={{
                 padding: '4px 8px',
                 fontSize: 10.5,
-                fontWeight: 600,
+                fontWeight: 500,
                 borderRadius: 3,
                 border: `1px solid ${k.orange}40`,
                 background: `${k.orange}10`,
@@ -485,7 +481,7 @@ export function AdaptiveEdgeHelpVisualizer() {
               style={{
                 padding: '4px 8px',
                 fontSize: 10.5,
-                fontWeight: 600,
+                fontWeight: 500,
                 borderRadius: 3,
                 border: `1px solid ${k.red}40`,
                 background: `${k.red}10`,
@@ -504,14 +500,14 @@ export function AdaptiveEdgeHelpVisualizer() {
             background: k.surface,
             border: `1px solid ${k.border}`,
             borderRadius: 4,
-            padding: '14px 16px',
+            padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
+            gap: 10,
           }}
         >
-          <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            ⚙️ Editable Trade & Execution Parameters:
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Editable Trade & Execution Parameters
           </div>
 
           <div
@@ -523,7 +519,7 @@ export function AdaptiveEdgeHelpVisualizer() {
           >
             {/* Lot Size & Number of Lots */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 Lots × Lot Size
               </label>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -537,7 +533,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                     width: 48,
                     padding: '4px 6px',
                     fontSize: 11.5,
-                    fontWeight: 600,
+                    fontWeight: 500,
                     borderRadius: 3,
                     border: `1px solid ${k.border}`,
                     background: k.bg,
@@ -556,7 +552,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                     width: 48,
                     padding: '4px 6px',
                     fontSize: 11.5,
-                    fontWeight: 600,
+                    fontWeight: 500,
                     borderRadius: 3,
                     border: `1px solid ${k.border}`,
                     background: k.bg,
@@ -570,7 +566,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Entry Premium */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 Entry Premium (₹)
               </label>
               <input
@@ -581,7 +577,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   borderRadius: 3,
                   border: `1px solid ${k.border}`,
                   background: k.bg,
@@ -593,7 +589,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Initial Protective Hard SL */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 Initial Hard SL (₹)
               </label>
               <input
@@ -604,7 +600,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   borderRadius: 3,
                   border: `1px solid ${k.border}`,
                   background: k.bg,
@@ -616,7 +612,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Exit Target / Take Profit */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 Exit Target (₹)
               </label>
               <input
@@ -627,7 +623,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   borderRadius: 3,
                   border: `1px solid ${k.border}`,
                   background: k.bg,
@@ -639,7 +635,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Trailing Stop Offset (pts) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 TSL Trail Offset (pts)
               </label>
               <input
@@ -651,7 +647,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   borderRadius: 3,
                   border: `1px solid ${k.border}`,
                   background: k.bg,
@@ -663,7 +659,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Break-Even Trigger (pts) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 650, color: k.dim, textTransform: 'uppercase' }}>
+              <label style={{ fontSize: 10, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
                 Break-Even Trigger (pts)
               </label>
               <input
@@ -675,7 +671,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
-                  fontWeight: 600,
+                  fontWeight: 500,
                   borderRadius: 3,
                   border: `1px solid ${k.border}`,
                   background: k.bg,
@@ -690,9 +686,9 @@ export function AdaptiveEdgeHelpVisualizer() {
         {/* Spot Price Slider Control */}
         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
-            <span style={{ fontWeight: 650, color: k.text }}>
-              Simulated Spot Price: <span style={{ color: k.blue, fontWeight: 750 }}>₹{simSpot.toLocaleString('en-IN')}</span>
-              <span style={{ marginLeft: 6, fontWeight: 600, color: spotDiff >= 0 ? k.green : k.red }}>
+            <span style={{ fontWeight: 500, color: k.text }}>
+              Simulated Spot Price: <span style={{ color: k.blue, fontWeight: 650 }}>₹{simSpot.toLocaleString('en-IN')}</span>
+              <span style={{ marginLeft: 6, fontWeight: 500, color: spotDiff >= 0 ? k.green : k.red }}>
                 ({spotDiff >= 0 ? '+' : ''}{spotDiff} pts)
               </span>
             </span>
@@ -715,10 +711,10 @@ export function AdaptiveEdgeHelpVisualizer() {
           {/* Current Option LTP */}
           <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 3, padding: '8px 10px' }}>
             <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Live Option LTP</div>
-            <div style={{ fontSize: 14, fontWeight: 750, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 14, fontWeight: 650, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
               ₹{currentLtp.toFixed(2)}
             </div>
-            <div style={{ fontSize: 9.5, fontWeight: 600, color: ptsDiff >= 0 ? k.green : k.red, marginTop: 1 }}>
+            <div style={{ fontSize: 9.5, fontWeight: 500, color: ptsDiff >= 0 ? k.green : k.red, marginTop: 1 }}>
               {ptsDiff >= 0 ? '+' : ''}{ptsDiff.toFixed(2)} pts ({ptsPct >= 0 ? '+' : ''}{ptsPct}%)
             </div>
           </div>
@@ -735,10 +731,10 @@ export function AdaptiveEdgeHelpVisualizer() {
             <div style={{ fontSize: 9.5, fontWeight: 600, color: ptsDiff >= 0 ? k.green : k.red, textTransform: 'uppercase' }}>
               Unrealized MTM P&L
             </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: ptsDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
               {netPnlUsd >= 0 ? '+' : ''}₹{netPnlUsd.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: 9.5, color: ptsDiff >= 0 ? k.green : k.red, fontWeight: 600, marginTop: 1 }}>
+            <div style={{ fontSize: 9.5, color: ptsDiff >= 0 ? k.green : k.red, fontWeight: 500, marginTop: 1 }}>
               {ptsDiff >= 0 ? 'PROFIT' : 'LOSS'} ({totalQty} Qty)
             </div>
           </div>
@@ -748,11 +744,11 @@ export function AdaptiveEdgeHelpVisualizer() {
             <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>
               Ratcheted TSL
             </div>
-            <div style={{ fontSize: 14, fontWeight: 750, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 14, fontWeight: 650, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
               ₹{dynamicTsl.toFixed(2)}
             </div>
-            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.dim, fontWeight: isRiskFree ? 700 : 400, marginTop: 1 }}>
-              {isRiskFree ? '🛡️ RISK-FREE LOCK' : `Initial SL: ₹${initialSl}`}
+            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.dim, fontWeight: isRiskFree ? 600 : 400, marginTop: 1 }}>
+              {isRiskFree ? 'RISK-FREE LOCK' : `Initial SL: ₹${initialSl}`}
             </div>
           </div>
 
@@ -766,12 +762,12 @@ export function AdaptiveEdgeHelpVisualizer() {
             }}
           >
             <div style={{ fontSize: 9.5, fontWeight: 600, color: isRiskFree ? k.green : k.red, textTransform: 'uppercase' }}>
-              {isRiskFree ? '🔒 Locked Profit @ TSL' : '⚠️ Defined Risk @ TSL'}
+              {isRiskFree ? 'Locked Profit @ TSL' : 'Defined Risk @ TSL'}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 750, color: isRiskFree ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 14, fontWeight: 650, color: isRiskFree ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
               {tslPnl >= 0 ? '+' : ''}₹{tslPnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.red, fontWeight: 600, marginTop: 1 }}>
+            <div style={{ fontSize: 9.5, color: isRiskFree ? k.green : k.red, fontWeight: 500, marginTop: 1 }}>
               {isRiskFree ? `${tslPtsDiff > 0 ? `+${tslPtsDiff} pts` : 'Break-Even (0 risk)'}` : `Max Loss: -₹${Math.abs(tslPnl).toLocaleString('en-IN')}`}
             </div>
           </div>
@@ -781,26 +777,26 @@ export function AdaptiveEdgeHelpVisualizer() {
             <div style={{ fontSize: 9.5, fontWeight: 600, color: simModeColor, textTransform: 'uppercase' }}>
               Mode & R:R Ratio
             </div>
-            <div style={{ fontSize: 13, fontWeight: 750, color: simModeColor }}>
+            <div style={{ fontSize: 13, fontWeight: 650, color: simModeColor }}>
               {simModeBadge}
             </div>
-            <div style={{ fontSize: 9.5, color: simModeColor, fontWeight: 600, marginTop: 1 }}>
+            <div style={{ fontSize: 9.5, color: simModeColor, fontWeight: 500, marginTop: 1 }}>
               R:R: <b>{currentRR}R</b>
             </div>
           </div>
         </div>
 
         {/* ── Visual TSL Progression Ladder & Timeline Explainer ── */}
-        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            🪜 How Trailing Stop Loss (TSL) Protects You Step-by-Step:
+        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            How Trailing Stop Loss (TSL) Protects You Step-by-Step
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
             
             {/* Step 1 */}
             <div style={{ background: k.bg, border: `1px solid ${currentLtp < entryPrice + beTrigger ? k.blue : k.border}`, borderRadius: 4, padding: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: k.blue }}>PHASE 1: TRADE INCEPTION</div>
+              <div style={{ fontSize: 10, fontWeight: 650, color: k.blue }}>PHASE 1: TRADE INCEPTION</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>Entry @ ₹{entryPrice}</div>
               <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
                 Initial Hard SL placed at <b>₹{initialSl}</b>. Maximum capital risk defined as <b>-₹{maxRiskAmount.toLocaleString('en-IN')}</b>.
@@ -809,7 +805,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Step 2 */}
             <div style={{ background: k.bg, border: `1px solid ${currentLtp >= entryPrice + beTrigger && currentLtp < entryPrice + tslOffset + 15 ? k.green : k.border}`, borderRadius: 4, padding: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: k.green }}>PHASE 2: BREAK-EVEN RATCHET</div>
+              <div style={{ fontSize: 10, fontWeight: 650, color: k.green }}>PHASE 2: BREAK-EVEN RATCHET</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>LTP crosses +{beTrigger} pts (₹{(entryPrice + beTrigger).toFixed(2)})</div>
               <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
                 TSL automatically jumps to <b>₹{entryPrice}</b>. Trade is now <b>100% Risk-Free</b> (Capital is fully preserved).
@@ -818,7 +814,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Step 3 */}
             <div style={{ background: k.bg, border: `1px solid ${currentLtp >= entryPrice + tslOffset + 15 && currentLtp < exitTarget ? k.orange : k.border}`, borderRadius: 4, padding: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: k.orange }}>PHASE 3: PROFIT TRAILING</div>
+              <div style={{ fontSize: 10, fontWeight: 650, color: k.orange }}>PHASE 3: PROFIT TRAILING</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>LTP climbs further (e.g. ₹{(entryPrice + 50).toFixed(2)})</div>
               <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
                 TSL ratchets up continuously behind price (LTP - {tslOffset} pts). Automatically locks in guaranteed profit on any pullback.
@@ -827,7 +823,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
             {/* Step 4 */}
             <div style={{ background: k.bg, border: `1px solid ${currentLtp >= exitTarget ? k.purple : k.border}`, borderRadius: 4, padding: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: k.purple }}>PHASE 4: EXIT / TARGET</div>
+              <div style={{ fontSize: 10, fontWeight: 650, color: k.purple }}>PHASE 4: EXIT / TARGET</div>
               <div style={{ fontSize: 11, fontWeight: 600, color: k.text, marginTop: 2 }}>Target @ ₹{exitTarget} or TSL Trigger</div>
               <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.4, marginTop: 4 }}>
                 Clean 100% automated rule-based exit when target is reached or when price reverses into the ratcheted TSL.
@@ -837,10 +833,10 @@ export function AdaptiveEdgeHelpVisualizer() {
         </div>
 
         {/* Pictorial Execution Bounds Visualizer */}
-        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: 14 }}>
+        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              📈 Real-Time Premium Trajectory & Bounds Visualizer
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Real-Time Premium Trajectory & Bounds Visualizer
             </span>
             <div style={{ display: 'flex', gap: 10, fontSize: 10, color: k.dim, flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -872,7 +868,7 @@ export function AdaptiveEdgeHelpVisualizer() {
 
               {/* Target line */}
               <line x1="0" y1="25" x2="500" y2="25" stroke={k.purple} strokeWidth="1.5" strokeDasharray="3 3" />
-              <text x="8" y="21" fill={k.purple} fontSize="9" fontWeight="700">Target ₹{exitTarget} (+₹{maxTargetAmount.toLocaleString('en-IN')})</text>
+              <text x="8" y="21" fill={k.purple} fontSize="9" fontWeight="600">Target ₹{exitTarget} (+₹{maxTargetAmount.toLocaleString('en-IN')})</text>
 
               {/* Hard SL line */}
               <line x1="0" y1="140" x2="500" y2="140" stroke={k.red} strokeWidth="1.5" strokeDasharray="4 4" />
@@ -889,7 +885,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                 return (
                   <>
                     <line x1="180" y1={tslY} x2="500" y2={tslY} stroke={k.orange} strokeWidth="2" strokeDasharray="3 3" />
-                    <text x="190" y={tslY - 4} fill={k.orange} fontSize="9.5" fontWeight="750">
+                    <text x="190" y={tslY - 4} fill={k.orange} fontSize="9.5" fontWeight="650">
                       Ratcheted TSL ₹{dynamicTsl} ({tslPnl >= 0 ? `+₹${tslPnl.toLocaleString('en-IN')}` : `-₹${Math.abs(tslPnl).toLocaleString('en-IN')}`})
                     </text>
                   </>
@@ -909,7 +905,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                       strokeWidth="2.5"
                     />
                     <circle cx="475" cy={targetY} r="5.5" fill={strokeColor} />
-                    <text x="410" y={Math.max(16, targetY - 8)} fill={strokeColor} fontSize="10.5" fontWeight="800">
+                    <text x="410" y={Math.max(16, targetY - 8)} fill={strokeColor} fontSize="10" fontWeight="700">
                       LTP ₹{currentLtp} ({netPnlUsd >= 0 ? '+' : ''}₹{netPnlUsd.toLocaleString('en-IN')})
                     </text>
                   </>

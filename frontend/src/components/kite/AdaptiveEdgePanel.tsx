@@ -928,8 +928,8 @@ export function AdaptiveEdgePanel({
               >
                 {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    🎯 Option Strike Execution (₹ Premiums)
+                  <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                    Option Strike Execution (₹ Premiums)
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
                     <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={k.text} />
@@ -964,8 +964,8 @@ export function AdaptiveEdgePanel({
 
                 {/* 2. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    🌊 Spot Microstructure & Order Flow Anchor
+                  <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                    Spot Microstructure & Order Flow Anchor
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
                     <StatCard label="Spot Entry" value={`₹${fmt(row.spotEntry ?? (row.underlying.includes('BANK') ? 51200 : 24465), 0)}`} color={k.text} />
@@ -982,8 +982,8 @@ export function AdaptiveEdgePanel({
                 {/* 3. VISUALIZER AREA CHART & BOUNDS */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      📈 Price Trajectory & Execution Bounds
+                    <div style={{ fontSize: 11, fontWeight: 650, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Price Trajectory & Execution Bounds
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: k.dim }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -1023,12 +1023,12 @@ export function AdaptiveEdgePanel({
                       }}
                       style={{
                         flex: 1,
-                        padding: '8px 14px',
+                        padding: '7px 14px',
                         background: k.blue,
                         color: '#ffffff',
                         border: 0,
                         borderRadius: 3,
-                        fontSize: 12,
+                        fontSize: 11.5,
                         fontWeight: 600,
                         cursor: 'pointer',
                         display: 'flex',
@@ -1037,7 +1037,7 @@ export function AdaptiveEdgePanel({
                         gap: 6,
                       }}
                     >
-                      📈 Open Interactive Chart
+                      Open Interactive Chart
                     </button>
                   )}
 
@@ -1045,17 +1045,17 @@ export function AdaptiveEdgePanel({
                     type="button"
                     onClick={(e) => handleCopy(e, row.instrument, row.id)}
                     style={{
-                      padding: '8px 14px',
+                      padding: '7px 14px',
                       background: k.bg,
                       color: k.text,
                       border: `1px solid ${k.border}`,
                       borderRadius: 3,
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
                   >
-                    {copiedId === row.id ? '✓ Copied!' : '📋 Copy Symbol'}
+                    {copiedId === row.id ? '✓ Copied' : 'Copy Symbol'}
                   </button>
                 </div>
               </div>
