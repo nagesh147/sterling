@@ -123,12 +123,26 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
 
   const handleAction = (e: React.MouseEvent, type: 'BUY' | 'SELL') => {
     e.stopPropagation();
+    const entryPx = lastPx || leg.entry_premium || leg.last_price || 0;
+    const activeSl = leg.initial_stop_premium ?? leg.trail_stop_premium;
+    const slPercentage =
+      type === 'BUY' && entryPx > 0 && activeSl && activeSl > 0
+        ? -Math.abs(Number((((entryPx - activeSl) / entryPx) * 100).toFixed(1)))
+        : undefined;
+    const tgtPercentage =
+      type === 'BUY' && entryPx > 0 && leg.target_premium && leg.target_premium > 0
+        ? Math.abs(Number((((leg.target_premium - entryPx) / entryPx) * 100).toFixed(1)))
+        : undefined;
+
     openOrderWindow({
       symbol: leg.option_symbol,
       exchange: exchange,
       initialSide: type,
       lotSize: leg.lot_size || 1,
       lastPrice: lastPx || 0,
+      initialSlPct: slPercentage,
+      initialTgtPct: tgtPercentage,
+      tag: 'DIRECTIONAL_SIGNAL',
     });
   };
 

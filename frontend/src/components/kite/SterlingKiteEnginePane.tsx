@@ -707,10 +707,25 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     leg.strike, leg.expiry, leg.option_type, spot,
                     q, leg.lot_size ?? null,
                   );
-                  return (
+                    const entryForSl = lastPx || gEntry || 0;
+                    const slPercentage =
+                      entryForSl > 0 && slPx && slPx > 0
+                        ? -Math.abs(Number((((entryForSl - slPx) / entryForSl) * 100).toFixed(1)))
+                        : undefined;
+                    const tgtPercentage =
+                      entryForSl > 0 && row.target && row.target > 0
+                        ? Math.abs(Number((((row.target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                        : undefined;
+
+                    return (
                     <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <AdaptiveEdgePositionCalculator
+                        key={leg.option_symbol || row.underlying}
                         symbol={leg.option_symbol || row.underlying}
+                        tradingsymbol={leg.option_symbol}
+                        exchange={row.exchange}
+                        expiry={leg.expiry}
+                        lotSize={leg.lot_size}
                         defaultEntryPrice={roundToTick(gEntry)}
                         defaultSl={roundToTick(slPx)}
                         defaultTsl={roundToTick(slPx)}
@@ -735,6 +750,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                             initialSide: 'BUY',
                             lotSize: leg.lot_size || 1,
                             lastPrice: lastPx || 0,
+                            initialSlPct: slPercentage,
+                            initialTgtPct: tgtPercentage,
+                            tag: 'SUPERTREND',
                           });
                         }}
                         onSell={() => {
@@ -744,6 +762,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                             initialSide: 'SELL',
                             lotSize: leg.lot_size || 1,
                             lastPrice: lastPx || 0,
+                            tag: 'SUPERTREND',
                           });
                         }}
                       />
@@ -1024,12 +1043,25 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       className="st-actions-persistent"
                       onBuy={(e) => {
                         e.stopPropagation();
+                        const entryForSl = lastPx || leg.premium_spot || 0;
+                        const slPxVal = leg.entry_sl ?? leg.premium_sl;
+                        const slPercentage =
+                          entryForSl > 0 && slPxVal && slPxVal > 0
+                            ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        const tgtPercentage =
+                          entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                            ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
                         openOrderWindow({
                           symbol: leg.option_symbol,
                           exchange: row.exchange,
                           initialSide: 'BUY',
                           lotSize: leg.lot_size || 1,
                           lastPrice: lastPx || 0,
+                          initialSlPct: slPercentage,
+                          initialTgtPct: tgtPercentage,
+                          tag: 'SUPERTREND',
                         });
                       }}
                       onSell={(e) => {
@@ -1040,6 +1072,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           initialSide: 'SELL',
                           lotSize: leg.lot_size || 1,
                           lastPrice: lastPx || 0,
+                          tag: 'SUPERTREND',
                         });
                       }}
                       onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
@@ -1104,11 +1137,27 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   leg.strike, leg.expiry, leg.option_type, spot,
                   q, leg.lot_size ?? null,
                 );
+                const entryForSl = lastPx || entryPx || 0;
+                const activeSl = initSlPx ?? slPx;
+                const slPercentage =
+                  entryForSl > 0 && activeSl && activeSl > 0
+                    ? -Math.abs(Number((((entryForSl - activeSl) / entryForSl) * 100).toFixed(1)))
+                    : undefined;
+                const tgtPercentage =
+                  entryForSl > 0 && targetPx && targetPx > 0
+                    ? Math.abs(Number((((targetPx - entryForSl) / entryForSl) * 100).toFixed(1)))
+                    : undefined;
+
                 return (
                   <div onClick={(e) => e.stopPropagation()} style={{ background: k.surface, borderBottom: `1px solid ${k.border}`, padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {/* 1. POSITION SIZING & P&L CALCULATOR */}
                     <AdaptiveEdgePositionCalculator
+                      key={leg.option_symbol || row.underlying}
                       symbol={leg.option_symbol || row.underlying}
+                      tradingsymbol={leg.option_symbol}
+                      exchange={row.exchange}
+                      expiry={leg.expiry}
+                      lotSize={leg.lot_size}
                       defaultEntryPrice={roundToTick(entryPx)}
                       defaultSl={roundToTick(initSlPx ?? slPx)}
                       defaultTsl={roundToTick(slPx)}
@@ -1134,6 +1183,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           initialSide: 'BUY',
                           lotSize: leg.lot_size || 1,
                           lastPrice: lastPx || 0,
+                          initialSlPct: slPercentage,
+                          initialTgtPct: tgtPercentage,
+                          tag: 'SUPERTREND',
                         });
                       }}
                       onSell={() => {
@@ -1143,6 +1195,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           initialSide: 'SELL',
                           lotSize: leg.lot_size || 1,
                           lastPrice: lastPx || 0,
+                          tag: 'SUPERTREND',
                         });
                       }}
                     />
