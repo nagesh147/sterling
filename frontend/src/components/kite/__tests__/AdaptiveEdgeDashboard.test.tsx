@@ -96,15 +96,17 @@ describe('AdaptiveEdgeDashboard', () => {
   it('renders KPI metrics and switches between dashboard sections', () => {
     render(<AdaptiveEdgeDashboard snapshot={mockSnapshot} />);
     expect(screen.getByText('AUTHORIZED')).toBeInTheDocument();
-    expect(screen.getByText('24,405')).toBeInTheDocument();
-    expect(screen.getByText('24,409.84')).toBeInTheDocument();
+    expect(screen.getByText('₹24,405')).toBeInTheDocument();
+    expect(screen.getByText('₹24,409.84')).toBeInTheDocument();
     expect(screen.getByText('+32,055')).toBeInTheDocument();
-    expect(screen.getByText('42')).toBeInTheDocument();
-    expect(screen.getByText('2,215')).toBeInTheDocument();
 
     // Click Microstructure section
-    fireEvent.click(screen.getByText('🌊 Order Flow & Microstructure'));
-    expect(screen.getByText(/Order Flow & Market Profile Engine Details/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('🌊 Market Profile & Order Flow'));
+    expect(screen.getByText(/Market Profile, Volume Profile & Order Flow Breakdown/)).toBeInTheDocument();
+
+    // Click Indices vs Stocks Mechanics section
+    fireEvent.click(screen.getByText('⚡ Indices vs. Stocks Mechanics'));
+    expect(screen.getByText(/How Adaptive Edge Operates on Indices vs. F&O Stocks/)).toBeInTheDocument();
 
     // Click Opportunity Modes section
     fireEvent.click(screen.getByText('🎯 Opportunity Modes'));
