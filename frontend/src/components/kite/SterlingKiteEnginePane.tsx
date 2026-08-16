@@ -21,6 +21,7 @@ import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
+import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 
 interface Props {
@@ -734,17 +735,17 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(75px, 1fr))', gap: 4 }}>
                           <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Entry</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>{gEntry != null ? `₹${gEntry.toFixed(2)}` : '—'}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>{gEntry != null ? `₹${fmtTick(gEntry)}` : '—'}</span>
                           </div>
                           <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Current LTP</span>
                             <span style={{ fontSize: 11, fontWeight: 600, color: gDiff != null ? (gDiff >= 0 ? k.green : k.red) : k.text, fontVariantNumeric: 'tabular-nums' }}>
-                              {lastPx != null ? `₹${lastPx.toFixed(2)}` : '—'}
+                              {lastPx != null ? `₹${fmtTick(lastPx)}` : '—'}
                             </span>
                           </div>
                           <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{slPx != null ? `₹${slPx.toFixed(2)}` : '—'}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{slPx != null ? `₹${fmtTick(slPx)}` : '—'}</span>
                           </div>
                         </div>
                       </div>
@@ -1138,11 +1139,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     {/* 1. POSITION SIZING & P&L CALCULATOR */}
                     <AdaptiveEdgePositionCalculator
                       symbol={leg.option_symbol || row.underlying}
-                      defaultEntryPrice={entryPx}
-                      defaultSl={initSlPx ?? slPx}
-                      defaultTsl={slPx}
-                      defaultExit={targetPx}
-                      currentLtp={lastPx}
+                      defaultEntryPrice={roundToTick(entryPx)}
+                      defaultSl={roundToTick(initSlPx ?? slPx)}
+                      defaultTsl={roundToTick(slPx)}
+                      defaultExit={roundToTick(targetPx)}
+                      currentLtp={roundToTick(lastPx)}
                       optionType={leg.option_type as 'CE' | 'PE'}
                     />
 
@@ -1165,7 +1166,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                           <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Entry</span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
-                            {entryPx != null ? `₹${entryPx.toFixed(2)}` : '—'}
+                            {entryPx != null ? `₹${fmtTick(entryPx)}` : '—'}
                           </span>
                         </div>
                         <div
@@ -1183,24 +1184,24 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                             Current LTP
                           </span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: entryDiff != null ? (entryDiff >= 0 ? k.green : k.red) : k.text, fontVariantNumeric: 'tabular-nums' }}>
-                            {lastPx != null ? `₹${lastPx.toFixed(2)}` : '—'}
+                            {lastPx != null ? `₹${fmtTick(lastPx)}` : '—'}
                           </span>
                           {entryDiff != null && (
                             <span style={{ fontSize: 9.5, fontWeight: 600, color: entryDiff >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
-                              {entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)} pts
+                              {entryDiff >= 0 ? '+' : ''}{fmtTick(entryDiff)} pts
                             </span>
                           )}
                         </div>
                         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                           <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-                            {(initSlPx ?? slPx) != null ? `₹${(initSlPx ?? slPx)!.toFixed(2)}` : '—'}
+                            {(initSlPx ?? slPx) != null ? `₹${fmtTick(initSlPx ?? slPx)}` : '—'}
                           </span>
                         </div>
                         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                           <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Trail (TSL)</span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
-                            {slPx != null ? `₹${slPx.toFixed(2)}` : '—'}
+                            {slPx != null ? `₹${fmtTick(slPx)}` : '—'}
                           </span>
                         </div>
                         <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>

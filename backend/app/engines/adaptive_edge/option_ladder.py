@@ -130,6 +130,22 @@ def _as_chain(option_rows: Sequence[dict], option_name: str, today: date) -> lis
     return list(option_rows)
 
 
+def _round_tick(val: float | None, tick: float = 0.05) -> float | None:
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        if f <= 0:
+            return 0.0
+        return round(round(f / tick) * tick, 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _iv_for_symbol(option_name: str | None, dte_days: float) -> float:
+    return _IV_ASSUMPTION
+
+
 def _stamp_premiums(
     *,
     spot: float,
@@ -137,16 +153,13 @@ def _stamp_premiums(
     strike: float,
     option_type: str,
     dte_days: float,
-    stop_points: float | None,
-    trail_points: float | None,
+    stop_points: float | None = None,
+    trail_points: float | None = None,
     iv: float | None = None,
-    option_name: str = "",
+    option_name: str | None = None,
 ) -> tuple[float | None, float | None, float | None]:
-    if spot <= 0 or strike <= 0:
-        return None, None, None
-    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"} if option_name else False
-    eff_iv = iv if (iv is not None and iv > 0) else (0.32 if is_stock else _IV_ASSUMPTION)
     eff_dte = max(dte_days, 1.0)
+    eff_iv = iv if (iv is not None and iv > 0) else _iv_for_symbol(option_name, dte_days=eff_dte)
     premium = bs_price(
         spot=spot,
         strike=strike,
@@ -181,7 +194,7 @@ def _stamp_premiums(
             spot=spot,
             trail_level=trail_level,
         )
-    return premium, stop_premium, trail_premium
+    return _round_tick(premium), _round_tick(stop_premium), _round_tick(trail_premium)
 
 
 def _labeled_ladder(
@@ -478,10 +491,10 @@ def apply_cached_quotes(
                 expiry=str(hit.get("expiry") or "")[:10] or leg.expiry,
                 lot_size=int(hit.get("lot_size") or 0) or leg.lot_size,
                 token=int(hit.get("token") or 0) or leg.token,
-                entry_premium=_num(hit.get("premium_spot")) if _num(hit.get("premium_spot")) else leg.entry_premium,
-                stop_premium=_num(hit.get("entry_sl")) if _num(hit.get("entry_sl")) else leg.stop_premium,
-                trail_premium=_num(hit.get("premium_sl")) if _num(hit.get("premium_sl")) else leg.trail_premium,
-                ltp=_num(hit.get("last_price")) or _num(hit.get("ltp")) or leg.ltp,
+                entry_premium=_round_tick(_num(hit.get("premium_spot"))) if _num(hit.get("premium_spot")) else leg.entry_premium,
+                stop_premium=_round_tick(_num(hit.get("entry_sl"))) if _num(hit.get("entry_sl")) else leg.stop_premium,
+                trail_premium=_round_tick(_num(hit.get("premium_sl"))) if _num(hit.get("premium_sl")) else leg.trail_premium,
+                ltp=_round_tick(_num(hit.get("last_price")) or _num(hit.get("ltp"))) or leg.ltp,
                 resolution_reason=None,
             )
         )

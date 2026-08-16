@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { k, tint } from '../../styles/kiteUI';
+import { roundToTick, fmtTick } from '../../utils/fmt';
 
 interface StepDetail {
   id: number;
@@ -571,9 +572,9 @@ export function AdaptiveEdgeHelpVisualizer() {
               </label>
               <input
                 type="number"
-                step={0.5}
+                step={0.05}
                 value={entryPrice}
-                onChange={(e) => setEntryPrice(Number(e.target.value))}
+                onChange={(e) => setEntryPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
@@ -594,9 +595,9 @@ export function AdaptiveEdgeHelpVisualizer() {
               </label>
               <input
                 type="number"
-                step={0.5}
+                step={0.05}
                 value={initialSl}
-                onChange={(e) => setInitialSl(Number(e.target.value))}
+                onChange={(e) => setInitialSl(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
@@ -607,7 +608,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                   color: k.text,
                 }}
               />
-              <span style={{ fontSize: 9.5, color: k.red }}>Max Risk: -₹{maxRiskAmount.toLocaleString('en-IN')}</span>
+              <span style={{ fontSize: 9.5, color: k.red }}>Max Risk: -₹{maxRiskAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             {/* Exit Target / Take Profit */}
@@ -617,9 +618,9 @@ export function AdaptiveEdgeHelpVisualizer() {
               </label>
               <input
                 type="number"
-                step={0.5}
+                step={0.05}
                 value={exitTarget}
-                onChange={(e) => setExitTarget(Number(e.target.value))}
+                onChange={(e) => setExitTarget(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
                 style={{
                   padding: '4px 8px',
                   fontSize: 11.5,
@@ -630,7 +631,7 @@ export function AdaptiveEdgeHelpVisualizer() {
                   color: k.text,
                 }}
               />
-              <span style={{ fontSize: 9.5, color: k.green }}>Max Gain: +₹{maxTargetAmount.toLocaleString('en-IN')}</span>
+              <span style={{ fontSize: 9.5, color: k.green }}>Max Gain: +₹{maxTargetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             {/* Trailing Stop Offset (pts) */}

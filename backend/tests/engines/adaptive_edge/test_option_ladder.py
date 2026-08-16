@@ -180,7 +180,7 @@ def test_snapshot_uses_live_spot_scans_for_other_indices():
     atm = next(leg for leg in by_name["NIFTY BANK"]["legs"] if leg["moneyness"] == "ATM")
     assert atm["option_symbol"] == "BANKNIFTY26AUG57200PE"
     assert atm["entry_premium"] == 501.25
-    assert atm["stop_premium"] == 233.72
+    assert atm["stop_premium"] == 233.7
     assert atm["trail_premium"] == 359.30
     assert by_name["SENSEX"]["option_type"] == "PE"
     assert all(item.get("skip_reason") != "no tape" for item in signals)

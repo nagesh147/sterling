@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useSterlingKiteEngine';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
-import { parseTradingsymbol } from '../../utils/fmt';
+import { parseTradingsymbol, roundToTick, fmtTick } from '../../utils/fmt';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './SterlingWatchList';
@@ -199,7 +199,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
         if (entry == null && sl == null && tsl == null && tgt == null) return null;
         const breached = lastPx != null && tsl != null && tsl > 0 && lastPx <= tsl;
         const open = lastPx != null && entry != null && entry > 0 ? lastPx - entry : null;
-        const fmt = (v: number | null) => (v != null && v > 0 ? v.toFixed(2) : '—');
+        const fmt = (v: number | null) => (v != null && v > 0 ? fmtTick(v) : '—');
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', borderTop: `1px solid ${k.border}`, background: k.bg }}>
             <PlanCell label="Entry" value={fmt(entry)} title="Premium this signal is measured from." />
@@ -209,7 +209,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
             <PlanCell label="Target" value={fmt(tgt)} color={tgt != null && tgt > 0 ? undefined : k.dim}
               title={tgt != null && tgt > 0 ? "Navigator's AVWAP target for this leg." : 'No fixed target — SuperTrend exits on the trail plus the red counter.'} />
             {open != null && (
-              <PlanCell label="Open P&L" value={`${open >= 0 ? '+' : ''}${open.toFixed(2)}`} color={open >= 0 ? k.green : k.red}
+              <PlanCell label="Open P&L" value={`${open >= 0 ? '+' : ''}${fmtTick(open)}`} color={open >= 0 ? k.green : k.red}
                 title="Live premium minus this signal's entry premium, per unit." />
             )}
             {breached && (
@@ -227,11 +227,11 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
           <div onClick={(e) => e.stopPropagation()}>
             <AdaptiveEdgePositionCalculator
               symbol={leg.option_symbol || underlying}
-              defaultEntryPrice={leg.entry_premium}
-              defaultSl={leg.initial_stop_premium}
-              defaultTsl={leg.trail_stop_premium}
-              defaultExit={leg.target_premium}
-              currentLtp={lastPx}
+              defaultEntryPrice={roundToTick(leg.entry_premium)}
+              defaultSl={roundToTick(leg.initial_stop_premium)}
+              defaultTsl={roundToTick(leg.trail_stop_premium)}
+              defaultExit={roundToTick(leg.target_premium)}
+              currentLtp={roundToTick(lastPx)}
               optionType={leg.option_symbol.toUpperCase().endsWith('PE') ? 'PE' : 'CE'}
             />
           </div>

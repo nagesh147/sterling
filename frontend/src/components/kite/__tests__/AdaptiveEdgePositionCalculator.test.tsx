@@ -80,4 +80,25 @@ describe('AdaptiveEdgePositionCalculator', () => {
     expect(screen.getByText('25 Qty (1 Lot × 25)')).toBeInTheDocument();
     expect(screen.getByText('₹12,500')).toBeInTheDocument();
   });
+
+  it('rounds raw floating-point stop loss and entries to nearest 0.05 tick multiple', () => {
+    render(
+      <AdaptiveEdgePositionCalculator
+        symbol="NIFTY 50"
+        defaultEntryPrice={504.35}
+        defaultSl={175.77233038426942}
+        defaultTsl={473.4812}
+        defaultExit={750.887}
+        currentLtp={543.1}
+        optionType="CE"
+      />,
+    );
+
+    // 175.77233... rounded to nearest 0.05 tick is 175.75
+    // SL distance: 504.35 - 175.75 = 328.60 pts
+    // Risk: 328.60 * 25 = ₹8,215
+    expect(screen.getByText('-₹8,215')).toBeInTheDocument();
+    expect(screen.getByText(/-328\.6 pts/)).toBeInTheDocument();
+    expect(screen.getByText(/@ ₹473\.5/)).toBeInTheDocument();
+  });
 });

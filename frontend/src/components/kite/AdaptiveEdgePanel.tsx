@@ -251,8 +251,9 @@ export function when(value: string | null | undefined) {
 }
 
 export function fmt(value: number | null | undefined, digits = 2) {
-  if (value == null || Number.isNaN(value)) return '—';
-  return value.toLocaleString('en-IN', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) return '—';
+  const tickRounded = digits === 2 ? Math.round(Number(value) * 20) / 20 : Number(value);
+  return tickRounded.toLocaleString('en-IN', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 }
 
 export function quoteKeyFor(

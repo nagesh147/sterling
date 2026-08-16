@@ -26,6 +26,19 @@ export function fmtN(val: number | null | undefined, decimals = 2): string {
   return val.toFixed(decimals);
 }
 
+/** Round to nearest tick (default 0.05 paise) with 2 decimals max */
+export function roundToTick(val: number | null | undefined, tickSize = 0.05): number | null {
+  if (val == null || !Number.isFinite(val)) return null;
+  return Number((Math.round(val / tickSize) * tickSize).toFixed(2));
+}
+
+/** Format to nearest tick (0.05 multiple, 2 decimals max): e.g. 175.77233 -> "175.75" */
+export function fmtTick(val: number | null | undefined, tickSize = 0.05): string {
+  if (val == null || !Number.isFinite(val)) return '—';
+  const rounded = Math.round(val / tickSize) * tickSize;
+  return rounded.toFixed(2);
+}
+
 /** Safe currency format */
 export function fmtUSD(val: number | null | undefined, decimals = 0): string {
   if (val == null || !isFinite(val)) return '—';

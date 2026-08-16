@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { fmt } from './AdaptiveEdgePanel';
+import { roundToTick, fmtTick } from '../../utils/fmt';
 
 /**
  * Standard lot size lookup for major Indian indices and watched F&O equities.
@@ -51,10 +52,10 @@ export function AdaptiveEdgePositionCalculator({
   optionType = 'CE',
 }: Props) {
   const lotSize = useMemo(() => getInstrumentLotSize(symbol), [symbol]);
-  const baseEntry = defaultEntryPrice ?? currentLtp ?? 100;
-  const baseSl = defaultSl ?? Number((baseEntry * 0.8).toFixed(2));
-  const baseTsl = defaultTsl ?? baseEntry;
-  const baseTarget = defaultExit ?? Number((baseEntry + Math.abs(baseEntry - baseSl) * 2).toFixed(2));
+  const baseEntry = roundToTick(defaultEntryPrice ?? currentLtp ?? 100) ?? 100;
+  const baseSl = roundToTick(defaultSl ?? (baseEntry * 0.8)) ?? Number((baseEntry * 0.8).toFixed(2));
+  const baseTsl = roundToTick(defaultTsl ?? baseEntry) ?? baseEntry;
+  const baseTarget = roundToTick(defaultExit ?? (baseEntry + Math.abs(baseEntry - baseSl) * 2)) ?? baseEntry;
 
   // Editable State
   const [numLots, setNumLots] = useState<number>(1);
@@ -80,29 +81,29 @@ export function AdaptiveEdgePositionCalculator({
 
   // Calculations
   const totalQty = Math.max(1, numLots * lotSize);
-  const totalInvestment = entryPrice * totalQty;
-  const liveLtp = currentLtp ?? entryPrice;
+  const totalInvestment = roundToTick(entryPrice * totalQty) ?? (entryPrice * totalQty);
+  const liveLtp = roundToTick(currentLtp ?? entryPrice) ?? entryPrice;
 
   // Covered Points & Return
-  const coveredPoints = Number((liveLtp - entryPrice).toFixed(2));
+  const coveredPoints = roundToTick(liveLtp - entryPrice) ?? 0;
   const coveredPct = entryPrice > 0 ? Number(((coveredPoints / entryPrice) * 100).toFixed(2)) : 0;
-  const unrealizedPnl = Number((coveredPoints * totalQty).toFixed(2));
+  const unrealizedPnl = roundToTick(coveredPoints * totalQty) ?? 0;
   const isProfit = coveredPoints >= 0;
 
   // Hard SL Risk
-  const slDistance = Math.max(0, Number((entryPrice - slPrice).toFixed(2)));
+  const slDistance = Math.max(0, roundToTick(entryPrice - slPrice) ?? 0);
   const slPct = entryPrice > 0 ? Number(((slDistance / entryPrice) * 100).toFixed(2)) : 0;
-  const maxRiskAmount = Number((slDistance * totalQty).toFixed(2));
-  const riskPerLot = Number((slDistance * lotSize).toFixed(2));
+  const maxRiskAmount = roundToTick(slDistance * totalQty) ?? 0;
+  const riskPerLot = roundToTick(slDistance * lotSize) ?? 0;
 
   // Trailing Stop Loss (TSL) Locked Profit / Risk Protection
-  const tslDistance = Number((tslPrice - entryPrice).toFixed(2));
-  const tslPnl = Number((tslDistance * totalQty).toFixed(2));
+  const tslDistance = roundToTick(tslPrice - entryPrice) ?? 0;
+  const tslPnl = roundToTick(tslDistance * totalQty) ?? 0;
   const isRiskFree = tslPrice >= entryPrice;
 
   // Target / Reward
-  const targetDistance = Math.max(0, Number((targetPrice - entryPrice).toFixed(2)));
-  const targetReward = Number((targetDistance * totalQty).toFixed(2));
+  const targetDistance = Math.max(0, roundToTick(targetPrice - entryPrice) ?? 0);
+  const targetReward = roundToTick(targetDistance * totalQty) ?? 0;
   const riskRewardRatio = slDistance > 0 ? (targetDistance / slDistance).toFixed(2) : '1.00';
   const realizedRR = slDistance > 0 ? (coveredPoints / slDistance).toFixed(2) : '0.00';
 
@@ -281,9 +282,9 @@ export function AdaptiveEdgePositionCalculator({
           </label>
           <input
             type="number"
-            step={0.5}
+            step={0.05}
             value={entryPrice}
-            onChange={(e) => setEntryPrice(Number(e.target.value))}
+            onChange={(e) => setEntryPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
               height: 22,
               padding: '0 6px',
@@ -305,9 +306,9 @@ export function AdaptiveEdgePositionCalculator({
           </label>
           <input
             type="number"
-            step={0.5}
+            step={0.05}
             value={slPrice}
-            onChange={(e) => setSlPrice(Number(e.target.value))}
+            onChange={(e) => setSlPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
             style={{
               height: 22,
               padding: '0 6px',
