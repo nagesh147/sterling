@@ -79,7 +79,32 @@ def _aggregate_4h(candles_1h: List[Candle]) -> List[Candle]:
                 volume=sum(x.volume for x in buf),
             ))
             buf = []
-    return result
+class AsyncOrderRateLimiter:
+    """Token-bucket rate limiter enforcing Zerodha Kite's 3.0 req/sec limit across concurrent order submissions."""
+
+    def __init__(self, rate: float = 3.0, capacity: float = 3.0) -> None:
+        self.rate = rate
+        self.capacity = capacity
+        self.tokens = capacity
+        self.last_update = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            elapsed = max(0.0, now - self.last_update)
+            self.last_update = now
+            self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+            if self.tokens < 1.0:
+                wait_time = (1.0 - self.tokens) / self.rate
+                await asyncio.sleep(wait_time)
+                self.tokens = 0.0
+                self.last_update = time.monotonic()
+            else:
+                self.tokens -= 1.0
+
+
+_GLOBAL_KITE_ORDER_LIMITER = AsyncOrderRateLimiter(rate=3.0, capacity=3.0)
 
 
 class KiteClient(TradingExchangeAdapter):
@@ -349,19 +374,30 @@ class KiteClient(TradingExchangeAdapter):
             body["iceberg_quantity"] = int(iceberg_quantity)
         if tag:
             body["tag"] = str(tag)[:20]
-        try:
-            return await self._auth_post(f"/orders/{variety}", body)
-        except KiteError as exc:
-            # Markets closed: Zerodha rejects a regular order with the hint
-            # `switch_to_amo`. Mirror the Kite web app — auto-resubmit the same
-            # order as an After-Market Order (queues for the next session open)
-            # instead of failing the click. Flag the result so the UI can say so.
-            if variety == K.VARIETY_REGULAR and "switch_to_amo" in exc.hints:
-                result = await self._auth_post(f"/orders/{K.VARIETY_AMO}", body)
-                if isinstance(result, dict):
-                    result["amo"] = True
-                return result
-            raise
+
+        for attempt in range(3):
+            await _GLOBAL_KITE_ORDER_LIMITER.acquire()
+            try:
+                return await self._auth_post(f"/orders/{variety}", body)
+            except KiteError as exc:
+                # Markets closed: Zerodha rejects a regular order with the hint
+                # `switch_to_amo`. Mirror the Kite web app — auto-resubmit the same
+                # order as an After-Market Order (queues for the next session open)
+                # instead of failing the click. Flag the result so the UI can say so.
+                if variety == K.VARIETY_REGULAR and "switch_to_amo" in exc.hints:
+                    await _GLOBAL_KITE_ORDER_LIMITER.acquire()
+                    result = await self._auth_post(f"/orders/{K.VARIETY_AMO}", body)
+                    if isinstance(result, dict):
+                        result["amo"] = True
+                    return result
+                # 429 Rate Limit retry
+                if getattr(exc, "status_code", None) == 429 or "429" in str(exc) or "rate" in str(exc).lower():
+                    if attempt < 2:
+                        backoff = 0.35 * (2 ** attempt)
+                        log.warning("Kite order rate limit hit (429), retrying in %.2fs (attempt %d/3)", backoff, attempt + 1)
+                        await asyncio.sleep(backoff)
+                        continue
+                raise
 
     async def place_order(
         self, symbol: str, side: str, size: float,
