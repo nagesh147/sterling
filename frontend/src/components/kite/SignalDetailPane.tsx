@@ -87,12 +87,13 @@ function PlanCell({ label, value, title, color }: { label: string; value: string
   );
 }
 
-function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
+function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta, isActive }: {
   leg: OptionDetail; exchange: string;
   underlying: string;
   spotPx?: number;
   isBest?: boolean;
   isBestDelta?: boolean;
+  isActive?: boolean;
 }) {
   const [showDepth, setShowDepth] = useState(false);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -192,7 +193,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
             <KiteActionButtons
               className="sd-actions"
               variant="long"
-              onBuy={(e) => handleAction(e, 'BUY')}
+              onBuy={isActive === false ? undefined : (e) => handleAction(e, 'BUY')}
               onSell={(e) => handleAction(e, 'SELL')}
               onChart={(e) => { e.stopPropagation(); }}
               onMore={(e) => { e.stopPropagation(); }}
@@ -247,6 +248,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
               defaultExit={roundToTick(leg.target_premium)}
               currentLtp={roundToTick(lastPx)}
               optionType={leg.option_symbol.toUpperCase().endsWith('PE') ? 'PE' : 'CE'}
+              exitState={isActive === false ? 'Closed' : 'HOLD'}
             />
           </div>
           <div style={{ display: 'flex' }}>
@@ -665,7 +667,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, source, onCl
                       })), sd,
                     );
                     return data.options.map((leg) => (
-                      <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
+                      <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} isActive={data.is_active !== false} />
                     ));
                   })()
                 )}

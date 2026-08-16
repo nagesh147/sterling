@@ -1041,7 +1041,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
-                      onBuy={(e) => {
+                      onBuy={ended ? undefined : (e) => {
                         e.stopPropagation();
                         const entryForSl = lastPx || leg.premium_spot || 0;
                         const slPxVal = leg.entry_sl ?? leg.premium_sl;

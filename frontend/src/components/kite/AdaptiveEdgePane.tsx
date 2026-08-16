@@ -750,6 +750,7 @@ export function AdaptiveEdgePane({
                     defaultExit={selected.exit}
                     currentLtp={selected.ltp}
                     optionType={selected.optionType}
+                    exitState={selected.open ? 'HOLD' : (selected.whyClosed || 'CLOSED')}
                   />
 
                   {/* 3. OPTION PREMIUM EXECUTION CLUSTER */}

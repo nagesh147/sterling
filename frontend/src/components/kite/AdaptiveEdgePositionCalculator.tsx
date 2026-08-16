@@ -125,6 +125,20 @@ export function AdaptiveEdgePositionCalculator({
   const estFrictionINR = 60 * numLots;
   const isLowExpectancy = targetReward > 0 && targetReward < 240 * numLots;
 
+  const isClosed = useMemo(() => {
+    if (!exitState) return false;
+    const s = exitState.toUpperCase();
+    return (
+      s.includes('CLOSED') ||
+      s.includes('ENDED') ||
+      s.includes('STOP') ||
+      s.includes('SL_HIT') ||
+      s.includes('TARGET') ||
+      s.includes('EXPIRED') ||
+      s.includes('EXITED')
+    );
+  }, [exitState]);
+
   const isExpiringSoon = useMemo(() => {
     if (!expiry) return false;
     try {
@@ -139,6 +153,7 @@ export function AdaptiveEdgePositionCalculator({
   }, [expiry]);
 
   const handlePlaceOrder = () => {
+    if (isClosed) return;
     const tradeSymbol = tradingsymbol || symbol;
     const slPercentage =
       entryPrice > 0 && slPrice > 0
@@ -180,6 +195,26 @@ export function AdaptiveEdgePositionCalculator({
         fontFamily: k.fontFamily,
       }}
     >
+      {/* ── CLOSED SETUP NOTICE BANNER ── */}
+      {isClosed && (
+        <div
+          style={{
+            background: '#f8f9fa',
+            border: `1px solid ${k.border}`,
+            borderRadius: 4,
+            padding: '7px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11.5,
+            color: k.dim,
+          }}
+        >
+          <span>🔒</span>
+          <span><strong>Signal Closed ({exitState}):</strong> This setup has completed its lifecycle. Trade plan is locked for historical review; order execution is disabled.</span>
+        </div>
+      )}
+
       {/* ── EXPIRY WARNING BANNER (IF 0-1 DTE) ── */}
       {isExpiringSoon && (
         <div
@@ -675,27 +710,49 @@ export function AdaptiveEdgePositionCalculator({
             {copied ? '✓ Copied Plan' : '📋 Copy Plan'}
           </button>
 
-          <button
-            type="button"
-            onClick={handlePlaceOrder}
-            style={{
-              padding: '6px 16px',
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 3,
-              border: 'none',
-              background: optionType === 'PE' ? '#ff5722' : '#4184f3',
-              color: '#ffffff',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-            }}
-          >
-            <span>Place {optionType === 'PE' ? 'BUY PUT (PE)' : 'BUY CALL (CE)'}</span>
-            <span style={{ opacity: 0.85, fontSize: 11 }}>({totalQty} Qty)</span>
-          </button>
+          {isClosed ? (
+            <div
+              style={{
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 3,
+                border: `1px solid ${k.border}`,
+                background: '#f1f3f4',
+                color: '#70757a',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'not-allowed',
+              }}
+              title="This trade setup is closed. Order placement is locked."
+            >
+              <span>🔒 Setup Closed</span>
+              <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.85 }}>({exitState || 'Closed'})</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePlaceOrder}
+              style={{
+                padding: '6px 16px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 3,
+                border: 'none',
+                background: optionType === 'PE' ? '#ff5722' : '#4184f3',
+                color: '#ffffff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+              }}
+            >
+              <span>Place {optionType === 'PE' ? 'BUY PUT (PE)' : 'BUY CALL (CE)'}</span>
+              <span style={{ opacity: 0.85, fontSize: 11 }}>({totalQty} Qty)</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
