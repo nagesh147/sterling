@@ -56,15 +56,50 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
 
   // Active signal for the selected symbol (if available in signals array)
   const activeSignal: AdaptiveEdgeSignal | undefined = useMemo(() => {
-    return signals.find((s) => s.underlying.toUpperCase() === selectedSymbol.toUpperCase()) || signals[0];
+    const selNorm = selectedSymbol.toUpperCase().replace(/[\s\-_]+/g, '');
+    const found = signals.find((s) => {
+      const uNorm = (s.underlying || '').toUpperCase().replace(/[\s\-_]+/g, '');
+      const tNorm = (s.tape_symbol || '').toUpperCase().replace(/[\s\-_]+/g, '');
+      return uNorm === selNorm || tNorm === selNorm || uNorm.includes(selNorm) || selNorm.includes(uNorm);
+    });
+    if (found) return found;
+    if (selNorm.includes('NIFTY50') || selNorm === 'NIFTY' || selNorm === 'NIFTYI') return signals[0];
+    return undefined;
   }, [signals, selectedSymbol]);
 
+  const isNifty = useMemo(() => {
+    const s = selectedSymbol.toUpperCase().replace(/[\s\-_]+/g, '');
+    return s === 'NIFTY50' || s === 'NIFTY' || s === 'NIFTYI';
+  }, [selectedSymbol]);
+
+  const isIndex = useMemo(() => {
+    const s = selectedSymbol.toUpperCase();
+    return s.includes('NIFTY') || s.includes('SENSEX') || s.includes('BANK') || s.includes('FIN');
+  }, [selectedSymbol]);
+
   // Derive dynamic metrics for selected symbol
-  const isIndex = ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX', 'NIFTY', 'BANKNIFTY', 'FINNIFTY'].includes(selectedSymbol.toUpperCase());
-  const currentSpot = activeSignal?.spot_entry ?? (selectedSymbol === 'NIFTY 50' ? 24405 : selectedSymbol === 'NIFTY BANK' ? 51200 : selectedSymbol === 'NIFTY FIN SERVICE' ? 23450 : selectedSymbol === 'SENSEX' ? 80100 : 2500);
-  const currentPoc = activeSignal?.poc ?? (isIndex ? (session?.last_poc ?? 24405) : currentSpot * 0.998);
-  const currentVwap = activeSignal?.vwap ?? (isIndex ? (session?.last_vwap ?? 24409.84) : currentSpot * 1.001);
-  const currentCvd = activeSignal?.cvd ?? (isIndex ? (session?.last_cvd ?? 32055) : 1450);
+  const currentSpot = activeSignal?.spot_entry ?? (
+    selectedSymbol.toUpperCase().includes('BANK') ? 51200 :
+    selectedSymbol.toUpperCase().includes('FIN') ? 23450 :
+    selectedSymbol.toUpperCase().includes('SENSEX') ? 78100 :
+    selectedSymbol.toUpperCase().includes('NIFTY') ? 24405 :
+    2500
+  );
+
+  const currentPoc = activeSignal?.poc ?? (
+    isNifty ? (session?.last_poc ?? 24405) :
+    Math.round(currentSpot * 0.9992)
+  );
+
+  const currentVwap = activeSignal?.vwap ?? (
+    isNifty ? (session?.last_vwap ?? 24409.84) :
+    Number((currentSpot * 1.0004).toFixed(2))
+  );
+
+  const currentCvd = activeSignal?.cvd ?? (
+    isNifty ? (session?.last_cvd ?? 32055) :
+    ((activeSignal?.side === 'SELL' || activeSignal?.option_type === 'PE') ? -Math.round(currentSpot * 0.42) : Math.round(currentSpot * 0.42))
+  );
   const currentMode = activeSignal?.current_mode || activeSignal?.entry_mode || session?.last_mode || 'SCALP';
   const currentScore = activeSignal?.score ?? 0.84;
   const currentSide = activeSignal?.side || 'BUY_CE';
