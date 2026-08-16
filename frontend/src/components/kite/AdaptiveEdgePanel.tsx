@@ -1,51 +1,50 @@
-import React from 'react';
-import { k } from '../../styles/kiteUI';
+import React, { useMemo, useState } from 'react';
 import type {
   AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
   AdaptiveEdgeMode,
   AdaptiveEdgeOptionLeg,
   AdaptiveEdgeOrigin,
-  AdaptiveEdgeOverlay,
-  AdaptiveEdgeSignal,
   AdaptiveEdgeSnapshot,
+  AdaptiveEdgeSignal,
+  AdaptiveEdgeOverlay,
 } from '../../types/adaptiveEdge';
+
+export type AdaptiveEdgeThesis = string;
 
 const C = {
   text: '#1e293b',
   muted: '#64748b',
   dim: '#94a3b8',
   border: '#e2e8f0',
-  surface: '#ffffff',
-  surfaceHover: '#f8fafc',
-  selectedBg: 'rgba(37, 99, 235, 0.06)',
-  selectedBorder: '#2563eb',
-  emerald: '#10b981',
-  emeraldBg: 'rgba(16, 185, 129, 0.10)',
+  emeraldBg: 'rgba(16, 185, 129, 0.08)',
   emeraldBorder: 'rgba(16, 185, 129, 0.25)',
-  emeraldText: '#047857',
-  rose: '#f43f5e',
-  roseBg: 'rgba(244, 63, 94, 0.10)',
-  roseBorder: 'rgba(244, 63, 94, 0.25)',
-  roseText: '#be123c',
-  blue: '#2563eb',
-  blueBg: 'rgba(37, 99, 235, 0.08)',
-  blueBorder: 'rgba(37, 99, 235, 0.25)',
-  blueText: '#1d4ed8',
-  orange: '#f06428',
-  orangeBg: 'rgba(240, 100, 40, 0.08)',
-  orangeBorder: 'rgba(240, 100, 40, 0.25)',
-  orangeText: '#c2410c',
-  purple: '#7c3aed',
+  emeraldText: '#059669',
+  roseBg: 'rgba(239, 68, 68, 0.08)',
+  roseBorder: 'rgba(239, 68, 68, 0.25)',
+  roseText: '#dc2626',
+  orangeBg: 'rgba(245, 158, 11, 0.08)',
+  orangeBorder: 'rgba(245, 158, 11, 0.25)',
+  orangeText: '#d97706',
+  orange: '#f59e0b',
+  blueBg: 'rgba(59, 130, 246, 0.08)',
+  blueBorder: 'rgba(59, 130, 246, 0.25)',
+  blueText: '#2563eb',
+  blue: '#3b82f6',
   purpleBg: 'rgba(124, 58, 237, 0.08)',
   purpleBorder: 'rgba(124, 58, 237, 0.25)',
-  purpleText: '#6d28d9',
+  purpleText: '#7c3aed',
+  selectedBg: 'rgba(59, 130, 246, 0.06)',
+  selectedBorder: '#3b82f6',
 };
 
-const MODE_META: Record<string, { label: string; desc: string; bg: string; color: string; border: string }> = {
+export const MODE_METAS: Record<
+  string,
+  { label: string; desc: string; bg: string; color: string; border: string }
+> = {
   MICRO: {
     label: 'MICRO',
-    desc: 'Micro-Scalp (1–3 bars, immediate targets)',
+    desc: 'Micro Scalp (quick exit at 1R target)',
     bg: 'rgba(59, 130, 246, 0.08)',
     color: '#2563eb',
     border: '1px solid rgba(59, 130, 246, 0.25)',
@@ -118,33 +117,32 @@ export function formatModeBadge(
   modeHistory?: string[] | null,
 ): FormattedModeBadge {
   if (origin === 'spot_scan') {
+    const meta = MODE_METAS.INTRADAY;
     return {
       label: 'INTRADAY',
-      title: 'Spot Scan: Evaluated as standard intraday momentum session direction.',
-      bg: 'rgba(100, 116, 139, 0.08)',
-      color: '#475569',
-      border: '1px solid rgba(100, 116, 139, 0.25)',
+      title: 'Origin: Spot Scan (SuperTrend Direction) · Default Intraday Trend Horizon',
+      bg: meta.bg,
+      color: meta.color,
+      border: meta.border,
       isUpgraded: false,
       isDowngraded: false,
-      entryLabel: 'INTRADAY',
-      promotedLabel: 'INTRADAY',
-      modePath: 'INTRADAY',
-      history: ['INTRADAY'],
     };
   }
 
-  const entry = entryMode || 'MICRO';
-  const peak = peakMode || entry;
-  const curr = currentMode || peak;
+  const effectiveEntry = entryMode || 'MICRO';
+  const effectivePeak = peakMode || effectiveEntry;
+  const effectiveCurrent = currentMode || effectivePeak;
 
-  const entryCfg = MODE_META[entry] || MODE_META.MICRO;
-  const peakCfg = MODE_META[peak] || entryCfg;
-  const currCfg = MODE_META[curr] || peakCfg;
+  const entryMeta = MODE_METAS[effectiveEntry] || MODE_METAS.MICRO;
+  const peakMeta = MODE_METAS[effectivePeak] || entryMeta;
+  const currentMeta = MODE_METAS[effectiveCurrent] || peakMeta;
 
-  const isUpgraded = Boolean(isUpgradedFlag || rankOf(peak) > rankOf(entry) || rankOf(curr) > rankOf(entry));
-  const isDowngraded = Boolean(isDowngradedFlag || (!isUpgradedFlag && peak && rankOf(curr) < rankOf(peak)));
+  const entryRank = rankOf(effectiveEntry);
+  const peakRank = rankOf(effectivePeak);
+  const isUpgraded = Boolean(isUpgradedFlag || rankOf(effectivePeak) > rankOf(effectiveEntry) || rankOf(effectiveCurrent) > rankOf(effectiveEntry));
+  const isDowngraded = Boolean(isDowngradedFlag || (!isUpgradedFlag && effectivePeak && rankOf(effectiveCurrent) < rankOf(effectivePeak)));
 
-  if (modePath) {
+  if (modePath && modePath.trim().length > 0) {
     const isDowngradePath = modePath.includes('↘');
     const isUpgradePath = modePath.includes('↗');
     return {
@@ -158,64 +156,66 @@ export function formatModeBadge(
         ? 'rgba(239, 68, 68, 0.08)'
         : isUpgradePath
         ? 'rgba(16, 185, 129, 0.08)'
-        : currCfg.bg,
-      color: isDowngradePath ? '#dc2626' : isUpgradePath ? '#059669' : currCfg.color,
+        : currentMeta.bg,
+      color: isDowngradePath ? '#dc2626' : isUpgradePath ? '#059669' : currentMeta.color,
       border: isDowngradePath
-        ? '1px solid rgba(239, 68, 68, 0.3)'
+        ? '1px solid rgba(239, 68, 68, 0.25)'
         : isUpgradePath
-        ? '1px solid rgba(16, 185, 129, 0.3)'
-        : currCfg.border,
+        ? '1px solid rgba(16, 185, 129, 0.25)'
+        : currentMeta.border,
       isUpgraded: isUpgradePath,
       isDowngraded: isDowngradePath,
-      entryLabel: entryCfg.label,
-      promotedLabel: currCfg.label,
+      entryLabel: entryMeta.label,
+      promotedLabel: currentMeta.label,
       modePath,
-      history: modeHistory || [entryCfg.label, currCfg.label],
+      history: modeHistory || [entryMeta.label, currentMeta.label],
     };
   }
 
   if (isUpgraded && !isDowngradedFlag) {
+    const toLabel = rankOf(effectivePeak) > rankOf(effectiveEntry) ? peakMeta.label : 'SCALP';
+    const label = `${entryMeta.label} ↗ ${toLabel}`;
     return {
-      label: `${entryCfg.label} ↗ ${peakCfg.label}`,
-      title: `Upgraded trade: Entered as ${entryCfg.desc}, promoted to ${peakCfg.desc} on favorable expansion`,
+      label,
+      title: `Upgraded trade: Entered as ${entryMeta.desc}, promoted to ${peakMeta.desc} on favorable expansion`,
       bg: 'rgba(16, 185, 129, 0.08)',
       color: '#059669',
-      border: '1px solid rgba(16, 185, 129, 0.3)',
+      border: '1px solid rgba(16, 185, 129, 0.25)',
       isUpgraded: true,
       isDowngraded: false,
-      entryLabel: entryCfg.label,
-      promotedLabel: peakCfg.label,
-      modePath: `${entryCfg.label} ↗ ${peakCfg.label}`,
-      history: [entryCfg.label, peakCfg.label],
+      entryLabel: entryMeta.label,
+      promotedLabel: peakMeta.label,
+      modePath: label,
+      history: [entryMeta.label, peakMeta.label],
     };
   }
 
   if (isDowngraded) {
-    const fromCfg = peak && rankOf(peak) > rankOf(curr) ? peakCfg : entryCfg;
+    const fromCfg = effectivePeak && rankOf(effectivePeak) > rankOf(effectiveCurrent) ? peakMeta : entryMeta;
     return {
-      label: `${fromCfg.label} ↘ ${currCfg.label}`,
-      title: `Downgraded trade: Transitioned down from ${fromCfg.desc} to ${currCfg.desc} due to momentum consolidation`,
+      label: `${fromCfg.label} ↘ ${currentMeta.label}`,
+      title: `Downgraded trade: Transitioned down from ${fromCfg.desc} to ${currentMeta.desc} due to momentum consolidation`,
       bg: 'rgba(239, 68, 68, 0.08)',
       color: '#dc2626',
-      border: '1px solid rgba(239, 68, 68, 0.3)',
+      border: '1px solid rgba(239, 68, 68, 0.25)',
       isUpgraded: false,
       isDowngraded: true,
       entryLabel: fromCfg.label,
-      promotedLabel: currCfg.label,
-      modePath: `${fromCfg.label} ↘ ${currCfg.label}`,
-      history: [fromCfg.label, currCfg.label],
+      promotedLabel: currentMeta.label,
+      modePath: `${fromCfg.label} ↘ ${currentMeta.label}`,
+      history: [fromCfg.label, currentMeta.label],
     };
   }
 
   return {
-    ...currCfg,
-    title: `${currCfg.label}: ${currCfg.desc}`,
+    label: entryMeta.label,
+    title: `Opportunity Mode: ${entryMeta.label} (${entryMeta.desc})`,
+    bg: entryMeta.bg,
+    color: entryMeta.color,
+    border: entryMeta.border,
     isUpgraded: false,
     isDowngraded: false,
-    entryLabel: currCfg.label,
-    promotedLabel: currCfg.label,
-    modePath: currCfg.label,
-    history: [currCfg.label],
+    entryLabel: entryMeta.label,
   };
 }
 
@@ -242,13 +242,7 @@ export function when(value: string | null | undefined) {
   const dt = new Date(value);
   return Number.isNaN(dt.getTime())
     ? value
-    : dt.toLocaleString('en-IN', {
-        hour12: false,
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+    : `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
 }
 
 export function fmt(value: number | null | undefined, digits = 2) {
@@ -318,7 +312,7 @@ export function resolveLiveLtp(row: AdaptiveEdgeRow, quotes?: Record<string, any
 export function whyClosed(leg: AdaptiveEdgeLeg) {
   const open = leg.flattened === false && (leg.quantity ?? 0) !== 0;
   if (open) return null;
-  const overlay = (leg.overlays ?? []).find((name) => OVERLAY_WHY[name] && name !== 'AT_LVN');
+  const overlay = (leg.overlays ?? []).find((name: string) => OVERLAY_WHY[name] && name !== 'AT_LVN');
   if (overlay) return `Closed because ${OVERLAY_WHY[overlay]}.`;
   if ((leg.thesis ?? '').includes('INVALID')) return 'Closed because the original thesis invalidated.';
   if ((leg.protection_stage ?? '').includes('P0') && leg.exit_time) return 'Closed at the protective hard stop.';
@@ -327,6 +321,50 @@ export function whyClosed(leg: AdaptiveEdgeLeg) {
     if (hour >= 9 * 60 + 14 && hour <= 9 * 60 + 20) return 'Closed at the 14:45 IST session cutoff.';
   }
   return leg.exit_time ? 'Closed and flattened.' : null;
+}
+
+export function formatWhyClosed(
+  origin?: AdaptiveEdgeOrigin | string | null,
+  overlays?: any[] | null,
+  thesis?: any | null,
+  entryMode?: any | null,
+  peakMode?: any | null,
+  currentMode?: any | null,
+  modeDowngraded?: boolean,
+  modePath?: string | null,
+): string {
+  if (origin === 'spot_scan') {
+    return 'spot scan ended (direction flipped or trend stop breached)';
+  }
+
+  const reasons: string[] = [];
+
+  if (modeDowngraded || (modePath && modePath.includes('↘'))) {
+    reasons.push('mode decayed (gave back too much of the peak)');
+  } else if (thesis === 'THESIS_WEAKENING' || thesis === 'THESIS_INVALIDATED') {
+    reasons.push('thesis weakened (gave back too much of the peak)');
+  }
+
+  if (overlays && overlays.length > 0) {
+    overlays.forEach((ov: any) => {
+      const s = String(ov);
+      if (s.includes('ECONOMIC_COLLAPSE') || s.includes('COLLAPSE')) {
+        reasons.push('economic collapse overlay triggered');
+      } else if (s.includes('FLOW_AGAINST')) {
+        reasons.push('tape flow flipped against position');
+      } else if (s.includes('STRUCTURE_FLIP')) {
+        reasons.push('market profile structure broke');
+      } else if (s.includes('GIVEBACK_PEAK')) {
+        reasons.push('gave back too much of the peak');
+      }
+    });
+  }
+
+  if (reasons.length === 0) {
+    return 'gave back too much of the peak (trailing stop reached)';
+  }
+
+  return Array.from(new Set(reasons)).join(' · ');
 }
 
 function optionLabel(leg: AdaptiveEdgeOptionLeg, underlying: string) {
@@ -348,13 +386,16 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     if (origin === 'spot_scan') {
       why = 'Closed because spot scan ended (SuperTrend direction flipped). Not an AE thesis exit.';
     } else {
-      why = whyClosed({
-        overlays: signal.overlays,
-        thesis: signal.thesis,
-        exit_time: signal.exit_time,
-        flattened: signal.flattened,
-        quantity: signal.quantity,
-      });
+      why = formatWhyClosed(
+        origin,
+        signal.overlays,
+        signal.thesis,
+        signal.entry_mode,
+        signal.peak_mode,
+        signal.current_mode,
+        signal.mode_downgraded,
+        signal.mode_path,
+      );
     }
   }
 
@@ -364,17 +405,17 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     kind: 'option',
     origin,
     instrument: optionLabel(leg, signal.underlying),
-    exchange: leg.exchange ?? 'NFO',
+    exchange: leg.exchange ?? 'NSE',
     moneyness: leg.moneyness,
     optionType: (leg.option_type?.toUpperCase() === 'PE' ? 'PE' : 'CE') as 'CE' | 'PE',
-    entry: leg.entry_premium,
-    sl: leg.stop_premium,
-    tsl: leg.trail_premium,
-    exit: null,
-    ltp: leg.ltp ?? leg.entry_premium,
+    entry: leg.entry_premium ?? signal.spot_entry ?? null,
+    sl: leg.stop_premium ?? signal.spot_sl ?? null,
+    tsl: leg.trail_premium ?? signal.spot_tsl ?? null,
+    exit: !open ? leg.ltp ?? signal.spot_exit ?? null : null,
+    ltp: leg.ltp ?? leg.entry_premium ?? null,
     strike: leg.strike,
-    entryTime: signal.entry_time,
-    exitTime: signal.exit_time,
+    entryTime: signal.entry_time ?? null,
+    exitTime: signal.exit_time ?? null,
     open,
     tapeSymbol: signal.tape_symbol,
     underlying: signal.underlying,
@@ -456,16 +497,16 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
 }
 
 export function watchedSignals(data: AdaptiveEdgeSnapshot): AdaptiveEdgeSignal[] {
-  return (data.signals ?? []).filter((item) => !item.scanned);
+  return (data.signals ?? []).filter((item: AdaptiveEdgeSignal) => !item.scanned);
 }
 
 export function rowsFromSnapshot(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow[] {
   const out: AdaptiveEdgeRow[] = [];
-  const scanned = (data.signals ?? []).filter((item) => item.scanned);
-  scanned.forEach((signal, sIdx) => {
+  const scanned = (data.signals ?? []).filter((item: AdaptiveEdgeSignal) => item.scanned);
+  scanned.forEach((signal: AdaptiveEdgeSignal, sIdx: number) => {
     const legs = signal.legs ?? [];
     if (legs.length) {
-      legs.forEach((leg, lIdx) => {
+      legs.forEach((leg: AdaptiveEdgeOptionLeg, lIdx: number) => {
         out.push(optionRow(signal, leg, sIdx * 100 + lIdx));
       });
     } else {
@@ -477,7 +518,7 @@ export function rowsFromSnapshot(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow[] 
 
 export function historyRowsFromSnapshot(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow[] {
   const legs = data.legs ?? [];
-  return legs.map((leg, index) => legacyLegRow(leg, index, data.settings.symbol));
+  return legs.map((leg: AdaptiveEdgeLeg, index: number) => legacyLegRow(leg, index, data.settings.symbol));
 }
 
 export interface AdaptiveEdgeRow {
@@ -522,9 +563,19 @@ export interface AdaptiveEdgeRow {
   modePath?: string | null;
   modeHistory?: string[] | null;
   horizon?: AdaptiveEdgeHorizon | string;
+  side?: 'BUY' | 'SELL';
 }
 
 const COLUMNS = ['Instrument', 'Type', 'Exc.', 'Leg', 'Entry', 'SL', 'TSL', 'Exit', 'LTP', 'Time', 'Status'];
+
+interface UnderlyingGroup {
+  underlying: string;
+  isIndex: boolean;
+  rows: AdaptiveEdgeRow[];
+  origin: string;
+  optionType?: string;
+  spotEntry?: number | null;
+}
 
 export function AdaptiveEdgePanel({
   rows,
@@ -539,24 +590,52 @@ export function AdaptiveEdgePanel({
   onSelect?: (row: AdaptiveEdgeRow) => void;
   onInspectSymbol?: (symbol: string) => void;
 }) {
-  const isIndex = (r: AdaptiveEdgeRow) => {
-    const u = r.underlying.toUpperCase();
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (sym: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(sym)) next.delete(sym);
+      else next.add(sym);
+      return next;
+    });
+  };
+
+  const isIndexSym = (u: string) => {
+    const s = u.toUpperCase();
     return (
-      ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX', 'NIFTY', 'BANKNIFTY', 'FINNIFTY'].includes(u) ||
-      u.includes('NIFTY') ||
-      u.includes('SENSEX')
+      ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX', 'NIFTY', 'BANKNIFTY', 'FINNIFTY'].includes(s) ||
+      s.includes('NIFTY') ||
+      s.includes('SENSEX')
     );
   };
 
-  const indexRows = rows.filter(isIndex);
-  const stockRows = rows.filter((r) => !isIndex(r));
-  const hasMultipleGroups = indexRows.length > 0 && stockRows.length > 0;
+  // Group all option/derivative rows by their underlying stock/index
+  const groups: UnderlyingGroup[] = useMemo(() => {
+    const map = new Map<string, UnderlyingGroup>();
+
+    rows.forEach((r) => {
+      const u = r.underlying;
+      if (!map.has(u)) {
+        map.set(u, {
+          underlying: u,
+          isIndex: isIndexSym(u),
+          rows: [],
+          origin: r.origin,
+          optionType: r.optionType,
+          spotEntry: r.spotEntry,
+        });
+      }
+      map.get(u)!.rows.push(r);
+    });
+
+    return Array.from(map.values());
+  }, [rows]);
 
   const renderRow = (row: AdaptiveEdgeRow, rIdx: number) => {
     const selected = row.id === selectedId;
     const liveLtp = resolveLiveLtp(row, quotes);
     const entryDiff = liveLtp != null && row.entry != null ? liveLtp - row.entry : null;
-    const diffPct = entryDiff != null && row.entry && row.entry > 0 ? (entryDiff / row.entry) * 100 : null;
 
     const badge = formatModeBadge(
       row.entryMode,
@@ -571,7 +650,6 @@ export function AdaptiveEdgePanel({
 
     const isCE = row.optionType === 'CE';
     const isProfit = entryDiff != null && entryDiff > 0;
-    const isDrawdown = entryDiff != null && entryDiff < 0;
 
     return (
       <tr
@@ -590,7 +668,7 @@ export function AdaptiveEdgePanel({
         }}
       >
         {/* 1. Instrument & Underlying */}
-        <td style={{ padding: '9px 12px' }}>
+        <td style={{ padding: '8px 12px 8px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
             <span style={{ fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
               {row.instrument}
@@ -657,7 +735,7 @@ export function AdaptiveEdgePanel({
         </td>
 
         {/* 2. Mode Badge */}
-        <td style={{ padding: '9px 12px' }}>
+        <td style={{ padding: '8px 12px' }}>
           <span
             title={badge.title}
             style={{
@@ -678,12 +756,12 @@ export function AdaptiveEdgePanel({
         </td>
 
         {/* 3. Exchange */}
-        <td style={{ padding: '9px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
+        <td style={{ padding: '8px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
           {row.exchange}
         </td>
 
         {/* 4. Leg & Option Strike */}
-        <td style={{ padding: '9px 12px' }}>
+        <td style={{ padding: '8px 12px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span
               style={{
@@ -698,23 +776,14 @@ export function AdaptiveEdgePanel({
             >
               {row.optionType || 'CE'}
             </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 650,
-                padding: '1px 5px',
-                borderRadius: 3,
-                background: '#f1f5f9',
-                color: '#475569',
-              }}
-            >
-              {row.moneyness || 'ATM'}
+            <span style={{ fontSize: 11, fontWeight: 650, color: C.text }}>
+              {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
             </span>
           </div>
         </td>
 
-        {/* 5. Entry Price & Live MTM */}
-        <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+        {/* 5. Entry & MTM */}
+        <td style={{ padding: '8px 12px', textAlign: 'right' }}>
           <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>
             {fmt(row.entry)}
           </div>
@@ -737,46 +806,47 @@ export function AdaptiveEdgePanel({
         </td>
 
         {/* 6. Protective SL */}
-        <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted, fontWeight: 600 }}>
+        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted, fontWeight: 600 }}>
           {fmt(row.sl)}
         </td>
 
         {/* 7. Trailing SL */}
-        <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
+        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
           {fmt(row.tsl)}
         </td>
 
         {/* 8. Exit Price */}
-        <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
+        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
           {fmt(row.exit)}
         </td>
 
         {/* 9. Current LTP */}
-        <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
+        <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
           {fmt(liveLtp)}
         </td>
 
         {/* 10. Timestamp */}
-        <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
+        <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
           {when(row.entryTime)}
         </td>
 
         {/* 11. Status */}
-        <td style={{ padding: '9px 12px' }}>
+        <td style={{ padding: '8px 12px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span
               style={{
-                width: 6,
-                height: 6,
+                display: 'inline-block',
+                width: 7,
+                height: 7,
                 borderRadius: '50%',
-                background: row.open ? C.emerald : C.dim,
+                background: row.open ? '#10b981' : '#94a3b8',
               }}
             />
             <span
               style={{
+                fontSize: 10.5,
                 fontWeight: 700,
-                fontSize: 11,
-                color: row.open ? C.emeraldText : C.muted,
+                color: row.open ? '#059669' : '#64748b',
               }}
             >
               {row.open ? 'Open' : 'Closed'}
@@ -803,7 +873,7 @@ export function AdaptiveEdgePanel({
                   letterSpacing: '0.03em',
                   textTransform: 'uppercase',
                   borderBottom: `1px solid ${C.border}`,
-                  textAlign: ['Entry & MTM', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left',
+                  textAlign: ['Entry', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -813,53 +883,96 @@ export function AdaptiveEdgePanel({
           </tr>
         </thead>
         <tbody>
-          {hasMultipleGroups ? (
-            <>
-              {indexRows.length > 0 && (
-                <>
-                  <tr style={{ background: '#f1f5f9', borderBottom: `1px solid ${C.border}` }}>
-                    <td
-                      colSpan={COLUMNS.length}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: 11,
-                        fontWeight: 750,
-                        color: '#2563eb',
-                        letterSpacing: '0.04em',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      🏛️ Index Derivatives ({indexRows.length})
-                    </td>
-                  </tr>
-                  {indexRows.map((r, idx) => renderRow(r, idx))}
-                </>
-              )}
+          {groups.map((grp) => {
+            const isCollapsed = collapsedGroups.has(grp.underlying);
+            const spotQuoteKey = `NSE:${grp.underlying}`;
+            const spotQ = quotes?.[spotQuoteKey] || quotes?.[grp.underlying];
+            const spotPx = spotQ?.last_price ?? grp.spotEntry;
+            const isBull = grp.optionType === 'CE';
 
-              {stockRows.length > 0 && (
-                <>
-                  <tr style={{ background: '#f1f5f9', borderBottom: `1px solid ${C.border}` }}>
-                    <td
-                      colSpan={COLUMNS.length}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: 11,
-                        fontWeight: 750,
-                        color: '#7c3aed',
-                        letterSpacing: '0.04em',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      🏢 F&O Stocks & Equities ({stockRows.length})
-                    </td>
-                  </tr>
-                  {stockRows.map((r, idx) => renderRow(r, idx))}
-                </>
-              )}
-            </>
-          ) : (
-            rows.map((r, idx) => renderRow(r, idx))
-          )}
+            return (
+              <React.Fragment key={grp.underlying}>
+                {/* Master Stock / Index Header Card Row */}
+                <tr
+                  onClick={() => toggleGroup(grp.underlying)}
+                  style={{
+                    background: '#f1f5f9',
+                    borderTop: `1px solid ${C.border}`,
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <td colSpan={COLUMNS.length} style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      {/* Left: Expand toggle, Icon, Underlying Symbol, Direction, Spot */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, color: '#64748b', userSelect: 'none', width: 14 }}>
+                          {isCollapsed ? '▶' : '▼'}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                          {grp.isIndex ? '🏛️' : '🏢'} {grp.underlying}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 9.5,
+                            fontWeight: 750,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: isBull ? C.emeraldBg : C.roseBg,
+                            color: isBull ? C.emeraldText : C.roseText,
+                            border: `1px solid ${isBull ? C.emeraldBorder : C.roseBorder}`,
+                          }}
+                        >
+                          {isBull ? '▲ BULLISH (CE)' : '▼ BEARISH (PE)'}
+                        </span>
+                        {spotPx != null && (
+                          <span style={{ fontSize: 11, color: '#475569', fontWeight: 650, fontVariantNumeric: 'tabular-nums' }}>
+                            Spot: ₹{spotPx.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#e2e8f0', color: '#475569' }}>
+                          {grp.rows.length} {grp.rows.length === 1 ? 'Option Leg' : 'Option Strikes'}
+                        </span>
+                      </div>
+
+                      {/* Right: Origin Badge & Quick Chart Inspector Button */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {onInspectSymbol && (
+                          <button
+                            type="button"
+                            title={`Open Market Profile & Order Flow charts for ${grp.underlying}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onInspectSymbol(grp.underlying);
+                            }}
+                            style={{
+                              border: `1px solid ${C.blueBorder}`,
+                              background: '#ffffff',
+                              color: C.blueText,
+                              borderRadius: 4,
+                              padding: '2px 8px',
+                              fontSize: 10.5,
+                              fontWeight: 750,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <span>🌊</span> View Profile & Footprints
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Sub-Rows: Option Strikes belonging to this stock/index */}
+                {!isCollapsed && grp.rows.map((r, rIdx) => renderRow(r, rIdx))}
+              </React.Fragment>
+            );
+          })}
+
           {!rows.length && (
             <tr>
               <td
