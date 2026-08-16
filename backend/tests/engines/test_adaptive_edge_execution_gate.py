@@ -148,3 +148,88 @@ def test_dte_gamma_gate_blocks_otm_on_expiry_day():
     assert normal.authorized is True
     assert normal.is_expiry_day is False
 
+
+def test_portfolio_drawdown_gate_trips_breaker():
+    from app.engines.adaptive_edge.execution_gate import evaluate_portfolio_drawdown_gate
+
+    # Account 10 Lakhs, daily loss -35,000 INR (3.5% > 3.0% max limit) -> trips breaker
+    decision = evaluate_portfolio_drawdown_gate(
+        daily_realized_pnl=-25000.0,
+        daily_unrealized_pnl=-10000.0,
+        portfolio_equity=1000000.0,
+        max_drawdown_pct=3.0,
+    )
+    assert decision.authorized is False
+    assert decision.circuit_breaker_tripped is True
+    assert decision.current_drawdown_pct == 3.5
+    assert "daily_drawdown_circuit_breaker_tripped" in decision.reason
+
+    # Normal day: PnL +15,000 INR -> authorized
+    ok = evaluate_portfolio_drawdown_gate(
+        daily_realized_pnl=15000.0,
+        daily_unrealized_pnl=0.0,
+        portfolio_equity=1000000.0,
+    )
+    assert ok.authorized is True
+    assert ok.circuit_breaker_tripped is False
+
+
+def test_portfolio_var_gate_monitors_risk():
+    from app.engines.adaptive_edge.execution_gate import evaluate_portfolio_var_gate
+
+    # Portfolio 5 Lakhs, large open positions with high volatility -> VaR > 2.5% budget
+    decision = evaluate_portfolio_var_gate(
+        portfolio_equity=500000.0,
+        position_values=[200000.0, 150000.0],
+        position_volatilities=[0.03, 0.04],
+        confidence=0.99,
+        max_var_pct=2.5,
+    )
+    assert decision.authorized is False
+    assert decision.portfolio_var_pct > 2.5
+    assert "portfolio_var_exceeds_risk_budget" in decision.reason
+
+    # Small contained position -> VaR within limit
+    ok = evaluate_portfolio_var_gate(
+        portfolio_equity=500000.0,
+        position_values=[50000.0],
+        position_volatilities=[0.02],
+        confidence=0.99,
+        max_var_pct=2.5,
+    )
+    assert ok.authorized is True
+    assert ok.portfolio_var_pct < 2.5
+
+
+def test_smart_iceberg_slicing():
+    from app.engines.adaptive_edge.execution_gate import evaluate_smart_iceberg_slicing
+
+    # Order of 1000 qty NIFTY (40 lots) -> sliced into 4 clips of 250 qty (10 lots)
+    decision = evaluate_smart_iceberg_slicing(quantity=1000, freeze_limit=1800, max_clip_lots=10, lot_size=25)
+    assert decision.requires_slicing is True
+    assert decision.num_legs == 4
+    assert decision.clip_quantity == 250
+
+    # Small order of 50 qty (2 lots) -> no slicing needed
+    single = evaluate_smart_iceberg_slicing(quantity=50, freeze_limit=1800, max_clip_lots=10, lot_size=25)
+    assert single.requires_slicing is False
+    assert single.num_legs == 1
+    assert single.clip_quantity == 50
+
+
+def test_alpha_conviction_gate():
+    from app.engines.adaptive_edge.execution_gate import evaluate_alpha_conviction_gate
+
+    # High confluence A+ trade -> authorized
+    decision = evaluate_alpha_conviction_gate(confluence_score=88.0, volume_surge=2.1, adx=28.0)
+    assert decision.authorized is True
+    assert decision.grade == "A+"
+    assert decision.reason is None
+
+    # Low confluence C grade chop trade -> blocked
+    blocked = evaluate_alpha_conviction_gate(confluence_score=55.0, volume_surge=1.1, adx=14.0)
+    assert blocked.authorized is False
+    assert blocked.grade == "C"
+    assert "insufficient_alpha_conviction" in blocked.reason
+
+

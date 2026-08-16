@@ -135,6 +135,7 @@ class KiteClient(TradingExchangeAdapter):
             self._client = httpx.AsyncClient(
                 base_url=self._base,
                 timeout=self._timeout,
+                limits=httpx.Limits(max_keepalive_connections=50, max_connections=100, keepalive_expiry=120.0),
                 headers={"X-Kite-Version": K.KITE_VERSION, "User-Agent": K.USER_AGENT},
             )
         return self._client

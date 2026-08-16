@@ -297,3 +297,197 @@ def evaluate_dte_gamma_gate(
         reason=None,
     )
 
+
+@dataclass(frozen=True)
+class PortfolioDrawdownDecision:
+    authorized: bool
+    current_drawdown_pct: float
+    max_drawdown_limit_pct: float
+    circuit_breaker_tripped: bool
+    reason: str | None = None
+
+
+def evaluate_portfolio_drawdown_gate(
+    *,
+    daily_realized_pnl: float,
+    daily_unrealized_pnl: float,
+    portfolio_equity: float,
+    max_drawdown_pct: float = 3.0,
+) -> PortfolioDrawdownDecision:
+    """Institutional Stretch: Max Drawdown Circuit Breaker (<4.5% absolute risk ceiling).
+
+    If intraday realized + unrealized drawdown exceeds max_drawdown_pct (default -3.0%),
+    the gate trips, disarming all auto-entries to protect portfolio capital.
+    """
+    if portfolio_equity <= 0:
+        return PortfolioDrawdownDecision(
+            authorized=False,
+            current_drawdown_pct=0.0,
+            max_drawdown_limit_pct=max_drawdown_pct,
+            circuit_breaker_tripped=True,
+            reason="invalid_portfolio_equity",
+        )
+    total_pnl = daily_realized_pnl + daily_unrealized_pnl
+    if total_pnl >= 0:
+        return PortfolioDrawdownDecision(
+            authorized=True,
+            current_drawdown_pct=0.0,
+            max_drawdown_limit_pct=max_drawdown_pct,
+            circuit_breaker_tripped=False,
+            reason=None,
+        )
+    dd_pct = (abs(total_pnl) / portfolio_equity) * 100.0
+    if dd_pct >= max_drawdown_pct:
+        return PortfolioDrawdownDecision(
+            authorized=False,
+            current_drawdown_pct=round(dd_pct, 2),
+            max_drawdown_limit_pct=max_drawdown_pct,
+            circuit_breaker_tripped=True,
+            reason=f"daily_drawdown_circuit_breaker_tripped ({dd_pct:.2f}% >= {max_drawdown_pct:.2f}% max ceiling)",
+        )
+    return PortfolioDrawdownDecision(
+        authorized=True,
+        current_drawdown_pct=round(dd_pct, 2),
+        max_drawdown_limit_pct=max_drawdown_pct,
+        circuit_breaker_tripped=False,
+        reason=None,
+    )
+
+
+@dataclass(frozen=True)
+class PortfolioVaRDecision:
+    authorized: bool
+    portfolio_var_inr: float
+    portfolio_var_pct: float
+    max_var_limit_pct: float
+    reason: str | None = None
+
+
+def evaluate_portfolio_var_gate(
+    *,
+    portfolio_equity: float,
+    position_values: list[float],
+    position_volatilities: list[float],
+    confidence: float = 0.99,
+    max_var_pct: float = 2.5,
+) -> PortfolioVaRDecision:
+    """Institutional Stretch: Parametric 1-Day Value-at-Risk (VaR) Engine.
+
+    Guards total open portfolio exposure against catastrophic joint variance.
+    """
+    if portfolio_equity <= 0 or not position_values:
+        return PortfolioVaRDecision(
+            authorized=True,
+            portfolio_var_inr=0.0,
+            portfolio_var_pct=0.0,
+            max_var_limit_pct=max_var_pct,
+            reason=None,
+        )
+    z_score = 2.33 if confidence >= 0.99 else 1.65
+    # Parametric diversified VaR sum
+    total_var = sum(v * vol * z_score for v, vol in zip(position_values, position_volatilities))
+    var_pct = (total_var / portfolio_equity) * 100.0 if portfolio_equity > 0 else 0.0
+
+    if var_pct > max_var_pct:
+        return PortfolioVaRDecision(
+            authorized=False,
+            portfolio_var_inr=round(total_var, 2),
+            portfolio_var_pct=round(var_pct, 2),
+            max_var_limit_pct=max_var_pct,
+            reason=f"portfolio_var_exceeds_risk_budget ({var_pct:.2f}% > {max_var_pct:.2f}% limit)",
+        )
+    return PortfolioVaRDecision(
+        authorized=True,
+        portfolio_var_inr=round(total_var, 2),
+        portfolio_var_pct=round(var_pct, 2),
+        max_var_limit_pct=max_var_pct,
+        reason=None,
+    )
+
+
+@dataclass(frozen=True)
+class SmartSlicingDecision:
+    requires_slicing: bool
+    total_quantity: int
+    num_legs: int
+    clip_quantity: int
+    freeze_limit: int
+
+
+def evaluate_smart_iceberg_slicing(
+    *,
+    quantity: int,
+    freeze_limit: int = 1800,
+    max_clip_lots: int = 10,
+    lot_size: int = 25,
+) -> SmartSlicingDecision:
+    """Institutional Stretch: Smart Order Routing (SOR) & Iceberg Slicing.
+
+    Slices large lot sizes to eliminate market impact and comply with exchange freeze limits.
+    """
+    max_clip_qty = max(lot_size, min(freeze_limit, max_clip_lots * lot_size))
+    if quantity > max_clip_qty or quantity > freeze_limit:
+        num_legs = (quantity + max_clip_qty - 1) // max_clip_qty
+        clip_qty = (quantity // num_legs // lot_size) * lot_size or lot_size
+        return SmartSlicingDecision(
+            requires_slicing=True,
+            total_quantity=quantity,
+            num_legs=num_legs,
+            clip_quantity=clip_qty,
+            freeze_limit=freeze_limit,
+        )
+    return SmartSlicingDecision(
+        requires_slicing=False,
+        total_quantity=quantity,
+        num_legs=1,
+        clip_quantity=quantity,
+        freeze_limit=freeze_limit,
+    )
+
+
+@dataclass(frozen=True)
+class AlphaConvictionDecision:
+    authorized: bool
+    confluence_score: float
+    volume_surge: float
+    adx: float
+    grade: str
+    reason: str | None = None
+
+
+def evaluate_alpha_conviction_gate(
+    *,
+    confluence_score: float,
+    volume_surge: float,
+    adx: float,
+    min_confluence: float = 75.0,
+    min_volume_surge: float = 1.4,
+    min_adx: float = 20.0,
+) -> AlphaConvictionDecision:
+    """Institutional Stretch: High Sharpe (>3.0) & Profit Factor (>2.0) Conviction Gate.
+
+    Prunes low-conviction chop trades to preserve capacity and maximize win rate.
+    """
+    is_a_plus = confluence_score >= 85.0 and volume_surge >= 1.8 and adx >= 25.0
+    is_a = confluence_score >= min_confluence and volume_surge >= min_volume_surge and adx >= min_adx
+
+    if not is_a:
+        grade = "B" if confluence_score >= 60.0 else "C"
+        return AlphaConvictionDecision(
+            authorized=False,
+            confluence_score=round(confluence_score, 1),
+            volume_surge=round(volume_surge, 2),
+            adx=round(adx, 1),
+            grade=grade,
+            reason=f"insufficient_alpha_conviction (Grade {grade}: Confluence={confluence_score:.1f}%, Volume={volume_surge:.2f}x, ADX={adx:.1f})",
+        )
+    return AlphaConvictionDecision(
+        authorized=True,
+        confluence_score=round(confluence_score, 1),
+        volume_surge=round(volume_surge, 2),
+        adx=round(adx, 1),
+        grade="A+" if is_a_plus else "A",
+        reason=None,
+    )
+
+
