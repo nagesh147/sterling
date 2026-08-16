@@ -511,7 +511,7 @@ export function AdaptiveEdgePanel({
                     <span style={{ fontWeight: 650 }}>{row.instrument}</span>
                     {row.origin === 'adaptive_edge' ? (
                       <span
-                        title="Origin: Adaptive Edge causal research model on NIFTY tape"
+                        title="Origin: Adaptive Edge Microstructure Model (POC, VWAP, CVD, Liquidity Imbalance & Dynamic Opportunity Modes)"
                         style={{
                           fontSize: 9,
                           fontWeight: 700,
@@ -528,7 +528,7 @@ export function AdaptiveEdgePanel({
                       </span>
                     ) : (
                       <span
-                        title="Origin: Live spot scan with borrowed SuperTrend direction. Not an Adaptive Edge model signal."
+                        title="Origin: Spot direction scan. Option strikes, DTE decay filters, and lot sizing managed by Adaptive Edge."
                         style={{
                           fontSize: 9,
                           fontWeight: 700,

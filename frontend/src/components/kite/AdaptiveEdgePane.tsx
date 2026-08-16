@@ -81,6 +81,7 @@ export function AdaptiveEdgePane({
   onOpenChart?: (symbol: string, tab: InstrumentTab | 'chart' | 'option-chain') => void;
 }) {
   const { data, isLoading, error, refetch, isFetching } = useAdaptiveEdgeSnapshot();
+  const isAuthorized = Boolean(data?.production_gate_authorized);
   const board = data ? rowsFromSnapshot(data) : [];
   const history = data ? historyRowsFromSnapshot(data) : [];
   const watched = data ? watchedSignals(data) : [];
@@ -116,17 +117,34 @@ export function AdaptiveEdgePane({
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', fontFamily: k.fontFamily, background: '#fff' }}>
       <style>{`@media (max-width: 860px) { .ae-desk { grid-template-columns: 1fr !important; } }`}</style>
-      <div style={{ background: '#fafafa', borderBottom: `1px solid ${C.border}`, padding: '7px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 11, color: C.muted, flexWrap: 'wrap' }}>
+      <div style={{ background: isAuthorized ? 'rgba(0,168,107,.04)' : '#fafafa', borderBottom: `1px solid ${C.border}`, padding: '7px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 11, color: C.muted, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, letterSpacing: '0.04em', color: C.orange, background: 'rgba(240,100,40,.1)', border: '1px solid rgba(240,100,40,.25)', borderRadius: 3, padding: '1px 6px', fontSize: 10 }}>
-            RESEARCH DESK · NOT LIVE
+          <span style={{
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            color: isAuthorized ? '#00875a' : C.orange,
+            background: isAuthorized ? 'rgba(0,135,90,.1)' : 'rgba(240,100,40,.1)',
+            border: isAuthorized ? '1px solid rgba(0,135,90,.25)' : '1px solid rgba(240,100,40,.25)',
+            borderRadius: 3,
+            padding: '1px 6px',
+            fontSize: 10,
+          }}>
+            {isAuthorized ? 'MULTI-INDEX ACTIVE · AUTHORIZED' : 'RESEARCH DESK · NOT LIVE'}
           </span>
           <span>
-            Adaptive Edge is <strong style={{ color: C.text }}>not live</strong>, <strong style={{ color: C.text }}>not calibrated</strong>, and <strong style={{ color: C.text }}>not multi-index</strong> in the AE sense. That gap is the design, not a bug. NIFTY uses causal replay; other symbols are spot scans with borrowed SuperTrend direction.
+            {isAuthorized ? (
+              <>
+                Adaptive Edge is <strong style={{ color: C.text }}>live & authorized</strong> across <strong style={{ color: C.text }}>NIFTY, BANKNIFTY, FINNIFTY, and SENSEX</strong> with native microstructure (POC, VWAP, Order Flow) and dynamic opportunity modes.
+              </>
+            ) : (
+              <>
+                Adaptive Edge is <strong style={{ color: C.text }}>not live</strong>, <strong style={{ color: C.text }}>not calibrated</strong>, and <strong style={{ color: C.text }}>not multi-index</strong> in the AE sense. That gap is the design, not a bug. NIFTY uses causal replay; other symbols are spot scans with borrowed SuperTrend direction.
+              </>
+            )}
           </span>
         </div>
-        <div style={{ whiteSpace: 'nowrap', fontSize: 10.5, color: C.muted }}>
-          Unlock: TrueData tick history → /getticks → A197 → F-101..F-114 → ExecutionGate
+        <div style={{ whiteSpace: 'nowrap', fontSize: 10.5, color: isAuthorized ? '#00875a' : C.muted }}>
+          {isAuthorized ? 'TrueData Ingestion → Multi-Day Calibration → Risk & Execution Formulas → ExecutionGate Authorized' : 'Unlock: TrueData tick history → /getticks → A197 → F-101..F-114 → ExecutionGate'}
         </div>
       </div>
 

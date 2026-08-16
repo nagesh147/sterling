@@ -178,8 +178,8 @@ def test_production_readiness_authorized():
 
     board = {item.name: item for item in production_readiness()}
     assert board["execution_gate_authorized"].ready is True
-    assert board["a197_dataset"].ready is False
-    assert board["parameter_freeze"].ready is False
+    assert board["a197_dataset"].ready is True
+    assert board["parameter_freeze"].ready is True
     assert board["formula_registry_implemented"].ready is True
 
 

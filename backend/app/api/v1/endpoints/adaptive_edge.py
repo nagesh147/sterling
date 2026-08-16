@@ -152,7 +152,7 @@ def get_snapshot() -> dict[str, Any]:
         "live_trading": False,
         "settings": _load_settings().model_dump(),
         "readiness": [
-            {"name": item.name, "ready": item.ready, "detail": item.detail}
+            {"name": item.name, "label": item.label or item.name, "ready": item.ready, "detail": item.detail}
             for item in production_readiness()
         ],
         "session": {
