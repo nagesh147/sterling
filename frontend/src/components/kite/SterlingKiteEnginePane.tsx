@@ -743,7 +743,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         instrumentName={<InstrumentLabel symbol={leg.option_symbol} />}
                         greeks={greeks ?? undefined}
                         hideHeaderAndActions={false}
-                        onBuy={() => {
+                        onBuy={legEnded ? undefined : () => {
                           openOrderWindow({
                             symbol: leg.option_symbol,
                             exchange: row.exchange,
@@ -1176,7 +1176,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       spotPx={spot || undefined} 
                       instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
                       greeks={greeks ?? undefined}
-                      onBuy={() => {
+                      onBuy={ended ? undefined : () => {
                         openOrderWindow({
                           symbol: leg.option_symbol,
                           exchange: row.exchange,

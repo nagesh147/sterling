@@ -630,7 +630,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, source, onCl
                     headless
                     data={data}
                     updatedAt={dataUpdatedAt}
-                    onBuy={(leg) => openOrderWindow({
+                    onBuy={data.is_active === false ? undefined : (leg) => openOrderWindow({
                       symbol: leg.option_symbol,
                       exchange: data.exchange,
                       initialSide: 'BUY',
