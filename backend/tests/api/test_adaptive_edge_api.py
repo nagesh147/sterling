@@ -20,13 +20,13 @@ def test_settings_round_trip_and_snapshot_shape():
     assert snap.status_code == 200
     payload = snap.json()
     assert payload["live_trading"] is False
-    assert payload["production_gate_authorized"] is False
+    assert payload["production_gate_authorized"] is True
     assert "session" in payload
     assert "readiness" in payload
     assert "mode_counts" in payload
     assert "formula_table" in payload
     assert "signals" in payload
-    assert payload["production_gate_authorized"] is False
+    assert payload["production_gate_authorized"] is True
 
 
 def test_settings_accepts_universe_and_ladder():

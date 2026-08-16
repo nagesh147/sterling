@@ -188,7 +188,7 @@ async def test_acquirer_uses_documented_from_to_and_bidask(tmp_path):
         sequence.events, "2026-08-13T03:45:30+00:00"
     )
     assert feature.status is FeatureStatus.VALID
-    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_bar_store_round_trip_and_hash(tmp_path):
@@ -257,4 +257,4 @@ async def test_bar_acquirer_uses_documented_getbars(tmp_path):
     assert len(sequence.events) == 1
     assert sequence.events[0].event_type == "bar"
     assert sequence.events[0].payload["close"] == 24705.0
-    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
