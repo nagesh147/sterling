@@ -13,6 +13,7 @@ import {
 } from './AdaptiveEdgePanel';
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
+import { AdaptiveEdgeDashboard } from './AdaptiveEdgeDashboard';
 import { openSettingsSection } from './config/registry';
 import type { InstrumentTab } from './InstrumentPane';
 
@@ -85,6 +86,7 @@ export function AdaptiveEdgePane({
   const board = data ? rowsFromSnapshot(data) : [];
   const history = data ? historyRowsFromSnapshot(data) : [];
   const watched = data ? watchedSignals(data) : [];
+  const [viewMode, setViewMode] = useState<'signals' | 'dashboard'>('signals');
   const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -183,29 +185,73 @@ export function AdaptiveEdgePane({
         </div>
       </div>
 
-      <div className="ae-desk" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(360px, 1.15fr) minmax(280px, .85fr)', overflow: 'hidden' }}>
-        <section style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
-            {([
-              { id: 'all' as const, label: `All ${board.length}` },
-              { id: 'open' as const, label: `Open ${openCount}` },
-              { id: 'closed' as const, label: `Closed ${history.filter((row) => !row.open).length || board.filter((row) => !row.open).length}` },
-            ]).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setFilter(item.id)}
-                style={{
-                  border: `1px solid ${filter === item.id ? C.orange : C.border}`,
-                  background: filter === item.id ? 'rgba(240,100,40,.08)' : '#fff',
-                  color: filter === item.id ? C.orange : C.muted,
-                  borderRadius: 99, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+      {/* Top View Mode Switcher */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: '#fafafa', padding: '0 22px' }}>
+        <button
+          type="button"
+          onClick={() => setViewMode('signals')}
+          style={{
+            padding: '10px 16px',
+            border: 0,
+            borderBottom: viewMode === 'signals' ? `2px solid ${C.orange}` : '2px solid transparent',
+            background: 'transparent',
+            color: viewMode === 'signals' ? C.orange : C.muted,
+            fontWeight: viewMode === 'signals' ? 700 : 500,
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          ⚡ Live Signals & Option Ladder
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('dashboard')}
+          style={{
+            padding: '10px 16px',
+            border: 0,
+            borderBottom: viewMode === 'dashboard' ? `2px solid ${C.blue}` : '2px solid transparent',
+            background: 'transparent',
+            color: viewMode === 'dashboard' ? C.blue : C.muted,
+            fontWeight: viewMode === 'dashboard' ? 700 : 500,
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          📊 Microstructure & Strategy Dashboard
+        </button>
+      </div>
+
+      {viewMode === 'dashboard' ? (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <AdaptiveEdgeDashboard
+            snapshot={data}
+            onOpenSettings={() => openSettingsSection('adaptiveEdge')}
+          />
+        </div>
+      ) : (
+        <div className="ae-desk" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(360px, 1.15fr) minmax(280px, .85fr)', overflow: 'hidden' }}>
+          <section style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
+              {([
+                { id: 'all' as const, label: `All ${board.length}` },
+                { id: 'open' as const, label: `Open ${openCount}` },
+                { id: 'closed' as const, label: `Closed ${history.filter((row) => !row.open).length || board.filter((row) => !row.open).length}` },
+              ]).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFilter(item.id)}
+                  style={{
+                    border: `1px solid ${filter === item.id ? C.orange : C.border}`,
+                    background: filter === item.id ? 'rgba(240,100,40,.08)' : '#fff',
+                    color: filter === item.id ? C.orange : C.muted,
+                    borderRadius: 99, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <AdaptiveEdgePanel
               rows={visible}
@@ -381,6 +427,7 @@ export function AdaptiveEdgePane({
           )}
         </aside>
       </div>
+      )}
     </div>
   );
 }
