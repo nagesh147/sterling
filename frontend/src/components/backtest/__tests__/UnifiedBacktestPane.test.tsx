@@ -27,11 +27,13 @@ const mockPresets = [
   },
 ];
 
+const mockMutate = vi.fn();
+
 vi.mock('../../../hooks/useUnifiedBacktest', () => ({
   useUnifiedStrategies: () => ({ data: mockStrategies, isLoading: false }),
   useUnifiedPresets: () => ({ data: mockPresets, isLoading: false }),
   useRunUnifiedBacktest: () => ({
-    mutate: vi.fn(),
+    mutate: mockMutate,
     isPending: false,
   }),
 }));
@@ -46,15 +48,36 @@ function renderComponent() {
 }
 
 describe('UnifiedBacktestPane', () => {
-  it('renders strategy selector, presets, parameters, and run button', () => {
+  it('renders strategy selector, presets, parameters, data source options, and run button', () => {
     renderComponent();
 
-    expect(screen.getByText('REAL HISTORICAL DATA ENGINE')).toBeInTheDocument();
+    expect(screen.getByText(/REAL DATA:/i)).toBeInTheDocument();
     expect(screen.getByText('NIFTY 50 • Adaptive Edge Intraday')).toBeInTheDocument();
+    expect(screen.getByText(/Historical Data Source/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Zerodha Kite/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /TrueData/i })).toBeInTheDocument();
     expect(screen.getByText(/Strategy & Engine Parameters/i)).toBeInTheDocument();
     expect(screen.getByText(/Indian F&O Friction Engine/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Run Backtest/i })).toBeInTheDocument();
     expect(screen.getByText('Ready to Run Real-Data Backtest')).toBeInTheDocument();
+  });
+
+  it('allows toggling between Zerodha Kite and TrueData sources', () => {
+    renderComponent();
+
+    const kiteBtn = screen.getByRole('button', { name: /Zerodha Kite/i });
+    const truedataBtn = screen.getByRole('button', { name: /TrueData/i });
+
+    expect(kiteBtn).toBeInTheDocument();
+    expect(truedataBtn).toBeInTheDocument();
+
+    // Click TrueData
+    fireEvent.click(truedataBtn);
+    expect(screen.getByText(/TRUEDATA V2.6 ENGINE/i)).toBeInTheDocument();
+
+    // Click Kite back
+    fireEvent.click(kiteBtn);
+    expect(screen.getByText(/ZERODHA KITE ENGINE/i)).toBeInTheDocument();
   });
 
   it('clicking preset applies preset values', () => {

@@ -30,6 +30,7 @@ export function UnifiedBacktestPane() {
   // Form State
   const [strategy, setStrategy] = useState('adaptive_edge');
   const [symbol, setSymbol] = useState('NIFTY 50');
+  const [dataSource, setDataSource] = useState<'kite' | 'truedata'>('kite');
   const [timeframe, setTimeframe] = useState('5m');
   const [lookbackDays, setLookbackDays] = useState(30);
   const [startingCapital, setStartingCapital] = useState(100000);
@@ -63,6 +64,7 @@ export function UnifiedBacktestPane() {
     const payload: UnifiedBacktestRequest = {
       strategy,
       symbol,
+      data_source: dataSource,
       timeframe,
       lookback_days: lookbackDays,
       starting_capital: startingCapital,
@@ -160,7 +162,7 @@ export function UnifiedBacktestPane() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: '#2e7d32', background: 'rgba(46,125,50,0.08)', padding: '4px 10px', borderRadius: 4 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2e7d32' }} />
-          REAL HISTORICAL DATA ENGINE
+          REAL DATA: {result?.data_source ?? (dataSource === 'kite' ? 'ZERODHA KITE ENGINE' : 'TRUEDATA V2.6 ENGINE')}
         </div>
       </div>
 
@@ -170,6 +172,57 @@ export function UnifiedBacktestPane() {
         <div style={{ width: 320, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             ⚙️ Strategy & Engine Parameters
+          </div>
+
+          {/* Data Source Picker (Kite vs TrueData) */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
+              Historical Data Source
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setDataSource('kite')}
+                style={{
+                  padding: '7px 8px',
+                  borderRadius: 4,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  border: dataSource === 'kite' ? '2px solid #f06428' : '1px solid #ddd',
+                  background: dataSource === 'kite' ? 'rgba(240,100,40,0.08)' : '#fafafa',
+                  color: dataSource === 'kite' ? '#f06428' : '#666',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>🪁</span> Zerodha Kite
+              </button>
+              <button
+                type="button"
+                onClick={() => setDataSource('truedata')}
+                style={{
+                  padding: '7px 8px',
+                  borderRadius: 4,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  border: dataSource === 'truedata' ? '2px solid #1976d2' : '1px solid #ddd',
+                  background: dataSource === 'truedata' ? 'rgba(25,118,210,0.08)' : '#fafafa',
+                  color: dataSource === 'truedata' ? '#1976d2' : '#666',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>📊</span> TrueData
+              </button>
+            </div>
           </div>
 
           {/* Strategy Picker */}

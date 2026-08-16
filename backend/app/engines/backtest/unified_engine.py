@@ -222,6 +222,7 @@ def generate_strategy_signals(
 def run_unified_backtest(
     candles: List[Dict[str, Any]],
     req: UnifiedBacktestRequest,
+    data_source_label: Optional[str] = None,
 ) -> UnifiedBacktestResult:
     """
     Executes a high-fidelity bar-by-bar backtest simulation on real historical candles.
@@ -454,11 +455,16 @@ def run_unified_backtest(
     # ── 5. Run Monte Carlo Resampling ─────────────────────────────────────────
     monte_carlo = _run_monte_carlo(trades, initial_capital) if len(trades) >= 5 else None
 
+    source_name = data_source_label or (
+        "ZERODHA_KITE" if getattr(req, "data_source", "").lower() == "kite"
+        else ("TRUEDATA_V2.6" if getattr(req, "data_source", "").lower() == "truedata" else "REAL_HISTORICAL_DATA")
+    )
+
     return UnifiedBacktestResult(
         strategy=req.strategy,
         symbol=req.symbol,
         timeframe=req.timeframe,
-        data_source="REAL_HISTORICAL_TICKS",
+        data_source=source_name,
         candles_evaluated=len(df),
         start_date=df["dt"].iloc[0].isoformat(),
         end_date=df["dt"].iloc[-1].isoformat(),

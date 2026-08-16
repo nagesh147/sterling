@@ -206,6 +206,10 @@ class UnifiedBacktestRequest(BaseModel):
         description="Strategy to backtest: adaptive_edge, supertrend, navigator, directional, mean_reversion",
     )
     symbol: str = Field(default="NIFTY 50", description="Index or F&O equity tradingsymbol")
+    data_source: str = Field(
+        default="kite",
+        description="Historical data source provider: 'kite' (Zerodha Kite) or 'truedata' (TrueData V2.6)",
+    )
     timeframe: str = Field(default="5m", description="Candle timeframe: 1m, 3m, 5m, 15m, 30m, 1h, day")
     lookback_days: int = Field(default=30, ge=3, le=365, description="Lookback window in calendar days")
     starting_capital: float = Field(default=100000.0, ge=1000.0, description="Starting capital in INR")

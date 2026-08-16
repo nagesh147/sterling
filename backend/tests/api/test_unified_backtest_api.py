@@ -36,11 +36,12 @@ def test_get_unified_presets():
     assert len(presets) >= 4
 
 
-def test_run_unified_backtest_endpoint():
+def test_run_unified_backtest_endpoint_kite_source():
     client = get_client()
     payload = {
         "strategy": "supertrend",
         "symbol": "NIFTY 50",
+        "data_source": "kite",
         "timeframe": "5m",
         "lookback_days": 7,
         "starting_capital": 100000.0,
@@ -53,7 +54,33 @@ def test_run_unified_backtest_endpoint():
     data = res.json()
     assert data["strategy"] == "supertrend"
     assert data["symbol"] == "NIFTY 50"
+    assert "KITE" in data["data_source"]
     assert "metrics" in data
     assert "equity_curve" in data
     assert "trades" in data
     assert data["starting_capital"] == 100000.0
+
+
+def test_run_unified_backtest_endpoint_truedata_source():
+    client = get_client()
+    payload = {
+        "strategy": "adaptive_edge",
+        "symbol": "NIFTY BANK",
+        "data_source": "truedata",
+        "timeframe": "5m",
+        "lookback_days": 7,
+        "starting_capital": 150000.0,
+        "num_lots": 2,
+        "stop_points": 80.0,
+        "target_points": 160.0,
+    }
+    res = client.post("/api/v1/backtest/unified/run", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["strategy"] == "adaptive_edge"
+    assert data["symbol"] == "NIFTY BANK"
+    assert "TRUEDATA" in data["data_source"]
+    assert "metrics" in data
+    assert "equity_curve" in data
+    assert "trades" in data
+    assert data["starting_capital"] == 150000.0

@@ -27,6 +27,7 @@ export interface BacktestPreset {
 export interface UnifiedBacktestRequest {
   strategy: string;
   symbol: string;
+  data_source?: 'kite' | 'truedata' | 'auto';
   timeframe: string;
   lookback_days: number;
   starting_capital: number;
