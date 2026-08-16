@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
+import { k, tint } from '../../styles/kiteUI';
 import type {
   AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
@@ -14,29 +15,31 @@ import type {
 export type AdaptiveEdgeThesis = string;
 
 const C = {
-  text: '#1e293b',
-  muted: '#64748b',
-  dim: '#94a3b8',
-  border: '#e2e8f0',
-  emeraldBg: 'rgba(16, 185, 129, 0.08)',
-  emeraldBorder: 'rgba(16, 185, 129, 0.25)',
-  emeraldText: '#059669',
-  roseBg: 'rgba(239, 68, 68, 0.08)',
-  roseBorder: 'rgba(239, 68, 68, 0.25)',
-  roseText: '#dc2626',
-  orangeBg: 'rgba(245, 158, 11, 0.08)',
-  orangeBorder: 'rgba(245, 158, 11, 0.25)',
-  orangeText: '#d97706',
-  orange: '#f59e0b',
-  blueBg: 'rgba(59, 130, 246, 0.08)',
-  blueBorder: 'rgba(59, 130, 246, 0.25)',
-  blueText: '#2563eb',
-  blue: '#3b82f6',
-  purpleBg: 'rgba(124, 58, 237, 0.08)',
-  purpleBorder: 'rgba(124, 58, 237, 0.25)',
-  purpleText: '#7c3aed',
-  selectedBg: 'rgba(59, 130, 246, 0.06)',
-  selectedBorder: '#3b82f6',
+  text: k.text,
+  muted: k.dim,
+  dim: k.dim,
+  border: k.border,
+  surface: k.surface,
+  surfaceHover: k.surfaceHover,
+  emeraldBg: `${k.green}18`,
+  emeraldBorder: `${k.green}40`,
+  emeraldText: k.green,
+  roseBg: `${k.red}18`,
+  roseBorder: `${k.red}40`,
+  roseText: k.red,
+  orangeBg: `${k.orange}18`,
+  orangeBorder: `${k.orange}40`,
+  orangeText: k.orange,
+  orange: k.orange,
+  blueBg: `${k.blue}18`,
+  blueBorder: `${k.blue}40`,
+  blueText: k.blue,
+  blue: k.blue,
+  purpleBg: `${k.purple}18`,
+  purpleBorder: `${k.purple}40`,
+  purpleText: k.purple,
+  selectedBg: k.surfaceHover,
+  selectedBorder: k.blue,
 };
 
 export const MODE_METAS: Record<
@@ -46,37 +49,37 @@ export const MODE_METAS: Record<
   MICRO: {
     label: 'MICRO',
     desc: 'Micro Scalp (quick exit at 1R target)',
-    bg: 'rgba(59, 130, 246, 0.08)',
-    color: '#2563eb',
-    border: '1px solid rgba(59, 130, 246, 0.25)',
+    bg: `${k.blue}18`,
+    color: k.blue,
+    border: `1px solid ${k.blue}40`,
   },
   SCALP: {
     label: 'SCALP',
     desc: 'Momentum Scalp (expansion beyond 1.5R)',
-    bg: 'rgba(16, 185, 129, 0.08)',
-    color: '#059669',
-    border: '1px solid rgba(16, 185, 129, 0.25)',
+    bg: `${k.green}18`,
+    color: k.green,
+    border: `1px solid ${k.green}40`,
   },
   EXTENDED: {
     label: 'EXTENDED',
     desc: 'Extended Scalp (trend continuation runner)',
-    bg: 'rgba(124, 58, 237, 0.08)',
-    color: '#7c3aed',
-    border: '1px solid rgba(124, 58, 237, 0.25)',
+    bg: `${k.purple}18`,
+    color: k.purple,
+    border: `1px solid ${k.purple}40`,
   },
   EXTENDED_SCALP: {
     label: 'EXTENDED',
     desc: 'Extended Scalp (trend continuation runner)',
-    bg: 'rgba(124, 58, 237, 0.08)',
-    color: '#7c3aed',
-    border: '1px solid rgba(124, 58, 237, 0.25)',
+    bg: `${k.purple}18`,
+    color: k.purple,
+    border: `1px solid ${k.purple}40`,
   },
   INTRADAY: {
     label: 'INTRADAY',
     desc: 'Intraday Session Trend (full session runner)',
-    bg: 'rgba(240, 100, 40, 0.08)',
-    color: '#ea580c',
-    border: '1px solid rgba(240, 100, 40, 0.25)',
+    bg: `${k.orange}18`,
+    color: k.orange,
+    border: `1px solid ${k.orange}40`,
   },
 };
 
@@ -582,8 +585,8 @@ function StatCard({
   label,
   value,
   subvalue,
-  color = C.text,
-  bg = '#ffffff',
+  color = k.text,
+  bg = k.bg,
 }: {
   label: string;
   value: string;
@@ -595,23 +598,23 @@ function StatCard({
     <div
       style={{
         background: bg,
-        border: `1px solid ${C.border}`,
-        borderRadius: 6,
-        padding: '7px 10px',
+        border: `1px solid ${k.border}`,
+        borderRadius: 3,
+        padding: '6px 9px',
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
         minWidth: 80,
       }}
     >
-      <div style={{ fontSize: 9.5, fontWeight: 650, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <div style={{ fontSize: 9.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         {label}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 750, color, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
       {subvalue && (
-        <div style={{ fontSize: 10, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
           {subvalue}
         </div>
       )}
@@ -656,17 +659,18 @@ export function AdaptiveEdgePanel({
     });
   };
 
-  const isIndexSym = (u: string) => {
-    const s = u.toUpperCase();
-    return (
-      ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX', 'NIFTY', 'BANKNIFTY', 'FINNIFTY'].includes(s) ||
-      s.includes('NIFTY') ||
-      s.includes('SENSEX')
-    );
-  };
+  const groups = useMemo(() => {
+    const isIndexSym = (sym: string) => {
+      const s = sym.toUpperCase();
+      return (
+        s.includes('NIFTY') ||
+        s.includes('SENSEX') ||
+        s.includes('BANK') ||
+        s.includes('FINNIFTY') ||
+        s.includes('MIDCPNIFTY')
+      );
+    };
 
-  // Group all option/derivative rows by their underlying stock/index
-  const groups: UnderlyingGroup[] = useMemo(() => {
     const map = new Map<string, UnderlyingGroup>();
 
     rows.forEach((r) => {
@@ -720,20 +724,20 @@ export function AdaptiveEdgePanel({
           onClick={onRowClick}
           style={{
             background: selected || isExpanded
-              ? C.selectedBg
+              ? k.surfaceHover
               : rIdx % 2 === 1
               ? '#fafafa'
-              : '#ffffff',
+              : k.bg,
             cursor: 'pointer',
-            borderBottom: `1px solid ${C.border}`,
+            borderBottom: `1px solid ${k.border}`,
             transition: 'background 0.12s ease',
-            borderLeft: selected || isExpanded ? `3px solid ${C.selectedBorder}` : '3px solid transparent',
+            borderLeft: selected || isExpanded ? `3px solid ${k.blue}` : '3px solid transparent',
           }}
         >
           {/* 1. Instrument & Underlying */}
           <td style={{ padding: '8px 12px 8px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
-              <span style={{ fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
+              <span style={{ fontWeight: 400, fontSize: 13, color: k.text, whiteSpace: 'nowrap' }}>
                 {row.instrument}
               </span>
               {row.origin === 'adaptive_edge' ? (
@@ -742,11 +746,11 @@ export function AdaptiveEdgePanel({
                   style={{
                     fontSize: 9,
                     fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: 4,
-                    background: C.orangeBg,
-                    color: C.orange,
-                    border: `1px solid ${C.orangeBorder}`,
+                    padding: '1px 4px',
+                    borderRadius: 2,
+                    background: `${k.orange}18`,
+                    color: k.orange,
+                    border: `1px solid ${k.orange}40`,
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -758,11 +762,11 @@ export function AdaptiveEdgePanel({
                   style={{
                     fontSize: 9,
                     fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: 4,
-                    background: C.blueBg,
-                    color: C.blue,
-                    border: `1px solid ${C.blueBorder}`,
+                    padding: '1px 4px',
+                    borderRadius: 2,
+                    background: `${k.blue}18`,
+                    color: k.blue,
+                    border: `1px solid ${k.blue}40`,
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -771,11 +775,11 @@ export function AdaptiveEdgePanel({
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>
+              <span style={{ fontSize: 11, color: k.dim }}>
                 {row.underlying}
               </span>
               {row.strike != null && (
-                <span style={{ fontSize: 10.5, color: C.dim, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontSize: 10.5, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
                   ₹{fmt(row.strike, 0)}
                 </span>
               )}
@@ -787,13 +791,13 @@ export function AdaptiveEdgePanel({
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
               <span
                 style={{
-                  fontWeight: 700,
-                  fontSize: 11,
-                  padding: '2px 7px',
-                  borderRadius: 4,
-                  background: isCE ? C.emeraldBg : C.roseBg,
-                  color: isCE ? C.emeraldText : C.roseText,
-                  border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
+                  fontWeight: 600,
+                  fontSize: 10,
+                  padding: '2px 5px',
+                  borderRadius: 2,
+                  background: isCE ? `${k.green}18` : `${k.red}18`,
+                  color: isCE ? k.green : k.red,
+                  border: `1px solid ${isCE ? `${k.green}40` : `${k.red}40`}`,
                   display: 'inline-block',
                 }}
               >
@@ -802,11 +806,11 @@ export function AdaptiveEdgePanel({
               <span
                 title={badge.title}
                 style={{
-                  fontSize: 10,
-                  fontWeight: 700,
+                  fontSize: 9.5,
+                  fontWeight: 600,
                   letterSpacing: '0.02em',
-                  padding: '2px 6px',
-                  borderRadius: 4,
+                  padding: '2px 5px',
+                  borderRadius: 2,
                   background: badge.bg,
                   color: badge.color,
                   border: badge.border,
@@ -820,28 +824,14 @@ export function AdaptiveEdgePanel({
           </td>
 
           {/* 3. Exchange */}
-          <td style={{ padding: '8px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
+          <td style={{ padding: '8px 12px', color: k.dim, fontSize: 11, fontWeight: 400 }}>
             {row.exchange}
           </td>
 
           {/* 4. Leg & Option Strike */}
           <td style={{ padding: '8px 12px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 750,
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  background: isCE ? C.emeraldBg : C.roseBg,
-                  color: isCE ? C.emeraldText : C.roseText,
-                  border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
-                  display: 'inline-block',
-                }}
-              >
-                {row.optionType || 'CE'}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 650, color: C.text }}>
+              <span style={{ fontSize: 11, color: k.dim, fontWeight: 400 }}>
                 {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
               </span>
             </div>
@@ -849,17 +839,17 @@ export function AdaptiveEdgePanel({
 
           {/* 5. Entry & MTM */}
           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-            <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>
+            <div style={{ fontSize: 11, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: k.text }}>
               {fmt(row.entry)}
             </div>
             {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
               <div
                 style={{
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontVariantNumeric: 'tabular-nums',
                   marginTop: 1,
-                  color: isProfit ? C.emeraldText : C.roseText,
+                  color: isProfit ? k.green : k.red,
                 }}
               >
                 <span>
@@ -871,27 +861,27 @@ export function AdaptiveEdgePanel({
           </td>
 
           {/* 6. Stop Loss (SL) */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}>
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
             {fmt(row.sl)}
           </td>
 
           {/* 7. Trailing Stop (TSL) */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 500 }}>
             {fmt(row.tsl)}
           </td>
 
           {/* 8. Exit Price */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
             {fmt(row.exit)}
           </td>
 
           {/* 9. Current LTP */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
+          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: k.text, fontSize: 13 }}>
             {fmt(liveLtp)}
           </td>
 
           {/* 10. Timestamp */}
-          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
+          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: k.dim, fontWeight: 400 }}>
             {when(row.entryTime)}
           </td>
 
@@ -901,17 +891,17 @@ export function AdaptiveEdgePanel({
               <span
                 style={{
                   display: 'inline-block',
-                  width: 7,
-                  height: 7,
+                  width: 6,
+                  height: 6,
                   borderRadius: '50%',
-                  background: row.open ? '#10b981' : '#94a3b8',
+                  background: row.open ? k.green : k.dim,
                 }}
               />
               <span
                 style={{
                   fontSize: 10.5,
-                  fontWeight: 700,
-                  color: row.open ? '#059669' : '#64748b',
+                  fontWeight: 600,
+                  color: row.open ? k.green : k.dim,
                 }}
               >
                 {row.open ? 'Open' : 'Closed'}
@@ -922,30 +912,30 @@ export function AdaptiveEdgePanel({
 
         {/* Expanded Row Detail Drawer (Right Sidebar Mode) */}
         {isExpanded && (
-          <tr key={`${row.id}-details`} style={{ background: '#f8fafc', borderBottom: `2px solid ${C.border}` }}>
-            <td colSpan={COLUMNS.length} style={{ padding: '14px 16px 18px', background: '#f8fafc' }}>
+          <tr key={`${row.id}-details`} style={{ background: k.surface, borderBottom: `2px solid ${k.border}` }}>
+            <td colSpan={COLUMNS.length} style={{ padding: '12px 16px 16px', background: k.surface }}>
               <div
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 14,
-                  background: '#ffffff',
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 8,
-                  padding: 16,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                  gap: 12,
+                  background: k.bg,
+                  border: `1px solid ${k.border}`,
+                  borderRadius: 4,
+                  padding: 14,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
                 }}
               >
                 {/* 1. OPTION PREMIUM EXECUTION CLUSTER */}
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
                     🎯 Option Strike Execution (₹ Premiums)
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
-                    <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={C.text} />
-                    <StatCard label="Stop (SL)" value={`₹${fmt(row.sl)}`} color={C.muted} />
-                    <StatCard label="Trail (TSL)" value={`₹${fmt(row.tsl)}`} color={C.orangeText} />
-                    <StatCard label="Exit" value={row.exit ? `₹${fmt(row.exit)}` : '—'} color={C.muted} />
+                    <StatCard label="Entry" value={`₹${fmt(row.entry)}`} color={k.text} />
+                    <StatCard label="Stop (SL)" value={`₹${fmt(row.sl)}`} color={k.dim} />
+                    <StatCard label="Trail (TSL)" value={`₹${fmt(row.tsl)}`} color={k.orange} />
+                    <StatCard label="Exit" value={row.exit ? `₹${fmt(row.exit)}` : '—'} color={k.dim} />
                     <StatCard
                       label="Current LTP"
                       value={`₹${fmt(liveLtp)}`}
@@ -957,16 +947,16 @@ export function AdaptiveEdgePanel({
                       color={
                         entryDiff != null
                           ? entryDiff >= 0
-                            ? C.emeraldText
-                            : C.roseText
-                          : C.text
+                            ? k.green
+                            : k.red
+                          : k.text
                       }
                       bg={
                         entryDiff != null
                           ? entryDiff >= 0
-                            ? C.emeraldBg
-                            : C.roseBg
-                          : '#ffffff'
+                            ? `${k.green}12`
+                            : `${k.red}12`
+                          : k.bg
                       }
                     />
                   </div>
@@ -974,41 +964,41 @@ export function AdaptiveEdgePanel({
 
                 {/* 2. SPOT & MICROSTRUCTURE ANCHOR CLUSTER */}
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
                     🌊 Spot Microstructure & Order Flow Anchor
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 }}>
-                    <StatCard label="Spot Entry" value={`₹${fmt(row.spotEntry ?? (row.underlying.includes('BANK') ? 51200 : 24465), 0)}`} color={C.text} />
-                    <StatCard label="Spot SL" value={`₹${fmt(row.spotSl ?? (row.underlying.includes('BANK') ? 51120 : 24385), 0)}`} color={C.muted} />
-                    <StatCard label="Spot TSL" value={`₹${fmt(row.spotTsl ?? (row.underlying.includes('BANK') ? 51160 : 24425), 0)}`} color={C.orangeText} />
-                    <StatCard label="POC Anchor" value={`₹${fmt(row.poc ?? (row.underlying.includes('BANK') ? 51180 : 24405), 0)}`} color={C.purpleText} />
-                    <StatCard label="Session VWAP" value={`₹${fmt(row.vwap ?? (row.underlying.includes('BANK') ? 51190.5 : 24406.92))}`} color={C.blueText} />
-                    <StatCard label="Order Flow CVD" value={`${(row.cvd ?? 39075) > 0 ? '+' : ''}${fmt(row.cvd ?? 39075, 0)}`} color={C.emeraldText} />
-                    <StatCard label="Model Score" value={row.score != null ? `${fmt(row.score, 2)}` : '0.09'} color={C.text} />
-                    <StatCard label="Horizon" value={row.horizon || 'IMPULSE'} color={C.muted} />
+                    <StatCard label="Spot Entry" value={`₹${fmt(row.spotEntry ?? (row.underlying.includes('BANK') ? 51200 : 24465), 0)}`} color={k.text} />
+                    <StatCard label="Spot SL" value={`₹${fmt(row.spotSl ?? (row.underlying.includes('BANK') ? 51120 : 24385), 0)}`} color={k.dim} />
+                    <StatCard label="Spot TSL" value={`₹${fmt(row.spotTsl ?? (row.underlying.includes('BANK') ? 51160 : 24425), 0)}`} color={k.orange} />
+                    <StatCard label="POC Anchor" value={`₹${fmt(row.poc ?? (row.underlying.includes('BANK') ? 51180 : 24405), 0)}`} color={k.purple} />
+                    <StatCard label="Session VWAP" value={`₹${fmt(row.vwap ?? (row.underlying.includes('BANK') ? 51190.5 : 24406.92))}`} color={k.blue} />
+                    <StatCard label="Order Flow CVD" value={`${(row.cvd ?? 39075) > 0 ? '+' : ''}${fmt(row.cvd ?? 39075, 0)}`} color={k.green} />
+                    <StatCard label="Model Score" value={row.score != null ? `${fmt(row.score, 2)}` : '0.09'} color={k.text} />
+                    <StatCard label="Horizon" value={row.horizon || 'IMPULSE'} color={k.dim} />
                   </div>
                 </div>
 
                 {/* 3. VISUALIZER AREA CHART & BOUNDS */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: k.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       📈 Price Trajectory & Execution Bounds
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: C.muted }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: k.dim }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#2563eb' }} /> Entry
+                        <span style={{ width: 8, height: 2, background: k.blue }} /> Entry
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#ef4444' }} /> SL
+                        <span style={{ width: 8, height: 2, background: k.red }} /> SL
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 2, background: '#f59e0b' }} /> TSL
+                        <span style={{ width: 8, height: 2, background: k.orange }} /> TSL
                       </span>
                     </div>
                   </div>
 
-                  <div style={{ height: 200, border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ height: 200, border: `1px solid ${k.border}`, borderRadius: 4, overflow: 'hidden' }}>
                     <AdaptiveEdgeSetupChart
                       symbol={row.underlying || row.instrument}
                       entryTime={row.entryTime}
@@ -1034,12 +1024,12 @@ export function AdaptiveEdgePanel({
                       style={{
                         flex: 1,
                         padding: '8px 14px',
-                        background: C.blue,
+                        background: k.blue,
                         color: '#ffffff',
                         border: 0,
-                        borderRadius: 6,
+                        borderRadius: 3,
                         fontSize: 12,
-                        fontWeight: 650,
+                        fontWeight: 600,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -1056,10 +1046,10 @@ export function AdaptiveEdgePanel({
                     onClick={(e) => handleCopy(e, row.instrument, row.id)}
                     style={{
                       padding: '8px 14px',
-                      background: '#ffffff',
-                      color: C.text,
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 6,
+                      background: k.bg,
+                      color: k.text,
+                      border: `1px solid ${k.border}`,
+                      borderRadius: 3,
                       fontSize: 12,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -1077,21 +1067,19 @@ export function AdaptiveEdgePanel({
   };
 
   return (
-    <div style={{ overflow: 'auto', minHeight: 0, height: '100%', background: '#ffffff' }}>
-      <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12 }}>
+    <div style={{ overflow: 'auto', minHeight: 0, height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
+      <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12, fontFamily: k.fontFamily }}>
         <thead>
-          <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 5 }}>
+          <tr style={{ background: k.bg, borderBottom: `1px solid ${k.border}`, position: 'sticky', top: 0, zIndex: 5 }}>
             {COLUMNS.map((label) => (
               <th
                 key={label}
                 style={{
-                  padding: '9px 12px',
-                  color: C.muted,
-                  fontSize: 11,
-                  fontWeight: 650,
-                  letterSpacing: '0.03em',
-                  textTransform: 'uppercase',
-                  borderBottom: `1px solid ${C.border}`,
+                  padding: '12px 16px',
+                  color: k.dim,
+                  fontSize: 12,
+                  fontWeight: 400,
+                  borderBottom: `1px solid ${k.border}`,
                   textAlign: ['Entry', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left',
                   whiteSpace: 'nowrap',
                 }}
@@ -1115,46 +1103,50 @@ export function AdaptiveEdgePanel({
                 <tr
                   onClick={() => toggleGroup(grp.underlying)}
                   style={{
-                    background: '#f1f5f9',
-                    borderTop: `1px solid ${C.border}`,
-                    borderBottom: `1px solid ${C.border}`,
+                    background: k.surface,
+                    borderTop: `1px solid ${k.border}`,
+                    borderBottom: `1px solid ${k.border}`,
                     cursor: 'pointer',
+                    transition: 'background 0.12s ease',
                   }}
                 >
                   <td colSpan={COLUMNS.length} style={{ padding: '8px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                       {/* Left: Expand toggle, Icon, Underlying Symbol, Direction, Spot */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 10, color: '#64748b', userSelect: 'none', width: 14 }}>
+                        <span style={{ fontSize: 10, color: k.dim, userSelect: 'none', width: 14 }}>
                           {isCollapsed ? '▶' : '▼'}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: k.text, letterSpacing: -0.2 }}>
                           {grp.isIndex ? '🏛️' : '🏢'} {grp.underlying}
                         </span>
                         <span
                           style={{
-                            fontSize: 9.5,
-                            fontWeight: 750,
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            background: isBull ? C.emeraldBg : C.roseBg,
-                            color: isBull ? C.emeraldText : C.roseText,
-                            border: `1px solid ${isBull ? C.emeraldBorder : C.roseBorder}`,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: isBull ? `${k.green}18` : `${k.red}18`,
+                            color: isBull ? k.green : k.red,
+                            border: `1px solid ${isBull ? `${k.green}40` : `${k.red}40`}`,
                           }}
                         >
                           {isBull ? '▲ BULLISH (CE)' : '▼ BEARISH (PE)'}
                         </span>
                         {spotPx != null && (
-                          <span style={{ fontSize: 11, color: '#475569', fontWeight: 650, fontVariantNumeric: 'tabular-nums' }}>
-                            Spot: ₹{spotPx.toLocaleString('en-IN')}
+                          <span style={{ fontSize: 11, color: k.dim, display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                            <span>Spot:</span>
+                            <span style={{ fontWeight: 500, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
+                              ₹{spotPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </span>
                         )}
-                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#e2e8f0', color: '#475569' }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: k.surfaceHover, color: k.dim, border: `1px solid ${k.border}` }}>
                           {grp.rows.length} {grp.rows.length === 1 ? 'Option Leg' : 'Option Strikes'}
                         </span>
                       </div>
 
-                      {/* Right: Origin Badge & Quick Chart Inspector Button */}
+                      {/* Right: Quick Chart Inspector Button */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {onInspectSymbol && (
                           <button
@@ -1165,13 +1157,13 @@ export function AdaptiveEdgePanel({
                               onInspectSymbol(grp.underlying);
                             }}
                             style={{
-                              border: `1px solid ${C.blueBorder}`,
-                              background: '#ffffff',
-                              color: C.blueText,
-                              borderRadius: 4,
+                              border: `1px solid ${k.border}`,
+                              background: k.bg,
+                              color: k.blue,
+                              borderRadius: 3,
                               padding: '2px 8px',
                               fontSize: 10.5,
-                              fontWeight: 750,
+                              fontWeight: 600,
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -1199,8 +1191,8 @@ export function AdaptiveEdgePanel({
                 style={{
                   padding: 36,
                   textAlign: 'center',
-                  color: C.muted,
-                  fontSize: 12.5,
+                  color: k.dim,
+                  fontSize: 12,
                 }}
               >
                 No signals found matching the active filter criteria.
