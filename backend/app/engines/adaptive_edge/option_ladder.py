@@ -77,6 +77,46 @@ class AdaptiveEdgeOptionLeg:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class AdaptiveEdgeVerticalSpread:
+    spread_type: str  # "BULL_CALL_SPREAD" | "BEAR_PUT_SPREAD"
+    long_leg: AdaptiveEdgeOptionLeg
+    short_leg: AdaptiveEdgeOptionLeg
+    net_debit: float
+    max_risk: float
+    max_reward: float
+    risk_reward_ratio: float
+    width: float
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def build_vertical_spread(
+    long_leg: AdaptiveEdgeOptionLeg,
+    short_leg: AdaptiveEdgeOptionLeg,
+) -> AdaptiveEdgeVerticalSpread | None:
+    """Build a defined-risk vertical debit spread from long and short option legs."""
+    if long_leg.entry_premium is None or short_leg.entry_premium is None:
+        return None
+    net_debit = max(0.05, round(long_leg.entry_premium - short_leg.entry_premium, 2))
+    width = abs(short_leg.strike - long_leg.strike)
+    max_risk = net_debit
+    max_reward = max(0.0, round(width - net_debit, 2))
+    rr = round(max_reward / max_risk, 2) if max_risk > 0 else 0.0
+    spread_type = "BULL_CALL_SPREAD" if long_leg.option_type.upper() == "CE" else "BEAR_PUT_SPREAD"
+    return AdaptiveEdgeVerticalSpread(
+        spread_type=spread_type,
+        long_leg=long_leg,
+        short_leg=short_leg,
+        net_debit=net_debit,
+        max_risk=max_risk,
+        max_reward=max_reward,
+        risk_reward_ratio=rr,
+        width=width,
+    )
+
+
 def option_name_for(symbol: str) -> str:
     key = symbol.upper()
     return TAPE_TO_OPTION_NAME.get(key, key.replace("-I", ""))

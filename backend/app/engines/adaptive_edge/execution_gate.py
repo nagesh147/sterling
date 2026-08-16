@@ -96,3 +96,44 @@ class ExecutionBlockedError(RuntimeError):
             + ", ".join(decision.blocking_formulas)
             + " require authoritative resolution before execution"
         )
+
+
+@dataclass(frozen=True)
+class FrictionExpectancyDecision:
+    authorized: bool
+    expected_gain_inr: float
+    estimated_friction_inr: float
+    friction_ratio: float
+    reason: str | None = None
+
+
+def evaluate_friction_expectancy_gate(
+    *,
+    entry_price: float,
+    target_price: float,
+    lot_size: int,
+    estimated_friction_inr: float = 60.0,
+    min_friction_multiplier: float = 4.0,
+) -> FrictionExpectancyDecision:
+    """Validate that expected trade gain exceeds minimum friction multiplier threshold.
+
+    Guards against retail micro-churn where STT and transaction taxes consume alpha.
+    """
+    points_gain = max(0.0, abs(target_price - entry_price))
+    expected_gain = points_gain * max(1, lot_size)
+    min_required = estimated_friction_inr * min_friction_multiplier
+    if expected_gain < min_required:
+        return FrictionExpectancyDecision(
+            authorized=False,
+            expected_gain_inr=round(expected_gain, 2),
+            estimated_friction_inr=round(estimated_friction_inr, 2),
+            friction_ratio=round(expected_gain / max(1.0, estimated_friction_inr), 2),
+            reason=f"expected_gain_below_friction_threshold ({expected_gain:.2f} < {min_required:.2f})",
+        )
+    return FrictionExpectancyDecision(
+        authorized=True,
+        expected_gain_inr=round(expected_gain, 2),
+        estimated_friction_inr=round(estimated_friction_inr, 2),
+        friction_ratio=round(expected_gain / max(1.0, estimated_friction_inr), 2),
+        reason=None,
+    )

@@ -122,6 +122,9 @@ export function AdaptiveEdgePositionCalculator({
   const riskRewardRatio = slDistance > 0 ? (targetDistance / slDistance).toFixed(2) : '1.00';
   const realizedRR = slDistance > 0 ? (coveredPoints / slDistance).toFixed(2) : '0.00';
 
+  const estFrictionINR = 60 * numLots;
+  const isLowExpectancy = targetReward > 0 && targetReward < 240 * numLots;
+
   const isExpiringSoon = useMemo(() => {
     if (!expiry) return false;
     try {
@@ -599,6 +602,17 @@ export function AdaptiveEdgePositionCalculator({
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>
                 <span style={{ color: k.purple }}>{fmtINR(targetReward, { showSign: true })}</span>
                 <span style={{ color: k.dim, fontSize: 11, marginLeft: 6 }}>(1 : {riskRewardRatio} R)</span>
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ color: k.dim }}>Est. Tax & Charges</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 11 }}>
+                <span style={{ color: k.dim }}>~{fmtINR(estFrictionINR)}</span>
+                {isLowExpectancy && (
+                  <span style={{ color: k.orange, marginLeft: 6, fontWeight: 500 }}>
+                    (⚠️ Low Expectancy Drag)
+                  </span>
+                )}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
