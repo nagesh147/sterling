@@ -173,6 +173,27 @@ def test_portfolio_drawdown_gate_trips_breaker():
     assert ok.authorized is True
     assert ok.circuit_breaker_tripped is False
 
+    # Disabled toggle: returns authorized even on large loss
+    disabled = evaluate_portfolio_drawdown_gate(
+        daily_realized_pnl=-50000.0,
+        daily_unrealized_pnl=0.0,
+        portfolio_equity=1000000.0,
+        enabled=False,
+    )
+    assert disabled.authorized is True
+    assert disabled.circuit_breaker_tripped is False
+
+    # Custom threshold (e.g. 5.0%): loss of 3.5% is authorized
+    custom = evaluate_portfolio_drawdown_gate(
+        daily_realized_pnl=-35000.0,
+        daily_unrealized_pnl=0.0,
+        portfolio_equity=1000000.0,
+        max_drawdown_pct=5.0,
+        enabled=True,
+    )
+    assert custom.authorized is True
+    assert custom.circuit_breaker_tripped is False
+
 
 def test_portfolio_var_gate_monitors_risk():
     from app.engines.adaptive_edge.execution_gate import evaluate_portfolio_var_gate

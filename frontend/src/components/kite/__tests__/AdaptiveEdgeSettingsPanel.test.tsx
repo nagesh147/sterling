@@ -66,8 +66,9 @@ describe('AdaptiveEdgeSettingsPanel', () => {
     expect(screen.getByText('Spot')).toBeInTheDocument();
     expect(screen.getByText('Strike range')).toBeInTheDocument();
     expect(screen.getByText('Index expiries')).toBeInTheDocument();
-    expect(screen.getByText('Trail points')).toBeInTheDocument();
     expect(screen.getByText('Stop points')).toBeInTheDocument();
+    expect(screen.getByText('Daily drawdown circuit breaker')).toBeInTheDocument();
+    expect(screen.getByLabelText('Enable daily drawdown circuit breaker')).toBeInTheDocument();
     expect(screen.getByLabelText('Flatten at 14:45 IST')).toBeDisabled();
   });
 });

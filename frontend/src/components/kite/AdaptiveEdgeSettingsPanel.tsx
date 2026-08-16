@@ -210,6 +210,42 @@ export function AdaptiveEdgeSettingsPanel() {
             Kite orders stay blocked.
           </ConfigNote>
         </Section>
+
+        <Section
+          title="Daily drawdown circuit breaker"
+          description="Hard portfolio stop that halts new trade entries."
+          summary={draft.drawdown_circuit_breaker_enabled ?? true ? `Active · max -${draft.max_daily_drawdown_pct ?? 3.0}%` : 'Disabled'}
+          defaultOpen
+          persistKey="ae-drawdown-breaker"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0 12px' }}>
+            <Switch
+              checked={draft.drawdown_circuit_breaker_enabled ?? true}
+              label="Enable daily drawdown circuit breaker"
+              onChange={() => patch({ drawdown_circuit_breaker_enabled: !(draft.drawdown_circuit_breaker_enabled ?? true) })}
+            />
+            <span style={{ color: (draft.drawdown_circuit_breaker_enabled ?? true) ? '#2e7d32' : MUTED, fontSize: 11.5, fontWeight: 500 }}>
+              {(draft.drawdown_circuit_breaker_enabled ?? true) ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+          {(draft.drawdown_circuit_breaker_enabled ?? true) && (
+            <Field label="Max daily loss (%)" hint="Maximum portfolio drawdown before tripping breaker (default: 3.0%).">
+              <input
+                style={inputStyle}
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="10.0"
+                value={draft.max_daily_drawdown_pct ?? 3.0}
+                onChange={(e) => patch({ max_daily_drawdown_pct: Math.max(0.5, Math.min(10.0, Number(e.target.value))) })}
+              />
+            </Field>
+          )}
+          <ConfigNote>
+            Trips automatically if daily realized + unrealized loss reaches -{(draft.max_daily_drawdown_pct ?? 3.0).toFixed(1)}% of portfolio equity,
+            disarming all automated buy triggers to protect the &lt;4.5% institutional drawdown ceiling.
+          </ConfigNote>
+        </Section>
       </PanelCard>
 
       <Section title="Structure" description="Profile bin size and opening-range length on the Adaptive Edge chart." summary={`${draft.tick_size} pt · IB ${draft.ib_minutes}m`} persistKey="ae-structure">

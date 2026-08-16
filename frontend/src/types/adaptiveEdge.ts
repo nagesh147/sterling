@@ -22,6 +22,8 @@ export interface AdaptiveEdgeSettings {
   intraday_favorable_points: number;
   tick_size: number;
   ib_minutes: number;
+  drawdown_circuit_breaker_enabled?: boolean;
+  max_daily_drawdown_pct?: number;
 }
 
 export interface AdaptiveEdgeReadiness {

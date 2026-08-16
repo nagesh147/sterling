@@ -313,12 +313,21 @@ def evaluate_portfolio_drawdown_gate(
     daily_unrealized_pnl: float,
     portfolio_equity: float,
     max_drawdown_pct: float = 3.0,
+    enabled: bool = True,
 ) -> PortfolioDrawdownDecision:
     """Institutional Stretch: Max Drawdown Circuit Breaker (<4.5% absolute risk ceiling).
 
     If intraday realized + unrealized drawdown exceeds max_drawdown_pct (default -3.0%),
     the gate trips, disarming all auto-entries to protect portfolio capital.
     """
+    if not enabled:
+        return PortfolioDrawdownDecision(
+            authorized=True,
+            current_drawdown_pct=0.0,
+            max_drawdown_limit_pct=max_drawdown_pct,
+            circuit_breaker_tripped=False,
+            reason=None,
+        )
     if portfolio_equity <= 0:
         return PortfolioDrawdownDecision(
             authorized=False,

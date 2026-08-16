@@ -53,6 +53,8 @@ class AdaptiveEdgeSettings(BaseModel):
     intraday_favorable_points: float = Field(25.0, gt=0)
     tick_size: float = Field(1.0, gt=0)
     ib_minutes: int = Field(15, ge=5, le=60)
+    drawdown_circuit_breaker_enabled: bool = True
+    max_daily_drawdown_pct: float = Field(3.0, ge=0.5, le=10.0)
 
     @field_validator("scan_indices")
     @classmethod
