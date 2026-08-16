@@ -82,11 +82,11 @@ export function OrderWindow({ options, onClose }: Props) {
   const [disclosedQty, setDisclosedQty] = useState<number>(0);
   const [marketProtection, setMarketProtection] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  // Protective GTT (shown only for carry / Overnight positions, never Intraday).
-  const [slOn, setSlOn] = useState(false);
-  const [slPct, setSlPct] = useState<number>(0);
-  const [tgtOn, setTgtOn] = useState(false);
-  const [tgtPct, setTgtPct] = useState<number>(0);
+  // Protective GTT (shown for carry / Overnight positions, can be initialized from trade plan).
+  const [slOn, setSlOn] = useState(options.initialSlPct != null && options.initialSlPct !== 0);
+  const [slPct, setSlPct] = useState<number>(options.initialSlPct ?? 0);
+  const [tgtOn, setTgtOn] = useState(options.initialTgtPct != null && options.initialTgtPct !== 0);
+  const [tgtPct, setTgtPct] = useState<number>(options.initialTgtPct ?? 0);
   const [error, setError] = useState<string | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);   // search lives in its own component so typing doesn't re-render the ticket

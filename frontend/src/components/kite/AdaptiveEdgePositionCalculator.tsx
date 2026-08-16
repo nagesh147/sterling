@@ -140,6 +140,15 @@ export function AdaptiveEdgePositionCalculator({
 
   const handlePlaceOrder = () => {
     const tradeSymbol = tradingsymbol || symbol;
+    const slPercentage =
+      entryPrice > 0 && slPrice > 0
+        ? -Math.abs(Number((((entryPrice - slPrice) / entryPrice) * 100).toFixed(1)))
+        : undefined;
+    const tgtPercentage =
+      entryPrice > 0 && targetPrice > 0
+        ? Math.abs(Number((((targetPrice - entryPrice) / entryPrice) * 100).toFixed(1)))
+        : undefined;
+
     openOrderWindow({
       symbol: tradeSymbol,
       exchange,
@@ -147,6 +156,8 @@ export function AdaptiveEdgePositionCalculator({
       initialQty: totalQty,
       lastPrice: entryPrice,
       lotSize,
+      initialSlPct: slPercentage,
+      initialTgtPct: tgtPercentage,
       tag: 'ADAPTIVE_EDGE',
     });
   };
