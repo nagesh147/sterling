@@ -106,3 +106,17 @@ class TickHistoryAcquirer:
             chunk_count=len(chunks),
             dataset_sha256=self._store.dataset_sha256(symbol),
         )
+
+    async def acquire_symbols(
+        self,
+        symbols: Sequence[str],
+        start: datetime,
+        end: datetime,
+        *,
+        bidask: int = 1,
+    ) -> dict[str, TickAcquisitionResult]:
+        """Acquire tick history for multiple symbols in sequence respecting rate limits."""
+        results: dict[str, TickAcquisitionResult] = {}
+        for symbol in symbols:
+            results[symbol] = await self.acquire(symbol, start, end, bidask=bidask)
+        return results

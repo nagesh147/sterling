@@ -137,8 +137,8 @@ def test_operating_mode_posture():
         )
         is DynamicMode.DEFENSIVE
     )
-    assert FORMULAS["F-105"].status is FormulaStatus.LOCKED
-    assert FORMULAS["F-106"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-105"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-106"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_session_records_management_states():

@@ -38,23 +38,25 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
 }
 
-for _id, _name in {
-    "F-101": "Feature normalization / feature score",
-    "F-102": "Edge / prediction score",
-    "F-103": "Opportunity eligibility",
-    "F-104": "Dynamic-mode transition",
-    "F-105": "Predictive-profit protection",
-    "F-106": "Dynamic-risk schedule",
-    "F-107": "Risk-per-unit",
-    "F-108": "Position sizing",
-    "F-109": "Instrument / option selection",
-    "F-110": "Entry trigger",
-    "F-111": "Exit trigger",
-    "F-112": "Trailing / protection parameterization",
-    "F-113": "Re-entry",
-    "F-114": "Multi-position interaction",
-}.items():
-    FORMULAS[_id] = FormulaDefinition(_id, "0.0", _name, FormulaStatus.LOCKED, "unspecified", "unassigned")
+_FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
+    "F-101": ("Feature normalization / feature score", "z-score", "f101"),
+    "F-102": ("Edge / prediction score", "probability / score", "edge"),
+    "F-103": ("Opportunity eligibility", "boolean / state", "opportunity_mode"),
+    "F-104": ("Dynamic-mode transition", "mode state", "opportunity_mode"),
+    "F-105": ("Predictive-profit protection", "price points", "protection"),
+    "F-106": ("Dynamic-risk schedule", "multiplier", "risk_sizing"),
+    "F-107": ("Risk-per-unit", "INR / point", "risk_sizing"),
+    "F-108": ("Position sizing", "contracts", "risk_sizing"),
+    "F-109": ("Instrument / option selection", "strike / leg", "option_ladder"),
+    "F-110": ("Entry trigger", "event trigger", "lifecycle_engine"),
+    "F-111": ("Exit trigger", "event trigger", "lifecycle_engine"),
+    "F-112": ("Trailing / protection parameterization", "points", "protection"),
+    "F-113": ("Re-entry", "boolean", "lifecycle_engine"),
+    "F-114": ("Multi-position interaction", "allocation weight", "management"),
+}
+
+for _id, (_name, _units, _owner) in _FORMULA_METADATA.items():
+    FORMULAS[_id] = FormulaDefinition(_id, "1.0", _name, FormulaStatus.IMPLEMENTED, _units, _owner)
 
 
 def get_formula(formula_id: str) -> FormulaDefinition:

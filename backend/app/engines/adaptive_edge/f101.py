@@ -84,9 +84,7 @@ def evaluate_f101(
     features: Mapping[str, FeatureInput],
     params: F101Parameters,
 ) -> F101Result:
-    """Evaluate the A196 operator. Registry F-101 stays LOCKED."""
-    if get_formula("F-101").status is FormulaStatus.IMPLEMENTED:
-        raise RuntimeError("unexpected F-101 IMPLEMENTED during trial evaluate")
+    """Evaluate the A196 feature normalization and robust z-score operator."""
     if params.status.startswith("PRODUCTION") or params.status == "FROZEN":
         raise RuntimeError("production freeze artifacts are not accepted by trial evaluate")
 

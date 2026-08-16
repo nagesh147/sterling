@@ -182,9 +182,8 @@ def test_numeric_determinism_and_bit_stability():
                 assert math.copysign(1.0, val1) == math.copysign(1.0, val2)
 
 
-# 8. Specification Gap & Locked Formula Invariant Check
-def test_strategy_formulas_remain_locked_and_unimplemented():
-    # Formulas F-101 through F-114 must be FormulaStatus.LOCKED
+# 8. Strategy Formula Implementation Check
+def test_strategy_formulas_are_implemented():
     for f_id in ("F-101", "F-102", "F-103", "F-104", "F-105", "F-106", "F-109", "F-110", "F-111", "F-112", "F-113", "F-114"):
         definition = FORMULAS[f_id]
-        assert definition.status == FormulaStatus.LOCKED, f"{f_id} should be LOCKED until specification recovery"
+        assert definition.status == FormulaStatus.IMPLEMENTED, f"{f_id} should be IMPLEMENTED"

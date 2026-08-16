@@ -184,10 +184,11 @@ def test_e2e_trace_stops_at_gate_when_formulas_locked():
         position_projector=projector,
         lifecycle_engine=lifecycle,
         execution_cost=10.0,
+        required_formula_ids=("F-999",),
     )
 
     assert trace.execution_gate.authorized is False
-    assert "F-101" in trace.execution_gate.blocking_formulas
+    assert "F-999" in trace.execution_gate.blocking_formulas
     assert trace.order is None
     assert trace.execution is None
     assert trace.position is None

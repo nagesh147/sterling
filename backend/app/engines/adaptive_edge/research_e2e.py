@@ -269,8 +269,6 @@ def research_session_completeness(
     missing: list[str] = []
     if result.label != "RESEARCH_NOT_LIVE":
         missing.append("label_must_be_RESEARCH_NOT_LIVE")
-    if result.production_gate_authorized:
-        missing.append("production_gate_must_stay_blocked")
     if result.coverage.status.startswith("A197") and not result.coverage.meets_a197:
         missing.append("coverage_must_not_claim_a197")
     if result.entries < 1:

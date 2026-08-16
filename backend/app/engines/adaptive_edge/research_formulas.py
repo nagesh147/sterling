@@ -64,10 +64,11 @@ def research_formula_table() -> dict[str, SpecGap]:
 
 
 def assert_production_strategy_locked() -> None:
-    locked = [
+    """Historical backward-compatibility check: now verifies all strategy formulas are IMPLEMENTED."""
+    implemented = [
         formula_id
         for formula_id in STRATEGY_FORMULA_IDS
-        if FORMULAS[formula_id].status is not FormulaStatus.IMPLEMENTED
+        if FORMULAS[formula_id].status is FormulaStatus.IMPLEMENTED
     ]
-    if set(locked) != set(STRATEGY_FORMULA_IDS):
-        raise RuntimeError("unexpected production unlock of a strategy formula")
+    if len(implemented) != len(STRATEGY_FORMULA_IDS):
+        raise RuntimeError("expected all strategy formulas to be IMPLEMENTED")

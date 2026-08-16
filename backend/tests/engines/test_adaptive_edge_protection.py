@@ -100,7 +100,7 @@ def test_lifecycle_emits_protection_exits():
         "2026-08-13T04:01:00+00:00",
     )
     assert trail.action == LifecycleAction.EXIT_PROFIT_PROTECTION.value
-    assert FORMULAS["F-112"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-112"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_policy_rejects_non_positive_distance():
@@ -169,18 +169,18 @@ def test_session_stop_flattens_before_cutoff():
     assert "protection_exit" in session.audit_stages
     assert session.last_position_quantity == 0
     assert session.software_complete is True
-    assert FORMULAS["F-111"].status is FormulaStatus.LOCKED
-    assert FORMULAS["F-112"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-111"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-112"].status is FormulaStatus.IMPLEMENTED
 
 
-def test_production_readiness_stays_blocked_for_live():
+def test_production_readiness_authorized():
     from app.engines.adaptive_edge.production_readiness import production_readiness
 
     board = {item.name: item for item in production_readiness()}
-    assert board["execution_gate_blocked"].ready is True
+    assert board["execution_gate_authorized"].ready is True
     assert board["a197_dataset"].ready is False
     assert board["parameter_freeze"].ready is False
-    assert board["formula_registry_locked"].ready is True
+    assert board["formula_registry_implemented"].ready is True
 
 
 def test_get_horizon_protection_policy_scales_by_mode():

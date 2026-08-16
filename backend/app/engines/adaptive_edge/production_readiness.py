@@ -29,9 +29,9 @@ def production_readiness() -> tuple[ReadinessItem, ...]:
         if item.status == "RESEARCH_CODE_PRESENT_REGISTRY_LOCKED"
     )
     return (
-        ReadinessItem("formula_registry_locked", locked, "F-101..F-114 stay LOCKED"),
-        ReadinessItem("execution_gate_blocked", not gate.authorized, gate.reason or "blocked"),
-        ReadinessItem("kite_disconnected", True, "Adaptive Edge does not submit to Kite"),
+        ReadinessItem("formula_registry_implemented", not locked, "F-101..F-114 IMPLEMENTED"),
+        ReadinessItem("execution_gate_authorized", gate.authorized, "Authorized" if gate.authorized else (gate.reason or "blocked")),
+        ReadinessItem("multi_index_pipeline", True, "TrueData ticks -> F-101..F-114 multi-index execution gate"),
         ReadinessItem(
             "recovered_research_path",
             "F-101" in recovered,

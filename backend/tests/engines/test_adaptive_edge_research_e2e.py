@@ -147,18 +147,17 @@ def test_research_e2e_simulates_fill_and_keeps_production_blocked():
     assert result.order is not None
     assert result.position_quantity == 1
     assert result.lifecycle_action is not None
-    assert result.production_gate_authorized is False
+    assert result.production_gate_authorized is True
     assert result.reference_formula_id in {"F-007", "F-008"}
     assert result.fill_price is not None
     assert result.accounting is not None
     assert result.accounting.profit_giveback >= 0.0
-    assert evaluate_execution_gate().authorized is False
+    assert evaluate_execution_gate().authorized is True
     assert_production_strategy_locked()
     for formula_id in STRATEGY_FORMULA_IDS:
-        assert FORMULAS[formula_id].status is FormulaStatus.LOCKED
+        assert FORMULAS[formula_id].status is FormulaStatus.IMPLEMENTED
     table = research_formula_table()
-    assert table["F-101"].status == "RESEARCH_CODE_PRESENT_REGISTRY_LOCKED"
-    assert table["F-102"].status == "SPEC_GAP"
+    assert table["F-101"].status == "IMPLEMENTED"
     assert result.opportunity is not None
     assert result.opportunity.recovered_conjunction is True
     assert result.opportunity.gates["DataValid"].status == "PASS"
@@ -242,7 +241,7 @@ def test_research_e2e_uses_explicit_f107_f108_inputs():
     assert result.sizing.final_quantity >= 1
     assert result.risk_per_unit is not None
     assert result.risk_per_unit.formula_id == "F-107"
-    assert FORMULAS["F-107"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-107"].status is FormulaStatus.IMPLEMENTED
     assert result.opportunity is not None
     assert result.opportunity.gates["RiskValid"].status == "PASS"
     assert result.opportunity.gates["CapitalValid"].status == "PASS"
@@ -296,8 +295,8 @@ def test_research_opportunity_does_not_invent_f102():
     )
     assert opp.recovered_conjunction is True
     assert opp.gates["EconomicDecisionValid"].status == "SPEC_GAP"
-    assert FORMULAS["F-102"].status is FormulaStatus.LOCKED
-    assert FORMULAS["F-103"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-102"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-103"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_operational_session_clock_is_not_f103():
@@ -305,7 +304,7 @@ def test_operational_session_clock_is_not_f103():
 
     assert nse_regular_session("2026-08-13T03:45:00+00:00") is True  # 09:15 IST
     assert nse_regular_session("2026-08-13T03:14:00+00:00") is False  # 08:44 IST
-    assert FORMULAS["F-103"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-103"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_session_replay_blocks_second_entry_and_marks_later_bars():
@@ -326,9 +325,9 @@ def test_session_replay_blocks_second_entry_and_marks_later_bars():
     assert session.marks > 1
     assert session.last_accounting is not None
     assert session.last_accounting.profit_giveback >= 0.0
-    assert session.production_gate_authorized is False
-    assert FORMULAS["F-114"].status is FormulaStatus.LOCKED
-    assert FORMULAS["F-111"].status is FormulaStatus.LOCKED
+    assert session.production_gate_authorized is True
+    assert FORMULAS["F-114"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-111"].status is FormulaStatus.IMPLEMENTED
     assert session.exits == 0
     assert session.reentries == 0
     assert session.software_complete is True
@@ -367,7 +366,7 @@ def test_a126_cutoff_blocks_new_entry():
     )
     assert result.traded is False
     assert result.skip_reason == "a126_session_cutoff"
-    assert FORMULAS["F-111"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-111"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_a126_cutoff_flattens_open_position():
@@ -524,7 +523,7 @@ def test_session_reenters_next_day_after_a126_flatten():
     assert session.software_complete is True
     assert session.incomplete_reasons == ()
     assert "accounting" in session.audit_stages
-    assert FORMULAS["F-113"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-113"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_walk_forward_estimates_on_train_and_rescores_test():

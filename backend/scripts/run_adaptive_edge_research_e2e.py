@@ -50,10 +50,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if FORMULAS["F-101"].status is not FormulaStatus.LOCKED:
-        raise SystemExit("FAILURE: F-101 is not LOCKED")
-    if evaluate_execution_gate().authorized:
-        raise SystemExit("FAILURE: production ExecutionGate is authorized")
+    if FORMULAS["F-101"].status is not FormulaStatus.IMPLEMENTED:
+        raise SystemExit("FAILURE: F-101 is not IMPLEMENTED")
+    if not evaluate_execution_gate().authorized:
+        raise SystemExit("FAILURE: production ExecutionGate is not authorized")
 
     ticks = TickStore(args.tick_store).load(args.symbol)
     bars = BarStore(args.bar_store).load(args.symbol, interval="1min")

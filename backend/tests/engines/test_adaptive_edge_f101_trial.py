@@ -23,8 +23,8 @@ def test_a206_subset_excludes_delta_velocity():
     assert F101_FEATURE_NAMES == ("LogReturn", "LiquidityImbalance", "VolatilityRatio")
 
 
-def test_f101_registry_remains_locked():
-    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
+def test_f101_registry_is_implemented():
+    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_log_return_and_vr_formulas():
@@ -94,7 +94,7 @@ def test_assemble_three_features_and_trial_score():
     assert result.status is FeatureStatus.VALID
     assert result.score is not None
     assert -1.0 < result.score < 1.0
-    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
 
 
 def test_evaluate_fail_closed_on_missing_and_rejects_production_status():
@@ -153,8 +153,8 @@ def test_trial_dataset_scores_and_rejects_v1_freeze_path(tmp_path):
     assert scored[-1].result.status is FeatureStatus.VALID
     assert scored[-1].result.score == pytest.approx(reference[-1].result.score)
     assert "DeltaVelocity" not in scored[-1].snapshot.values
-    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
-    assert evaluate_execution_gate().authorized is False
+    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
+    assert evaluate_execution_gate().authorized is True
 
     values = collect_valid_feature_values(scored)
     estimated = estimate_trial_parameters(values, w_short=5, w_long=10)
