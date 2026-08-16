@@ -686,9 +686,6 @@ export function AdaptiveEdgePane({
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 6 }}>
                       <StatCard label="Entry" value={`₹${fmt(selected.entry)}`} color={k.text} />
-                      <StatCard label="Stop (SL)" value={`₹${fmt(selected.sl)}`} color={k.dim} />
-                      <StatCard label="Trail (TSL)" value={`₹${fmt(selected.tsl)}`} color={k.orange} />
-                      <StatCard label="Exit" value={selected.exit ? `₹${fmt(selected.exit)}` : '—'} color={k.dim} />
                       <StatCard
                         label="Current LTP"
                         value={`₹${fmt(selected.ltp)}`}
@@ -712,6 +709,9 @@ export function AdaptiveEdgePane({
                             : k.surface
                         }
                       />
+                      <StatCard label="Stop (SL)" value={`₹${fmt(selected.sl)}`} color={k.dim} />
+                      <StatCard label="Trail (TSL)" value={`₹${fmt(selected.tsl)}`} color={k.orange} />
+                      <StatCard label="Exit" value={selected.exit ? `₹${fmt(selected.exit)}` : '—'} color={k.dim} />
                     </div>
                   </div>
 

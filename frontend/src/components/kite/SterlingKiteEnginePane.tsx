@@ -737,14 +737,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                             <span style={{ fontSize: 11, fontWeight: 600, color: k.text, fontVariantNumeric: 'tabular-nums' }}>{gEntry != null ? `₹${gEntry.toFixed(2)}` : '—'}</span>
                           </div>
                           <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{slPx != null ? `₹${slPx.toFixed(2)}` : '—'}</span>
-                          </div>
-                          <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Current LTP</span>
                             <span style={{ fontSize: 11, fontWeight: 600, color: gDiff != null ? (gDiff >= 0 ? k.green : k.red) : k.text, fontVariantNumeric: 'tabular-nums' }}>
                               {lastPx != null ? `₹${lastPx.toFixed(2)}` : '—'}
                             </span>
+                          </div>
+                          <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <span style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{slPx != null ? `₹${slPx.toFixed(2)}` : '—'}</span>
                           </div>
                         </div>
                       </div>
@@ -1168,24 +1168,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                             {entryPx != null ? `₹${entryPx.toFixed(2)}` : '—'}
                           </span>
                         </div>
-                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-                            {(initSlPx ?? slPx) != null ? `₹${(initSlPx ?? slPx)!.toFixed(2)}` : '—'}
-                          </span>
-                        </div>
-                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Trail (TSL)</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
-                            {slPx != null ? `₹${slPx.toFixed(2)}` : '—'}
-                          </span>
-                        </div>
-                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Exit</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: exitColor, fontVariantNumeric: 'tabular-nums' }}>
-                            {legExitState || '—'}
-                          </span>
-                        </div>
                         <div
                           style={{
                             background: entryDiff != null ? (entryDiff >= 0 ? `${k.green}10` : `${k.red}10`) : k.surface,
@@ -1208,6 +1190,24 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                               {entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)} pts
                             </span>
                           )}
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Stop (SL)</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
+                            {(initSlPx ?? slPx) != null ? `₹${(initSlPx ?? slPx)!.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Trail (TSL)</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: k.orange, fontVariantNumeric: 'tabular-nums' }}>
+                            {slPx != null ? `₹${slPx.toFixed(2)}` : '—'}
+                          </span>
+                        </div>
+                        <div style={{ background: k.surface, border: `1px solid ${k.border}`, borderRadius: 3, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, textTransform: 'uppercase' }}>Exit</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: exitColor, fontVariantNumeric: 'tabular-nums' }}>
+                            {legExitState || '—'}
+                          </span>
                         </div>
                       </div>
                     </div>
