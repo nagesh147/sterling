@@ -11,7 +11,6 @@ import {
   type AdaptiveEdgeRow,
 } from './AdaptiveEdgePanel';
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
-import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { AdaptiveEdgeDashboard } from './AdaptiveEdgeDashboard';
 import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
@@ -818,50 +817,7 @@ export function AdaptiveEdgePane({
                     </div>
                   </div>
 
-                  {/* 4. VISUALIZER AREA CHART */}
-                  <div
-                    style={{
-                      background: k.bg,
-                      border: `1px solid ${k.border}`,
-                      borderRadius: 4,
-                      padding: 12,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        Price Trajectory & Execution Bounds
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10, color: k.dim }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          <span style={{ width: 8, height: 2, background: k.blue }} /> Entry
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          <span style={{ width: 8, height: 2, background: k.red }} /> SL
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          <span style={{ width: 8, height: 2, background: k.orange }} /> TSL
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={{ height: 200, width: '100%', borderRadius: 3, border: `1px solid ${k.border}`, overflow: 'hidden', position: 'relative' }}>
-                      <AdaptiveEdgeSetupChart
-                        symbol={selected.underlying || selected.instrument}
-                        entryTime={selected.entryTime}
-                        exitTime={selected.exitTime}
-                        spotEntry={selected.spotEntry}
-                        spotSl={selected.spotSl}
-                        spotTsl={selected.spotTsl}
-                        spotExit={selected.spotExit}
-                        isBullish={selected.optionType === 'CE'}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 5. QUICK ACTIONS FOOTER */}
+                  {/* 4. QUICK ACTIONS FOOTER */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
                     <button
                       type="button"

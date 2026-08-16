@@ -170,7 +170,7 @@ describe('AdaptiveEdgePane', () => {
     expect(screen.getAllByText('TSL').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/24,405/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Taken as MICRO/)).toBeNull();
-    expect(screen.getAllByText('Setup chart').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Price Trajectory & Execution Bounds/)).toBeNull();
   });
 
   it('opens Adaptive Edge settings from the desk', () => {
