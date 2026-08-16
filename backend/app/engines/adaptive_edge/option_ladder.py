@@ -12,6 +12,7 @@ from typing import Any, Sequence
 from app.services.kite_engine.greeks import (
     black_scholes_greeks,
     bs_price,
+    implied_vol,
     premium_stop_from_move,
 )
 from app.services.kite_engine.strikes import chain_rows_for, filter_liquid_contracts, pick_strikes
@@ -143,7 +144,20 @@ def _round_tick(val: float | None, tick: float = 0.05) -> float | None:
 
 
 def _iv_for_symbol(option_name: str | None, dte_days: float) -> float:
-    return _IV_ASSUMPTION
+    if not option_name:
+        return _IV_ASSUMPTION
+    name = option_name.upper()
+    if name == "NIFTY":
+        return 0.135
+    if name == "BANKNIFTY":
+        return 0.165
+    if name == "FINNIFTY":
+        return 0.145
+    if name in {"SENSEX", "BANKEX"}:
+        return 0.140
+    if name == "MIDCPNIFTY":
+        return 0.180
+    return 0.30
 
 
 def _stamp_premiums(
@@ -339,6 +353,22 @@ def expand_spot_signal(
             continue
         default_dte = 20.0 if is_stock else 7.0
         eff_dte = float(pick.dte or default_dte)
+        calibrated_iv = None
+        market_px = getattr(pick, "ltp", None) or getattr(pick, "last_price", None) or getattr(pick, "close", None)
+        if market_px is not None and float(market_px) > 0:
+            try:
+                solved_iv = implied_vol(
+                    price=float(market_px),
+                    spot=spot,
+                    strike=pick.strike,
+                    dte_days=eff_dte,
+                    option_type=pick.option_type,
+                )
+                if solved_iv > 0:
+                    calibrated_iv = solved_iv
+            except Exception:
+                calibrated_iv = None
+
         premium, stop_prem, trail_prem = _stamp_premiums(
             spot=spot,
             side=side,
@@ -347,6 +377,7 @@ def expand_spot_signal(
             dte_days=eff_dte,
             stop_points=stop_points,
             trail_points=trail_points,
+            iv=calibrated_iv,
             option_name=option_name,
         )
         ltp_prem, _, _ = _stamp_premiums(
@@ -357,6 +388,7 @@ def expand_spot_signal(
             dte_days=eff_dte,
             stop_points=stop_points,
             trail_points=trail_points,
+            iv=calibrated_iv,
             option_name=option_name,
         )
         legs.append(

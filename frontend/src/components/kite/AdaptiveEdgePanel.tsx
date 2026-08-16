@@ -420,6 +420,7 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     exit: !open ? leg.ltp ?? signal.spot_exit ?? null : null,
     ltp: leg.ltp ?? leg.entry_premium ?? null,
     strike: leg.strike,
+    expiry: leg.expiry ?? null,
     entryTime: signal.entry_time ?? null,
     exitTime: signal.exit_time ?? null,
     open,
@@ -542,6 +543,7 @@ export interface AdaptiveEdgeRow {
   exit: number | null;
   ltp: number | null;
   strike: number | null;
+  expiry?: string | null;
   entryTime: string | null;
   exitTime: string | null;
   open: boolean;

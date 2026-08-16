@@ -740,6 +740,9 @@ export function AdaptiveEdgePane({
                   {/* 2. INTERACTIVE POSITION SIZING & P&L CALCULATOR */}
                   <AdaptiveEdgePositionCalculator
                     symbol={selected.underlying || selected.instrument}
+                    tradingsymbol={selected.instrument}
+                    exchange={selected.exchange || 'NFO'}
+                    expiry={selected.expiry}
                     defaultEntryPrice={selected.entry}
                     defaultSl={selected.sl}
                     defaultTsl={selected.tsl}

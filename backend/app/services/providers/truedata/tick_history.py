@@ -92,9 +92,17 @@ class TickHistoryAcquirer:
                 await asyncio.sleep(wait)
             request_from = format_history_timestamp(chunk_start)
             request_to = format_history_timestamp(chunk_end)
-            rows = await self._client.get_ticks(
-                symbol, request_from, request_to, bidask=bidask
-            )
+            rows = []
+            for attempt in range(3):
+                try:
+                    rows = await self._client.get_ticks(
+                        symbol, request_from, request_to, bidask=bidask
+                    )
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0.2 * (2 ** attempt))
             last_call = asyncio.get_running_loop().time()
             self._store.upsert(
                 symbol, rows, request_from=request_from, request_to=request_to

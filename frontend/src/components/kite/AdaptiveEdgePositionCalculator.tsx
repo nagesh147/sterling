@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { fmt } from './AdaptiveEdgePanel';
 import { roundToTick, fmtTick, fmtINR } from '../../utils/fmt';
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 /**
  * Standard lot size lookup for major Indian indices and watched F&O equities.
@@ -34,6 +35,9 @@ export function getInstrumentLotSize(symbol: string): number {
 
 interface Props {
   symbol: string;
+  tradingsymbol?: string;
+  exchange?: string;
+  expiry?: string | null;
   defaultEntryPrice?: number | null;
   defaultSl?: number | null;
   defaultTsl?: number | null;
@@ -45,6 +49,9 @@ interface Props {
 
 export function AdaptiveEdgePositionCalculator({
   symbol,
+  tradingsymbol,
+  exchange = 'NFO',
+  expiry,
   defaultEntryPrice,
   defaultSl,
   defaultTsl,
@@ -53,6 +60,8 @@ export function AdaptiveEdgePositionCalculator({
   optionType = 'CE',
   exitState,
 }: Props) {
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
+  const [copied, setCopied] = useState(false);
   const lotSize = useMemo(() => getInstrumentLotSize(symbol), [symbol]);
   const baseEntry = roundToTick(defaultEntryPrice ?? currentLtp ?? 100) ?? 100;
   const baseSl = roundToTick(defaultSl ?? (baseEntry * 0.8)) ?? Number((baseEntry * 0.8).toFixed(2));
@@ -108,6 +117,41 @@ export function AdaptiveEdgePositionCalculator({
   const riskRewardRatio = slDistance > 0 ? (targetDistance / slDistance).toFixed(2) : '1.00';
   const realizedRR = slDistance > 0 ? (coveredPoints / slDistance).toFixed(2) : '0.00';
 
+  const isExpiringSoon = useMemo(() => {
+    if (!expiry) return false;
+    try {
+      const expDate = new Date(expiry);
+      if (isNaN(expDate.getTime())) return false;
+      const now = new Date();
+      const diffDays = (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays >= -0.5 && diffDays <= 1.2;
+    } catch {
+      return false;
+    }
+  }, [expiry]);
+
+  const handlePlaceOrder = () => {
+    const tradeSymbol = tradingsymbol || symbol;
+    openOrderWindow({
+      symbol: tradeSymbol,
+      exchange,
+      initialSide: 'BUY',
+      initialQty: totalQty,
+      lastPrice: entryPrice,
+      lotSize,
+      tag: 'ADAPTIVE_EDGE',
+    });
+  };
+
+  const handleCopyTradePlan = () => {
+    const text = `ADAPTIVE EDGE TRADE PLAN\nSymbol: ${tradingsymbol || symbol} (${exchange})\nLots: ${numLots} (${totalQty} Qty)\nEntry: ₹${fmtTick(entryPrice)}\nStop Loss: ₹${fmtTick(slPrice)} (-${fmtTick(slDistance)} pts)\nTSL: ₹${fmtTick(tslPrice)}\nTarget: ₹${fmtTick(targetPrice)} (+${fmtTick(targetDistance)} pts)\nRisk/Reward: 1 : ${riskRewardRatio} R`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div
       style={{
@@ -117,6 +161,26 @@ export function AdaptiveEdgePositionCalculator({
         fontFamily: k.fontFamily,
       }}
     >
+      {/* ── EXPIRY WARNING BANNER (IF 0-1 DTE) ── */}
+      {isExpiringSoon && (
+        <div
+          style={{
+            background: '#fff8e6',
+            border: `1px solid ${k.orange}40`,
+            borderRadius: 4,
+            padding: '6px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 11,
+            color: '#b35900',
+          }}
+        >
+          <span>⚠️ <strong>Expiring Soon ({expiry})</strong>: High theta decay & physical delivery risk on stocks. Plan rollout if holding.</span>
+          <span style={{ fontSize: 10, background: '#ffe0b2', padding: '1px 6px', borderRadius: 2, fontWeight: 600 }}>0/1 DTE</span>
+        </div>
+      )}
+
       {/* ── TOP INPUTS & POSITION SIZING CARD ── */}
       <div
         style={{
@@ -158,7 +222,7 @@ export function AdaptiveEdgePositionCalculator({
                   fontSize: 11,
                   color: k.blue,
                   background: 'transparent',
-                  border: 0,
+                  border: 'none',
                   cursor: 'pointer',
                   padding: 0,
                   textDecoration: 'underline',
@@ -168,24 +232,24 @@ export function AdaptiveEdgePositionCalculator({
               </button>
             )}
             <span style={{ fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-              {totalQty} Qty ({numLots} {numLots === 1 ? 'Lot' : 'Lots'} × {lotSize})
+              {totalQty} Qty ({numLots} Lot{numLots > 1 ? 's' : ''} × {lotSize})
             </span>
           </div>
         </div>
 
-        {/* 5-Column Responsive Inputs Strip */}
+        {/* 5-Column Inputs Strip */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
             gap: 8,
           }}
         >
-          {/* Lots Stepper */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {/* 1. Lots Stepper */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Lots
-            </label>
+            </span>
             <div
               style={{
                 display: 'flex',
@@ -194,26 +258,25 @@ export function AdaptiveEdgePositionCalculator({
                 borderRadius: 3,
                 height: 26,
                 background: '#ffffff',
-                overflow: 'hidden',
               }}
             >
               <button
                 type="button"
-                onClick={() => setNumLots((prev) => Math.max(1, prev - 1))}
+                onClick={() => setNumLots((l) => Math.max(1, l - 1))}
                 style={{
                   width: 24,
                   height: '100%',
-                  border: 0,
-                  borderRight: `1px solid ${k.border}`,
-                  background: k.surface,
-                  color: k.text,
-                  fontSize: 12,
-                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'transparent',
+                  color: numLots <= 1 ? k.dim : k.text,
+                  cursor: numLots <= 1 ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  lineHeight: '26px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: 0,
                 }}
+                disabled={numLots <= 1}
               >
                 −
               </button>
@@ -222,36 +285,38 @@ export function AdaptiveEdgePositionCalculator({
                 min={1}
                 max={500}
                 value={numLots}
-                onChange={(e) => setNumLots(Math.max(1, Number(e.target.value)))}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val) && val >= 1) setNumLots(val);
+                }}
                 style={{
-                  flex: 1,
-                  minWidth: 26,
+                  width: '100%',
                   height: '100%',
-                  border: 0,
-                  background: 'transparent',
-                  color: k.text,
-                  fontSize: 11.5,
+                  border: 'none',
                   textAlign: 'center',
-                  outline: 'none',
+                  fontSize: 12,
+                  color: k.text,
                   fontVariantNumeric: 'tabular-nums',
+                  padding: 0,
+                  outline: 'none',
+                  MozAppearance: 'textfield',
                 }}
               />
               <button
                 type="button"
-                onClick={() => setNumLots((prev) => prev + 1)}
+                onClick={() => setNumLots((l) => l + 1)}
                 style={{
                   width: 24,
                   height: '100%',
-                  border: 0,
-                  borderLeft: `1px solid ${k.border}`,
-                  background: k.surface,
+                  border: 'none',
+                  background: 'transparent',
                   color: k.text,
-                  fontSize: 12,
                   cursor: 'pointer',
+                  fontSize: 13,
+                  lineHeight: '26px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: 0,
                 }}
               >
                 +
@@ -259,113 +324,129 @@ export function AdaptiveEdgePositionCalculator({
             </div>
           </div>
 
-          {/* Entry Price */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {/* 2. Entry (₹) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Entry (₹)
-            </label>
+            </span>
             <input
               type="number"
-              step={0.05}
+              step="0.05"
               value={entryPrice}
-              onChange={(e) => setEntryPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 0) setEntryPrice(roundToTick(val) ?? val);
+              }}
               style={{
                 height: 26,
-                padding: '0 6px',
-                fontSize: 11.5,
-                borderRadius: 3,
                 border: `1px solid ${k.border}`,
-                background: '#ffffff',
+                borderRadius: 3,
+                padding: '0 6px',
+                fontSize: 12,
                 color: k.text,
-                outline: 'none',
                 fontVariantNumeric: 'tabular-nums',
+                outline: 'none',
+                background: '#ffffff',
+                boxSizing: 'border-box',
               }}
             />
           </div>
 
-          {/* Stop Loss (SL) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {/* 3. SL (₹) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               SL (₹)
-            </label>
+            </span>
             <input
               type="number"
-              step={0.05}
+              step="0.05"
               value={slPrice}
-              onChange={(e) => setSlPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 0) setSlPrice(roundToTick(val) ?? val);
+              }}
               style={{
                 height: 26,
-                padding: '0 6px',
-                fontSize: 11.5,
-                borderRadius: 3,
                 border: `1px solid ${k.border}`,
-                background: '#ffffff',
-                color: k.text,
-                outline: 'none',
+                borderRadius: 3,
+                padding: '0 6px',
+                fontSize: 12,
+                color: k.red,
                 fontVariantNumeric: 'tabular-nums',
+                outline: 'none',
+                background: '#ffffff',
+                boxSizing: 'border-box',
               }}
             />
           </div>
 
-          {/* Trailing Stop (TSL) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {/* 4. TSL (₹) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               TSL (₹)
-            </label>
+            </span>
             <input
               type="number"
-              step={0.05}
+              step="0.05"
               value={tslPrice}
-              onChange={(e) => setTslPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 0) setTslPrice(roundToTick(val) ?? val);
+              }}
               style={{
                 height: 26,
-                padding: '0 6px',
-                fontSize: 11.5,
-                borderRadius: 3,
                 border: `1px solid ${k.border}`,
-                background: '#ffffff',
-                color: k.orange,
-                outline: 'none',
+                borderRadius: 3,
+                padding: '0 6px',
+                fontSize: 12,
+                color: isRiskFree ? k.green : k.orange,
                 fontVariantNumeric: 'tabular-nums',
+                outline: 'none',
+                background: '#ffffff',
+                boxSizing: 'border-box',
               }}
             />
           </div>
 
-          {/* Target */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {/* 5. Target (₹) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Target (₹)
-            </label>
+            </span>
             <input
               type="number"
-              step={0.05}
+              step="0.05"
               value={targetPrice}
-              onChange={(e) => setTargetPrice(roundToTick(Number(e.target.value)) ?? Number(e.target.value))}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 0) setTargetPrice(roundToTick(val) ?? val);
+              }}
               style={{
                 height: 26,
-                padding: '0 6px',
-                fontSize: 11.5,
-                borderRadius: 3,
                 border: `1px solid ${k.border}`,
-                background: '#ffffff',
+                borderRadius: 3,
+                padding: '0 6px',
+                fontSize: 12,
                 color: k.purple,
-                outline: 'none',
                 fontVariantNumeric: 'tabular-nums',
+                outline: 'none',
+                background: '#ffffff',
+                boxSizing: 'border-box',
               }}
             />
           </div>
         </div>
       </div>
 
-      {/* ── 3 DISTINCT CARDS ── */}
+      {/* ── 3 COMPACT GROUPED METRIC CARDS ── */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: 10,
         }}
       >
-        {/* CARD 1: POSITION & LIVE MTM */}
+        {/* CARD 1: POSITION & MTM */}
         <div
           style={{
             background: '#ffffff',
@@ -389,38 +470,40 @@ export function AdaptiveEdgePositionCalculator({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Capital deployed</span>
-              <span style={{ color: k.text, fontVariantNumeric: 'tabular-nums' }}>{fmtINR(totalInvestment)}</span>
+              <span style={{ color: k.text, fontVariantNumeric: 'tabular-nums' }}>
+                {fmtINR(totalInvestment)}
+              </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Current LTP</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ color: coveredPoints >= 0 ? k.green : k.red }}>₹{fmtTick(liveLtp)}</span>
-                <span style={{ color: coveredPoints >= 0 ? k.green : k.red, fontSize: 11, marginLeft: 6 }}>
-                  ({coveredPoints >= 0 ? '+' : ''}{fmtTick(coveredPoints)} pts · {coveredPct >= 0 ? '+' : ''}{coveredPct.toFixed(2)}%)
+                <span style={{ color: isProfit ? k.green : k.red }}>₹{fmtTick(liveLtp)}</span>
+                <span style={{ color: isProfit ? k.green : k.red, fontSize: 11, marginLeft: 6 }}>
+                  ({coveredPoints >= 0 ? `+${fmtTick(coveredPoints)}` : fmtTick(coveredPoints)} pts · {coveredPct >= 0 ? `+${coveredPct.toFixed(2)}%` : `${coveredPct.toFixed(2)}%`})
                 </span>
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Points covered</span>
-              <span style={{ color: coveredPoints >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
-                {coveredPoints >= 0 ? '+' : ''}{fmtTick(coveredPoints)} pts ({coveredPct >= 0 ? '+' : ''}{coveredPct.toFixed(2)}%)
+              <span style={{ color: isProfit ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
+                {coveredPoints >= 0 ? `+${fmtTick(coveredPoints)}` : fmtTick(coveredPoints)} pts ({coveredPct >= 0 ? `+${coveredPct.toFixed(2)}%` : `${coveredPct.toFixed(2)}%`})
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Unrealized MTM P&L</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ color: unrealizedPnl >= 0 ? k.green : k.red }}>
+                <span style={{ color: isProfit ? k.green : k.red }}>
                   {fmtINR(unrealizedPnl, { showSign: true })}
                 </span>
-                <span style={{ color: unrealizedPnl >= 0 ? k.green : k.red, fontSize: 11, marginLeft: 6 }}>
-                  ({isProfit ? 'PROFIT' : 'DRAWDOWN'} · {realizedRR}R)
+                <span style={{ color: isProfit ? k.green : k.red, fontSize: 11, marginLeft: 6 }}>
+                  ({isProfit ? 'PROFIT' : 'LOSS'} · {realizedRR}R)
                 </span>
               </span>
             </div>
           </div>
         </div>
 
-        {/* CARD 2: RISK & STOP PROTECTION */}
+        {/* CARD 2: RISK & STOPS */}
         <div
           style={{
             background: '#ffffff',
@@ -437,7 +520,7 @@ export function AdaptiveEdgePositionCalculator({
               Risk & Stops
             </span>
             <span style={{ fontSize: 10.5, color: k.red, fontVariantNumeric: 'tabular-nums' }}>
-              Max -{fmtINR(maxRiskAmount)}
+              -{fmtINR(maxRiskAmount)} Max
             </span>
           </div>
 
@@ -445,8 +528,8 @@ export function AdaptiveEdgePositionCalculator({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Stop (SL)</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ color: k.text }}>₹{fmtTick(slPrice)}</span>
-                <span style={{ color: k.dim, fontSize: 11, marginLeft: 6 }}>(-{fmtTick(slDistance)} pts)</span>
+                <span style={{ color: k.red }}>₹{fmtTick(slPrice)}</span>
+                <span style={{ color: k.red, fontSize: 11, marginLeft: 6 }}>(-{fmtTick(slDistance)} pts)</span>
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -520,6 +603,69 @@ export function AdaptiveEdgePositionCalculator({
               </span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── 4. 1-CLICK KITE ORDER EXECUTION BAR ── */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: `1px solid ${k.border}`,
+          borderRadius: 4,
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <span style={{ color: k.dim }}>Selected Contract:</span>
+          <strong style={{ color: k.text }}>{tradingsymbol || symbol}</strong>
+          <span style={{ color: k.dim }}>({exchange})</span>
+          <span style={{ color: k.dim, marginLeft: 4 }}>·</span>
+          <span style={{ color: k.text, fontVariantNumeric: 'tabular-nums' }}>{totalQty} Qty @ ₹{fmtTick(entryPrice)}</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            onClick={handleCopyTradePlan}
+            style={{
+              padding: '6px 12px',
+              fontSize: 11.5,
+              borderRadius: 3,
+              border: `1px solid ${k.border}`,
+              background: '#ffffff',
+              color: k.text,
+              cursor: 'pointer',
+            }}
+          >
+            {copied ? '✓ Copied Plan' : '📋 Copy Plan'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePlaceOrder}
+            style={{
+              padding: '6px 16px',
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 3,
+              border: 'none',
+              background: optionType === 'PE' ? '#ff5722' : '#4184f3',
+              color: '#ffffff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+            }}
+          >
+            <span>Place {optionType === 'PE' ? 'BUY PUT (PE)' : 'BUY CALL (CE)'}</span>
+            <span style={{ opacity: 0.85, fontSize: 11 }}>({totalQty} Qty)</span>
+          </button>
         </div>
       </div>
     </div>
