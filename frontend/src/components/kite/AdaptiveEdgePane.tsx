@@ -169,6 +169,8 @@ export function AdaptiveEdgePane({
               <AdaptiveEdgeMetricsStrip
                 session={session}
                 watched={watched}
+                selectedRow={selected}
+                activeSymbol={selected?.underlying || selected?.instrument || 'NIFTY 50'}
                 taken={typeof session?.entries === 'number' ? session.entries : taken}
                 skipped={typeof skipped === 'number' ? skipped : 0}
               />
