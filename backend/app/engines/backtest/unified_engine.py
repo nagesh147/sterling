@@ -415,18 +415,28 @@ def run_unified_backtest(
                 delta = 1.0
                 theta_decay_pts = 0.0
                 c_type = getattr(req, "contract_type", "futures")
-                if c_type == "options_atm":
+                is_option = "options" in c_type
+                expiry_c = getattr(req, "expiry_cycle", "weekly")
+                theta_cycle_mult = 0.55 if expiry_c in ["next_week", "monthly"] else 1.0
+
+                if c_type in ["options_itm_2", "options_deep_itm"]:
+                    delta = 0.80
+                    theta_decay_pts = (curr_atr * 0.015) * max(1, bars_held) * theta_cycle_mult
+                elif c_type in ["options_itm_1", "options_itm"]:
+                    delta = 0.65
+                    theta_decay_pts = (curr_atr * 0.025) * max(1, bars_held) * theta_cycle_mult
+                elif c_type == "options_atm":
                     delta = 0.50
-                    theta_decay_pts = (curr_atr * 0.04) * max(1, bars_held)
-                elif c_type == "options_itm":
-                    delta = 0.70
-                    theta_decay_pts = (curr_atr * 0.02) * max(1, bars_held)
-                elif c_type == "options_otm":
-                    delta = 0.30
-                    theta_decay_pts = (curr_atr * 0.07) * max(1, bars_held)
+                    theta_decay_pts = (curr_atr * 0.045) * max(1, bars_held) * theta_cycle_mult
+                elif c_type in ["options_otm_1", "options_otm"]:
+                    delta = 0.35
+                    theta_decay_pts = (curr_atr * 0.075) * max(1, bars_held) * theta_cycle_mult
+                elif c_type in ["options_otm_2", "options_deep_otm"]:
+                    delta = 0.20
+                    theta_decay_pts = (curr_atr * 0.110) * max(1, bars_held) * theta_cycle_mult
 
                 pts_move = (exit_price - entry_price) if direction == "LONG" else (entry_price - exit_price)
-                if "options" in c_type:
+                if is_option:
                     contract_pts = (pts_move * delta) - theta_decay_pts
                 else:
                     contract_pts = pts_move
@@ -434,19 +444,34 @@ def run_unified_backtest(
                 gross_pnl = contract_pts * total_qty
 
                 # Indian F&O Friction Engine (Exact SEBI/NSE Tariff Schedule)
-                turnover_mult = delta if "options" in c_type else 1.0
-                entry_turnover = entry_price * total_qty * turnover_mult
-                exit_turnover = exit_price * total_qty * turnover_mult
-                total_turnover = entry_turnover + exit_turnover
+                if is_option:
+                    est_premium_entry = max(5.0, (entry_price * 0.010 * (delta / 0.50)))
+                    est_premium_exit = max(1.0, est_premium_entry + contract_pts)
+                    entry_turnover = est_premium_entry * total_qty
+                    exit_turnover = est_premium_exit * total_qty
+                    total_turnover = entry_turnover + exit_turnover
 
-                brokerage = req.brokerage_per_order * 2.0  # ₹20 Entry + ₹20 Exit
-                stt = exit_turnover * req.stt_pct  # 0.02% Futures / 0.1% Options on sell turnover
-                turnover_charge = total_turnover * 0.000019  # NSE 0.0019%
-                stamp_duty = entry_turnover * 0.00002  # Stamp Duty 0.002% on buy
-                sebi_charge = total_turnover * 0.000001  # SEBI ₹10 per crore
-                gst = (brokerage + turnover_charge) * 0.18  # 18% GST on brokerage + exchange
-                slippage_cost = req.slippage_points * total_qty * 2.0
-                total_friction = round(brokerage + stt + turnover_charge + stamp_duty + sebi_charge + gst + slippage_cost, 2)
+                    brokerage = req.brokerage_per_order * 2.0  # ₹20 Entry + ₹20 Exit
+                    stt = exit_turnover * 0.001  # STT 0.1% on options sell premium turnover
+                    turnover_charge = total_turnover * 0.0005  # Exchange 0.05% on options premium
+                    stamp_duty = entry_turnover * 0.00003  # Stamp Duty 0.003% on options buy
+                    sebi_charge = total_turnover * 0.000001
+                    gst = (brokerage + turnover_charge) * 0.18
+                    slippage_cost = req.slippage_points * total_qty * 2.0
+                    total_friction = round(brokerage + stt + turnover_charge + stamp_duty + sebi_charge + gst + slippage_cost, 2)
+                else:
+                    entry_turnover = entry_price * total_qty
+                    exit_turnover = exit_price * total_qty
+                    total_turnover = entry_turnover + exit_turnover
+
+                    brokerage = req.brokerage_per_order * 2.0
+                    stt = exit_turnover * req.stt_pct  # 0.02% Futures sell turnover
+                    turnover_charge = total_turnover * 0.000019  # NSE Futures 0.0019%
+                    stamp_duty = entry_turnover * 0.00002  # Stamp Duty 0.002% on buy
+                    sebi_charge = total_turnover * 0.000001
+                    gst = (brokerage + turnover_charge) * 0.18
+                    slippage_cost = req.slippage_points * total_qty * 2.0
+                    total_friction = round(brokerage + stt + turnover_charge + stamp_duty + sebi_charge + gst + slippage_cost, 2)
 
                 net_pnl = round(gross_pnl - total_friction, 2)
                 return_pct = round((net_pnl / capital) * 100.0, 2) if capital > 0 else 0.0
