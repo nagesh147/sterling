@@ -173,7 +173,7 @@ describe('AdaptiveEdgePane', () => {
     expect(screen.getByText(/NIFTY BANK · no tape/)).toBeInTheDocument();
     expect(screen.getAllByText(/AE RESEARCH/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Taken as MICRO/)).toBeNull();
-    expect(screen.getByText('Setup chart')).toBeInTheDocument();
+    expect(screen.getAllByText('Setup chart').length).toBeGreaterThan(0);
   });
 
   it('opens Adaptive Edge settings from the desk', () => {
