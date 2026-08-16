@@ -631,6 +631,10 @@ export function AdaptiveEdgePanel({
   onSelect,
   onInspectSymbol,
   inlineExpand = false,
+  scanning = false,
+  scanningLabel,
+  pendingSymbols = [],
+  isFetching = false,
 }: {
   rows: AdaptiveEdgeRow[];
   quotes?: Record<string, any>;
@@ -638,6 +642,10 @@ export function AdaptiveEdgePanel({
   onSelect?: (row: AdaptiveEdgeRow) => void;
   onInspectSymbol?: (symbol: string) => void;
   inlineExpand?: boolean;
+  scanning?: boolean;
+  scanningLabel?: string;
+  pendingSymbols?: string[];
+  isFetching?: boolean;
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -1184,7 +1192,148 @@ export function AdaptiveEdgePanel({
             );
           })}
 
-          {!rows.length && (
+          {/* ── IN-TABLE LIVE SCANNING PROGRESS ROW (WHEN SIGNALS ALREADY LOADED) ── */}
+          {rows.length > 0 && (scanning || isFetching || (pendingSymbols && pendingSymbols.length > 0)) && (
+            <tr style={{ background: '#f9f9f9', borderTop: `1px dashed ${k.blue}60`, borderBottom: `1px solid ${k.border}` }}>
+              <td colSpan={COLUMNS.length} style={{ padding: '12px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                  {/* Left: Animated Pulse indicator & Status */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 260 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, position: 'relative', flexShrink: 0 }}>
+                      <span
+                        style={{
+                          position: 'absolute',
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: `${k.blue}20`,
+                          animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        }}
+                      />
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: k.blue,
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: k.text }}>
+                          Scanning remaining instruments in background…
+                        </span>
+                        {scanningLabel && (
+                          <span style={{ fontSize: 11, color: k.blue, fontWeight: 500 }}>
+                            ({scanningLabel})
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: k.dim, marginTop: 2 }}>
+                        Evaluating Order Flow CVD, Volume Profile LVN Voids & Multi-Strike Momentum. Loaded setups above remain live and clickable.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Pending symbols queue */}
+                  {pendingSymbols && pendingSymbols.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, color: k.dim }}>Scanning queue:</span>
+                      {pendingSymbols.map((sym) => (
+                        <span
+                          key={sym}
+                          style={{
+                            fontSize: 10.5,
+                            padding: '2px 7px',
+                            borderRadius: 3,
+                            background: k.bg,
+                            border: `1px solid ${k.border}`,
+                            color: k.text,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.blue, display: 'inline-block' }} />
+                          {sym}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </td>
+            </tr>
+          )}
+
+          {/* ── EMPTY STATE OR INITIAL SCANNING STATE ── */}
+          {!rows.length && (scanning || isFetching || (pendingSymbols && pendingSymbols.length > 0)) ? (
+            <tr>
+              <td
+                colSpan={COLUMNS.length}
+                style={{
+                  padding: 48,
+                  textAlign: 'center',
+                  background: k.bg,
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                  <div style={{ position: 'relative', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span
+                      style={{
+                        position: 'absolute',
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: `${k.blue}18`,
+                        animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        background: k.blue,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: k.text }}>
+                      Scanning market instruments in background…
+                    </div>
+                    <div style={{ fontSize: 11.5, color: k.dim, marginTop: 4, maxWidth: 440, lineHeight: 1.5 }}>
+                      {scanningLabel ? `Scanning ${scanningLabel} · ` : ''}Evaluating Order Flow CVD, Volume Profile LVN Voids & Multi-Strike Momentum
+                    </div>
+                  </div>
+                  {pendingSymbols && pendingSymbols.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: k.dim }}>Instruments in queue:</span>
+                      {pendingSymbols.map((sym) => (
+                        <span
+                          key={sym}
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 8px',
+                            borderRadius: 3,
+                            background: k.surface,
+                            border: `1px solid ${k.border}`,
+                            color: k.text,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                          }}
+                        >
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.blue }} />
+                          {sym}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ) : !rows.length ? (
             <tr>
               <td
                 colSpan={COLUMNS.length}
@@ -1198,7 +1347,7 @@ export function AdaptiveEdgePanel({
                 No signals found matching the active filter criteria.
               </td>
             </tr>
-          )}
+          ) : null}
         </tbody>
       </table>
     </div>

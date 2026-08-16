@@ -2377,6 +2377,64 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             );
           })
         )}
+
+        {/* IN-TABLE SCANNING PROGRESS CARD (WHILE ROWS ALREADY LOADED) */}
+        {groupedRows.length > 0 && scanning && (
+          <div
+            style={{
+              margin: '12px 16px',
+              padding: '10px 16px',
+              background: '#f9f9f9',
+              border: `1px dashed ${k.blue}60`,
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 10,
+              fontFamily: k.fontFamily,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, position: 'relative', flexShrink: 0 }}>
+                <span
+                  style={{
+                    position: 'absolute',
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: `${k.blue}20`,
+                    animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                  }}
+                />
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: k.blue,
+                  }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: k.text, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span>Scanning in background…</span>
+                  {signals?.scanning_label && (
+                    <span style={{ fontSize: 11, color: k.blue, fontWeight: 500 }}>
+                      ({signals.scanning_label})
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: k.dim, marginTop: 2 }}>
+                  Scanning derivatives and multi-timeframe candles. Loaded setups above remain live and interactive.
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {rows.length} {rows.length === 1 ? 'setup active' : 'setups active'}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

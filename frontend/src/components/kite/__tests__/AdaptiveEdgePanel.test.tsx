@@ -302,4 +302,41 @@ describe('AdaptiveEdgePanel', () => {
     fireEvent.click(rowEl);
     expect(screen.queryByText(/Position Sizing & Trade Plan/)).toBeNull();
   });
+
+  it('renders in-table background scanning loader with pending instruments while existing rows remain loaded and interactive', () => {
+    const rows = rowsFromSnapshot(snapshot as unknown as AdaptiveEdgeSnapshot);
+    render(
+      <AdaptiveEdgePanel
+        rows={rows}
+        scanning={true}
+        scanningLabel="BANKNIFTY 51200 CE"
+        pendingSymbols={['BANKNIFTY', 'FINNIFTY', 'SENSEX']}
+      />,
+    );
+
+    // Existing loaded rows are visible and accessible
+    expect(screen.getByText('NIFTY25AUG24500CE')).toBeInTheDocument();
+
+    // Background scanning loader row is visible in the table
+    expect(screen.getByText(/Scanning remaining instruments in background…/)).toBeInTheDocument();
+    expect(screen.getByText('(BANKNIFTY 51200 CE)')).toBeInTheDocument();
+    expect(screen.getByText('BANKNIFTY')).toBeInTheDocument();
+    expect(screen.getByText('FINNIFTY')).toBeInTheDocument();
+    expect(screen.getByText('SENSEX')).toBeInTheDocument();
+  });
+
+  it('renders initial scanning state when no rows are loaded yet and scanning is active', () => {
+    render(
+      <AdaptiveEdgePanel
+        rows={[]}
+        scanning={true}
+        pendingSymbols={['NIFTY 50', 'BANKNIFTY', 'FINNIFTY']}
+      />,
+    );
+
+    expect(screen.getByText(/Scanning market instruments in background…/)).toBeInTheDocument();
+    expect(screen.getByText('NIFTY 50')).toBeInTheDocument();
+    expect(screen.getByText('BANKNIFTY')).toBeInTheDocument();
+    expect(screen.getByText('FINNIFTY')).toBeInTheDocument();
+  });
 });

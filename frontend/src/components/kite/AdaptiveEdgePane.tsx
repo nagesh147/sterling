@@ -173,6 +173,41 @@ export function AdaptiveEdgePane({
   const openCount = board.filter((row) => row.open).length;
   const closedCount = history.filter((row) => !row.open).length || board.filter((row) => !row.open).length;
 
+  // Track configured vs scanned instruments to show real-time background scanning queue
+  const allConfiguredSymbols = useMemo(() => {
+    const list: string[] = [];
+    if (data?.settings?.scan_indices && data.settings.scan_indices.length > 0) {
+      list.push(...data.settings.scan_indices);
+    } else {
+      list.push('NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX');
+    }
+    if (data?.settings?.scan_stock_contracts) {
+      if (data.settings.scan_all_stocks) {
+        list.push('F&O Equities');
+      } else if (data.settings.scan_stocks?.length) {
+        list.push(...data.settings.scan_stocks);
+      }
+    }
+    return Array.from(new Set(list));
+  }, [data?.settings]);
+
+  const pendingSymbols = useMemo(() => {
+    const scanned = new Set<string>();
+    (data?.signals ?? []).forEach((s) => {
+      if (s.scanned) scanned.add(s.underlying);
+    });
+    board.forEach((r) => scanned.add(r.underlying));
+
+    return allConfiguredSymbols.filter((sym) => {
+      const isScanned = Array.from(scanned).some(
+        (s) => s.toUpperCase() === sym.toUpperCase() || s.toUpperCase().includes(sym.toUpperCase()) || sym.toUpperCase().includes(s.toUpperCase())
+      );
+      return !isScanned;
+    });
+  }, [allConfiguredSymbols, data?.signals, board]);
+
+  const isScanning = isFetching || pendingSymbols.length > 0;
+
   const handleCopy = (text: string) => {
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(text);
@@ -536,6 +571,9 @@ export function AdaptiveEdgePane({
                   setInspectSymbol(sym);
                   setViewMode('charts');
                 }}
+                scanning={isScanning}
+                pendingSymbols={pendingSymbols}
+                isFetching={isFetching}
               />
             </div>
           </section>
