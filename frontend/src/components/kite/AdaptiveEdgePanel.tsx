@@ -1,181 +1,209 @@
 import React from 'react';
 import { k } from '../../styles/kiteUI';
 import type {
+  AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
+  AdaptiveEdgeMode,
   AdaptiveEdgeOptionLeg,
   AdaptiveEdgeOrigin,
+  AdaptiveEdgeOverlay,
   AdaptiveEdgeSignal,
   AdaptiveEdgeSnapshot,
 } from '../../types/adaptiveEdge';
 
-export type AdaptiveEdgeDecision = 'ENTER' | 'HOLD' | 'EXIT' | 'REJECT';
+const C = {
+  text: '#1e293b',
+  muted: '#64748b',
+  dim: '#94a3b8',
+  border: '#e2e8f0',
+  surface: '#ffffff',
+  surfaceHover: '#f8fafc',
+  selectedBg: 'rgba(37, 99, 235, 0.06)',
+  selectedBorder: '#2563eb',
+  emerald: '#10b981',
+  emeraldBg: 'rgba(16, 185, 129, 0.10)',
+  emeraldBorder: 'rgba(16, 185, 129, 0.25)',
+  emeraldText: '#047857',
+  rose: '#f43f5e',
+  roseBg: 'rgba(244, 63, 94, 0.10)',
+  roseBorder: 'rgba(244, 63, 94, 0.25)',
+  roseText: '#be123c',
+  blue: '#2563eb',
+  blueBg: 'rgba(37, 99, 235, 0.08)',
+  blueBorder: 'rgba(37, 99, 235, 0.25)',
+  blueText: '#1d4ed8',
+  orange: '#f06428',
+  orangeBg: 'rgba(240, 100, 40, 0.08)',
+  orangeBorder: 'rgba(240, 100, 40, 0.25)',
+  orangeText: '#c2410c',
+  purple: '#7c3aed',
+  purpleBg: 'rgba(124, 58, 237, 0.08)',
+  purpleBorder: 'rgba(124, 58, 237, 0.25)',
+  purpleText: '#6d28d9',
+};
 
-export interface AdaptiveEdgeRow {
-  id: string;
-  parentId: string;
-  kind: 'spot' | 'option';
-  origin: AdaptiveEdgeOrigin;
-  instrument: string;
-  exchange: string;
-  moneyness: string;
-  optionType: string;
-  entry: number | null;
-  sl: number | null;
-  tsl: number | null;
-  exit: number | null;
-  ltp: number | null;
-  strike: number | null;
-  entryTime: string | null;
-  exitTime: string | null;
-  open: boolean;
-  tapeSymbol: string;
-  underlying: string;
-  spotEntry: number | null;
-  spotSl: number | null;
-  spotTsl: number | null;
-  spotExit: number | null;
-  score: number | null;
-  poc: number | null;
-  vwap: number | null;
-  cvd: number | null;
-  whyClosed: string | null;
-  resolutionReason: string | null;
-  observationTime: number;
-  featureQuality: 'OPEN' | 'FLAT';
-  decision: AdaptiveEdgeDecision;
-  entryMode?: string | null;
-  currentMode?: string | null;
-  peakMode?: string | null;
-  exitMode?: string | null;
-  horizon?: string | null;
-  modeUpgraded?: boolean;
-  modeDowngraded?: boolean;
-  modePath?: string | null;
-  modeHistory?: string[];
+const MODE_META: Record<string, { label: string; desc: string; bg: string; color: string; border: string }> = {
+  MICRO: {
+    label: 'MICRO',
+    desc: 'Micro-Scalp (1–3 bars, immediate targets)',
+    bg: 'rgba(59, 130, 246, 0.08)',
+    color: '#2563eb',
+    border: '1px solid rgba(59, 130, 246, 0.25)',
+  },
+  SCALP: {
+    label: 'SCALP',
+    desc: 'Momentum Scalp (expansion beyond 1.5R)',
+    bg: 'rgba(16, 185, 129, 0.08)',
+    color: '#059669',
+    border: '1px solid rgba(16, 185, 129, 0.25)',
+  },
+  EXTENDED: {
+    label: 'EXTENDED',
+    desc: 'Extended Scalp (trend continuation runner)',
+    bg: 'rgba(124, 58, 237, 0.08)',
+    color: '#7c3aed',
+    border: '1px solid rgba(124, 58, 237, 0.25)',
+  },
+  EXTENDED_SCALP: {
+    label: 'EXTENDED',
+    desc: 'Extended Scalp (trend continuation runner)',
+    bg: 'rgba(124, 58, 237, 0.08)',
+    color: '#7c3aed',
+    border: '1px solid rgba(124, 58, 237, 0.25)',
+  },
+  INTRADAY: {
+    label: 'INTRADAY',
+    desc: 'Intraday Session Trend (full session runner)',
+    bg: 'rgba(240, 100, 40, 0.08)',
+    color: '#ea580c',
+    border: '1px solid rgba(240, 100, 40, 0.25)',
+  },
+};
+
+const MODE_RANKS: Record<string, number> = {
+  MICRO: 0,
+  SCALP: 1,
+  EXTENDED: 2,
+  EXTENDED_SCALP: 2,
+  INTRADAY: 3,
+};
+
+function rankOf(mode?: string | null): number {
+  if (!mode) return 0;
+  return MODE_RANKS[mode.toUpperCase()] ?? 0;
+}
+
+export interface FormattedModeBadge {
+  label: string;
+  title: string;
+  bg: string;
+  color: string;
+  border: string;
+  isUpgraded: boolean;
+  isDowngraded: boolean;
+  entryLabel?: string;
+  promotedLabel?: string;
+  modePath?: string;
+  history?: string[];
 }
 
 export function formatModeBadge(
-  mode?: string | null,
-  origin?: string | null,
-  peakMode?: string | null,
-  currentMode?: string | null,
-  modeUpgraded?: boolean,
-  modeDowngraded?: boolean,
+  entryMode?: AdaptiveEdgeMode | string | null,
+  origin?: AdaptiveEdgeOrigin | string | null,
+  peakMode?: AdaptiveEdgeMode | string | null,
+  currentMode?: AdaptiveEdgeMode | string | null,
+  isUpgradedFlag?: boolean,
+  isDowngradedFlag?: boolean,
   modePath?: string | null,
-  modeHistory?: string[],
-) {
-  const m = (mode || '').toUpperCase();
-  const peak = (peakMode || '').toUpperCase();
-  const curr = (currentMode || '').toUpperCase();
-
-  const rankOf = (name: string) => {
-    if (name === 'MICRO' || name === 'MICRO_SCALP' || name === 'IMPULSE') return 0;
-    if (name === 'SCALP' || name === 'TACTICAL') return 1;
-    if (name === 'EXTENDED_SCALP' || name === 'EXTENDED' || name === 'INTRADAY_SWING') return 2;
-    if (name === 'INTRADAY' || name === 'SESSION_TREND' || origin === 'spot_scan') return 3;
-    return 1;
-  };
-
-  const baseConfig = (name: string) => {
-    const raw = (name || '').trim().toUpperCase();
-    if (raw === 'MICRO' || raw === 'MICRO_SCALP' || raw === 'IMPULSE') {
-      return { label: 'MICRO', desc: 'Micro-Scalp (1–3 bars)', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: '1px solid rgba(59, 130, 246, 0.3)' };
-    }
-    if (raw === 'SCALP' || raw === 'TACTICAL') {
-      return { label: 'SCALP', desc: 'Tactical Scalp (3–15 bars, LVN to POC)', bg: 'rgba(168, 85, 247, 0.12)', color: '#9333ea', border: '1px solid rgba(168, 85, 247, 0.3)' };
-    }
-    if (raw === 'EXTENDED_SCALP' || raw === 'EXTENDED' || raw === 'INTRADAY_SWING') {
-      return { label: 'EXT SCALP', desc: 'Extended Scalp (15–45m continuation)', bg: 'rgba(20, 184, 166, 0.12)', color: '#0d9488', border: '1px solid rgba(20, 184, 166, 0.3)' };
-    }
-    if (raw === 'INTRADAY' || raw === 'SESSION_TREND' || origin === 'spot_scan') {
-      return { label: 'INTRADAY', desc: 'Intraday Session Trend (held until 14:45 cutoff)', bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.3)' };
-    }
-    return { label: raw || 'SCALP', desc: 'Trade Horizon', bg: 'rgba(107, 114, 128, 0.12)', color: '#4b5563', border: '1px solid rgba(107, 114, 128, 0.3)' };
-  };
-
-  if (modePath) {
-    const isUp = modePath.includes('↗');
-    const isDown = modePath.includes('↘');
-    const separator = isUp ? ' ↗ ' : ' ↘ ';
-    const tokens = modePath.split(separator);
-    const formattedLabel = tokens.map((t) => baseConfig(t).label).join(separator);
-    if (isDown) {
-      return {
-        label: formattedLabel,
-        title: `Downgraded trade progression: ${tokens.map((t) => baseConfig(t).desc).join(' → ')} due to giveback or momentum decay`,
-        bg: 'rgba(239, 68, 68, 0.12)',
-        color: '#dc2626',
-        border: '1px solid rgba(239, 68, 68, 0.35)',
-        isUpgraded: false,
-        isDowngraded: true,
-        entryLabel: baseConfig(tokens[0]).label,
-        promotedLabel: baseConfig(tokens[tokens.length - 1]).label,
-        modePath: formattedLabel,
-        history: tokens.map((t) => baseConfig(t).label),
-      };
-    }
-    if (isUp) {
-      return {
-        label: formattedLabel,
-        title: `Upgraded trade progression: ${tokens.map((t) => baseConfig(t).desc).join(' → ')} on continuous favorable expansion`,
-        bg: 'rgba(22, 163, 74, 0.12)',
-        color: '#15803d',
-        border: '1px solid rgba(22, 163, 74, 0.35)',
-        isUpgraded: true,
-        isDowngraded: false,
-        entryLabel: baseConfig(tokens[0]).label,
-        promotedLabel: baseConfig(tokens[tokens.length - 1]).label,
-        modePath: formattedLabel,
-        history: tokens.map((t) => baseConfig(t).label),
-      };
-    }
-  }
-
-  const entryRank = rankOf(m);
-  const targetMode = curr || peak || m;
-  const targetRank = rankOf(targetMode);
-
-  const isUpgraded = Boolean(modeUpgraded || (targetRank > entryRank));
-  const isDowngraded = Boolean(
-    modeDowngraded ||
-    (curr && peak && rankOf(curr) < rankOf(peak)) ||
-    (curr && rankOf(curr) < entryRank),
-  );
-
-  const entryCfg = baseConfig(m);
-  const peakCfg = baseConfig(peak || m);
-  const currCfg = baseConfig(curr || targetMode);
-
-  if (isDowngraded) {
-    const fromCfg = peak && rankOf(peak) > rankOf(curr) ? peakCfg : entryCfg;
+  modeHistory?: string[] | null,
+): FormattedModeBadge {
+  if (origin === 'spot_scan') {
     return {
-      label: `${fromCfg.label} ↘ ${currCfg.label}`,
-      title: `Downgraded trade: Transitioned down from ${fromCfg.desc} to ${currCfg.desc} due to giveback or momentum decay`,
-      bg: 'rgba(239, 68, 68, 0.12)',
-      color: '#dc2626',
-      border: '1px solid rgba(239, 68, 68, 0.35)',
+      label: 'INTRADAY',
+      title: 'Spot Scan: Evaluated as standard intraday momentum session direction.',
+      bg: 'rgba(100, 116, 139, 0.08)',
+      color: '#475569',
+      border: '1px solid rgba(100, 116, 139, 0.25)',
       isUpgraded: false,
-      isDowngraded: true,
-      entryLabel: fromCfg.label,
-      promotedLabel: currCfg.label,
-      modePath: `${fromCfg.label} ↘ ${currCfg.label}`,
-      history: [fromCfg.label, currCfg.label],
+      isDowngraded: false,
+      entryLabel: 'INTRADAY',
+      promotedLabel: 'INTRADAY',
+      modePath: 'INTRADAY',
+      history: ['INTRADAY'],
     };
   }
 
-  if (isUpgraded) {
+  const entry = entryMode || 'MICRO';
+  const peak = peakMode || entry;
+  const curr = currentMode || peak;
+
+  const entryCfg = MODE_META[entry] || MODE_META.MICRO;
+  const peakCfg = MODE_META[peak] || entryCfg;
+  const currCfg = MODE_META[curr] || peakCfg;
+
+  const isUpgraded = Boolean(isUpgradedFlag || rankOf(peak) > rankOf(entry) || rankOf(curr) > rankOf(entry));
+  const isDowngraded = Boolean(isDowngradedFlag || (!isUpgradedFlag && peak && rankOf(curr) < rankOf(peak)));
+
+  if (modePath) {
+    const isDowngradePath = modePath.includes('↘');
+    const isUpgradePath = modePath.includes('↗');
+    return {
+      label: modePath,
+      title: isDowngradePath
+        ? `Downgraded progression: ${modePath}`
+        : isUpgradePath
+        ? `Upgraded progression: ${modePath}`
+        : `Opportunity Mode: ${modePath}`,
+      bg: isDowngradePath
+        ? 'rgba(239, 68, 68, 0.08)'
+        : isUpgradePath
+        ? 'rgba(16, 185, 129, 0.08)'
+        : currCfg.bg,
+      color: isDowngradePath ? '#dc2626' : isUpgradePath ? '#059669' : currCfg.color,
+      border: isDowngradePath
+        ? '1px solid rgba(239, 68, 68, 0.3)'
+        : isUpgradePath
+        ? '1px solid rgba(16, 185, 129, 0.3)'
+        : currCfg.border,
+      isUpgraded: isUpgradePath,
+      isDowngraded: isDowngradePath,
+      entryLabel: entryCfg.label,
+      promotedLabel: currCfg.label,
+      modePath,
+      history: modeHistory || [entryCfg.label, currCfg.label],
+    };
+  }
+
+  if (isUpgraded && !isDowngradedFlag) {
     return {
       label: `${entryCfg.label} ↗ ${peakCfg.label}`,
       title: `Upgraded trade: Entered as ${entryCfg.desc}, promoted to ${peakCfg.desc} on favorable expansion`,
-      bg: 'rgba(22, 163, 74, 0.12)',
-      color: '#15803d',
-      border: '1px solid rgba(22, 163, 74, 0.35)',
+      bg: 'rgba(16, 185, 129, 0.08)',
+      color: '#059669',
+      border: '1px solid rgba(16, 185, 129, 0.3)',
       isUpgraded: true,
       isDowngraded: false,
       entryLabel: entryCfg.label,
       promotedLabel: peakCfg.label,
       modePath: `${entryCfg.label} ↗ ${peakCfg.label}`,
       history: [entryCfg.label, peakCfg.label],
+    };
+  }
+
+  if (isDowngraded) {
+    const fromCfg = peak && rankOf(peak) > rankOf(curr) ? peakCfg : entryCfg;
+    return {
+      label: `${fromCfg.label} ↘ ${currCfg.label}`,
+      title: `Downgraded trade: Transitioned down from ${fromCfg.desc} to ${currCfg.desc} due to momentum consolidation`,
+      bg: 'rgba(239, 68, 68, 0.08)',
+      color: '#dc2626',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
+      isUpgraded: false,
+      isDowngraded: true,
+      entryLabel: fromCfg.label,
+      promotedLabel: currCfg.label,
+      modePath: `${fromCfg.label} ↘ ${currCfg.label}`,
+      history: [fromCfg.label, currCfg.label],
     };
   }
 
@@ -212,7 +240,15 @@ export function pretty(value: string | null | undefined) {
 export function when(value: string | null | undefined) {
   if (!value) return '—';
   const dt = new Date(value);
-  return Number.isNaN(dt.getTime()) ? value : dt.toLocaleString('en-IN', { hour12: false, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(dt.getTime())
+    ? value
+    : dt.toLocaleString('en-IN', {
+        hour12: false,
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 }
 
 export function fmt(value: number | null | undefined, digits = 2) {
@@ -231,16 +267,16 @@ export function quoteKeyFor(
 
   if (isSpot) {
     const remap: Record<string, string[]> = {
-      'NIFTY': ['NSE:NIFTY 50', 'NSE:NIFTY-I', 'NIFTY 50'],
+      NIFTY: ['NSE:NIFTY 50', 'NSE:NIFTY-I', 'NIFTY 50'],
       'NIFTY 50': ['NSE:NIFTY 50', 'NSE:NIFTY-I', 'NIFTY 50'],
       'NIFTY-I': ['NSE:NIFTY 50', 'NSE:NIFTY-I', 'NIFTY 50'],
-      'BANKNIFTY': ['NSE:NIFTY BANK', 'NSE:BANKNIFTY-I', 'NIFTY BANK'],
+      BANKNIFTY: ['NSE:NIFTY BANK', 'NSE:BANKNIFTY-I', 'NIFTY BANK'],
       'NIFTY BANK': ['NSE:NIFTY BANK', 'NSE:BANKNIFTY-I', 'NIFTY BANK'],
       'BANKNIFTY-I': ['NSE:NIFTY BANK', 'NSE:BANKNIFTY-I', 'NIFTY BANK'],
-      'FINNIFTY': ['NSE:NIFTY FIN SERVICE', 'NSE:FINNIFTY-I', 'NIFTY FIN SERVICE'],
+      FINNIFTY: ['NSE:NIFTY FIN SERVICE', 'NSE:FINNIFTY-I', 'NIFTY FIN SERVICE'],
       'NIFTY FIN SERVICE': ['NSE:NIFTY FIN SERVICE', 'NSE:FINNIFTY-I', 'NIFTY FIN SERVICE'],
       'FINNIFTY-I': ['NSE:NIFTY FIN SERVICE', 'NSE:FINNIFTY-I', 'NIFTY FIN SERVICE'],
-      'SENSEX': ['BSE:SENSEX', 'BSE:SENSEX-I', 'SENSEX'],
+      SENSEX: ['BSE:SENSEX', 'BSE:SENSEX-I', 'SENSEX'],
       'SENSEX-I': ['BSE:SENSEX', 'BSE:SENSEX-I', 'SENSEX'],
     };
     if (underlying && remap[underlying]) {
@@ -249,23 +285,14 @@ export function quoteKeyFor(
     if (instrument && remap[instrument]) {
       keys.push(...remap[instrument]);
     }
-    if (instrument) {
-      keys.push(`NSE:${instrument}`, `BSE:${instrument}`, instrument);
+    if (underlying) {
+      keys.push(underlying);
+      keys.push(`NSE:${underlying}`);
+      keys.push(`BSE:${underlying}`);
     }
-    if (underlying && !remap[underlying]) {
-      keys.push(`NSE:${underlying}`, `BSE:${underlying}`, underlying);
-    }
-    return Array.from(new Set(keys));
-  }
-
-  // Option contract quote keys — strictly derivative keys, never spot index/stock keys
-  if (instrument) {
+  } else {
     if (cleanExch) {
       keys.push(`${cleanExch}:${instrument}`);
-    }
-    if (cleanExch === 'BSE' || cleanExch === 'BFO') {
-      keys.push(`BFO:${instrument}`);
-      keys.push(`BSE:${instrument}`);
     } else {
       keys.push(`NFO:${instrument}`);
       keys.push(`NSE:${instrument}`);
@@ -293,8 +320,8 @@ export function whyClosed(leg: AdaptiveEdgeLeg) {
   if (open) return null;
   const overlay = (leg.overlays ?? []).find((name) => OVERLAY_WHY[name] && name !== 'AT_LVN');
   if (overlay) return `Closed because ${OVERLAY_WHY[overlay]}.`;
-  if ((leg.thesis ?? '').includes('INVALID')) return 'Closed because the original idea stopped being true.';
-  if ((leg.protection_stage ?? '').includes('P0') && leg.exit_time) return 'Closed at the hard stop.';
+  if ((leg.thesis ?? '').includes('INVALID')) return 'Closed because the original thesis invalidated.';
+  if ((leg.protection_stage ?? '').includes('P0') && leg.exit_time) return 'Closed at the protective hard stop.';
   if (leg.exit_time) {
     const hour = new Date(leg.exit_time).getUTCHours() * 60 + new Date(leg.exit_time).getUTCMinutes();
     if (hour >= 9 * 60 + 14 && hour <= 9 * 60 + 20) return 'Closed at the 14:45 IST session cutoff.';
@@ -315,7 +342,7 @@ function signalOpen(signal: AdaptiveEdgeSignal) {
 function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index: number): AdaptiveEdgeRow {
   const open = signalOpen(signal);
   const origin: AdaptiveEdgeOrigin = signal.scan_origin === 'spot_scan' ? 'spot_scan' : 'adaptive_edge';
-  
+
   let why: string | null = null;
   if (!open) {
     if (origin === 'spot_scan') {
@@ -337,14 +364,14 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     kind: 'option',
     origin,
     instrument: optionLabel(leg, signal.underlying),
-    exchange: leg.exchange || '—',
+    exchange: leg.exchange ?? 'NFO',
     moneyness: leg.moneyness,
-    optionType: leg.option_type,
-    entry: leg.entry_premium ?? signal.spot_entry,
-    sl: leg.stop_premium ?? signal.spot_sl,
-    tsl: leg.trail_premium ?? signal.spot_tsl,
-    exit: leg.moneyness === 'SPOT' ? signal.spot_exit : (!open ? (leg.ltp ?? null) : null),
-    ltp: leg.ltp ?? (leg.moneyness === 'SPOT' ? (signal.spot_exit ?? signal.spot_entry) : null),
+    optionType: (leg.option_type?.toUpperCase() === 'PE' ? 'PE' : 'CE') as 'CE' | 'PE',
+    entry: leg.entry_premium,
+    sl: leg.stop_premium,
+    tsl: leg.trail_premium,
+    exit: null,
+    ltp: leg.ltp ?? leg.entry_premium,
     strike: leg.strike,
     entryTime: signal.entry_time,
     exitTime: signal.exit_time,
@@ -355,23 +382,23 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     spotSl: signal.spot_sl,
     spotTsl: signal.spot_tsl,
     spotExit: signal.spot_exit,
-    score: signal.score ?? null,
-    poc: signal.poc ?? null,
-    vwap: signal.vwap ?? null,
-    cvd: signal.cvd ?? null,
+    score: signal.score,
+    poc: signal.poc,
+    vwap: signal.vwap,
+    cvd: signal.cvd,
     whyClosed: why,
-    resolutionReason: leg.resolution_reason,
+    resolutionReason: leg.resolution_reason ?? null,
     observationTime: signal.entry_time ? Date.parse(signal.entry_time) : Date.now(),
     featureQuality: open ? 'OPEN' : 'FLAT',
     decision: open ? 'HOLD' : 'EXIT',
-    entryMode: signal.entry_mode ?? (origin === 'spot_scan' ? 'INTRADAY' : 'MICRO'),
-    currentMode: signal.current_mode ?? signal.exit_mode ?? signal.peak_mode ?? signal.entry_mode ?? (origin === 'spot_scan' ? 'INTRADAY' : 'MICRO'),
-    peakMode: signal.peak_mode ?? signal.entry_mode ?? (origin === 'spot_scan' ? 'INTRADAY' : 'MICRO'),
+    entryMode: signal.entry_mode ?? 'MICRO',
+    currentMode: signal.current_mode ?? signal.entry_mode ?? 'MICRO',
+    peakMode: signal.peak_mode ?? signal.entry_mode ?? 'MICRO',
     exitMode: signal.exit_mode ?? null,
-    modeUpgraded: signal.mode_upgraded ?? false,
-    modeDowngraded: signal.mode_downgraded ?? false,
-    modePath: signal.mode_path ?? null,
-    modeHistory: signal.mode_history ?? [],
+    modeUpgraded: signal.mode_upgraded,
+    modeDowngraded: signal.mode_downgraded,
+    modePath: signal.mode_path,
+    modeHistory: signal.mode_history,
     horizon: signal.horizon ?? (origin === 'spot_scan' ? 'SESSION_TREND' : 'IMPULSE'),
   };
 }
@@ -391,7 +418,7 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
     instrument: tape,
     exchange: exch,
     moneyness: 'SPOT',
-    optionType: (leg.side === 'SELL' ? 'PE' : 'CE'),
+    optionType: leg.side === 'SELL' ? 'PE' : 'CE',
     entry: leg.entry_price ?? null,
     sl: leg.stop_price ?? null,
     tsl: leg.trail_price ?? null,
@@ -429,41 +456,75 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
 }
 
 export function watchedSignals(data: AdaptiveEdgeSnapshot): AdaptiveEdgeSignal[] {
-  return (data.signals ?? []).filter((signal) => !signal.scanned);
+  return (data.signals ?? []).filter((item) => !item.scanned);
 }
 
 export function rowsFromSnapshot(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow[] {
-  const signals = data.signals ?? [];
-  if (signals.length) {
-    return signals.flatMap((signal) => {
-      if (signal.scanned && signal.legs?.length) {
-        return signal.legs.map((leg, index) => optionRow(signal, leg, index));
-      }
-      return [];
-    });
-  }
-  const rawLegs = data.legs ?? [];
-  if (rawLegs.length) {
-    return rawLegs.map((leg, index) => legacyLegRow(leg, index, data.settings.symbol));
-  }
-  return [];
+  const out: AdaptiveEdgeRow[] = [];
+  const scanned = (data.signals ?? []).filter((item) => item.scanned);
+  scanned.forEach((signal, sIdx) => {
+    const legs = signal.legs ?? [];
+    if (legs.length) {
+      legs.forEach((leg, lIdx) => {
+        out.push(optionRow(signal, leg, sIdx * 100 + lIdx));
+      });
+    } else {
+      out.push(legacyLegRow(signal as unknown as AdaptiveEdgeLeg, sIdx, data.settings.symbol));
+    }
+  });
+  return out;
 }
 
 export function historyRowsFromSnapshot(data: AdaptiveEdgeSnapshot): AdaptiveEdgeRow[] {
-  return [...(data.legs ?? [])].reverse().map((leg, index) => legacyLegRow(leg, index, data.settings.symbol));
+  const legs = data.legs ?? [];
+  return legs.map((leg, index) => legacyLegRow(leg, index, data.settings.symbol));
 }
 
-const COLUMNS = ['Instrument', 'Type', 'Exc.', 'Leg', 'Entry', 'SL', 'TSL', 'Exit', 'LTP', 'Time', 'Status'] as const;
+export interface AdaptiveEdgeRow {
+  id: string;
+  parentId: string;
+  kind: 'option' | 'spot';
+  origin: AdaptiveEdgeOrigin;
+  instrument: string;
+  exchange: string;
+  moneyness: string;
+  optionType: 'CE' | 'PE';
+  entry: number | null;
+  sl: number | null;
+  tsl: number | null;
+  exit: number | null;
+  ltp: number | null;
+  strike: number | null;
+  entryTime: string | null;
+  exitTime: string | null;
+  open: boolean;
+  tapeSymbol: string;
+  underlying: string;
+  spotEntry: number | null;
+  spotSl: number | null;
+  spotTsl: number | null;
+  spotExit: number | null;
+  score: number | null;
+  poc: number | null;
+  vwap: number | null;
+  cvd: number | null;
+  whyClosed: string | null;
+  resolutionReason: string | null;
+  observationTime: number;
+  featureQuality: 'OPEN' | 'FLAT';
+  decision: 'HOLD' | 'EXIT';
+  entryMode?: AdaptiveEdgeMode | string;
+  currentMode?: AdaptiveEdgeMode | string;
+  peakMode?: AdaptiveEdgeMode | string;
+  exitMode?: AdaptiveEdgeMode | string | null;
+  modeUpgraded?: boolean;
+  modeDowngraded?: boolean;
+  modePath?: string | null;
+  modeHistory?: string[] | null;
+  horizon?: AdaptiveEdgeHorizon | string;
+}
 
-const th: React.CSSProperties = {
-  padding: '9px 10px', borderBottom: `1px solid ${k.border}`, color: k.dim,
-  fontSize: 11, fontWeight: 500, textAlign: 'left', whiteSpace: 'nowrap',
-};
-const td: React.CSSProperties = {
-  padding: '10px 10px', borderBottom: `1px solid ${k.border}`, color: k.text,
-  fontSize: 12, verticalAlign: 'middle',
-};
-const num: React.CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+const COLUMNS = ['Instrument', 'Type', 'Exc.', 'Leg', 'Entry', 'SL', 'TSL', 'Exit', 'LTP', 'Time', 'Status'];
 
 export function AdaptiveEdgePanel({
   rows,
@@ -477,20 +538,37 @@ export function AdaptiveEdgePanel({
   onSelect?: (row: AdaptiveEdgeRow) => void;
 }) {
   return (
-    <div style={{ overflow: 'auto', minHeight: 0 }}>
-      <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse' }}>
+    <div style={{ overflow: 'auto', minHeight: 0, height: '100%', background: '#ffffff' }}>
+      <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
-          <tr>
+          <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, zIndex: 5 }}>
             {COLUMNS.map((label) => (
-              <th key={label} style={{ ...th, textAlign: ['Entry', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left' }}>{label}</th>
+              <th
+                key={label}
+                style={{
+                  padding: '9px 12px',
+                  color: C.muted,
+                  fontSize: 11,
+                  fontWeight: 650,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                  borderBottom: `1px solid ${C.border}`,
+                  textAlign: ['Entry & MTM', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {label}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {rows.map((row, rIdx) => {
             const selected = row.id === selectedId;
             const liveLtp = resolveLiveLtp(row, quotes);
-            const entryDiff = (liveLtp != null && row.entry != null) ? liveLtp - row.entry : null;
+            const entryDiff = liveLtp != null && row.entry != null ? liveLtp - row.entry : null;
+            const diffPct = entryDiff != null && row.entry && row.entry > 0 ? (entryDiff / row.entry) * 100 : null;
+
             const badge = formatModeBadge(
               row.entryMode,
               row.origin,
@@ -501,27 +579,44 @@ export function AdaptiveEdgePanel({
               row.modePath,
               row.modeHistory,
             );
+
+            const isCE = row.optionType === 'CE';
+            const isProfit = entryDiff != null && entryDiff > 0;
+            const isDrawdown = entryDiff != null && entryDiff < 0;
+
             return (
               <tr
                 key={row.id}
                 onClick={() => onSelect?.(row)}
-                style={{ background: selected ? 'rgba(240,100,40,.08)' : undefined, cursor: 'pointer' }}
+                style={{
+                  background: selected
+                    ? C.selectedBg
+                    : rIdx % 2 === 1
+                    ? '#fafafa'
+                    : '#ffffff',
+                  cursor: 'pointer',
+                  borderBottom: `1px solid ${C.border}`,
+                  transition: 'background 0.12s ease',
+                  borderLeft: selected ? `3px solid ${C.selectedBorder}` : '3px solid transparent',
+                }}
               >
-                <td style={td}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 650 }}>{row.instrument}</span>
+                {/* 1. Instrument & Underlying */}
+                <td style={{ padding: '9px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                    <span style={{ fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
+                      {row.instrument}
+                    </span>
                     {row.origin === 'adaptive_edge' ? (
                       <span
-                        title="Origin: Adaptive Edge Microstructure Model (POC, VWAP, CVD, Liquidity Imbalance & Dynamic Opportunity Modes)"
+                        title="Origin: Adaptive Edge Microstructure Model"
                         style={{
                           fontSize: 9,
                           fontWeight: 700,
-                          letterSpacing: '0.04em',
                           padding: '1px 5px',
-                          borderRadius: 3,
-                          background: 'rgba(240,100,40,.12)',
-                          color: k.orange,
-                          border: '1px solid rgba(240,100,40,.25)',
+                          borderRadius: 4,
+                          background: C.orangeBg,
+                          color: C.orange,
+                          border: `1px solid ${C.orangeBorder}`,
                           whiteSpace: 'nowrap',
                         }}
                       >
@@ -529,16 +624,15 @@ export function AdaptiveEdgePanel({
                       </span>
                     ) : (
                       <span
-                        title="Origin: Spot direction scan. Option strikes, DTE decay filters, and lot sizing managed by Adaptive Edge."
+                        title="Origin: Spot Scan (SuperTrend Direction)"
                         style={{
                           fontSize: 9,
                           fontWeight: 700,
-                          letterSpacing: '0.04em',
                           padding: '1px 5px',
-                          borderRadius: 3,
-                          background: 'rgba(65,132,243,.10)',
-                          color: k.blue,
-                          border: '1px solid rgba(65,132,243,.25)',
+                          borderRadius: 4,
+                          background: C.blueBg,
+                          color: C.blue,
+                          border: `1px solid ${C.blueBorder}`,
                           whiteSpace: 'nowrap',
                         }}
                       >
@@ -546,17 +640,19 @@ export function AdaptiveEdgePanel({
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: k.dim, marginTop: 2 }}>{row.underlying}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{row.underlying}</div>
                 </td>
-                <td style={td}>
+
+                {/* 2. Mode Badge */}
+                <td style={{ padding: '9px 12px' }}>
                   <span
                     title={badge.title}
                     style={{
-                      fontSize: 9.5,
-                      fontWeight: 750,
-                      letterSpacing: '0.04em',
-                      padding: '2px 6px',
-                      borderRadius: 3,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: '0.02em',
+                      padding: '2px 7px',
+                      borderRadius: 4,
                       background: badge.bg,
                       color: badge.color,
                       border: badge.border,
@@ -567,45 +663,119 @@ export function AdaptiveEdgePanel({
                     {badge.label}
                   </span>
                 </td>
-                <td style={td}>{row.exchange}</td>
-                <td style={td}>
-                  <div style={{ fontWeight: 650 }}>{row.moneyness}</div>
-                  <div style={{ fontSize: 11, color: row.optionType === 'CE' ? k.green : k.dim }}>{row.optionType}</div>
+
+                {/* 3. Exchange */}
+                <td style={{ padding: '9px 12px', color: C.muted, fontWeight: 600, fontSize: 11 }}>
+                  {row.exchange}
                 </td>
-                <td style={num}>
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    <span>{fmt(row.entry)}</span>
-                    {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          marginLeft: 4,
-                          fontWeight: 600,
-                          color: entryDiff > 0 ? k.green : k.red,
-                        }}
-                      >
-                        ({entryDiff > 0 ? '+' : ''}{fmt(entryDiff)})
+
+                {/* 4. Moneyness & Type */}
+                <td style={{ padding: '9px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 3,
+                        background: isCE ? C.emeraldBg : C.roseBg,
+                        color: isCE ? C.emeraldText : C.roseText,
+                        border: `1px solid ${isCE ? C.emeraldBorder : C.roseBorder}`,
+                      }}
+                    >
+                      {row.optionType}
+                    </span>
+                    <span style={{ fontWeight: 650, color: C.text, fontSize: 11.5 }}>
+                      {row.moneyness}
+                    </span>
+                  </div>
+                </td>
+
+                {/* 5. Entry Price & Live MTM */}
+                <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>
+                    {fmt(row.entry)}
+                  </div>
+                  {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        fontVariantNumeric: 'tabular-nums',
+                        marginTop: 1,
+                        color: isProfit ? C.emeraldText : C.roseText,
+                      }}
+                    >
+                      <span>
+                        ({entryDiff > 0 ? '+' : ''}
+                        {fmt(entryDiff)})
                       </span>
-                    )}
-                  </span>
+                    </div>
+                  )}
                 </td>
-                <td style={num}>{fmt(row.sl)}</td>
-                <td style={num}>{fmt(row.tsl)}</td>
-                <td style={num}>{fmt(row.exit)}</td>
-                <td style={num}>
-                  <span style={{ fontWeight: 650, color: k.text }}>{fmt(liveLtp)}</span>
+
+                {/* 6. Protective SL */}
+                <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted, fontWeight: 600 }}>
+                  {fmt(row.sl)}
                 </td>
-                <td style={{ ...td, whiteSpace: 'nowrap' }}>{when(row.entryTime)}</td>
-                <td style={td}>
-                  <span style={{ color: row.open ? k.green : k.dim, fontWeight: 650 }}>{row.open ? 'Open' : 'Closed'}</span>
+
+                {/* 7. Trailing SL */}
+                <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.orangeText, fontWeight: 600 }}>
+                  {fmt(row.tsl)}
+                </td>
+
+                {/* 8. Exit Price */}
+                <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.text, fontWeight: 600 }}>
+                  {fmt(row.exit)}
+                </td>
+
+                {/* 9. Current LTP */}
+                <td style={{ padding: '9px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 750, color: C.text, fontSize: 12.5 }}>
+                  {fmt(liveLtp)}
+                </td>
+
+                {/* 10. Timestamp */}
+                <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', fontSize: 11, color: C.muted }}>
+                  {when(row.entryTime)}
+                </td>
+
+                {/* 11. Status */}
+                <td style={{ padding: '9px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: row.open ? C.emerald : C.dim,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: 11,
+                        color: row.open ? C.emeraldText : C.muted,
+                      }}
+                    >
+                      {row.open ? 'Open' : 'Closed'}
+                    </span>
+                  </div>
                 </td>
               </tr>
             );
           })}
           {!rows.length && (
             <tr>
-              <td colSpan={COLUMNS.length} style={{ ...td, borderBottom: 0, padding: 28, textAlign: 'center', color: k.dim }}>
-                Nothing was taken in this scan window.
+              <td
+                colSpan={COLUMNS.length}
+                style={{
+                  padding: 36,
+                  textAlign: 'center',
+                  color: C.muted,
+                  fontSize: 12.5,
+                }}
+              >
+                No signals found matching the active filter criteria.
               </td>
             </tr>
           )}

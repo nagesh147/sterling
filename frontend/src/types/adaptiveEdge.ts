@@ -85,6 +85,9 @@ export interface AdaptiveEdgeLeg {
 }
 
 export type AdaptiveEdgeOrigin = 'adaptive_edge' | 'spot_scan';
+export type AdaptiveEdgeMode = 'MICRO' | 'SCALP' | 'EXTENDED' | 'EXTENDED_SCALP' | 'INTRADAY';
+export type AdaptiveEdgeHorizon = 'IMPULSE' | 'SESSION_TREND' | 'SWING';
+export type AdaptiveEdgeOverlay = string;
 
 export interface AdaptiveEdgeOptionLeg {
   moneyness: string;
