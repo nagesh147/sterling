@@ -845,8 +845,16 @@ def _make_place_cb(client, uid: str):
                 # it is what the protective GTT and the tick monitor below use, and for
                 # a spot/navigator row it is the only one resolved into the premium
                 # domain at all.
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                if is_stock and entry_px > 0:
+                    limit_px = round(entry_px * 1.003, 2)
+                    order_type = "limit_order"
+                else:
+                    limit_px = None
+                    order_type = "market_order"
                 result = await client.place_order_option(
-                    trade_symbol, "buy", qty, exchange=trade_exchange,
+                    trade_symbol, "buy", qty, order_type=order_type, limit_price=limit_px,
+                    exchange=trade_exchange,
                     stop_loss=(stop_px if stop_px > 0 else None), tag=idem)
         except Exception as exc:  # noqa: BLE001
             state.log(uid, "order_failed", f"{row.underlying} {trade_symbol}: {exc}")

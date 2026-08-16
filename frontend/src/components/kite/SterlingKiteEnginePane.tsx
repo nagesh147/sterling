@@ -541,14 +541,16 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           {row.exit_reason && (
             <Tip text={row.exit_reason.startsWith('trail breach')
               ? `Closed by the trailing stop — ${row.exit_reason}. The red counter (${row.exit_state ?? '—'}) had not fired; the trail is enforced as a real exit, so whichever rule triggers first ends the trade.`
+              : row.exit_reason.startsWith('time decay')
+              ? `Closed by time-decay limit — ${row.exit_reason}. Price consolidated without expanding momentum, so trade closed to avoid theta decay on options.`
               : `Closed by the red counter — ${row.exit_reason}.`}>
               <span
                     style={{
                       fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
-                      color: row.exit_reason.startsWith('trail breach') ? k.red : k.dim,
-                      background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : undefined,
+                      color: row.exit_reason.startsWith('trail breach') ? k.red : row.exit_reason.startsWith('time decay') ? k.orange : k.dim,
+                      background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : row.exit_reason.startsWith('time decay') ? '#fff3e0' : undefined,
                     }}>
-                {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : 'counter exit'}
+                {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : row.exit_reason.startsWith('time decay') ? 'Theta exit' : 'counter exit'}
               </span>
             </Tip>
           )}

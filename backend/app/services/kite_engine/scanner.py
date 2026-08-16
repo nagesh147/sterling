@@ -228,7 +228,8 @@ def evaluate_item(
         # price trades through the trailing stop — whichever comes first. Once it fires
         # the trade is dead even if conditions reverse later (that's a new entry).
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         # Freeze the readouts at the exit bar: a dead trade whose trail kept ratcheting
         # for days afterwards shows a stop it was never protected by.
@@ -430,7 +431,8 @@ def evaluate_derivative_contract(
         # "running" until the red counter fires (per exit_mode) or the premium trades
         # through its trail. For derivatives all entries are long (BUY), so red = -1.
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         end_idx = last_idx if exit_j is None else int(exit_j)
         stop_loss = exits.reported_trail_level(r, "long", int(i), exit_j, last_idx, cfg)
