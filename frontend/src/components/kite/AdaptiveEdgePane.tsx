@@ -147,6 +147,7 @@ export function AdaptiveEdgePane({
   const [viewMode, setViewMode] = useState<'signals' | 'dashboard' | 'charts'>('signals');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [symbolFilter, setSymbolFilter] = useState<string>('ALL');
+  const [inspectSymbol, setInspectSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
@@ -399,7 +400,10 @@ export function AdaptiveEdgePane({
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <button
             type="button"
-            onClick={() => setViewMode('signals')}
+            onClick={() => {
+              setSymbolFilter('ALL');
+              setViewMode('signals');
+            }}
             style={{
               padding: '10px 16px',
               border: 0,
@@ -455,7 +459,7 @@ export function AdaptiveEdgePane({
             style={{
               padding: '10px 16px',
               border: 0,
-              borderBottom: viewMode === 'charts' ? `2px solid ${C.purple}` : '2px solid transparent',
+              borderBottom: viewMode === 'charts' ? `2px solid ${C.purpleText}` : '2px solid transparent',
               background: 'transparent',
               color: viewMode === 'charts' ? C.purpleText : C.muted,
               fontWeight: viewMode === 'charts' ? 750 : 550,
@@ -505,12 +509,16 @@ export function AdaptiveEdgePane({
       {viewMode === 'charts' ? (
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 18, background: '#f8fafc' }}>
           <AdaptiveEdgeVisualizerHub
-            selectedSymbol={selected?.underlying || selected?.instrument || 'NIFTY 50'}
+            selectedSymbol={inspectSymbol || selected?.underlying || selected?.instrument || 'NIFTY 50'}
             currentSpot={selected?.spotEntry ?? 24405}
             poc={selected?.poc ?? 24405}
             vwap={selected?.vwap ?? 24409.84}
             cvd={selected?.cvd ?? 32055}
             optionType={selected?.optionType || 'CE'}
+            onBack={() => {
+              setSymbolFilter('ALL');
+              setViewMode('signals');
+            }}
           />
         </div>
       ) : viewMode === 'dashboard' ? (
@@ -620,7 +628,7 @@ export function AdaptiveEdgePane({
                 selectedId={selected?.id}
                 onSelect={(row) => setSelectedId(row.id)}
                 onInspectSymbol={(sym) => {
-                  setSymbolFilter(sym);
+                  setInspectSymbol(sym);
                   setViewMode('charts');
                 }}
               />

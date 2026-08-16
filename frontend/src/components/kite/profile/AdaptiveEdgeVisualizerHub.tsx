@@ -13,6 +13,7 @@ interface Props {
   vwap?: number;
   cvd?: number;
   optionType?: string;
+  onBack?: () => void;
 }
 
 const INDEX_LIST = ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX'];
@@ -90,6 +91,7 @@ export function AdaptiveEdgeVisualizerHub({
   vwap,
   cvd,
   optionType = 'CE',
+  onBack,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'market_profile' | 'volume_profile' | 'order_overflow' | 'volume_analytics' | 'confluence'>('market_profile');
   const [activeSymbol, setActiveSymbol] = useState<string>(selectedSymbol || 'NIFTY 50');
@@ -127,7 +129,30 @@ export function AdaptiveEdgeVisualizerHub({
           {/* Top Bar: Title & View Switcher */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    title="Return to Signals & Strikes Table"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#1e293b',
+                      borderRadius: 5,
+                      padding: '3px 9px',
+                      fontSize: 11,
+                      fontWeight: 750,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginRight: 4,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, lineHeight: 1 }}>←</span> Back to Signals Table
+                  </button>
+                )}
                 <h3 style={{ margin: 0, fontSize: 15, fontWeight: 750, color: '#0f172a', letterSpacing: '-0.01em' }}>
                   🎯 Microstructure, Volume & Order Overflow Visualizer
                 </h3>
