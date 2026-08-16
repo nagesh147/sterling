@@ -4,6 +4,7 @@ import { useCandles, type OHLCVBar } from '../../../hooks/useCandles';
 import { MarketProfileChart } from './MarketProfileChart';
 import { VolumeProfileChart } from './VolumeProfileChart';
 import { OrderOverflowChart } from './OrderOverflowChart';
+import { VolumeAnalyticsChart } from './VolumeAnalyticsChart';
 
 interface Props {
   selectedSymbol: string;
@@ -56,7 +57,7 @@ export function AdaptiveEdgeVisualizerHub({
   cvd,
   optionType = 'CE',
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'market_profile' | 'volume_profile' | 'order_overflow' | 'confluence'>('market_profile');
+  const [activeTab, setActiveTab] = useState<'market_profile' | 'volume_profile' | 'order_overflow' | 'volume_analytics' | 'confluence'>('market_profile');
 
   return (
     <SafeCandleWrapper symbol={selectedSymbol}>
@@ -80,7 +81,7 @@ export function AdaptiveEdgeVisualizerHub({
                 🎯 Microstructure, Volume & Order Overflow Visualizer
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>
-                Inspect real-time TPO distributions, Volume-at-Price profiles, and order book overflow footprints for <strong style={{ color: '#0f172a' }}>{selectedSymbol}</strong>.
+                Inspect real-time TPO distributions, Volume-at-Price profiles, order book overflow footprints, and RVOL surges for <strong style={{ color: '#0f172a' }}>{selectedSymbol}</strong>.
               </p>
             </div>
 
@@ -90,7 +91,8 @@ export function AdaptiveEdgeVisualizerHub({
                 { id: 'market_profile', label: '1. Market Profile (TPO)' },
                 { id: 'volume_profile', label: '2. Volume Profile (VP)' },
                 { id: 'order_overflow', label: '3. Order Overflow (Footprint)' },
-                { id: 'confluence', label: '4. Confluence Engine' },
+                { id: 'volume_analytics', label: '4. Volume & RVOL Analytics' },
+                { id: 'confluence', label: '5. Confluence Engine' },
               ] as const).map((tab) => (
                 <button
                   key={tab.id}
@@ -144,6 +146,16 @@ export function AdaptiveEdgeVisualizerHub({
                 currentSpot={currentSpot}
                 cvd={cvd}
                 optionType={optionType}
+              />
+            )}
+
+            {activeTab === 'volume_analytics' && (
+              <VolumeAnalyticsChart
+                symbol={selectedSymbol}
+                candles={candles}
+                currentSpot={currentSpot}
+                vwap={vwap}
+                poc={poc}
               />
             )}
 
