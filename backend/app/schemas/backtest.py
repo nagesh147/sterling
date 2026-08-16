@@ -246,7 +246,7 @@ class UnifiedBacktestRequest(BaseModel):
     num_lots: int = Field(default=1, ge=1, le=100, description="Number of lots traded per setup")
     slippage_points: float = Field(default=0.5, ge=0.0, le=20.0, description="Slippage buffer in points per fill")
     brokerage_per_order: float = Field(default=20.0, ge=0.0, description="Flat brokerage in INR per order")
-    stt_pct: float = Field(default=0.00125, ge=0.0, description="STT rate on sell side")
+    stt_pct: float = Field(default=0.0002, ge=0.0, description="STT rate on sell turnover (0.02% for Futures, 0.1% for Options)")
     stop_points: Optional[float] = Field(default=None, description="Manual hard stop override in points (if dynamic_mode is disabled)")
     target_points: Optional[float] = Field(default=None, description="Manual profit target override in points (if dynamic_mode is disabled)")
     trail_points: Optional[float] = Field(default=None, description="Manual trailing stop override in points (if dynamic_mode is disabled)")

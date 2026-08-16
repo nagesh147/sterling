@@ -433,18 +433,20 @@ def run_unified_backtest(
 
                 gross_pnl = contract_pts * total_qty
 
-                # Indian F&O Friction Engine
+                # Indian F&O Friction Engine (Exact SEBI/NSE Tariff Schedule)
                 turnover_mult = delta if "options" in c_type else 1.0
                 entry_turnover = entry_price * total_qty * turnover_mult
                 exit_turnover = exit_price * total_qty * turnover_mult
                 total_turnover = entry_turnover + exit_turnover
 
-                brokerage = req.brokerage_per_order * 2.0  # Entry + Exit
-                stt = exit_turnover * req.stt_pct  # STT charged on sell turnover
-                turnover_charge = total_turnover * 0.0005  # Exchange 0.05%
-                gst = (brokerage + turnover_charge) * 0.18  # 18% GST
+                brokerage = req.brokerage_per_order * 2.0  # ₹20 Entry + ₹20 Exit
+                stt = exit_turnover * req.stt_pct  # 0.02% Futures / 0.1% Options on sell turnover
+                turnover_charge = total_turnover * 0.000019  # NSE 0.0019%
+                stamp_duty = entry_turnover * 0.00002  # Stamp Duty 0.002% on buy
+                sebi_charge = total_turnover * 0.000001  # SEBI ₹10 per crore
+                gst = (brokerage + turnover_charge) * 0.18  # 18% GST on brokerage + exchange
                 slippage_cost = req.slippage_points * total_qty * 2.0
-                total_friction = round(brokerage + stt + turnover_charge + gst + slippage_cost, 2)
+                total_friction = round(brokerage + stt + turnover_charge + stamp_duty + sebi_charge + gst + slippage_cost, 2)
 
                 net_pnl = round(gross_pnl - total_friction, 2)
                 return_pct = round((net_pnl / capital) * 100.0, 2) if capital > 0 else 0.0
@@ -482,7 +484,13 @@ def run_unified_backtest(
                 current_trade = None
 
         # ── 2. Check fresh entry signals (if flat) ────────────────────────────
-        if current_trade is None and i < len(df) - 1:
+        bar_time = bar["dt"]
+        is_near_session_end = hasattr(bar_time, "hour") and (
+            bar_time.hour > (req.session_cutoff_hour - 1)
+            or (bar_time.hour == (req.session_cutoff_hour - 1) and bar_time.minute >= 45)
+        )
+
+        if current_trade is None and i < len(df) - 1 and not is_near_session_end:
             is_long = bool(long_signals.iloc[i])
             is_short = bool(short_signals.iloc[i])
 

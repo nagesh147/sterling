@@ -69,7 +69,7 @@ export function UnifiedBacktestPane() {
   const [trailPoints, setTrailPoints] = useState<number | undefined>(25);
   const [slippagePoints, setSlippagePoints] = useState(0.5);
   const [brokerage, setBrokerage] = useState(20.0);
-  const [sttPct, setSttPct] = useState(0.00125);
+  const [sttPct, setSttPct] = useState(0.0002);
 
   // View state
   const [activeTab, setActiveTab] = useState<'equity' | 'drawdown' | 'trades' | 'monte_carlo'>('equity');
