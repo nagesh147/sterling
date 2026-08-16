@@ -14,6 +14,7 @@ import {
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
 import { AdaptiveEdgeDashboard } from './AdaptiveEdgeDashboard';
+import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
 import { openSettingsSection } from './config/registry';
 import type { InstrumentTab } from './InstrumentPane';
 
@@ -143,7 +144,7 @@ export function AdaptiveEdgePane({
   const history = data ? historyRowsFromSnapshot(data) : [];
   const watched = data ? watchedSignals(data) : [];
 
-  const [viewMode, setViewMode] = useState<'signals' | 'dashboard'>('signals');
+  const [viewMode, setViewMode] = useState<'signals' | 'dashboard' | 'charts'>('signals');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [symbolFilter, setSymbolFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -445,7 +446,27 @@ export function AdaptiveEdgePane({
               gap: 6,
             }}
           >
-            <span>📊 Market Profile & Strategy Dashboard</span>
+            <span>📊 Strategy Dashboard</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('charts')}
+            style={{
+              padding: '10px 16px',
+              border: 0,
+              borderBottom: viewMode === 'charts' ? `2px solid ${C.purple}` : '2px solid transparent',
+              background: 'transparent',
+              color: viewMode === 'charts' ? C.purpleText : C.muted,
+              fontWeight: viewMode === 'charts' ? 750 : 550,
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>🌊 Market Profile, VP & Order Overflow Charts</span>
           </button>
         </div>
 
@@ -481,7 +502,18 @@ export function AdaptiveEdgePane({
         )}
       </div>
 
-      {viewMode === 'dashboard' ? (
+      {viewMode === 'charts' ? (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 18, background: '#f8fafc' }}>
+          <AdaptiveEdgeVisualizerHub
+            selectedSymbol={selected?.underlying || selected?.instrument || 'NIFTY 50'}
+            currentSpot={selected?.spotEntry ?? 24405}
+            poc={selected?.poc ?? 24405}
+            vwap={selected?.vwap ?? 24409.84}
+            cvd={selected?.cvd ?? 32055}
+            optionType={selected?.optionType || 'CE'}
+          />
+        </div>
+      ) : viewMode === 'dashboard' ? (
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <AdaptiveEdgeDashboard snapshot={data} onOpenSettings={() => openSettingsSection('adaptiveEdge')} />
         </div>

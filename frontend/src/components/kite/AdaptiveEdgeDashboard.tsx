@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { AdaptiveEdgeSnapshot, AdaptiveEdgeSignal } from '../../types/adaptiveEdge';
 import { k, tint, Icons } from '../../styles/kiteUI';
+import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
 
 interface Props {
   snapshot?: AdaptiveEdgeSnapshot | null;
@@ -358,9 +359,19 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* SECTION 2: MARKET PROFILE & ORDER FLOW */}
         {section === 'structure' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {/* Visualizer Hub: Interactive Market Profile, Volume Profile & Order Overflow Charts */}
+            <AdaptiveEdgeVisualizerHub
+              selectedSymbol={selectedSymbol}
+              currentSpot={currentSpot}
+              poc={currentPoc}
+              vwap={currentVwap}
+              cvd={currentCvd}
+              optionType={activeSignal?.option_type || (activeSignal?.side === 'SELL' ? 'PE' : 'CE')}
+            />
+
             <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>
-                🌊 Market Profile, Volume Profile & Order Flow Breakdown
+                🌊 Market Profile, Volume Profile & Order Flow Breakdown ({selectedSymbol})
               </h3>
               <p style={{ margin: '0 0 16px', fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
                 Adaptive Edge combines three structural lenses to identify where institutions are buying and where price acceptance is occurring:
