@@ -205,7 +205,32 @@ class UnifiedBacktestRequest(BaseModel):
         default="adaptive_edge",
         description="Strategy to backtest: adaptive_edge, supertrend, navigator, directional, mean_reversion",
     )
-    symbol: str = Field(default="NIFTY 50", description="Index, F&O equity tradingsymbol, or ALL_INDICES")
+    symbol: str = Field(default="NIFTY 50", description="Primary tradingsymbol or universe label")
+    instrument_scope: str = Field(
+        default="single",
+        description="Scope of instruments: 'single', 'indices', 'fno_all', 'fno_selected'",
+    )
+    scan_indices: List[str] = Field(
+        default_factory=lambda: ["NIFTY 50", "NIFTY BANK"],
+        description="List of index symbols when scanning indices",
+    )
+    scan_stocks: List[str] = Field(
+        default_factory=lambda: ["RELIANCE", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "TCS"],
+        description="List of selected F&O stock symbols",
+    )
+    scan_all_stocks: bool = Field(default=False, description="Scan full eligible ~180+ F&O universe")
+    contract_type: str = Field(
+        default="futures",
+        description="Contract type to simulate: 'futures', 'options_atm', 'options_itm', 'options_otm', 'spot'",
+    )
+    expiry_cycle: str = Field(
+        default="weekly",
+        description="Expiry cycle to trade: 'weekly' or 'monthly'",
+    )
+    strike_moneyness: List[str] = Field(
+        default_factory=lambda: ["ATM"],
+        description="Strike moneyness resolved: ['ATM'], ['ITM', 'ATM'], etc.",
+    )
     data_source: str = Field(
         default="kite",
         description="Historical data source provider: 'kite' (Zerodha Kite) or 'truedata' (TrueData V2.6)",

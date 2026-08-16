@@ -27,6 +27,13 @@ export interface BacktestPreset {
 export interface UnifiedBacktestRequest {
   strategy: string;
   symbol: string;
+  instrument_scope?: 'single' | 'indices' | 'fno_all' | 'fno_selected';
+  scan_indices?: string[];
+  scan_stocks?: string[];
+  scan_all_stocks?: boolean;
+  contract_type?: 'futures' | 'options_atm' | 'options_itm' | 'options_otm' | 'spot';
+  expiry_cycle?: 'weekly' | 'monthly';
+  strike_moneyness?: string[];
   data_source?: 'kite' | 'truedata' | 'auto';
   dynamic_mode?: boolean;
   timeframe: string;

@@ -22,16 +22,44 @@ function fmtCurr(n: number): string {
   return `${prefix}${Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
 }
 
+const AVAILABLE_INDICES = [
+  { id: 'NIFTY 50', label: 'NIFTY 50' },
+  { id: 'NIFTY BANK', label: 'BANKNIFTY' },
+  { id: 'NIFTY FIN SERVICE', label: 'FINNIFTY' },
+  { id: 'MIDCPNIFTY', label: 'MIDCPNIFTY' },
+  { id: 'SENSEX', label: 'SENSEX' },
+  { id: 'BANKEX', label: 'BANKEX' },
+];
+
+const CURATED_FNO_STOCKS = [
+  { group: 'Very High Liquidity', stocks: ['HDFCBANK', 'ICICIBANK', 'SBIN', 'RELIANCE'] },
+  { group: 'High Liquidity & Volatility', stocks: ['INFY', 'TCS', 'BAJFINANCE', 'BHARTIARTL', 'TATAMOTORS', 'AXISBANK', 'KOTAKBANK', 'ADANIENT'] },
+  { group: 'Metals & Energy', stocks: ['JSWSTEEL', 'TATASTEEL', 'HINDALCO', 'ONGC', 'COALINDIA'] },
+  { group: 'Auto & Consumer', stocks: ['MARUTI', 'TITAN', 'ITC', 'ASIANPAINT', 'NESTLEIND'] },
+];
+
 export function UnifiedBacktestPane() {
   const { data: strategies = [] } = useUnifiedStrategies();
   const { data: presets = [] } = useUnifiedPresets();
   const runMutation = useRunUnifiedBacktest();
 
-  // Form State
+  // Strategy & Mode
   const [strategy, setStrategy] = useState('adaptive_edge');
-  const [symbol, setSymbol] = useState('NIFTY 50');
   const [dataSource, setDataSource] = useState<'kite' | 'truedata'>('kite');
   const [dynamicMode, setDynamicMode] = useState(true);
+
+  // Instruments & Universe Scope
+  const [instrumentScope, setInstrumentScope] = useState<'single' | 'indices' | 'fno_all' | 'fno_selected'>('single');
+  const [singleSymbol, setSingleSymbol] = useState('NIFTY 50');
+  const [scanIndices, setScanIndices] = useState<string[]>(['NIFTY 50', 'NIFTY BANK']);
+  const [scanStocks, setScanStocks] = useState<string[]>(['RELIANCE', 'HDFCBANK', 'INFY', 'ICICIBANK', 'SBIN', 'TCS']);
+  const [scanAllStocks, setScanAllStocks] = useState(false);
+
+  // Contracts & Derivatives
+  const [contractType, setContractType] = useState<'futures' | 'options_atm' | 'options_itm' | 'options_otm' | 'spot'>('futures');
+  const [expiryCycle, setExpiryCycle] = useState<'weekly' | 'monthly'>('weekly');
+
+  // Execution & Timeframe
   const [timeframe, setTimeframe] = useState('5m');
   const [lookbackDays, setLookbackDays] = useState(30);
   const [startingCapital, setStartingCapital] = useState(100000);
@@ -48,9 +76,22 @@ export function UnifiedBacktestPane() {
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'WIN' | 'LOSS'>('ALL');
   const [result, setResult] = useState<UnifiedBacktestResult | null>(null);
 
+  const toggleIndex = (idx: string) => {
+    setScanIndices((prev) =>
+      prev.includes(idx) ? (prev.length > 1 ? prev.filter((x) => x !== idx) : prev) : [...prev, idx]
+    );
+  };
+
+  const toggleStock = (stk: string) => {
+    setScanStocks((prev) =>
+      prev.includes(stk) ? (prev.length > 1 ? prev.filter((x) => x !== stk) : prev) : [...prev, stk]
+    );
+  };
+
   const handleApplyPreset = (p: typeof presets[0]) => {
     setStrategy(p.strategy);
-    setSymbol(p.symbol);
+    setSingleSymbol(p.symbol);
+    setInstrumentScope('single');
     setTimeframe(p.timeframe);
     setLookbackDays(p.lookback_days);
     setStartingCapital(p.starting_capital);
@@ -62,9 +103,24 @@ export function UnifiedBacktestPane() {
   };
 
   const handleRunBacktest = () => {
+    const activeSymbol =
+      instrumentScope === 'single'
+        ? singleSymbol
+        : instrumentScope === 'indices'
+        ? `INDICES (${scanIndices.join(', ')})`
+        : instrumentScope === 'fno_all'
+        ? 'ALL_FNO_STOCKS (~180+)'
+        : `FNO_PORTFOLIO (${scanStocks.slice(0, 4).join(', ')}${scanStocks.length > 4 ? ` +${scanStocks.length - 4}` : ''})`;
+
     const payload: UnifiedBacktestRequest = {
       strategy,
-      symbol,
+      symbol: activeSymbol,
+      instrument_scope: instrumentScope,
+      scan_indices: scanIndices,
+      scan_stocks: scanStocks,
+      scan_all_stocks: instrumentScope === 'fno_all' || scanAllStocks,
+      contract_type: contractType,
+      expiry_cycle: expiryCycle,
       data_source: dataSource,
       dynamic_mode: dynamicMode,
       timeframe,
@@ -80,6 +136,7 @@ export function UnifiedBacktestPane() {
       session_cutoff_hour: 15,
       session_cutoff_min: 15,
     };
+
     runMutation.mutate(payload, {
       onSuccess: (res) => {
         setResult(res);
@@ -102,6 +159,7 @@ export function UnifiedBacktestPane() {
       'Exit Time',
       'Symbol',
       'Direction',
+      'Contract',
       'Entry Price',
       'Exit Price',
       'Qty',
@@ -122,6 +180,7 @@ export function UnifiedBacktestPane() {
       t.exit_time,
       t.symbol || result.symbol,
       t.direction,
+      contractType.toUpperCase(),
       t.entry_price,
       t.exit_price,
       t.qty,
@@ -140,7 +199,7 @@ export function UnifiedBacktestPane() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `backtest_${result.strategy}_${result.symbol}_${result.timeframe}.csv`);
+    link.setAttribute('download', `backtest_${result.strategy}_${contractType}_${result.timeframe}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -179,9 +238,9 @@ export function UnifiedBacktestPane() {
       {/* ── Main Content Area ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* ── Left Sidebar: Strategy & Parameters Config ── */}
-        <div style={{ width: 330, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
+        <div style={{ width: 360, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            ⚙️ Strategy & Engine Parameters
+            ⚙️ Strategy & Universe Config
           </div>
 
           {/* Execution Mode: Dynamic vs Manual */}
@@ -206,7 +265,6 @@ export function UnifiedBacktestPane() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 4,
-                  transition: 'all 0.15s ease',
                 }}
               >
                 <span>⚡</span> Dynamic (Live)
@@ -227,7 +285,6 @@ export function UnifiedBacktestPane() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 4,
-                  transition: 'all 0.15s ease',
                 }}
               >
                 <span>⚙️</span> Manual Override
@@ -235,10 +292,10 @@ export function UnifiedBacktestPane() {
             </div>
           </div>
 
-          {/* Data Source Picker (Kite vs TrueData) */}
+          {/* Data Source Picker */}
           <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
-              Historical Data Source
+              Historical Data Provider
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <button
@@ -257,7 +314,6 @@ export function UnifiedBacktestPane() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 5,
-                  transition: 'all 0.15s ease',
                 }}
               >
                 <span>🪁</span> Zerodha Kite
@@ -278,7 +334,6 @@ export function UnifiedBacktestPane() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 5,
-                  transition: 'all 0.15s ease',
                 }}
               >
                 <span>📊</span> TrueData
@@ -302,30 +357,201 @@ export function UnifiedBacktestPane() {
             </select>
           </div>
 
-          {/* Instrument & Timeframe */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
-                Instrument
-              </label>
-              <select
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
-              >
-                <option value="NIFTY 50">NIFTY 50</option>
-                <option value="NIFTY BANK">BANKNIFTY</option>
-                <option value="NIFTY FIN SERVICE">FINNIFTY</option>
-                <option value="SENSEX">SENSEX</option>
-                <option value="ALL_INDICES">🌐 All Indian Indices</option>
-                <option value="RELIANCE">RELIANCE</option>
-                <option value="HDFCBANK">HDFCBANK</option>
-                <option value="INFY">INFY</option>
-                <option value="TCS">TCS</option>
-                <option value="BTCUSD">BTC/USD</option>
-                <option value="ETHUSD">ETH/USD</option>
-              </select>
+          {/* ── Instruments & Universe Scope Section ── */}
+          <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              🏛️ Instruments & Universe Scope
             </div>
+
+            {/* Scope Tabs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 10 }}>
+              {[
+                { id: 'single' as const, label: 'Single' },
+                { id: 'indices' as const, label: 'Indices' },
+                { id: 'fno_selected' as const, label: 'Selected F&O' },
+                { id: 'fno_all' as const, label: 'All F&O' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setInstrumentScope(tab.id)}
+                  style={{
+                    padding: '5px 2px',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    borderRadius: 3,
+                    border: instrumentScope === tab.id ? '1.5px solid #f06428' : '1px solid #ddd',
+                    background: instrumentScope === tab.id ? 'rgba(240,100,40,0.1)' : '#fafafa',
+                    color: instrumentScope === tab.id ? '#f06428' : '#666',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Single Symbol View */}
+            {instrumentScope === 'single' && (
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                  Target Instrument
+                </label>
+                <select
+                  value={singleSymbol}
+                  onChange={(e) => setSingleSymbol(e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                >
+                  <option value="NIFTY 50">NIFTY 50 (Lot: 25)</option>
+                  <option value="NIFTY BANK">BANKNIFTY (Lot: 15)</option>
+                  <option value="NIFTY FIN SERVICE">FINNIFTY (Lot: 25)</option>
+                  <option value="SENSEX">SENSEX (Lot: 10)</option>
+                  <option value="RELIANCE">RELIANCE (Lot: 250)</option>
+                  <option value="HDFCBANK">HDFCBANK (Lot: 550)</option>
+                  <option value="ICICIBANK">ICICIBANK (Lot: 700)</option>
+                  <option value="SBIN">SBIN (Lot: 750)</option>
+                  <option value="INFY">INFY (Lot: 400)</option>
+                  <option value="TCS">TCS (Lot: 175)</option>
+                  <option value="TATAMOTORS">TATAMOTORS (Lot: 575)</option>
+                  <option value="BAJFINANCE">BAJFINANCE (Lot: 125)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Indices Multi-Select */}
+            {instrumentScope === 'indices' && (
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 4 }}>
+                  Scan Indices ({scanIndices.length} active)
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {AVAILABLE_INDICES.map((idx) => {
+                    const checked = scanIndices.includes(idx.id);
+                    return (
+                      <label
+                        key={idx.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 7px', borderRadius: 4,
+                          border: `1px solid ${checked ? '#f06428' : '#e0e0e0'}`,
+                          background: checked ? 'rgba(240,100,40,0.06)' : '#fafafa',
+                          fontSize: 11, fontWeight: checked ? 700 : 500, color: checked ? '#f06428' : '#555',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIndex(idx.id)}
+                          style={{ accentColor: '#f06428', margin: 0 }}
+                        />
+                        {idx.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Selected F&O Stocks */}
+            {instrumentScope === 'fno_selected' && (
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 4 }}>
+                  Selected F&O Stocks ({scanStocks.length} selected)
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 160, overflowY: 'auto', paddingRight: 4 }}>
+                  {CURATED_FNO_STOCKS.map((group) => (
+                    <div key={group.group}>
+                      <div style={{ fontSize: 9.5, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 3 }}>
+                        {group.group}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                        {group.stocks.map((stk) => {
+                          const checked = scanStocks.includes(stk);
+                          return (
+                            <label
+                              key={stk}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 3,
+                                border: `1px solid ${checked ? '#f06428' : '#e5e5e5'}`,
+                                background: checked ? 'rgba(240,100,40,0.06)' : '#fff',
+                                fontSize: 10.5, fontWeight: checked ? 700 : 500, color: checked ? '#f06428' : '#555',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleStock(stk)}
+                                style={{ accentColor: '#f06428', margin: 0 }}
+                              />
+                              {stk}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* All F&O Universe */}
+            {instrumentScope === 'fno_all' && (
+              <div style={{ background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: '#333', lineHeight: 1.4 }}>
+                <div style={{ fontWeight: 700, color: '#1976d2', marginBottom: 2 }}>🌐 Full NSE F&O Universe (~180+ Stocks)</div>
+                Simulates multi-asset portfolio scanning across all eligible liquid F&O stocks with lot sizes and margin scaling.
+              </div>
+            )}
+          </div>
+
+          {/* ── Contracts & Product Specification Section ── */}
+          <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              📜 Contracts & Expiry Specs
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                  Contract Type
+                </label>
+                <select
+                  value={contractType}
+                  onChange={(e) => setContractType(e.target.value as any)}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                >
+                  <option value="futures">📈 Futures (Delta 1.0)</option>
+                  <option value="options_atm">⚡ Options ATM (Δ 0.50)</option>
+                  <option value="options_itm">🎯 Options ITM (Δ 0.70)</option>
+                  <option value="options_otm">🏹 Options OTM (Δ 0.30)</option>
+                  <option value="spot">📊 Spot Index</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                  Expiry Cycle
+                </label>
+                <select
+                  value={expiryCycle}
+                  onChange={(e) => setExpiryCycle(e.target.value as any)}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                >
+                  <option value="weekly">Weekly Cycle</option>
+                  <option value="monthly">Monthly Cycle</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 10.5, color: '#888', lineHeight: 1.35 }}>
+              {contractType.startsWith('options')
+                ? 'Simulates dynamic delta price capture & theta decay per bar held.'
+                : 'Simulates full tick point movement with exchange lot sizes.'}
+            </div>
+          </div>
+
+          {/* Timeframe & Lookback */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
                 Timeframe
@@ -344,10 +570,7 @@ export function UnifiedBacktestPane() {
                 <option value="day">1 Day (Positional)</option>
               </select>
             </div>
-          </div>
 
-          {/* Lookback Days & Capital */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
                 Lookback (Days)
@@ -358,6 +581,22 @@ export function UnifiedBacktestPane() {
                 max={365}
                 value={lookbackDays}
                 onChange={(e) => setLookbackDays(Number(e.target.value))}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+
+          {/* Capital & Lots */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+                Starting Capital (₹)
+              </label>
+              <input
+                type="number"
+                step={10000}
+                value={startingCapital}
+                onChange={(e) => setStartingCapital(Number(e.target.value))}
                 style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
               />
             </div>
@@ -374,19 +613,6 @@ export function UnifiedBacktestPane() {
                 style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
               />
             </div>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
-              Starting Capital (₹)
-            </label>
-            <input
-              type="number"
-              step={10000}
-              value={startingCapital}
-              onChange={(e) => setStartingCapital(Number(e.target.value))}
-              style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
-            />
           </div>
 
           {/* Stop, Target & Trailing */}
@@ -491,8 +717,8 @@ export function UnifiedBacktestPane() {
               <div style={{ fontSize: 16, fontWeight: 700, color: '#444', marginBottom: 4 }}>
                 Ready to Run Real-Data Backtest
               </div>
-              <div style={{ fontSize: 13, maxWidth: 450, textAlign: 'center', lineHeight: 1.5 }}>
-                Select a preset or customize your strategy parameters on the left, then click <strong>Run Backtest</strong> to evaluate performance on genuine historical candles with dynamic ATR risk and trailing stops.
+              <div style={{ fontSize: 13, maxWidth: 460, textAlign: 'center', lineHeight: 1.5 }}>
+                Select your <strong>Instruments</strong> (Indices / F&O Stocks), <strong>Contracts</strong> (Futures / Options ATM), and Strategy on the left, then click <strong>Run Backtest</strong> to simulate with dynamic ATR risk and friction.
               </div>
             </div>
           )}
@@ -503,7 +729,7 @@ export function UnifiedBacktestPane() {
               <div style={{ fontSize: 15, fontWeight: 600, color: '#333', marginBottom: 4 }}>
                 Fetching Historical Candles & Simulating Executions…
               </div>
-              <div style={{ fontSize: 12 }}>Calculating dynamic ATR risk boundaries, fee ledgers, and MAE/MFE diagnostics</div>
+              <div style={{ fontSize: 12 }}>Calculating dynamic ATR risk boundaries, options delta scaling, fee ledgers, and MAE/MFE diagnostics</div>
             </div>
           )}
 
@@ -634,7 +860,7 @@ export function UnifiedBacktestPane() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
-                        Portfolio Capital Growth vs. High-Water Mark (INR)
+                        Portfolio Capital Growth vs. High-Water Mark (INR) • {contractType.toUpperCase()}
                       </span>
                       <span style={{ fontSize: 12, color: '#888' }}>
                         Evaluated {result.candles_evaluated} real candles ({result.start_date.substring(0, 10)} → {result.end_date.substring(0, 10)})

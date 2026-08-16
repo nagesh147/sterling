@@ -48,7 +48,7 @@ function renderComponent() {
 }
 
 describe('UnifiedBacktestPane', () => {
-  it('renders strategy selector, dynamic mode, presets, parameters, data source options, and run button', () => {
+  it('renders strategy selector, universe scopes, contracts options, and run button', () => {
     renderComponent();
 
     expect(screen.getByText(/REAL DATA:/i)).toBeInTheDocument();
@@ -57,54 +57,57 @@ describe('UnifiedBacktestPane', () => {
     expect(screen.getByRole('button', { name: /Dynamic \(Live\)/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Manual Override/i })).toBeInTheDocument();
     expect(screen.getByText(/⚡ Dynamic Risk Engine Active/i)).toBeInTheDocument();
-    expect(screen.getByText(/Historical Data Source/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Zerodha Kite/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /TrueData/i })).toBeInTheDocument();
-    expect(screen.getByText(/Strategy & Engine Parameters/i)).toBeInTheDocument();
-    expect(screen.getByText(/Indian F&O Friction Engine/i)).toBeInTheDocument();
+    expect(screen.getByText(/Instruments & Universe Scope/i)).toBeInTheDocument();
+    expect(screen.getByText(/Contracts & Expiry Specs/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Single/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Indices/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Selected F&O/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /All F&O/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Run Backtest/i })).toBeInTheDocument();
-    expect(screen.getByText('Ready to Run Real-Data Backtest')).toBeInTheDocument();
   });
 
-  it('allows toggling between Dynamic Autonomous mode and Manual Override', () => {
+  it('allows switching between Instrument scopes: Single, Indices, Selected F&O, and All F&O', () => {
     renderComponent();
 
-    const manualBtn = screen.getByRole('button', { name: /Manual Override/i });
-    const dynamicBtn = screen.getByRole('button', { name: /Dynamic \(Live\)/i });
+    // Click Indices scope
+    const indicesBtn = screen.getByRole('button', { name: /Indices/i });
+    fireEvent.click(indicesBtn);
+    expect(screen.getByText(/Scan Indices/i)).toBeInTheDocument();
+    expect(screen.getByText('BANKNIFTY')).toBeInTheDocument();
 
-    // Click Manual Override
-    fireEvent.click(manualBtn);
-    expect(screen.getByText('Stop (SL)')).toBeInTheDocument();
-    expect(screen.getByText('Target (TP)')).toBeInTheDocument();
+    // Click Selected F&O scope
+    const fnoSelectedBtn = screen.getByRole('button', { name: /Selected F&O/i });
+    fireEvent.click(fnoSelectedBtn);
+    expect(screen.getByText(/Selected F&O Stocks/i)).toBeInTheDocument();
+    expect(screen.getByText('RELIANCE')).toBeInTheDocument();
 
-    // Click Dynamic back
-    fireEvent.click(dynamicBtn);
-    expect(screen.getByText(/⚡ Dynamic Risk Engine Active/i)).toBeInTheDocument();
+    // Click All F&O scope
+    const fnoAllBtn = screen.getByRole('button', { name: /All F&O/i });
+    fireEvent.click(fnoAllBtn);
+    expect(screen.getByText(/Full NSE F&O Universe/i)).toBeInTheDocument();
   });
 
-  it('allows toggling between Zerodha Kite and TrueData sources', () => {
+  it('allows selecting contract type and expiry cycle', () => {
     renderComponent();
 
-    const kiteBtn = screen.getByRole('button', { name: /Zerodha Kite/i });
-    const truedataBtn = screen.getByRole('button', { name: /TrueData/i });
-
-    expect(kiteBtn).toBeInTheDocument();
-    expect(truedataBtn).toBeInTheDocument();
-
-    // Click TrueData
-    fireEvent.click(truedataBtn);
-    expect(screen.getByText(/TRUEDATA V2.6 ENGINE/i)).toBeInTheDocument();
-
-    // Click Kite back
-    fireEvent.click(kiteBtn);
-    expect(screen.getByText(/ZERODHA KITE ENGINE/i)).toBeInTheDocument();
+    expect(screen.getByText(/Contract Type/i)).toBeInTheDocument();
+    expect(screen.getByText(/Expiry Cycle/i)).toBeInTheDocument();
   });
 
-  it('clicking preset applies preset values', () => {
+  it('clicking run backtest submits configured payload with universe and contract parameters', () => {
     renderComponent();
 
-    const presetBtn = screen.getByText('NIFTY 50 • Adaptive Edge Intraday');
-    fireEvent.click(presetBtn);
-    expect(presetBtn).toBeInTheDocument();
+    const runBtn = screen.getByRole('button', { name: /Run Backtest/i });
+    fireEvent.click(runBtn);
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategy: 'adaptive_edge',
+        contract_type: 'futures',
+        expiry_cycle: 'weekly',
+        dynamic_mode: true,
+      }),
+      expect.any(Object)
+    );
   });
 });

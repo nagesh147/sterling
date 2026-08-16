@@ -38,21 +38,53 @@ from app.schemas.backtest import (
 )
 
 
+FNO_LOT_SIZES = {
+    "NIFTY 50": 25,
+    "NIFTY BANK": 15,
+    "NIFTY FIN SERVICE": 25,
+    "MIDCPNIFTY": 50,
+    "SENSEX": 10,
+    "BANKEX": 15,
+    "RELIANCE": 250,
+    "HDFCBANK": 550,
+    "ICICIBANK": 700,
+    "SBIN": 750,
+    "INFY": 400,
+    "TCS": 175,
+    "TATAMOTORS": 575,
+    "BAJFINANCE": 125,
+    "BHARTIARTL": 475,
+    "KOTAKBANK": 400,
+    "AXISBANK": 625,
+    "ADANIENT": 300,
+    "ADANIPORTS": 400,
+    "JSWSTEEL": 675,
+    "TATASTEEL": 5500,
+    "HINDALCO": 1400,
+    "MARUTI": 50,
+    "TITAN": 175,
+    "ASIANPAINT": 200,
+    "ITC": 1600,
+    "HCLTECH": 350,
+    "TECHM": 600,
+    "WIPRO": 1500,
+    "NTPC": 1500,
+    "POWERGRID": 1800,
+    "COALINDIA": 2100,
+    "ONGC": 3850,
+}
+
+
 def _resolve_lot_size(symbol: str, override: Optional[int] = None) -> int:
     if override and override > 0:
         return override
-    sym = symbol.upper()
-    if "BANK" in sym:
-        return 15
-    if "FIN" in sym:
-        return 25
-    if "MIDCP" in sym:
-        return 50
-    if "SENSEX" in sym:
-        return 10
-    if "NIFTY" in sym:
-        return 25
-    return 25  # default index / stock lot size
+    sym = symbol.upper().strip()
+    if sym in FNO_LOT_SIZES:
+        return FNO_LOT_SIZES[sym]
+    for k, v in FNO_LOT_SIZES.items():
+        if k in sym or sym in k:
+            return v
+    return 25  # default F&O lot size
 
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -379,14 +411,32 @@ def run_unified_backtest(
 
             # Process Trade Exit
             if exit_price is not None:
-                if direction == "LONG":
-                    gross_pnl = (exit_price - entry_price) * total_qty
+                # Option Greeks & Contract Model
+                delta = 1.0
+                theta_decay_pts = 0.0
+                c_type = getattr(req, "contract_type", "futures")
+                if c_type == "options_atm":
+                    delta = 0.50
+                    theta_decay_pts = (curr_atr * 0.04) * max(1, bars_held)
+                elif c_type == "options_itm":
+                    delta = 0.70
+                    theta_decay_pts = (curr_atr * 0.02) * max(1, bars_held)
+                elif c_type == "options_otm":
+                    delta = 0.30
+                    theta_decay_pts = (curr_atr * 0.07) * max(1, bars_held)
+
+                pts_move = (exit_price - entry_price) if direction == "LONG" else (entry_price - exit_price)
+                if "options" in c_type:
+                    contract_pts = (pts_move * delta) - theta_decay_pts
                 else:
-                    gross_pnl = (entry_price - exit_price) * total_qty
+                    contract_pts = pts_move
+
+                gross_pnl = contract_pts * total_qty
 
                 # Indian F&O Friction Engine
-                entry_turnover = entry_price * total_qty
-                exit_turnover = exit_price * total_qty
+                turnover_mult = delta if "options" in c_type else 1.0
+                entry_turnover = entry_price * total_qty * turnover_mult
+                exit_turnover = exit_price * total_qty * turnover_mult
                 total_turnover = entry_turnover + exit_turnover
 
                 brokerage = req.brokerage_per_order * 2.0  # Entry + Exit
@@ -404,8 +454,7 @@ def run_unified_backtest(
 
                 sl_d = current_trade.get("sl_dist", round(abs(entry_price - sl_price), 2))
                 tp_d = current_trade.get("tp_dist", round(abs(tp_price - entry_price), 2))
-                pts_captured = (exit_price - entry_price) if direction == "LONG" else (entry_price - exit_price)
-                rr_achieved = round(pts_captured / sl_d, 2) if sl_d > 0 else 0.0
+                rr_achieved = round(contract_pts / (sl_d * delta), 2) if (sl_d * delta) > 0 else 0.0
 
                 trades.append(
                     BacktestTradeLog(
