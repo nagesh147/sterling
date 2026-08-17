@@ -94,8 +94,8 @@ def test_mode_transition_does_not_change_authorized_risk():
     moved = transition(state, StateEvent.ENTER_INTRADAY).resulting_state
     assert moved.authorization is auth
     assert moved.authorization.authorized_risk == 10.0
-    assert FORMULAS["F-104"].status is FormulaStatus.IMPLEMENTED
-    assert FORMULAS["F-106"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-104"].status is FormulaStatus.LOCKED
+    assert FORMULAS["F-106"].status is FormulaStatus.LOCKED
 
 
 def test_session_records_mode_ladder():
@@ -160,4 +160,4 @@ def test_session_records_mode_ladder():
     assert session.mode_transitions
     assert session.legs[0].entry_mode == "MICRO"
     assert session.legs[0].peak_mode != "MICRO"
-    assert FORMULAS["F-104"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-104"].status is FormulaStatus.LOCKED

@@ -236,7 +236,7 @@ def run_e2e(
         raise ValueError("order intent requires idempotency key")
     audit.append("order_intent", order.order_intent_id, instrument.selection_id)
 
-    execution_gateway.submit(order)
+    execution_gateway.submit(order, formula_ids)
     if broker_event is None:
         raise ValueError("broker execution event is required; submission is not execution")
 

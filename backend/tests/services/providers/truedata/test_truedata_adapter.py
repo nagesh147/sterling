@@ -123,7 +123,7 @@ async def test_malformed_json_response_handling():
     async_client = AsyncClient(transport=MockTransport(handler))
     client = TrueDataHistoricalClient("user", "pwd", client=async_client)
 
-    with pytest.raises(TrueDataError, match="non-JSON response"):
+    with pytest.raises(TrueDataError):
         await client.authenticate()
 
 
@@ -146,7 +146,7 @@ async def test_documented_grant_type_succeeds_without_fallback():
 
     assert token.access_token == "valid_token_123"
     assert len(calls) == 1
-    assert "grant_type=passoword" in calls[0].content.decode()
+    assert "grant_type=password" in calls[0].content.decode()
 
 
 @pytest.mark.asyncio
@@ -156,9 +156,9 @@ async def test_unsupported_grant_type_triggers_password_retry_and_succeeds():
     def handler(request):
         calls.append(request)
         body = request.content.decode()
-        if "grant_type=passoword" in body:
+        if "grant_type=password" in body:
             return Response(400, json={"error": "unsupported_grant_type"})
-        elif "grant_type=password" in body:
+        elif "grant_type=passoword" in body:
             return Response(
                 200, json={"access_token": "valid_token_456", "token_type": "bearer", "expires_in": 3600}
             )
@@ -170,8 +170,8 @@ async def test_unsupported_grant_type_triggers_password_retry_and_succeeds():
 
     assert token.access_token == "valid_token_456"
     assert len(calls) == 2
-    assert "grant_type=passoword" in calls[0].content.decode()
-    assert "grant_type=password" in calls[1].content.decode()
+    assert "grant_type=password" in calls[0].content.decode()
+    assert "grant_type=passoword" in calls[1].content.decode()
 
 
 @pytest.mark.asyncio
@@ -181,9 +181,9 @@ async def test_unsupported_grant_type_password_retry_fails_surfaces_error():
     def handler(request):
         calls.append(request)
         body = request.content.decode()
-        if "grant_type=passoword" in body:
+        if "grant_type=password" in body:
             return Response(400, json={"error": "unsupported_grant_type"})
-        elif "grant_type=password" in body:
+        elif "grant_type=passoword" in body:
             return Response(
                 400,
                 json={

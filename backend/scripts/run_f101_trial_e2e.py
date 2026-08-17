@@ -112,8 +112,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if FORMULAS["F-101"].status is not FormulaStatus.IMPLEMENTED:
-        raise SystemExit("FAILURE: F-101 registry is not IMPLEMENTED")
+    if FORMULAS["F-101"].status is not FormulaStatus.LOCKED:
+        raise SystemExit("FAILURE: F-101 registry is not LOCKED")
 
     tick_store = TickStore(args.tick_store)
     start, end = _tick_span(tick_store, args.symbol)
