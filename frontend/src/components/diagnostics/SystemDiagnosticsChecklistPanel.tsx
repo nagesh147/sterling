@@ -654,14 +654,6 @@ export function SystemDiagnosticsChecklistPanel() {
                     >
                       {isTesting ? <span className="diag-spinner-tiny" /> : 'Test'}
                     </button>
-
-                    <button
-                      className="diag-btn-chevron"
-                      onClick={() => toggleExpand(item.id)}
-                      aria-label="Toggle proof details"
-                    >
-                      <span className={`diag-chevron-arrow ${isExpanded ? 'open' : ''}`}>▼</span>
-                    </button>
                   </div>
                 </div>
 
@@ -1080,7 +1072,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
         .diag-table-header {
           display: grid;
-          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 80px;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 60px;
           align-items: center;
           padding: 8px 16px;
           gap: 12px;
@@ -1129,7 +1121,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
         .diag-item-row {
           display: grid;
-          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 80px;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 60px;
           align-items: center;
           padding: 10px 16px;
           gap: 12px;
@@ -1267,7 +1259,7 @@ export function SystemDiagnosticsChecklistPanel() {
           background: #f8fafc;
           border: 1px solid #cbd5e1;
           color: #f06428;
-          padding: 3px 8px;
+          padding: 3px 10px;
           border-radius: 4px;
           cursor: pointer;
           transition: all 0.15s ease;
@@ -1276,26 +1268,6 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-btn-micro:hover:not(:disabled) {
           background: #fff5f0;
           border-color: #ffd7c7;
-        }
-
-        .diag-btn-chevron {
-          background: none;
-          border: none;
-          color: #94a3b8;
-          cursor: pointer;
-          padding: 2px 4px;
-          display: flex;
-          align-items: center;
-        }
-
-        .diag-chevron-arrow {
-          font-size: 9px;
-          transition: transform 0.15s ease;
-          display: inline-block;
-        }
-
-        .diag-chevron-arrow.open {
-          transform: rotate(180deg);
         }
 
         .diag-proof-drawer {
