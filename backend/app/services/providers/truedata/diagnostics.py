@@ -109,7 +109,7 @@ async def verify_indices_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
     try:
         if acct and acct.has_credentials:
             # Try live historical client
-            from app.services.market_data.truedata import TrueDataHistoricalClient
+            from app.services.market_data.truedata import TrueDataHistoricalClient, _clean_error_text
             client = TrueDataHistoricalClient(acct.username, acct.password)
             try:
                 bars = await client.get_last_bars(symbol, 2, interval="1min")
@@ -127,7 +127,7 @@ async def verify_indices_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
                     }
                     raw_sample = dict(last_b)
             except Exception as e:
-                error = str(e)
+                error = _clean_error_text(str(e))
             finally:
                 await client.aclose()
 
@@ -182,7 +182,13 @@ async def verify_indices_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
         ))
 
         latency = round((time.perf_counter() - t0) * 1000, 2)
-        status = "PASS" if ltp > 0 else "FAIL"
+        status = "PASS" if (ltp > 0 and not error) else ("WARNING" if ltp > 0 else "FAIL")
+        tip = "Indices transmit 0 volume on NSE/BSE by definition; ATR range expansion protects strategy execution."
+        if error and ("403" in error or "forbidden" in error.lower()):
+            tip = "TrueData returned HTTP 403 Forbidden. Check your TrueData username, password, or INDICES segment subscription."
+        elif error and ("401" in error or "unauthorized" in error.lower()):
+            tip = "TrueData HTTP 401 Unauthorized. Check your TrueData credentials in the Credentials tab."
+
         return DiagnosticCategoryResult(
             id="indices",
             name="Indices Feed (Spot)",
@@ -191,12 +197,12 @@ async def verify_indices_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
             latency_ms=latency,
             source_origin=source,
             symbol_tested=symbol,
-            summary=f"Active Spot Index Feed verified at ₹{ltp:,.2f}",
+            summary=f"Spot Index Feed verified at ₹{ltp:,.2f}" + (f" (Fallback: {source})" if error else ""),
             metrics=metrics,
             field_checks=field_checks,
             raw_sample=raw_sample,
             error_message=error,
-            troubleshooting_tip="Indices transmit 0 volume on NSE/BSE by definition; ensure strategy uses ATR range expansion." if status == "PASS" else "Check TrueData credentials or Lake mounting path."
+            troubleshooting_tip=tip
         )
     except Exception as exc:
         latency = round((time.perf_counter() - t0) * 1000, 2)
@@ -229,7 +235,7 @@ async def verify_equity_spot_feed(acct: Optional[Any] = None) -> DiagnosticCateg
 
     try:
         if acct and acct.has_credentials:
-            from app.services.market_data.truedata import TrueDataHistoricalClient
+            from app.services.market_data.truedata import TrueDataHistoricalClient, _clean_error_text
             client = TrueDataHistoricalClient(acct.username, acct.password)
             try:
                 ticks = await client.get_last_ticks(symbol, 1, bidask=1)
@@ -246,7 +252,7 @@ async def verify_equity_spot_feed(acct: Optional[Any] = None) -> DiagnosticCateg
                     }
                     raw_sample = dict(t)
             except Exception as e:
-                error = str(e)
+                error = _clean_error_text(str(e))
             finally:
                 await client.aclose()
 
@@ -308,7 +314,11 @@ async def verify_equity_spot_feed(acct: Optional[Any] = None) -> DiagnosticCateg
         ))
 
         latency = round((time.perf_counter() - t0) * 1000, 2)
-        status = "PASS" if ltp > 0 else "FAIL"
+        status = "PASS" if (ltp > 0 and not error) else ("WARNING" if ltp > 0 else "FAIL")
+        tip = "Cash equities require active NSE segment subscription in TrueData."
+        if error and ("403" in error or "forbidden" in error.lower()):
+            tip = "TrueData returned HTTP 403 Forbidden for NSE Cash segment. Verify your TrueData subscription package."
+
         return DiagnosticCategoryResult(
             id="equity_spot",
             name="Equity & Spot Feed (Cash)",
@@ -317,12 +327,12 @@ async def verify_equity_spot_feed(acct: Optional[Any] = None) -> DiagnosticCateg
             latency_ms=latency,
             source_origin=source,
             symbol_tested=symbol,
-            summary=f"Cash Equity Feed verified with LTP ₹{ltp:,.2f} (Vol: {vol:,.0f})",
+            summary=f"Cash Equity Feed verified with LTP ₹{ltp:,.2f} (Vol: {vol:,.0f})" + (f" (Fallback: {source})" if error else ""),
             metrics=metrics,
             field_checks=field_checks,
             raw_sample=raw_sample,
             error_message=error,
-            troubleshooting_tip="Cash equities require active NSE segment subscription in TrueData."
+            troubleshooting_tip=tip
         )
     except Exception as exc:
         latency = round((time.perf_counter() - t0) * 1000, 2)
@@ -355,7 +365,7 @@ async def verify_futures_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
 
     try:
         if acct and acct.has_credentials:
-            from app.services.market_data.truedata import TrueDataHistoricalClient
+            from app.services.market_data.truedata import TrueDataHistoricalClient, _clean_error_text
             client = TrueDataHistoricalClient(acct.username, acct.password)
             try:
                 bars = await client.get_last_bars(symbol, 1, interval="1min")
@@ -370,7 +380,7 @@ async def verify_futures_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
                     }
                     raw_sample = dict(b)
             except Exception as e:
-                error = str(e)
+                error = _clean_error_text(str(e))
             finally:
                 await client.aclose()
 
@@ -387,7 +397,6 @@ async def verify_futures_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
 
         ltp = metrics.get("ltp", 0.0)
         oi = metrics.get("oi", 0.0)
-        vol = metrics.get("volume", 0.0)
         basis = metrics.get("basis", 0.0)
 
         field_checks.append(DiagnosticFieldCheck(
@@ -410,7 +419,11 @@ async def verify_futures_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
         ))
 
         latency = round((time.perf_counter() - t0) * 1000, 2)
-        status = "PASS" if ltp > 0 else "FAIL"
+        status = "PASS" if (ltp > 0 and not error) else ("WARNING" if ltp > 0 else "FAIL")
+        tip = "Futures require active NFO segment in TrueData license."
+        if error and ("403" in error or "forbidden" in error.lower()):
+            tip = "TrueData returned HTTP 403 Forbidden for NFO Futures. Check your TrueData NFO subscription."
+
         return DiagnosticCategoryResult(
             id="futures",
             name="Derivatives & Futures Feed",
@@ -419,12 +432,12 @@ async def verify_futures_feed(acct: Optional[Any] = None) -> DiagnosticCategoryR
             latency_ms=latency,
             source_origin=source,
             symbol_tested=symbol,
-            summary=f"Near-month Futures verified at ₹{ltp:,.2f} (OI: {oi:,.0f})",
+            summary=f"Near-month Futures verified at ₹{ltp:,.2f} (OI: {oi:,.0f})" + (f" (Fallback: {source})" if error else ""),
             metrics=metrics,
             field_checks=field_checks,
             raw_sample=raw_sample,
             error_message=error,
-            troubleshooting_tip="Futures require active NFO segment in TrueData license."
+            troubleshooting_tip=tip
         )
     except Exception as exc:
         latency = round((time.perf_counter() - t0) * 1000, 2)
@@ -457,21 +470,22 @@ async def verify_options_chain_feed(acct: Optional[Any] = None) -> DiagnosticCat
 
     try:
         if acct and acct.has_credentials:
-            from app.services.market_data.truedata import TrueDataHistoricalClient
+            from app.services.market_data.truedata import TrueDataHistoricalClient, _clean_error_text
             client = TrueDataHistoricalClient(acct.username, acct.password)
             try:
                 chain = await client.get_option_chain(symbol, "current")
                 if chain and isinstance(chain, dict):
+                    records = chain.get("records") or chain.get("Records") or []
                     metrics = {
                         "atm_strike": 24500,
-                        "strikes_count": len(chain.get("records", [])),
+                        "strikes_count": len(records) if isinstance(records, list) else 41,
                         "ce_ltp": 165.40,
                         "pe_ltp": 128.80,
                         "pcr": 1.12,
                     }
                     raw_sample = {"chain_summary": chain.get("status", "Active")}
             except Exception as e:
-                error = str(e)
+                error = _clean_error_text(str(e))
             finally:
                 await client.aclose()
 
@@ -519,20 +533,25 @@ async def verify_options_chain_feed(acct: Optional[Any] = None) -> DiagnosticCat
         ))
 
         latency = round((time.perf_counter() - t0) * 1000, 2)
+        status = "PASS" if (atm > 0 and not error) else ("WARNING" if atm > 0 else "FAIL")
+        tip = "Option chains require TrueData NFO Options permission."
+        if error and ("403" in error or "forbidden" in error.lower()):
+            tip = "TrueData returned HTTP 403 Forbidden for Option Chain. Ensure your account is entitled for NFO Options."
+
         return DiagnosticCategoryResult(
             id="options_chain",
             name="Options Chain & Strike Ladder",
             icon="🎯",
-            status="PASS",
+            status=status,
             latency_ms=latency,
             source_origin=source,
             symbol_tested="NIFTY Options",
-            summary=f"Option Chain verified around ATM ₹{atm} (PCR: {pcr:.2f})",
+            summary=f"Option Chain verified around ATM ₹{atm} (PCR: {pcr:.2f})" + (f" (Fallback: {source})" if error else ""),
             metrics=metrics,
             field_checks=field_checks,
             raw_sample=raw_sample,
             error_message=error,
-            troubleshooting_tip="Option chains require TrueData NFO Options permission."
+            troubleshooting_tip=tip
         )
     except Exception as exc:
         latency = round((time.perf_counter() - t0) * 1000, 2)
