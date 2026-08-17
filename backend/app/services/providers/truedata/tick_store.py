@@ -1,4 +1,8 @@
-"""Local TrueData tick-quote cache for LiquidityImbalance acquisition."""
+"""Local TrueData tick-quote cache for LiquidityImbalance acquisition.
+
+Provenance is persisted and returned so Adaptive Edge replay cannot relabel
+synthetic or mixed-provider rows as TrueData.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -50,16 +54,20 @@ class TickStore:
         *,
         request_from: str,
         request_to: str,
+        source: str = "truedata",
+        source_version: str = "2.6",
     ) -> str:
         with self._connect() as conn:
             for ordinal, row in enumerate(rows):
+                row_source = str(row.get("source", source))
+                row_version = str(row.get("source_version", source_version))
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO truedata_tick_quotes (
                         symbol, provider_timestamp, row_ordinal,
                         ltp, volume, oi, bid, bidqty, ask, askqty,
-                        request_from, request_to
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        request_from, request_to, source, source_version
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         symbol,
@@ -74,6 +82,8 @@ class TickStore:
                         _num(row.get("askqty")),
                         request_from,
                         request_to,
+                        row_source,
+                        row_version,
                     ),
                 )
         return self.dataset_sha256(symbol)
@@ -83,7 +93,8 @@ class TickStore:
             rows = conn.execute(
                 """
                 SELECT provider_timestamp AS timestamp, row_ordinal,
-                       ltp, volume, oi, bid, bidqty, ask, askqty
+                       ltp, volume, oi, bid, bidqty, ask, askqty,
+                       source, source_version
                 FROM truedata_tick_quotes
                 WHERE symbol = ?
                 ORDER BY provider_timestamp, row_ordinal
