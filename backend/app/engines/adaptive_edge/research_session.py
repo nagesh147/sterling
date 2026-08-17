@@ -5,10 +5,12 @@ Session 09:15–15:30 IST weekdays matches tick_history.py, not a TrueData v2.6 
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.services.providers.truedata.tick_history import IST, SESSION_CLOSE, SESSION_OPEN
+IST = ZoneInfo("Asia/Kolkata")
+SESSION_OPEN = time(9, 15)
+SESSION_CLOSE = time(15, 30)
 
 # A126: new entries forbidden and open positions flatten 45 minutes before session close.
 A126_CUTOFF_BEFORE_CLOSE = timedelta(minutes=45)
