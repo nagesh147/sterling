@@ -37,12 +37,16 @@ from app.engines.adaptive_edge.formula_registry import FORMULAS, FormulaStatus
 from app.engines.adaptive_edge.trial_dataset import collect_valid_feature_values, score_trial_bars
 from app.services.providers.truedata.bar_history import BarHistoryAcquirer, bars_to_canonical_sequence
 from app.services.providers.truedata.bar_store import BarStore
+from app.services.providers.truedata.replay_contract import (
+    TRUE_DATA_SOURCE,
+    TRUE_DATA_VERSION,
+    require_causal_order,
+    require_truedata_sequence,
+)
 from app.services.providers.truedata.tick_history import ticks_to_canonical_sequence
 from app.services.providers.truedata.tick_store import TickStore
 
 IST = ZoneInfo("Asia/Kolkata")
-TRUE_DATA_SOURCE = "truedata"
-TRUE_DATA_VERSION = "2.6"
 
 
 def _parse_provider_ts(value: str) -> datetime:
@@ -68,37 +72,12 @@ def _tick_span(store: TickStore, symbol: str) -> tuple[datetime, datetime]:
     return min(times), max(times)
 
 
-def _require_truedata_sequence(sequence, label: str) -> None:
-    """Reject empty, synthetic, mixed-provider, or wrong-version sequences."""
-    if not sequence.events:
-        raise SystemExit(f"FAILURE: {label} sequence is empty")
-    bad = [
-        event
-        for event in sequence.events
-        if event.source != TRUE_DATA_SOURCE or event.source_version != TRUE_DATA_VERSION
-    ]
-    if bad:
-        sample = bad[0]
-        raise SystemExit(
-            f"FAILURE: {label} contains non-TrueData provenance: "
-            f"source={sample.source!r}, version={sample.source_version!r}, "
-            f"record_id={sample.record_id}"
-        )
-
-
-def _assert_causal_order(sequence, label: str) -> None:
-    previous = None
-    for event in sequence.events:
-        if event.available_at < event.event_time:
-            raise SystemExit(
-                f"FAILURE: {label} violates causal availability at {event.record_id}"
-            )
-        if previous is not None and (event.event_time, event.record_id) < (
-            previous.event_time,
-            previous.record_id,
-        ):
-            raise SystemExit(f"FAILURE: {label} is not deterministically ordered")
-        previous = event
+def _validate_true_data(sequence, label: str) -> None:
+    try:
+        require_truedata_sequence(sequence, label)
+        require_causal_order(sequence, label)
+    except ValueError as exc:
+        raise SystemExit(f"FAILURE: {exc}") from exc
 
 
 async def _maybe_fetch_bars(args: argparse.Namespace, start: datetime, end: datetime) -> None:
@@ -130,27 +109,15 @@ async def _maybe_fetch_bars(args: argparse.Namespace, start: datetime, end: date
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbol", default="NIFTY-I")
-    parser.add_argument(
-        "--tick-store",
-        default=str(ROOT / "backend" / "data" / "truedata_ticks.sqlite"),
-    )
-    parser.add_argument(
-        "--bar-store",
-        default=str(ROOT / "backend" / "data" / "truedata_bars.sqlite"),
-    )
+    parser.add_argument("--tick-store", default=str(ROOT / "backend" / "data" / "truedata_ticks.sqlite"))
+    parser.add_argument("--bar-store", default=str(ROOT / "backend" / "data" / "truedata_bars.sqlite"))
     parser.add_argument("--fetch-bars", action="store_true")
     parser.add_argument("--w-short", type=int, default=5)
     parser.add_argument("--w-long", type=int, default=15)
     parser.add_argument("--params")
     parser.add_argument("--estimate-params", action="store_true")
-    parser.add_argument(
-        "--write-params",
-        default=str(ROOT / "backend" / "data" / "adaptive_edge" / "f101_parameters_trial.json"),
-    )
-    parser.add_argument(
-        "--out",
-        default=str(ROOT / "backend" / "data" / "adaptive_edge" / "f101_trial_scores.json"),
-    )
+    parser.add_argument("--write-params", default=str(ROOT / "backend" / "data" / "adaptive_edge" / "f101_parameters_trial.json"))
+    parser.add_argument("--out", default=str(ROOT / "backend" / "data" / "adaptive_edge" / "f101_trial_scores.json"))
     args = parser.parse_args()
 
     # F-101 is intentionally LOCKED in the production formula registry.
@@ -180,10 +147,8 @@ def main() -> int:
 
     tick_sequence = ticks_to_canonical_sequence(args.symbol, tick_store.load(args.symbol))
     bar_sequence = bars_to_canonical_sequence(args.symbol, bar_rows)
-    _require_truedata_sequence(bar_sequence, "bar")
-    _require_truedata_sequence(tick_sequence, "tick")
-    _assert_causal_order(bar_sequence, "bar")
-    _assert_causal_order(tick_sequence, "tick")
+    _validate_true_data(bar_sequence, "bar")
+    _validate_true_data(tick_sequence, "tick")
 
     print(f"SOURCE_VERIFIED: {TRUE_DATA_SOURCE.upper()}_V{TRUE_DATA_VERSION}")
     print(f"BAR_EVENTS: {len(bar_sequence.events)}")
@@ -196,21 +161,11 @@ def main() -> int:
     else:
         params = trial_identity_parameters(w_short=args.w_short, w_long=args.w_long)
 
-    observations = score_trial_bars(
-        bar_events=bar_sequence.events,
-        tick_events=tick_sequence.events,
-        params=params,
-    )
+    observations = score_trial_bars(bar_events=bar_sequence.events, tick_events=tick_sequence.events, params=params)
     if args.estimate_params:
         values = collect_valid_feature_values(observations)
-        params = estimate_trial_parameters(
-            values, w_short=params.w_short, w_long=params.w_long
-        )
-        observations = score_trial_bars(
-            bar_events=bar_sequence.events,
-            tick_events=tick_sequence.events,
-            params=params,
-        )
+        params = estimate_trial_parameters(values, w_short=params.w_short, w_long=params.w_long)
+        observations = score_trial_bars(bar_events=bar_sequence.events, tick_events=tick_sequence.events, params=params)
 
     dump_f101_parameters(params, args.write_params)
     valid = sum(1 for item in observations if item.result.status is FeatureStatus.VALID)
