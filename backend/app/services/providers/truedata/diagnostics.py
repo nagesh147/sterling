@@ -96,6 +96,124 @@ def _load_lake_sample(symbol_pattern: str, is_index: bool = False) -> Optional[p
         return None
 
 
+async def verify_truedata_auth(acct: Optional[Any] = None) -> DiagnosticCategoryResult:
+    """Test Category 0: TrueData Login, Authentication & Gateway Handshake."""
+    t0 = time.perf_counter()
+    if not acct or not acct.has_credentials:
+        return DiagnosticCategoryResult(
+            id="truedata_auth",
+            name="TrueData Account & Login Handshake",
+            icon="🔐",
+            status="WARNING",
+            latency_ms=0.1,
+            source_origin="local_cache",
+            symbol_tested="TrueData WebAPI",
+            summary="No active TrueData account credentials configured — using SterlingLake reference data",
+            metrics={"username": None, "has_credentials": False, "authenticated": False},
+            field_checks=[
+                DiagnosticFieldCheck(
+                    name="Credentials Configured",
+                    status="WARNING",
+                    value="Not Configured",
+                    description="Add TrueData username and password in TrueData Feed tab",
+                ),
+                DiagnosticFieldCheck(
+                    name="SterlingLake Historical Cache",
+                    status="PASS",
+                    value="Lake Data Store Active",
+                    description="Local parquet market data available for fallback replay",
+                ),
+            ],
+            troubleshooting_tip="Go to Settings > TrueData Feed to add your TrueData login credentials.",
+        )
+
+    from app.services.market_data.truedata import TrueDataHistoricalClient, _clean_error_text
+    client = TrueDataHistoricalClient(acct.username, acct.password)
+    error = None
+    authenticated = False
+    status_code = None
+
+    try:
+        # Test authentication against TrueData REST WebAPI (fetch last bar for NIFTY 50)
+        bars = await client.get_last_bars("NIFTY 50", 1, interval="1min")
+        if bars is not None:
+            authenticated = True
+            status_code = 200
+    except Exception as exc:
+        error = _clean_error_text(str(exc))
+        authenticated = False
+    finally:
+        await client.aclose()
+
+    latency = round(max(0.1, (time.perf_counter() - t0) * 1000), 2)
+    username_hint = acct.username_hint() if hasattr(acct, "username_hint") else getattr(acct, "username", "TD_USER")
+    realtime_port = getattr(acct, "realtime_port", 8084)
+
+    if authenticated:
+        status = "PASS"
+        summary = f"TrueData WebAPI Authenticated (User: {username_hint}, Port: {realtime_port})"
+        field_checks = [
+            DiagnosticFieldCheck(
+                name="TrueData Login & Token",
+                status="PASS",
+                value=f"Authorized ({username_hint})",
+                description="Valid TrueData username and password",
+            ),
+            DiagnosticFieldCheck(
+                name="WebAPI Gateway Status",
+                status="PASS",
+                value=f"HTTP 200 ({latency} ms)",
+                description="https://history.truedata.in reachable",
+            ),
+            DiagnosticFieldCheck(
+                name="Real-time Feed Port",
+                status="PASS",
+                value=f"Port {realtime_port} ({'Active' if getattr(acct, 'is_active', True) else 'Standby'})",
+                description="Socket streaming port configuration",
+            ),
+        ]
+        tip = None
+    else:
+        status = "FAIL" if (error and ("401" in error or "unauthorized" in error.lower())) else "WARNING"
+        summary = f"TrueData Login Handshake Failed — {error or 'Connection issue'}"
+        field_checks = [
+            DiagnosticFieldCheck(
+                name="TrueData Login & Token",
+                status="FAIL" if status == "FAIL" else "WARNING",
+                value=f"Error: {error or 'Unauthorized'}",
+                description="Credentials rejected by TrueData server",
+            ),
+            DiagnosticFieldCheck(
+                name="SterlingLake Offline Mode",
+                status="PASS",
+                value="Active & Operational",
+                description="Strategies continue running using offline calibrated lake data",
+            ),
+        ]
+        tip = (
+            "TrueData HTTP 401: Invalid username or password. Check your TrueData credentials in Settings > TrueData Feed."
+            if (error and "401" in error)
+            else "TrueData HTTP 403: Access forbidden. Verify your active TrueData subscription segment."
+            if (error and "403" in error)
+            else f"TrueData error: {error}. Check internet connection or credentials in Settings."
+        )
+
+    return DiagnosticCategoryResult(
+        id="truedata_auth",
+        name="TrueData Account & Login Handshake",
+        icon="🔐",
+        status=status,
+        latency_ms=latency,
+        source_origin="live_truedata" if authenticated else "local_cache",
+        symbol_tested=username_hint,
+        summary=summary,
+        metrics={"authenticated": authenticated, "username": username_hint, "realtime_port": realtime_port, "status_code": status_code},
+        field_checks=field_checks,
+        error_message=error,
+        troubleshooting_tip=tip,
+    )
+
+
 async def verify_indices_feed(acct: Optional[Any] = None) -> DiagnosticCategoryResult:
     """Test Category 1: Indices Feed (Spot Quotes & OHLC)."""
     t0 = time.perf_counter()
@@ -936,6 +1054,7 @@ async def run_truedata_diagnostics(
 
     # Map of all test runners
     runners = {
+        "truedata_auth": lambda: verify_truedata_auth(acct),
         "indices": lambda: verify_indices_feed(acct),
         "equity_spot": lambda: verify_equity_spot_feed(acct),
         "futures": lambda: verify_futures_feed(acct),

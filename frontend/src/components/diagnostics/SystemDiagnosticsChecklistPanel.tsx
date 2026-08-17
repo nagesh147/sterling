@@ -349,6 +349,28 @@ export function SystemDiagnosticsChecklistPanel() {
 
   const defaultTdItems: ChecklistCategory[] = [
     {
+      id: 'truedata_auth',
+      source: 'truedata',
+      name: 'TrueData Account & Login Handshake',
+      icon: '🔐',
+      status: tdSummary?.authenticated ? 'PASS' : (tdSummary?.has_credentials ? 'WARNING' : 'IDLE'),
+      latency_ms: 18.0,
+      symbol_tested: tdSummary?.username_hint || 'TD WebAPI',
+      summary: tdSummary?.authenticated
+        ? `TrueData WebAPI Authenticated (${tdSummary.username_hint}, Port: ${tdSummary.realtime_port})`
+        : (tdSummary?.has_credentials ? 'TrueData credentials stored — run test to verify live session' : 'No credentials configured — using SterlingLake fallback tape'),
+      metrics: { username: tdSummary?.username_hint, authenticated: tdSummary?.authenticated },
+      field_checks: [
+        {
+          name: 'REST WebAPI Auth',
+          status: tdSummary?.authenticated ? 'PASS' : (tdSummary?.has_credentials ? 'WARNING' : 'IDLE'),
+          value: tdSummary?.authenticated ? 'Authorized & Active' : (tdSummary?.has_credentials ? 'Verification Required' : 'Not Configured'),
+          description: 'TrueData REST HTTP token validation',
+        },
+      ],
+      troubleshooting_tip: 'Go to Settings > TrueData Feed to configure or test your username and password.',
+    },
+    {
       id: 'indices',
       source: 'truedata',
       name: 'Indices Feed (Spot OHLC)',
@@ -682,7 +704,7 @@ export function SystemDiagnosticsChecklistPanel() {
                       ? '✓ OPERATIONAL'
                       : item.status === 'FAIL'
                       ? '✗ FAILED'
-                      : item.id === 'kite_session'
+                      : item.id === 'kite_session' || item.id === 'truedata_auth'
                       ? '🔑 LOGIN REQUIRED'
                       : item.id === 'kite_margins'
                       ? '⚡ SIMULATED LEDGER'

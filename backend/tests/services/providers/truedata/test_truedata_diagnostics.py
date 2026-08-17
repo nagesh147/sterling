@@ -4,6 +4,7 @@ from app.services.providers.truedata.diagnostics import (
     DiagnosticFieldCheck,
     DiagnosticSuiteResult,
     run_truedata_diagnostics,
+    verify_truedata_auth,
     verify_indices_feed,
     verify_equity_spot_feed,
     verify_futures_feed,
@@ -18,15 +19,16 @@ from app.services.providers.truedata.diagnostics import (
 
 @pytest.mark.asyncio
 async def test_diagnostics_suite_runner_mock_user():
-    """Verify running the full diagnostics suite produces all 9 categories with valid metrics."""
+    """Verify running the full diagnostics suite produces all 10 categories with valid metrics."""
     result = await run_truedata_diagnostics("test_user_default")
     assert isinstance(result, DiagnosticSuiteResult)
-    assert result.total_tests == 9
-    assert result.passed_count >= 7
+    assert result.total_tests == 10
+    assert result.passed_count >= 8
     assert result.overall_status in ("PASS", "WARNING", "PARTIAL")
-    assert len(result.categories) == 9
+    assert len(result.categories) == 10
 
     cat_ids = [c.id for c in result.categories]
+    assert "truedata_auth" in cat_ids
     assert "indices" in cat_ids
     assert "equity_spot" in cat_ids
     assert "futures" in cat_ids
@@ -36,6 +38,15 @@ async def test_diagnostics_suite_runner_mock_user():
     assert "market_profile" in cat_ids
     assert "volume_profile" in cat_ids
     assert "delta_orderflow" in cat_ids
+
+
+@pytest.mark.asyncio
+async def test_truedata_auth_check_without_account():
+    """Verify TrueData auth check handles unconfigured account gracefully."""
+    res = await verify_truedata_auth(None)
+    assert res.id == "truedata_auth"
+    assert res.status == "WARNING"
+    assert "Not Configured" in res.field_checks[0].value
 
 
 @pytest.mark.asyncio

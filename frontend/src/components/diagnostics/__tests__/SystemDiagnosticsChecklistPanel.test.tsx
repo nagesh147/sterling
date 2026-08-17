@@ -65,7 +65,9 @@ describe('SystemDiagnosticsChecklistPanel', () => {
     );
 
     expect(screen.getByText(/Internet & Gateway Ping/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kite Session & User Profile/i)).toBeInTheDocument();
     expect(screen.getByText(/Kite Connect HTTPS Gateway/i)).toBeInTheDocument();
+    expect(screen.getByText(/TrueData Account & Login Handshake/i)).toBeInTheDocument();
     expect(screen.getByText(/Indices Feed \(Spot OHLC\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Options Greeks Solver/i)).toBeInTheDocument();
   });
