@@ -641,11 +641,13 @@ export function SystemDiagnosticsChecklistPanel() {
                     <span className="diag-latency-tag">{item.latency_ms.toFixed(1)} ms</span>
                   </div>
 
-                  <div className="diag-item-actions" onClick={(e) => e.stopPropagation()}>
+                  <div className="diag-item-status-col">
                     <div className="diag-badge-slot">
                       {renderStatusBadge(item.status, item.id, isTesting)}
                     </div>
+                  </div>
 
+                  <div className="diag-item-actions-col" onClick={(e) => e.stopPropagation()}>
                     <button
                       className="diag-btn-micro"
                       onClick={() => handleRunSingle(item)}
@@ -1072,7 +1074,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
         .diag-table-header {
           display: grid;
-          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 60px;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 70px;
           align-items: center;
           padding: 8px 16px;
           gap: 12px;
@@ -1098,7 +1100,7 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-th-actions {
-          text-align: right;
+          text-align: center;
         }
 
         .diag-items-list {
@@ -1121,7 +1123,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
         .diag-item-row {
           display: grid;
-          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 60px;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 70px;
           align-items: center;
           padding: 10px 16px;
           gap: 12px;
@@ -1213,12 +1215,18 @@ export function SystemDiagnosticsChecklistPanel() {
           text-align: right;
         }
 
-        .diag-item-actions {
+        .diag-item-status-col {
           display: flex;
           align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          flex-shrink: 0;
+          justify-content: center;
+          width: 100%;
+        }
+
+        .diag-item-actions-col {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
         }
 
         .diag-badge-slot {
