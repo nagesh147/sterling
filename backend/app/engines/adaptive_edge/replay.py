@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 from dataclasses import dataclass
@@ -72,10 +74,7 @@ class CanonicalEventSequence:
             seen_records.add(evt.record_id)
             unique_events.append(evt)
 
-        # Deterministic ordering: event_time ASC, then record_id ASC
-        sorted_events = tuple(
-            sorted(unique_events, key=lambda e: (e.event_time, e.record_id))
-        )
+        sorted_events = tuple(sorted(unique_events, key=lambda e: (e.event_time, e.record_id)))
 
         hasher = hashlib.sha256()
         for e in sorted_events:
@@ -97,7 +96,6 @@ def event_to_feature_snapshot(
     inputs: list[FeatureInput] = []
     source_ids = (event.record_id,)
 
-    # Map numeric payload fields to FeatureInputs with causal provenance
     for key, value in sorted(event.payload.items()):
         if value is None:
             val_float = None
@@ -140,10 +138,11 @@ def replay_canonical_sequence(
     """Replay a CanonicalEventSequence producing a sequence of FeatureSnapshots."""
     snapshots: list[FeatureSnapshot] = []
     for evt in sequence.events:
-        snap = event_to_feature_snapshot(
-            evt,
-            strategy_version=strategy_version,
-            feature_set_version=feature_set_version,
+        snapshots.append(
+            event_to_feature_snapshot(
+                evt,
+                strategy_version=strategy_version,
+                feature_set_version=feature_set_version,
+            )
         )
-        snapshots.append(snap)
     return tuple(snapshots)
