@@ -1,8 +1,12 @@
-"""Run the trial F-101 E2E path on the entitled bars+ticks window.
+"""Run the trial F-101 E2E path on the entitled TrueData bars+ticks window.
 
 Does not unlock F-101. Does not write f101_parameters_v1.json.
 Does not authorize ExecutionGate or connect Kite.
 Output is labeled TRIAL_NOT_A197 and is not an A197 calibration.
+
+The trial path is deliberately fail-closed on provenance: both canonical
+sequences must contain only TrueData V2.6 events. It must never silently
+replace missing provider data with synthetic/replay data.
 """
 from __future__ import annotations
 
@@ -37,6 +41,8 @@ from app.services.providers.truedata.tick_history import ticks_to_canonical_sequ
 from app.services.providers.truedata.tick_store import TickStore
 
 IST = ZoneInfo("Asia/Kolkata")
+TRUE_DATA_SOURCE = "truedata"
+TRUE_DATA_VERSION = "2.6"
 
 
 def _parse_provider_ts(value: str) -> datetime:
@@ -57,7 +63,42 @@ def _tick_span(store: TickStore, symbol: str) -> tuple[datetime, datetime]:
     if not rows:
         raise SystemExit(f"FAILURE: no ticks for {symbol} in tick store")
     times = [_parse_provider_ts(str(row["timestamp"])) for row in rows if row.get("timestamp")]
+    if not times:
+        raise SystemExit(f"FAILURE: no parseable tick timestamps for {symbol}")
     return min(times), max(times)
+
+
+def _require_truedata_sequence(sequence, label: str) -> None:
+    """Reject empty, synthetic, mixed-provider, or wrong-version sequences."""
+    if not sequence.events:
+        raise SystemExit(f"FAILURE: {label} sequence is empty")
+    bad = [
+        event
+        for event in sequence.events
+        if event.source != TRUE_DATA_SOURCE or event.source_version != TRUE_DATA_VERSION
+    ]
+    if bad:
+        sample = bad[0]
+        raise SystemExit(
+            f"FAILURE: {label} contains non-TrueData provenance: "
+            f"source={sample.source!r}, version={sample.source_version!r}, "
+            f"record_id={sample.record_id}"
+        )
+
+
+def _assert_causal_order(sequence, label: str) -> None:
+    previous = None
+    for event in sequence.events:
+        if event.available_at < event.event_time:
+            raise SystemExit(
+                f"FAILURE: {label} violates causal availability at {event.record_id}"
+            )
+        if previous is not None and (event.event_time, event.record_id) < (
+            previous.event_time,
+            previous.record_id,
+        ):
+            raise SystemExit(f"FAILURE: {label} is not deterministically ordered")
+        previous = event
 
 
 async def _maybe_fetch_bars(args: argparse.Namespace, start: datetime, end: datetime) -> None:
@@ -112,8 +153,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if FORMULAS["F-101"].status is not FormulaStatus.IMPLEMENTED:
-        raise SystemExit("FAILURE: F-101 registry is not IMPLEMENTED")
+    # F-101 is intentionally LOCKED in the production formula registry.
+    # The trial evaluator is research-only and must consume that locked state;
+    # requiring IMPLEMENTED here would make the governance fix self-defeating.
+    if FORMULAS["F-101"].status is not FormulaStatus.LOCKED:
+        raise SystemExit(
+            "FAILURE: F-101 must remain LOCKED for the trial E2E path; "
+            f"found {FORMULAS['F-101'].status.value}"
+        )
 
     tick_store = TickStore(args.tick_store)
     start, end = _tick_span(tick_store, args.symbol)
@@ -122,6 +169,7 @@ def main() -> int:
     print("LABEL: TRIAL_NOT_A197")
     print("NOT_A197_CALIBRATION: true")
     print("EXECUTION_GATE: BLOCKED")
+    print(f"REQUIRED_SOURCE: {TRUE_DATA_SOURCE.upper()}_V{TRUE_DATA_VERSION}")
 
     asyncio.run(_maybe_fetch_bars(args, start, end))
 
@@ -132,6 +180,12 @@ def main() -> int:
 
     tick_sequence = ticks_to_canonical_sequence(args.symbol, tick_store.load(args.symbol))
     bar_sequence = bars_to_canonical_sequence(args.symbol, bar_rows)
+    _require_truedata_sequence(bar_sequence, "bar")
+    _require_truedata_sequence(tick_sequence, "tick")
+    _assert_causal_order(bar_sequence, "bar")
+    _assert_causal_order(tick_sequence, "tick")
+
+    print(f"SOURCE_VERIFIED: {TRUE_DATA_SOURCE.upper()}_V{TRUE_DATA_VERSION}")
     print(f"BAR_EVENTS: {len(bar_sequence.events)}")
     print(f"TICK_EVENTS: {len(tick_sequence.events)}")
     print(f"BAR_SEQUENCE_HASH: {bar_sequence.sequence_hash}")
@@ -166,6 +220,8 @@ def main() -> int:
         "not_a197": True,
         "not_production_freeze": True,
         "symbol": args.symbol,
+        "source": TRUE_DATA_SOURCE,
+        "source_version": TRUE_DATA_VERSION,
         "parameter_status": params.status,
         "w_short": params.w_short,
         "w_long": params.w_long,
