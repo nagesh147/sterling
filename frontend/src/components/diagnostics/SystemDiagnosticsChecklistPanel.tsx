@@ -620,16 +620,22 @@ export function SystemDiagnosticsChecklistPanel() {
                   </div>
 
                   <div className="diag-item-main">
-                    <div className="diag-item-header-line">
-                      <span className="diag-item-name">{item.name}</span>
-                      <span className="diag-target-code">{item.symbol_tested}</span>
-                      <span className="diag-latency-tag">{item.latency_ms.toFixed(1)} ms</span>
-                    </div>
+                    <div className="diag-item-name">{item.name}</div>
                     <div className="diag-item-summary">{item.summary}</div>
                   </div>
 
+                  <div className="diag-item-target-col">
+                    <span className="diag-target-code" title={item.symbol_tested}>{item.symbol_tested}</span>
+                  </div>
+
+                  <div className="diag-item-latency-col">
+                    <span className="diag-latency-tag">{item.latency_ms.toFixed(1)} ms</span>
+                  </div>
+
                   <div className="diag-item-actions" onClick={(e) => e.stopPropagation()}>
-                    {renderStatusBadge(item.status, item.id, isTesting)}
+                    <div className="diag-badge-slot">
+                      {renderStatusBadge(item.status, item.id, isTesting)}
+                    </div>
 
                     <button
                       className="diag-btn-micro"
@@ -1082,7 +1088,8 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-item-row {
-          display: flex;
+          display: grid;
+          grid-template-columns: 14px minmax(220px, 1fr) 140px 65px auto;
           align-items: center;
           padding: 10px 16px;
           gap: 12px;
@@ -1119,21 +1126,30 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-item-main {
-          flex: 1;
           min-width: 0;
-        }
-
-        .diag-item-header-line {
           display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
+          flex-direction: column;
+          gap: 2px;
         }
 
         .diag-item-name {
           font-size: 12.5px;
           font-weight: 500;
           color: #0f172a;
+          line-height: 1.25;
+        }
+
+        .diag-item-summary {
+          font-size: 11.5px;
+          color: #64748b;
+          line-height: 1.35;
+        }
+
+        .diag-item-target-col {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          min-width: 0;
         }
 
         .diag-target-code {
@@ -1141,28 +1157,43 @@ export function SystemDiagnosticsChecklistPanel() {
           font-family: monospace;
           color: #f06428;
           background: #fff5f0;
-          padding: 1px 6px;
+          padding: 2px 7px;
           border-radius: 4px;
           border: 1px solid #ffd7c7;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 140px;
+          display: inline-block;
+        }
+
+        .diag-item-latency-col {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
         }
 
         .diag-latency-tag {
           font-size: 11px;
           color: #94a3b8;
-        }
-
-        .diag-item-summary {
-          font-size: 11.5px;
-          color: #64748b;
-          margin-top: 2px;
-          line-height: 1.35;
+          font-family: monospace;
+          white-space: nowrap;
+          text-align: right;
         }
 
         .diag-item-actions {
           display: flex;
           align-items: center;
+          justify-content: flex-end;
           gap: 8px;
           flex-shrink: 0;
+        }
+
+        .diag-badge-slot {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          min-width: 24px;
         }
 
         .diag-badge-tick {
@@ -1182,6 +1213,7 @@ export function SystemDiagnosticsChecklistPanel() {
           display: inline-flex;
           align-items: center;
           gap: 4px;
+          white-space: nowrap;
         }
 
         .diag-badge-fail { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
