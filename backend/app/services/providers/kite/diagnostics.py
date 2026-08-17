@@ -201,15 +201,16 @@ async def verify_kite_session(acct: Optional[Any]) -> KiteDiagnosticCategoryResu
 
     if connected:
         try:
-            profile = await client.profile()
+            profile = await client.get_profile()
             if profile and isinstance(profile, dict):
-                user_name = profile.get("user_name", acct.label)
-                user_id = profile.get("user_id", user_id)
+                user_name = profile.get("user_name") or getattr(acct, "label", "User")
+                user_id = profile.get("user_id") or user_id
+                connected = True
         except Exception as exc:
             error = str(exc)
             connected = False
 
-    latency = round((time.perf_counter() - t0) * 1000, 2)
+    latency = round(max(0.1, (time.perf_counter() - t0) * 1000), 2)
     status = "PASS" if connected else ("WARNING" if acct.has_credentials else "FAIL")
 
     field_checks = [
@@ -279,7 +280,7 @@ async def verify_kite_margins(acct: Optional[Any]) -> KiteDiagnosticCategoryResu
     collateral = 0.0
     error = None
     try:
-        margins = await client.margins()
+        margins = await client.get_margins()
         if margins and isinstance(margins, dict):
             eq = margins.get("equity", {})
             cash = float(eq.get("available", {}).get("cash", 0.0))
@@ -345,7 +346,7 @@ async def verify_kite_historical(acct: Optional[Any]) -> KiteDiagnosticCategoryR
             today = datetime.now()
             from_dt = (today - timedelta(days=2)).strftime("%Y-%m-%d")
             to_dt = today.strftime("%Y-%m-%d")
-            res = await client.historical_data(token, from_dt, to_dt, "5minute")
+            res = await client.get_historical(token, from_dt, to_dt, "5minute")
             if res and isinstance(res, list):
                 candles_count = len(res)
                 if candles_count > 0:
@@ -404,7 +405,7 @@ async def verify_kite_quotes(acct: Optional[Any]) -> KiteDiagnosticCategoryResul
     if acct and acct.connected:
         client = await kite_accounts.acquire_client(acct)
         try:
-            q = await client.quote([instrument])
+            q = await client.get_quote([instrument])
             if q and isinstance(q, dict) and instrument in q:
                 d = q[instrument]
                 ltp = float(d.get("last_price", 24535.0))

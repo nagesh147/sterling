@@ -123,6 +123,7 @@ export function useGenerateKiteSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      qc.invalidateQueries({ queryKey: ['kite-diagnostics-summary'] });
     },
     onError: (err) => {
       authIdle();
@@ -139,6 +140,7 @@ export function useRefreshKiteSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      qc.invalidateQueries({ queryKey: ['kite-diagnostics-summary'] });
     },
     onError: () => { authIdle(); },
   });

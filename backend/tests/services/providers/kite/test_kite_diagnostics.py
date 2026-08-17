@@ -90,3 +90,51 @@ async def test_kite_diagnostics_suite_runner():
     assert "kite_historical" in cat_ids
     assert "kite_quotes" in cat_ids
     assert "kite_orders_gtt" in cat_ids
+
+
+@pytest.mark.asyncio
+async def test_kite_authenticated_diagnostics(monkeypatch):
+    """Verify diagnostics when user is authenticated with live Kite session."""
+    from unittest.mock import AsyncMock, MagicMock
+    from app.services.exchanges.kite import accounts as kite_accounts
+
+    mock_acct = MagicMock()
+    mock_acct.id = "KITE-TEST01"
+    mock_acct.user_id = "test_user_1"
+    mock_acct.label = "My Kite"
+    mock_acct.api_key = "test_key"
+    mock_acct.connected = True
+    mock_acct.has_credentials = True
+    mock_acct.is_paper = False
+    mock_acct.kite_user_id = "AA0595"
+
+    mock_client = MagicMock()
+    mock_client.get_profile = AsyncMock(return_value={"user_id": "AA0595", "user_name": "Nagesh Madaram"})
+    mock_client.get_margins = AsyncMock(return_value={"equity": {"available": {"cash": 150000.0, "collateral": 25000.0}}})
+    mock_client.get_historical = AsyncMock(return_value=[{"close": 24550.0}])
+    mock_client.get_quote = AsyncMock(return_value={"NSE:NIFTY 50": {"last_price": 24550.0}})
+    mock_client.get_gtts = AsyncMock(return_value=[{"id": 1, "status": "active"}])
+
+    monkeypatch.setattr(kite_accounts, "acquire_client", AsyncMock(return_value=mock_client))
+
+    sess_res = await verify_kite_session(mock_acct)
+    assert sess_res.status == "PASS"
+    assert "AA0595" in sess_res.summary
+    assert "Nagesh Madaram" in sess_res.summary
+
+    margin_res = await verify_kite_margins(mock_acct)
+    assert margin_res.status == "PASS"
+    assert margin_res.metrics["cash"] == 150000.0
+
+    hist_res = await verify_kite_historical(mock_acct)
+    assert hist_res.status == "PASS"
+    assert hist_res.metrics["last_close"] == 24550.0
+
+    quote_res = await verify_kite_quotes(mock_acct)
+    assert quote_res.status == "PASS"
+    assert quote_res.metrics["ltp"] == 24550.0
+
+    gtt_res = await verify_kite_orders_gtt(mock_acct)
+    assert gtt_res.status == "PASS"
+    assert gtt_res.metrics["gtt_count"] == 1
+
