@@ -115,50 +115,43 @@ class TrueDataHistoricalClient:
             await self._client.aclose()
 
     async def authenticate(self) -> TrueDataToken:
+        # 1. Attempt standard OAuth2 grant_type="password"
         response = await self._client.post(
             self.AUTH_URL,
             data={
                 "username": self._username,
                 "password": self._password,
-                "grant_type": self.DOCUMENTED_GRANT_TYPE,
+                "grant_type": "password",
             },
             headers=DEFAULT_HEADERS,
         )
+
+        # 2. Fallback to documented "passoword" typo if server specifically asks for it
+        if response.status_code >= 400:
+            try:
+                err_payload = response.json()
+            except Exception:
+                err_payload = {}
+            if err_payload.get("error") == "unsupported_grant_type":
+                response = await self._client.post(
+                    self.AUTH_URL,
+                    data={
+                        "username": self._username,
+                        "password": self._password,
+                        "grant_type": self.DOCUMENTED_GRANT_TYPE,
+                    },
+                    headers=DEFAULT_HEADERS,
+                )
+
         if response.status_code == 403:
             raise TrueDataAuthError("TrueData HTTP 403 Forbidden: Access is denied. Please verify your TrueData credentials, IP authorization, and active subscription.")
         if response.status_code == 401:
             raise TrueDataAuthError("TrueData HTTP 401 Unauthorized: Invalid TrueData username or password.")
 
-        if response.status_code == 200:
+        try:
             payload = self._json(response)
-        else:
-            try:
-                payload = response.json()
-            except Exception:
-                payload = {}
-
-        if response.status_code >= 400 and payload.get("error") == "unsupported_grant_type":
-            # Documented PDF specifies "passoword", but live OAuth server expects "password"
-            response = await self._client.post(
-                self.AUTH_URL,
-                data={
-                    "username": self._username,
-                    "password": self._password,
-                    "grant_type": "password",
-                },
-                headers=DEFAULT_HEADERS,
-            )
-            if response.status_code == 403:
-                raise TrueDataAuthError("TrueData HTTP 403 Forbidden: Access is denied. Please verify your TrueData credentials, IP authorization, and active subscription.")
-            if response.status_code == 401:
-                raise TrueDataAuthError("TrueData HTTP 401 Unauthorized: Invalid TrueData username or password.")
-            if response.status_code == 200:
-                payload = self._json(response)
-            else:
-                try:
-                    payload = response.json()
-                except Exception:
-                    payload = {}
+        except Exception:
+            payload = {}
 
         if response.status_code >= 400 or "access_token" not in payload:
             detail = payload.get("error_description") or payload.get("error") or _clean_error_text(response.text)
@@ -181,10 +174,27 @@ class TrueDataHistoricalClient:
         return h
 
     async def _history_get(self, path: str, params: Mapping[str, Any]) -> httpx.Response:
+        p = dict(params)
+        try:
+            headers = await self._headers()
+            response = await self._client.get(
+                f"{self.HISTORY_BASE_URL}{path}",
+                params=p,
+                headers=headers,
+            )
+            if response.status_code == 200:
+                self._raise_history_error(response)
+                return response
+        except Exception:
+            # Fall back to direct REST query parameters authentication
+            pass
+
+        p["user"] = self._username
+        p["password"] = self._password
         response = await self._client.get(
             f"{self.HISTORY_BASE_URL}{path}",
-            params=dict(params),
-            headers=await self._headers(),
+            params=p,
+            headers=DEFAULT_HEADERS,
         )
         self._raise_history_error(response)
         return response

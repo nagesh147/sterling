@@ -50,8 +50,8 @@ describe('SystemDiagnosticsChecklistPanel', () => {
       </QueryClientProvider>
     );
 
-    expect(screen.getByText(/Feed & API Operational Checklist/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Run All Checklist Checks/i })).toBeInTheDocument();
+    expect(screen.getByText(/Feed & API Health & Verification Checklist/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Run All Verification Checks/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All Checkpoints/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Zerodha Kite & Network/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /TrueData Market Feeds/i })).toBeInTheDocument();

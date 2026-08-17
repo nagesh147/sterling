@@ -545,7 +545,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
   // Stats calculation
   const totalCheckpoints = allItems.length;
-  const operationalCount = allItems.filter((i) => i.status === 'PASS').length;
+  const verifiedCount = allItems.filter((i) => i.status === 'PASS').length;
   const warningCount = allItems.filter((i) => i.status === 'WARNING' || i.status === 'PARTIAL').length;
   const failedCount = allItems.filter((i) => i.status === 'FAIL').length;
 
@@ -559,7 +559,7 @@ export function SystemDiagnosticsChecklistPanel() {
       );
     }
     if (status === 'PASS') {
-      return <span className="diag-badge diag-badge-pass">OPERATIONAL</span>;
+      return <span className="diag-badge diag-badge-pass">VERIFIED</span>;
     }
     if (status === 'FAIL') {
       return <span className="diag-badge diag-badge-fail">FAILED</span>;
@@ -721,7 +721,7 @@ export function SystemDiagnosticsChecklistPanel() {
       {/* ── Top Header & Global Actions ── */}
       <div className="diag-cockpit-header">
         <div>
-          <h2 className="diag-main-title">Feed & API Operational Checklist</h2>
+          <h2 className="diag-main-title">Feed & API Health & Verification Checklist</h2>
           <p className="diag-main-sub">
             End-to-end verification of broker session execution, real-time market data streams, and quantitative analytical engines.
           </p>
@@ -739,7 +739,7 @@ export function SystemDiagnosticsChecklistPanel() {
                 Verifying All Checkpoints...
               </>
             ) : (
-              'Run All Checklist Checks'
+              'Run All Verification Checks'
             )}
           </button>
         </div>
@@ -748,10 +748,10 @@ export function SystemDiagnosticsChecklistPanel() {
       {/* ── Status Overview Bar ── */}
       <div className="diag-overview-strip">
         <div className="diag-stat-card">
-          <span className="diag-stat-label">Checkpoints Status</span>
+          <span className="diag-stat-label">System Health Status</span>
           <div className="diag-stat-main">
-            <span className="diag-stat-number">{operationalCount}</span>
-            <span className="diag-stat-total">/ {totalCheckpoints} Operational</span>
+            <span className="diag-stat-number">{verifiedCount}</span>
+            <span className="diag-stat-total">/ {totalCheckpoints} Verified</span>
           </div>
           <span className="diag-stat-sub">
             {warningCount > 0 ? `${warningCount} Fallback / Warning` : 'All Systems Verified'}
