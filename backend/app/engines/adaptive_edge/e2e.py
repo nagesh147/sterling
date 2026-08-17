@@ -8,6 +8,9 @@ is independently normalized into a canonical execution event.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+import hashlib
+import json
 from typing import Mapping, Protocol
 
 from .broker_event_mapper import BrokerExecutionEvent
@@ -18,6 +21,26 @@ from .execution_adapter import CanonicalExecutionEvent, CanonicalOrderIntent
 from .execution_gateway import ExecutionGateway
 from .execution_gate import ExecutionGateDecision, REQUIRED_STRATEGY_FORMULAS, evaluate_execution_gate
 from .feature_engine import FeatureSnapshot
+
+
+class ExecutionMode(str, Enum):
+    PRODUCTION = "production"
+    SIMULATION = "simulation"
+
+
+@dataclass(frozen=True)
+class ReplayContext:
+    decision_time: str
+    event_time: str
+    deterministic_id_namespace: str = "deterministic"
+    sequence_seed: int = 0
+    broker_simulation_seed: int = 0
+    execution_reference_policy: str = "deterministic"
+
+    def deterministic_id(self, prefix: str, suffix: str) -> str:
+        payload = f"{self.deterministic_id_namespace}:{prefix}:{suffix}:{self.sequence_seed}"
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{prefix}-{digest}"
 
 
 @dataclass(frozen=True)
@@ -112,6 +135,30 @@ class E2ETrace:
     lifecycle: LifecycleEvaluation | None
     audit: tuple[AuditRecord, ...]
     execution_gate: ExecutionGateDecision
+    mode: ExecutionMode = ExecutionMode.PRODUCTION
+
+    @property
+    def trace_hash(self) -> str:
+        payload = {
+            "mode": self.mode.value,
+            "event_id": self.event.record_id,
+            "event_time": self.event.event_time,
+            "snapshot_id": self.snapshot.snapshot_id,
+            "prediction_id": self.prediction.prediction_id if self.prediction else None,
+            "edge_id": self.edge.opportunity_id if self.edge else None,
+            "economic_net": self.economics.expected_net_value if self.economics else None,
+            "decision_eligible": self.decision.eligible if self.decision else None,
+            "authorization_id": self.authorization.intent_id if self.authorization else None,
+            "instrument_id": self.instrument.instrument_id if self.instrument else None,
+            "order_intent_id": self.order.order_intent_id if self.order else None,
+            "execution_id": self.execution.execution_event_id if self.execution else None,
+            "position_id": self.position.position_id if self.position else None,
+            "lifecycle_state": self.lifecycle.lifecycle_state if self.lifecycle else None,
+            "gate_status": self.execution_gate.status.value,
+            "audit": [(r.sequence, r.stage, r.object_id, r.parent_ids) for r in self.audit],
+        }
+        raw = json.dumps(payload, sort_keys=True)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 class PredictionEngine(Protocol):
@@ -175,18 +222,25 @@ def run_e2e(
     lifecycle_engine: LifecycleEngine,
     execution_cost: float,
     minimum_net_value: float = 0.0,
+    mode: ExecutionMode = ExecutionMode.PRODUCTION,
     required_formula_ids: tuple[str, ...] | None = None,
     broker_event: BrokerExecutionEvent | None = None,
+    replay_context: ReplayContext | None = None,
 ) -> E2ETrace:
     """Run one candidate through every currently authorized layer.
 
-    The execution gate is evaluated before any locked strategy formula is
-    invoked. Unresolved mathematics therefore stop the path deterministically.
+    In PRODUCTION mode, all REQUIRED_STRATEGY_FORMULAS are evaluated against
+    the execution gate. Because F-101..F-114 remain LOCKED, production execution
+    is deterministically BLOCKED and halts prior to order authorization.
+
+    In SIMULATION mode, authorized simulation formula sets (e.g. F-004) are
+    evaluated and may progress to simulated broker execution.
     """
     audit = AuditLedger()
     audit.append("market_event", event.record_id)
 
     snapshot = feature_builder.build(event)
+    snapshot.assert_causal(snapshot.decision_time)
     audit.append("feature_snapshot", snapshot.snapshot_id, event.record_id)
 
     prediction = prediction_engine.predict(snapshot)
@@ -196,10 +250,19 @@ def run_e2e(
         raise ValueError("prediction time must equal snapshot decision time")
     audit.append("prediction", prediction.prediction_id, snapshot.snapshot_id)
 
-    formula_ids = REQUIRED_STRATEGY_FORMULAS if required_formula_ids is None else required_formula_ids
+    if required_formula_ids is not None:
+        formula_ids = required_formula_ids
+    elif mode is ExecutionMode.PRODUCTION:
+        formula_ids = REQUIRED_STRATEGY_FORMULAS
+    else:
+        formula_ids = ("F-004",)
+
     gate = evaluate_execution_gate(formula_ids)
     if not gate.authorized:
-        return E2ETrace(event, snapshot, prediction, None, None, None, None, None, None, None, None, None, audit.records(), gate)
+        return E2ETrace(
+            event, snapshot, prediction, None, None, None, None, None, None, None, None, None,
+            audit.records(), gate, mode=mode
+        )
 
     edge = evaluate_edge(snapshot, edge_formula)
     if edge.opportunity_id != prediction.opportunity_id:
@@ -215,7 +278,10 @@ def run_e2e(
     audit.append("decision", decision.decision_id, edge.opportunity_id, prediction.prediction_id)
 
     if not decision.eligible:
-        return E2ETrace(event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None, audit.records(), gate)
+        return E2ETrace(
+            event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None,
+            audit.records(), gate, mode=mode
+        )
 
     authorization = risk_authorizer.authorize(decision)
     if authorization.decision_id != decision.decision_id:
@@ -255,5 +321,8 @@ def run_e2e(
         raise ValueError("lifecycle position identity mismatch")
     audit.append("lifecycle", lifecycle.evaluation_id, position.position_id)
 
-    return E2ETrace(event, snapshot, prediction, edge, economics, decision, authorization,
-                    instrument, order, execution, position, lifecycle, audit.records(), gate)
+    return E2ETrace(
+        event, snapshot, prediction, edge, economics, decision, authorization,
+        instrument, order, execution, position, lifecycle, audit.records(), gate, mode=mode
+    )
+
