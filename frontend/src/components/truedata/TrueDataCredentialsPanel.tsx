@@ -10,7 +10,6 @@ import {
   useUpdateTrueDataSettings,
 } from '../../hooks/useTrueData';
 import type { MarketDataSource, TrueDataCredential } from '../../types/truedata';
-import { TrueDataDiagnosticsTab } from './TrueDataDiagnosticsTab';
 
 const S: Record<string, React.CSSProperties> = {
   card: {
@@ -582,128 +581,47 @@ function AddTrueDataCredential() {
 }
 
 export function TrueDataCredentialsPanel() {
-  const [activeTab, setActiveTab] = useState<'credentials' | 'diagnostics'>('credentials');
   const { data: creds, isLoading } = useTrueDataCredentials();
   const { data: status } = useTrueDataStatus();
 
   return (
     <div>
-      {/* Sub-Tab Navigation Bar */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: '#f1f5f9',
-          padding: 4,
-          borderRadius: 8,
-          marginBottom: 16,
-          border: '1px solid #e2e8f0',
-        }}
-      >
-        <button
-          onClick={() => setActiveTab('credentials')}
-          style={{
-            flex: 1,
-            minHeight: 32,
-            background: activeTab === 'credentials' ? '#fff' : 'transparent',
-            color: activeTab === 'credentials' ? '#0f172a' : '#64748b',
-            border: activeTab === 'credentials' ? '1px solid #cbd5e1' : 'none',
-            borderRadius: 6,
-            fontWeight: activeTab === 'credentials' ? 750 : 600,
-            fontSize: 11.5,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            boxShadow: activeTab === 'credentials' ? '0 1px 3px rgba(0,0,0,0.04)' : 'none',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <span>🔌</span>
-          <span>Credentials & Setup</span>
-        </button>
+      <DataSourceSelector />
 
-        <button
-          onClick={() => setActiveTab('diagnostics')}
-          style={{
-            flex: 1,
-            minHeight: 32,
-            background: activeTab === 'diagnostics' ? '#fff' : 'transparent',
-            color: activeTab === 'diagnostics' ? '#f06428' : '#64748b',
-            border: activeTab === 'diagnostics' ? '1px solid rgba(240, 100, 40, 0.3)' : 'none',
-            borderRadius: 6,
-            fontWeight: activeTab === 'diagnostics' ? 750 : 600,
-            fontSize: 11.5,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            boxShadow: activeTab === 'diagnostics' ? '0 1px 3px rgba(240, 100, 40, 0.08)' : 'none',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <span>🧪</span>
-          <span>Live Feed & Analytics Diagnostics</span>
+      <div style={S.card}>
+        <div style={S.title}>TRUEDATA MARKET DATA STATUS</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span
             style={{
-              fontSize: 9.5,
-              fontWeight: 800,
-              background: activeTab === 'diagnostics' ? 'rgba(240, 100, 40, 0.15)' : '#e2e8f0',
-              color: activeTab === 'diagnostics' ? '#f06428' : '#475569',
-              padding: '1px 5px',
+              width: 8,
+              height: 8,
               borderRadius: 4,
+              background: status?.connected ? '#4caf50' : '#777',
             }}
-          >
-            9 CHECKS
+          />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
+            {status?.connected
+              ? `Connected (${status.username_hint || 'TrueData'})`
+              : status?.message || 'Not Connected'}
           </span>
-        </button>
+        </div>
+        <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.5 }}>
+          TrueData provides tick and bar market data feeds for Adaptive Edge and Sterling market scanning.
+          Credentials are encrypted at rest with <code>STERLING_SECRET_KEY</code> and never stored in plain text.
+        </div>
       </div>
 
-      {activeTab === 'credentials' ? (
-        <>
-          <DataSourceSelector />
-
-          <div style={S.card}>
-            <div style={S.title}>TRUEDATA MARKET DATA STATUS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  background: status?.connected ? '#4caf50' : '#777',
-                }}
-              />
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
-                {status?.connected
-                  ? `Connected (${status.username_hint || 'TrueData'})`
-                  : status?.message || 'Not Connected'}
-              </span>
-            </div>
-            <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.5 }}>
-              TrueData provides tick and bar market data feeds for Adaptive Edge and Sterling market scanning.
-              Credentials are encrypted at rest with <code>STERLING_SECRET_KEY</code> and never stored in plain text.
-            </div>
-          </div>
-
-          {isLoading && <div style={S.hint}>Loading TrueData credentials…</div>}
-          {creds?.map((c) => (
-            <TrueDataCredentialCard key={c.id} cred={c} />
-          ))}
-          {creds && creds.length === 0 && (
-            <div style={{ ...S.hint, marginBottom: 14 }}>
-              No TrueData credentials saved yet. Add your username and password below to enable market data.
-            </div>
-          )}
-
-          <AddTrueDataCredential />
-        </>
-      ) : (
-        <TrueDataDiagnosticsTab />
+      {isLoading && <div style={S.hint}>Loading TrueData credentials…</div>}
+      {creds?.map((c) => (
+        <TrueDataCredentialCard key={c.id} cred={c} />
+      ))}
+      {creds && creds.length === 0 && (
+        <div style={{ ...S.hint, marginBottom: 14 }}>
+          No TrueData credentials saved yet. Add your username and password below to enable market data.
+        </div>
       )}
+
+      <AddTrueDataCredential />
     </div>
   );
 }
