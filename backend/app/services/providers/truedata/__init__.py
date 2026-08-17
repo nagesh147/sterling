@@ -31,6 +31,12 @@ from .credentials import (
     to_response,
     update,
 )
+from .diagnostics import (
+    DiagnosticCategoryResult,
+    DiagnosticFieldCheck,
+    DiagnosticSuiteResult,
+    run_truedata_diagnostics,
+)
 from .models import (
     TrueDataCredentialCreate,
     TrueDataCredentialResponse,
@@ -61,6 +67,10 @@ __all__ = [
     "TrueDataCredentialUpdate",
     "TrueDataCredentialResponse",
     "TrueDataStatus",
+    "DiagnosticFieldCheck",
+    "DiagnosticCategoryResult",
+    "DiagnosticSuiteResult",
+    "run_truedata_diagnostics",
     "add",
     "get",
     "get_active",
