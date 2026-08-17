@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SystemDiagnosticsChecklistPanel } from '../SystemDiagnosticsChecklistPanel';
 
@@ -64,11 +64,30 @@ describe('SystemDiagnosticsChecklistPanel', () => {
       </QueryClientProvider>
     );
 
-    expect(screen.getByText(/Internet & Gateway Ping/i)).toBeInTheDocument();
+    expect(screen.getByText(/Internet & DNS Gateway/i)).toBeInTheDocument();
     expect(screen.getByText(/Kite Session & User Profile/i)).toBeInTheDocument();
     expect(screen.getByText(/Kite Connect HTTPS Gateway/i)).toBeInTheDocument();
-    expect(screen.getByText(/TrueData Account & Login Handshake/i)).toBeInTheDocument();
+    expect(screen.getByText(/TrueData REST WebAPI & Auth Handshake/i)).toBeInTheDocument();
     expect(screen.getByText(/Indices Feed \(Spot OHLC\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Options Greeks Solver/i)).toBeInTheDocument();
+  });
+
+  it('supports tab switching and expansion of verifiable proof drawer', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SystemDiagnosticsChecklistPanel />
+      </QueryClientProvider>
+    );
+
+    // Switch to Kite tab
+    const kiteTab = screen.getByRole('button', { name: /Zerodha Kite & Network/i });
+    fireEvent.click(kiteTab);
+    expect(screen.getByText(/Zerodha Kite & Network Execution Stack/i)).toBeInTheDocument();
+
+    // Click on row to expand proof drawer
+    const row = screen.getByText(/Internet & DNS Gateway/i);
+    fireEvent.click(row);
+    expect(screen.getByText(/Verified Field Health Checks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verifiable Server Telemetry & Proof Payload/i)).toBeInTheDocument();
   });
 });

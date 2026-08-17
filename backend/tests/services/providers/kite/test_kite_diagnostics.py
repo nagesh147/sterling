@@ -9,6 +9,7 @@ from app.services.providers.kite.diagnostics import (
     verify_kite_api_reachability,
     verify_kite_session,
     verify_kite_margins,
+    verify_kite_instruments,
     verify_kite_historical,
     verify_kite_quotes,
     verify_kite_orders_gtt,
@@ -51,6 +52,15 @@ async def test_kite_margins_without_account():
 
 
 @pytest.mark.asyncio
+async def test_kite_instruments_check():
+    """Verify instruments database resolution check."""
+    res = await verify_kite_instruments(None)
+    assert res.id == "kite_instruments"
+    assert res.status == "PASS"
+    assert res.metrics["total_instruments"] > 0
+
+
+@pytest.mark.asyncio
 async def test_kite_historical_fallback():
     """Verify historical candle stream fallback."""
     res = await verify_kite_historical(None)
@@ -80,13 +90,14 @@ async def test_kite_diagnostics_suite_runner():
     """Verify full suite runner runs all categories."""
     suite = await run_kite_diagnostics("test_user_default")
     assert isinstance(suite, KiteDiagnosticSuiteResult)
-    assert suite.total_tests == 7
-    assert len(suite.categories) == 7
+    assert suite.total_tests == 8
+    assert len(suite.categories) == 8
     cat_ids = [c.id for c in suite.categories]
     assert "internet_network" in cat_ids
     assert "kite_gateway" in cat_ids
     assert "kite_session" in cat_ids
     assert "kite_margins" in cat_ids
+    assert "kite_instruments" in cat_ids
     assert "kite_historical" in cat_ids
     assert "kite_quotes" in cat_ids
     assert "kite_orders_gtt" in cat_ids
