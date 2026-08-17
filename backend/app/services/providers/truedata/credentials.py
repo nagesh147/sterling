@@ -208,12 +208,14 @@ def bootstrap() -> None:
 def add(user_id: str, data: TrueDataCredentialCreate) -> _Account:
     bootstrap()
     first_for_user = not any(a.user_id == user_id for a in _credentials.values())
+    clean_user = data.username.strip() if data.username else ""
+    clean_pass = data.password.strip() if data.password else ""
     a = _Account(
         id=_new_id(),
         user_id=user_id,
         label=data.label or "My TrueData Feed",
-        username=data.username,
-        password_enc=encrypt(data.password),
+        username=clean_user,
+        password_enc=encrypt(clean_pass),
         realtime_port=data.realtime_port,
         is_active=first_for_user,
     )
@@ -241,9 +243,9 @@ def update(user_id: str, account_id: str, data: TrueDataCredentialUpdate) -> Opt
     if data.label is not None:
         a.label = data.label
     if data.username is not None:
-        a.username = data.username
+        a.username = data.username.strip()
     if data.password is not None:
-        a.password_enc = encrypt(data.password)
+        a.password_enc = encrypt(data.password.strip())
     if data.realtime_port is not None:
         a.realtime_port = data.realtime_port
     a.updated_at_ms = _now_ms()
