@@ -38,22 +38,22 @@ def research_formula_table() -> dict[str, SpecGap]:
         "F-113": "re-enter only when flat and before A126 cutoff; registry LOCKED",
         "F-114": "INV-ENTRY-003 one active position; second entry blocked; registry LOCKED",
     }
-    # F-102/F-103: entry-gate *structure* is implemented as research_opportunity;
-    # numeric score/thresholds remain unrecovered (RECOVERY.md, STRATEGY_SPEC_ANCHOR).
-    # F-001..F-008 live outside the F-10x strategy lock; F-007/F-008 are used
-    # by the research path as executable references.
     table: dict[str, SpecGap] = {}
     for formula_id in STRATEGY_FORMULA_IDS:
         definition = get_formula(formula_id)
-        if definition.status is FormulaStatus.IMPLEMENTED:
+        if definition.status is FormulaStatus.LOCKED:
+            if formula_id in recovered:
+                reason = recovered[formula_id]
+                status = "RESEARCH_CODE_PRESENT_REGISTRY_LOCKED"
+            else:
+                reason = "no recovered closed-form; fail closed"
+                status = "SPEC_GAP"
+        elif definition.status is FormulaStatus.IMPLEMENTED:
             reason = "registry IMPLEMENTED"
             status = "IMPLEMENTED"
-        elif formula_id in recovered:
-            reason = recovered[formula_id]
-            status = "RESEARCH_CODE_PRESENT_REGISTRY_LOCKED"
         else:
-            reason = "no recovered closed-form; fail closed"
-            status = "SPEC_GAP"
+            reason = f"registry status {definition.status.value}"
+            status = "NON_EXECUTABLE"
         table[formula_id] = SpecGap(
             formula_id=formula_id,
             name=definition.name,
@@ -64,11 +64,13 @@ def research_formula_table() -> dict[str, SpecGap]:
 
 
 def assert_production_strategy_locked() -> None:
-    """Historical backward-compatibility check: now verifies all strategy formulas are IMPLEMENTED."""
-    implemented = [
+    """Enforce that every strategy-specific formula remains LOCKED."""
+    unlocked = [
         formula_id
         for formula_id in STRATEGY_FORMULA_IDS
-        if FORMULAS[formula_id].status is FormulaStatus.IMPLEMENTED
+        if FORMULAS[formula_id].status is not FormulaStatus.LOCKED
     ]
-    if len(implemented) != len(STRATEGY_FORMULA_IDS):
-        raise RuntimeError("expected all strategy formulas to be IMPLEMENTED")
+    if unlocked:
+        raise RuntimeError(
+            "production strategy formulas must remain LOCKED: " + ", ".join(unlocked)
+        )
