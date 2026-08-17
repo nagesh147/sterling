@@ -962,3 +962,69 @@ async def save_chart_state(
     }
     app_db.set_config(key, json.dumps(data))
     return {"ok": True}
+
+
+# ─── Diagnostics & System Health Checklist ────────────────────────────────────
+@router.post("/diagnostics/run")
+async def run_kite_diagnostics_endpoint(
+    category_id: Optional[str] = Query(None, description="Optional specific category ID to test"),
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Executes live diagnostic health checks against Zerodha Kite API and network endpoints."""
+    from app.services.providers.kite.diagnostics import run_kite_diagnostics
+    suite = await run_kite_diagnostics(user.user_id, category_id=category_id)
+    return {
+        "timestamp": suite.timestamp,
+        "overall_status": suite.overall_status,
+        "total_tests": suite.total_tests,
+        "passed_count": suite.passed_count,
+        "warning_count": suite.warning_count,
+        "failed_count": suite.failed_count,
+        "total_duration_ms": suite.total_duration_ms,
+        "authenticated": suite.authenticated,
+        "account_label": suite.account_label,
+        "kite_user_id": suite.kite_user_id,
+        "is_paper": suite.is_paper,
+        "categories": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "icon": c.icon,
+                "status": c.status,
+                "latency_ms": c.latency_ms,
+                "source_origin": c.source_origin,
+                "symbol_tested": c.symbol_tested,
+                "summary": c.summary,
+                "metrics": c.metrics,
+                "field_checks": [
+                    {
+                        "name": fc.name,
+                        "status": fc.status,
+                        "value": fc.value,
+                        "description": fc.description,
+                    }
+                    for fc in c.field_checks
+                ],
+                "raw_sample": c.raw_sample,
+                "error_message": c.error_message,
+                "troubleshooting_tip": c.troubleshooting_tip,
+            }
+            for c in suite.categories
+        ],
+    }
+
+
+@router.get("/diagnostics/summary")
+async def get_kite_diagnostics_summary(
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Quick summary of active Kite account connection state for checklist overview."""
+    acct = kite_accounts.get_active(user.user_id)
+    return {
+        "authenticated": bool(acct and acct.connected),
+        "account_label": acct.label if acct else None,
+        "kite_user_id": acct.kite_user_id if acct else None,
+        "is_paper": bool(acct.is_paper) if acct else True,
+        "has_credentials": bool(acct and acct.has_credentials),
+    }
+
