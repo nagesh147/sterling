@@ -386,9 +386,14 @@ class TrueDataHistoricalClient:
             if expiry and expiry.lower() == "next":
                 days_ahead += 7
             target_date = now + timedelta(days=days_ahead)
-            resolved_expiry = target_date.strftime("%Y-%m-%d")
+            resolved_expiry = target_date.strftime("%d-%m-%Y")
         else:
-            resolved_expiry = expiry
+            # If provided as YYYY-MM-DD, convert to DD-MM-YYYY for TrueData .NET parser compatibility
+            if len(expiry) == 10 and expiry[4] == "-" and expiry[7] == "-":
+                parts = expiry.split("-")
+                resolved_expiry = f"{parts[2]}-{parts[1]}-{parts[0]}"
+            else:
+                resolved_expiry = expiry
 
         params: dict[str, Any] = {
             "user": self._username,

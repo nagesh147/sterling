@@ -686,6 +686,20 @@ export function SystemDiagnosticsChecklistPanel() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: '#222' }}>{item.name}</span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 750,
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                        letterSpacing: '0.3px',
+                        background: item.source === 'kite' ? '#eff6ff' : (item.source === 'truedata' ? '#fff7ed' : '#f8fafc'),
+                        color: item.source === 'kite' ? '#1d4ed8' : (item.source === 'truedata' ? '#c2410c' : '#475569'),
+                        border: `1px solid ${item.source === 'kite' ? '#bfdbfe' : (item.source === 'truedata' ? '#fed7aa' : '#cbd5e1')}`,
+                      }}
+                    >
+                      {item.source === 'kite' ? '🪁 ZERODHA KITE' : (item.source === 'truedata' ? '📊 TRUEDATA FEED' : '🌐 NETWORK')}
+                    </span>
                     <span style={{ fontSize: 11, color: '#999', background: '#f5f5f5', padding: '1px 6px', borderRadius: 4 }}>
                       {item.symbol_tested}
                     </span>
@@ -735,6 +749,21 @@ export function SystemDiagnosticsChecklistPanel() {
               {/* ── Expanded Drawer ── */}
               {isExpanded && (
                 <div style={S.drawer}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid #f0f0f0', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: item.source === 'kite' ? '#1d4ed8' : (item.source === 'truedata' ? '#c2410c' : '#475569') }}>
+                        {item.source === 'kite'
+                          ? 'Provider: Zerodha Kite Connect (Execution, Orders & Margins)'
+                          : item.source === 'truedata'
+                          ? 'Provider: TrueData Market Feed (Realtime WebSockets & Historical REST API)'
+                          : 'Provider: Network Infrastructure (Internet & DNS Gateways)'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 10.5, color: '#555', background: '#f5f5f5', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                      Data Source: {item.source_origin || (item.source === 'kite' ? 'kite_session' : 'live_truedata')}
+                    </span>
+                  </div>
+
                   {item.field_checks.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
@@ -769,7 +798,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
                   {item.error_message && (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px', color: '#991b1b', fontSize: 11.5, marginBottom: 8 }}>
-                      <strong>Diagnostic Error:</strong> {item.error_message}
+                      <strong>{item.source === 'truedata' ? '🛑 TrueData Gateway Error:' : (item.source === 'kite' ? '🛑 Zerodha Kite Error:' : '🛑 Network Error:')}</strong> {item.error_message}
                     </div>
                   )}
 
