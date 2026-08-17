@@ -4,9 +4,13 @@ import pytest
 
 from app.engines.adaptive_edge.event_boundary import CanonicalEventBoundary
 from app.engines.adaptive_edge.formula_registry import FORMULAS, FormulaStatus
+from app.engines.adaptive_edge.replay import CanonicalEventSequence
 from app.services.providers.truedata.adapter import TrueDataMarketDataAdapter
 from app.services.providers.truedata.bar_history import bars_to_canonical_sequence
-from scripts.run_f101_trial_e2e import _require_truedata_sequence
+from app.services.providers.truedata.replay_contract import (
+    require_causal_order,
+    require_truedata_sequence,
+)
 
 
 def _bar(timestamp: str, close: float) -> dict[str, object]:
@@ -34,7 +38,8 @@ def test_truedata_bar_sequence_is_provenance_verified() -> None:
         ],
     )
 
-    _require_truedata_sequence(sequence, "bar")
+    require_truedata_sequence(sequence, "bar")
+    require_causal_order(sequence, "bar")
     assert len(sequence.events) == 2
     assert all(event.source == "truedata" for event in sequence.events)
     assert all(event.source_version == "2.6" for event in sequence.events)
@@ -64,11 +69,9 @@ def test_trial_gate_rejects_non_truedata_events() -> None:
         source_timestamp="2026-08-13T03:45:00+00:00",
     )
 
-    from app.engines.adaptive_edge.replay import CanonicalEventSequence
-
     sequence = CanonicalEventSequence.from_events([event])
-    with pytest.raises(SystemExit, match="non-TrueData provenance"):
-        _require_truedata_sequence(sequence, "synthetic")
+    with pytest.raises(ValueError, match="non-TrueData provenance"):
+        require_truedata_sequence(sequence, "synthetic")
 
 
 def test_truedata_adapter_sets_causal_available_at() -> None:
