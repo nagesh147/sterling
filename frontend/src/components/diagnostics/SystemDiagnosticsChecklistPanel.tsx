@@ -686,6 +686,8 @@ export function SystemDiagnosticsChecklistPanel() {
                       ? '🔑 LOGIN REQUIRED'
                       : item.id === 'kite_margins'
                       ? '⚡ SIMULATED LEDGER'
+                      : item.id === 'kite_historical' || item.id === 'kite_quotes'
+                      ? '⚠️ FALLBACK (LAKE)'
                       : item.status === 'WARNING' || item.status === 'PARTIAL'
                       ? '⚠️ WARNING'
                       : '⚪ NOT TESTED'}

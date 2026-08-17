@@ -346,11 +346,15 @@ async def verify_kite_historical(acct: Optional[Any]) -> KiteDiagnosticCategoryR
             today = datetime.now()
             from_dt = (today - timedelta(days=2)).strftime("%Y-%m-%d")
             to_dt = today.strftime("%Y-%m-%d")
-            res = await client.get_historical(token, from_dt, to_dt, "5minute")
-            if res and isinstance(res, list):
-                candles_count = len(res)
-                if candles_count > 0:
-                    last_close = float(res[-1].get("close", 24535.0))
+            res = await client.get_historical(token, "5minute", from_dt, to_dt)
+            candles = res.get("candles", []) if isinstance(res, dict) else (res if isinstance(res, list) else [])
+            if candles and len(candles) > 0:
+                candles_count = len(candles)
+                last_c = candles[-1]
+                if isinstance(last_c, (list, tuple)) and len(last_c) >= 5:
+                    last_close = float(last_c[4])
+                elif isinstance(last_c, dict):
+                    last_close = float(last_c.get("close", 24535.0))
         except Exception as exc:
             error = str(exc)
             source = "sterling_lake"
@@ -361,22 +365,28 @@ async def verify_kite_historical(acct: Optional[Any]) -> KiteDiagnosticCategoryR
         last_close = 24535.80
 
     latency = round(max(0.1, (time.perf_counter() - t0) * 1000), 2)
-    status = "PASS"
+    status = "WARNING" if error or not (acct and acct.connected) else "PASS"
 
     field_checks = [
         KiteDiagnosticFieldCheck(
-            name="NIFTY 50 5m Candle History",
-            status="PASS" if candles_count > 0 else "FAIL",
-            value=f"{candles_count} candles loaded",
-            description="5-minute historical OHLCV candles",
+            name="Kite Historical API Stream",
+            status="PASS" if (acct and acct.connected and not error) else "WARNING",
+            value="Active & Streaming" if (acct and acct.connected and not error) else (f"Fallback: {error}" if error else "Login Required"),
+            description="Zerodha Kite Historical 5m candle API",
         ),
         KiteDiagnosticFieldCheck(
-            name="Candle Close Price",
-            status="PASS" if last_close > 10000 else "FAIL",
-            value=f"₹{last_close:,.2f}",
-            description="Latest historical candle close price",
+            name="NIFTY 50 5m Candle History",
+            status="PASS" if candles_count > 0 else "FAIL",
+            value=f"{candles_count} candles loaded (Last Close: ₹{last_close:,.2f})",
+            description="5-minute historical OHLCV candles",
         ),
     ]
+
+    summary = (
+        f"Historical Candle Feed: {candles_count} bars (Zerodha Kite Live Stream)"
+        if (acct and acct.connected and not error)
+        else f"Historical Candle Feed: {candles_count} bars (SterlingLake Fallback)" + (f" — Kite API: {error}" if error else "")
+    )
 
     return KiteDiagnosticCategoryResult(
         id="kite_historical",
@@ -386,11 +396,11 @@ async def verify_kite_historical(acct: Optional[Any]) -> KiteDiagnosticCategoryR
         latency_ms=latency,
         source_origin=source,
         symbol_tested=symbol,
-        summary=f"Historical Candle Feed: {candles_count} bars (Last Close: ₹{last_close:,.2f})" + (f" (Fallback: {source})" if error or not (acct and acct.connected) else ""),
+        summary=summary,
         metrics={"candles_count": candles_count, "last_close": last_close},
         field_checks=field_checks,
         error_message=error,
-        troubleshooting_tip="Kite historical API requires Kite Connect subscription with Historical API add-on.",
+        troubleshooting_tip="Kite historical API requires Kite Connect subscription with Historical API add-on." if error else None,
     )
 
 
