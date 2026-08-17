@@ -56,7 +56,7 @@ _FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
 }
 
 for _id, (_name, _units, _owner) in _FORMULA_METADATA.items():
-    FORMULAS[_id] = FormulaDefinition(_id, "1.0", _name, FormulaStatus.IMPLEMENTED, _units, _owner)
+    FORMULAS[_id] = FormulaDefinition(_id, "1.0", _name, FormulaStatus.LOCKED, _units, _owner)
 
 
 def get_formula(formula_id: str) -> FormulaDefinition:
