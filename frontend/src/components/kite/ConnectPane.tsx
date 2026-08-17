@@ -878,26 +878,28 @@ export function ConnectPane() {
     }}>
       <header style={{
         flexShrink: 0, width: '100%', boxSizing: 'border-box',
-        padding: '14px 16px 12px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
+        padding: '16px 32px 14px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
       }}>
-        <div style={{
-          color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
-          textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
-        }}>
-          Settings
+        <div style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+          <div style={{
+            color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
+          }}>
+            Settings
+          </div>
+          <h1 style={{
+            margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
+            letterSpacing: '-0.01em', fontFamily: 'inherit',
+          }}>
+            {page.label}
+          </h1>
+          <p style={{
+            margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
+            fontFamily: 'inherit', maxWidth: 720,
+          }}>
+            {page.pageDescription}
+          </p>
         </div>
-        <h1 style={{
-          margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
-          letterSpacing: '-0.01em', fontFamily: 'inherit',
-        }}>
-          {page.label}
-        </h1>
-        <p style={{
-          margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
-          fontFamily: 'inherit', maxWidth: 560,
-        }}>
-          {page.pageDescription}
-        </p>
       </header>
 
       <div className="kite-settings-layout" style={{
@@ -947,9 +949,9 @@ export function ConnectPane() {
 
         <main style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '18px 24px 32px', background: '#fff',
+          padding: '24px 32px 48px', background: '#fff',
         }}>
-          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%' }}>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
             {section === 'account' && (
               <>
                 {isLoading && <div style={S.hint}>Loading accounts…</div>}
