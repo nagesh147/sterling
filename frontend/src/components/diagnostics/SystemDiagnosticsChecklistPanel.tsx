@@ -559,7 +559,14 @@ export function SystemDiagnosticsChecklistPanel() {
       );
     }
     if (status === 'PASS') {
-      return <span className="diag-badge diag-badge-pass">VERIFIED</span>;
+      return (
+        <span className="diag-badge-tick" title="Verified" aria-label="Verified">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ display: 'block' }}>
+            <circle cx="8" cy="8" r="7" fill="#16a34a" />
+            <path d="M4.8 8.2l2.2 2.2 4.4-4.8" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      );
     }
     if (status === 'FAIL') {
       return <span className="diag-badge diag-badge-fail">FAILED</span>;
@@ -860,7 +867,7 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-main-title {
           font-size: 15px;
           font-weight: 600;
-          color: #0f172a;
+          color: #1e3a8a;
           margin: 0;
           letter-spacing: -0.01em;
         }
@@ -892,23 +899,26 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-btn-primary {
-          background: #0f172a;
+          background: #2563eb;
           color: #ffffff;
-          border: 1px solid #0f172a;
+          border: 1px solid #1d4ed8;
+          box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
         }
 
         .diag-btn-primary:hover:not(:disabled) {
-          background: #1e293b;
+          background: #1d4ed8;
+          border-color: #1e40af;
         }
 
         .diag-btn-secondary {
-          background: #f8fafc;
-          color: #334155;
-          border: 1px solid #cbd5e1;
+          background: #eff6ff;
+          color: #1e40af;
+          border: 1px solid #bfdbfe;
         }
 
         .diag-btn-secondary:hover:not(:disabled) {
-          background: #f1f5f9;
+          background: #dbeafe;
+          border-color: #93c5fd;
         }
 
         .diag-btn:disabled {
@@ -930,6 +940,11 @@ export function SystemDiagnosticsChecklistPanel() {
           display: flex;
           flex-direction: column;
           gap: 3px;
+          transition: border-color 0.15s ease;
+        }
+
+        .diag-stat-card:hover {
+          border-color: #bfdbfe;
         }
 
         .diag-stat-label {
@@ -949,7 +964,7 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-stat-number {
           font-size: 16px;
           font-weight: 600;
-          color: #0f172a;
+          color: #2563eb;
         }
 
         .diag-stat-total {
@@ -960,7 +975,7 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-stat-text {
           font-size: 13px;
           font-weight: 500;
-          color: #0f172a;
+          color: #1e293b;
         }
 
         .diag-stat-sub {
@@ -990,7 +1005,7 @@ export function SystemDiagnosticsChecklistPanel() {
           background: none;
           border: none;
           border-bottom: 2px solid transparent;
-          font-size: 12.5px;
+          font-size: 12px;
           font-weight: 500;
           color: #64748b;
           padding: 8px 14px;
@@ -1000,13 +1015,14 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-tab-btn:hover {
-          color: #0f172a;
-          background: #f8fafc;
+          color: #2563eb;
+          background: #eff6ff;
         }
 
         .diag-tab-btn.active {
-          color: #0f172a;
-          border-bottom-color: #0f172a;
+          color: #2563eb;
+          border-bottom-color: #2563eb;
+          background: #eff6ff;
           font-weight: 600;
         }
 
@@ -1037,7 +1053,7 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-section-title {
           font-size: 13px;
           font-weight: 600;
-          color: #0f172a;
+          color: #1e3a8a;
           letter-spacing: -0.01em;
         }
 
@@ -1123,11 +1139,11 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-target-code {
           font-size: 10.5px;
           font-family: monospace;
-          color: #475569;
-          background: #f1f5f9;
+          color: #1d4ed8;
+          background: #eff6ff;
           padding: 1px 6px;
           border-radius: 4px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid #dbeafe;
         }
 
         .diag-latency-tag {
@@ -1149,6 +1165,14 @@ export function SystemDiagnosticsChecklistPanel() {
           flex-shrink: 0;
         }
 
+        .diag-badge-tick {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+        }
+
         .diag-badge {
           font-size: 10px;
           font-weight: 500;
@@ -1160,7 +1184,6 @@ export function SystemDiagnosticsChecklistPanel() {
           gap: 4px;
         }
 
-        .diag-badge-pass { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
         .diag-badge-fail { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
         .diag-badge-warn { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
         .diag-badge-auth { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
@@ -1169,9 +1192,9 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-btn-micro {
           font-size: 11px;
           font-weight: 500;
-          background: #ffffff;
+          background: #f8fafc;
           border: 1px solid #cbd5e1;
-          color: #334155;
+          color: #1e40af;
           padding: 3px 8px;
           border-radius: 4px;
           cursor: pointer;
@@ -1179,7 +1202,8 @@ export function SystemDiagnosticsChecklistPanel() {
         }
 
         .diag-btn-micro:hover:not(:disabled) {
-          background: #f1f5f9;
+          background: #eff6ff;
+          border-color: #93c5fd;
         }
 
         .diag-btn-chevron {
