@@ -3,7 +3,7 @@ from __future__ import annotations
 from .broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
 from .execution_adapter import CanonicalExecutionEvent, CanonicalOrderIntent, ExecutionAdapter
 from .execution_event_registry import ExecutionEventRegistry
-from .execution_gate import ExecutionGateDecision, require_execution_authorized
+from .execution_gate import require_execution_authorized
 
 
 class ExecutionGateway:
