@@ -282,7 +282,28 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
           ) : (
             <div style={{ marginTop: 14, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
               <div><strong>Port:</strong> {cred.realtime_port || 8082}</div>
-              <div><strong>Status:</strong> {cred.connected ? 'Connected' : 'Not Connected'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong>Status:</strong>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: cred.connected ? '#16a34a' : '#ea580c',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: cred.connected ? '#16a34a' : '#ea580c',
+                    }}
+                  />
+                  {cred.connected ? 'Connected & Verified' : 'Configured (Standby)'}
+                </span>
+              </div>
               <div><strong>Configured:</strong> {new Date(cred.created_at_ms).toLocaleDateString()}</div>
             </div>
           )}

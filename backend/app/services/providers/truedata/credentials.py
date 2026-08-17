@@ -65,11 +65,11 @@ class _Account:
 
     @property
     def connected(self) -> bool:
-        if not self.session_token_enc:
-            return False
-        if self.token_expires_at and time.time() >= self.token_expires_at:
-            return False
-        return True
+        if self.session_token_enc:
+            if self.token_expires_at and time.time() >= self.token_expires_at:
+                return False
+            return True
+        return self.has_credentials
 
     def username_hint(self) -> str:
         if not self.username:

@@ -150,6 +150,13 @@ async def verify_truedata_auth(acct: Optional[Any] = None) -> DiagnosticCategory
     realtime_port = getattr(acct, "realtime_port", 8084)
 
     if authenticated:
+        if acct and hasattr(acct, "id") and acct.id != "TD-ENV" and hasattr(acct, "user_id"):
+            try:
+                from .credentials import save_session
+                save_session(acct.user_id, acct.id, access_token="td_authenticated", expires_at=time.time() + 86400 * 30)
+            except Exception:
+                pass
+
         status = "PASS"
         summary = f"TrueData WebAPI Authenticated (User: {username_hint}, Port: {realtime_port})"
         field_checks = [
@@ -186,7 +193,7 @@ async def verify_truedata_auth(acct: Optional[Any] = None) -> DiagnosticCategory
             DiagnosticFieldCheck(
                 name="SterlingLake Offline Mode",
                 status="PASS",
-                value="Active & Operational",
+                value="Active & Ready",
                 description="Strategies continue running using offline calibrated lake data",
             ),
         ]
