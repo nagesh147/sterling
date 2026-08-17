@@ -607,6 +607,15 @@ export function SystemDiagnosticsChecklistPanel() {
           </button>
         </div>
 
+        <div className="diag-table-header">
+          <div className="diag-th diag-th-dot" />
+          <div className="diag-th diag-th-name">Checkpoint & Scope</div>
+          <div className="diag-th diag-th-target">Target / Endpoint</div>
+          <div className="diag-th diag-th-latency">Latency</div>
+          <div className="diag-th diag-th-status">Health Status</div>
+          <div className="diag-th diag-th-actions">Actions</div>
+        </div>
+
         <div className="diag-items-list">
           {items.map((item) => {
             const isExpanded = !!expandedIds[item.id];
@@ -1069,6 +1078,37 @@ export function SystemDiagnosticsChecklistPanel() {
           margin-top: 2px;
         }
 
+        .diag-table-header {
+          display: grid;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 80px;
+          align-items: center;
+          padding: 8px 16px;
+          gap: 12px;
+          background: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+          user-select: none;
+        }
+
+        .diag-th {
+          font-size: 10px;
+          font-weight: 700;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .diag-th-latency {
+          text-align: right;
+        }
+
+        .diag-th-status {
+          text-align: center;
+        }
+
+        .diag-th-actions {
+          text-align: right;
+        }
+
         .diag-items-list {
           display: flex;
           flex-direction: column;
@@ -1089,7 +1129,7 @@ export function SystemDiagnosticsChecklistPanel() {
 
         .diag-item-row {
           display: grid;
-          grid-template-columns: 14px minmax(220px, 1fr) 140px 65px auto;
+          grid-template-columns: 20px minmax(220px, 1.6fr) 150px 80px 110px 80px;
           align-items: center;
           padding: 10px 16px;
           gap: 12px;
@@ -1104,7 +1144,7 @@ export function SystemDiagnosticsChecklistPanel() {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 14px;
+          width: 20px;
         }
 
         .diag-status-dot {
@@ -1163,7 +1203,7 @@ export function SystemDiagnosticsChecklistPanel() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          max-width: 140px;
+          max-width: 150px;
           display: inline-block;
         }
 
@@ -1192,8 +1232,8 @@ export function SystemDiagnosticsChecklistPanel() {
         .diag-badge-slot {
           display: flex;
           align-items: center;
-          justify-content: flex-end;
-          min-width: 24px;
+          justify-content: center;
+          width: 100%;
         }
 
         .diag-badge-tick {
