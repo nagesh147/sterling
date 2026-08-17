@@ -949,107 +949,109 @@ export function ConnectPane() {
           minWidth: 0, minHeight: 0, overflowY: 'auto',
           padding: '18px 24px 32px', background: '#fff',
         }}>
-          {section === 'account' && (
-            <>
-              {isLoading && <div style={S.hint}>Loading accounts…</div>}
-              {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
-              {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
-              <AddAccount />
-              <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
-                Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
-              </div>
-            </>
-          )}
-
-          {section === 'truedata' && (
-            <>
-              <TrueDataCredentialsPanel />
-            </>
-          )}
-
-          {section === 'diagnostics' && (
-            <>
-              <SystemDiagnosticsChecklistPanel />
-            </>
-          )}
-
-          {section === 'mode' && (
-            <>
-              <TradingModePanel />
-              <KiteExchangeSettingsCard />
-            </>
-          )}
-
-          {section === 'manualRules' && (
-            <>
-              <ManualRulesPanel />
-            </>
-          )}
-
-          {section === 'autoRules' && (
-            <>
-              <AutomaticRulesPanel />
-            </>
-          )}
-
-          {section === 'engine' && (
-            <>
-              <SuperTrendEnginePanel />
-            </>
-          )}
-
-          {section === 'navigator' && (
-            <>
-              <NavigatorSettingsPanel />
-              <NavigatorCalibrationPanel />
-            </>
-          )}
-
-          {section === 'adaptiveEdge' && (
-            <>
-              <AdaptiveEdgeSettingsPanel />
-            </>
-          )}
-
-          {section === 'markets' && (
-            <>
-              {liveTools ? (
-                <><Funds /><MarginCalc /><Ticker /></>
-              ) : (
-                <div style={S.card}>
-                  <div style={S.title}>LIVE ACCOUNT TOOLS</div>
-                  <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%' }}>
+            {section === 'account' && (
+              <>
+                {isLoading && <div style={S.hint}>Loading accounts…</div>}
+                {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
+                {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
+                <AddAccount />
+                <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
+                  Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
                 </div>
-              )}
-            </>
-          )}
+              </>
+            )}
 
-          {section === 'notifications' && (
-            <>
-              <KiteTelegramPanel />
-            </>
-          )}
+            {section === 'truedata' && (
+              <>
+                <TrueDataCredentialsPanel />
+              </>
+            )}
 
-          {section === 'dataLake' && (
-            <>
-              <DataLakeSettingsPanel />
-            </>
-          )}
+            {section === 'diagnostics' && (
+              <>
+                <SystemDiagnosticsChecklistPanel />
+              </>
+            )}
 
-          {section === 'experience' && (
-            <>
-              <MotionStyleSettings />
-              <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-                <BrandIconPicker />
-              </section>
-              <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
-                <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
-                  Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+            {section === 'mode' && (
+              <>
+                <TradingModePanel />
+                <KiteExchangeSettingsCard />
+              </>
+            )}
+
+            {section === 'manualRules' && (
+              <>
+                <ManualRulesPanel />
+              </>
+            )}
+
+            {section === 'autoRules' && (
+              <>
+                <AutomaticRulesPanel />
+              </>
+            )}
+
+            {section === 'engine' && (
+              <>
+                <SuperTrendEnginePanel />
+              </>
+            )}
+
+            {section === 'navigator' && (
+              <>
+                <NavigatorSettingsPanel />
+                <NavigatorCalibrationPanel />
+              </>
+            )}
+
+            {section === 'adaptiveEdge' && (
+              <>
+                <AdaptiveEdgeSettingsPanel />
+              </>
+            )}
+
+            {section === 'markets' && (
+              <>
+                {liveTools ? (
+                  <><Funds /><MarginCalc /><Ticker /></>
+                ) : (
+                  <div style={S.card}>
+                    <div style={S.title}>LIVE ACCOUNT TOOLS</div>
+                    <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {section === 'notifications' && (
+              <>
+                <KiteTelegramPanel />
+              </>
+            )}
+
+            {section === 'dataLake' && (
+              <>
+                <DataLakeSettingsPanel />
+              </>
+            )}
+
+            {section === 'experience' && (
+              <>
+                <MotionStyleSettings />
+                <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                  <BrandIconPicker />
+                </section>
+                <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
+                  <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
+                    Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </main>
       </div>
 
