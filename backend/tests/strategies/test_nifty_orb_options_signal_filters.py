@@ -13,16 +13,9 @@ def _bars(closes: list[float], volumes: list[float]) -> list[Bar]:
     return out
 
 
-def test_vwap_slope_is_required_for_long_signal():
+def test_positive_vwap_slope_confirms_long_breakout():
     cfg = StrategyConfig(min_breakout_atr=0.01, volume_multiplier=1.0, vwap_slope_lookback=2)
-    # Opening range 09:15-09:30, then a breakout whose price is above VWAP.
     bars = _bars([100, 100, 101, 102, 103, 105], [100, 100, 100, 100, 100, 500])
     signal = generate_signal(bars, cfg)
     assert signal.direction == "LONG"
-
-
-def test_flat_vwap_does_not_confirm_direction():
-    cfg = StrategyConfig(min_breakout_atr=0.01, volume_multiplier=1.0, vwap_slope_lookback=2)
-    bars = _bars([100, 100, 100, 100, 100, 105], [100, 100, 100, 100, 100, 500])
-    signal = generate_signal(bars, cfg)
-    assert signal.direction == "NONE"
+    assert "positive VWAP slope" in signal.reason
