@@ -6,7 +6,7 @@ from math import isfinite
 from typing import Sequence
 
 
-# Preserve the six buckets explicitly defined by the recovered V1 source.
+# Statistical buckets explicitly defined by recovered V1 source.
 HORIZON_BUCKETS = (
     "MICRO_SCALP",      # T < 3m
     "SHORT_SCALP",      # 3m <= T < 5m
@@ -14,6 +14,17 @@ HORIZON_BUCKETS = (
     "EXTENDED_SCALP",   # 15m <= T < 30m
     "INTRADAY",         # 30m <= T < 45m
     "LONG_TAIL",        # T > 45m
+)
+
+# Four lifecycle management classes remain distinct from the statistical
+# buckets. The mapping is deterministic and carries no production threshold.
+MANAGEMENT_CLASS_BY_BUCKET = (
+    "MICRO_SCALP",
+    "MICRO_SCALP",
+    "SCALP",
+    "EXTENDED_SCALP",
+    "INTRADAY",
+    "INTRADAY",
 )
 
 
@@ -40,9 +51,14 @@ class HorizonDistribution:
             raise ValueError("horizon probabilities must sum to 1")
 
     @property
-    def management_class(self) -> str:
-        """Return the dominant management bucket as a derived state only."""
+    def dominant_bucket(self) -> str:
         return HORIZON_BUCKETS[max(range(len(self.probabilities)), key=self.probabilities.__getitem__)]
+
+    @property
+    def management_class(self) -> str:
+        """Map the dominant statistical bucket to a lifecycle class."""
+        index = max(range(len(self.probabilities)), key=self.probabilities.__getitem__)
+        return MANAGEMENT_CLASS_BY_BUCKET[index]
 
     @property
     def confidence(self) -> float:
