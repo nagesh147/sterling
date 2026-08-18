@@ -25,6 +25,7 @@ class PortfolioAssessment:
     causal_cutoff: str
     reason: str
     approved_quantity: int = 0
+    quantity_step: int = 1
 
     def __post_init__(self) -> None:
         if not self.assessment_id.strip():
@@ -33,12 +34,16 @@ class PortfolioAssessment:
             raise ValueError("model_version is required")
         if not self.causal_cutoff.strip():
             raise ValueError("causal_cutoff is required")
+        if self.quantity_step <= 0:
+            raise ValueError("quantity_step must be positive")
         if self.approved_quantity < 0:
             raise ValueError("approved_quantity cannot be negative")
-        if self.decision == PortfolioDecision.ADMIT and self.approved_quantity <= 0:
-            raise ValueError("ADMIT requires positive approved_quantity")
-        if self.decision != PortfolioDecision.ADMIT and self.approved_quantity != 0:
-            raise ValueError("non-ADMIT portfolio decisions cannot approve quantity")
+        if self.approved_quantity % self.quantity_step != 0:
+            raise ValueError("approved_quantity must respect quantity_step")
+        if self.decision in (PortfolioDecision.ADMIT, PortfolioDecision.REDUCE) and self.approved_quantity <= 0:
+            raise ValueError("exposure-permitting decision requires positive approved_quantity")
+        if self.decision not in (PortfolioDecision.ADMIT, PortfolioDecision.REDUCE) and self.approved_quantity != 0:
+            raise ValueError("non-exposure portfolio decisions cannot approve quantity")
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,12 @@ def admit_candidate(
         return F114Admission(False, 0, "portfolio_assessment_unavailable", portfolio_assessment.assessment_id)
     if portfolio_assessment.decision == PortfolioDecision.REDUCE:
         quantity = min(candidate_quantity, portfolio_assessment.approved_quantity)
+        quantity -= quantity % portfolio_assessment.quantity_step
         if quantity <= 0:
             return F114Admission(False, 0, "portfolio_reduced_to_zero", portfolio_assessment.assessment_id)
         return F114Admission(True, quantity, "portfolio_reduced", portfolio_assessment.assessment_id)
-    return F114Admission(True, min(candidate_quantity, portfolio_assessment.approved_quantity), "portfolio_admitted", portfolio_assessment.assessment_id)
+    quantity = min(candidate_quantity, portfolio_assessment.approved_quantity)
+    quantity -= quantity % portfolio_assessment.quantity_step
+    if quantity <= 0:
+        return F114Admission(False, 0, "portfolio_reduced_to_zero", portfolio_assessment.assessment_id)
+    return F114Admission(True, quantity, "portfolio_admitted", portfolio_assessment.assessment_id)
