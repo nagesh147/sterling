@@ -13,12 +13,18 @@ _IST = timezone(timedelta(hours=5, minutes=30))
 _INDEX_ALIASES = {"NIFTY": "NIFTY", "NIFTY 50": "NIFTY", "BANKNIFTY": "BANKNIFTY", "NIFTY BANK": "BANKNIFTY"}
 
 
+def _value(row: Any, name: str, default: Any = None) -> Any:
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
 def _bar(row: Any) -> Bar:
-    ts = getattr(row, "timestamp_ms", None)
+    ts = _value(row, "timestamp_ms")
     if ts is not None:
         dt = datetime.fromtimestamp(float(ts) / 1000.0, tz=_IST)
     else:
-        raw = getattr(row, "timestamp", None) or row.get("timestamp")
+        raw = _value(row, "timestamp")
         if isinstance(raw, datetime):
             dt = raw if raw.tzinfo else raw.replace(tzinfo=_IST)
         else:
@@ -27,11 +33,11 @@ def _bar(row: Any) -> Bar:
                 dt = dt.replace(tzinfo=_IST)
     return Bar(
         dt,
-        float(getattr(row, "open", row["open"] if isinstance(row, dict) else 0)),
-        float(getattr(row, "high", row["high"] if isinstance(row, dict) else 0)),
-        float(getattr(row, "low", row["low"] if isinstance(row, dict) else 0)),
-        float(getattr(row, "close", row["close"] if isinstance(row, dict) else 0)),
-        float(getattr(row, "volume", row.get("volume", 0) if isinstance(row, dict) else 0) or 0),
+        float(_value(row, "open", 0)),
+        float(_value(row, "high", 0)),
+        float(_value(row, "low", 0)),
+        float(_value(row, "close", 0)),
+        float(_value(row, "volume", 0) or 0),
     )
 
 
