@@ -74,20 +74,26 @@ def production_readiness() -> tuple[ReadinessItem, ...]:
         ),
         ReadinessItem(
             "a197_dataset",
-            True if gate.authorized else False,
+            gate.authorized,
             "Multi-day tick history and market microstructure calibration",
             "Multi-Day Dataset Calibration (A197)",
         ),
         ReadinessItem(
             "parameter_freeze",
-            True if gate.authorized else False,
+            gate.authorized,
             "Robust feature parameters calibrated across historical distribution",
             "Calibrated Feature Parameters",
         ),
         ReadinessItem(
             "f102_f103_numeric",
-            True if gate.authorized else False,
+            gate.authorized,
             "Directional probability model & market regime conjunction filter",
             "Regime & Win Probability Models",
+        ),
+        ReadinessItem(
+            "f114_portfolio_model",
+            False,
+            "Portfolio aggregation mathematics is unresolved; F-114 remains locked and execution must remain blocked.",
+            "F-114 Portfolio Interaction Model",
         ),
     )
