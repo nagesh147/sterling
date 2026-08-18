@@ -72,31 +72,12 @@ POST /api/v1/config/nifty-orb-options/execute
 
 The included deterministic backtest is the **underlying signal-validation layer**. It must not be presented as an options P&L backtest.
 
-A production-grade options backtest must replay historical option contracts and premiums for the selected expiry/strike, including:
-
-- brokerage and statutory charges
-- bid/ask slippage
-- option liquidity
-- IV changes
-- expiry-day behavior
-- contract roll/selection
-- partial fills
-- actual lot sizes
+A production-grade options backtest must replay historical option contracts and premiums for the selected expiry/strike, including brokerage, statutory charges, bid/ask slippage, option liquidity, IV changes, expiry-day behavior, contract roll/selection, partial fills and actual lot sizes.
 
 No fabricated option P&L is generated when those data are unavailable.
 
 ## Metrics
 
-The engine reports:
+The engine reports trades, wins/losses, win rate, gross profit/loss, profit factor, expectancy, average win/loss, maximum drawdown and net P&L.
 
-- trades
-- wins/losses
-- win rate
-- gross profit/loss
-- profit factor
-- expectancy
-- average win/loss
-- maximum drawdown
-- net P&L
-
-The acceptance target is not a specific win rate. The strategy should only graduate to automatic/live execution after out-of-sample and walk-forward tests demonstrate positive expectancy after costs and stable drawdown.
+The strategy should only graduate to automatic/live execution after out-of-sample and walk-forward tests demonstrate positive expectancy after costs and stable drawdown.
