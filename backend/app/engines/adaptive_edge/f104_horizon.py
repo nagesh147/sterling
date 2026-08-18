@@ -6,9 +6,11 @@ from math import isfinite
 from typing import Sequence
 
 
+# Preserve the six buckets explicitly defined by the recovered V1 source.
 HORIZON_BUCKETS = (
     "MICRO_SCALP",      # T < 3m
-    "SCALP",            # 3m <= T < 15m
+    "SHORT_SCALP",      # 3m <= T < 5m
+    "SCALP",            # 5m <= T < 15m
     "EXTENDED_SCALP",   # 15m <= T < 30m
     "INTRADAY",         # 30m <= T < 45m
     "LONG_TAIL",        # T > 45m
@@ -19,8 +21,8 @@ HORIZON_BUCKETS = (
 class HorizonDistribution:
     """Probability state for future trade duration.
 
-    The representation intentionally preserves the open-ended >45m tail.
-    It does not fabricate a midpoint for that censored interval.
+    The >45m interval is retained as an open-ended tail; no arbitrary
+    midpoint is introduced.
     """
 
     probabilities: tuple[float, ...]
@@ -29,7 +31,7 @@ class HorizonDistribution:
 
     def __post_init__(self) -> None:
         if len(self.probabilities) != len(HORIZON_BUCKETS):
-            raise ValueError("F-104 requires exactly five horizon probabilities")
+            raise ValueError("F-104 requires exactly six horizon probabilities")
         if any(not isfinite(p) for p in self.probabilities):
             raise ValueError("horizon probabilities must be finite")
         if any(p < 0.0 for p in self.probabilities):
@@ -39,11 +41,7 @@ class HorizonDistribution:
 
     @property
     def management_class(self) -> str:
-        """Return the maximum-probability management class.
-
-        This is a derived state only. It is not a production decision
-        threshold and does not alter previously authorized risk.
-        """
+        """Return the dominant management bucket as a derived state only."""
         return HORIZON_BUCKETS[max(range(len(self.probabilities)), key=self.probabilities.__getitem__)]
 
     @property
@@ -52,18 +50,17 @@ class HorizonDistribution:
 
 
 def distribution_from_scores(scores: Sequence[float]) -> HorizonDistribution:
-    """Convert finite research scores into a deterministic probability vector.
+    """Convert research scores into a deterministic probability vector.
 
-    Softmax is used only as a deterministic research boundary. Coefficients and
-    model fitting remain unfrozen and must be learned through walk-forward
-    validation before production promotion.
+    Softmax is only a research boundary. Coefficients and model fitting remain
+    unfrozen and require chronological walk-forward validation before any
+    production promotion.
     """
     if len(scores) != len(HORIZON_BUCKETS):
-        raise ValueError("F-104 requires five horizon scores")
+        raise ValueError("F-104 requires six horizon scores")
     if any(not isfinite(score) for score in scores):
         raise ValueError("horizon scores must be finite")
 
-    # Numerically stable softmax.
     import math
 
     maximum = max(scores)
