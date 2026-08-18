@@ -108,7 +108,7 @@ async def set_eval_history_cap(cap:int=50)->EvalHistoryCapResponse:
  from app.services import eval_history
  eval_history.set_cap(cap);return EvalHistoryCapResponse(cap=eval_history.get_cap())
 class NiftyOrbConfigRequest(BaseModel):
- enabled:bool|None=None;underlying:str|None=None;scan_indices:list[str]|None=None;scan_stocks:list[str]|None=None;scan_all_stocks:bool|None=None;scan_stock_contracts:bool|None=None;interval_minutes:int|None=None;opening_range_minutes:int|None=None;entry_start:str|None=None;entry_end:str|None=None;min_breakout_atr:float|None=None;volume_multiplier:float|None=None;vwap_slope_lookback:int|None=None;trend_lookback:int|None=None;atr_period:int|None=None;stop_buffer_atr:float|None=None;trail_atr:float|None=None;target_r:float|None=None;option_moneyness:str|None=None;option_steps_itm:int|None=None;max_risk_inr:float|None=None;max_trades_per_day:int|None=None;avoid_expiry_day:bool|None=None;expiry_selection:str|None=None;expiry_dte_min:int|None=None;expiry_dte_max:int|None=None;execution_broker:str|None=None;data_source:str|None=None;max_spread_pct:float|None=None;min_option_volume:float|None=None;min_open_interest:float|None=None;max_quote_staleness_s:int|None=None
+ enabled:bool|None=None;underlying:str|None=None;scan_indices:list[str]|None=None;scan_stocks:list[str]|None=None;scan_all_stocks:bool|None=None;scan_stock_contracts:bool|None=None;interval_minutes:int|None=None;opening_range_minutes:int|None=None;entry_start:str|None=None;entry_end:str|None=None;min_breakout_atr:float|None=None;volume_multiplier:float|None=None;vwap_slope_lookback:int|None=None;trend_lookback:int|None=None;atr_period:int|None=None;stop_buffer_atr:float|None=None;trail_atr:float|None=None;target_r:float|None=None;option_moneyness:str|None=None;option_steps_itm:int|None=None;max_risk_inr:float|None=None;max_trades_per_day:int|None=None;avoid_expiry_day:bool|None=None;expiry_selection:str|None=None;expiry_dte_min:int|None=None;expiry_dte_max:int|None=None;execution_broker:str|None=None;data_source:str|None=None;max_spread_pct:float|None=None;min_option_volume:float|None=None;min_open_interest:float|None=None;max_quote_staleness_s:int|None=None;truedata_use_ticks:bool|None=None;truedata_use_oi:bool|None=None;truedata_use_bid_ask:bool|None=None;truedata_use_quote_freshness:bool|None=None
 @router.get("/nifty-orb-options")
 async def get_nifty_orb_options_config()->dict:
  from app.services.nifty_orb_options import get_config
@@ -126,8 +126,6 @@ async def nifty_orb_options_snapshot(user:UserContext=Depends(get_current_user))
  except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB snapshot failed: {exc}") from exc
 @router.post("/nifty-orb-options/scan")
 async def nifty_orb_options_scan(user:UserContext=Depends(get_current_user))->dict:
- """Realtime ORB board feed: one isolated row per configured underlying, with a
- resolved BUY CE/PE trade plan when the underlying signal is actionable."""
  from app.services.nifty_orb_scanner import scan_user
  try:return await scan_user(user.user_id)
  except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB scan failed: {exc}") from exc
@@ -143,8 +141,7 @@ async def nifty_orb_options_execute(user:UserContext=Depends(get_current_user))-
  try:return await execute_manual(user.user_id)
  except ValueError as exc:raise HTTPException(409,detail=str(exc)) from exc
  except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB execution failed: {exc}") from exc
-
 @router.on_event("startup")
-async def _start_nifty_orb_runner() -> None:
+async def _start_nifty_orb_runner()->None:
  from app.services.nifty_orb_options_runner import start
  start()
