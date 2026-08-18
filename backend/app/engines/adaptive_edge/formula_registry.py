@@ -38,24 +38,25 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
 }
 
-# F-101..F-114 are the recovered strategy-specific contract slots. Their
-# descriptions are governance metadata only; implementation status remains
-# LOCKED until each canonical artifact has passed its promotion contract.
+# Canonical F-101..F-114 roles are taken from docs/strategy/adaptive-edge/FORMULAS.md.
+# SOURCE-RECOVERED means the V1.0 strategy source has been recovered; LOCKED means
+# the formula has not yet satisfied the full promotion contract and is therefore
+# not production-executable.
 _FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
-    "F-101": ("Feature normalization", "normalized feature state", "f101_normalization"),
-    "F-102": ("Probability / prediction state", "probability vector", "f102_prediction"),
-    "F-103": ("Opportunity eligibility", "boolean / state", "f103_opportunity"),
+    "F-101": ("Feature/state construction and normalization", "normalized feature state", "f101_normalization"),
+    "F-102": ("Probability/regime state", "probability vector", "f102_prediction"),
+    "F-103": ("Candidate eligibility / NO_TRADE boundary", "boolean / state", "f103_opportunity"),
     "F-104": ("Adaptive horizon distribution", "probability vector", "f104_horizon"),
     "F-105": ("Target/stop competition and conservative EV", "value / state", "f105_economics"),
-    "F-106": ("Option candidate economic selection", "candidate / instrument", "f106_option_selection"),
-    "F-107": ("Effective risk per unit", "INR / unit", "risk_sizing"),
+    "F-106": ("Option candidate economics", "candidate / instrument", "f106_option_selection"),
+    "F-107": ("Effective risk semantics", "INR / unit", "risk_sizing"),
     "F-108": ("Position sizing", "contracts", "risk_sizing"),
-    "F-109": ("Option moneyness / listed-contract selection", "strike / leg", "option_ladder"),
-    "F-110": ("Canonical order intent", "order intent", "execution_adapter"),
-    "F-111": ("Canonical execution event", "execution event", "execution_adapter"),
-    "F-112": ("Dynamic protection", "protection state", "protection"),
-    "F-113": ("Lifecycle termination", "lifecycle state", "lifecycle_engine"),
-    "F-114": ("Final portfolio interaction", "portfolio state", "management"),
+    "F-109": ("Option selection by validated ExpectedNetEV subject to constraints", "candidate / instrument", "f109_option_selection"),
+    "F-110": ("BUY_CE / BUY_PE mandatory entry gate", "entry decision", "f110_entry_gate"),
+    "F-111": ("Position-management exit state machine", "lifecycle state", "f111_exit_gate"),
+    "F-112": ("Monotonic dynamic protection / profit floor", "protection state", "protection"),
+    "F-113": ("Post-exit / re-entry boundary", "re-entry state", "f113_reentry"),
+    "F-114": ("Final decision interaction with PositionState and CapitalState", "portfolio state", "management"),
 }
 
 for _id, (_name, _units, _owner) in _FORMULA_METADATA.items():
