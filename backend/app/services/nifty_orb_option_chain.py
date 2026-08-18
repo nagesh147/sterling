@@ -1,72 +1,43 @@
-"""Normalize broker option-chain quotes for ORB option buying.
-
-The ORB strategy consumes this boundary instead of knowing Kite/TrueData payload
-shapes. No orders are placed here.
-"""
+"""Normalize broker option-chain quotes for ORB option buying."""
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import date
-from typing import Any, Awaitable, Callable, Sequence
-from app.engines.nifty_orb_options import OptionContract, StrategyConfig
-
+from datetime import date,datetime,timezone
+from typing import Any,Awaitable,Callable,Sequence
+from app.engines.nifty_orb_options import OptionContract,StrategyConfig
 @dataclass(frozen=True)
 class ChainQuote:
-    symbol: str
-    strike: float
-    expiry: str
-    option_type: str
-    ltp: float
-    bid: float
-    ask: float
-    lot_size: int
-    volume: float
-    open_interest: float
-    delta: float | None = None
-
-    def to_contract(self) -> OptionContract:
-        return OptionContract(self.symbol,self.strike,self.expiry,self.option_type,self.ltp,self.bid,self.ask,self.lot_size,self.delta,self.volume,self.open_interest)
-
-def normalize_chain(rows: Sequence[dict[str, Any]] | dict[str, Any], *, default_lot_size: int = 1) -> list[OptionContract]:
-    if isinstance(rows,dict):
-        rows=rows.get("data") or rows.get("records") or rows.get("Records") or rows.get("options") or []
+    symbol:str;strike:float;expiry:str;option_type:str;ltp:float;bid:float;ask:float;lot_size:int;volume:float;open_interest:float;delta:float|None=None;quote_timestamp:datetime|None=None
+    def to_contract(self)->OptionContract:return OptionContract(self.symbol,self.strike,self.expiry,self.option_type,self.ltp,self.bid,self.ask,self.lot_size,self.delta,self.volume,self.open_interest,self.quote_timestamp)
+def _timestamp(row:dict[str,Any])->datetime|None:
+    raw=row.get("quote_timestamp") or row.get("timestamp") or row.get("time")
+    if not raw:return None
+    try:
+        if isinstance(raw,datetime):return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+        s=str(raw).replace("Z","+00:00");dt=datetime.fromisoformat(s) if "T" in s else datetime.strptime(s,"%Y-%m-%d %H:%M:%S");return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (TypeError,ValueError):return None
+def normalize_chain(rows:Sequence[dict[str,Any]]|dict[str,Any],*,default_lot_size:int=1)->list[OptionContract]:
+    if isinstance(rows,dict):rows=rows.get("data") or rows.get("records") or rows.get("Records") or rows.get("options") or []
     result=[]
     for row in rows:
-        raw_type=str(row.get("option_type") or row.get("instrument_type") or row.get("type") or "").upper()
-        option_type={"CALL":"CE","C":"CE","PUT":"PE","P":"PE"}.get(raw_type,raw_type)
-        if option_type not in {"CE","PE"}: continue
-        try: strike=float(row.get("strike") or row.get("strike_price")); expiry=str(row.get("expiry") or row.get("expiry_date"))[:10]
-        except (TypeError,ValueError): continue
-        if strike<=0 or not expiry: continue
-        result.append(ChainQuote(
-            symbol=str(row.get("symbol") or row.get("tradingsymbol") or row.get("instrument") or ""),
-            strike=strike,expiry=expiry,option_type=option_type,
-            ltp=float(row.get("ltp") or row.get("last_price") or row.get("close") or 0),
-            bid=float(row.get("bid") or row.get("bid_price") or 0),
-            ask=float(row.get("ask") or row.get("ask_price") or 0),
-            lot_size=int(row.get("lot_size") or row.get("lotsize") or default_lot_size),
-            volume=float(row.get("volume") or 0),
-            open_interest=float(row.get("open_interest") or row.get("oi") or 0),
-            delta=float(row["delta"]) if row.get("delta") not in (None,"") else None,
-        ).to_contract())
+        raw_type=str(row.get("option_type") or row.get("instrument_type") or row.get("type") or row.get("opttype") or "").upper();typ={"CALL":"CE","C":"CE","PUT":"PE","P":"PE"}.get(raw_type,raw_type)
+        if typ not in {"CE","PE"}:continue
+        try:strike=float(row.get("strike") or row.get("strike_price"));expiry=str(row.get("expiry") or row.get("expiry_date"))[:10]
+        except (TypeError,ValueError):continue
+        if strike<=0 or not expiry:continue
+        result.append(ChainQuote(str(row.get("symbol") or row.get("tradingsymbol") or row.get("instrument") or ""),strike,expiry,typ,float(row.get("ltp") or row.get("last_price") or row.get("close") or 0),float(row.get("bid") or row.get("bid_price") or 0),float(row.get("ask") or row.get("ask_price") or 0),int(row.get("lot_size") or row.get("lotsize") or default_lot_size),float(row.get("volume") or 0),float(row.get("open_interest") or row.get("oi") or 0),float(row["delta"]) if row.get("delta") not in (None,"") else None,_timestamp(row)).to_contract())
     return result
-
-
-def filter_chain(contracts: Sequence[OptionContract], cfg: StrategyConfig, *, today: date | None = None) -> list[OptionContract]:
-    today=today or date.today(); result=[]
-    for contract in contracts:
-        if not contract.symbol or contract.lot_size<=0 or contract.ltp<=0 or contract.bid<=0 or contract.ask<contract.bid: continue
-        try: dte=(date.fromisoformat(contract.expiry[:10])-today).days
-        except ValueError: continue
-        if dte<cfg.expiry_dte_min or dte>cfg.expiry_dte_max: continue
-        if contract.spread_pct>cfg.max_spread_pct: continue
-        if contract.volume<cfg.min_option_volume or contract.open_interest<cfg.min_open_interest: continue
-        result.append(contract)
+def filter_chain(contracts:Sequence[OptionContract],cfg:StrategyConfig,*,today:date|None=None)->list[OptionContract]:
+    today=today or date.today();result=[]
+    for c in contracts:
+        if not c.symbol or c.lot_size<=0 or c.ltp<=0:continue
+        if cfg.truedata_use_bid_ask and (c.bid<=0 or c.ask<c.bid or c.spread_pct>cfg.max_spread_pct):continue
+        if cfg.truedata_use_oi and c.open_interest<cfg.min_open_interest:continue
+        if c.volume<cfg.min_option_volume:continue
+        try:dte=(date.fromisoformat(c.expiry[:10])-today).days
+        except ValueError:continue
+        if dte<cfg.expiry_dte_min or dte>cfg.expiry_dte_max:continue
+        if cfg.truedata_use_quote_freshness and c.quote_timestamp is not None and c.quote_age_seconds>cfg.max_quote_staleness_s:continue
+        result.append(c)
     return result
-
-QuoteFetcher=Callable[[str, str], Awaitable[Sequence[dict[str,Any]]]]
-
-async def hydrate(symbol: str, direction: str, cfg: StrategyConfig, fetch_quotes: QuoteFetcher) -> list[OptionContract]:
-    """Fetch, normalize and filter the CE/PE side required by one ORB signal."""
-    option_type="CE" if direction=="LONG" else "PE"
-    rows=await fetch_quotes(symbol,option_type)
-    return filter_chain(normalize_chain(rows),cfg)
+QuoteFetcher=Callable[[str,str],Awaitable[Sequence[dict[str,Any]]]]
+async def hydrate(symbol:str,direction:str,cfg:StrategyConfig,fetch_quotes:QuoteFetcher)->list[OptionContract]:return filter_chain(normalize_chain(await fetch_quotes(symbol,"CE" if direction=="LONG" else "PE")),cfg)
