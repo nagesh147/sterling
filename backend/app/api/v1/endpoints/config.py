@@ -23,10 +23,8 @@ async def update_risk_config(params:RiskParams)->RiskParams:
 @router.post("/risk/reset")
 async def reset_risk_config()->RiskParams:
  global _risk;_risk=RiskParams(capital=settings.default_capital,max_position_pct=settings.max_position_pct,max_contracts=settings.max_contracts,hybrid_st_weight=0.5);return _risk
-class DataSourceRequest(BaseModel):
- exchange:str;api_key:str="";api_secret:str=""
-class DataSourceResponse(BaseModel):
- exchange:str;display_name:str;reachable:bool;adapter_stack:str;timestamp_ms:int
+class DataSourceRequest(BaseModel): exchange:str;api_key:str="";api_secret:str=""
+class DataSourceResponse(BaseModel): exchange:str;display_name:str;reachable:bool;adapter_stack:str;timestamp_ms:int
 @router.get("/data-source")
 async def get_data_source()->DataSourceResponse:
  name=_adm.get_data_source();ad=_adm.get_adapter();reachable=False
@@ -62,10 +60,8 @@ async def update_scoring_weights(body:ScoringWeights)->ScoringWeights:
 @router.post("/scoring-weights/reset")
 async def reset_scoring_weights()->ScoringWeights:
  global _scoring_weights;_scoring_weights=ScoringWeights();return _scoring_weights
-class TelegramConfigRequest(BaseModel):
- bot_token:str="";chat_id:str="";enabled:bool=True
-class TelegramConfigResponse(BaseModel):
- bot_token_set:bool;bot_token_hint:str;chat_id:str;enabled:bool;reachable:bool=False
+class TelegramConfigRequest(BaseModel): bot_token:str="";chat_id:str="";enabled:bool=True
+class TelegramConfigResponse(BaseModel): bot_token_set:bool;bot_token_hint:str;chat_id:str;enabled:bool;reachable:bool=False
 @router.get("/telegram")
 async def get_telegram_config()->TelegramConfigResponse:
  import app.services.notifications.telegram as _tg
@@ -96,8 +92,7 @@ async def test_telegram()->TelegramConfigResponse:
  return TelegramConfigResponse(bot_token_set=bool(token),bot_token_hint=f"…{token[-6:]}" if len(token)>=6 else ("set" if token else ""),chat_id=_tg.TELEGRAM_CHAT_ID,enabled=bool(token and _tg.TELEGRAM_CHAT_ID),reachable=reachable)
 @router.get("/circuit-breaker")
 async def get_circuit_breaker(request:Request)->dict:
- cb=getattr(request.app.state,"circuit_breaker",None)
- return {"state":"halted" if cb and cb.halted else "ok","halted":bool(cb and cb.halted),"size_multiplier":cb.size_multiplier if cb else 1.0}
+ cb=getattr(request.app.state,"circuit_breaker",None);return {"state":"halted" if cb and cb.halted else "ok","halted":bool(cb and cb.halted),"size_multiplier":cb.size_multiplier if cb else 1.0}
 @router.post("/circuit-breaker/reset")
 async def reset_circuit_breaker(request:Request)->dict:
  cb=getattr(request.app.state,"circuit_breaker",None)
@@ -141,3 +136,8 @@ async def nifty_orb_options_execute(user:UserContext=Depends(get_current_user))-
  try:return await execute_manual(user.user_id)
  except ValueError as exc:raise HTTPException(409,detail=str(exc)) from exc
  except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB execution failed: {exc}") from exc
+
+@router.on_event("startup")
+async def _start_nifty_orb_runner() -> None:
+ from app.services.nifty_orb_options_runner import start
+ start()
