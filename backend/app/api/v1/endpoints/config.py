@@ -81,7 +81,7 @@ async def set_telegram_config(body:TelegramConfigRequest)->TelegramConfigRespons
   try:reachable=await _tg.send("✓ Sterling Telegram connected",parse_mode="HTML")
   except Exception:pass
  _db.set_config("telegram_verified","1" if reachable else "0");_tg.TELEGRAM_REACHABLE=reachable;token=_tg.TELEGRAM_TOKEN
- return TelegramConfigResponse(bot_token_set=bool(token),bot_token_hint=f"…{token[-6:]}" if len(token)>=6 else ("set" if token else ""),chat_id=_tg.TELEGRAM_CHAT_ID,enabled=bool(token and _tg.TELEGRAM_CHAT_ID),reachable=reachable)
+ return TelegramConfigResponse(bot_token_set=bool(token),bot_token_hint=f"…{token[-6:]}" if len(token)>=6 else ("set" if token else ""),chat_id=_tg.TELEGRAM_CHAT_ID,enabled=bool(token and chat),reachable=reachable)
 @router.post("/telegram/test")
 async def test_telegram()->TelegramConfigResponse:
  import app.services.notifications.telegram as _tg
@@ -108,7 +108,7 @@ async def set_eval_history_cap(cap:int=50)->EvalHistoryCapResponse:
  from app.services import eval_history
  eval_history.set_cap(cap);return EvalHistoryCapResponse(cap=eval_history.get_cap())
 class NiftyOrbConfigRequest(BaseModel):
- enabled:bool|None=None;underlying:str|None=None;interval_minutes:int|None=None;opening_range_minutes:int|None=None;entry_start:str|None=None;entry_end:str|None=None;min_breakout_atr:float|None=None;volume_multiplier:float|None=None;vwap_slope_lookback:int|None=None;trend_lookback:int|None=None;atr_period:int|None=None;stop_buffer_atr:float|None=None;trail_atr:float|None=None;target_r:float|None=None;option_moneyness:str|None=None;option_steps_itm:int|None=None;max_risk_inr:float|None=None;max_trades_per_day:int|None=None;avoid_expiry_day:bool|None=None;expiry_selection:str|None=None;execution_broker:str|None=None;data_source:str|None=None;max_spread_pct:float|None=None;min_option_volume:float|None=None;min_open_interest:float|None=None
+ enabled:bool|None=None;underlying:str|None=None;scan_indices:list[str]|None=None;scan_stocks:list[str]|None=None;scan_all_stocks:bool|None=None;scan_stock_contracts:bool|None=None;interval_minutes:int|None=None;opening_range_minutes:int|None=None;entry_start:str|None=None;entry_end:str|None=None;min_breakout_atr:float|None=None;volume_multiplier:float|None=None;vwap_slope_lookback:int|None=None;trend_lookback:int|None=None;atr_period:int|None=None;stop_buffer_atr:float|None=None;trail_atr:float|None=None;target_r:float|None=None;option_moneyness:str|None=None;option_steps_itm:int|None=None;max_risk_inr:float|None=None;max_trades_per_day:int|None=None;avoid_expiry_day:bool|None=None;expiry_selection:str|None=None;expiry_dte_min:int|None=None;expiry_dte_max:int|None=None;execution_broker:str|None=None;data_source:str|None=None;max_spread_pct:float|None=None;min_option_volume:float|None=None;min_open_interest:float|None=None;max_quote_staleness_s:int|None=None
 @router.get("/nifty-orb-options")
 async def get_nifty_orb_options_config()->dict:
  from app.services.nifty_orb_options import get_config
@@ -124,6 +124,13 @@ async def nifty_orb_options_snapshot(user:UserContext=Depends(get_current_user))
  from app.services.nifty_orb_options import snapshot
  try:return await snapshot(user.user_id)
  except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB snapshot failed: {exc}") from exc
+@router.post("/nifty-orb-options/scan")
+async def nifty_orb_options_scan(user:UserContext=Depends(get_current_user))->dict:
+ """Realtime ORB board feed: one isolated row per configured underlying, with a
+ resolved BUY CE/PE trade plan when the underlying signal is actionable."""
+ from app.services.nifty_orb_scanner import scan_user
+ try:return await scan_user(user.user_id)
+ except Exception as exc:raise HTTPException(502,detail=f"NIFTY ORB scan failed: {exc}") from exc
 @router.post("/nifty-orb-options/backtest")
 async def nifty_orb_options_backtest(body:dict)->dict:
  from app.services.nifty_orb_options import backtest_from_bars
