@@ -5,22 +5,22 @@ import pytest
 from app.engines.adaptive_edge.formula_registry import FormulaStatus, get_formula, require_implemented
 
 
-def test_strategy_formula_registry_matches_recovered_contract_names() -> None:
+def test_strategy_formula_registry_matches_canonical_contract_names() -> None:
     expected = {
-        "F-101": "Feature normalization",
-        "F-102": "Probability / prediction state",
-        "F-103": "Opportunity eligibility",
+        "F-101": "Feature/state construction and normalization",
+        "F-102": "Probability/regime state",
+        "F-103": "Candidate eligibility / NO_TRADE boundary",
         "F-104": "Adaptive horizon distribution",
         "F-105": "Target/stop competition and conservative EV",
-        "F-106": "Option candidate economic selection",
-        "F-107": "Effective risk per unit",
+        "F-106": "Option candidate economics",
+        "F-107": "Effective risk semantics",
         "F-108": "Position sizing",
-        "F-109": "Option moneyness / listed-contract selection",
-        "F-110": "Canonical order intent",
-        "F-111": "Canonical execution event",
-        "F-112": "Dynamic protection",
-        "F-113": "Lifecycle termination",
-        "F-114": "Final portfolio interaction",
+        "F-109": "Option selection by validated ExpectedNetEV subject to constraints",
+        "F-110": "BUY_CE / BUY_PE mandatory entry gate",
+        "F-111": "Position-management exit state machine",
+        "F-112": "Monotonic dynamic protection / profit floor",
+        "F-113": "Post-exit / re-entry boundary",
+        "F-114": "Final decision interaction with PositionState and CapitalState",
     }
     for formula_id, name in expected.items():
         definition = get_formula(formula_id)
