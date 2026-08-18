@@ -38,21 +38,24 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
 }
 
+# F-101..F-114 are the recovered strategy-specific contract slots. Their
+# descriptions are governance metadata only; implementation status remains
+# LOCKED until each canonical artifact has passed its promotion contract.
 _FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
-    "F-101": ("Feature normalization / feature score", "z-score", "f101"),
-    "F-102": ("Edge / prediction score", "probability / score", "edge"),
-    "F-103": ("Opportunity eligibility", "boolean / state", "opportunity_mode"),
-    "F-104": ("Dynamic-mode transition", "mode state", "opportunity_mode"),
-    "F-105": ("Predictive-profit protection", "price points", "protection"),
-    "F-106": ("Dynamic-risk schedule", "multiplier", "risk_sizing"),
-    "F-107": ("Risk-per-unit", "INR / point", "risk_sizing"),
+    "F-101": ("Feature normalization", "normalized feature state", "f101_normalization"),
+    "F-102": ("Probability / prediction state", "probability vector", "f102_prediction"),
+    "F-103": ("Opportunity eligibility", "boolean / state", "f103_opportunity"),
+    "F-104": ("Adaptive horizon distribution", "probability vector", "f104_horizon"),
+    "F-105": ("Target/stop competition and conservative EV", "value / state", "f105_economics"),
+    "F-106": ("Option candidate economic selection", "candidate / instrument", "f106_option_selection"),
+    "F-107": ("Effective risk per unit", "INR / unit", "risk_sizing"),
     "F-108": ("Position sizing", "contracts", "risk_sizing"),
-    "F-109": ("Instrument / option selection", "strike / leg", "option_ladder"),
-    "F-110": ("Entry trigger", "event trigger", "lifecycle_engine"),
-    "F-111": ("Exit trigger", "event trigger", "lifecycle_engine"),
-    "F-112": ("Trailing / protection parameterization", "points", "protection"),
-    "F-113": ("Re-entry", "boolean", "lifecycle_engine"),
-    "F-114": ("Multi-position interaction", "allocation weight", "management"),
+    "F-109": ("Option moneyness / listed-contract selection", "strike / leg", "option_ladder"),
+    "F-110": ("Canonical order intent", "order intent", "execution_adapter"),
+    "F-111": ("Canonical execution event", "execution event", "execution_adapter"),
+    "F-112": ("Dynamic protection", "protection state", "protection"),
+    "F-113": ("Lifecycle termination", "lifecycle state", "lifecycle_engine"),
+    "F-114": ("Final portfolio interaction", "portfolio state", "management"),
 }
 
 for _id, (_name, _units, _owner) in _FORMULA_METADATA.items():
