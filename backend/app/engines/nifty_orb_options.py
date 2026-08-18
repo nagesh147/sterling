@@ -23,7 +23,7 @@ class Bar:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    enabled: bool = True
+    enabled: bool = False
     underlying: str = "NIFTY 50"
     interval_minutes: int = 5
     opening_range_minutes: int = 15
@@ -45,7 +45,6 @@ class StrategyConfig:
     expiry_selection: str = "nearest"
     execution_broker: str = "kite"
     data_source: str = "kite"
-    paper_only: bool = True
 
 
 @dataclass(frozen=True)
@@ -155,8 +154,6 @@ def _regime(bars: Sequence[Bar], cfg: StrategyConfig, current_vwap: float, curre
 def opening_range(bars: Sequence[Bar], minutes: int = 15) -> tuple[float, float]:
     if not bars:
         raise ValueError("No bars supplied")
-    # Historical fetches contain multiple sessions. ORB must always be built
-    # from the latest session represented by the input, never bars[0]'s date.
     session = max(b.timestamp.date() for b in bars)
     tz = next((b.timestamp.tzinfo for b in bars if b.timestamp.date() == session), None)
     start = datetime.combine(session, time(9, 15), tzinfo=tz)
