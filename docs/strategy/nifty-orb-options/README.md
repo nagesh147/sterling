@@ -25,7 +25,7 @@ LONG / SHORT / NO TRADE
     |
     +-- R target + trailing protection
     v
-existing Kite safety + protection path
+universal Trading Mode -> Kite safety + protection path
 ```
 
 ## Data sources
@@ -37,12 +37,13 @@ The strategy supports:
 
 The data source controls market data only. Execution is fixed to Zerodha Kite so changing the market-data provider cannot change the broker order path.
 
-Kite's official API supplies historical candles, quotes, instruments and orders, but does not expose a native option-chain endpoint; Sterling therefore builds the live NFO chain from the instrument master and quote endpoints. citeturn2search0turn2search5
+## Execution ownership
 
-TrueData provides option-chain fields including strike, CE/PE type, LTP, volume, OI, bid and ask. citeturn2search12
+NIFTY ORB does not define its own Paper/Live switch. The active Kite account's universal Trading Mode controls Paper/Live, and the universal Manual/Auto setting controls who places orders. The ORB-specific `enabled` flag controls only whether this signal engine generates signals.
 
 ## Default configuration
 
+- Strategy: disabled on fresh installation
 - Interval: 5 minutes
 - Opening range: 15 minutes
 - Entry window: 09:30-12:00 IST
@@ -52,7 +53,7 @@ TrueData provides option-chain fields including strike, CE/PE type, LTP, volume,
 - Max risk: ₹3,000/trade
 - Max trades: 2/day
 - Execution: Kite
-- Paper-only: enabled
+- Execution mode: universal Paper/Live + Manual/Auto
 - Data source: Kite
 
 ## API
@@ -65,7 +66,7 @@ POST /api/v1/config/nifty-orb-options/backtest
 POST /api/v1/config/nifty-orb-options/execute
 ```
 
-`execute` is blocked while `paper_only=true`.
+`execute` uses the active account's universal Paper/Live mode. It does not have a strategy-local paper flag.
 
 ## Backtest integrity
 
@@ -98,4 +99,4 @@ The engine reports:
 - maximum drawdown
 - net P&L
 
-The acceptance target is not a specific win rate. The strategy should only graduate to live execution after out-of-sample and walk-forward tests demonstrate positive expectancy after costs and stable drawdown.
+The acceptance target is not a specific win rate. The strategy should only graduate to automatic/live execution after out-of-sample and walk-forward tests demonstrate positive expectancy after costs and stable drawdown.
