@@ -7,9 +7,17 @@ feature completeness, or stale/causally invalid observations block entry.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from .research_pipeline import CoverageReport, ResearchQualityReport, A197_MIN_BARS, A197_MIN_TRADING_DAYS
+from .research_pipeline import (
+    A197_MIN_BARS,
+    A197_MIN_TRADING_DAYS,
+    CoverageReport,
+    ResearchQualityReport,
+)
+
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,10 @@ class CalibrationGateDecision:
     def assert_allowed(self) -> None:
         if not self.allowed:
             raise RuntimeError("F-101 calibration blocked: " + "; ".join(self.reasons))
+
+
+def _valid_sha256(value: str | None) -> bool:
+    return value is not None and _SHA256_RE.fullmatch(value) is not None
 
 
 def assess_f101_calibration_readiness(
@@ -52,9 +64,9 @@ def assess_f101_calibration_readiness(
         reasons.append("observations_outside_session")
     if quality.bars_after_a126_cutoff > 0:
         reasons.append("observations_after_a126_cutoff")
-    if dataset_sha256 is None or len(dataset_sha256) != 64:
+    if not _valid_sha256(dataset_sha256):
         reasons.append("dataset_sha256_missing")
-    if canonical_sequence_hash is None or len(canonical_sequence_hash) != 64:
+    if not _valid_sha256(canonical_sequence_hash):
         reasons.append("canonical_sequence_hash_missing")
 
     if reasons:
