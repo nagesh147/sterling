@@ -19,6 +19,7 @@ NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
 - Entry window: 09:30-12:00 IST
 - Breakout threshold: 0.15 ATR
 - Volume confirmation: 1.15x prior-volume baseline
+- VWAP slope: required in the signal direction
 - ATR period: 14
 - Initial stop buffer: 0.10 ATR
 - Trail: 1.25 ATR
@@ -26,8 +27,11 @@ NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
 - Option: ATM
 - Maximum risk: Rs 3,000/trade
 - Maximum trades: 2/day
+- Maximum spread: 1.5% of mid
+- Minimum option volume: 1,000
+- Minimum open interest: 10,000
 - Data source: **Kite**
-- Alternative data source: **TrueData**
+- Alternative: **TrueData**
 - Execution broker: **Kite**
 - Execution mode: **universal Trading Mode** (Paper/Live + Manual/Auto)
 
@@ -35,13 +39,15 @@ NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
 
 NIFTY ORB does **not** own a paper/live switch. The active Kite account owns Paper/Live, and the universal Trading Mode owns Manual/Auto. This prevents contradictory execution controls between signal engines.
 
-The strategy's own `enabled` flag answers a different question: whether NIFTY ORB is allowed to generate signals.
+The strategy's own `enabled` flag answers only whether NIFTY ORB may generate signals.
 
 ```text
 Strategy enabled?  -> ORB signal engine ON/OFF
 Paper / Live?      -> universal account mode
 Manual / Auto?     -> universal execution mode
 ```
+
+Automatic execution runs through the same live-safety, idempotency, Kite order and position-protection infrastructure used by SuperTrend. A strategy-local `paper_only` setting is intentionally forbidden.
 
 ## Signal rules
 
@@ -54,17 +60,21 @@ LONG requires:
 5. Volume meets the configured multiplier.
 6. Regime is TREND or EXPANSION.
 
-SHORT mirrors the conditions below the opening-range low.
+SHORT mirrors these conditions below the opening-range low, including a negative VWAP slope.
 
 A RANGE regime produces no trade.
 
-## Option selection
+## Option selection and liquidity
 
 For LONG, select CE. For SHORT, select PE. Contracts are selected from the nearest eligible expiry and configured ATM/ITM moneyness. The option is not used to generate the directional signal.
 
-## Risk
+Before a contract can be selected for execution it must have a valid bid/ask, acceptable spread, minimum volume and minimum open interest. The quantity is lot-aligned and constrained by the INR risk budget.
 
-Risk is calculated from the underlying entry/stop distance and the configured INR risk budget. The execution quantity is constrained by lot size and the maximum risk budget.
+## Protection and lifecycle
+
+The generated plan contains both underlying risk levels and premium-domain protection levels. Automatic execution registers the position through the existing protection subsystem so broker GTT and/or server-side monitoring follow the universal `stop_mode` configuration. Existing reconciliation, expiry square-off and position monitoring remain responsible for the resulting open position.
+
+The ORB background runner is multi-tenant, processes only active connected Kite accounts, is market-hours gated, and isolates failures per account. Daily trade count and the last executed signal are persisted so a process restart cannot reset the daily limit.
 
 ## Backtest integrity
 
