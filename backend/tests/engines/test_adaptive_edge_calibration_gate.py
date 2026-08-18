@@ -89,3 +89,15 @@ def test_calibration_gate_blocks_quality_contamination():
     assert "missing_score_rate>0.1%" in decision.reasons
     assert "observations_outside_session" in decision.reasons
     assert "observations_after_a126_cutoff" in decision.reasons
+
+
+def test_calibration_gate_rejects_non_hex_64_character_hashes():
+    decision = assess_f101_calibration_readiness(
+        _coverage(),
+        _quality(),
+        dataset_sha256="z" * 64,
+        canonical_sequence_hash="not-a-sha" + "x" * 54,
+    )
+    assert decision.allowed is False
+    assert "dataset_sha256_missing" in decision.reasons
+    assert "canonical_sequence_hash_missing" in decision.reasons
