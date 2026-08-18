@@ -1,8 +1,8 @@
 from app.engines.nifty_orb_options import StrategyConfig
-from app.services.nifty_orb_options import set_config
+from app.services.nifty_orb_options import get_config, set_config
 
 
-def test_default_strategy_contract_is_kite_and_paper_only():
+def test_engine_contract_is_kite_and_paper_only():
     cfg = StrategyConfig()
     assert cfg.data_source == "kite"
     assert cfg.execution_broker == "kite"
@@ -10,6 +10,13 @@ def test_default_strategy_contract_is_kite_and_paper_only():
     assert cfg.opening_range_minutes == 15
     assert cfg.interval_minutes == 5
     assert cfg.max_risk_inr == 3000.0
+
+
+def test_runtime_default_is_disabled():
+    cfg = get_config()
+    assert cfg.enabled is False
+    assert cfg.paper_only is True
+    assert cfg.execution_broker == "kite"
 
 
 def test_config_rejects_non_kite_execution():
