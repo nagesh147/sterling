@@ -3,37 +3,36 @@ import { api } from '../utils/api';
 
 export type OrbConfig = {
   enabled: boolean;
-  universe: string;
-  instruments: string[];
-  instrument_types: string[];
-  expiry_dte_min: number;
-  expiry_dte_max: number;
-  expiry_preference: 'NEAREST' | 'WEEKLY' | 'MONTHLY' | 'DTE_RANGE';
+  underlying: string;
   interval_minutes: number;
   opening_range_minutes: number;
   entry_start: string;
   entry_end: string;
-  breakout_atr: number;
-  atr_period: number;
+  min_breakout_atr: number;
   volume_multiplier: number;
-  option_moneyness: 'ATM' | 'ITM';
+  vwap_slope_lookback: number;
+  trend_lookback: number;
+  atr_period: number;
+  stop_buffer_atr: number;
+  trail_atr: number;
+  target_r: number;
+  option_moneyness: string;
   option_steps_itm: number;
   max_risk_inr: number;
   max_trades_per_day: number;
-  max_signals_per_day: number;
   avoid_expiry_day: boolean;
-  paper_only: boolean;
+  expiry_selection: string;
+  execution_broker: string;
   data_source: 'kite' | 'truedata';
-  execution_broker: 'kite';
-  option_entry_side: 'BUY';
+  paper_only: boolean;
 };
 
-const key = ['orb-momentum-options-config'];
+const key = ['nifty-orb-options-config'];
 
 export function useOrbMomentumOptionsConfig() {
-  return useQuery<{ config: OrbConfig; strategy: string; option_entry: string }>({
+  return useQuery<{ config: OrbConfig; supported_data_sources: string[]; execution_brokers: string[] }>({
     queryKey: key,
-    queryFn: () => api.get('/orb-momentum-options/config'),
+    queryFn: () => api.get('/config/nifty-orb-options'),
     staleTime: 30_000,
   });
 }
@@ -41,15 +40,15 @@ export function useOrbMomentumOptionsConfig() {
 export function useSetOrbMomentumOptionsConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (config: Partial<OrbConfig>) => api.put('/orb-momentum-options/config', config),
+    mutationFn: (config: Partial<OrbConfig>) => api.put('/config/nifty-orb-options', config),
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 }
 
-export function useOrbMomentumOptionsSignals() {
+export function useOrbMomentumOptionsSnapshot() {
   return useQuery({
-    queryKey: ['orb-momentum-options-signals'],
-    queryFn: () => api.get('/orb-momentum-options/signals'),
+    queryKey: ['nifty-orb-options-snapshot'],
+    queryFn: () => api.post('/config/nifty-orb-options/snapshot', {}),
     refetchInterval: 5_000,
   });
 }
