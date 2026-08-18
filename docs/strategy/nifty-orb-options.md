@@ -8,11 +8,12 @@ The strategy generates direction from the NIFTY 50 underlying and uses a CE/PE o
 NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
                                       -> CE/PE selection
                                       -> risk sizing
-                                      -> Kite execution
+                                      -> universal Kite execution mode
 ```
 
 ## Default configuration
 
+- Strategy: **disabled** on fresh installation
 - Signal interval: 5 minutes
 - Opening range: 15 minutes (09:15-09:30 IST)
 - Entry window: 09:30-12:00 IST
@@ -28,7 +29,19 @@ NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
 - Data source: **Kite**
 - Alternative data source: **TrueData**
 - Execution broker: **Kite**
-- Live execution: disabled by default (`paper_only=true`)
+- Execution mode: **universal Trading Mode** (Paper/Live + Manual/Auto)
+
+## Execution ownership
+
+NIFTY ORB does **not** own a paper/live switch. The active Kite account owns Paper/Live, and the universal Trading Mode owns Manual/Auto. This prevents contradictory execution controls between signal engines.
+
+The strategy's own `enabled` flag answers a different question: whether NIFTY ORB is allowed to generate signals.
+
+```text
+Strategy enabled?  -> ORB signal engine ON/OFF
+Paper / Live?      -> universal account mode
+Manual / Auto?     -> universal execution mode
+```
 
 ## Signal rules
 
@@ -63,4 +76,4 @@ Kite and TrueData feed the same canonical bar/option representations. Switching 
 
 ## Production graduation criteria
 
-Do not enable live execution until the strategy has a sufficiently large out-of-sample option-level sample and demonstrates stable profit factor, expectancy and drawdown after costs and slippage across market regimes.
+Do not enable automatic/live execution merely because the signal engine is enabled. Require a sufficiently large out-of-sample option-level sample and demonstrate stable profit factor, expectancy and drawdown after costs and slippage across market regimes.
