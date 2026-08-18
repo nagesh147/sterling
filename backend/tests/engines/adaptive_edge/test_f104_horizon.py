@@ -35,4 +35,5 @@ def test_f104_rejects_invalid_distribution() -> None:
 
 def test_f104_does_not_invent_tail_midpoint() -> None:
     distribution = HorizonDistribution((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
-    assert distribution.management_class == "LONG_TAIL"
+    assert distribution.dominant_bucket == "LONG_TAIL"
+    assert distribution.management_class == "INTRADAY"
