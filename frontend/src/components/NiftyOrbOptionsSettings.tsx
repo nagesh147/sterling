@@ -25,7 +25,6 @@ interface OrbConfig {
   expiry_selection: string;
   execution_broker: string;
   data_source: 'kite' | 'truedata';
-  paper_only: boolean;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -62,7 +61,7 @@ export function NiftyOrbOptionsSettings() {
   return <>
     <Section title="NIFTY ORB + VWAP OPTIONS">
       <div style={{ padding: '10px 12px', background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 5, marginBottom: 14, fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.6 }}>
-        Signal is generated from NIFTY 50. CE/PE is the execution vehicle. Data source affects market data only; execution remains Zerodha Kite.
+        Signal is generated from NIFTY 50. CE/PE is the execution vehicle. Data source affects market data only; execution remains Zerodha Kite. Paper/Live and Manual/Auto are controlled by the universal Trading Mode panel.
       </div>
       <Field label="STRATEGY"><button onClick={() => set('enabled', !cfg.enabled)} style={{ ...inputStyle, textAlign: 'left', color: cfg.enabled ? 'var(--t-green)' : 'var(--t-dim)', cursor: 'pointer' }}>{cfg.enabled ? 'ON — SIGNAL ENGINE ACTIVE' : 'OFF — DISABLED'}</button></Field>
       <Field label="DATA SOURCE" hint="Default: Zerodha Kite"><select value={cfg.data_source} onChange={e => set('data_source', e.target.value)} style={inputStyle}><option value="kite">Zerodha Kite</option><option value="truedata">TrueData</option></select></Field>
@@ -86,10 +85,9 @@ export function NiftyOrbOptionsSettings() {
       <Field label="EXPIRY DAY"><button onClick={() => set('avoid_expiry_day', !cfg.avoid_expiry_day)} style={{ ...inputStyle, textAlign: 'left', cursor: 'pointer', color: cfg.avoid_expiry_day ? 'var(--t-green)' : 'var(--t-dim)' }}>{cfg.avoid_expiry_day ? 'AVOID' : 'ALLOW'}</button></Field>
     </Section>
 
-    <Section title="EXECUTION SAFETY">
-      <Field label="EXECUTION"><input value="ZERODHA KITE" readOnly style={{ ...inputStyle, color: 'var(--t-blue)' }}/></Field>
-      <Field label="PAPER MODE"><button onClick={() => set('paper_only', !cfg.paper_only)} style={{ ...inputStyle, textAlign: 'left', cursor: 'pointer', color: cfg.paper_only ? 'var(--t-amber)' : 'var(--t-red)' }}>{cfg.paper_only ? 'PAPER ONLY — SAFE DEFAULT' : 'LIVE ENABLED'}</button></Field>
-      <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.6 }}>Live execution is intentionally blocked until Paper Mode is disabled. Orders use the existing Kite safety/protection path.</div>
+    <Section title="EXECUTION">
+      <Field label="BROKER"><input value="ZERODHA KITE" readOnly style={{ ...inputStyle, color: 'var(--t-blue)' }}/></Field>
+      <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.6 }}>This strategy does not own an execution-mode switch. The active Kite account's universal Paper/Live setting determines where orders go, while the universal Manual/Auto setting determines who places them.</div>
     </Section>
 
     <button onClick={() => update.mutate(draft)} disabled={!dirty || update.isPending} style={{ width: '100%', padding: '9px 0', borderRadius: 5, border: '1px solid var(--t-border)', background: dirty ? 'var(--t-bg2)' : 'transparent', color: dirty ? 'var(--t-bright)' : 'var(--t-dim)', cursor: dirty ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em' }}>{update.isPending ? 'SAVING…' : dirty ? 'SAVE NIFTY ORB SETTINGS' : 'SAVED'}</button>
