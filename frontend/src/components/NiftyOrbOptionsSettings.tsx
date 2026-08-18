@@ -1,18 +1,90 @@
 import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
-interface OrbConfig { enabled:boolean; underlying:string; interval_minutes:number; opening_range_minutes:number; entry_start:string; entry_end:string; min_breakout_atr:number; volume_multiplier:number; vwap_slope_lookback:number; trend_lookback:number; atr_period:number; stop_buffer_atr:number; trail_atr:number; target_r:number; option_moneyness:string; option_steps_itm:number; max_risk_inr:number; max_trades_per_day:number; avoid_expiry_day:boolean; expiry_selection:string; expiry_dte_min:number; expiry_dte_max:number; execution_broker:string; data_source:'kite'|'truedata'; max_spread_pct:number; min_option_volume:number; min_open_interest:number; }
+
+interface OrbConfig {
+  enabled:boolean; underlying:string; scan_indices:string[]; scan_stocks:string[]; scan_all_stocks:boolean; scan_stock_contracts:boolean;
+  interval_minutes:number; opening_range_minutes:number; entry_start:string; entry_end:string; min_breakout_atr:number;
+  volume_multiplier:number; vwap_slope_lookback:number; trend_lookback:number; atr_period:number; stop_buffer_atr:number;
+  trail_atr:number; target_r:number; option_moneyness:string; option_steps_itm:number; max_risk_inr:number;
+  max_trades_per_day:number; avoid_expiry_day:boolean; expiry_selection:string; expiry_dte_min:number; expiry_dte_max:number;
+  execution_broker:string; data_source:'kite'|'truedata'; max_spread_pct:number; min_option_volume:number; min_open_interest:number;
+  max_quote_staleness_s:number;
+}
+
 const inputStyle:React.CSSProperties={width:'100%',boxSizing:'border-box',background:'var(--t-bg)',color:'var(--t-bright)',border:'1px solid var(--t-border)',borderRadius:6,padding:'7px 10px',fontFamily:'monospace',fontSize:12};
+const checkStyle:React.CSSProperties={display:'flex',alignItems:'center',gap:8,fontSize:11,color:'var(--t-bright)',cursor:'pointer'};
 function Section({title,children}:{title:string;children:React.ReactNode}){return <div style={{marginBottom:24}}><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}><span style={{fontSize:10,fontWeight:500,letterSpacing:'0.14em',color:'var(--t-bright)',textTransform:'uppercase'}}>{title}</span><div style={{flex:1,height:1,background:'var(--t-border)'}}/></div>{children}</div>}
 function Field({label,children,hint}:{label:string;children:React.ReactNode;hint?:string}){return <div style={{marginBottom:12}}><div style={{fontSize:9,fontWeight:500,color:'var(--t-dim)',letterSpacing:'0.08em',marginBottom:4,textTransform:'uppercase'}}>{label}</div>{children}{hint&&<div style={{fontSize:9,color:'var(--t-dim)',marginTop:4}}>{hint}</div>}</div>}
+function Toggle({checked,label,onChange}:{checked:boolean;label:string;onChange:()=>void}){return <label style={checkStyle}><input type="checkbox" checked={checked} onChange={onChange}/>{label}</label>}
+
 export function NiftyOrbOptionsSettings(){
- const qc=useQueryClient();const {data,isLoading}=useQuery<{config:OrbConfig}>({queryKey:['nifty-orb-options-config'],queryFn:()=>api.get('/api/v1/config/nifty-orb-options'),staleTime:30000});const [draft,setDraft]=React.useState<Partial<OrbConfig>>({});const cfg={...(data?.config||{}),...draft} as OrbConfig;const update=useMutation({mutationFn:(body:Partial<OrbConfig>)=>api.put('/api/v1/config/nifty-orb-options',body),onSuccess:r=>{qc.setQueryData(['nifty-orb-options-config'],r);setDraft({});}});
- if(isLoading||!data)return <div style={{color:'var(--t-dim)',fontSize:10}}>Loading NIFTY ORB configuration…</div>;const set=(key:keyof OrbConfig,value:unknown)=>setDraft(d=>({...d,[key]:value}));const dirty=Object.keys(draft).length>0;
- return <><Section title="NIFTY ORB + VWAP OPTIONS"><div style={{padding:'10px 12px',background:'var(--t-bg2)',border:'1px solid var(--t-border)',borderRadius:5,marginBottom:14,fontSize:10,color:'var(--t-dim)',lineHeight:1.6}}>NIFTY 50 generates direction. CE/PE is only the execution vehicle. Strategy ON/OFF controls signal generation; Paper/Live and Manual/Auto remain universal Trading Mode controls.</div><Field label="STRATEGY"><button onClick={()=>set('enabled',!cfg.enabled)} style={{...inputStyle,textAlign:'left',color:cfg.enabled?'var(--t-green)':'var(--t-dim)',cursor:'pointer'}}>{cfg.enabled?'ON — SIGNAL ENGINE ACTIVE':'OFF — DISABLED'}</button></Field><Field label="DATA SOURCE" hint="Market data only; execution remains Kite"><select value={cfg.data_source} onChange={e=>set('data_source',e.target.value)} style={inputStyle}><option value="kite">Zerodha Kite</option><option value="truedata">TrueData</option></select></Field><Field label="INSTRUMENT"><input value="NIFTY 50" readOnly style={inputStyle}/></Field><Field label="INTERVAL"><select value={cfg.interval_minutes} onChange={e=>set('interval_minutes',Number(e.target.value))} style={inputStyle}>{[1,3,5,10,15].map(v=><option key={v} value={v}>{v} minute</option>)}</select></Field><Field label="OPENING RANGE"><select value={cfg.opening_range_minutes} onChange={e=>set('opening_range_minutes',Number(e.target.value))} style={inputStyle}>{[5,10,15,20,30].map(v=><option key={v} value={v}>{v} minutes</option>)}</select></Field><Field label="ENTRY WINDOW"><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="time" value={cfg.entry_start} onChange={e=>set('entry_start',e.target.value)} style={inputStyle}/><input type="time" value={cfg.entry_end} onChange={e=>set('entry_end',e.target.value)} style={inputStyle}/></div></Field></Section>
- <Section title="SIGNAL FILTERS"><Field label="MIN BREAKOUT / ATR"><input type="number" step="0.05" min="0" value={cfg.min_breakout_atr} onChange={e=>set('min_breakout_atr',Number(e.target.value))} style={inputStyle}/></Field><Field label="VOLUME MULTIPLIER"><input type="number" step="0.05" min="0" value={cfg.volume_multiplier} onChange={e=>set('volume_multiplier',Number(e.target.value))} style={inputStyle}/></Field><Field label="VWAP SLOPE LOOKBACK"><input type="number" min="1" max="20" value={cfg.vwap_slope_lookback} onChange={e=>set('vwap_slope_lookback',Number(e.target.value))} style={inputStyle}/></Field><Field label="ATR PERIOD"><input type="number" min="5" max="100" value={cfg.atr_period} onChange={e=>set('atr_period',Number(e.target.value))} style={inputStyle}/></Field><Field label="TARGET (R)"><input type="number" step="0.25" min="0.5" value={cfg.target_r} onChange={e=>set('target_r',Number(e.target.value))} style={inputStyle}/></Section>
- <Section title="OPTION CONTRACT"><Field label="OPTION MONEYNESS"><select value={cfg.option_moneyness} onChange={e=>set('option_moneyness',e.target.value)} style={inputStyle}><option value="ATM">ATM</option><option value="ITM">ITM</option></select></Field>{cfg.option_moneyness==='ITM'&&<Field label="ITM STEPS"><input type="number" min="1" max="3" value={cfg.option_steps_itm} onChange={e=>set('option_steps_itm',Number(e.target.value))} style={inputStyle}/></Field>}<Field label="EXPIRY SELECTION"><select value={cfg.expiry_selection} onChange={e=>set('expiry_selection',e.target.value)} style={inputStyle}><option value="nearest">Nearest eligible</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field><Field label="DTE RANGE" hint="Only contracts inside this range can generate a signal."><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="number" min="0" max="365" value={cfg.expiry_dte_min} onChange={e=>set('expiry_dte_min',Number(e.target.value))} style={inputStyle}/><input type="number" min="0" max="365" value={cfg.expiry_dte_max} onChange={e=>set('expiry_dte_max',Number(e.target.value))} style={inputStyle}/></div></Field><Field label="EXPIRY DAY"><button onClick={()=>set('avoid_expiry_day',!cfg.avoid_expiry_day)} style={{...inputStyle,textAlign:'left',cursor:'pointer',color:cfg.avoid_expiry_day?'var(--t-green)':'var(--t-dim)'}}>{cfg.avoid_expiry_day?'AVOID':'ALLOW'}</button></Field></Section>
- <Section title="OPTION + RISK"><Field label="MAX RISK / TRADE (INR)"><input type="number" step="500" min="500" value={cfg.max_risk_inr} onChange={e=>set('max_risk_inr',Number(e.target.value))} style={inputStyle}/></Field><Field label="MAX TRADES / DAY"><input type="number" min="1" max="10" value={cfg.max_trades_per_day} onChange={e=>set('max_trades_per_day',Number(e.target.value))} style={inputStyle}/></Field></Section>
- <Section title="OPTION LIQUIDITY"><Field label="MAX BID/ASK SPREAD %" hint="Reject entries whose spread is wider than this percentage of mid."><input type="number" step="0.1" min="0.1" max="10" value={cfg.max_spread_pct} onChange={e=>set('max_spread_pct',Number(e.target.value))} style={inputStyle}/></Field><Field label="MIN OPTION VOLUME"><input type="number" step="100" min="0" value={cfg.min_option_volume} onChange={e=>set('min_option_volume',Number(e.target.value))} style={inputStyle}/></Field><Field label="MIN OPEN INTEREST"><input type="number" step="1000" min="0" value={cfg.min_open_interest} onChange={e=>set('min_open_interest',Number(e.target.value))} style={inputStyle}/></Field></Section>
- <Section title="EXECUTION"><Field label="BROKER"><input value="ZERODHA KITE" readOnly style={{...inputStyle,color:'var(--t-blue)'}}/></Field><div style={{fontSize:9,color:'var(--t-dim)',lineHeight:1.6}}>ORB does not own Paper/Live or Manual/Auto. Those controls are inherited from universal Trading Mode and the active Kite account. Automatic ORB entries use the same idempotency, live-safety and position-protection path as SuperTrend.</div></Section>
- <button onClick={()=>update.mutate(draft)} disabled={!dirty||update.isPending} style={{width:'100%',padding:'9px 0',borderRadius:5,border:'1px solid var(--t-border)',background:dirty?'var(--t-bg2)':'transparent',color:dirty?'var(--t-bright)':'var(--t-dim)',cursor:dirty?'pointer':'not-allowed',fontFamily:'inherit',fontSize:10,fontWeight:600,letterSpacing:'0.1em'}}>{update.isPending?'SAVING…':dirty?'SAVE NIFTY ORB SETTINGS':'SAVED'}</button>{update.isError&&<div style={{marginTop:8,color:'var(--t-red)',fontSize:10}}>{(update.error as Error).message}</div>}</>;
+ const qc=useQueryClient();
+ const {data,isLoading}=useQuery<{config:OrbConfig}>({queryKey:['nifty-orb-options-config'],queryFn:()=>api.get('/api/v1/config/nifty-orb-options'),staleTime:30000});
+ const [draft,setDraft]=React.useState<Partial<OrbConfig>>({});
+ const cfg={...(data?.config||{}),...draft} as OrbConfig;
+ const update=useMutation({mutationFn:(body:Partial<OrbConfig>)=>api.put('/api/v1/config/nifty-orb-options',body),onSuccess:r=>{qc.setQueryData(['nifty-orb-options-config'],r);setDraft({});}});
+ if(isLoading||!data)return <div style={{color:'var(--t-dim)',fontSize:10}}>Loading ORB configuration…</div>;
+ const set=(key:keyof OrbConfig,value:unknown)=>setDraft(d=>({...d,[key]:value}));
+ const toggleIndex=(value:string)=>{const current=cfg.scan_indices||[];const next=current.includes(value)?current.filter(x=>x!==value):[...current,value];set('scan_indices',next.length?next:['NIFTY']);};
+ const toggleStock=(value:string)=>{const current=cfg.scan_stocks||[];set('scan_stocks',current.includes(value)?current.filter(x=>x!==value):[...current,value]);};
+ const dirty=Object.keys(draft).length>0;
+ return <>
+  <Section title="ORB + VWAP OPTIONS">
+   <div style={{padding:'10px 12px',background:'var(--t-bg2)',border:'1px solid var(--t-border)',borderRadius:5,marginBottom:14,fontSize:10,color:'var(--t-dim)',lineHeight:1.6}}>Underlying generates direction. LONG =&gt; BUY CE. SHORT =&gt; BUY PE. No option selling. Strategy ON/OFF is strategy-local; Paper/Live and Manual/Auto remain universal Trading Mode controls.</div>
+   <Field label="STRATEGY"><Toggle checked={cfg.enabled} label={cfg.enabled?'ORB signal engine active':'ORB signal engine disabled'} onChange={()=>set('enabled',!cfg.enabled)}/></Field>
+   <Field label="DATA SOURCE" hint="Market data only. Order execution remains Zerodha Kite."><select value={cfg.data_source} onChange={e=>set('data_source',e.target.value)} style={inputStyle}><option value="kite">Zerodha Kite</option><option value="truedata">TrueData</option></select></Field>
+  </Section>
+
+  <Section title="INSTRUMENT UNIVERSE">
+   <Field label="INDICES" hint="Each selected index is scanned independently for an ORB signal.">
+    <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:9}}>
+     {['NIFTY','BANKNIFTY'].map(x=><Toggle key={x} checked={(cfg.scan_indices||[]).includes(x)} label={x==='NIFTY'?'NIFTY 50':'BANK NIFTY'} onChange={()=>toggleIndex(x)}/>)}
+    </div>
+   </Field>
+   <Field label="SINGLE-STOCK F&O" hint="Turn off to run index-only ORB. Stock selection is preserved."><Toggle checked={cfg.scan_stock_contracts} label="Scan stock option underlyings" onChange={()=>set('scan_stock_contracts',!cfg.scan_stock_contracts)}/></Field>
+   {cfg.scan_stock_contracts&&<>
+    <Field label="STOCK SCOPE"><Toggle checked={cfg.scan_all_stocks} label="All eligible high-liquidity F&O stocks" onChange={()=>set('scan_all_stocks',!cfg.scan_all_stocks)}/></Field>
+    {!cfg.scan_all_stocks&&<Field label="SELECTED STOCKS" hint="Enter NSE F&O symbols, comma separated."><input value={(cfg.scan_stocks||[]).join(', ')} onChange={e=>set('scan_stocks',e.target.value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean))} style={inputStyle} placeholder="RELIANCE, SBIN, INFY"/></Field>}
+   </>}
+  </Section>
+
+  <Section title="SIGNAL ENGINE">
+   <Field label="BAR INTERVAL"><select value={cfg.interval_minutes} onChange={e=>set('interval_minutes',Number(e.target.value))} style={inputStyle}>{[1,3,5,10,15].map(v=><option key={v} value={v}>{v} minute</option>)}</select></Field>
+   <Field label="OPENING RANGE"><select value={cfg.opening_range_minutes} onChange={e=>set('opening_range_minutes',Number(e.target.value))} style={inputStyle}>{[5,10,15,20,30].map(v=><option key={v} value={v}>{v} minutes</option>)}</select></Field>
+   <Field label="ENTRY WINDOW"><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="time" value={cfg.entry_start} onChange={e=>set('entry_start',e.target.value)} style={inputStyle}/><input type="time" value={cfg.entry_end} onChange={e=>set('entry_end',e.target.value)} style={inputStyle}/></div></Field>
+   <Field label="MIN BREAKOUT / ATR"><input type="number" step="0.05" min="0" value={cfg.min_breakout_atr} onChange={e=>set('min_breakout_atr',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="VOLUME MULTIPLIER"><input type="number" step="0.05" min="0" value={cfg.volume_multiplier} onChange={e=>set('volume_multiplier',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="VWAP SLOPE LOOKBACK"><input type="number" min="1" max="20" value={cfg.vwap_slope_lookback} onChange={e=>set('vwap_slope_lookback',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="ATR PERIOD"><input type="number" min="5" max="100" value={cfg.atr_period} onChange={e=>set('atr_period',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="TARGET (R)"><input type="number" step="0.25" min="0.5" value={cfg.target_r} onChange={e=>set('target_r',Number(e.target.value))} style={inputStyle}/></Field>
+  </Section>
+
+  <Section title="OPTION CONTRACT">
+   <Field label="OPTION MONEYNESS"><select value={cfg.option_moneyness} onChange={e=>set('option_moneyness',e.target.value)} style={inputStyle}><option value="ATM">ATM</option><option value="ITM">ITM</option></select></Field>
+   {cfg.option_moneyness==='ITM'&&<Field label="ITM STEPS"><input type="number" min="1" max="3" value={cfg.option_steps_itm} onChange={e=>set('option_steps_itm',Number(e.target.value))} style={inputStyle}/></Field>}
+   <Field label="EXPIRY"><select value={cfg.expiry_selection} onChange={e=>set('expiry_selection',e.target.value)} style={inputStyle}><option value="nearest">Nearest eligible</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field>
+   <Field label="DTE RANGE"><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="number" min="0" max="365" value={cfg.expiry_dte_min} onChange={e=>set('expiry_dte_min',Number(e.target.value))} style={inputStyle}/><input type="number" min="0" max="365" value={cfg.expiry_dte_max} onChange={e=>set('expiry_dte_max',Number(e.target.value))} style={inputStyle}/></div></Field>
+   <Field label="EXPIRY DAY"><Toggle checked={cfg.avoid_expiry_day} label={cfg.avoid_expiry_day?'Avoid expiry-day entries':'Allow expiry-day entries'} onChange={()=>set('avoid_expiry_day',!cfg.avoid_expiry_day)}/></Field>
+  </Section>
+
+  <Section title="OPTION + RISK">
+   <Field label="MAX RISK / TRADE (INR)"><input type="number" step="500" min="500" value={cfg.max_risk_inr} onChange={e=>set('max_risk_inr',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="MAX TRADES / DAY"><input type="number" min="1" max="20" value={cfg.max_trades_per_day} onChange={e=>set('max_trades_per_day',Number(e.target.value))} style={inputStyle}/></Field>
+  </Section>
+
+  <Section title="OPTION LIQUIDITY">
+   <Field label="MAX BID/ASK SPREAD %"><input type="number" step="0.1" min="0.1" max="10" value={cfg.max_spread_pct} onChange={e=>set('max_spread_pct',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="MIN OPTION VOLUME"><input type="number" step="100" min="0" value={cfg.min_option_volume} onChange={e=>set('min_option_volume',Number(e.target.value))} style={inputStyle}/></Field>
+   <Field label="MIN OPEN INTEREST"><input type="number" step="1000" min="0" value={cfg.min_open_interest} onChange={e=>set('min_open_interest',Number(e.target.value))} style={inputStyle}/></Field>
+  </Section>
+
+  <Section title="EXECUTION OWNERSHIP">
+   <Field label="BROKER"><input value="ZERODHA KITE" readOnly style={{...inputStyle,color:'var(--t-blue)'}}/></Field>
+   <div style={{fontSize:9,color:'var(--t-dim)',lineHeight:1.6}}>ORB never owns Paper/Live or Manual/Auto. Automatic entries consume the universal Trading Mode and use the same Kite idempotency, safety and position-protection infrastructure. This strategy only submits BUY orders: CE for LONG and PE for SHORT.</div>
+  </Section>
+
+  <button onClick={()=>update.mutate(draft)} disabled={!dirty||update.isPending} style={{width:'100%',padding:'9px 0',borderRadius:5,border:'1px solid var(--t-border)',background:dirty?'var(--t-bg2)':'transparent',color:dirty?'var(--t-bright)':'var(--t-dim)',cursor:dirty?'pointer':'not-allowed',fontFamily:'inherit',fontSize:10,fontWeight:600,letterSpacing:'0.1em'}}>{update.isPending?'SAVING…':dirty?'SAVE ORB SETTINGS':'SAVED'}</button>
+  {update.isError&&<div style={{marginTop:8,color:'var(--t-red)',fontSize:10}}>{(update.error as Error).message}</div>}
+ </>;
 }
