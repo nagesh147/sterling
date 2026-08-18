@@ -1,7 +1,10 @@
-"""NIFTY ORB option-level historical replay endpoint."""
-from fastapi import APIRouter, HTTPException
-from app.engines.nifty_orb_option_replay import OptionBar, ReplayCostConfig, replay_trade, summarize_replay
+"""NIFTY ORB option-level replay and universe scan endpoints."""
 from datetime import datetime
+
+from fastapi import APIRouter, HTTPException
+
+from app.engines.nifty_orb_option_replay import OptionBar, ReplayCostConfig, replay_trade, summarize_replay
+from app.engines.nifty_orb_options import StrategyConfig
 
 router = APIRouter(prefix="/nifty-orb-options", tags=["nifty-orb-options"])
 
@@ -50,4 +53,47 @@ async def replay(body: dict) -> dict:
                 trades.append(trade)
         return {"trades": [trade.to_dict() for trade in trades], "metrics": summarize_replay(trades), "option_pnl": True}
     except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/scan")
+async def scan(body: dict) -> dict:
+    """Scan a bounded ORB universe and return ranked actionable signals."""
+    uid = str(body.get("user_id") or "").strip()
+    if not uid:
+        raise HTTPException(422, "user_id is required")
+    try:
+        raw = body.get("config") or {}
+        cfg = StrategyConfig(**raw)
+        if cfg.data_source != "kite":
+            raise ValueError("universe scan currently requires data_source='kite'")
+        from app.services.nifty_orb_universe_runtime import scan_kite_universe
+        results = await scan_kite_universe(
+            uid,
+            cfg,
+            max_candidates=min(int(body.get("max_candidates") or 30), 100),
+            concurrency=min(int(body.get("concurrency") or 6), 8),
+        )
+        return {
+            "count": len(results),
+            "signals": [
+                {
+                    "symbol": item.instrument.symbol,
+                    "kind": item.instrument.kind,
+                    "direction": item.signal.direction,
+                    "regime": item.signal.regime,
+                    "confidence": item.signal.confidence,
+                    "timestamp": item.signal.timestamp.isoformat() if item.signal.timestamp else None,
+                    "or_high": item.signal.or_high,
+                    "or_low": item.signal.or_low,
+                    "vwap": item.signal.vwap,
+                    "atr": item.signal.atr,
+                    "breakout_distance": item.signal.breakout_distance,
+                    "volume_ratio": item.signal.volume_ratio,
+                    "reason": item.signal.reason,
+                }
+                for item in results
+            ],
+        }
+    except (TypeError, ValueError, RuntimeError) as exc:
         raise HTTPException(422, str(exc)) from exc
