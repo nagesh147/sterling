@@ -27,19 +27,28 @@ class ORBMomentumScanner:
             raise ValueError("ORB Momentum Options is option-buying only")
 
     def evaluate(self, symbol: str, bars: Sequence[UnderlyingBar], contracts: Sequence[OptionCandidate]) -> dict | None:
-        if not self.config.enabled or not bars: return None
+        if not self.config.enabled or not bars:
+            return None
         today = bars[-1].timestamp.date()
-        if self.state.session_date != today: self.state = ScannerState([], 0, 0, today)
-        if self.state.signals_today >= self.config.max_signals_per_day or self.state.trades_today >= self.config.max_trades_per_day: return None
+        if self.state.session_date != today:
+            self.state = ScannerState([], 0, 0, today)
+        if self.state.signals_today >= self.config.max_signals_per_day or self.state.trades_today >= self.config.max_trades_per_day:
+            return None
         signal = generate_signal(symbol, bars, self.config)
-        if signal.direction == "NONE": return None
+        if signal.direction == "NONE":
+            return None
         option = select_option(bars[-1].close, signal.direction, contracts, self.config)
-        if option is None: return None
+        if option is None:
+            return None
         trade = build_trade_signal(signal, option, self.config)
         payload = trade.to_dict()
-        payload.update({"status":"SIGNAL", "strategy":self.STRATEGY, "data_source":self.config.data_source, "option_action":self.ENTRY_SIDE, "option_position":"LONG"})
-        self.state.signals.append(payload); self.state.signals_today += 1
+        payload.update({"status": "SIGNAL", "strategy": self.STRATEGY, "data_source": self.config.data_source, "option_action": self.ENTRY_SIDE, "option_position": "LONG"})
+        self.state.signals.append(payload)
+        self.state.signals_today += 1
         return payload
 
-    def signals(self) -> list[dict]: return list(reversed(self.state.signals))
-    def reset(self) -> None: self.state = ScannerState([])
+    def signals(self) -> list[dict]:
+        return list(reversed(self.state.signals))
+
+    def reset(self) -> None:
+        self.state = ScannerState([])
