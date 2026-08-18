@@ -10,7 +10,7 @@ from app.engines.adaptive_edge.f114_portfolio_boundary import (
 )
 
 
-def assessment(decision: PortfolioDecision, quantity: int = 50) -> PortfolioAssessment:
+def assessment(decision: PortfolioDecision, quantity: int = 50, step: int = 1) -> PortfolioAssessment:
     return PortfolioAssessment(
         decision=decision,
         assessment_id="pa-001",
@@ -18,6 +18,7 @@ def assessment(decision: PortfolioDecision, quantity: int = 50) -> PortfolioAsse
         causal_cutoff="2026-08-18T09:30:00Z",
         reason="test",
         approved_quantity=quantity if decision in (PortfolioDecision.ADMIT, PortfolioDecision.REDUCE) else 0,
+        quantity_step=step,
     )
 
 
@@ -51,6 +52,23 @@ def test_f114_can_only_reduce_candidate_quantity() -> None:
     )
     assert result.admitted is True
     assert result.quantity == 50
+
+
+def test_f114_preserves_lot_granularity_when_reducing() -> None:
+    result = admit_candidate(
+        candidate_quantity=100,
+        standalone_eligible=True,
+        execution_authorized=True,
+        portfolio_assessment=assessment(PortfolioDecision.REDUCE, 75, 25),
+    )
+    assert result.admitted is True
+    assert result.quantity == 75
+    assert result.quantity % 25 == 0
+
+
+def test_f114_rejects_non_lot_portfolio_cap() -> None:
+    with pytest.raises(ValueError, match="quantity_step"):
+        assessment(PortfolioDecision.REDUCE, 70, 25)
 
 
 def test_f114_never_increases_candidate_quantity() -> None:
