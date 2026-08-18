@@ -104,10 +104,10 @@ def backtest_from_bars(rows:list[dict[str,Any]],cfg:StrategyConfig|None=None)->d
         for b in bars[i+1:]:
             if b.timestamp.date()!=day:break
             if sig.direction=='LONG':
-                if b.low<=stop: outcome=-risk; break
-                if b.high>=target: outcome=target-entry; break
+                if b.low<=stop:outcome=-risk;break
+                if b.high>=target:outcome=target-entry;break
             else:
-                if b.high>=stop: outcome=-risk; break
-                if b.low<=target: outcome=entry-target; break
+                if b.high>=stop:outcome=-risk;break
+                if b.low<=target:outcome=entry-target;break
         if outcome is not None:pnls.append(outcome);count+=1
     return {'metrics':{**summarize_pnl(pnls),'model':'underlying-point baseline','costs_included':False,'option_pnl':False},'warning':'Underlying baseline only. Option-level replay requires historical option premiums, contracts, costs and slippage.'}
