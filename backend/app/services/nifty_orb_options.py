@@ -11,8 +11,7 @@ _CONFIG_KEY = 'nifty_orb_options_config'
 
 
 def get_config() -> StrategyConfig:
-    # Runtime strategy is deliberately OFF until explicitly enabled by the user.
-    # Paper-only remains a separate execution safety gate.
+    # Strategy enablement is independent of the universal account paper/live mode.
     d = StrategyConfig(enabled=False)
     try:
         from app.services import db
@@ -128,9 +127,6 @@ async def _kite_options(uid: str, direction: str) -> list[OptionContract]:
     if not candidates:
         return []
     nearest = min(x[0] for x in candidates)
-    # Search the full expiry but only quote strikes near the underlying later in
-    # select_option. The snapshot currently does not know spot until after bars,
-    # so retain contracts here; quote retrieval remains the exchange boundary.
     out = []
     for exp, r in candidates:
         if exp != nearest:
@@ -143,17 +139,10 @@ async def _kite_options(uid: str, direction: str) -> list[OptionContract]:
             buy = (dep.get('buy') or [{}])[0]
             sell = (dep.get('sell') or [{}])[0]
             out.append(OptionContract(
-                sym,
-                float(r.get('strike') or 0),
-                exp.isoformat(),
-                wanted,
-                float(d.get('last_price') or 0),
-                float(buy.get('price') or 0),
-                float(sell.get('price') or 0),
-                int(r.get('lot_size') or 1),
-                None,
-                float(d.get('volume') or 0),
-                float(d.get('oi') or 0),
+                sym, float(r.get('strike') or 0), exp.isoformat(), wanted,
+                float(d.get('last_price') or 0), float(buy.get('price') or 0),
+                float(sell.get('price') or 0), int(r.get('lot_size') or 1), None,
+                float(d.get('volume') or 0), float(d.get('oi') or 0),
             ))
         except Exception:
             continue
