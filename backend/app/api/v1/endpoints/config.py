@@ -102,7 +102,6 @@ async def set_data_source(body: DataSourceRequest, request: Request) -> DataSour
         )
     try:
         new_adapter = await _adm.switch(exchange, body.api_key, body.api_secret)
-        # Keep app.state.adapter in sync for legacy code that reads it directly
         request.app.state.adapter = new_adapter
         reachable = await new_adapter.ping()
     except Exception as exc:
@@ -119,10 +118,9 @@ async def set_data_source(body: DataSourceRequest, request: Request) -> DataSour
 
 @router.post("/data-source/invalidate-cache")
 async def invalidate_cache() -> dict:
-    """Force-clear the market data cache so the next request fetches live data."""
     ad = _adm.get_adapter()
     if ad and hasattr(ad, "invalidate"):
-        ad.invalidate()  # type: ignore[attr-defined]
+        ad.invalidate()
     return {"cleared": True, "timestamp_ms": int(time.time() * 1000)}
 
 
@@ -199,7 +197,7 @@ class TelegramConfigRequest(BaseModel):
 
 class TelegramConfigResponse(BaseModel):
     bot_token_set: bool
-    bot_token_hint: str     # last 6 chars only — never expose full token
+    bot_token_hint: str
     chat_id: str
     enabled: bool
     reachable: bool = False
@@ -210,9 +208,7 @@ async def get_telegram_config() -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
     from app.services import db as _db
     token = _tg.TELEGRAM_TOKEN
-    chat  = _tg.TELEGRAM_CHAT_ID
-    # Restore in-memory flag from DB when not already set — handles page reloads
-    # and any scenario where the module-level bool was reset without a server restart.
+    chat = _tg.TELEGRAM_CHAT_ID
     if not _tg.TELEGRAM_REACHABLE and token and chat:
         if _db.get_config("telegram_verified") == "1":
             _tg.TELEGRAM_REACHABLE = True
@@ -229,31 +225,22 @@ async def get_telegram_config() -> TelegramConfigResponse:
 async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
     from app.services import db as _db
-
     new_token = body.bot_token.strip()
-    new_chat  = body.chat_id.strip()
-
-    # Empty token = keep existing (don't wipe a saved token when only updating chat_id)
+    new_chat = body.chat_id.strip()
     if new_token:
         _tg.TELEGRAM_TOKEN = new_token
     if new_chat or not _tg.TELEGRAM_CHAT_ID:
         _tg.TELEGRAM_CHAT_ID = new_chat
-
-    # Persist credentials to SQLite
     _db.set_config("telegram_bot_token", _tg.TELEGRAM_TOKEN)
-    _db.set_config("telegram_chat_id",   _tg.TELEGRAM_CHAT_ID)
-
-    # Attempt to send a verification message — write DB flag based on actual result
+    _db.set_config("telegram_chat_id", _tg.TELEGRAM_CHAT_ID)
     reachable = False
     if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
         try:
             reachable = await _tg.send("✓ Sterling Telegram connected", parse_mode="HTML")
         except Exception:
             pass
-
     _db.set_config("telegram_verified", "1" if reachable else "0")
     _tg.TELEGRAM_REACHABLE = reachable
-
     token = _tg.TELEGRAM_TOKEN
     return TelegramConfigResponse(
         bot_token_set=bool(token),
@@ -270,11 +257,7 @@ async def test_telegram() -> TelegramConfigResponse:
     from app.services import db as _db
     reachable = False
     if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
-        reachable = await _tg.send(
-            "<b>Sterling test message</b>\nTelegram notifications are working.",
-            parse_mode="HTML",
-        )
-    # Persist verified status so it survives server restarts
+        reachable = await _tg.send("<b>Sterling test message</b>\nTelegram notifications are working.", parse_mode="HTML")
     if reachable:
         _db.set_config("telegram_verified", "1")
     token = _tg.TELEGRAM_TOKEN
@@ -323,3 +306,67 @@ async def set_eval_history_cap(cap: int = 50) -> EvalHistoryCapResponse:
     from app.services import eval_history
     eval_history.set_cap(cap)
     return EvalHistoryCapResponse(cap=eval_history.get_cap())
+
+
+# ─── NIFTY ORB + VWAP options strategy ───────────────────────────────────────
+
+class NiftyOrbConfigRequest(BaseModel):
+    enabled: bool | None = None
+    underlying: str | None = None
+    interval_minutes: int | None = None
+    opening_range_minutes: int | None = None
+    entry_start: str | None = None
+    entry_end: str | None = None
+    min_breakout_atr: float | None = None
+    volume_multiplier: float | None = None
+    vwap_slope_lookback: int | None = None
+    trend_lookback: int | None = None
+    atr_period: int | None = None
+    stop_buffer_atr: float | None = None
+    trail_atr: float | None = None
+    target_r: float | None = None
+    option_moneyness: str | None = None
+    option_steps_itm: int | None = None
+    max_risk_inr: float | None = None
+    max_trades_per_day: int | None = None
+    avoid_expiry_day: bool | None = None
+    expiry_selection: str | None = None
+    execution_broker: str | None = None
+    data_source: str | None = None
+    paper_only: bool | None = None
+
+
+@router.get("/nifty-orb-options")
+async def get_nifty_orb_options_config() -> dict:
+    from app.services.nifty_orb_options import get_config
+    return {"config": get_config().__dict__, "supported_data_sources": ["kite", "truedata"], "execution_brokers": ["kite"]}
+
+
+@router.put("/nifty-orb-options")
+async def update_nifty_orb_options_config(body: NiftyOrbConfigRequest) -> dict:
+    from app.services.nifty_orb_options import get_config, set_config
+    values = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        cfg = set_config(values)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"config": cfg.__dict__}
+
+
+@router.post("/nifty-orb-options/snapshot")
+async def nifty_orb_options_snapshot(request: Request) -> dict:
+    from app.services.nifty_orb_options import snapshot
+    uid = getattr(getattr(request, "state", None), "user_id", None) or "default"
+    try:
+        return await snapshot(uid)
+    except Exception as exc:
+        raise HTTPException(502, f"NIFTY ORB snapshot failed: {exc}") from exc
+
+
+@router.post("/nifty-orb-options/backtest")
+async def nifty_orb_options_backtest(body: dict) -> dict:
+    from app.services.nifty_orb_options import backtest_from_bars
+    rows = body.get("bars") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        raise HTTPException(422, "bars must be a list of OHLCV rows")
+    return backtest_from_bars(rows)
