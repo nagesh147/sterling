@@ -1,10 +1,4 @@
-"""NIFTY 15-minute opening-range breakout options strategy.
-
-The signal is generated from the underlying, never from option premium.  The
-option is only the execution vehicle.  This keeps theta/IV/microstructure from
-contaminating the directional signal and makes the strategy portable across
-Kite and TrueData market-data sources.
-"""
+"""NIFTY opening-range breakout engine with directional option execution planning."""
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
@@ -161,9 +155,12 @@ def _regime(bars: Sequence[Bar], cfg: StrategyConfig, current_vwap: float, curre
 def opening_range(bars: Sequence[Bar], minutes: int = 15) -> tuple[float, float]:
     if not bars:
         raise ValueError("No bars supplied")
-    session = bars[0].timestamp.date()
-    start = datetime.combine(session, time(9, 15), tzinfo=bars[0].timestamp.tzinfo)
-    end = start.replace(minute=start.minute + minutes)
+    # Historical fetches contain multiple sessions. ORB must always be built
+    # from the latest session represented by the input, never bars[0]'s date.
+    session = max(b.timestamp.date() for b in bars)
+    tz = next((b.timestamp.tzinfo for b in bars if b.timestamp.date() == session), None)
+    start = datetime.combine(session, time(9, 15), tzinfo=tz)
+    end = datetime.combine(session, time(9, 15 + minutes // 60, minutes % 60), tzinfo=tz)
     opening = [b for b in bars if start <= b.timestamp < end]
     if not opening:
         raise ValueError("Opening range bars are missing")
@@ -185,13 +182,11 @@ def generate_signal(bars: Sequence[Bar], cfg: StrategyConfig = StrategyConfig())
         return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "outside entry window")
     if current_atr <= 0:
         return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "ATR unavailable")
-
     long_break = current.close - or_high
     short_break = or_low - current.close
     long_ok = long_break >= cfg.min_breakout_atr * current_atr and current.close > current_vwap
     short_ok = short_break >= cfg.min_breakout_atr * current_atr and current.close < current_vwap
     volume_ok = vol_ratio >= cfg.volume_multiplier
-
     if long_ok and volume_ok and regime in ("EXPANSION", "TREND"):
         confidence = min(0.99, 0.50 + 0.15 * min(long_break / current_atr, 2.0) + 0.10 * min(vol_ratio / cfg.volume_multiplier, 2.0))
         return Signal("LONG", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, long_break, vol_ratio, confidence, "ORB high break + VWAP + momentum + volume")
@@ -216,8 +211,7 @@ def select_option(spot: float, direction: Direction, contracts: Sequence[OptionC
         step = sorted({abs(b - a) for a, b in zip(strikes, strikes[1:]) if b > a})
         increment = step[0] if step else 50.0
         target = atm - cfg.option_steps_itm * increment if direction == "LONG" else atm + cfg.option_steps_itm * increment
-    same_expiry = candidates
-    return min(same_expiry, key=lambda c: (abs(c.strike - target), -c.volume, -c.open_interest))
+    return min(candidates, key=lambda c: (abs(c.strike - target), -c.volume, -c.open_interest))
 
 
 def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig, *, spot: float) -> TradePlan:
@@ -226,8 +220,6 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     risk_points = max(signal.atr * cfg.stop_buffer_atr, abs(signal.breakout_distance) * 0.50, 1.0)
     stop = spot - risk_points if signal.direction == "LONG" else spot + risk_points
     target = spot + cfg.target_r * risk_points if signal.direction == "LONG" else spot - cfg.target_r * risk_points
-    # Position sizing is deliberately based on underlying risk, not option premium.
-    # A conservative delta proxy is used when live Greeks are unavailable.
     delta = abs(option.delta) if option.delta is not None else 0.50
     premium_risk_per_share = max(risk_points * delta, 0.01)
     lots = int(cfg.max_risk_inr // (premium_risk_per_share * option.lot_size))
