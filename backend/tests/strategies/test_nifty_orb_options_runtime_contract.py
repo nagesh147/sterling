@@ -2,11 +2,12 @@ from app.engines.nifty_orb_options import StrategyConfig
 from app.services.nifty_orb_options import get_config, set_config
 
 
-def test_engine_contract_is_kite_and_paper_only():
+def test_engine_contract_is_kite_and_strategy_has_no_local_execution_mode():
     cfg = StrategyConfig()
     assert cfg.data_source == "kite"
     assert cfg.execution_broker == "kite"
-    assert cfg.paper_only is True
+    assert not hasattr(cfg, "paper_only")
+    assert cfg.enabled is False
     assert cfg.opening_range_minutes == 15
     assert cfg.interval_minutes == 5
     assert cfg.max_risk_inr == 3000.0
@@ -15,7 +16,7 @@ def test_engine_contract_is_kite_and_paper_only():
 def test_runtime_default_is_disabled():
     cfg = get_config()
     assert cfg.enabled is False
-    assert cfg.paper_only is True
+    assert not hasattr(cfg, "paper_only")
     assert cfg.execution_broker == "kite"
 
 
@@ -35,3 +36,12 @@ def test_config_rejects_invalid_data_source():
         assert "data_source" in str(exc)
     else:
         raise AssertionError("unknown data source must be rejected")
+
+
+def test_config_rejects_legacy_strategy_local_paper_flag():
+    try:
+        set_config({"paper_only": True})
+    except ValueError as exc:
+        assert "paper_only" in str(exc)
+    else:
+        raise AssertionError("strategy-local paper_only must not be accepted")
