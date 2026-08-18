@@ -14,10 +14,15 @@ import {
 } from './config/registry';
 import type { EngineConfigModel } from '../../types/kiteEngine';
 import { notifyOrder } from '../../store/useKiteNotifications';
+import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 
 /**
  * SuperTrend engine settings — shared order with Navigator:
  * draft bar → power → chart → instruments → contracts → engine-specific.
+ *
+ * NIFTY ORB Momentum is rendered as a separate strategy block below the
+ * SuperTrend controls until the shared settings registry grows a dedicated
+ * signal-engine section. It is intentionally isolated from the SuperTrend draft.
  */
 export function SuperTrendEnginePanel() {
   const { data: serverCfg, isLoading } = useEngineConfig();
@@ -29,7 +34,6 @@ export function SuperTrendEnginePanel() {
   const [dirty, setDirty] = React.useState(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
-  // Leaving this section unmounts the panel and the draft with it.
   useUnsavedDraftGuard('supertrend', dirty);
 
   React.useEffect(() => {
@@ -57,16 +61,11 @@ export function SuperTrendEnginePanel() {
         notifyOrder({ kind: 'info', title: 'Settings updated', message: 'SuperTrend settings applied.' });
         runScan.mutate();
       },
-      // Without this a failed save was completely silent: the draft stayed dirty
-      // and nothing anywhere said the write had not landed, so the user reads the
-      // still-showing "Unsaved changes" as their own unfinished edit rather than a
-      // rejected one — and walks away believing the engine took the new settings.
       onError: (err) => {
         notifyOrder({
           kind: 'error',
           title: 'Settings NOT saved',
-          message: `SuperTrend settings were not applied: ${String(
-            (err as Error)?.message ?? 'the save was rejected')}. Your changes are still here — try Apply again.`,
+          message: `SuperTrend settings were not applied: ${String((err as Error)?.message ?? 'the save was rejected')}. Your changes are still here — try Apply again.`,
         });
       },
     });
@@ -126,27 +125,11 @@ export function SuperTrendEnginePanel() {
       />
 
       <PanelCard>
-        <Section
-          title="Chart source"
-          description="Which price series SuperTrend reads a setup from."
-          summary={scanSourceLabel(cfg.scan_source)}
-          defaultOpen
-        
-          persistKey="st-chart">
-          <SignalSourceGroup
-            name="supertrend-signal-source"
-            value={cfg.scan_source}
-            onChange={(v) => patch({ scan_source: v })}
-          />
+        <Section title="Chart source" description="Which price series SuperTrend reads a setup from." summary={scanSourceLabel(cfg.scan_source)} defaultOpen persistKey="st-chart">
+          <SignalSourceGroup name="supertrend-signal-source" value={cfg.scan_source} onChange={(v) => patch({ scan_source: v })} />
         </Section>
 
-        <Section
-          title="Instruments"
-          description="The indices and F&O stocks this engine watches."
-          summary={instrumentsSummary}
-          defaultOpen
-        
-          persistKey="st-instruments">
+        <Section title="Instruments" description="The indices and F&O stocks this engine watches." summary={instrumentsSummary} defaultOpen persistKey="st-instruments">
           <InstrumentsGroup
             idPrefix="SuperTrend"
             indices={cfg.scan_indices}
@@ -157,78 +140,45 @@ export function SuperTrendEnginePanel() {
           />
         </Section>
 
-        <Section
-          title="Contracts"
-          description="Which strikes and expiry cycles SuperTrend resolves."
-          summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
-          defaultOpen
-        
-          persistKey="st-contracts">
-          <ContractsGroup
-            strikes={cfg.strike_moneyness}
-            indexExpiries={indexExpiries}
-            onChange={(next) => patch(next)}
-          />
+        <Section title="Contracts" description="Which strikes and expiry cycles SuperTrend resolves." summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`} defaultOpen persistKey="st-contracts">
+          <ContractsGroup strikes={cfg.strike_moneyness} indexExpiries={indexExpiries} onChange={(next) => patch(next)} />
         </Section>
 
-        <Section
-          title="Trail tightness"
-          description="Which line the stop follows once a trade is running."
-          summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`}
-          defaultOpen
-        
-          persistKey="st-trail">
+        <Section title="Trail tightness" description="Which line the stop follows once a trade is running." summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`} defaultOpen persistKey="st-trail">
           <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}>
-            <ChoiceRow
-              value={cfg.trail_target} options={TRAIL_OPTIONS}
-              onChange={(v) => patch({ trail_target: v })}
-            />
+            <ChoiceRow value={cfg.trail_target} options={TRAIL_OPTIONS} onChange={(v) => patch({ trail_target: v })} />
           </Field>
           <Field label={FIELDS.exit_aligned_trail.label} hint={FIELDS.exit_aligned_trail.help}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Switch
-                checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter"
-                onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) })}
-              />
-              <span style={{ color: TEXT, fontSize: 11.5 }}>
-                {cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}
-              </span>
+              <Switch checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter" onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) })} />
+              <span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}</span>
             </div>
           </Field>
         </Section>
 
-        <Section
-          title="Exit rule"
-          description="What closes a SuperTrend trade."
-          summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`}
-          defaultOpen
-        
-          persistKey="st-exit">
+        <Section title="Exit rule" description="What closes a SuperTrend trade." summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`} defaultOpen persistKey="st-exit">
           <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}>
-            <ChoiceRow
-              value={cfg.exit_mode} options={EXIT_MODE_OPTIONS}
-              onChange={(v) => patch({ exit_mode: v })}
-            />
+            <ChoiceRow value={cfg.exit_mode} options={EXIT_MODE_OPTIONS} onChange={(v) => patch({ exit_mode: v })} />
           </Field>
           <Field label={FIELDS.price_stop_exit.label} hint={FIELDS.price_stop_exit.help}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Switch
-                checked={cfg.price_stop_exit ?? true} label="Enforce the trailing stop as a real exit"
-                onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) })}
-              />
-              <span style={{ color: TEXT, fontSize: 11.5 }}>
-                {(cfg.price_stop_exit ?? true) ? 'Trail or exit counter, whichever fires first' : 'Exit counter only'}
-              </span>
+              <Switch checked={cfg.price_stop_exit ?? true} label="Enforce the trailing stop as a real exit" onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) })} />
+              <span style={{ color: TEXT, fontSize: 11.5 }}>{(cfg.price_stop_exit ?? true) ? 'Trail or exit counter, whichever fires first' : 'Exit counter only'}</span>
             </div>
           </Field>
           <ConfigNote>
-            Entry is fixed: all three SuperTrend lines must be green and the signal fresh on the
-            latest closed 1H bar. Filters that can refuse an automatic entry live under{' '}
-            <b>Automatic rules</b>. A position already held by the server-side tick monitor has its
-            trail enforced regardless of the board exit rule.
+            Entry is fixed: all three SuperTrend lines must be green and the signal fresh on the latest closed 1H bar. Filters that can refuse an automatic entry live under <b>Automatic rules</b>. A position already held by the server-side tick monitor has its trail enforced regardless of the board exit rule.
           </ConfigNote>
         </Section>
       </PanelCard>
+
+      <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ marginBottom: 10, color: TEXT, fontSize: 13, fontWeight: 750 }}>Additional signal engine</div>
+        <div style={{ marginBottom: 10, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
+          NIFTY ORB Momentum uses the underlying for signal generation and BUY-only options for execution. Its configuration is independent from the SuperTrend draft above.
+        </div>
+        <OrbMomentumOptionsSettingsPanel />
+      </div>
 
       <style>{`
         @media (max-width: 640px) {
