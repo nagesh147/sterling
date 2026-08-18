@@ -48,7 +48,8 @@ def normalize_option_chain(rows: Any, expiry: str | None = None) -> list[OptionC
     result = []
     for r in rows or []:
         if not isinstance(r, dict): continue
-        typ = {"CALL":"CE", "C":"CE", "PUT":"PE", "P":"PE"}.get(str(r.get("option_type") or r.get("type") or r.get("opttype") or "").upper(), str(r.get("option_type") or "").upper())
+        raw_type = str(r.get("option_type") or r.get("type") or r.get("opttype") or "").upper()
+        typ = {"CALL":"CE", "C":"CE", "PUT":"PE", "P":"PE"}.get(raw_type, raw_type)
         if typ not in {"CE", "PE"}: continue
         try: strike = float(r.get("strike") or r.get("strike_price"))
         except (TypeError, ValueError): continue
@@ -65,7 +66,7 @@ async def _kite_bars(user_id: str, interval: str) -> list[Bar]:
     rows = await client.get_candles(inst, interval, limit=240)
     return [_bar({"timestamp_ms": r.timestamp_ms, "open": r.open, "high": r.high, "low": r.low, "close": r.close, "volume": r.volume}) for r in rows]
 
-async def _kite_options(user_id: str, direction: str, spot: float) -> list[OptionContract]:
+async def _kite_options(user_id: str, direction: str) -> list[OptionContract]:
     from app.services.exchanges.kite import accounts as ka
     acct = ka.get_active(user_id)
     if not acct: raise RuntimeError("No active Kite account")
@@ -90,16 +91,16 @@ async def snapshot(user_id: str) -> dict[str, Any]:
     cfg = get_config()
     if not cfg.enabled: return {"enabled": False, "signal": None, "plan": None, "data_source": cfg.data_source}
     if cfg.data_source == "kite":
-        bars = await _kite_bars(user_id, f"{cfg.interval_minutes}m"); signal = generate_signal(bars, cfg); spot = bars[-1].close; contracts = await _kite_options(user_id, signal.direction, spot) if signal.direction != "NONE" else []
+        bars = await _kite_bars(user_id, f"{cfg.interval_minutes}m"); signal = generate_signal(bars, cfg); contracts = await _kite_options(user_id, signal.direction) if signal.direction != "NONE" else []
     else:
         from app.services.market_data.truedata import TrueDataHistoricalClient
         client = TrueDataHistoricalClient(settings.truedata_username, settings.truedata_password, timeout=settings.truedata_timeout_seconds)
         try:
-            bars = [_bar(r) for r in await client.get_last_bars("NIFTY 50", 240, interval=f"{cfg.interval_minutes}min")]; signal = generate_signal(bars, cfg); spot = bars[-1].close; contracts = normalize_option_chain(await client.get_option_chain("NIFTY", "nearest")) if signal.direction != "NONE" else []
+            bars = [_bar(r) for r in await client.get_last_bars("NIFTY 50", 240, interval=f"{cfg.interval_minutes}min")]; signal = generate_signal(bars, cfg); contracts = normalize_option_chain(await client.get_option_chain("NIFTY", "nearest")) if signal.direction != "NONE" else []
         finally: await client.aclose()
     plan = None
     if signal.direction != "NONE":
-        option = select_option(spot, signal.direction, contracts, cfg); plan = build_trade_plan(signal, option, cfg, spot=spot)
+        spot = bars[-1].close; option = select_option(spot, signal.direction, contracts, cfg); plan = build_trade_plan(signal, option, cfg, spot=spot)
     return {"enabled": True, "data_source": cfg.data_source, "execution_broker": cfg.execution_broker, "signal": signal.to_dict(), "plan": plan.to_dict() if plan else None}
 
 def backtest_from_bars(rows: list[dict[str, Any]], cfg: StrategyConfig | None = None) -> dict[str, Any]:
