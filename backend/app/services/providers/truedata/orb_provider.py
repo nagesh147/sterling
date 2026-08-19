@@ -5,25 +5,27 @@ latest ticks refresh executable quotes. Advanced fields remain execution-quality
 inputs; they do not alter the independent ORB alpha model.
 """
 from __future__ import annotations
-from datetime import date,datetime,timedelta,timezone
+from datetime import date,datetime,timezone
 from typing import Any,Sequence
+from zoneinfo import ZoneInfo
 from app.engines.nifty_orb_options import Bar,OptionContract,StrategyConfig
 from app.services.market_data.truedata import TrueDataHistoricalClient
 from app.services.nifty_orb_option_chain import normalize_chain
 
+IST=ZoneInfo("Asia/Kolkata")
+
 class TrueDataOrbProvider:
     def __init__(self,client:TrueDataHistoricalClient)->None:self.client=client
 
+    @staticmethod
+    def _parse_provider_time(raw:Any)->datetime:
+        text=str(raw or "").strip().replace("Z","+00:00")
+        dt=datetime.fromisoformat(text) if "T" in text or "+" in text[10:] else datetime.strptime(text,"%Y-%m-%d %H:%M:%S")
+        return (dt.replace(tzinfo=IST) if dt.tzinfo is None else dt).astimezone(timezone.utc)
+
     async def bars(self,symbol:str,cfg:StrategyConfig)->list[Bar]:
-        interval=f"{cfg.interval_minutes}min"
-        rows=await self.client.get_last_bars(symbol,200,interval=interval,bidask=0)
-        out=[]
-        for r in rows:
-            raw=str(r.get("timestamp") or r.get("time") or "")
-            dt=datetime.fromisoformat(raw.replace("Z","+00:00")) if "T" in raw else datetime.strptime(raw,"%Y-%m-%d %H:%M:%S")
-            if dt.tzinfo is None:dt=dt.replace(tzinfo=timezone.utc)
-            out.append(Bar(dt,float(r.get("open",0)),float(r.get("high",0)),float(r.get("low",0)),float(r.get("close",0)),float(r.get("volume",0))))
-        return out
+        rows=await self.client.get_last_bars(symbol,200,interval=f"{cfg.interval_minutes}min",bidask=0)
+        return [Bar(self._parse_provider_time(r.get("timestamp") or r.get("time")),float(r.get("open",0)),float(r.get("high",0)),float(r.get("low",0)),float(r.get("close",0)),float(r.get("volume",0))) for r in rows]
 
     async def latest_tick(self,symbol:str,*,bidask:bool=True)->dict[str,Any]|None:
         rows=await self.client.get_last_ticks(symbol,1,bidask=1 if bidask else 0)
@@ -35,7 +37,7 @@ class TrueDataOrbProvider:
         if not raw:return None
         try:
             if isinstance(raw,(int,float)):return datetime.fromtimestamp(float(raw)/1000,tz=timezone.utc)
-            dt=datetime.fromisoformat(str(raw).replace("Z","+00:00"));return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            text=str(raw).replace("Z","+00:00");dt=datetime.fromisoformat(text) if "T" in text or "+" in text[10:] else datetime.strptime(text,"%Y-%m-%d %H:%M:%S");return (dt.replace(tzinfo=IST) if dt.tzinfo is None else dt).astimezone(timezone.utc)
         except (TypeError,ValueError,OverflowError):return None
 
     @staticmethod
@@ -70,30 +72,24 @@ class TrueDataOrbProvider:
         def visit(node:Any)->None:
             if isinstance(node,dict):
                 for key,value in node.items():
-                    if str(key).lower() in {"expiry","expiry_date","expirydate"}:
-                        visit(value)
+                    if str(key).lower() in {"expiry","expiry_date","expirydate"}:visit(value)
                     elif isinstance(value,(dict,list)):visit(value)
             elif isinstance(node,list):
                 for value in node:visit(value)
             elif isinstance(node,str):
-                text=node[:10]
-                try:
-                    values.add(date.fromisoformat(text))
+                try:values.add(date.fromisoformat(node[:10]))
                 except ValueError:pass
         visit(payload);return sorted(d for d in values if d>=date.today())
 
     async def resolve_expiry(self,symbol:str,cfg:StrategyConfig)->str:
         payload=await self.client.get_all_symbols("NFO",search=symbol,allexpiry=True)
-        expiries=self._extract_expiries(payload)
-        if not expiries:raise ValueError(f"TrueData returned no eligible expiries for {symbol}")
-        eligible=[d for d in expiries if cfg.expiry_dte_min<=(d-date.today()).days<=cfg.expiry_dte_max]
+        expiries=self._extract_expiries(payload);eligible=[d for d in expiries if cfg.expiry_dte_min<=(d-date.today()).days<=cfg.expiry_dte_max]
         if not eligible:raise ValueError(f"No TrueData expiry for {symbol} satisfies configured DTE range")
         if cfg.expiry_selection=="monthly":
-            month_max=max(d for d in eligible if d.month==eligible[0].month) if any(d.month==eligible[0].month for d in eligible) else eligible[0]
-            return month_max.isoformat()
-        if cfg.expiry_selection=="weekly":
-            weekly=[d for d in eligible if (d-date.today()).days<=7]
-            return min(weekly or eligible).isoformat()
+            by_month={}
+            for d in eligible:by_month.setdefault((d.year,d.month),[]).append(d)
+            return min(max(ds) for ds in by_month.values()).isoformat()
+        if cfg.expiry_selection=="weekly":return min([d for d in eligible if (d-date.today()).days<=7] or eligible).isoformat()
         return min(eligible).isoformat()
 
     async def option_chain(self,symbol:str,expiry:str,cfg:StrategyConfig)->list[OptionContract]:
