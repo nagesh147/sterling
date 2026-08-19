@@ -7,12 +7,11 @@ export function NiftyOrbSignalsTable() {
   const { signals: rows, isLoading, error } = useOrbSignals(true);
   if (isLoading) return <div style={{ padding: 12, color: 'var(--t-dim)', fontSize: 10 }}>Scanning ORB universe…</div>;
   if (error) return <div style={{ padding: 12, color: 'var(--t-red)', fontSize: 10 }}>ORB signal feed unavailable: {(error as Error).message}</div>;
-
   return (
     <div style={{ width: '100%', overflowX: 'auto', border: '1px solid var(--t-border)', borderRadius: 6, background: 'var(--t-bg)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 11px', borderBottom: '1px solid var(--t-border)' }}>
         <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--t-bright)' }}>ORB SIGNALS</div>
-        <div style={{ fontSize: 9, color: 'var(--t-dim)' }}>{rows.length} actionable · {rows.length ? 'live' : 'no signals'}</div>
+        <div style={{ fontSize: 9, color: 'var(--t-dim)' }}>{rows.length} feed rows</div>
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'monospace' }}>
         <thead><tr>{['Instrument', 'State', 'Direction', 'Spot', 'ORB', 'VWAP', 'Vol', 'Option', 'Strike', 'Expiry', 'Entry', 'SL', 'Target', 'Risk', 'Data'].map(x => <th key={x} style={{ ...cell, textAlign: 'left', color: 'var(--t-dim)', fontWeight: 500 }}>{x}</th>)}</tr></thead>
@@ -20,7 +19,7 @@ export function NiftyOrbSignalsTable() {
           <tr key={row.id}>
             <td style={{ ...cell, color: 'var(--t-bright)', fontWeight: 600 }}>{row.underlying}</td>
             <td style={{ ...cell, color: row.state === 'SIGNAL' ? 'var(--t-green)' : row.state === 'ERROR' || row.state === 'REJECTED' ? 'var(--t-red)' : 'var(--t-dim)' }}>{row.state}</td>
-            <td style={{ ...cell, color: row.direction === 'long' ? 'var(--t-green)' : 'var(--t-red)', fontWeight: 600 }}>{row.direction.toUpperCase()}</td>
+            <td style={{ ...cell, color: row.direction === 'long' ? 'var(--t-green)' : row.direction === 'short' ? 'var(--t-red)' : 'var(--t-dim)', fontWeight: 600 }}>{row.direction?.toUpperCase() || '—'}</td>
             <td style={{ ...cell, textAlign: 'right' }}>{row.spot?.toFixed(2) || '—'}</td>
             <td style={{ ...cell, textAlign: 'right' }}>{row.orbHigh == null ? '—' : `${row.orbHigh.toFixed(2)}/${row.orbLow?.toFixed(2) ?? '—'}`}</td>
             <td style={{ ...cell, textAlign: 'right' }}>{row.vwap?.toFixed(2) || '—'}</td>
