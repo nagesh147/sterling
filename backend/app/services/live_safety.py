@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib,time,uuid
 from dataclasses import dataclass,field
-from typing import Any,Dict,List,Optional,Tuple
+from typing import Any,Dict,List,Optional
 
 _KILL_SWITCH={"enabled":False,"reason":"","set_ts_ms":0}; _IDEMPOTENCY_CACHE={}; _IDEMPOTENCY_TTL_MS=60000; _RETRY_QUEUE={}
 
@@ -40,15 +40,28 @@ def daily_realized_pnl_inr(positions):
     return round(total,2)
 
 def daily_realized_pnl(positions):
-    # Compatibility alias; ORB/Kite interprets this value as INR.
     total=0.0
     for p in positions:
         ts=getattr(p,"exit_timestamp_ms",None) or getattr(p,"closed_ms",None); pnl=getattr(p,"realized_pnl_usd",None)
         if ts and pnl is not None and int(ts)>=_today_start_ms_ist():total+=float(pnl)
     return round(total,2)
 
-def daily_loss_state(positions):
-    pnl=daily_realized_pnl_inr(positions); level="clear"
+def _account_daily_pnl_inr(uid:str|None)->float|None:
+    if not uid:return None
+    try:
+        from app.services.kite_engine import state
+        return float(state.daily_realized_pnl(uid))
+    except Exception:
+        return None
+
+def daily_loss_state(positions=None, *, uid:str|None=None):
+    # Kite/ORB authoritative source is the persisted per-user accumulator populated
+    # by the confirmed broker exit path. Position snapshots remain the compatibility
+    # fallback for older callers/tests. Never turn a state-read failure into zero.
+    pnl = _account_daily_pnl_inr(uid)
+    if pnl is None:
+        pnl=daily_realized_pnl_inr(positions or [])
+    level="clear"
     if _DAILY_LOSS_CFG.enabled:
         if pnl<=_DAILY_LOSS_CFG.hard_halt_inr:level="halt"
         elif pnl<=_DAILY_LOSS_CFG.soft_warn_inr:level="warning"
@@ -83,11 +96,11 @@ class SafetyDecision:
     allowed:bool; reason:str=""; code:str=""
     def to_dict(self):return {"allowed":self.allowed,"reason":self.reason,"code":self.code}
 
-def assert_safe_to_trade(positions,idempotency_key=None,*,check_daily_loss=True):
+def assert_safe_to_trade(positions,idempotency_key=None,*,check_daily_loss=True,uid:str|None=None):
     try:
         if kill_switch_state().get("enabled"):return SafetyDecision(False,f"Kill switch active: {kill_switch_state().get('reason') or 'manual halt'}","kill_switch")
         if check_daily_loss:
-            dl=daily_loss_state(positions)
+            dl=daily_loss_state(positions,uid=uid)
             if dl["level"]=="halt":return SafetyDecision(False,f"Daily loss circuit breaker: INR {dl['pnl_inr']:.2f} <= INR {dl['hard_halt_inr']:.2f}","daily_loss_halt")
         if idempotency_key:
             prior=check_idempotency(idempotency_key)
