@@ -15,7 +15,6 @@ class DailyLossConfig:
     enabled:bool=True
     soft_warn_inr:float=-1000.0
     hard_halt_inr:float=-1500.0
-    # Legacy USD names retained for compatibility with the Delta/Sterling safety API.
     soft_warn_usd:Optional[float]=None
     hard_halt_usd:Optional[float]=None
     def __post_init__(self):
@@ -48,19 +47,13 @@ def daily_realized_pnl(positions):
 
 def _account_daily_pnl_inr(uid:str|None)->float|None:
     if not uid:return None
-    try:
-        from app.services.kite_engine import state
-        return float(state.daily_realized_pnl(uid))
-    except Exception:
-        return None
+    from app.services.kite_engine import state
+    # The strict accessor deliberately propagates DB/JSON failures. A failed risk-state
+    # read must never be interpreted as a zero loss and allow a new live order.
+    return float(state.daily_realized_pnl_strict(uid))
 
 def daily_loss_state(positions=None, *, uid:str|None=None):
-    # Kite/ORB authoritative source is the persisted per-user accumulator populated
-    # by the confirmed broker exit path. Position snapshots remain the compatibility
-    # fallback for older callers/tests. Never turn a state-read failure into zero.
-    pnl = _account_daily_pnl_inr(uid)
-    if pnl is None:
-        pnl=daily_realized_pnl_inr(positions or [])
+    pnl=_account_daily_pnl_inr(uid) if uid else daily_realized_pnl_inr(positions or [])
     level="clear"
     if _DAILY_LOSS_CFG.enabled:
         if pnl<=_DAILY_LOSS_CFG.hard_halt_inr:level="halt"
