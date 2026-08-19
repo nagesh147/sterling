@@ -8,6 +8,11 @@ from .f107_f110_pipeline import F107F110Decision
 from .order_intent_factory import OrderIntentFactory, OrderIntentInputs
 
 
+def expected_f110_admission_token(intent: object) -> str:
+    """Derive the canonical proof token from the immutable order intent."""
+    return sha256(f"F-110|{intent.fingerprint()}".encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class F110OrderAdmission:
     admitted: bool
@@ -19,13 +24,6 @@ class F110OrderAdmission:
         if not self.admitted or self.order_intent is not intent or self.admission_token is None:
             raise ValueError("order was not admitted by F-110")
         return self.admission_token
-
-
-def _admission_token(intent: object, decision: F107F110Decision) -> str:
-    fingerprint = intent.fingerprint()
-    sizing = decision.sizing.final_quantity
-    material = f"F-110|{fingerprint}|{decision.instrument_id}|{sizing}|{decision.reason}"
-    return sha256(material.encode("utf-8")).hexdigest()
 
 
 def create_admitted_order(
@@ -51,4 +49,4 @@ def create_admitted_order(
         intent_version=intent_version,
         created_at=created_at,
     ))
-    return F110OrderAdmission(True, intent, "admitted", _admission_token(intent, decision))
+    return F110OrderAdmission(True, intent, "admitted", expected_f110_admission_token(intent))
