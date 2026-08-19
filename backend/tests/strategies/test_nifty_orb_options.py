@@ -1,14 +1,13 @@
 from datetime import datetime, timedelta
 
-import pytest
-
 from app.engines.nifty_orb_options import (
     Bar,
     OptionContract,
+    Signal,
     StrategyConfig,
+    build_trade_plan,
     generate_signal,
     select_option,
-    build_trade_plan,
 )
 
 
@@ -56,9 +55,19 @@ def test_option_selection_never_crosses_direction():
 def test_trade_plan_is_lot_aligned_and_risk_bounded():
     cfg = StrategyConfig(max_risk_inr=3000, min_option_volume=100, min_open_interest=100)
     option = OptionContract("NIFTYCE", 100, "2026-08-20", "CE", 20, 19.5, 20.0, 75, 0.5, 10000, 20000)
-    signal = generate_signal(_bars("LONG"), cfg)
-    if signal.direction == "NONE":
-        pytest.skip("synthetic fixture did not create an actionable signal")
+    signal = Signal(
+        direction="LONG",
+        regime="TREND",
+        timestamp=datetime(2026, 8, 19, 10, 0),
+        or_high=100.0,
+        or_low=99.0,
+        vwap=100.5,
+        atr=2.0,
+        breakout_distance=1.0,
+        volume_ratio=1.5,
+        confidence=0.9,
+        reason="test",
+    )
     plan = build_trade_plan(signal, option, cfg, spot=101.0)
     assert plan.quantity % option.lot_size == 0
     assert plan.quantity >= 0
