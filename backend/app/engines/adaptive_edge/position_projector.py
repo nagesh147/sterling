@@ -8,14 +8,28 @@ Canonical invariants:
 4. Partial entries, multiple fills, partial exits, cancelled remainders, and full flattening
    are deterministically projected.
 5. Over-exit or non-positive price/quantity fails closed.
+6. Duplicate execution_event_id is idempotent; conflicting reuse fails closed.
+7. Fill after cancel of the same order_intent_id fails closed.
+8. Out-of-order event_time fails closed.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable, Mapping, Sequence
 
 from .e2e import PositionState
 from .execution_adapter import CanonicalExecutionEvent, CanonicalExecutionStatus
+
+
+def _parse_event_time(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PositionInvariantError("event_time must be a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise PositionInvariantError("event_time must include timezone")
+    return parsed
 
 
 class PositionInvariantError(ValueError):
@@ -44,6 +58,7 @@ class DeterministicPositionProjector:
         *,
         side: str = "BUY",
         order_side_map: Mapping[str, str] | Callable[[str], str] | None = None,
+        risk_boundary: float | None = None,
     ) -> None:
         if not position_id:
             raise ValueError("position_id is required")
@@ -56,6 +71,7 @@ class DeterministicPositionProjector:
         self._instrument_id = instrument_id
         self._initial_side = side
         self._order_side_map = order_side_map
+        self._risk_boundary = risk_boundary
 
         self._current_quantity: int = 0
         self._total_entry_quantity: int = 0
@@ -65,9 +81,21 @@ class DeterministicPositionProjector:
         self._realized_pnl: float = 0.0
         self._average_price: float = 0.0
         self._lifecycle_state: str = "FLAT"
+        self._direction: str = ""
+        self._open_time: str | None = None
         self._last_event_id: str = "initial"
+        self._last_event_time: datetime | None = None
         self._fills: list[FillRecord] = []
         self._state_history: list[PositionState] = []
+        self._seen_events: dict[str, CanonicalExecutionEvent] = {}
+        self._cancelled_orders: set[str] = set()
+
+    @property
+    def initial_side(self) -> str:
+        return self._initial_side
+
+    def set_risk_boundary(self, risk_boundary: float | None) -> None:
+        self._risk_boundary = risk_boundary
 
     @property
     def position_id(self) -> str:
@@ -116,27 +144,53 @@ class DeterministicPositionProjector:
         # and opposing side reduces position.
         return self._initial_side
 
+    def _snapshot(self, source_execution_event_id: str) -> PositionState:
+        return PositionState(
+            position_id=self._position_id,
+            instrument_id=self._instrument_id,
+            quantity=self._current_quantity,
+            average_price=self._average_price,
+            lifecycle_state=self._lifecycle_state,
+            source_execution_event_id=source_execution_event_id,
+            direction=self._direction,
+            open_time=self._open_time,
+            risk_boundary=self._risk_boundary,
+        )
+
     def project(self, event: CanonicalExecutionEvent) -> PositionState:
         """Project a single canonical execution event into updated PositionState."""
         event.validate()
-        self._last_event_id = event.execution_event_id
+
+        prior = self._seen_events.get(event.execution_event_id)
+        if prior is not None:
+            if prior != event:
+                raise PositionInvariantError("execution event id reused with different event")
+            for state in reversed(self._state_history):
+                if state.source_execution_event_id == event.execution_event_id:
+                    return state
+            return self._snapshot(event.execution_event_id)
+
+        event_time = _parse_event_time(event.event_time)
+        if self._last_event_time is not None and event_time < self._last_event_time:
+            raise PositionInvariantError("out-of-order execution event")
 
         is_fill = event.event_type in {
             CanonicalExecutionStatus.PARTIALLY_FILLED,
             CanonicalExecutionStatus.FILLED,
         }
+        if is_fill and event.order_intent_id in self._cancelled_orders:
+            raise PositionInvariantError("fill after cancel is not permitted")
+
+        self._seen_events[event.execution_event_id] = event
+        self._last_event_id = event.execution_event_id
+        self._last_event_time = event_time
+        if event.event_type is CanonicalExecutionStatus.CANCELLED:
+            self._cancelled_orders.add(event.order_intent_id)
 
         if not is_fill:
             # Non-fill events (ACKNOWLEDGED, CANCELLED, REJECTED, EXPIRED, etc.)
             # must not alter position quantity or average price.
-            state = PositionState(
-                position_id=self._position_id,
-                instrument_id=self._instrument_id,
-                quantity=self._current_quantity,
-                average_price=self._average_price,
-                lifecycle_state=self._lifecycle_state,
-                source_execution_event_id=event.execution_event_id,
-            )
+            state = self._snapshot(event.execution_event_id)
             self._state_history.append(state)
             return state
 
@@ -170,6 +224,9 @@ class DeterministicPositionProjector:
             self._current_quantity += fill_qty
             self._average_price = self._total_entry_cost / self._total_entry_quantity
             self._lifecycle_state = "OPEN"
+            self._direction = self._initial_side
+            if self._open_time is None:
+                self._open_time = event.event_time
         else:
             # Scaling out / exit fill
             if fill_qty > self._current_quantity:
@@ -192,17 +249,12 @@ class DeterministicPositionProjector:
 
             if self._current_quantity == 0:
                 self._lifecycle_state = "FLAT"
+                self._direction = ""
+                self._open_time = None
             else:
                 self._lifecycle_state = "OPEN"
 
-        state = PositionState(
-            position_id=self._position_id,
-            instrument_id=self._instrument_id,
-            quantity=self._current_quantity,
-            average_price=self._average_price,
-            lifecycle_state=self._lifecycle_state,
-            source_execution_event_id=event.execution_event_id,
-        )
+        state = self._snapshot(event.execution_event_id)
         self._state_history.append(state)
         return state
 
@@ -212,12 +264,5 @@ class DeterministicPositionProjector:
         for event in events:
             state = self.project(event)
         if state is None:
-            return PositionState(
-                position_id=self._position_id,
-                instrument_id=self._instrument_id,
-                quantity=self._current_quantity,
-                average_price=self._average_price,
-                lifecycle_state=self._lifecycle_state,
-                source_execution_event_id=self._last_event_id,
-            )
+            return self._snapshot(self._last_event_id)
         return state

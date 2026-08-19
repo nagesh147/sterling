@@ -10,19 +10,13 @@ from datetime import datetime
 from typing import Sequence
 
 from .accounting import AccountingSnapshot, mark_accounting
-from .broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
+from .broker_event_mapper import BrokerExecutionEvent
 from .contracts import AdaptiveEdgeState, RiskAuthorization, RiskState
-from .e2e import AuditLedger, PositionState
+from .e2e import AuditLedger, SelectedInstrument
 from .event_boundary import CanonicalMarketEvent
-from .execution_adapter import (
-    CanonicalExecutionEvent,
-    CanonicalExecutionStatus,
-    CanonicalOrderIntent,
-    ExecutionAdapter,
-)
-from .execution_event_registry import ExecutionEventRegistry
+from .execution_adapter import CanonicalExecutionEvent, CanonicalExecutionStatus, CanonicalOrderIntent
 from .execution_gate import evaluate_execution_gate
-from .execution_gateway import ExecutionGateway
+from .execution_path import AdaptiveEdgeExecutionPath
 from .f101 import F101Parameters, F101Result
 from .feature_engine import FeatureStatus
 from .position_projector import DeterministicPositionProjector
@@ -50,6 +44,7 @@ from .lifecycle_engine import (
     ProtectionState,
     ThesisState,
 )
+from .position_lifecycle import ManagedPosition
 from .management import ManagementPolicy, ManagementSnapshot, evaluate_management
 from .opportunity_mode import (
     ModeDecision,
@@ -518,46 +513,78 @@ def run_research_e2e(
         )
     engine = transition(engine, StateEvent.ACTIVATE).resulting_state
 
-    order = CanonicalOrderIntent(
-        order_intent_id=f"RESEARCH-{chosen.bar_record_id}",
-        selection_id=f"SEL-{symbol}",
-        instrument_id=symbol,
-        side=side,
-        quantity=trade_qty,
-        intent_version="research-1",
-        idempotency_key=f"research-{chosen.bar_record_id}",
-        created_at=chosen.decision_time,
+    path = AdaptiveEdgeExecutionPath(transport=SimulatedBroker(), formula_ids=())
+    fill_event = BrokerExecutionEvent(
+        broker_event_id=f"SIMFILL-{chosen.bar_record_id}",
+        order_intent_id="pending",
+        broker_status="FILLED",
+        event_time=chosen.decision_time,
+        filled_quantity=trade_qty,
+        fill_price=reference.price,
     )
-    gateway = ExecutionGateway(
-        ExecutionAdapter(SimulatedBroker()),
-        BrokerEventMapper({"SIM_FILL": CanonicalExecutionStatus.FILLED}),
-        ExecutionEventRegistry(),
-    )
-    broker_ref = gateway.submit(order, formula_ids=())
-    fill = gateway.receive(
-        BrokerExecutionEvent(
+    if auth is not None and sizing is not None:
+        instrument = SelectedInstrument(
+            selection_id=f"SEL-{chosen.bar_record_id}",
+            intent_id=auth.opportunity_id,
+            instrument_id=symbol,
+            selection_version="research-1",
+            selected_at=chosen.decision_time,
+        )
+        executed = path.submit_and_project(
+            instrument=instrument,
+            authorization=auth,
+            sizing=sizing,
+            side=side,
+            created_at=chosen.decision_time,
+            broker_event=fill_event,
+        )
+        order = executed.order
+        position = executed.position
+    else:
+        order = CanonicalOrderIntent(
+            order_intent_id=f"RESEARCH-{chosen.bar_record_id}",
+            selection_id=f"SEL-{symbol}",
+            instrument_id=symbol,
+            side=side,
+            quantity=trade_qty,
+            intent_version="research-1",
+            idempotency_key=f"research-{chosen.bar_record_id}",
+            created_at=chosen.decision_time,
+        )
+        path.submit(order)
+        fill_event = BrokerExecutionEvent(
             broker_event_id=f"SIMFILL-{chosen.bar_record_id}",
             order_intent_id=order.order_intent_id,
-            broker_status="SIM_FILL",
+            broker_status="FILLED",
             event_time=chosen.decision_time,
-            broker_reference=broker_ref,
             filled_quantity=trade_qty,
             fill_price=reference.price,
         )
-    )
-    projector = DeterministicPositionProjector(
-        position_id=f"POS-{symbol}",
-        instrument_id=symbol,
-        side=order.side,
-    )
-    position = projector.project(fill)
+        position = path.receive_and_project(
+            fill_event,
+            instrument_id=symbol,
+            side=order.side,
+            position_id=f"POS-{symbol}",
+        ).position
     mark = float(bar_events[chosen.bar_index].payload["close"])
     signed = 1.0 if order.side == "BUY" else -1.0
     current_pnl = (mark - reference.price) * signed * trade_qty
     accounting = mark_accounting((0.0, current_pnl))
-    lifecycle = A126LifecycleEngine(position.position_id).evaluate(
-        position, bar_events[chosen.bar_index]
+    policy = ProtectionPolicy(label="RESEARCH_NOT_LIVE")
+    if sizing_inputs is not None and sizing_inputs.stop_points is not None:
+        policy = ProtectionPolicy(
+            label="RESEARCH_NOT_LIVE",
+            protective_stop_points=abs(sizing_inputs.stop_points),
+        )
+    managed = ManagedPosition(
+        position,
+        side=order.side,
+        entry_price=reference.price,
+        policy=policy,
+        authorization_id=order.authorization_id or auth.opportunity_id if auth is not None else order.order_intent_id,
+        entry_order=order,
     )
+    lifecycle = managed.on_mark(mark, bar_events[chosen.bar_index].available_at).lifecycle
     return ResearchE2EResult(
         label="RESEARCH_NOT_LIVE",
         coverage=coverage,
@@ -886,18 +913,14 @@ def run_research_session(
                         idempotency_key=f"research-exit-{row.bar_record_id}",
                         created_at=row.decision_time,
                     )
-                    gateway = ExecutionGateway(
-                        ExecutionAdapter(SimulatedBroker()),
-                        BrokerEventMapper({"SIM_FILL": CanonicalExecutionStatus.FILLED}),
-                        ExecutionEventRegistry(),
-                    )
+                    exit_path = AdaptiveEdgeExecutionPath(transport=SimulatedBroker(), formula_ids=())
                     side_map[close_order.order_intent_id] = close_side
-                    broker_ref = gateway.submit(close_order, formula_ids=())
-                    exit_event = gateway.receive(
+                    broker_ref = exit_path.submit(close_order)
+                    exit_event = exit_path.receive(
                         BrokerExecutionEvent(
                             broker_event_id=f"SIMEXIT-{row.bar_record_id}",
                             order_intent_id=close_order.order_intent_id,
-                            broker_status="SIM_FILL",
+                            broker_status="FILLED",
                             event_time=row.decision_time,
                             broker_reference=broker_ref,
                             filled_quantity=opened.order.quantity,

@@ -5,6 +5,18 @@ from typing import Mapping
 
 from .execution_adapter import CanonicalExecutionEvent, CanonicalExecutionStatus
 
+DEFAULT_BROKER_STATUS_MAP: dict[str, CanonicalExecutionStatus] = {
+    "SUBMITTED": CanonicalExecutionStatus.SUBMITTED,
+    "ACKNOWLEDGED": CanonicalExecutionStatus.ACKNOWLEDGED,
+    "PARTIALLY_FILLED": CanonicalExecutionStatus.PARTIALLY_FILLED,
+    "FILLED": CanonicalExecutionStatus.FILLED,
+    "REJECTED": CanonicalExecutionStatus.REJECTED,
+    "CANCELLED": CanonicalExecutionStatus.CANCELLED,
+    "CANCEL_REQUESTED": CanonicalExecutionStatus.CANCEL_REQUESTED,
+    "EXPIRED": CanonicalExecutionStatus.EXPIRED,
+    "AMENDED": CanonicalExecutionStatus.AMENDED,
+}
+
 
 @dataclass(frozen=True)
 class BrokerExecutionEvent:

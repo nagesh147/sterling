@@ -303,3 +303,29 @@ def final_test_is_claim_eligible(
     """Return whether the test boundary remains eligible as final evidence."""
 
     return holdout.status is HoldoutStatus.FROZEN and not registry.test_contaminated
+
+
+def require_oos_claim_allowed(
+    registry: ResearchRegistry,
+    holdout: FinalHoldout,
+    *,
+    trading_days: int,
+    bar_count: int,
+    li_valid: int,
+) -> None:
+    """OOS claims require an untouched holdout and a real A197 corpus.
+
+    Bars-only history cannot promote. Test data cannot select parameters.
+    """
+    from .research_pipeline import meets_a197_contract
+
+    if not final_test_is_claim_eligible(registry, holdout):
+        raise TestSetContaminatedError("OOS claim requires a frozen, uncontaminated holdout")
+    if not meets_a197_contract(
+        trading_days=trading_days,
+        bar_count=bar_count,
+        li_valid=li_valid,
+    ):
+        raise EvaluationContractError(
+            "OOS/A197 claim blocked: corpus missing LI-scale history"
+        )

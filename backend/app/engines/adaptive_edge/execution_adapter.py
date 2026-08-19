@@ -29,6 +29,10 @@ class CanonicalOrderIntent:
     intent_version: str
     idempotency_key: str
     created_at: str
+    order_type: str = "MARKET"
+    limit_price: float | None = None
+    authorization_id: str = ""
+    causal_parent_ids: tuple[str, ...] = ()
 
     def fingerprint(self) -> str:
         value = "|".join(
@@ -41,6 +45,10 @@ class CanonicalOrderIntent:
                 self.intent_version,
                 self.idempotency_key,
                 self.created_at,
+                self.order_type,
+                "" if self.limit_price is None else format(self.limit_price, ".8f"),
+                self.authorization_id,
+                ",".join(self.causal_parent_ids),
             )
         )
         return sha256(value.encode("utf-8")).hexdigest()
@@ -53,6 +61,13 @@ class CanonicalOrderIntent:
             raise ValueError("quantity must be positive")
         if self.side not in {"BUY", "SELL"}:
             raise ValueError("side must be BUY or SELL")
+        if self.order_type not in {"MARKET", "LIMIT"}:
+            raise ValueError("order_type must be MARKET or LIMIT")
+        if self.order_type == "LIMIT":
+            if self.limit_price is None or self.limit_price <= 0:
+                raise ValueError("LIMIT orders require a positive limit_price")
+        elif self.limit_price is not None:
+            raise ValueError("MARKET orders cannot carry limit_price")
 
 
 @dataclass(frozen=True)

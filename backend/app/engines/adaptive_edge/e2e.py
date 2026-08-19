@@ -97,6 +97,9 @@ class PositionState:
     average_price: float
     lifecycle_state: str
     source_execution_event_id: str
+    direction: str = ""
+    open_time: str | None = None
+    risk_boundary: float | None = None
 
 
 @dataclass(frozen=True)
@@ -305,6 +308,20 @@ def run_e2e(
     execution_gateway.submit(order, formula_ids)
     if broker_event is None:
         raise ValueError("broker execution event is required; submission is not execution")
+    if broker_event.order_intent_id in {"", "pending"}:
+        event_id = broker_event.broker_event_id
+        if event_id in {"", "pending"} or event_id.endswith("pending"):
+            event_id = f"BE-{order.order_intent_id}"
+        broker_event = BrokerExecutionEvent(
+            broker_event_id=event_id,
+            order_intent_id=order.order_intent_id,
+            broker_status=broker_event.broker_status,
+            event_time=broker_event.event_time,
+            broker_reference=broker_event.broker_reference,
+            filled_quantity=broker_event.filled_quantity,
+            fill_price=broker_event.fill_price,
+            receipt_time=broker_event.receipt_time,
+        )
 
     execution = execution_gateway.receive(broker_event)
     if execution.order_intent_id != order.order_intent_id:
