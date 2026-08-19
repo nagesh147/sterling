@@ -1,4 +1,4 @@
-"""Governed composition of order intent, gateway, execution event, position and protection."""
+"""Governed composition of F-110 admission, execution, position and protection."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +7,7 @@ from typing import Callable
 from .e2e import PositionState
 from .execution_adapter import CanonicalExecutionEvent, CanonicalOrderIntent
 from .execution_gateway import ExecutionGateway
+from .f110_admission_proof import create_f110_admission_proof
 from .order_intent_factory import OrderIntentFactory, OrderIntentInputs
 from .position_projector import DeterministicPositionProjector
 from .protection import ProtectionDecision, ProtectionEngine, ProtectionPolicy
@@ -22,7 +23,7 @@ class ExecutionPathResult:
 
 
 class GovernedExecutionPath:
-    """Compose existing execution boundaries without bypassing the gate."""
+    """Compose existing execution boundaries without bypassing F-110."""
 
     def __init__(self, gateway: ExecutionGateway, projector: DeterministicPositionProjector, *, protection_policy: ProtectionPolicy | None = None) -> None:
         self._gateway = gateway
@@ -32,7 +33,8 @@ class GovernedExecutionPath:
 
     def submit_and_project(self, *, selection_id: str, instrument_id: str, side: str, quantity: int, intent_version: str, created_at: str, broker_event_factory: Callable[[CanonicalOrderIntent, str], object], entry_price: float | None = None, mark: float | None = None) -> ExecutionPathResult:
         intent = OrderIntentFactory.create(OrderIntentInputs(selection_id, instrument_id, side, quantity, intent_version, created_at))
-        broker_reference = self._gateway.submit(intent)
+        admission_proof = create_f110_admission_proof(intent)
+        broker_reference = self._gateway.submit(intent, f110_admission_token=admission_proof)
         event = self._gateway.receive(broker_event_factory(intent, broker_reference))
         position = self._projector.project(event)
         protection = None
