@@ -9,19 +9,15 @@ import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitiv
 import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
-import { EXIT_MODE_OPTIONS, FIELDS, TRAIL_OPTIONS, exitModeLabel, scanSourceLabel } from './config/registry';
+import {
+  EXIT_MODE_OPTIONS, FIELDS, TRAIL_OPTIONS, exitModeLabel, scanSourceLabel,
+} from './config/registry';
 import type { EngineConfigModel } from '../../types/kiteEngine';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { NiftyOrbOptionsSettings } from '../NiftyOrbOptionsSettings';
 import { NiftyOrbSignalsPanel } from './NiftyOrbSignalsPanel';
 
-/**
- * SuperTrend engine settings.
- *
- * NIFTY ORB + VWAP is an independent signal engine. It is rendered as a
- * separate strategy block here; it does not share SuperTrend's draft/apply
- * state or execution-mode controls.
- */
+/** SuperTrend engine settings — shared order with Navigator: draft bar → power → chart → instruments → contracts → engine-specific. */
 export function SuperTrendEnginePanel() {
   const { data: serverCfg, isLoading } = useEngineConfig();
   const setCfg = useSetEngineConfig();
@@ -30,73 +26,43 @@ export function SuperTrendEnginePanel() {
   const [draft, setDraft] = React.useState<EngineConfigModel | null>(null);
   const [dirty, setDirty] = React.useState(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
-
   useUnsavedDraftGuard('supertrend', dirty);
-
-  React.useEffect(() => {
-    if (!serverCfg) return;
-    if (!dirty) setDraft(serverCfg);
-  }, [serverCfg, dirty]);
-
-  if (isLoading || !draft) return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading SuperTrend settings…</div>;
-  const cfg = draft;
-  const patch = (values: Partial<EngineConfigModel>) => {
-    setDraft((prev) => (prev ? { ...prev, ...values } : prev));
-    setDirty(true);
-    setResetConfirm(false);
-  };
-  const handleApply = () => {
-    if (!draft) return;
-    setCfg.mutate(draft, {
-      onSuccess: () => { setDirty(false); notifyOrder({ kind: 'info', title: 'Settings updated', message: 'SuperTrend settings applied.' }); runScan.mutate(); },
-      onError: (err) => notifyOrder({ kind: 'error', title: 'Settings NOT saved', message: `SuperTrend settings were not applied: ${String((err as Error)?.message ?? 'the save was rejected')}. Your changes are still here — try Apply again.` }),
-    });
-  };
-  const handleDiscard = () => { if (serverCfg) setDraft(serverCfg); setDirty(false); setResetConfirm(false); };
-  const handleReset = () => {
-    if (!resetConfirm) { setResetConfirm(true); return; }
-    resetCfg.mutate(undefined, { onSuccess: () => { setDirty(false); setResetConfirm(false); runScan.mutate(); } });
-  };
-  const on = cfg.engine_enabled;
-  const trailLabel = TRAIL_OPTIONS.find((o) => o.value === cfg.trail_target)?.label ?? cfg.trail_target;
-  const indexExpiries = cfg.scan_expiries_indices ?? cfg.scan_expiries;
-  const instrumentsSummary = !(cfg.scan_stock_contracts ?? true)
-    ? `${cfg.scan_indices.length} indices · no stocks`
-    : cfg.scan_all_stocks ? `All F&O · ${cfg.scan_indices.length} indices` : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
-  const saving = setCfg.isPending;
-
-  return (
-    <>
-      <SettingsDraftBar dirty={dirty} saving={saving} onApply={handleApply} onDiscard={handleDiscard} onReset={handleReset} resetConfirm={resetConfirm} />
-      <EnginePowerHeader name="SuperTrend" tagline="Triple SuperTrend on a 1H Heikin-Ashi chart." on={on} liveOn={serverCfg?.engine_enabled ?? on} busy={saving} onToggle={() => patch({ engine_enabled: !on })} runningNote="Scanning, producing signals, and eligible for automatic execution." offNote="Not scanning. Navigator can still run on its own." />
-      <PanelCard>
-        <Section title="Chart source" description="Which price series SuperTrend reads a setup from." summary={scanSourceLabel(cfg.scan_source)} defaultOpen persistKey="st-chart">
-          <SignalSourceGroup name="supertrend-signal-source" value={cfg.scan_source} onChange={(v) => patch({ scan_source: v })} />
-        </Section>
-        <Section title="Instruments" description="The indices and F&O stocks this engine watches." summary={instrumentsSummary} defaultOpen persistKey="st-instruments">
-          <InstrumentsGroup idPrefix="SuperTrend" indices={cfg.scan_indices} stocks={cfg.scan_stocks} allStocks={cfg.scan_all_stocks} stockContracts={cfg.scan_stock_contracts ?? true} onChange={(next) => patch(next)} />
-        </Section>
-        <Section title="Contracts" description="Which strikes and expiry cycles SuperTrend resolves." summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`} defaultOpen persistKey="st-contracts">
-          <ContractsGroup strikes={cfg.strike_moneyness} indexExpiries={indexExpiries} onChange={(next) => patch(next)} />
-        </Section>
-        <Section title="Trail tightness" description="Which line the stop follows once a trade is running." summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`} defaultOpen persistKey="st-trail">
-          <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}><ChoiceRow value={cfg.trail_target} options={TRAIL_OPTIONS} onChange={(v) => patch({ trail_target: v })} /></Field>
-          <Field label={FIELDS.exit_aligned_trail.label} hint={FIELDS.exit_aligned_trail.help}><div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Switch checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter" onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) })} /><span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}</span></div></Field>
-        </Section>
-        <Section title="Exit rule" description="What closes a SuperTrend trade." summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`} defaultOpen persistKey="st-exit">
-          <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}><ChoiceRow value={cfg.exit_mode} options={EXIT_MODE_OPTIONS} onChange={(v) => patch({ exit_mode: v })} /></Field>
-          <Field label={FIELDS.price_stop_exit.label} hint={FIELDS.price_stop_exit.help}><div style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Switch checked={cfg.price_stop_exit ?? true} label="Enforce the trailing stop as a real exit" onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) })} /><span style={{ color: TEXT, fontSize: 11.5 }}>{(cfg.price_stop_exit ?? true) ? 'Trail or exit counter, whichever fires first' : 'Exit counter only'}</span></div></Field>
-          <ConfigNote>Entry is fixed: all three SuperTrend lines must be green and the signal fresh on the latest closed 1H bar. Filters that can refuse an automatic entry live under <b>Automatic rules</b>. A position already held by the server-side tick monitor has its trail enforced regardless of the board exit rule.</ConfigNote>
-        </Section>
-      </PanelCard>
-      <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ marginBottom: 10, color: TEXT, fontSize: 13, fontWeight: 750 }}>NIFTY ORB + VWAP</div>
-        <div style={{ marginBottom: 10, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>Independent BUY-only directional options engine. It generates from NIFTY 50 and maps LONG → CE / SHORT → PE. It does not inherit SuperTrend settings.</div>
-        <NiftyOrbOptionsSettings />
-        <div style={{ marginTop: 18, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}><NiftyOrbSignalsPanel /></div>
-      </div>
-      <style>{`@media (max-width: 640px) { .sk-config-summary { display: none; } .sk-config-section-body { padding: 0 14px 18px !important; } .sk-config-field { grid-template-columns: 1fr !important; gap: 8px !important; } .sk-config-check-grid { grid-template-columns: 1fr !important; } }`}</style>
-    </>
-  );
+  React.useEffect(() => { if (!serverCfg) return; if (!dirty) setDraft(serverCfg); }, [serverCfg, dirty]);
+  if (isLoading || !draft) return <div style={{ padding:18,color:DIM,fontSize:12 }}>Loading SuperTrend settings…</div>;
+  const cfg=draft;
+  const patch=(values:Partial<EngineConfigModel>)=>{setDraft(prev=>prev?{...prev,...values}:prev);setDirty(true);setResetConfirm(false);};
+  const handleApply=()=>{if(!draft)return;setCfg.mutate(draft,{onSuccess:()=>{setDirty(false);notifyOrder({kind:'info',title:'Settings updated',message:'SuperTrend settings applied.'});runScan.mutate();},onError:(err)=>notifyOrder({kind:'error',title:'Settings NOT saved',message:`SuperTrend settings were not applied: ${String((err as Error)?.message??'the save was rejected')}. Your changes are still here — try Apply again.`})});};
+  const handleDiscard=()=>{if(serverCfg)setDraft(serverCfg);setDirty(false);setResetConfirm(false);};
+  const handleReset=()=>{if(!resetConfirm){setResetConfirm(true);return;}resetCfg.mutate(undefined,{onSuccess:()=>{setDirty(false);setResetConfirm(false);runScan.mutate();}});};
+  const on=cfg.engine_enabled;
+  const trailLabel=TRAIL_OPTIONS.find(o=>o.value===cfg.trail_target)?.label??cfg.trail_target;
+  const indexExpiries=cfg.scan_expiries_indices??cfg.scan_expiries;
+  const instrumentsSummary=!(cfg.scan_stock_contracts??true)?`${cfg.scan_indices.length} indices · no stocks`:cfg.scan_all_stocks?`All F&O · ${cfg.scan_indices.length} indices`:`${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
+  const saving=setCfg.isPending;
+  return <>
+    <SettingsDraftBar dirty={dirty} saving={saving} onApply={handleApply} onDiscard={handleDiscard} onReset={handleReset} resetConfirm={resetConfirm}/>
+    <EnginePowerHeader name="SuperTrend" tagline="Triple SuperTrend on a 1H Heikin-Ashi chart." on={on} liveOn={serverCfg?.engine_enabled??on} busy={saving} onToggle={()=>patch({engine_enabled:!on})} runningNote="Scanning, producing signals, and eligible for automatic execution." offNote="Not scanning. Navigator can still run on its own."/>
+    <PanelCard>
+      <Section title="Chart source" description="Which price series SuperTrend reads a setup from." summary={scanSourceLabel(cfg.scan_source)} defaultOpen persistKey="st-chart"><SignalSourceGroup name="supertrend-signal-source" value={cfg.scan_source} onChange={v=>patch({scan_source:v})}/></Section>
+      <Section title="Instruments" description="The indices and F&O stocks this engine watches." summary={instrumentsSummary} defaultOpen persistKey="st-instruments"><InstrumentsGroup idPrefix="SuperTrend" indices={cfg.scan_indices} stocks={cfg.scan_stocks} allStocks={cfg.scan_all_stocks} stockContracts={cfg.scan_stock_contracts??true} onChange={next=>patch(next)}/></Section>
+      <Section title="Contracts" description="Which strikes and expiry cycles SuperTrend resolves." summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`} defaultOpen persistKey="st-contracts"><ContractsGroup strikes={cfg.strike_moneyness} indexExpiries={indexExpiries} onChange={next=>patch(next)}/></Section>
+      <Section title="Trail tightness" description="Which line the stop follows once a trade is running." summary={`${trailLabel}${cfg.exit_aligned_trail?' · anchored to exit counter':''}`} defaultOpen persistKey="st-trail">
+        <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}><ChoiceRow value={cfg.trail_target} options={TRAIL_OPTIONS} onChange={v=>patch({trail_target:v})}/></Field>
+        <Field label={FIELDS.exit_aligned_trail.label} hint={FIELDS.exit_aligned_trail.help}><div style={{display:'flex',alignItems:'center',gap:9}}><Switch checked={cfg.exit_aligned_trail??false} label="Anchor stop to exit counter" onChange={()=>patch({exit_aligned_trail:!(cfg.exit_aligned_trail??false)})}/><span style={{color:TEXT,fontSize:11.5}}>{cfg.exit_aligned_trail?'Aligned to exit counter':'Tightest fast line'}</span></div></Field>
+      </Section>
+      <Section title="Exit rule" description="What closes a SuperTrend trade." summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit??true)?' · trail enforced':' · counter only'}`} defaultOpen persistKey="st-exit">
+        <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}><ChoiceRow value={cfg.exit_mode} options={EXIT_MODE_OPTIONS} onChange={v=>patch({exit_mode:v})}/></Field>
+        <Field label={FIELDS.price_stop_exit.label} hint={FIELDS.price_stop_exit.help}><div style={{display:'flex',alignItems:'center',gap:9}}><Switch checked={cfg.price_stop_exit??true} label="Enforce the trailing stop as a real exit" onChange={()=>patch({price_stop_exit:!(cfg.price_stop_exit??true)})}/><span style={{color:TEXT,fontSize:11.5}}>{(cfg.price_stop_exit??true)?'Trail or exit counter, whichever fires first':'Exit counter only'}</span></div></Field>
+        <ConfigNote>Entry is fixed: all three SuperTrend lines must be green and the signal fresh on the latest closed 1H bar. Filters that can refuse an automatic entry live under <b>Automatic rules</b>. A position already held by the server-side tick monitor has its trail enforced regardless of the board exit rule.</ConfigNote>
+      </Section>
+    </PanelCard>
+    <div style={{marginTop:18,paddingTop:18,borderTop:`1px solid ${BORDER}`}}>
+      <div style={{marginBottom:10,color:TEXT,fontSize:13,fontWeight:750}}>NIFTY ORB + VWAP</div>
+      <div style={{marginBottom:10,color:MUTED,fontSize:11,lineHeight:1.5}}>Independent BUY-only directional options engine. It generates from NIFTY 50 and maps LONG → CE / SHORT → PE. It does not inherit SuperTrend settings.</div>
+      <NiftyOrbOptionsSettings/>
+      <div style={{marginTop:18,paddingTop:18,borderTop:`1px solid ${BORDER}`}}><NiftyOrbSignalsPanel/></div>
+    </div>
+    <style>{`@media (max-width: 640px) { .sk-config-summary { display:none; } .sk-config-section-body { padding:0 14px 18px !important; } .sk-config-field { grid-template-columns:1fr !important; gap:8px !important; } .sk-config-check-grid { grid-template-columns:1fr !important; } }`}</style>
+  </>;
 }
 export default SuperTrendEnginePanel;
