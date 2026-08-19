@@ -48,7 +48,7 @@ class OptionContract:
         try:return max(0,(datetime.strptime(self.expiry[:10],"%Y-%m-%d").date()-datetime.now().date()).days)
         except (ValueError,TypeError):return None
 
-a@dataclass(frozen=True)
+@dataclass(frozen=True)
 class TradePlan:
     direction:Direction; option_type:Literal["CE","PE"]; contract:OptionContract; underlying_entry:float; underlying_stop:float; initial_risk_points:float; target_points:float; entry_premium:float; stop_premium:float; target_premium:float; premium_risk_per_share:float; quantity:int; risk_inr:float; reason:str
     def to_dict(self)->dict:
@@ -96,7 +96,7 @@ def select_option(spot:float,direction:Direction,contracts:Sequence[OptionContra
     if direction not in ("LONG","SHORT"):raise ValueError("Cannot select an option without a directional signal")
     typ="CE" if direction=="LONG" else "PE";candidates=[c for c in contracts if c.option_type==typ and c.lot_size>0 and c.ltp>0 and c.bid>0 and c.ask>=c.bid and c.spread_pct<=cfg.max_spread_pct and c.volume>=cfg.min_option_volume and c.open_interest>=cfg.min_open_interest and _expiry_allowed(c,cfg)]
     if not candidates:raise ValueError(f"No liquid {typ} contracts satisfy expiry and liquidity settings")
-    strikes=sorted({c.strike for c in candidates});atm=min(strikes,key=lambda x:abs(x-spot));target=atm if cfg.option_moneyness.upper()=="ATM" else atm-(cfg.option_steps_itm*(min([b-a for a,b in zip(strikes,strikes[1:]) if b>a]) if len(strikes)>1 else 50.0) if direction=="LONG" else -cfg.option_steps_itm*(min([b-a for a,b in zip(strikes,strikes[1:]) if b>a]) if len(strikes)>1 else 50.0));return min(candidates,key=lambda c:(abs(c.strike-target),c.dte or 999,-c.volume,-c.open_interest,c.spread_pct))
+    strikes=sorted({c.strike for c in candidates});atm=min(strikes,key=lambda x:abs(x-spot));steps=min([b-a for a,b in zip(strikes,strikes[1:]) if b>a],default=50.0);target=atm if cfg.option_moneyness.upper()=="ATM" else atm-(cfg.option_steps_itm*steps) if direction=="LONG" else atm+(cfg.option_steps_itm*steps);return min(candidates,key=lambda c:(abs(c.strike-target),c.dte or 999,-c.volume,-c.open_interest,c.spread_pct))
 def build_trade_plan(signal:Signal,option:OptionContract,cfg:StrategyConfig,*,spot:float)->TradePlan:
     if signal.direction not in ("LONG","SHORT"):raise ValueError("No trade plan for a neutral signal")
     expected="CE" if signal.direction=="LONG" else "PE"
