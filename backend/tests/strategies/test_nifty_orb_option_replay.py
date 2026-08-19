@@ -25,6 +25,11 @@ def test_option_replay_applies_costs():
     assert trade.costs == 30
 
 
+def test_replay_rejects_last_bar_entry_to_prevent_same_candle_exit():
+    bars = [_bar(0, 100, 102, 101)]
+    assert replay_trade(bars, 0, risk_points=2, target_r=2) is None
+
+
 def test_replay_summary_reports_profit_factor_and_drawdown():
     bars = [_bar(0, 100, 102, 101), _bar(1, 102, 110, 108)]
     trade = replay_trade(bars, 0, risk_points=2, target_r=2)
