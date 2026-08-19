@@ -1,14 +1,14 @@
 """Realtime multi-underlying scanner for the independent NIFTY ORB family."""
 from __future__ import annotations
 import asyncio
-from dataclasses import replace
 from datetime import datetime,timedelta,timezone
 from typing import Any
 from app.engines.nifty_orb_options import Bar,OptionContract,StrategyConfig,build_trade_plan,generate_signal,select_option
 from app.services.nifty_orb_options import _bar,get_config,normalize_option_chain
 from app.services.nifty_orb_option_chain import filter_chain
 _IST=timezone(timedelta(hours=5,minutes=30));_BAR_CACHE_TTL_S=4.0;_option_cache:dict[tuple[str,str,str],tuple[float,list[OptionContract]]]={};_bar_cache:dict[tuple[str,str,str],tuple[float,list[Bar]]]={}
-def _canonical(symbol:str)->str:return {"NIFTY 50":"NIFTY","NIFTY BANK":"BANKNIFTY","NIFTY FIN SERVICE":"FINNIFTY"}.get(symbol.strip().upper(),symbol.strip().upper())
+def _canonical(symbol:str)->str:return {"NIFTY 50":"NIFTY","NIFTY BANK":"BANKNIFTY","FINNIFTY":"FINNIFTY","NIFTY FIN SERVICE":"FINNIFTY"}.get(symbol.strip().upper(),symbol.strip().upper())
+def _truedata_symbol(underlying:str)->str:return {"NIFTY":"NIFTY 50","BANKNIFTY":"NIFTY BANK","FINNIFTY":"NIFTY FIN SERVICE"}.get(underlying,underlying)
 def configured_underlyings(cfg:StrategyConfig)->list[str]:
     values=[]
     for raw in cfg.scan_indices or ():
@@ -37,10 +37,10 @@ async def _kite_bars_for_underlying(uid:str,underlying:str,interval:str)->list[B
     client=await accounts.acquire_client(acct);rows=await client.get_candles(_kite_symbol(underlying),interval,limit=240);bars=[_bar({"timestamp_ms":r.timestamp_ms,"open":r.open,"high":r.high,"low":r.low,"close":r.close,"volume":r.volume}) for r in rows];_bar_cache[key]=(datetime.now().timestamp(),bars);return bars
 async def _truedata_bars_for_underlying(underlying:str,interval:str)->list[Bar]:
     from app.services.market_data.truedata import TrueDataHistoricalClient
+    from app.services.providers.truedata.orb_provider import TrueDataOrbProvider
     from app.core.config import settings
     client=TrueDataHistoricalClient(settings.truedata_username,settings.truedata_password,timeout=settings.truedata_timeout_seconds)
-    try:
-        aliases={"NIFTY":"NIFTY 50","BANKNIFTY":"NIFTY BANK","FINNIFTY":"NIFTY FIN SERVICE"};rows=await client.get_last_bars(aliases.get(underlying,underlying),240,interval=f"{interval}min");return [_bar(r) for r in rows]
+    try:return await TrueDataOrbProvider(client).bars(_truedata_symbol(underlying),StrategyConfig(interval_minutes=int(interval)))
     finally:await client.aclose()
 async def _kite_option_contracts(uid:str,underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     from app.services.exchanges.kite import accounts
@@ -69,25 +69,10 @@ async def _kite_option_contracts(uid:str,underlying:str,direction:str,cfg:Strate
     _option_cache[key]=(datetime.now().timestamp(),contracts);return contracts
 async def _truedata_option_contracts(underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     from app.services.market_data.truedata import TrueDataHistoricalClient
+    from app.services.providers.truedata.orb_provider import TrueDataOrbProvider
     from app.core.config import settings
     client=TrueDataHistoricalClient(settings.truedata_username,settings.truedata_password,timeout=settings.truedata_timeout_seconds)
-    try:
-        payload=await client.get_option_chain(underlying,cfg.expiry_selection);contracts=normalize_option_chain(payload)
-        contracts=filter_chain(contracts,cfg)
-        if not cfg.truedata_use_ticks or not cfg.truedata_use_quote_freshness:return contracts
-        # Chain hydration is cheap; tick hydration is reserved for the already liquid set.
-        # Refresh only the nearest candidates so advanced tick data does not multiply API load by the full chain size.
-        wanted="CE" if direction=="LONG" else "PE";side=[c for c in contracts if c.option_type==wanted];side=sorted(side,key=lambda c:(c.dte or 999,c.spread_pct,-c.volume,-c.open_interest))[:6];refreshed=[]
-        for c in side:
-            try:
-                ticks=await client.get_ticks(c.symbol,(datetime.now(_IST)-timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S"),datetime.now(_IST).strftime("%Y-%m-%d %H:%M:%S"),bidask=1)
-                if ticks:
-                    t=ticks[-1];ts=str(t.get("timestamp") or t.get("time") or "");qt=None
-                    try:qt=datetime.fromisoformat(ts.replace("Z","+00:00")) if "T" in ts else datetime.strptime(ts,"%Y-%m-%d %H:%M:%S").replace(tzinfo=_IST)
-                    except (TypeError,ValueError):pass
-                    refreshed.append(replace(c,ltp=float(t.get("ltp") or c.ltp),bid=float(t.get("bid") or c.bid),ask=float(t.get("ask") or c.ask),volume=float(t.get("volume") or c.volume),open_interest=float(t.get("oi") or c.open_interest),quote_timestamp=qt))
-            except Exception:continue
-        return filter_chain(refreshed,cfg)
+    try:return await TrueDataOrbProvider(client).option_chain(_truedata_symbol(underlying),cfg.expiry_selection,cfg)
     finally:await client.aclose()
 async def _option_contracts(uid:str,underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     return await _kite_option_contracts(uid,underlying,direction,cfg) if cfg.data_source=="kite" else await _truedata_option_contracts(underlying,direction,cfg)
