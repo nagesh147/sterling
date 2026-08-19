@@ -130,7 +130,7 @@ jobs:
       - name: Run Playwright E2E
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: http://localhost:8000
+          VITE_API_BASE_URL: http://127.0.0.1:8000
           CI: "true"
           PARITY_ENGINE: ${{ matrix.parity }}
         run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }} --reporter=list
@@ -171,6 +171,8 @@ jobs:
           tests/strategies/test_nifty_orb_option_replay.py
           tests/strategies/test_nifty_orb_options.py
           tests/services/test_nifty_orb_execution.py
+          tests/services/test_nifty_orb_execution_safety.py
+          tests/test_live_safety.py
         env:
           ENVIRONMENT: test
           PAPER_TRADING: "true"
