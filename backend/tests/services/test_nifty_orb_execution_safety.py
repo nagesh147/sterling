@@ -1,7 +1,8 @@
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.services.nifty_orb_execution import _conservative_quantity, _parse_timestamp, _quote_age
+from app.services.nifty_orb_execution import _conservative_quantity, _entry_window_open, _parse_timestamp, _quote_age
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -27,3 +28,10 @@ def test_quote_age_rejects_missing_timestamp_semantically():
 def test_quote_age_is_non_negative_for_recent_quote():
     now = datetime.now(IST)
     assert 0 <= _quote_age(now.isoformat()) < 2
+
+
+def test_execution_rechecks_configured_entry_window():
+    cfg = SimpleNamespace(entry_start="09:30", entry_end="12:00")
+    assert _entry_window_open(datetime(2026, 8, 19, 9, 29, tzinfo=IST), cfg) is False
+    assert _entry_window_open(datetime(2026, 8, 19, 9, 30, tzinfo=IST), cfg) is True
+    assert _entry_window_open(datetime(2026, 8, 19, 12, 1, tzinfo=IST), cfg) is False
