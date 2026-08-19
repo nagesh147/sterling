@@ -74,6 +74,30 @@ async def _truedata_option_contracts(underlying:str,direction:str,cfg:StrategyCo
     client=TrueDataHistoricalClient(settings.truedata_username,settings.truedata_password,timeout=settings.truedata_timeout_seconds)
     try:return await TrueDataOrbProvider(client).option_chain(_truedata_symbol(underlying),cfg.expiry_selection,cfg)
     finally:await client.aclose()
+async def _truedata_refresh_option(contract:OptionContract,cfg:StrategyConfig)->tuple[OptionContract,float|None]:
+    if not any((cfg.truedata_use_ticks, cfg.truedata_use_oi, cfg.truedata_use_bid_ask, cfg.truedata_use_quote_freshness)):return contract,None
+    from app.services.market_data.truedata import TrueDataHistoricalClient
+    from app.services.providers.truedata.orb_provider import TrueDataOrbProvider
+    from app.core.config import settings
+    client=TrueDataHistoricalClient(settings.truedata_username,settings.truedata_password,timeout=settings.truedata_timeout_seconds)
+    try:
+        tick=await TrueDataOrbProvider(client).latest_tick(contract.symbol)
+    finally:await client.aclose()
+    if not tick:return contract,None
+    raw=tick.get("timestamp") or tick.get("time")
+    try:
+        ts=datetime.fromisoformat(str(raw).replace("Z","+00:00")) if "T" in str(raw) else datetime.strptime(str(raw),"%Y-%m-%d %H:%M:%S").replace(tzinfo=_IST)
+        if ts.tzinfo is None:ts=ts.replace(tzinfo=_IST)
+        age=max(0.0,datetime.now(_IST).timestamp()-ts.timestamp())
+    except Exception:age=None
+    ltp=float(tick.get("ltp") or contract.ltp);bid=float(tick.get("bid") or contract.bid);ask=float(tick.get("ask") or contract.ask);volume=float(tick.get("volume") or contract.volume);oi=float(tick.get("oi") or contract.open_interest)
+    if cfg.truedata_use_quote_freshness and (age is None or age>cfg.max_quote_staleness_s):raise ValueError(f"stale TrueData quote: {age if age is not None else 'unknown'}s")
+    if cfg.truedata_use_bid_ask and (bid<=0 or ask<bid):raise ValueError("invalid TrueData bid/ask")
+    refreshed=OptionContract(contract.symbol,contract.strike,contract.expiry,contract.option_type,ltp,bid,ask,contract.lot_size,contract.delta,volume,oi)
+    if cfg.truedata_use_oi and oi<cfg.min_open_interest:raise ValueError("TrueData OI below configured minimum")
+    if cfg.truedata_use_bid_ask and refreshed.spread_pct>cfg.max_spread_pct:raise ValueError("TrueData spread above configured maximum")
+    if volume<cfg.min_option_volume:raise ValueError("TrueData option volume below configured minimum")
+    return refreshed,age
 async def _option_contracts(uid:str,underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     return await _kite_option_contracts(uid,underlying,direction,cfg) if cfg.data_source=="kite" else await _truedata_option_contracts(underlying,direction,cfg)
 async def scan_underlying(uid:str,underlying:str,cfg:StrategyConfig|None=None)->dict[str,Any]:
@@ -82,7 +106,11 @@ async def scan_underlying(uid:str,underlying:str,cfg:StrategyConfig|None=None)->
     signal=generate_signal(bars,local);result={"underlying":symbol,"status":"signal" if signal.direction!="NONE" else "watching","signal":signal.to_dict(),"spot":bars[-1].close,"interval_minutes":cfg.interval_minutes,"data_source":cfg.data_source,"trade":None}
     if signal.direction=="NONE":return result
     try:
-        contracts=await _option_contracts(uid,symbol,signal.direction,cfg);option=select_option(bars[-1].close,signal.direction,contracts,cfg);result["trade"]=build_trade_plan(signal,option,cfg,spot=bars[-1].close).to_dict()
+        contracts=await _option_contracts(uid,symbol,signal.direction,cfg);option=select_option(bars[-1].close,signal.direction,contracts,cfg)
+        quote_age=None
+        if cfg.data_source=="truedata":option,quote_age=await _truedata_refresh_option(option,cfg)
+        result["trade"]=build_trade_plan(signal,option,cfg,spot=bars[-1].close).to_dict()
+        if quote_age is not None:result["quote_age_s"]=round(quote_age,2)
     except (ValueError,RuntimeError) as exc:result["status"]="signal_unresolved";result["trade_error"]=str(exc)
     return result
 async def scan_user(uid:str,cfg:StrategyConfig|None=None)->dict[str,Any]:
