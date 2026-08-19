@@ -15,7 +15,7 @@ def _event(event_id: str, intent: str, status, qty: int, price: float) -> Canoni
     return CanonicalExecutionEvent(
         execution_event_id=event_id, order_intent_id=intent, event_type=status,
         event_time=f"2026-08-19T03:45:{event_id[-1]}0Z", filled_quantity=qty,
-        fill_price=price, evidence_class="broker_fill",
+        fill_price=price, evidence_class="OBSERVED",
     )
 
 

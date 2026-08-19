@@ -311,6 +311,12 @@ def select_option(spot: float, direction: Direction, contracts: Sequence[OptionC
     if not candidates:
         raise ValueError(f"No liquid {typ} contracts satisfy expiry and liquidity settings")
 
+    if cfg.expiry_selection.lower() in {"weekly", "nearest"}:
+        candidates = sorted(candidates, key=lambda c: (c.dte if c.dte is not None else 999, abs(c.strike - spot), -c.volume, -c.open_interest))
+        if cfg.expiry_selection.lower() == "weekly":
+            candidates = [c for c in candidates if c.dte is not None and c.dte <= 7] or candidates
+    elif cfg.expiry_selection.lower() not in {"any", "all"}:
+        raise ValueError("expiry_selection must be nearest, weekly, any or all")
     strikes = sorted({c.strike for c in candidates})
     atm = min(strikes, key=lambda x: abs(x - spot))
     steps = min((b - a for a, b in zip(strikes, strikes[1:]) if b > a), default=50.0)

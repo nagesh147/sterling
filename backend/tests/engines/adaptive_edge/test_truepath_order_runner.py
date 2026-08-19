@@ -5,7 +5,7 @@ from app.engines.adaptive_edge.f101_f106_contracts import F106OptionCandidate
 from app.engines.adaptive_edge.f101_f106_pipeline import F101F106PipelineInput
 from app.engines.adaptive_edge.f107_f110_pipeline import F107F110Input
 from app.engines.adaptive_edge.contracts import RiskAuthorization, RiskState
-from app.engines.adaptive_edge.risk_sizing import ExecutionCostParameters, SizingParameters
+from app.engines.adaptive_edge.risk_sizing import ExecutionCostParameters, SizingParameters, ParameterMetadata, ParameterEstimationMethod, ParameterValidationStatus
 from app.engines.adaptive_edge.truepath_order_runner import build_order_from_canonical_event
 
 
@@ -36,8 +36,19 @@ def _risk():
         entry_price=100.0, initial_stop=95.0,
         risk_authorization=RiskAuthorization("opp-1",500.0,RiskState.AUTHORIZED,"policy-v1","2026-08-19T03:46:00+00:00"),
         candidate=F106OptionCandidate("NIFTY-CE",18.0,True,True,True,True),
-        costs=ExecutionCostParameters(fixed_cost=1.0, variable_cost_rate=0.001),
-        sizing=SizingParameters(lot_size=25, max_lots=4, max_capital=10000.0),
+        costs=ExecutionCostParameters(
+            ParameterMetadata("spread", 1.0, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            ParameterMetadata("slippage", 0.5, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            ParameterMetadata("brokerage", 0.1, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            ParameterMetadata("exchange", 0.05, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            ParameterMetadata("taxes", 0.05, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            ParameterMetadata("latency", 0.2, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+        ),
+        sizing=SizingParameters(
+            max_position_qty=ParameterMetadata("max_position_qty", 100, "qty", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            max_capital_allocation=ParameterMetadata("max_capital_allocation", 10000, "INR", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+            lot_size=ParameterMetadata("lot_size", 25, "qty", "test-1", "A214", ParameterEstimationMethod.CANONICAL_SPEC, ParameterValidationStatus.VALIDATED),
+        ),
     )
 
 
@@ -59,14 +70,10 @@ def test_truepath_stops_before_risk_when_economics_fail():
 
 
 def test_truepath_rejects_lookahead_event():
-    event = CanonicalEventBoundary.create(
-        record_id="bad", event_type="bar", instrument_id="NIFTY",
-        event_time="2026-08-19T03:46:00+00:00", available_at="2026-08-19T03:45:00+00:00",
-        source="truedata", source_version="2.6", payload={"close":1},
-    )
-    try:
-        build_order_from_canonical_event(event, upstream=_upstream(), risk_entry=_risk(),
-            selection_id="sel-1", side="BUY", intent_version="v1", created_at="2026-08-19T03:46:00+00:00")
-    except ValueError:
-        return
-    raise AssertionError("lookahead event must be rejected")
+    import pytest
+    with pytest.raises(ValueError, match="available_at cannot precede event_time"):
+        CanonicalEventBoundary.create(
+            record_id="bad", event_type="bar", instrument_id="NIFTY",
+            event_time="2026-08-19T03:46:00+00:00", available_at="2026-08-19T03:45:00+00:00",
+            source="truedata", source_version="2.6", payload={"close":1},
+        )

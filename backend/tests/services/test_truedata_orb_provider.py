@@ -22,5 +22,5 @@ async def test_truedata_provider_exposes_bid_ask_tick():
 
 @pytest.mark.asyncio
 async def test_truedata_provider_normalizes_option_chain():
-    contracts=await TrueDataOrbProvider(FakeClient()).option_chain("TEST","2026-08-27",StrategyConfig(expiry_dte_max=30,min_option_volume=1000,min_open_interest=10000))
+    contracts=await TrueDataOrbProvider(FakeClient()).option_chain("TEST","2026-08-27",StrategyConfig(expiry_dte_max=30,min_option_volume=1000,min_open_interest=10000,truedata_use_quote_freshness=False))
     assert contracts[0].option_type=="CE"

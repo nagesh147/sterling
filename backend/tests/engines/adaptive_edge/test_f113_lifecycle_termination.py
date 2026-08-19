@@ -14,8 +14,9 @@ def position() -> PositionState:
         position_id="pos-1",
         instrument_id="NIFTY26AUG24500CE",
         quantity=25,
-        average_entry_price=100.0,
+        average_price=100.0,
         lifecycle_state="OPEN",
+        source_execution_event_id="evt-1",
     )
 
 

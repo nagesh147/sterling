@@ -44,7 +44,7 @@ def sizing() -> SizingParameters:
 
 
 def auth(amount: float = 5_000) -> RiskAuthorization:
-    return RiskAuthorization(risk_state=RiskState.AUTHORIZED, authorized_risk=amount)
+    return RiskAuthorization("test-opportunity", amount, RiskState.AUTHORIZED, "test-policy", "2026-08-19T03:46:00+00:00")
 
 
 def test_f108_returns_valid_lot_multiple() -> None:
@@ -70,7 +70,7 @@ def test_f108_capital_constraint_is_independent() -> None:
 def test_f108_unauthorized_state_fails_closed() -> None:
     risk = calculate_risk_per_unit(100, 90, costs())
     blocked = auth()
-    blocked = replace(blocked, risk_state=RiskState.BLOCKED)
+    blocked = replace(blocked, risk_state=RiskState.UNAUTHORIZED)
     with pytest.raises(ValueError, match="Risk authorization"):
         calculate_position_sizing(blocked, risk, sizing())
 

@@ -14,7 +14,7 @@ def event(event_id: str, side: str, quantity: int, price: float) -> CanonicalExe
         event_time=f"2026-08-19T03:45:{int(event_id[-1]):02d}Z",
         filled_quantity=quantity,
         fill_price=price,
-        evidence_class="broker_fill",
+        evidence_class="OBSERVED",
     )
 
 
@@ -59,7 +59,7 @@ def test_non_fill_does_not_mutate_position():
         event_time="2026-08-19T03:46:00Z",
         filled_quantity=0,
         fill_price=None,
-        evidence_class="broker_status",
+        evidence_class="OBSERVED",
     )
     state = projector.project(non_fill)
     assert state.quantity == 10
