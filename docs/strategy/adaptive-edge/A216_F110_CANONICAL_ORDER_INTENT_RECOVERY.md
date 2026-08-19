@@ -1,60 +1,23 @@
 # A216 — F-110 Canonical Order Intent Recovery
 
-**Status:** `[SOURCE-RECOVERED / IMPLEMENTATION RECONCILIATION]`
-**Formula:** F-110 / order-construction boundary
+**Status:** `[SOURCE-RECOVERED / IMPLEMENTED / GATED]`
 
-## 1. Role
+F-110 produces the canonical order intent consumed by the execution boundary.
 
-F-110 converts an already authorized instrument and bounded quantity into a canonical order intent. It does not create authorization, select direction, or change risk.
+## Contract
 
-```text
-Decision
-  -> Economic eligibility
-  -> Risk authorization
-  -> Instrument
-  -> F-110 CanonicalOrderIntent
-```
+A valid intent requires `order_intent_id`, `selection_id`, `instrument_id`, `side`, positive `quantity`, `intent_version`, `idempotency_key`, and `created_at`.
 
-## 2. Required fields
+The intent is immutable and fingerprintable. The factory derives deterministic identity from the causal selection, instrument, side, quantity, version, timestamp, and deterministic namespace.
 
-A canonical order intent must contain, at minimum:
+## Boundary
 
-```text
-order_intent_id
-idempotency_key
-instrument identifier
-side
-quantity
-order type
-creation timestamp
-strategy/version identity
-causal parent identifiers
-```
+The factory does not authorize or submit execution. `ExecutionGateway.submit()` remains the crossing point and fails closed when required strategy formulas are not authorized.
 
-All quantities must be positive and valid for the selected contract's lot constraints.
+## Idempotency
 
-## 3. Authorization boundary
+Identical causal inputs produce identical identity and fingerprint. Changing a causal input produces a different identity. The downstream execution adapter rejects reuse of an idempotency key with a different intent fingerprint.
 
-F-110 may only construct an executable intent from an explicitly authorized trade state. A direct caller cannot bypass the execution gate by constructing an order intent from a prediction or option candidate alone.
+## Production status
 
-## 4. Idempotency
-
-The idempotency key must be deterministic for a replay of the same canonical decision context and unique across distinct trade intents.
-
-Repeated submission of the same intent must not create an independent economic position.
-
-## 5. Causal timestamp
-
-The intent creation timestamp must be at or after the causal decision point and must not precede its parent decision/input events.
-
-## 6. Risk preservation
-
-F-110 must preserve the quantity and risk authorization established by F-108. It must not increase quantity, widen risk, or replace the selected instrument with a different contract.
-
-## 7. Failure behavior
-
-Invalid authorization, missing instrument identity, non-positive quantity, invalid lot multiple, missing idempotency identity, or causal timestamp violation must fail closed.
-
-## 8. Production status
-
-This artifact establishes the contract. Production execution remains blocked until the complete required formula set is promoted and the execution gate authorizes submission.
+The contract is implemented and gated. Production execution remains locked until the complete required formula set is promoted.
