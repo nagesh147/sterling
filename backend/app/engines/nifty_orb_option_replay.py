@@ -1,7 +1,8 @@
 """Historical option-premium replay for the NIFTY ORB strategy.
 
-This module deliberately consumes normalized underlying signals and normalized
-option bars. It never substitutes underlying points for option P&L.
+This module consumes normalized option bars and never substitutes underlying
+points for option P&L. A replay entry must have at least one subsequent bar so
+an entry cannot be exited against information from the same candle.
 """
 from __future__ import annotations
 from dataclasses import dataclass, asdict
@@ -76,10 +77,15 @@ def replay_trade(
     target_r: float,
     costs: ReplayCostConfig = ReplayCostConfig(),
 ) -> ReplayTrade | None:
-    if entry_index < 0 or entry_index >= len(bars) or risk_points <= 0:
+    # Entry must be followed by at least one later candle. Otherwise the previous
+    # implementation used bars[-1] as the exit, which could equal the entry bar
+    # and leak same-candle information into P&L.
+    if entry_index < 0 or entry_index >= len(bars) - 1 or risk_points <= 0:
         return None
     entry_bar = bars[entry_index]
     entry = executable_entry(entry_bar, costs)
+    if entry <= 0:
+        return None
     stop = entry - risk_points
     target = entry + risk_points * target_r
     exit_bar = bars[-1]
@@ -117,13 +123,9 @@ def summarize_replay(trades: Sequence[ReplayTrade]) -> dict:
         peak = max(peak, equity)
         max_dd = max(max_dd, peak - equity)
     return {
-        "trades": len(trades),
-        "wins": len(wins),
-        "losses": len(losses),
+        "trades": len(trades), "wins": len(wins), "losses": len(losses),
         "win_rate": len(wins) / len(trades),
         "profit_factor": gross_profit / gross_loss if gross_loss else float("inf") if gross_profit else 0.0,
-        "net_pnl": sum(pnl),
-        "expectancy": sum(pnl) / len(pnl),
-        "max_drawdown": max_dd,
+        "net_pnl": sum(pnl), "expectancy": sum(pnl) / len(pnl), "max_drawdown": max_dd,
         "average_r": sum(t.r_multiple for t in trades) / len(trades),
     }
