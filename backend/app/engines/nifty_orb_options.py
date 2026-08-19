@@ -27,6 +27,7 @@ class StrategyConfig:
     max_trades_per_day:int=2; avoid_expiry_day:bool=False; expiry_selection:str="nearest"
     expiry_dte_min:int=0; expiry_dte_max:int=7; execution_broker:str="kite"; data_source:str="kite"
     max_spread_pct:float=1.5; min_option_volume:float=1000.0; min_open_interest:float=10000.0; max_quote_staleness_s:int=15
+    truedata_use_ticks:bool=True; truedata_use_oi:bool=True; truedata_use_bid_ask:bool=True; truedata_use_quote_freshness:bool=True
 
 @dataclass(frozen=True)
 class Signal:
@@ -47,7 +48,7 @@ class OptionContract:
         try:return max(0,(datetime.strptime(self.expiry[:10],"%Y-%m-%d").date()-datetime.now().date()).days)
         except (ValueError,TypeError):return None
 
-@dataclass(frozen=True)
+a@dataclass(frozen=True)
 class TradePlan:
     direction:Direction; option_type:Literal["CE","PE"]; contract:OptionContract; underlying_entry:float; underlying_stop:float; initial_risk_points:float; target_points:float; entry_premium:float; stop_premium:float; target_premium:float; premium_risk_per_share:float; quantity:int; risk_inr:float; reason:str
     def to_dict(self)->dict:
