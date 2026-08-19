@@ -102,6 +102,13 @@ def _conservative_quantity(requested,lot_size,ask,max_risk):
 def _signal_age(value):
     ts=_parse_timestamp(value); return None if ts is None else max(0,(datetime.now(IST)-ts.astimezone(IST)).total_seconds())
 
+def _entry_window_open(now,cfg):
+    try:
+        start=datetime.strptime(cfg.entry_start,"%H:%M").time(); end=datetime.strptime(cfg.entry_end,"%H:%M").time()
+        return start<=now.time()<=end
+    except (TypeError,ValueError):
+        return False
+
 async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,Any]:
     from app.services.kite_engine import state as engine_state,positions,protection
     from app.services import live_safety
@@ -116,7 +123,8 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
     client=await accounts.acquire_client(account); executed=[]; open_pos=positions.open_positions(uid)
     seen={str(p.underlying).upper() for p in open_pos if p.status in (positions.OPEN,positions.PENDING)}
     now=datetime.now(IST)
-    if now.weekday()>=5 or now.time()>=datetime.strptime("15:29","%H:%M").time():return {"status":"market_closed","executed":[]}
+    if now.weekday()>=5 or now.time()<datetime.strptime("09:15","%H:%M").time() or now.time()>datetime.strptime("15:29","%H:%M").time():return {"status":"market_closed","executed":[]}
+    if not _entry_window_open(now,cfg):return {"status":"outside_entry_window","executed":[]}
     for row in scan.get("signals",[]):
         if row.get("status")!="signal":continue
         plan=row.get("trade") or {}; contract=plan.get("contract") or {}; symbol=str(contract.get("symbol") or ""); underlying=str(row.get("underlying") or "").upper(); requested=int(plan.get("quantity") or 0); signal=row.get("signal") or {}; direction=str(signal.get("direction") or "")
@@ -125,19 +133,29 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
         if expected!=str(contract.get("option_type") or ""):
             executed.append({"status":"blocked","symbol":symbol,"reason":"option direction mismatch"});continue
         age=_signal_age(signal.get("timestamp"))
-        if age is None or age>max(10.0,cfg.interval_minutes*60):
+        if age is None or age>cfg.interval_minutes*60:
             executed.append({"status":"blocked","symbol":symbol,"reason":f"signal stale/invalid age={age}"});continue
         if len(executed)+int(trade_state.get("count",0))>=max_trades:break
         key=f"{underlying}:{signal.get('timestamp')}:{direction}:{symbol}"; idem=live_safety.make_idempotency_key(uid,key,"BUY")
-        decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True)
+        decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True,uid=uid)
         if not decision.allowed:
             executed.append({"status":"blocked","symbol":symbol,"reason":decision.reason,"code":decision.code});continue
         exchange,instrument=await _find_contract(client,symbol,underlying)
         if not exchange or not instrument:
             executed.append({"status":"blocked","symbol":symbol,"reason":"contract no longer exists"});continue
+        # The broker-resolved contract, not the scanner payload, is authoritative.
+        broker_type=str(instrument.get("instrument_type") or instrument.get("option_type") or "").upper()
+        if broker_type and broker_type not in {expected,"CE" if expected=="CE" else "PE"}:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract option type mismatch"});continue
+        plan_strike=float(contract.get("strike") or 0); broker_strike=float(instrument.get("strike") or 0)
+        if plan_strike>0 and broker_strike>0 and abs(plan_strike-broker_strike)>0.001:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract strike mismatch"});continue
         try: expiry=datetime.strptime(str(instrument.get("expiry"))[:10],"%Y-%m-%d").date()
         except (TypeError,ValueError):
             executed.append({"status":"blocked","symbol":symbol,"reason":"invalid contract expiry"});continue
+        plan_expiry=str(contract.get("expiry") or "")[:10]
+        if plan_expiry and plan_expiry!=expiry.isoformat():
+            executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract expiry mismatch"});continue
         dte=(expiry-now.date()).days
         if dte<cfg.expiry_dte_min or dte>cfg.expiry_dte_max or (cfg.avoid_expiry_day and dte==0):
             executed.append({"status":"blocked","symbol":symbol,"reason":"contract outside configured expiry policy"});continue
@@ -148,14 +166,20 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"blocked","symbol":symbol,"reason":"option liquidity below configured minimum"});continue
         spot=float(plan.get("underlying_entry") or row.get("spot") or 0)
         try:
-            uq=(await client.get_quote([f"NSE:{underlying}"]) or {}).get(f"NSE:{underlying}") or {}; current=float(uq.get("last_price") or 0)
-        except Exception: current=0
-        if spot>0 and current>0 and abs(current-spot)/spot>0.003:
+            uq=await client.get_quote([f"NSE:{underlying}"]); uquote=(uq or {}).get(f"NSE:{underlying}") or {}; current=float(uquote.get("last_price") or 0)
+        except Exception as exc:
+            executed.append({"status":"blocked","symbol":symbol,"reason":f"underlying quote unavailable: {exc}"});continue
+        if spot<=0 or current<=0:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"underlying entry/current price unavailable"});continue
+        if abs(current-spot)/spot>0.003:
             executed.append({"status":"blocked","symbol":symbol,"reason":"underlying moved >0.30% since signal"});continue
-        lot=int(contract.get("lot_size") or instrument.get("lot_size") or 1); quantity=_conservative_quantity(requested,lot,quote["ask"],float(cfg.max_risk_inr))
+        lot=int(contract.get("lot_size") or instrument.get("lot_size") or 1)
+        broker_lot=int(instrument.get("lot_size") or lot)
+        if lot!=broker_lot:lot=broker_lot
+        quantity=_conservative_quantity(requested,lot,quote["ask"],float(cfg.max_risk_inr))
         if quantity<=0:
             executed.append({"status":"blocked","symbol":symbol,"reason":"one option lot exceeds conservative premium risk budget"});continue
-        decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True)
+        decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True,uid=uid)
         if not decision.allowed:
             executed.append({"status":"blocked","symbol":symbol,"reason":decision.reason,"code":decision.code});continue
         ok,existing=await _existing_order_by_tag(client,idem)
