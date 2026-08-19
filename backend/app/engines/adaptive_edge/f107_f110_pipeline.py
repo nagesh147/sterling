@@ -3,15 +3,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .risk_sizing import ExecutionCostParameters, SizingParameters, calculate_risk_per_unit, calculate_position_sizing
+from .contracts import RiskAuthorization, RiskState
 from .f101_f106_contracts import F106OptionCandidate
+from .risk_sizing import (
+    ExecutionCostParameters,
+    PositionSizingAssessment,
+    RiskPerUnitAssessment,
+    SizingParameters,
+    calculate_position_sizing,
+    calculate_risk_per_unit,
+)
 
 
 @dataclass(frozen=True)
 class F107F110Input:
     entry_price: float
     initial_stop: float
-    authorized_risk_budget: float
+    risk_authorization: RiskAuthorization
     candidate: F106OptionCandidate
     costs: ExecutionCostParameters
     sizing: SizingParameters
@@ -20,8 +28,8 @@ class F107F110Input:
 @dataclass(frozen=True)
 class F107F110Decision:
     admitted: bool
-    risk_per_unit: object | None
-    sizing: object | None
+    risk_per_unit: RiskPerUnitAssessment | None
+    sizing: PositionSizingAssessment | None
     instrument_id: str | None
     reason: str
 
@@ -29,15 +37,16 @@ class F107F110Decision:
 def evaluate_f107_f110(request: F107F110Input) -> F107F110Decision:
     if not request.candidate.eligible:
         return F107F110Decision(False, None, None, None, "f106_candidate_ineligible")
-    if request.authorized_risk_budget <= 0:
+    if request.risk_authorization.risk_state not in (RiskState.AUTHORIZED, RiskState.REDUCED):
+        return F107F110Decision(False, None, None, None, "risk_not_authorized")
+    if request.risk_authorization.authorized_risk <= 0:
         return F107F110Decision(False, None, None, None, "invalid_authorized_risk_budget")
 
     risk = calculate_risk_per_unit(request.entry_price, request.initial_stop, request.costs)
     sizing = calculate_position_sizing(
-        risk_per_unit=risk.effective_risk_per_unit,
-        authorized_risk_budget=request.authorized_risk_budget,
-        entry_price=request.entry_price,
-        sizing_params=request.sizing,
+        request.risk_authorization,
+        risk,
+        request.sizing,
     )
     if not risk.valid or not sizing.valid or sizing.final_quantity <= 0:
         return F107F110Decision(False, risk, sizing, None, "risk_sizing_ineligible")
