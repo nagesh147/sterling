@@ -40,6 +40,11 @@ def test_config_rejects_legacy_strategy_local_paper_flag():
         set_config({"paper_only": True})
 
 
+def test_config_rejects_quote_freshness_without_ticks():
+    with pytest.raises(ValueError, match="requires truedata_use_ticks"):
+        set_config({"data_source": "truedata", "truedata_use_ticks": False, "truedata_use_quote_freshness": True})
+
+
 def test_option_liquidity_gate_rejects_wide_or_thin_contracts():
     cfg = StrategyConfig(max_spread_pct=1.0, min_option_volume=1000, min_open_interest=10000)
     contracts = [OptionContract("NIFTYCE", 25000, "2026-08-20", "CE", ltp=100, bid=90, ask=110, lot_size=75, volume=5000, open_interest=50000)]
