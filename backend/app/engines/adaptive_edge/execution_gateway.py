@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from typing import Iterable
 
 from .broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
@@ -11,8 +12,9 @@ from .execution_gate import require_execution_authorized
 class ExecutionGateway:
     """Compose governed submission, broker mapping and event registration.
 
-    An explicit research/simulation formula scope still requires a matching
-    F-110 admission token. Production remains governed by the full registry.
+    Explicit research/simulation execution requires a verifiable F-110
+    admission proof in addition to the normal formula authorization gate.
+    Production remains governed by the full registry.
     """
 
     def __init__(
@@ -36,9 +38,7 @@ class ExecutionGateway:
         if self._authorized_formula_ids is not None:
             if not f110_admission_token:
                 raise PermissionError("F-110 admission token required for research/simulation execution")
-            expected = getattr(intent, "f110_admission_token", None)
-            if expected is None:
-                raise PermissionError("intent is not bound to an F-110 admission")
+            expected = sha256(f"F-110|{intent.fingerprint()}".encode("utf-8")).hexdigest()
             if expected != f110_admission_token:
                 raise PermissionError("invalid F-110 admission token")
             require_execution_authorized(self._authorized_formula_ids)
