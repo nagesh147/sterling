@@ -19,8 +19,7 @@ def configured_underlyings(cfg:StrategyConfig)->list[str]:
         selected=[_canonical(str(x)) for x in (cfg.scan_stocks or ())]
         if cfg.scan_all_stocks:
             try:
-                from app.services.kite_engine.stock_registry import CURATED_STOCK_NAMES
-                selected=list(CURATED_STOCK_NAMES)
+                from app.services.kite_engine.stock_registry import CURATED_STOCK_NAMES;selected=list(CURATED_STOCK_NAMES)
             except Exception:pass
         for s in selected:
             if s and s not in values:values.append(s)
@@ -44,47 +43,46 @@ async def _truedata_bars_for_underlying(underlying:str,interval:str)->list[Bar]:
     try:return await TrueDataOrbProvider(client).bars(_truedata_symbol(underlying),StrategyConfig(interval_minutes=int(interval)))
     finally:await client.aclose()
 def _selection_config(cfg:StrategyConfig)->StrategyConfig:
-    if cfg.data_source!="truedata":return cfg
+    if cfg.data_source!='truedata':return cfg
     return replace(cfg,max_spread_pct=10.0 if not cfg.truedata_use_bid_ask else cfg.max_spread_pct,min_open_interest=0.0 if not cfg.truedata_use_oi else cfg.min_open_interest)
 async def _kite_option_contracts(uid:str,underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     from app.services.exchanges.kite import accounts
     acct=accounts.get_active(uid)
     if not acct:raise RuntimeError("No active Kite account")
-    wanted="CE" if direction=="LONG" else "PE";key=(uid,underlying,wanted,cfg.expiry_selection);cached=_option_cache.get(key)
+    wanted='CE' if direction=='LONG' else 'PE';key=(uid,underlying,wanted,cfg.expiry_selection);cached=_option_cache.get(key)
     if cached and datetime.now().timestamp()-cached[0]<_BAR_CACHE_TTL_S:return cached[1]
     client=await accounts.acquire_client(acct);lookup=underlying;rows=[]
-    for exchange in ("NFO","BFO"):
+    for exchange in ('NFO','BFO'):
         try:rows.extend(await client.search_instruments(lookup,exchange,limit=10000))
         except Exception:continue
-    today=datetime.now(_IST).date();candidates=[]
+    today=datetime.now(_IST).date();eligible=[]
     for row in rows:
-        if str(row.get("name") or "").upper()!=lookup.upper() or str(row.get("instrument_type") or "").upper()!=wanted:continue
-        try:exp=datetime.strptime(str(row.get("expiry"))[:10],"%Y-%m-%d").date()
+        if str(row.get('name') or '').upper()!=lookup.upper() or str(row.get('instrument_type') or '').upper()!=wanted:continue
+        try:exp=datetime.strptime(str(row.get('expiry'))[:10],'%Y-%m-%d').date()
         except (TypeError,ValueError):continue
-        if exp>=today:candidates.append((exp,row))
-    if not candidates:return []
-    eligible=[(exp,row) for exp,row in candidates if cfg.expiry_dte_min<=(exp-today).days<=cfg.expiry_dte_max]
+        if exp>=today and cfg.expiry_dte_min<=(exp-today).days<=cfg.expiry_dte_max:eligible.append((exp,row))
     if not eligible:return []
-    grouped:dict[tuple[int,int],list[tuple[Any,dict]]]={}
-    for exp,row in eligible:grouped.setdefault((exp.year,exp.month),[]).append((exp,row))
-    monthly_expiries=sorted(max(group,key=lambda x:x[0])[0] for group in grouped.values())
-    if cfg.expiry_selection=="monthly":selected_expiry=monthly_expiries[0]
-    elif cfg.expiry_selection=="weekly":selected_expiry=min(eligible,key=lambda x:x[0])[0]
-    else:selected_expiry=min(eligible,key=lambda x:x[0])[0]
+    by_month={}
+    for exp,row in eligible:by_month.setdefault((exp.year,exp.month),[]).append((exp,row))
+    monthly_expiries=sorted(max(group,key=lambda x:x[0])[0] for group in by_month.values())
+    selected_expiry=monthly_expiries[0] if cfg.expiry_selection=='monthly' else min(eligible,key=lambda x:x[0])[0]
     selected=[r for exp,r in eligible if exp==selected_expiry];contracts=[]
     for row in selected:
-        symbol=str(row.get("tradingsymbol") or "");exchange=str(row.get("exchange") or "NFO").upper()
+        symbol=str(row.get('tradingsymbol') or '');exchange=str(row.get('exchange') or 'NFO').upper()
         if not symbol:continue
         try:
-            q=(await client.get_quote([f"{exchange}:{symbol}"]) or {}).get(f"{exchange}:{symbol}",{}) or {};depth=q.get("depth") or {};bid=(depth.get("buy") or [{}])[0];ask=(depth.get("sell") or [{}])[0]
-            contracts.append(OptionContract(symbol,float(row.get("strike") or 0),str(row.get("expiry") or "")[:10],wanted,float(q.get("last_price") or 0),float(bid.get("price") or 0),float(ask.get("price") or 0),int(row.get("lot_size") or 1),float(q.get("delta")) if q.get("delta") not in (None,"") else None,float(q.get("volume") or 0),float(q.get("oi") or 0)))
+            q=(await client.get_quote([f'{exchange}:{symbol}']) or {}).get(f'{exchange}:{symbol}',{}) or {};depth=q.get('depth') or {};bid=(depth.get('buy') or [{}])[0];ask=(depth.get('sell') or [{}])[0]
+            contracts.append(OptionContract(symbol,float(row.get('strike') or 0),str(row.get('expiry') or '')[:10],wanted,float(q.get('last_price') or 0),float(bid.get('price') or 0),float(ask.get('price') or 0),int(row.get('lot_size') or 1),float(q.get('delta')) if q.get('delta') not in (None,'') else None,float(q.get('volume') or 0),float(q.get('oi') or 0)))
         except Exception:continue
     _option_cache[key]=(datetime.now().timestamp(),contracts);return contracts
 async def _truedata_option_contracts(underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
     from app.services.market_data.truedata import TrueDataHistoricalClient
     from app.core.config import settings
     client=TrueDataHistoricalClient(settings.truedata_username,settings.truedata_password,timeout=settings.truedata_timeout_seconds)
-    try:return await TrueDataOrbProvider(client).option_chain(underlying,cfg.expiry_selection,cfg)
+    try:
+        contracts=await TrueDataOrbProvider(client).option_chain(underlying,cfg.expiry_selection,cfg)
+        if not cfg.truedata_use_bid_ask:contracts=[OptionContract(c.symbol,c.strike,c.expiry,c.option_type,c.ltp,c.ltp,c.ltp,c.lot_size,c.delta,c.volume,c.open_interest) for c in contracts]
+        return contracts
     finally:await client.aclose()
 async def _truedata_refresh_option(contract:OptionContract,cfg:StrategyConfig)->tuple[OptionContract,float|None]:
     if not any((cfg.truedata_use_ticks,cfg.truedata_use_oi,cfg.truedata_use_bid_ask,cfg.truedata_use_quote_freshness)):return contract,None
@@ -94,40 +92,38 @@ async def _truedata_refresh_option(contract:OptionContract,cfg:StrategyConfig)->
     try:tick=await TrueDataOrbProvider(client).latest_tick(contract.symbol,bidask=cfg.truedata_use_bid_ask)
     finally:await client.aclose()
     if not tick:return contract,None
-    raw=tick.get("timestamp") or tick.get("time")
+    raw=tick.get('timestamp') or tick.get('time')
     try:
-        ts=datetime.fromisoformat(str(raw).replace("Z","+00:00")) if "T" in str(raw) else datetime.strptime(str(raw),"%Y-%m-%d %H:%M:%S").replace(tzinfo=_IST)
+        ts=datetime.fromisoformat(str(raw).replace('Z','+00:00')) if 'T' in str(raw) else datetime.strptime(str(raw),'%Y-%m-%d %H:%M:%S').replace(tzinfo=_IST)
         if ts.tzinfo is None:ts=ts.replace(tzinfo=_IST)
         age=max(0.0,datetime.now(_IST).timestamp()-ts.timestamp())
     except Exception:age=None
-    ltp=float(tick.get("ltp") or contract.ltp);bid=float(tick.get("bid") or contract.bid);ask=float(tick.get("ask") or contract.ask);volume=float(tick.get("volume") or contract.volume);oi=float(tick.get("oi") or contract.open_interest)
-    if not cfg.truedata_use_bid_ask:
-        bid=bid if bid>0 else ltp;ask=ask if ask>=bid and ask>0 else ltp
+    ltp=float(tick.get('ltp') or contract.ltp);bid=float(tick.get('bid') or contract.bid);ask=float(tick.get('ask') or contract.ask);volume=float(tick.get('volume') or contract.volume);oi=float(tick.get('oi') or contract.open_interest)
+    if not cfg.truedata_use_bid_ask:bid=bid if bid>0 else ltp;ask=ask if ask>=bid and ask>0 else ltp
     if cfg.truedata_use_quote_freshness and (age is None or age>cfg.max_quote_staleness_s):raise ValueError(f"stale TrueData quote: {age if age is not None else 'unknown'}s")
-    if cfg.truedata_use_bid_ask and (bid<=0 or ask<bid):raise ValueError("invalid TrueData bid/ask")
+    if cfg.truedata_use_bid_ask and (bid<=0 or ask<bid):raise ValueError('invalid TrueData bid/ask')
     refreshed=OptionContract(contract.symbol,contract.strike,contract.expiry,contract.option_type,ltp,bid,ask,contract.lot_size,contract.delta,volume,oi)
-    if cfg.truedata_use_oi and oi<cfg.min_open_interest:raise ValueError("TrueData OI below configured minimum")
-    if cfg.truedata_use_bid_ask and refreshed.spread_pct>cfg.max_spread_pct:raise ValueError("TrueData spread above configured maximum")
-    if volume<cfg.min_option_volume:raise ValueError("TrueData option volume below configured minimum")
+    if cfg.truedata_use_oi and oi<cfg.min_open_interest:raise ValueError('TrueData OI below configured minimum')
+    if cfg.truedata_use_bid_ask and refreshed.spread_pct>cfg.max_spread_pct:raise ValueError('TrueData spread above configured maximum')
+    if volume<cfg.min_option_volume:raise ValueError('TrueData option volume below configured minimum')
     return refreshed,age
 async def _option_contracts(uid:str,underlying:str,direction:str,cfg:StrategyConfig)->list[OptionContract]:
-    return await _kite_option_contracts(uid,underlying,direction,cfg) if cfg.data_source=="kite" else await _truedata_option_contracts(underlying,direction,cfg)
+    return await _kite_option_contracts(uid,underlying,direction,cfg) if cfg.data_source=='kite' else await _truedata_option_contracts(underlying,direction,cfg)
 async def scan_underlying(uid:str,underlying:str,cfg:StrategyConfig|None=None)->dict[str,Any]:
-    cfg=cfg or get_config();symbol=_canonical(underlying);local=StrategyConfig(**{**cfg.__dict__,"underlying":symbol});bars=await (_kite_bars_for_underlying(uid,symbol,f"{cfg.interval_minutes}m") if cfg.data_source=="kite" else _truedata_bars_for_underlying(symbol,str(cfg.interval_minutes)))
-    if not bars:return {"underlying":symbol,"status":"no_data","signal":None,"trade":None}
-    signal=generate_signal(bars,local);result={"underlying":symbol,"status":"signal" if signal.direction!="NONE" else "watching","signal":signal.to_dict(),"spot":bars[-1].close,"interval_minutes":cfg.interval_minutes,"data_source":cfg.data_source,"trade":None}
-    if signal.direction=="NONE":return result
+    cfg=cfg or get_config();symbol=_canonical(underlying);local=StrategyConfig(**{**cfg.__dict__,'underlying':symbol});bars=await (_kite_bars_for_underlying(uid,symbol,f'{cfg.interval_minutes}m') if cfg.data_source=='kite' else _truedata_bars_for_underlying(symbol,str(cfg.interval_minutes)))
+    if not bars:return {'underlying':symbol,'status':'no_data','signal':None,'trade':None}
+    signal=generate_signal(bars,local);result={'underlying':symbol,'status':'signal' if signal.direction!='NONE' else 'watching','signal':signal.to_dict(),'spot':bars[-1].close,'interval_minutes':cfg.interval_minutes,'data_source':cfg.data_source,'trade':None}
+    if signal.direction=='NONE':return result
     try:
-        contracts=await _option_contracts(uid,symbol,signal.direction,cfg);selection_cfg=_selection_config(cfg);option=select_option(bars[-1].close,signal.direction,contracts,selection_cfg)
-        quote_age=None
-        if cfg.data_source=="truedata":option,quote_age=await _truedata_refresh_option(option,cfg)
-        result["trade"]=build_trade_plan(signal,option,cfg,spot=bars[-1].close).to_dict()
-        if quote_age is not None:result["quote_age_s"]=round(quote_age,2)
-    except (ValueError,RuntimeError) as exc:result["status"]="signal_unresolved";result["trade_error"]=str(exc)
+        contracts=await _option_contracts(uid,symbol,signal.direction,cfg);selection_cfg=_selection_config(cfg);option=select_option(bars[-1].close,signal.direction,contracts,selection_cfg);quote_age=None
+        if cfg.data_source=='truedata':option,quote_age=await _truedata_refresh_option(option,cfg)
+        result['trade']=build_trade_plan(signal,option,cfg,spot=bars[-1].close).to_dict()
+        if quote_age is not None:result['quote_age_s']=round(quote_age,2)
+    except (ValueError,RuntimeError) as exc:result['status']='signal_unresolved';result['trade_error']=str(exc)
     return result
 async def scan_user(uid:str,cfg:StrategyConfig|None=None)->dict[str,Any]:
     cfg=cfg or get_config()
-    if not cfg.enabled:return {"enabled":False,"signals":[],"universe":[]}
+    if not cfg.enabled:return {'enabled':False,'signals':[],'universe':[]}
     universe=configured_underlyings(cfg);results=await asyncio.gather(*(scan_underlying(uid,s,cfg) for s in universe),return_exceptions=True);rows=[]
-    for symbol,result in zip(universe,results):rows.append({"underlying":symbol,"status":"error","signal":None,"trade":None,"error":str(result)} if isinstance(result,Exception) else result)
-    rows.sort(key=lambda r:(r.get("status") not in {"signal","signal_unresolved"},r["underlying"]));return {"enabled":True,"universe":universe,"signals":rows,"signal_count":sum(1 for r in rows if r.get("status") in {"signal","signal_unresolved"}),"data_source":cfg.data_source}
+    for symbol,result in zip(universe,results):rows.append({'underlying':symbol,'status':'error','signal':None,'trade':None,'error':str(result)} if isinstance(result,Exception) else result)
+    rows.sort(key=lambda r:(r.get('status') not in {'signal','signal_unresolved'},r['underlying']));return {'enabled':True,'universe':universe,'signals':rows,'signal_count':sum(1 for r in rows if r.get('status') in {'signal','signal_unresolved'}),'data_source':cfg.data_source}
