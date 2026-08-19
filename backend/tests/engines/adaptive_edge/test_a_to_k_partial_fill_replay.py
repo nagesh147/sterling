@@ -5,7 +5,6 @@ import json
 
 from app.engines.adaptive_edge.execution_adapter import CanonicalExecutionEvent, CanonicalExecutionStatus
 from app.engines.adaptive_edge.position_projector import DeterministicPositionProjector
-from app.engines.adaptive_edge.f112_f111_integration import *
 from app.engines.adaptive_edge.f112_protection_envelope import F112ProtectionEnvelope
 from app.engines.adaptive_edge.f111_lifecycle_state import F111LifecycleStateMachine, LifecycleInput
 from app.engines.adaptive_edge.f113_reentry_admission import ReentryContext, evaluate_reentry
