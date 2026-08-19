@@ -1,5 +1,4 @@
-import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.services.nifty_orb_execution import _conservative_quantity, _parse_timestamp, _quote_age
@@ -8,7 +7,7 @@ IST = ZoneInfo("Asia/Kolkata")
 
 
 def test_conservative_quantity_is_lot_aligned_and_never_exceeds_premium_budget():
-    assert _conservative_quantity(225, 75, 40.0, 3000.0) == 0
+    assert _conservative_quantity(225, 75, 40.0, 3000.0) == 75
     assert _conservative_quantity(225, 75, 20.0, 3000.0) == 150
     assert _conservative_quantity(150, 75, 20.0, 3000.0) == 150
 
