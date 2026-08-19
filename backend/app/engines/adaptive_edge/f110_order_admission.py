@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 
 from .f107_f110_pipeline import F107F110Decision
 from .order_intent_factory import OrderIntentFactory, OrderIntentInputs
@@ -12,6 +13,19 @@ class F110OrderAdmission:
     admitted: bool
     order_intent: object | None
     reason: str
+    admission_token: str | None = None
+
+    def token_for(self, intent: object) -> str:
+        if not self.admitted or self.order_intent is not intent or self.admission_token is None:
+            raise ValueError("order was not admitted by F-110")
+        return self.admission_token
+
+
+def _admission_token(intent: object, decision: F107F110Decision) -> str:
+    fingerprint = intent.fingerprint()
+    sizing = decision.sizing.final_quantity
+    material = f"F-110|{fingerprint}|{decision.instrument_id}|{sizing}|{decision.reason}"
+    return sha256(material.encode("utf-8")).hexdigest()
 
 
 def create_admitted_order(
@@ -37,4 +51,4 @@ def create_admitted_order(
         intent_version=intent_version,
         created_at=created_at,
     ))
-    return F110OrderAdmission(True, intent, "admitted")
+    return F110OrderAdmission(True, intent, "admitted", _admission_token(intent, decision))
