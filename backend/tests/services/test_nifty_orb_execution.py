@@ -1,6 +1,6 @@
 import asyncio
 
-from app.services.nifty_orb_execution import _resolve_fill
+from app.services.nifty_orb_execution import _conservative_quantity, _resolve_fill
 
 
 class FakeClient:
@@ -26,3 +26,19 @@ def test_execution_protection_uses_actual_filled_quantity():
     assert filled == 75
     assert average == 102.5
     assert status == "PARTIALLY FILLED"
+
+
+def test_conservative_quantity_uses_full_premium_loss_ceiling():
+    assert _conservative_quantity(requested=150, lot_size=75, ask=40.0, max_risk_inr=3000) == 75
+
+
+def test_conservative_quantity_blocks_lot_above_budget():
+    assert _conservative_quantity(requested=75, lot_size=75, ask=40.01, max_risk_inr=3000) == 0
+
+
+def test_conservative_quantity_never_breaks_lot_alignment():
+    assert _conservative_quantity(requested=225, lot_size=75, ask=10.0, max_risk_inr=1600) == 150
+
+
+def test_invalid_quote_cannot_produce_quantity():
+    assert _conservative_quantity(requested=75, lot_size=75, ask=0, max_risk_inr=3000) == 0
