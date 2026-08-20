@@ -7,9 +7,13 @@ Last updated: 2026-08-20
 **Unit-green and measurement-honest. Not approved for unattended automated options trading.**
 
 ```text
-178 passed
+200 passed
 0 failed          (backend, -k orb)
 ```
+
+Verified against a full-suite run on the pre-work commit: **25 failures fixed,
+0 newly broken**. The 39 that remain red are pre-existing and outside ORB
+(adaptive-edge, live-safety daily-loss, TrueData tick history).
 
 No production filter was weakened to reach green. Where a test and the
 implementation disagreed, the stricter side won and the fixture was rebuilt to
@@ -159,20 +163,35 @@ path never reads is the recurring failure mode this guards against.
 
 ## Remaining work
 
-### Step 1 — Execution truth (open)
+### Step 1 — Execution truth (mostly closed)
 
-Partial fills and expiry square-off are modelled in *replay*. The **live order
-path** still needs its own end-to-end coverage:
+`execute_scan` is now driven end-to-end against a fake broker in
+`tests/services/test_nifty_orb_execution_e2e.py`. Covered:
 
-- signal-to-order idempotency;
-- duplicate execution attempts;
-- broker rejection;
-- partial fill and remaining quantity;
-- position reconciliation;
-- restart recovery;
-- stop/protection registration and disarming;
-- expiry square-off at the broker;
-- daily trade-limit persistence.
+| Path | Proven behaviour |
+| --- | --- |
+| Idempotency | The order carries the tag and the tag is recorded against the broker order id. |
+| Duplicate submission | An existing broker order on our tag is adopted, not re-submitted. |
+| Tag collision | A tag naming a foreign symbol or a SELL trips the kill switch and places nothing. |
+| Same-scan duplicate | Two rows on one underlying produce one order. |
+| Broker rejection | A raising `place_order` is reported and nothing is counted. |
+| Unknown submission | No order id trips the kill switch: the order may have reached the exchange. |
+| Terminal status | A REJECTED order is not cancelled again. |
+| Unfilled order | A live unfilled order is cancelled and reconciled. |
+| Partial fill | Protection is armed for the quantity *held*, the remainder is cancelled, and `requested_quantity` is reported alongside it. |
+| Protection failure | An unprotectable position is closed; if it cannot be closed the kill switch trips. |
+| Contract authority | A broker strike/expiry/type disagreeing with the plan is refused before any order. |
+| Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget and >0.30% underlying drift each refuse. |
+| Daily limit | The count persists, and a second scan returns `daily_limit`. |
+| Advisory mode | `auto_execute` off places nothing. |
+
+Still uncovered, and still blocking:
+
+- **restart recovery** — re-reading trade state and open positions after a
+  process restart;
+- **protection disarming** — the teardown side of `arm_position`;
+- **broker-side expiry square-off** — modelled in replay, not yet proven on the
+  live path.
 
 ### Step 2 — Historical option dataset (open)
 
@@ -209,7 +228,10 @@ provider boundary contract green        [DONE]
 costed replay model honest              [DONE]
         |
         v
-live execution/reconciliation replay    [OPEN]
+live order path end-to-end              [DONE]
+        |
+        v
+restart recovery + protection teardown  [OPEN]
         |
         v
 historical option replay on real data   [OPEN]
