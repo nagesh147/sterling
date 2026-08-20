@@ -33,9 +33,11 @@ def _contract(symbol: str, strike: float, option_type: str) -> OptionContract:
         strike=strike,
         expiry=EXPIRY,
         option_type=option_type,
-        ltp=100.0,
-        bid=99.5,
-        ask=100.5,
+        # One lot must fit the risk budget (50.25 x 50 = Rs 2,513 under Rs 3,000)
+        # and the 1.0% spread must clear the 1.5% default ceiling.
+        ltp=50.0,
+        bid=49.75,
+        ask=50.25,
         lot_size=50,
         delta=0.7,
         volume=5000,
@@ -56,6 +58,10 @@ def test_long_signal_can_only_plan_a_ce_buy():
     assert planned.trade_plan.direction == "LONG"
     assert planned.trade_plan.quantity > 0
     assert planned.trade_plan.risk_inr <= cfg.max_risk_inr
+    # The binding ceiling is the full premium, because a bought option can expire
+    # worthless -- and it is the same ceiling the live executor applies.
+    assert planned.trade_plan.max_loss_inr <= cfg.max_risk_inr
+    assert planned.trade_plan.max_loss_inr == planned.trade_plan.quantity * planned.trade_plan.entry_premium
 
 
 def test_short_signal_can_only_plan_a_pe_buy():

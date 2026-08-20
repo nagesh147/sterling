@@ -219,6 +219,8 @@ class TradePlan:
     quantity: int
     risk_inr: float
     reason: str
+    max_loss_inr: float = 0.0
+    """Full premium outlay: what this position loses if the option expires worthless."""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -516,13 +518,24 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     target = spot + cfg.target_r * risk_points if signal.direction == "LONG" else spot - cfg.target_r * risk_points
     entry_premium = option.ask
     delta = abs(option.delta) if option.delta is not None else 0.50
-    premium_risk_per_share = max(risk_points * delta, 0.01)
+    # A bought option cannot lose more than it cost, so the modelled stop loss is
+    # capped at the premium. Without the cap, a stop wider than the premium
+    # produced a 0.05 stop -- "hold to zero" dressed up as a stop.
+    premium_risk_per_share = min(max(risk_points * delta, 0.01), entry_premium)
     stop_premium = max(0.05, entry_premium - premium_risk_per_share)
     target_premium = entry_premium + abs(target - spot) * delta
-    lots = int(cfg.max_risk_inr // (premium_risk_per_share * option.lot_size))
+
+    # Size against the FULL premium outlay, not the modelled stop distance. This
+    # is the same ceiling the live executor applies (`_conservative_quantity`),
+    # so the plan an operator reads is the plan that will execute. Sizing by the
+    # stop let a modest breakout produce 2400 units of an 18-rupee option --
+    # 43,200 rupees of premium -- while reporting "risk 3,000" and while the
+    # executor would in fact buy 150.
+    lots = int(cfg.max_risk_inr // (entry_premium * option.lot_size))
     quantity = max(0, lots * option.lot_size)
     risk = quantity * premium_risk_per_share
-    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason)
+    max_loss = quantity * entry_premium
+    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss)
 
 
 def summarize_pnl(pnls: Iterable[float]) -> dict:

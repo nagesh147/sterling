@@ -14,7 +14,7 @@ export function NiftyOrbSignalsTable() {
         <div style={{ fontSize: 9, color: 'var(--t-dim)' }}>{rows.length} feed rows</div>
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'monospace' }}>
-        <thead><tr>{['Instrument', 'State', 'Direction', 'Spot', 'ORB', 'VWAP', 'Vol', 'Option', 'Strike', 'Expiry', 'Entry', 'SL', 'Target', 'Risk', 'Data'].map(x => <th key={x} style={{ ...cell, textAlign: 'left', color: 'var(--t-dim)', fontWeight: 500 }}>{x}</th>)}</tr></thead>
+        <thead><tr>{['Instrument', 'State', 'Direction', 'Spot', 'ORB', 'VWAP', 'Vol', 'Option', 'Strike', 'Expiry', 'Entry', 'SL', 'Target', 'Qty', 'Stop Risk', 'Max Loss', 'Data'].map(x => <th key={x} style={{ ...cell, textAlign: 'left', color: 'var(--t-dim)', fontWeight: 500 }}>{x}</th>)}</tr></thead>
         <tbody>{rows.map(row => (
           <tr key={row.id}>
             <td style={{ ...cell, color: 'var(--t-bright)', fontWeight: 600 }}>{row.underlying}</td>
@@ -30,7 +30,11 @@ export function NiftyOrbSignalsTable() {
             <td style={{ ...cell, textAlign: 'right' }}>{row.optionPremium?.toFixed(2) || '—'}</td>
             <td style={{ ...cell, textAlign: 'right' }}>{row.stopPremium?.toFixed(2) || '—'}</td>
             <td style={{ ...cell, textAlign: 'right' }}>{row.targetPremium?.toFixed(2) || '—'}</td>
-            <td style={{ ...cell, textAlign: 'right' }}>{row.riskInr?.toFixed(0) || '—'}</td>
+            <td style={{ ...cell, textAlign: 'right' }}>{row.quantity ?? '—'}</td>
+            <td style={{ ...cell, textAlign: 'right' }}>{row.riskInr == null ? '—' : `₹${row.riskInr.toFixed(0)}`}</td>
+            {/* Full premium outlay: what this position loses if the option expires
+                worthless. "Stop Risk" alone understated a plan by up to 16x. */}
+            <td style={{ ...cell, textAlign: 'right', color: 'var(--t-bright)', fontWeight: 600 }}>{row.maxLossInr == null ? '—' : `₹${row.maxLossInr.toFixed(0)}`}</td>
             <td style={cell}>{row.dataSource || '—'}</td>
           </tr>
         ))}</tbody>
