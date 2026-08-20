@@ -1,13 +1,9 @@
 import React from 'react';
 import { NiftyOrbOptionsSettings } from '../NiftyOrbOptionsSettings';
-import { NiftyOrbUniverseSettings } from '../NiftyOrbUniverseSettings';
-import { NiftyOrbSignalsTable } from '../NiftyOrbSignalsTable';
 
-export function OrbMomentumOptionsSettingsPanel(){
-  return <>
-    <NiftyOrbOptionsSettings />
-    <div style={{marginTop:18,paddingTop:18,borderTop:'1px solid var(--t-border)'}}><NiftyOrbSignalsTable /></div>
-  </>;
+/** Settings page for the ORB engine. The live board lives in the signals dock. */
+export function OrbMomentumOptionsSettingsPanel() {
+  return <NiftyOrbOptionsSettings />;
 }
-export { NiftyOrbUniverseSettings };
+
 export default OrbMomentumOptionsSettingsPanel;

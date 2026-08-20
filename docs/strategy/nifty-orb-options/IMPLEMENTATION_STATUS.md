@@ -222,6 +222,31 @@ went green. Everything here was on a live path.
 | 21 | The ORB UI was unreachable | `OrbMomentumOptionsSettingsPanel` was mounted nowhere. ORB is now a settings section *and* a tab in the live signals dock. |
 | 22 | Delta was assumed 0.50 for every contract | Now solved from the traded premium: implied volatility by bisection on Black-Scholes, then delta from that volatility. See below. |
 
+| 23 | The signal board showed rejection reasons on every row and no trade detail | A board is a call to action. Tradable setups now carry the whole ticket (symbol, type, exchange, leg, LTP, entry, SL, exit, qty, at-risk, time); candidates that did not fire collapse behind one disclosure rather than padding the list. |
+| 24 | Expanding a row showed no sizing, no plan and no way to buy | The expansion now mounts the shared position calculator (so Buy is the same order window every other board uses), the shared 5-level depth ladder, session statistics and the Greeks. Depth is fetched per contract on expand, never for the whole universe. |
+| 25 | ORB settings used ad-hoc primitives in their own order | Rebuilt on `SettingsDraftBar` / `EnginePowerHeader` / `Section` / `Field` / `ChoiceRow` / `InstrumentsGroup` in the same order as SuperTrend and Navigator: draft bar -> power -> chart source -> instruments -> contracts -> session -> risk -> liquidity -> advanced. |
+| 26 | No way to tell a customised value from a default | New shared `NumberField` marks each numeric setting `default` or `changed · default X ↺` with one-click restore, tints a moved field, and the Advanced header counts how many settings differ. **The defaults come from the engine** (`GET` now returns `defaults`) rather than a client copy that could drift. |
+
+### Findings 23-26 in detail: the board and the settings
+
+Two decisions worth recording.
+
+**Reset preserves `enabled`.** Restoring defaults is a tuning action; silently
+starting or stopping a live engine is not. **Apply sends only changed keys**, so
+a save cannot clobber a field another session changed while the page was open.
+
+**Depth and sizing are shared, not copied.** The ladder was extracted out of the
+order window into `MarketDepthPanel` and the sizing panel is the existing
+`AdaptiveEdgePositionCalculator`, so the Buy path from the ORB board is the same
+governed order window as everywhere else -- a second ticket implementation is
+exactly how a board ends up placing an order the rest of the app cannot see.
+
+**Still absent on purpose: TSL.** ORB produces no trailing stop -- `trail_atr`
+was a dead knob, and trailing belongs to the universal Trading Mode once a
+position is open. It appears in the order ticket, where the calculator derives
+it, and nowhere else. Printing a trail on the signal row would be a number the
+engine does not produce.
+
 ### Finding 22 in detail: delta is measured, not assumed
 
 `stop_premium` is the number armed at the broker and it is derived from delta.

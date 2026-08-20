@@ -23,6 +23,14 @@ vi.mock('../../../hooks/useOrbConfig', () => ({
 }));
 const openSection = vi.hoisted(() => vi.fn());
 vi.mock('../config/registry', () => ({ openSettingsSection: openSection }));
+// The expansion pulls a live book and mounts the shared calculator; neither is
+// under test here, and both would drag the whole Kite query surface in.
+vi.mock('../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
+vi.mock('../AdaptiveEdgePositionCalculator', () => ({
+  AdaptiveEdgePositionCalculator: (p: Record<string, unknown>) => (
+    <div data-testid="sizing">sizing {String(p.tradingsymbol)} @ {String(p.defaultEntryPrice)} sl {String(p.defaultSl)} on {String(p.exchange)}</div>
+  ),
+}));
 
 import { NiftyOrbSignalsFeed } from '../NiftyOrbSignalsFeed';
 
@@ -32,6 +40,8 @@ const entry = (over: Partial<OrbFeedEntry> = {}): OrbFeedEntry => ({
   optionSymbol: 'NIFTY26AUG24000CE', optionStrike: 24000, optionType: 'CE', optionExpiry: '2026-08-27',
   optionPremium: 18, stopPremium: 14, targetPremium: 26, quantity: 150, riskInr: 187.5,
   maxLossInr: 2700, dataSource: 'kite', quoteAgeS: 3.2, reason: 'ORB high break + VWAP + momentum',
+  delta: 0.577, gamma: 0.00088, thetaPerDay: -10.0, vegaPerPoint: 16.9, exchange: 'NFO', lotSize: 75,
+  underlyingEntry: 24050, underlyingStop: 24040,
   timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: true, deltaSource: 'implied', impliedVol: 0.224,
   ...over,
 });
@@ -81,30 +91,45 @@ describe('ORB feed — engine off', () => {
   });
 });
 
-describe('ORB feed — rows', () => {
-  it('summarises actionable against scanned', () => {
+describe('ORB feed — tradable setups', () => {
+  it('counts tradable setups against everything scanned', () => {
     show({ rows: [entry({ underlying: 'NIFTY' }), entry({ underlying: 'SBIN', state: 'WATCHING', reason: 'regime is RANGE' })] });
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText(/actionable · 2 scanned/)).toBeInTheDocument();
+    expect(screen.getByText(/tradable · 2 scanned/)).toBeInTheDocument();
   });
 
-  it('puts a live plan above the rejections', () => {
-    show({ rows: [
-      entry({ underlying: 'SBIN', state: 'WATCHING', reason: 'regime is RANGE' }),
-      entry({ underlying: 'NIFTY' }),
-    ] });
-    const rows = screen.getAllByRole('button', { name: /NIFTY|SBIN/ });
-    expect(rows[0]).toHaveAccessibleName(/NIFTY SIGNAL/);
+  it('carries the whole ticket on the row', () => {
+    show({ rows: [entry()] });
+    expect(screen.getByText('NIFTY26AUG24000CE', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('CE · LONG')).toBeInTheDocument();
+    expect(screen.getByText('NFO')).toBeInTheDocument();
+    ['LTP', 'Entry', 'SL', 'Exit', 'Qty', 'At risk'].forEach((label) => {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    });
+    expect(screen.getByText('₹2,700')).toBeInTheDocument();
+    expect(screen.getByText('150')).toBeInTheDocument();
   });
 
-  it('shows the gate that stopped a non-signal on the row itself', () => {
-    show({ rows: [entry({ state: 'WATCHING', reason: 'volume below confirmation threshold' })] });
-    expect(screen.getByText('volume below confirmation threshold')).toBeInTheDocument();
-  });
-
-  it('flags a stale quote on the row', () => {
+  it('shows the signal time and marks a stale quote', () => {
     show({ rows: [entry({ quoteAgeS: 42 })] });
-    expect(screen.getByText('STALE')).toBeInTheDocument();
+    expect(screen.getByText(/· stale/)).toBeInTheDocument();
+  });
+
+  it('keeps candidates that did not fire out of the way', () => {
+    // The board is a call to action; reasons are available but not in the path.
+    show({ rows: [entry({ underlying: 'NIFTY' }), entry({ underlying: 'SBIN', state: 'WATCHING', reason: 'regime is RANGE' })] });
+    expect(screen.queryByText('regime is RANGE')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /1 not signalling/ }));
+    expect(screen.getByText('regime is RANGE')).toBeInTheDocument();
+  });
+
+  it('says so plainly when nothing is tradable', () => {
+    show({ rows: [entry({ state: 'WATCHING', reason: 'outside entry window' })] });
+    expect(screen.getByText(/No tradable ORB setup right now/)).toBeInTheDocument();
+  });
+
+  it('counts errored underlyings separately in the disclosure', () => {
+    show({ rows: [entry({ underlying: 'NIFTY', state: 'WATCHING', reason: 'regime is RANGE' }), entry({ underlying: 'SBIN', state: 'ERROR', reason: 'no instrument' })] });
+    expect(screen.getByRole('button', { name: /2 not signalling.*1 errored/ })).toBeInTheDocument();
   });
 
   it('calls out a scan that failed for everything', () => {
@@ -113,71 +138,59 @@ describe('ORB feed — rows', () => {
   });
 });
 
-describe('ORB feed — expanded row', () => {
+describe('ORB feed — expanded setup', () => {
   it('keeps the detail collapsed until asked', () => {
     show({ rows: [entry()] });
-    expect(screen.queryByText('UNDERLYING STRUCTURE')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /NIFTY/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('sizing')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /NIFTY CE setup/ })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('reveals structure, vehicle and risk on expand', () => {
+  it('hands the plan to the shared position calculator, which owns the Buy path', () => {
     show({ rows: [entry()] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY/ }));
-    expect(screen.getByText('UNDERLYING STRUCTURE')).toBeInTheDocument();
-    expect(screen.getByText('EXECUTION VEHICLE')).toBeInTheDocument();
-    expect(screen.getByText('RISK')).toBeInTheDocument();
-    expect(screen.getByText('NIFTY26AUG24000CE')).toBeInTheDocument();
-    // The premium at risk shows in both the row summary and the detail, and the
-    // two must agree — an operator reading either should see the same number.
-    expect(screen.getAllByText('₹2,700')).toHaveLength(2);
-    expect(screen.getByText('22.4%')).toBeInTheDocument();        // implied vol
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    expect(screen.getByTestId('sizing')).toHaveTextContent('sizing NIFTY26AUG24000CE @ 18 sl 14 on NFO');
   });
 
-  it('opens one row at a time', () => {
+  it('shows the book and the underlying setup', () => {
+    show({ rows: [entry()] });
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    expect(screen.getByText('MARKET DEPTH')).toBeInTheDocument();
+    expect(screen.getByText('UNDERLYING SETUP')).toBeInTheDocument();
+    expect(screen.getByText('ORB high')).toBeInTheDocument();
+  });
+
+  it('says when depth is unavailable rather than rendering an empty ladder', () => {
+    show({ rows: [entry()] });
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    expect(screen.getByText(/Depth unavailable/)).toBeInTheDocument();
+  });
+
+  it('opens one setup at a time', () => {
     show({ rows: [entry({ underlying: 'NIFTY' }), entry({ underlying: 'SBIN' })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY/ }));
-    expect(screen.getByRole('button', { name: /NIFTY/ })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: /SBIN/ }));
-    expect(screen.getByRole('button', { name: /NIFTY/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /SBIN/ })).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('collapses when clicked again', () => {
-    show({ rows: [entry()] });
-    const row = screen.getByRole('button', { name: /NIFTY/ });
-    fireEvent.click(row);
-    fireEvent.click(row);
-    expect(row).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /SBIN CE setup/ }));
+    expect(screen.getByRole('button', { name: /NIFTY CE setup/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /SBIN CE setup/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('is keyboard operable', () => {
     show({ rows: [entry()] });
-    const row = screen.getByRole('button', { name: /NIFTY/ });
+    const row = screen.getByRole('button', { name: /NIFTY CE setup/ });
     fireEvent.keyDown(row, { key: 'Enter' });
     expect(row).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('labels an assumed delta as such, and an implied one plainly', () => {
-    show({ rows: [entry({ deltaSource: 'assumed', impliedVol: null })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY/ }));
-    expect(screen.getByText('0.50 assumed')).toBeInTheDocument();
+  it('marks an assumed delta where the Greeks are shown', () => {
+    show({ rows: [entry({ deltaSource: 'assumed', delta: 0.5, impliedVol: null })] });
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    expect(screen.getByText('0.500 assumed')).toBeInTheDocument();
   });
 
-  it('explains why a rejected candidate did not fire', () => {
-    show({ rows: [entry({ state: 'WATCHING', reason: 'regime is RANGE', optionSymbol: null })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY/ }));
-    expect(screen.getByText('WHY IT DID NOT')).toBeInTheDocument();
-    expect(screen.queryByText('EXECUTION VEHICLE')).not.toBeInTheDocument();
-  });
-
-  it('does not invent a delta for a candidate with no plan', () => {
-    // The RISK block claimed "implied" for rows that never produced a trade.
-    show({ rows: [entry({ state: 'WATCHING', reason: 'outside entry window', optionSymbol: null, maxLossInr: null, riskInr: null, deltaSource: null, impliedVol: null })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY/ }));
-    expect(screen.queryByText('RISK')).not.toBeInTheDocument();
-    expect(screen.queryByText('implied')).not.toBeInTheDocument();
-    // The observable facts are still shown.
-    expect(screen.getByText('DATA')).toBeInTheDocument();
-    expect(screen.getByText('UNDERLYING STRUCTURE')).toBeInTheDocument();
+  it('shows solved Greeks without a caveat', () => {
+    show({ rows: [entry()] });
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    expect(screen.getByText('0.577')).toBeInTheDocument();
+    expect(screen.getByText('22.4%')).toBeInTheDocument();
+    expect(screen.queryByText(/assumed/)).not.toBeInTheDocument();
   });
 });

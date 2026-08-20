@@ -1,38 +1,370 @@
 import React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../utils/api';
-import { NiftyOrbUniverseSettings } from './NiftyOrbUniverseSettings';
+import { useOrbConfig, useSetOrbConfig, type OrbConfig } from '../hooks/useOrbConfig';
+import {
+  BORDER, ChoiceRow, Field, NumberField, Section, Switch, TEXT,
+} from './kite/kiteSettingsPrimitives';
+import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
+import { InstrumentsGroup } from './kite/config/ScanSettings';
 
-type DataSource = 'kite' | 'truedata';
-interface OrbConfig { enabled:boolean; underlying:string; scan_indices:string[]; scan_stocks:string[]; scan_all_stocks:boolean; scan_stock_contracts:boolean; interval_minutes:number; opening_range_minutes:number; entry_start:string; entry_end:string; min_breakout_atr:number; volume_multiplier:number; vwap_slope_lookback:number; trend_lookback:number; atr_period:number; stop_buffer_atr:number; target_r:number; option_moneyness:string; option_steps_itm:number; max_risk_inr:number; max_trades_per_day:number; avoid_expiry_day:boolean; expiry_selection:string; expiry_dte_min:number; expiry_dte_max:number; execution_broker:string; data_source:DataSource; max_spread_pct:number; min_option_volume:number; min_open_interest:number; max_quote_staleness_s:number; truedata_use_ticks?:boolean; truedata_use_oi?:boolean; truedata_use_bid_ask?:boolean; truedata_use_quote_freshness?:boolean; }
-const inputStyle:React.CSSProperties={width:'100%',boxSizing:'border-box',background:'var(--t-bg)',color:'var(--t-bright)',border:'1px solid var(--t-border)',borderRadius:6,padding:'7px 10px',fontFamily:'monospace',fontSize:12};
-function Section({title,children}:{title:string;children:React.ReactNode}){return <section style={{marginBottom:24}}><div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}><span style={{fontSize:10,fontWeight:500,letterSpacing:'0.14em',color:'var(--t-bright)',textTransform:'uppercase'}}>{title}</span><div style={{flex:1,height:1,background:'var(--t-border)'}}/></div>{children}</section>}
-function Field({label,children,hint}:{label:string;children:React.ReactNode;hint?:string}){return <div style={{marginBottom:12}}><div style={{fontSize:9,fontWeight:500,color:'var(--t-dim)',letterSpacing:'0.08em',marginBottom:4,textTransform:'uppercase'}}>{label}</div>{children}{hint&&<div style={{fontSize:9,color:'var(--t-dim)',marginTop:4}}>{hint}</div>}</div>}
-function Toggle({checked,label,onChange}:{checked:boolean;label:string;onChange:()=>void}){return <label style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'var(--t-bright)',cursor:'pointer'}}><input type="checkbox" checked={checked} onChange={onChange}/>{label}</label>}
-export function NiftyOrbOptionsSettings(){
- const qc=useQueryClient();
- const {data,isLoading}=useQuery<{config:OrbConfig}>({queryKey:['nifty-orb-options-config'],queryFn:()=>api.get('/api/v1/config/nifty-orb-options'),staleTime:30000});
- const [draft,setDraft]=React.useState<Partial<OrbConfig>>({});
- // Every hook must run before the loading early-return. `useMutation` used to sit
- // below it, so the loaded render called one hook more than the loading render and
- // React threw "Rendered more hooks than during the previous render" — the panel
- // never rendered at all, it went straight to the ErrorBoundary.
- const update=useMutation({mutationFn:(body:Partial<OrbConfig>)=>api.put('/api/v1/config/nifty-orb-options',body),onSuccess:r=>{qc.setQueryData(['nifty-orb-options-config'],r);setDraft({});}});
- const set=(key:keyof OrbConfig,value:unknown)=>setDraft(d=>({...d,[key]:value}));
- const setTicks=(enabled:boolean)=>setDraft(d=>({...d,truedata_use_ticks:enabled,...(!enabled?{truedata_use_quote_freshness:false}:{})}));
- const setUniverse=(next:Record<string,unknown>)=>setDraft(d=>({...d,...next}));
- if(isLoading||!data)return <div style={{color:'var(--t-dim)',fontSize:10}}>Loading ORB configuration…</div>;
- const cfg={...data.config,...draft} as OrbConfig;
- const dirty=Object.keys(draft).length>0;
- return <>
-  <Section title="ORB + VWAP OPTIONS"><div style={{padding:'10px 12px',background:'var(--t-bg2)',border:'1px solid var(--t-border)',borderRadius:5,marginBottom:14,fontSize:10,color:'var(--t-dim)',lineHeight:1.6}}>LONG =&gt; BUY CE. SHORT =&gt; BUY PE. No option selling. Paper/Live and Manual/Auto remain universal Trading Mode controls.</div><Field label="STRATEGY"><Toggle checked={cfg.enabled} label={cfg.enabled?'ORB signal engine active':'ORB signal engine disabled'} onChange={()=>set('enabled',!cfg.enabled)}/></Field><Field label="DATA SOURCE" hint="Market data only. Order execution remains Zerodha Kite."><select value={cfg.data_source} onChange={e=>set('data_source',e.target.value as DataSource)} style={inputStyle}><option value="kite">Zerodha Kite</option><option value="truedata">TrueData</option></select></Field></Section>
-  <Section title="INSTRUMENT UNIVERSE"><NiftyOrbUniverseSettings cfg={cfg} onChange={setUniverse}/></Section>
-  <Section title="SIGNAL ENGINE"><Field label="BAR INTERVAL"><select value={cfg.interval_minutes} onChange={e=>set('interval_minutes',Number(e.target.value))} style={inputStyle}>{[1,3,5,10,15].map(v=><option key={v} value={v}>{v} minute</option>)}</select></Field><Field label="OPENING RANGE"><select value={cfg.opening_range_minutes} onChange={e=>set('opening_range_minutes',Number(e.target.value))} style={inputStyle}>{[5,10,15,20,30].map(v=><option key={v} value={v}>{v} minutes</option>)}</select></Field><Field label="ENTRY WINDOW"><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="time" value={cfg.entry_start} onChange={e=>set('entry_start',e.target.value)} style={inputStyle}/><input type="time" value={cfg.entry_end} onChange={e=>set('entry_end',e.target.value)} style={inputStyle}/></div></Field><Field label="MIN BREAKOUT / ATR"><input type="number" step="0.05" min="0" value={cfg.min_breakout_atr} onChange={e=>set('min_breakout_atr',Number(e.target.value))} style={inputStyle}/></Field><Field label="VOLUME MULTIPLIER"><input type="number" step="0.05" min="0.1" value={cfg.volume_multiplier} onChange={e=>set('volume_multiplier',Number(e.target.value))} style={inputStyle}/></Field><Field label="VWAP SLOPE LOOKBACK"><input type="number" min="1" max="20" value={cfg.vwap_slope_lookback} onChange={e=>set('vwap_slope_lookback',Number(e.target.value))} style={inputStyle}/></Field><Field label="ATR PERIOD"><input type="number" min="5" max="100" value={cfg.atr_period} onChange={e=>set('atr_period',Number(e.target.value))} style={inputStyle}/></Field><Field label="TREND LOOKBACK" hint="Bars used to classify TREND / EXPANSION / RANGE."><input type="number" min="2" max="50" value={cfg.trend_lookback} onChange={e=>set('trend_lookback',Number(e.target.value))} style={inputStyle}/></Field><Field label="STOP BUFFER / ATR" hint="Underlying stop distance. Sets the modelled premium stop."><input type="number" step="0.05" min="0" value={cfg.stop_buffer_atr} onChange={e=>set('stop_buffer_atr',Number(e.target.value))} style={inputStyle}/></Field><Field label="TARGET (R)"><input type="number" step="0.25" min="0.5" value={cfg.target_r} onChange={e=>set('target_r',Number(e.target.value))} style={inputStyle}/></Field></Section>
-  {cfg.data_source==='truedata'&&<Section title="TRUEDATA ADVANCED DATA"><div style={{fontSize:9,color:'var(--t-dim)',lineHeight:1.6,marginBottom:10}}>Advanced TrueData fields only affect execution-quality validation.</div><Field label="USE REALTIME TICKS"><Toggle checked={cfg.truedata_use_ticks??true} label="Use ticks for realtime quote freshness" onChange={()=>setTicks(!(cfg.truedata_use_ticks??true))}/></Field><Field label="USE OPEN INTEREST"><Toggle checked={cfg.truedata_use_oi??true} label="Use OI for liquidity validation" onChange={()=>set('truedata_use_oi',!(cfg.truedata_use_oi??true))}/></Field><Field label="USE BID / ASK"><Toggle checked={cfg.truedata_use_bid_ask??true} label="Use bid/ask spread validation" onChange={()=>set('truedata_use_bid_ask',!(cfg.truedata_use_bid_ask??true))}/></Field><Field label="QUOTE FRESHNESS"><Toggle checked={cfg.truedata_use_quote_freshness??true} label={cfg.truedata_use_ticks?'Reject stale option quotes':'Requires realtime ticks'} onChange={()=>cfg.truedata_use_ticks&&set('truedata_use_quote_freshness',!(cfg.truedata_use_quote_freshness??true))}/></Field><Field label="MAX QUOTE AGE (SEC)"><input type="number" min="1" max="120" value={cfg.max_quote_staleness_s} onChange={e=>set('max_quote_staleness_s',Number(e.target.value))} style={inputStyle}/></Field></Section>}
-  <Section title="OPTION CONTRACT"><Field label="OPTION MONEYNESS"><select value={cfg.option_moneyness} onChange={e=>set('option_moneyness',e.target.value)} style={inputStyle}><option value="ATM">ATM</option><option value="ITM">ITM</option><option value="OTM">OTM</option></select></Field>{cfg.option_moneyness!=='ATM'&&<Field label={`${cfg.option_moneyness} STEPS`}><input type="number" min="1" max="3" value={cfg.option_steps_itm} onChange={e=>set('option_steps_itm',Number(e.target.value))} style={inputStyle}/></Field>}<Field label="EXPIRY"><select value={cfg.expiry_selection} onChange={e=>set('expiry_selection',e.target.value)} style={inputStyle}><option value="nearest">Nearest eligible</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></Field><Field label="DTE RANGE"><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><input type="number" min="0" max="365" value={cfg.expiry_dte_min} onChange={e=>set('expiry_dte_min',Number(e.target.value))} style={inputStyle}/><input type="number" min="0" max="365" value={cfg.expiry_dte_max} onChange={e=>set('expiry_dte_max',Number(e.target.value))} style={inputStyle}/></div></Field><Field label="EXPIRY DAY"><Toggle checked={cfg.avoid_expiry_day} label={cfg.avoid_expiry_day?'Avoid expiry-day entries':'Allow expiry-day entries'} onChange={()=>set('avoid_expiry_day',!cfg.avoid_expiry_day)}/></Field></Section>
-  <Section title="OPTION + RISK"><Field label="MAX RISK / TRADE (INR)"><input type="number" step="500" min="500" value={cfg.max_risk_inr} onChange={e=>set('max_risk_inr',Number(e.target.value))} style={inputStyle}/></Field><Field label="MAX TRADES / DAY"><input type="number" min="1" max="20" value={cfg.max_trades_per_day} onChange={e=>set('max_trades_per_day',Number(e.target.value))} style={inputStyle}/></Field></Section>
-  <Section title="OPTION LIQUIDITY"><Field label="MAX BID/ASK SPREAD %"><input type="number" step="0.1" min="0.1" max="10" value={cfg.max_spread_pct} onChange={e=>set('max_spread_pct',Number(e.target.value))} style={inputStyle}/></Field><Field label="MIN OPTION VOLUME"><input type="number" step="100" min="0" value={cfg.min_option_volume} onChange={e=>set('min_option_volume',Number(e.target.value))} style={inputStyle}/></Field><Field label="MIN OPEN INTEREST"><input type="number" step="1000" min="0" value={cfg.min_open_interest} onChange={e=>set('min_open_interest',Number(e.target.value))} style={inputStyle}/></Field></Section>
-  <Section title="EXECUTION OWNERSHIP"><Field label="BROKER"><input value="ZERODHA KITE" readOnly style={{...inputStyle,color:'var(--t-blue)'}}/></Field><div style={{fontSize:9,color:'var(--t-dim)',lineHeight:1.6}}>ORB never owns Paper/Live or Manual/Auto. Automatic entries use universal Trading Mode, Kite idempotency, safety and position protection. BUY only: CE for LONG, PE for SHORT.</div></Section>
-  <button onClick={()=>update.mutate(draft)} disabled={!dirty||update.isPending} style={{width:'100%',padding:'9px 0',borderRadius:5,border:'1px solid var(--t-border)',background:dirty?'var(--t-bg2)':'transparent',color:dirty?'var(--t-bright)':'var(--t-dim)',cursor:dirty?'pointer':'not-allowed',fontFamily:'inherit',fontSize:10,fontWeight:600,letterSpacing:'0.1em'}}>{update.isPending?'SAVING…':dirty?'SAVE ORB SETTINGS':'SAVED'}</button>{update.isError&&<div style={{marginTop:8,color:'var(--t-red)',fontSize:10}}>{(update.error as Error).message}</div>}
- </>;
+/**
+ * ORB + VWAP options settings.
+ *
+ * Deliberately the same order as SuperTrend and Navigator — draft bar → power →
+ * chart source → instruments → contracts → engine-specific → advanced — so the
+ * settings hub reads as one product rather than three conventions. Numeric
+ * tuning lives under Advanced, where each field says whether it is still at the
+ * engine's default.
+ */
+const DATA_SOURCE_OPTIONS = [
+  { value: 'kite', label: 'Zerodha Kite', hint: 'Broker candles and quotes. The default, and the same feed that executes.' },
+  { value: 'truedata', label: 'TrueData', hint: 'Independent feed with tick, OI and bid/ask depth for contract validation.' },
+] as const;
+
+const MONEYNESS_OPTIONS = [
+  { value: 'ATM', label: 'ATM', hint: 'At the money. Highest liquidity, ~0.5 delta.' },
+  { value: 'ITM', label: 'ITM', hint: 'In the money. Higher delta and cost, less time value.' },
+  { value: 'OTM', label: 'OTM', hint: 'Out of the money. Cheaper, lower delta, decays faster.' },
+] as const;
+
+const EXPIRY_OPTIONS = [
+  { value: 'nearest', label: 'Nearest', hint: 'Whichever eligible expiry is soonest.' },
+  { value: 'weekly', label: 'Weekly', hint: 'Nearest eligible non-monthly contract. Refuses rather than substituting a monthly.' },
+  { value: 'monthly', label: 'Monthly', hint: 'Nearest eligible monthly contract.' },
+] as const;
+
+export function NiftyOrbOptionsSettings() {
+  const { data, isLoading } = useOrbConfig();
+  const setCfg = useSetOrbConfig();
+
+  const server = data?.config;
+  const defaults = data?.defaults;
+  const [draft, setDraft] = React.useState<OrbConfig | null>(null);
+  const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  const cfg = draft ?? server ?? null;
+  const dirty = draft != null && server != null
+    && (Object.keys(draft) as (keyof OrbConfig)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
+
+  const patch = React.useCallback((next: Partial<OrbConfig>) => {
+    setDraft((prev) => ({ ...(prev ?? server!), ...next }));
+  }, [server]);
+
+  if (isLoading || !cfg || !server) {
+    return <div style={{ color: 'var(--t-dim)', fontSize: 11, padding: 16 }}>Loading ORB configuration…</div>;
+  }
+
+  const changedFrom = (base: OrbConfig) =>
+    (Object.keys(cfg) as (keyof OrbConfig)[])
+      .filter((key) => JSON.stringify(cfg[key]) !== JSON.stringify(base[key]));
+
+  // Only send what moved: a full-object PUT would rewrite fields another session
+  // changed between this page loading and the save.
+  const handleApply = () => {
+    if (!draft) return;
+    const body: Partial<OrbConfig> = {};
+    for (const key of changedFrom(server)) (body as Record<string, unknown>)[key] = cfg[key];
+    setCfg.mutate(body, { onSuccess: () => setDraft(null) });
+  };
+  const handleDiscard = () => setDraft(null);
+  const handleReset = () => {
+    if (!defaults) return;
+    if (!resetConfirm) { setResetConfirm(true); window.setTimeout(() => setResetConfirm(false), 4000); return; }
+    setResetConfirm(false);
+    // enabled is a power state, not a tuning value — a reset must not silently
+    // start or stop the engine.
+    setCfg.mutate({ ...defaults, enabled: cfg.enabled }, { onSuccess: () => setDraft(null) });
+  };
+
+  const nonDefaultCount = defaults ? changedFrom(defaults).filter((key) => key !== 'enabled').length : 0;
+  const universeSummary = cfg.scan_all_stocks
+    ? `All F&O · ${cfg.scan_indices.length} indices`
+    : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
+  const num = (key: keyof OrbConfig) => Number(cfg[key]);
+  const def = (key: keyof OrbConfig) => (defaults ? Number(defaults[key]) : undefined);
+
+  return (
+    <>
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={setCfg.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
+
+      <EnginePowerHeader
+        name="ORB + VWAP Options"
+        tagline="Opening-range breakout confirmed by VWAP. Buys calls on LONG and puts on SHORT — never sells."
+        on={cfg.enabled}
+        liveOn={server.enabled}
+        busy={setCfg.isPending}
+        onToggle={() => patch({ enabled: !cfg.enabled })}
+        runningNote="Scanning the configured universe every interval and producing option plans."
+        offNote="Not scanning. No ORB signals and no ORB entries."
+      />
+
+      <PanelCard>
+        <Section
+          title="Chart source"
+          description="Which feed ORB reads bars and option quotes from."
+          summary={cfg.data_source === 'kite' ? 'Zerodha Kite' : 'TrueData'}
+          defaultOpen
+          persistKey="orb-source">
+          <Field label="Market data" hint="Order execution stays on Zerodha Kite either way." wide>
+            <ChoiceRow
+              value={cfg.data_source}
+              options={DATA_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+              onChange={(v) => patch({ data_source: v as OrbConfig['data_source'] })}
+            />
+          </Field>
+        </Section>
+
+        <Section
+          title="Instruments"
+          description="The indices and F&O stocks this engine watches."
+          summary={universeSummary}
+          defaultOpen
+          persistKey="orb-instruments">
+          <InstrumentsGroup
+            idPrefix="NIFTY ORB"
+            indices={cfg.scan_indices}
+            stocks={cfg.scan_stocks}
+            allStocks={cfg.scan_all_stocks}
+            stockContracts={cfg.scan_stock_contracts}
+            onChange={(next) => patch(next as Partial<OrbConfig>)}
+            allowEmptyIndices={false}
+          />
+        </Section>
+
+        <Section
+          title="Contracts"
+          description="Which strike and expiry the signal is expressed through."
+          summary={`${cfg.option_moneyness}${cfg.option_moneyness === 'ATM' ? '' : ` ×${cfg.option_steps_itm}`} · ${cfg.expiry_selection} · ${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+          defaultOpen
+          persistKey="orb-contracts">
+          <Field label="Moneyness" hint="An unavailable moneyness is refused, not silently swapped for the nearest strike." wide>
+            <ChoiceRow
+              value={cfg.option_moneyness}
+              options={MONEYNESS_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+              onChange={(v) => patch({ option_moneyness: v })}
+            />
+          </Field>
+          {cfg.option_moneyness !== 'ATM' && (
+            <NumberField
+              label={`${cfg.option_moneyness} steps`}
+              hint="How many strikes away from the money."
+              value={num('option_steps_itm')} defaultValue={def('option_steps_itm')}
+              onChange={(v) => patch({ option_steps_itm: v })} min={1} max={5} suffix="strikes"
+            />
+          )}
+          <Field label="Expiry" hint="Weekly and monthly are separated by the venue calendar, not by DTE guesswork." wide>
+            <ChoiceRow
+              value={cfg.expiry_selection}
+              options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+              onChange={(v) => patch({ expiry_selection: v })}
+            />
+          </Field>
+          <NumberField
+            label="Minimum days to expiry" value={num('expiry_dte_min')} defaultValue={def('expiry_dte_min')}
+            onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={365} suffix="days"
+          />
+          <NumberField
+            label="Maximum days to expiry" value={num('expiry_dte_max')} defaultValue={def('expiry_dte_max')}
+            onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={365} suffix="days"
+          />
+          <Field label="Expiry day" hint="Expiry-day options gain and lose value fastest.">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <Switch
+                checked={cfg.avoid_expiry_day} label="Avoid expiry-day entries"
+                onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
+              />
+              <span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.avoid_expiry_day ? 'Skipped' : 'Allowed'}</span>
+            </div>
+          </Field>
+        </Section>
+
+        <Section
+          title="Session"
+          description="When the range is measured and when entries may fire."
+          summary={`${cfg.opening_range_minutes}m range · ${cfg.entry_start}–${cfg.entry_end} · ${cfg.interval_minutes}m bars`}
+          defaultOpen
+          persistKey="orb-session">
+          <Field label="Entry window" hint="The opening range is always anchored to 09:15 IST regardless of this window." wide>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="time" value={cfg.entry_start} onChange={(e) => patch({ entry_start: e.target.value })}
+                style={{ border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 }} />
+              <span style={{ color: TEXT, fontSize: 11 }}>to</span>
+              <input type="time" value={cfg.entry_end} onChange={(e) => patch({ entry_end: e.target.value })}
+                style={{ border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 }} />
+            </div>
+          </Field>
+          <NumberField
+            label="Opening range" hint="Minutes from 09:15 that define the range being broken."
+            value={num('opening_range_minutes')} defaultValue={def('opening_range_minutes')}
+            onChange={(v) => patch({ opening_range_minutes: v })} min={5} max={60} step={5} suffix="min"
+          />
+          <NumberField
+            label="Bar interval" value={num('interval_minutes')} defaultValue={def('interval_minutes')}
+            onChange={(v) => patch({ interval_minutes: v })} min={1} max={15} suffix="min"
+          />
+        </Section>
+
+        <Section
+          title="Risk"
+          description="What one ORB trade may cost, and how many may run."
+          summary={`₹${cfg.max_risk_inr.toLocaleString('en-IN')} · ${cfg.max_trades_per_day}/day`}
+          defaultOpen
+          persistKey="orb-risk">
+          <NumberField
+            label="Maximum risk per trade"
+            hint="Sizing uses the full premium — a bought option can expire worthless, so this is the real ceiling."
+            value={num('max_risk_inr')} defaultValue={def('max_risk_inr')}
+            onChange={(v) => patch({ max_risk_inr: v })} min={500} step={500} suffix="₹"
+          />
+          <NumberField
+            label="Maximum trades per day" value={num('max_trades_per_day')} defaultValue={def('max_trades_per_day')}
+            onChange={(v) => patch({ max_trades_per_day: v })} min={1} max={20}
+          />
+          <ConfigNote>
+            Paper/live and manual/automatic are <b>not</b> ORB settings — they belong to the universal
+            Trading Mode, and ORB uses the shared safety, idempotency and position-protection path.
+          </ConfigNote>
+        </Section>
+
+        <Section
+          title="Liquidity"
+          description="Contracts ORB refuses to trade."
+          summary={`≤${cfg.max_spread_pct}% spread · ${cfg.min_option_volume.toLocaleString('en-IN')} vol · ${cfg.min_open_interest.toLocaleString('en-IN')} OI`}
+          persistKey="orb-liquidity">
+          <NumberField
+            label="Maximum bid/ask spread" value={num('max_spread_pct')} defaultValue={def('max_spread_pct')}
+            onChange={(v) => patch({ max_spread_pct: v })} min={0.1} max={10} step={0.1} suffix="%"
+          />
+          <NumberField
+            label="Minimum option volume" value={num('min_option_volume')} defaultValue={def('min_option_volume')}
+            onChange={(v) => patch({ min_option_volume: v })} min={0} step={100}
+          />
+          <NumberField
+            label="Minimum open interest" value={num('min_open_interest')} defaultValue={def('min_open_interest')}
+            onChange={(v) => patch({ min_open_interest: v })} min={0} step={1000}
+          />
+        </Section>
+
+        {cfg.data_source === 'truedata' && (
+          <Section
+            title="TrueData validation"
+            description="Which TrueData observations gate a contract."
+            summary={[cfg.truedata_use_ticks && 'ticks', cfg.truedata_use_bid_ask && 'bid/ask', cfg.truedata_use_oi && 'OI', cfg.truedata_use_quote_freshness && 'freshness'].filter(Boolean).join(' · ') || 'all off'}
+            persistKey="orb-truedata">
+            <Field label="Realtime ticks" hint="Quote freshness is measured from the tick stamp, so it requires ticks.">
+              <Switch
+                checked={cfg.truedata_use_ticks} label="Use ticks"
+                onChange={() => patch({
+                  truedata_use_ticks: !cfg.truedata_use_ticks,
+                  ...(cfg.truedata_use_ticks ? { truedata_use_quote_freshness: false } : {}),
+                })}
+              />
+            </Field>
+            <Field label="Quote freshness" hint={cfg.truedata_use_ticks ? 'Reject a contract whose last tick is stale.' : 'Requires realtime ticks.'}>
+              <Switch
+                checked={cfg.truedata_use_quote_freshness} label="Reject stale quotes" disabled={!cfg.truedata_use_ticks}
+                onChange={() => cfg.truedata_use_ticks && patch({ truedata_use_quote_freshness: !cfg.truedata_use_quote_freshness })}
+              />
+            </Field>
+            <Field label="Bid / ask" hint="Enforce the spread ceiling and reject a crossed market.">
+              <Switch checked={cfg.truedata_use_bid_ask} label="Use bid/ask"
+                onChange={() => patch({ truedata_use_bid_ask: !cfg.truedata_use_bid_ask })} />
+            </Field>
+            <Field label="Open interest" hint="Enforce the open-interest floor.">
+              <Switch checked={cfg.truedata_use_oi} label="Use OI"
+                onChange={() => patch({ truedata_use_oi: !cfg.truedata_use_oi })} />
+            </Field>
+          </Section>
+        )}
+
+        <AdvancedSection count={nonDefaultCount || undefined}>
+          <Section
+            title="Signal thresholds"
+            description="The filters a bar must clear. Every value shows whether it is still the engine default."
+            summary={nonDefaultCount ? `${nonDefaultCount} changed from default` : 'all at default'}
+            defaultOpen
+            persistKey="orb-thresholds">
+            <NumberField
+              label="Minimum breakout" hint="How far past the opening range the close must be, in ATR."
+              value={num('min_breakout_atr')} defaultValue={def('min_breakout_atr')}
+              onChange={(v) => patch({ min_breakout_atr: v })} min={0} step={0.05} suffix="ATR"
+            />
+            <NumberField
+              label="Volume confirmation" hint="Current bar volume against this session's baseline. Must be above zero — zero is rejected, not treated as off."
+              value={num('volume_multiplier')} defaultValue={def('volume_multiplier')}
+              onChange={(v) => patch({ volume_multiplier: v })} min={0.1} step={0.05} suffix="×"
+            />
+            <NumberField
+              label="VWAP slope lookback" value={num('vwap_slope_lookback')} defaultValue={def('vwap_slope_lookback')}
+              onChange={(v) => patch({ vwap_slope_lookback: v })} min={1} max={20} suffix="bars"
+            />
+            <NumberField
+              label="Trend lookback" hint="Bars used to classify TREND / EXPANSION / RANGE."
+              value={num('trend_lookback')} defaultValue={def('trend_lookback')}
+              onChange={(v) => patch({ trend_lookback: v })} min={2} max={50} suffix="bars"
+            />
+            <NumberField
+              label="ATR period" value={num('atr_period')} defaultValue={def('atr_period')}
+              onChange={(v) => patch({ atr_period: v })} min={5} max={100} suffix="bars"
+            />
+          </Section>
+
+          <Section
+            title="Stop and target"
+            description="How the underlying stop and target are derived."
+            summary={`${cfg.stop_buffer_atr} ATR stop · ${cfg.target_r}R target`}
+            persistKey="orb-stop">
+            <NumberField
+              label="Stop buffer" hint="Underlying stop distance in ATR. The premium stop is derived from it via delta."
+              value={num('stop_buffer_atr')} defaultValue={def('stop_buffer_atr')}
+              onChange={(v) => patch({ stop_buffer_atr: v })} min={0} step={0.05} suffix="ATR"
+            />
+            <NumberField
+              label="Target" value={num('target_r')} defaultValue={def('target_r')}
+              onChange={(v) => patch({ target_r: v })} min={0.5} step={0.25} suffix="R"
+            />
+            <ConfigNote>
+              Trailing is <b>not</b> an ORB setting. Once a position is open the universal Trading Mode
+              owns the trail and the protection path.
+            </ConfigNote>
+          </Section>
+
+          <Section
+            title="Pricing and quotes"
+            description="Inputs to the implied-volatility solve and the freshness gate."
+            summary={`${(cfg.risk_free_rate * 100).toFixed(2)}% rate · ${cfg.max_quote_staleness_s}s`}
+            persistKey="orb-pricing">
+            <NumberField
+              label="Risk-free rate" hint="Used to solve implied volatility from the traded premium, which gives the delta behind the premium stop."
+              value={num('risk_free_rate')} defaultValue={def('risk_free_rate')}
+              onChange={(v) => patch({ risk_free_rate: v })} min={0} max={0.25} step={0.005}
+              format={(v) => `${(v * 100).toFixed(2)}%`} suffix={`= ${(cfg.risk_free_rate * 100).toFixed(2)}%`}
+            />
+            <NumberField
+              label="Maximum quote age" value={num('max_quote_staleness_s')} defaultValue={def('max_quote_staleness_s')}
+              onChange={(v) => patch({ max_quote_staleness_s: v })} min={1} max={120} suffix="sec"
+            />
+          </Section>
+        </AdvancedSection>
+      </PanelCard>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .sk-config-summary { display: none; }
+          .sk-config-section-body { padding: 0 14px 18px !important; }
+          .sk-config-field { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .sk-config-check-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </>
+  );
 }
+
+export default NiftyOrbOptionsSettings;

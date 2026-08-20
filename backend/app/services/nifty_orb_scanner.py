@@ -33,6 +33,15 @@ def _cache_put(cache: dict, key, value, ttl: float = _BAR_CACHE_TTL_S) -> None:
     cache[key] = (now, value)
 
 
+#: BSE derivatives settle on BFO; everything else on NFO. SENSEX and BANKEX are
+#: the BSE index underlyings ORB can trade.
+_BSE_UNDERLYINGS = {"SENSEX", "BANKEX"}
+
+
+def _option_exchange(option_symbol: str, underlying: str) -> str:
+    return "BFO" if underlying.upper() in _BSE_UNDERLYINGS else "NFO"
+
+
 def _canonical(symbol: str) -> str:
     return {"NIFTY 50": "NIFTY", "NIFTY BANK": "BANKNIFTY", "FINNIFTY": "FINNIFTY", "NIFTY FIN SERVICE": "FINNIFTY"}.get(symbol.strip().upper(), symbol.strip().upper())
 
@@ -313,7 +322,12 @@ async def scan_underlying(uid: str, underlying: str, cfg: StrategyConfig | None 
         quote_age = None
         if cfg.data_source == "truedata":
             option, quote_age = await _truedata_refresh_option(option, cfg)
-        result["trade"] = build_trade_plan(signal, option, cfg, spot=bars[-1].close).to_dict()
+        plan = build_trade_plan(signal, option, cfg, spot=bars[-1].close, now=now)
+        result["trade"] = plan.to_dict()
+        # The board and the order ticket both need the venue; deriving it in the
+        # client from the symbol would be a second, drifting source of truth.
+        result["exchange"] = _option_exchange(option.symbol, symbol)
+        result["lot_size"] = option.lot_size
         if quote_age is not None:
             result["quote_age_s"] = round(quote_age, 2)
     except (ValueError, RuntimeError) as exc:

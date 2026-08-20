@@ -13,7 +13,8 @@ told so and falls back explicitly rather than silently.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from math import erf, exp, isfinite, log, sqrt
+from dataclasses import dataclass
+from math import erf, exp, isfinite, log, pi, sqrt
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,25 @@ _MAX_ITERATIONS = 100
 
 def _normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + erf(x / sqrt(2.0)))
+
+
+def _normal_pdf(x: float) -> float:
+    return exp(-0.5 * x * x) / sqrt(2.0 * pi)
+
+
+@dataclass(frozen=True)
+class Greeks:
+    """The first-order risk of a position, all from one implied volatility.
+
+    ``theta`` is per calendar day and ``vega`` per one volatility point, because
+    those are the units a trader reads them in -- the raw per-year and per-100%
+    forms are almost never what anyone wants on screen.
+    """
+    implied_volatility: float
+    delta: float
+    gamma: float
+    theta: float
+    vega: float
 
 
 def years_to_expiry(expiry: date, now: datetime) -> float:
@@ -123,3 +143,45 @@ def implied_delta(
         return None
     delta = black_scholes_delta(spot, strike, years, vol, rate, option_type)
     return delta if isfinite(delta) else None
+
+
+def black_scholes_greeks(
+    spot: float, strike: float, years: float, vol: float, rate: float, option_type: OptionType
+) -> Greeks:
+    """First-order Greeks at a given volatility."""
+    if years <= 0 or vol <= 0:
+        return Greeks(vol, black_scholes_delta(spot, strike, years, vol, rate, option_type), 0.0, 0.0, 0.0)
+    root = vol * sqrt(years)
+    d1 = (log(spot / strike) + (rate + 0.5 * vol * vol) * years) / root
+    d2 = d1 - root
+    pdf = _normal_pdf(d1)
+    discounted = strike * exp(-rate * years)
+
+    delta = _normal_cdf(d1) if option_type == "CE" else _normal_cdf(d1) - 1.0
+    gamma = pdf / (spot * root)
+    vega = spot * pdf * sqrt(years) / 100.0            # per 1 volatility point
+    common = -(spot * pdf * vol) / (2.0 * sqrt(years))
+    if option_type == "CE":
+        theta = (common - rate * discounted * _normal_cdf(d2)) / 365.0
+    else:
+        theta = (common + rate * discounted * _normal_cdf(-d2)) / 365.0
+    return Greeks(vol, delta, gamma, theta, vega)
+
+
+def implied_greeks(
+    premium: float,
+    spot: float,
+    strike: float,
+    expiry: date,
+    option_type: OptionType,
+    *,
+    now: datetime,
+    rate: float,
+) -> Greeks | None:
+    """Full first-order Greeks implied by the traded premium, or None."""
+    years = years_to_expiry(expiry, now)
+    vol = implied_volatility(premium, spot, strike, years, rate, option_type)
+    if vol is None:
+        return None
+    greeks = black_scholes_greeks(spot, strike, years, vol, rate, option_type)
+    return greeks if all(isfinite(v) for v in (greeks.delta, greeks.gamma, greeks.theta, greeks.vega)) else None

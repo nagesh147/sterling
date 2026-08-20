@@ -233,7 +233,12 @@ class TradePlan:
     (``stop_premium``, ``target_premium``, ``risk_inr``) is only as good as that.
     ``stop_premium`` is the number armed at the broker, so the distinction matters.
     """
+    delta: float | None = None
+    """The delta actually used to derive every premium-domain number here."""
     implied_volatility: float | None = None
+    gamma: float | None = None
+    theta_per_day: float | None = None
+    vega_per_point: float | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -563,7 +568,7 @@ def select_option(
 
 def _resolve_delta(
     option: OptionContract, cfg: StrategyConfig, *, spot: float, now: datetime | None
-) -> tuple[float, str, float | None]:
+) -> tuple[float, str, object | None]:
     """Delta from the broker, else implied from the premium, else 0.50.
 
     The premium is an observable, so solving it for volatility and taking the
@@ -577,18 +582,15 @@ def _resolve_delta(
     expiry = option.expiry_date
     mark = option.ltp if option.ltp > 0 else (option.bid + option.ask) / 2.0
     if expiry is not None and mark > 0 and spot > 0 and option.strike > 0:
-        from app.engines.nifty_orb_greeks import implied_delta, implied_volatility, years_to_expiry
+        from app.engines.nifty_orb_greeks import implied_greeks
 
         reference = _as_ist(now) if now is not None else datetime.now(IST)
-        years = years_to_expiry(expiry, reference)
-        vol = implied_volatility(mark, spot, option.strike, years, cfg.risk_free_rate, option.option_type)
-        if vol is not None:
-            delta = implied_delta(
-                mark, spot, option.strike, expiry, option.option_type,
-                now=reference, rate=cfg.risk_free_rate,
-            )
-            if delta is not None and 0.0 < abs(delta) <= 1.0:
-                return abs(delta), "implied", vol
+        greeks = implied_greeks(
+            mark, spot, option.strike, expiry, option.option_type,
+            now=reference, rate=cfg.risk_free_rate,
+        )
+        if greeks is not None and 0.0 < abs(greeks.delta) <= 1.0:
+            return abs(greeks.delta), "implied", greeks
     return 0.50, "assumed", None
 
 
@@ -613,7 +615,7 @@ def build_trade_plan(
     stop = spot - risk_points if signal.direction == "LONG" else spot + risk_points
     target = spot + cfg.target_r * risk_points if signal.direction == "LONG" else spot - cfg.target_r * risk_points
     entry_premium = option.ask
-    delta, delta_source, implied_vol = _resolve_delta(option, cfg, spot=spot, now=now or signal.timestamp)
+    delta, delta_source, greeks = _resolve_delta(option, cfg, spot=spot, now=now or signal.timestamp)
     # A bought option cannot lose more than it cost, so the modelled stop loss is
     # capped at the premium. Without the cap, a stop wider than the premium
     # produced a 0.05 stop -- "hold to zero" dressed up as a stop.
@@ -631,7 +633,11 @@ def build_trade_plan(
     quantity = max(0, lots * option.lot_size)
     risk = quantity * premium_risk_per_share
     max_loss = quantity * entry_premium
-    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_source != "broker", delta_source=delta_source, implied_volatility=implied_vol)
+    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_source != "broker", delta_source=delta_source, delta=delta,
+                     implied_volatility=getattr(greeks, "implied_volatility", None),
+                     gamma=getattr(greeks, "gamma", None),
+                     theta_per_day=getattr(greeks, "theta", None),
+                     vega_per_point=getattr(greeks, "vega", None))
 
 
 def summarize_pnl(pnls: Iterable[float]) -> dict:

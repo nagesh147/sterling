@@ -305,9 +305,21 @@ class NiftyOrbConfigRequest(BaseModel):
 
 @router.get("/nifty-orb-options")
 async def get_nifty_orb_options_config() -> dict:
+    """Current ORB config, plus the engine's own defaults.
+
+    The defaults are published rather than mirrored in the client so the UI can
+    mark which fields are still at default without keeping a second copy that
+    could drift from the engine — the failure mode this codebase keeps hitting.
+    """
+    from app.engines.nifty_orb_options import StrategyConfig
     from app.services.nifty_orb_options import get_config
     cfg = get_config()
-    return {"config": cfg.__dict__, "supported_data_sources": ["kite", "truedata"], "execution_brokers": ["kite"]}
+    return {
+        "config": cfg.__dict__,
+        "defaults": StrategyConfig().__dict__,
+        "supported_data_sources": ["kite", "truedata"],
+        "execution_brokers": ["kite"],
+    }
 
 @router.put("/nifty-orb-options")
 async def update_nifty_orb_options_config(body: NiftyOrbConfigRequest) -> dict:

@@ -18,6 +18,8 @@ const entry = (over: Partial<OrbFeedEntry> = {}): OrbFeedEntry => ({
   quantity: 150, riskInr: 187.5, maxLossInr: 2700, dataSource: 'kite', quoteAgeS: 3.2,
   reason: 'ORB high break + VWAP + positive VWAP slope + momentum + volume',
   timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: false,
+  delta: 0.577, gamma: 0.00088, thetaPerDay: -10.0, vegaPerPoint: 16.9, exchange: 'NFO', lotSize: 75,
+  underlyingEntry: 24050, underlyingStop: 24040,
   deltaSource: 'implied', impliedVol: 0.224, ...over,
 });
 
