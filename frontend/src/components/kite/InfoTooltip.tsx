@@ -84,7 +84,7 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
             zIndex: 20000,
             pointerEvents: 'none',
             maxWidth: 290,
-            background: '#fff',
+            background: 'var(--k-bg)',
             border: '1px solid rgba(0,0,0,0.09)',
             borderRadius: 8,
             boxShadow: '0 12px 28px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06)',
@@ -104,8 +104,8 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
               position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 0, height: 0,
               borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
               ...(pos.placement === 'top'
-                ? { bottom: -6, borderTop: '6px solid #fff' }
-                : { top: -6, borderBottom: '6px solid #fff' }),
+                ? { bottom: -6, borderTop: '6px solid var(--k-bg)' }
+                : { top: -6, borderBottom: '6px solid var(--k-bg)' }),
             }}
           />
         </div>,

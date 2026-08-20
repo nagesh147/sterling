@@ -238,7 +238,7 @@ export function AdaptiveEdgePositionCalculator({
       {/* ── TOP INPUTS & POSITION SIZING CARD ── */}
       <div
         style={{
-          background: '#ffffff',
+          background: 'var(--k-bg)',
           border: `1px solid ${k.border}`,
           borderRadius: 4,
           padding: '12px 14px',
@@ -311,7 +311,7 @@ export function AdaptiveEdgePositionCalculator({
                 border: `1px solid ${k.border}`,
                 borderRadius: 3,
                 height: 26,
-                background: '#ffffff',
+                background: 'var(--k-bg)',
               }}
             >
               <button
@@ -400,7 +400,7 @@ export function AdaptiveEdgePositionCalculator({
                 color: k.text,
                 fontVariantNumeric: 'tabular-nums',
                 outline: 'none',
-                background: '#ffffff',
+                background: 'var(--k-bg)',
                 boxSizing: 'border-box',
               }}
             />
@@ -428,7 +428,7 @@ export function AdaptiveEdgePositionCalculator({
                 color: k.red,
                 fontVariantNumeric: 'tabular-nums',
                 outline: 'none',
-                background: '#ffffff',
+                background: 'var(--k-bg)',
                 boxSizing: 'border-box',
               }}
             />
@@ -456,7 +456,7 @@ export function AdaptiveEdgePositionCalculator({
                 color: isRiskFree ? k.green : k.orange,
                 fontVariantNumeric: 'tabular-nums',
                 outline: 'none',
-                background: '#ffffff',
+                background: 'var(--k-bg)',
                 boxSizing: 'border-box',
               }}
             />
@@ -484,7 +484,7 @@ export function AdaptiveEdgePositionCalculator({
                 color: k.purple,
                 fontVariantNumeric: 'tabular-nums',
                 outline: 'none',
-                background: '#ffffff',
+                background: 'var(--k-bg)',
                 boxSizing: 'border-box',
               }}
             />
@@ -503,7 +503,7 @@ export function AdaptiveEdgePositionCalculator({
         {/* CARD 1: POSITION & MTM */}
         <div
           style={{
-            background: '#ffffff',
+            background: 'var(--k-bg)',
             border: `1px solid ${k.border}`,
             borderRadius: 4,
             padding: '12px 14px',
@@ -560,7 +560,7 @@ export function AdaptiveEdgePositionCalculator({
         {/* CARD 2: RISK & STOPS */}
         <div
           style={{
-            background: '#ffffff',
+            background: 'var(--k-bg)',
             border: `1px solid ${k.border}`,
             borderRadius: 4,
             padding: '12px 14px',
@@ -617,7 +617,7 @@ export function AdaptiveEdgePositionCalculator({
         {/* CARD 3: TARGET & EXIT STRATEGY */}
         <div
           style={{
-            background: '#ffffff',
+            background: 'var(--k-bg)',
             border: `1px solid ${k.border}`,
             borderRadius: 4,
             padding: '12px 14px',
@@ -674,7 +674,7 @@ export function AdaptiveEdgePositionCalculator({
       {/* ── 4. 1-CLICK KITE ORDER EXECUTION BAR ── */}
       <div
         style={{
-          background: '#ffffff',
+          background: 'var(--k-bg)',
           border: `1px solid ${k.border}`,
           borderRadius: 4,
           padding: '10px 14px',
@@ -702,7 +702,7 @@ export function AdaptiveEdgePositionCalculator({
               fontSize: 11.5,
               borderRadius: 3,
               border: `1px solid ${k.border}`,
-              background: '#ffffff',
+              background: 'var(--k-bg)',
               color: k.text,
               cursor: 'pointer',
             }}
@@ -740,8 +740,8 @@ export function AdaptiveEdgePositionCalculator({
                 fontWeight: 600,
                 borderRadius: 3,
                 border: 'none',
-                background: optionType === 'PE' ? '#ff5722' : '#4184f3',
-                color: '#ffffff',
+                background: optionType === 'PE' ? 'var(--k-orange)' : 'var(--k-blue)',
+                color: 'var(--k-bg)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',

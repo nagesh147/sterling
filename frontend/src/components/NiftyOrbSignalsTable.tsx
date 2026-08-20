@@ -64,7 +64,7 @@ export function NiftyOrbSignalsTable() {
               {row.deltaSource === 'assumed' && (
                 /* Only a fallback deserves a caveat. A delta solved from the
                    traded premium is a measurement, so it is not flagged. */
-                <span title="Delta assumed 0.50 — the premium could not be solved for volatility" style={{ marginLeft: 4, color: 'var(--t-orange, #f06428)' }}>≈</span>
+                <span title="Delta assumed 0.50 — the premium could not be solved for volatility" style={{ marginLeft: 4, color: 'var(--t-orange, var(--k-brand))' }}>≈</span>
               )}
             </td>
             {/* A stale quote is the most common reason a plan is unexecutable. */}

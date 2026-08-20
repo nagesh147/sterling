@@ -163,32 +163,32 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       {/* Top Bar: Footprint Metrics & Stacked Imbalance Alerts */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: 'var(--k-surface-sunken)', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
             {symbol} Order Overflow Footprint (Bid × Ask Matrix)
           </span>
           {activeBar?.hasStackedBuy && (
-            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(16,185,129,.15)', color: '#059669', border: '1px solid rgba(16,185,129,.3)' }}>
+            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(16,185,129,.15)', color: 'var(--k-emerald)', border: '1px solid rgba(16,185,129,.3)' }}>
               ⚡ STACKED BUY OVERFLOW (≥300% ASK IMBALANCE)
             </span>
           )}
           {activeBar?.hasStackedSell && (
-            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(239,68,68,.15)', color: '#dc2626', border: '1px solid rgba(239,68,68,.3)' }}>
+            <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(239,68,68,.15)', color: 'var(--k-red-deep)', border: '1px solid rgba(239,68,68,.3)' }}>
               ⚡ STACKED SELL OVERFLOW (≥300% BID IMBALANCE)
             </span>
           )}
         </div>
 
         {/* Display Mode Toggle */}
-        <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+        <div style={{ display: 'flex', gap: 2, background: 'var(--k-bg)', padding: 2, borderRadius: 4, border: '1px solid var(--k-border-slate-strong)' }}>
           <button
             type="button"
             onClick={() => setDisplayMode('bid_ask')}
             style={{
               border: 0,
-              background: displayMode === 'bid_ask' ? '#059669' : 'transparent',
-              color: displayMode === 'bid_ask' ? '#ffffff' : '#64748b',
+              background: displayMode === 'bid_ask' ? 'var(--k-emerald)' : 'transparent',
+              color: displayMode === 'bid_ask' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
               fontSize: 10,
               fontWeight: 700,
               padding: '3px 7px',
@@ -203,8 +203,8 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
             onClick={() => setDisplayMode('delta')}
             style={{
               border: 0,
-              background: displayMode === 'delta' ? '#059669' : 'transparent',
-              color: displayMode === 'delta' ? '#ffffff' : '#64748b',
+              background: displayMode === 'delta' ? 'var(--k-emerald)' : 'transparent',
+              color: displayMode === 'delta' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
               fontSize: 10,
               fontWeight: 700,
               padding: '3px 7px',
@@ -218,7 +218,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
       </div>
 
       {/* Main Footprint Candlestick Matrix Columns */}
-      <div style={{ flex: 1, minHeight: 330, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '12px 16px', overflowX: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 330, background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 8, padding: '12px 16px', overflowX: 'auto' }}>
         <div style={{ display: 'flex', gap: 12, minWidth: 680, height: '100%' }}>
           {footprintBars.map((bar, bIdx) => {
             const isSelected = selectedBarIdx === bIdx || (selectedBarIdx === null && bIdx === footprintBars.length - 1);
@@ -232,20 +232,20 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
-                  border: isSelected ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                  border: isSelected ? '1.5px solid var(--k-blue-strong)' : '1px solid var(--k-border-slate)',
                   borderRadius: 6,
-                  background: isSelected ? 'rgba(37,99,235,.02)' : '#ffffff',
+                  background: isSelected ? 'rgba(37,99,235,.02)' : 'var(--k-bg)',
                   padding: 6,
                   cursor: 'pointer',
                   transition: 'all 0.12s ease',
                 }}
               >
                 {/* Bar Header: Time & Candle Direction */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: 4, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1e293b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--k-surface-slate)', paddingBottom: 4, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
                     {bar.time}
                   </span>
-                  <span style={{ fontSize: 10, fontWeight: 750, color: isUp ? '#059669' : '#dc2626' }}>
+                  <span style={{ fontSize: 10, fontWeight: 750, color: isUp ? 'var(--k-emerald)' : 'var(--k-red-deep)' }}>
                     {isUp ? '▲ BULL' : '▼ BEAR'}
                   </span>
                 </div>
@@ -268,7 +268,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                           : lvl.isSellImbalance
                           ? 'rgba(239,68,68,.18)'
                           : 'transparent',
-                        borderLeft: lvl.isBuyImbalance ? '2px solid #10b981' : lvl.isSellImbalance ? '2px solid #ef4444' : 'none',
+                        borderLeft: lvl.isBuyImbalance ? '2px solid var(--k-emerald-2)' : lvl.isSellImbalance ? '2px solid var(--k-red-500)' : 'none',
                       }}
                     >
                       {displayMode === 'bid_ask' ? (
@@ -276,7 +276,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                           {/* Bid Volume */}
                           <span
                             style={{
-                              color: lvl.isSellImbalance ? '#dc2626' : '#64748b',
+                              color: lvl.isSellImbalance ? 'var(--k-red-deep)' : 'var(--k-ink-slate-3)',
                               fontWeight: lvl.isSellImbalance ? 750 : 500,
                               width: 38,
                               textAlign: 'right',
@@ -286,14 +286,14 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                           </span>
 
                           {/* Center Price Tag */}
-                          <span style={{ color: '#94a3b8', fontSize: 9, padding: '0 2px' }}>
+                          <span style={{ color: 'var(--k-ink-slate-4)', fontSize: 9, padding: '0 2px' }}>
                             {lvl.price % 100}
                           </span>
 
                           {/* Ask Volume */}
                           <span
                             style={{
-                              color: lvl.isBuyImbalance ? '#059669' : '#1e293b',
+                              color: lvl.isBuyImbalance ? 'var(--k-emerald)' : 'var(--k-ink-slate-1)',
                               fontWeight: lvl.isBuyImbalance ? 750 : 600,
                               width: 38,
                               textAlign: 'left',
@@ -304,11 +304,11 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                         </>
                       ) : (
                         <>
-                          <span style={{ color: '#64748b', fontSize: 9.5 }}>₹{lvl.price}</span>
+                          <span style={{ color: 'var(--k-ink-slate-3)', fontSize: 9.5 }}>₹{lvl.price}</span>
                           <span
                             style={{
                               fontWeight: 750,
-                              color: lvl.delta >= 0 ? '#059669' : '#dc2626',
+                              color: lvl.delta >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)',
                             }}
                           >
                             {lvl.delta >= 0 ? `+${lvl.delta}` : lvl.delta}
@@ -320,16 +320,16 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
                 </div>
 
                 {/* Bar Footer: Total Net Delta & Volume */}
-                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 4, marginTop: 6, fontSize: 9.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ borderTop: '1px solid var(--k-surface-slate)', paddingTop: 4, marginTop: 6, fontSize: 9.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>Delta:</span>
-                    <strong style={{ color: bar.totalDelta >= 0 ? '#059669' : '#dc2626' }}>
+                    <span style={{ color: 'var(--k-ink-slate-3)' }}>Delta:</span>
+                    <strong style={{ color: bar.totalDelta >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)' }}>
                       {bar.totalDelta >= 0 ? `+${bar.totalDelta}` : bar.totalDelta}
                     </strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b' }}>Vol:</span>
-                    <span style={{ color: '#1e293b', fontWeight: 600 }}>{bar.volume.toLocaleString('en-IN')}</span>
+                    <span style={{ color: 'var(--k-ink-slate-3)' }}>Vol:</span>
+                    <span style={{ color: 'var(--k-ink-slate-1)', fontWeight: 600 }}>{bar.volume.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>
@@ -339,15 +339,15 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
       </div>
 
       {/* Cumulative Volume Delta (CVD) Progression Line Ribbon */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: 'var(--k-surface-sunken)', borderRadius: 6, border: '1px solid var(--k-border-slate)', fontSize: 11 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontWeight: 700, color: '#1e293b' }}>
+          <span style={{ fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
             Cumulative Volume Delta (CVD) Momentum:
           </span>
           <span
             style={{
               fontWeight: 800,
-              color: (cvdSeries[cvdSeries.length - 1] ?? 0) >= 0 ? '#059669' : '#dc2626',
+              color: (cvdSeries[cvdSeries.length - 1] ?? 0) >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)',
               fontVariantNumeric: 'tabular-nums',
             }}
           >
@@ -356,7 +356,7 @@ export function OrderOverflowChart({ symbol, candles, currentSpot, cvd: propCvd,
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, color: '#64748b' }}>
+        <div style={{ display: 'flex', gap: 12, color: 'var(--k-ink-slate-3)' }}>
           <span>🟢 Green Highlight = Ask ≥ 300% diagonal Bid (Aggressive Buy Sweep)</span>
           <span>🔴 Red Highlight = Bid ≥ 300% diagonal Ask (Aggressive Sell Sweep)</span>
         </div>

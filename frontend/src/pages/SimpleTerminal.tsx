@@ -22,6 +22,7 @@ import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
 import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { KiteTab } from '../components/kite/KiteTab';
+import { ThemeToggle } from '../components/kite/ThemeToggle';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
@@ -285,7 +286,7 @@ export function SimpleTerminal() {
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       fontFamily: 'inherit', fontSize: 13, fontWeight: kiteNav === item.id ? 500 : 400,
-                      color: kiteNav === item.id ? '#f06428' : '#444',
+                      color: kiteNav === item.id ? 'var(--k-brand)' : 'var(--k-text)',
                       padding: '0 9px', height: '100%',
                       transition: 'color .15s ease',
                     }}
@@ -296,6 +297,7 @@ export function SimpleTerminal() {
                 <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 8px' }} />
               </>
             )}
+            <ThemeToggle />
             {/* Bell — always visible in kite mode; conditional in crypto */}
             {(activeTopTab === 'kite' || scalpOn) && (
               <button onClick={() => scalpOn ? setShowLive(true) : undefined} title="Notifications" style={{
@@ -315,7 +317,7 @@ export function SimpleTerminal() {
                   <div style={{
                     width: 28, height: 28, borderRadius: 14,
                     background: 'rgba(240,100,40,0.15)',
-                    color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--k-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 11, fontWeight: 700,
                   }}>
                     {kiteStatus?.user_name ? kiteStatus.user_name.substring(0, 2).toUpperCase() : 'MA'}
@@ -324,7 +326,7 @@ export function SimpleTerminal() {
                     <span style={{
                       position: 'absolute', bottom: -1, right: -1,
                       width: 8, height: 8, borderRadius: '50%',
-                      background: kiteStatus.is_paper ? '#ff9800' : '#4caf50',
+                      background: kiteStatus.is_paper ? 'var(--k-amber-2)' : 'var(--k-green)',
                       border: '2px solid var(--t-bg2)',
                     }} />
                   )}

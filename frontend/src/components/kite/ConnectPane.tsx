@@ -28,19 +28,19 @@ import { SystemDiagnosticsChecklistPanel } from '../diagnostics/SystemDiagnostic
 import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
-  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 12, fontWeight: 750 },
-  row: { background: '#f7f7f8', border: `1px solid #e0e0e0`, borderRadius: 7, padding: '11px 14px', marginBottom: 8 },
-  name: { fontWeight: 700, color: '#444', fontSize: 13 },
+  card: { background: 'var(--k-bg)', border: `1px solid var(--k-border)`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
+  title: { color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 12, fontWeight: 750 },
+  row: { background: 'var(--k-surface-sunken-2)', border: `1px solid var(--k-border)`, borderRadius: 7, padding: '11px 14px', marginBottom: 8 },
+  name: { fontWeight: 700, color: 'var(--k-text)', fontSize: 13 },
   actions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
-  btn: { minHeight: 34, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  btnGreen: { minHeight: 34, background: '#f06428', color: '#fff', border: `1px solid #f06428`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { minHeight: 34, background: '#fff', color: '#c9433e', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  input: { minHeight: 36, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
-  label: { color: '#777', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
-  hint: { color: '#888', fontSize: 11.5 },
-  err: { color: '#e53935', fontSize: 11, marginTop: 6 },
-  ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
+  btn: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid var(--k-border-strong-2)`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  btnGreen: { minHeight: 34, background: 'var(--k-brand)', color: 'var(--k-on-accent)', border: `1px solid var(--k-brand)`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-red-brick)', border: `1px solid var(--k-border-strong-2)`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  input: { minHeight: 36, background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid var(--k-border-strong-2)`, borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
+  label: { color: 'var(--k-ink-5)', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
+  hint: { color: 'var(--k-ink-6)', fontSize: 11.5 },
+  err: { color: 'var(--k-red-strong)', fontSize: 11, marginTop: 6 },
+  ok: { color: 'var(--k-green)', fontSize: 11, marginTop: 6 },
 };
 
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
@@ -85,19 +85,19 @@ function KiteTroubleshooter() {
           fontFamily: 'inherit',
           fontSize: 11.5,
           fontWeight: 650,
-          color: '#444',
+          color: 'var(--k-text)',
           textAlign: 'left',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: '#f06428', fontWeight: 800 }}>⚡</span>
+          <span style={{ color: 'var(--k-brand)', fontWeight: 800 }}>⚡</span>
           <span>Kite Login Troubleshooter & Step-by-Step Fixes</span>
         </span>
-        <span style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>{open ? 'Hide ▲' : 'Show Guide ▼'}</span>
+        <span style={{ fontSize: 10, color: 'var(--k-ink-6)', fontWeight: 600 }}>{open ? 'Hide ▲' : 'Show Guide ▼'}</span>
       </button>
 
       {open && (
-        <div style={{ padding: '10px 12px 14px', borderTop: '1px solid #e8e8e8', background: '#fff' }}>
+        <div style={{ padding: '10px 12px 14px', borderTop: '1px solid var(--k-border-2)', background: 'var(--k-bg)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
             {[
               { id: 'gen_err' as const, label: '“Error generating request_token”' },
@@ -109,9 +109,9 @@ function KiteTroubleshooter() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  border: `1px solid ${activeTab === tab.id ? '#f06428' : '#e0e0e0'}`,
-                  background: activeTab === tab.id ? 'rgba(240,100,40,.08)' : '#fafafa',
-                  color: activeTab === tab.id ? '#f06428' : '#666',
+                  border: `1px solid ${activeTab === tab.id ? 'var(--k-brand)' : 'var(--k-border)'}`,
+                  background: activeTab === tab.id ? 'rgba(240,100,40,.08)' : 'var(--k-surface-2)',
+                  color: activeTab === tab.id ? 'var(--k-brand)' : 'var(--k-ink-4)',
                   borderRadius: 4,
                   padding: '3px 8px',
                   fontSize: 10.5,
@@ -125,14 +125,14 @@ function KiteTroubleshooter() {
           </div>
 
           {activeTab === 'gen_err' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#c9433e', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-red-brick)', marginBottom: 6, fontSize: 11 }}>
                 Directly from Zerodha’s Auth Gateway (kite.zerodha.com)
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <li>
                   <strong>Check Subscription Status:</strong> Log into{' '}
-                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer" style={{ color: '#387ed1', textDecoration: 'underline' }}>
+                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--k-blue-kite)', textDecoration: 'underline' }}>
                     developers.kite.trade
                   </a>
                   . Ensure your Kite Connect app status is <strong>Active</strong> (monthly credits active). If expired, renew subscription.
@@ -151,8 +151,8 @@ function KiteTroubleshooter() {
           )}
 
           {activeTab === 'not_enabled' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#f06428', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-brand)', marginBottom: 6, fontSize: 11 }}>
                 Account Authentication & Ownership
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -170,8 +170,8 @@ function KiteTroubleshooter() {
           )}
 
           {activeTab === 'token_expired' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#387ed1', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-blue-kite)', marginBottom: 6, fontSize: 11 }}>
                 Token Handshake & Checksum
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -205,8 +205,8 @@ function Funds() {
       <div style={S.title}>FUNDS</div>
       {segs.map(([seg, info]: [string, any]) => (
         <div key={seg} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
-          <span style={{ color: '#9b9b9b' }}>{seg}</span>
-          <span style={{ color: '#444', fontWeight: 700 }}>
+          <span style={{ color: 'var(--k-dim)' }}>{seg}</span>
+          <span style={{ color: 'var(--k-text)', fontWeight: 700 }}>
             ₹{Number(info?.net ?? info?.available?.live_balance ?? 0).toLocaleString('en-IN')}
           </span>
         </div>
@@ -314,7 +314,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
             {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
           </div>
           {showRelogin && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid #e0e0e0` }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid var(--k-border)` }}>
               {loginSteps}
             </div>
           )}
@@ -373,8 +373,8 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
   return (
     <div style={{
-      border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
-      background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      border: '1px solid var(--k-border)', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
+      background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
     }}>
       {/* ── Collapsed row: name + quiet meta, no status badges ── */}
       <div
@@ -382,37 +382,37 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
         <div style={{
-          width: 36, height: 36, borderRadius: '50%', background: '#e8e8e8', flexShrink: 0,
+          width: 36, height: 36, borderRadius: '50%', background: 'var(--k-border-2)', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#666', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
+          color: 'var(--k-ink-4)', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
         }}>
           {initials(displayName)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, color: '#444', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
+          <div style={{ fontWeight: 700, color: 'var(--k-text)', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
           {subText ? (
-            <div style={{ color: '#9b9b9b', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
+            <div style={{ color: 'var(--k-dim)', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
           ) : null}
         </div>
         <span aria-hidden style={{
-          color: '#bbb', fontSize: 11, flexShrink: 0,
+          color: 'var(--k-faint-2)', fontSize: 11, flexShrink: 0,
           transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s',
         }}>▼</span>
       </div>
 
       {/* ── Expanded body ── */}
       {expanded && (
-        <div style={{ borderTop: '1px solid #f0f0f0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ borderTop: '1px solid var(--k-surface-hover-2)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Session info */}
           {connected ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: '#444' }}>
+              <span style={{ fontSize: 12, color: 'var(--k-text)' }}>
                 Session active{acc.has_refresh_token ? ' · auto-renews' : ' · manual re-login required after 6 AM IST'}
               </span>
               {acc.has_refresh_token && (
                 <button style={S.btn} onClick={() => refresh.mutate({ account_id: acc.id })} disabled={refresh.isPending}>
-                  {refresh.isPending ? <ButtonLoader color="#387ed1" /> : '↻ Refresh'}
+                  {refresh.isPending ? <ButtonLoader color="var(--k-blue-kite)" /> : '↻ Refresh'}
                 </button>
               )}
               <button style={S.btn} onClick={() => setShowRelogin((v) => !v)}>
@@ -423,14 +423,14 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
               {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#999' }}>
+            <div style={{ fontSize: 12, color: 'var(--k-dim-2)' }}>
               {acc.has_credentials ? 'Not connected — use Kite Login below to get a session.' : 'Add API keys to enable login.'}
             </div>
           )}
 
           {/* Login flow */}
           {acc.has_credentials && (!connected || showRelogin) && (
-            <div style={{ background: '#fafafa', border: '1px solid #e8e8e8', borderRadius: 6, padding: 12 }}>
+            <div style={{ background: 'var(--k-surface-2)', border: '1px solid var(--k-border-2)', borderRadius: 6, padding: 12 }}>
               <div style={{ ...S.label, marginBottom: 8 }}>KITE LOGIN</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
                 <button style={S.btnGreen} disabled={!lu?.login_url} onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}>
@@ -667,7 +667,7 @@ function MarginCalc() {
         </button>
       </div>
       {latched && (
-        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 5, fontSize: 11, overflow: 'auto', maxHeight: 200, marginTop: 8 }}>
+        <pre style={{ background: 'var(--k-surface-4)', padding: 8, borderRadius: 5, fontSize: 11, overflow: 'auto', maxHeight: 200, marginTop: 8 }}>
           {JSON.stringify(latched, null, 2)}
         </pre>
       )}
@@ -695,9 +695,9 @@ function Ticker() {
       <div style={S.title}>WEBSOCKET TICKER</div>
       {ts && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? '#4caf50' : ts.active ? '#ff9800' : '#e53935', fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
-          <div><span style={S.label}>Subscribed</span><span style={{ color: '#444' }}>{ts.subscribed?.length ?? 0} tokens</span></div>
-          <div><span style={S.label}>Ticks</span><span style={{ color: '#444' }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
+          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? 'var(--k-green)' : ts.active ? 'var(--k-amber-2)' : 'var(--k-red-strong)', fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
+          <div><span style={S.label}>Subscribed</span><span style={{ color: 'var(--k-text)' }}>{ts.subscribed?.length ?? 0} tokens</span></div>
+          <div><span style={S.label}>Ticks</span><span style={{ color: 'var(--k-text)' }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -810,9 +810,9 @@ function readInitialSection(): ConnectSection {
 }
 
 function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; children: React.ReactNode }) {
-  const color = tone === 'good' ? '#2e7d32' : tone === 'warn' ? '#b85c00' : '#777';
+  const color = tone === 'good' ? 'var(--k-green-deep)' : tone === 'warn' ? '#b85c00' : 'var(--k-ink-5)';
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#666', padding: '3px 0', fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-ink-4)', padding: '3px 0', fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: 3, background: color }} />{children}
     </span>
   );
@@ -821,8 +821,8 @@ function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; child
 function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <h2 style={{ margin: 0, color: '#333', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
-      <p style={{ margin: '6px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
+      <h2 style={{ margin: 0, color: 'var(--k-ink-1)', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
+      <p style={{ margin: '6px 0 0', color: 'var(--k-ink-5)', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
     </div>
   );
 }
@@ -877,28 +877,28 @@ export function ConnectPane() {
   return (
     <div className="kite-settings-hub" style={{
       width: '100%', height: '100%', minHeight: '100%', boxSizing: 'border-box',
-      padding: 0, background: '#ffffff', display: 'flex', flexDirection: 'column',
+      padding: 0, background: 'var(--k-bg)', display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
     }}>
       <header style={{
         flexShrink: 0, width: '100%', boxSizing: 'border-box',
-        padding: '16px 32px 14px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
+        padding: '16px 32px 14px', borderBottom: '1px solid var(--k-border)', background: 'var(--k-bg)',
       }}>
         <div style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
           <div style={{
-            color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            color: 'var(--k-dim)', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
             textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
           }}>
             Settings
           </div>
           <h1 style={{
-            margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
+            margin: 0, color: 'var(--k-text)', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
             letterSpacing: '-0.01em', fontFamily: 'inherit',
           }}>
             {page.label}
           </h1>
           <p style={{
-            margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
+            margin: '3px 0 0', color: 'var(--k-dim)', fontSize: 12, lineHeight: 1.4,
             fontFamily: 'inherit', maxWidth: 720,
           }}>
             {page.pageDescription}
@@ -911,7 +911,7 @@ export function ConnectPane() {
         display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
       }}>
         <nav aria-label="Kite settings sections" style={{
-          background: '#ffffff', borderRight: '1px solid #e0e0e0', padding: '10px 8px 16px',
+          background: 'var(--k-bg)', borderRight: '1px solid var(--k-border)', padding: '10px 8px 16px',
           overflowY: 'auto', minHeight: 0,
         }}>
           {SECTION_DEFS.map((item, index) => {
@@ -928,21 +928,21 @@ export function ConnectPane() {
                   </div>
                 )}
                 <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
+                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? 'var(--k-brand)' : 'transparent'}`,
+                  borderRadius: 7, background: selected ? 'var(--k-surface-warm)' : 'transparent',
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
                 }}>
                   <span aria-hidden style={{
                     width: 28, height: 28, borderRadius: 7, flexShrink: 0,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    background: selected ? '#ffe8dc' : '#f4f4f5',
-                    color: selected ? '#f06428' : '#8a8a8a',
+                    background: selected ? 'var(--k-tint-warm-2)' : 'var(--k-surface-6)',
+                    color: selected ? 'var(--k-brand)' : '#8a8a8a',
                   }}>
                     {SECTION_ICONS[item.id]}
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: 'var(--k-ink-1)', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
                     <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
                   </span>
                 </button>
@@ -953,7 +953,7 @@ export function ConnectPane() {
 
         <main style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '24px 32px 48px', background: '#fff',
+          padding: '24px 32px 48px', background: 'var(--k-bg)',
         }}>
           <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
             {section === 'account' && (
@@ -1052,12 +1052,12 @@ export function ConnectPane() {
             {section === 'experience' && (
               <>
                 <MotionStyleSettings />
-                <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                <section style={{ marginBottom: 16, padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
                   <BrandIconPicker />
                 </section>
                 <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
-                  <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
+                  <span aria-hidden style={{ color: 'var(--k-ink-5)', fontSize: 16 }}>ⓘ</span>
+                  <div style={{ color: 'var(--k-ink-5)', fontSize: 11, lineHeight: 1.55 }}>
                     Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
                   </div>
                 </div>

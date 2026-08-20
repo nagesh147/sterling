@@ -65,8 +65,8 @@ function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange:
               style={{
                 padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
                 fontSize: 13, fontWeight: active ? 600 : 400,
-                color: active ? '#f06428' : '#666',
-                borderBottom: active ? '2px solid #f06428' : '2px solid transparent',
+                color: active ? 'var(--k-brand)' : 'var(--k-ink-4)',
+                borderBottom: active ? '2px solid var(--k-brand)' : '2px solid transparent',
                 marginBottom: -1, transition: 'color 0.15s',
               }}
             >

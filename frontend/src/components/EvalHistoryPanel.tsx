@@ -39,7 +39,7 @@ function RegimeBadge({ regime }: { regime?: string | null }) {
   const upper = regime.toUpperCase();
   const color = upper === 'VOLATILE' ? t.amber
     : upper === 'RANGING' || upper === 'CHOPPY' ? t.dim
-    : upper === 'IDLE' ? '#333'
+    : upper === 'IDLE' ? 'var(--k-ink-1)'
     : upper.includes('BULL') ? t.green
     : upper.includes('BEAR') ? t.red
     : t.dim;
@@ -52,7 +52,7 @@ function RegimeBadge({ regime }: { regime?: string | null }) {
 }
 
 function HistRow({ item }: { item: EvalHistoryItem }) {
-  const sc = STATE_COLOR[item.state] ?? '#444';
+  const sc = STATE_COLOR[item.state] ?? 'var(--k-text)';
   const dc = item.direction === 'long' ? t.green : item.direction === 'short' ? t.red : t.dim;
   return (
     <tr>
@@ -70,7 +70,7 @@ function HistRow({ item }: { item: EvalHistoryItem }) {
         {item.ivr != null ? `${item.ivr.toFixed(0)}%` : '—'}
         {item.ivr_band && <span style={{ color: t.dim, fontSize: 9 }}> {item.ivr_band.slice(0,3)}</span>}
       </td>
-      <td style={{ ...S.td, fontSize: 10, color: item.top_structure ? t.blue : '#444' }}>
+      <td style={{ ...S.td, fontSize: 10, color: item.top_structure ? t.blue : 'var(--k-text)' }}>
         {fmtStructure(item.top_structure ?? item.recommendation)}
       </td>
       <td style={{ ...S.td, color: item.no_trade_score > 50 ? t.red : t.green, fontSize: 10 }}>

@@ -8,14 +8,14 @@ import { parseInstrument } from './InstrumentLabel';
 const TILE_FONT = "var(--app-font, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif)";
 
 // Match Kite/light-theme watchlist semantics.
-const UP = '#4caf50';
-const DOWN = '#df514c';
-const TICKER_BG = '#fff';
-const TICKER_BORDER = '#e0e0e0';
-const CARD_BG = '#ffffff';
-const CARD_BORDER = '#9b9b9b';
-const TEXT = '#333333';
-const DIM = '#777777';
+const UP = 'var(--k-green)';
+const DOWN = 'var(--k-red)';
+const TICKER_BG = 'var(--k-bg)';
+const TICKER_BORDER = 'var(--k-border)';
+const CARD_BG = 'var(--k-bg)';
+const CARD_BORDER = 'var(--k-dim)';
+const TEXT = 'var(--k-ink-1)';
+const DIM = 'var(--k-ink-5)';
 
 const HIST = new Map<string, number[]>();
 const HIST_CAP = 48;
@@ -282,7 +282,7 @@ function SizeControlButton({ label, onClick }: { label: string; onClick: () => v
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{
         width: 24, height: 22, border: '1px solid #d6d6d6', borderRadius: 5,
-        background: '#fff', color: TEXT, cursor: 'pointer', fontFamily: TILE_FONT,
+        background: 'var(--k-bg)', color: TEXT, cursor: 'pointer', fontFamily: TILE_FONT,
         fontSize: 13, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -362,7 +362,7 @@ export function KiteTicker({ onOpenChart }: { onOpenChart?: (symbol: string) => 
           position: 'absolute', top: 6, right: 10, zIndex: 4,
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '3px 5px', borderRadius: 7,
-          background: 'rgba(255,255,255,0.94)', border: '1px solid #e0e0e0',
+          background: 'color-mix(in srgb, var(--k-bg) 94%, transparent)', border: '1px solid var(--k-border)',
           boxShadow: '0 1px 5px rgba(15, 23, 42, 0.10)',
           opacity: hover ? 1 : 0, pointerEvents: hover ? 'auto' : 'none',
           transition: 'opacity .12s ease',

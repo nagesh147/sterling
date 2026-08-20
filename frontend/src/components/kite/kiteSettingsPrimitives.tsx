@@ -312,7 +312,7 @@ export function Switch({ checked, label, onChange, disabled = false }: {
         position: 'relative',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        background: checked ? k.orange : '#ccc',
+        background: checked ? k.orange : 'var(--k-faint-5)',
         transition: 'background .15s ease',
       }}
     >
@@ -493,7 +493,7 @@ export function NumberField({
             textAlign: 'right',
             // A moved value is tinted so a panel of numbers reads at a glance.
             borderColor: isDefault ? k.border : k.orange,
-            background: isDefault ? '#fff' : tint(k.orange, 6),
+            background: isDefault ? 'var(--k-bg)' : tint(k.orange, 6),
             opacity: disabled ? 0.55 : 1,
           }}
         />

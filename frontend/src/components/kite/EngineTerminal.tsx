@@ -6,8 +6,8 @@ import type { ActivityEvent } from '../../types/kiteEngine';
 type Theme = 'dark' | 'light';
 
 const THEME = {
-  dark: { bg: '#0b0b0b', headerBg: '#111', border: '#1f1f1f', text: '#d8d8d8', dim: '#777', headTxt: '#eee', headDim: '#bdbdbd' },
-  light: { bg: '#ffffff', headerBg: '#f9f9f9', border: '#e0e0e0', text: '#333', dim: '#9b9b9b', headTxt: '#222', headDim: '#666' },
+  dark: { bg: '#0b0b0b', headerBg: '#111', border: '#1f1f1f', text: '#d8d8d8', dim: 'var(--k-ink-5)', headTxt: 'var(--k-hairline-3)', headDim: 'var(--k-faint-3)' },
+  light: { bg: 'var(--k-bg)', headerBg: 'var(--k-surface)', border: 'var(--k-border)', text: 'var(--k-ink-1)', dim: 'var(--k-dim)', headTxt: '#222', headDim: 'var(--k-ink-4)' },
 };
 
 // One monospace stack for the whole terminal so log lines read like real logs.

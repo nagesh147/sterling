@@ -28,12 +28,12 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
         display: 'flex', alignItems: 'center', justifyContent: 'center', 
         width: 125, height: 32, borderRadius: 3, padding: 0, 
         border: 'none', cursor: 'pointer', 
-        fontSize: 12, letterSpacing: '0.5px', color: '#fff'
+        fontSize: 12, letterSpacing: '0.5px', color: 'var(--k-bg)'
       }
     : { 
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         minWidth: 35, borderRadius: 3, padding: '6px 10px', cursor: 'pointer',
-        fontSize: 12, border: 'none', color: '#fff'
+        fontSize: 12, border: 'none', color: 'var(--k-bg)'
       };
 
   const iconBtnStyle: React.CSSProperties = {
@@ -43,12 +43,12 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
   return (
     <div className={className} onClick={(e) => e.stopPropagation()}>
       {onBuy && (
-        <button style={{ ...buySellStyle, background: '#4184f3' }} title={buyLabel || "Buy"} onClick={onBuy}>
+        <button style={{ ...buySellStyle, background: 'var(--k-blue)' }} title={buyLabel || "Buy"} onClick={onBuy}>
           {buyLabel || (variant === 'long' ? 'BUY' : 'B')}
         </button>
       )}
       {onSell && (
-        <button style={{ ...buySellStyle, background: '#ff5722' }} title={sellLabel || "Sell"} onClick={onSell}>
+        <button style={{ ...buySellStyle, background: 'var(--k-orange)' }} title={sellLabel || "Sell"} onClick={onSell}>
           {sellLabel || (variant === 'long' ? 'SELL' : 'S')}
         </button>
       )}
@@ -73,7 +73,7 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
         </button>
       )}
       {onAdd && (
-        <button style={{ ...btnAction, background: k.green, color: '#fff', fontSize: 16, fontWeight: 600 }} title="Add to watchlist" onClick={onAdd}>
+        <button style={{ ...btnAction, background: k.green, color: 'var(--k-bg)', fontSize: 16, fontWeight: 600 }} title="Add to watchlist" onClick={onAdd}>
           +
         </button>
       )}

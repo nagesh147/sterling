@@ -156,8 +156,8 @@ export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The char
               minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)',
               alignItems: 'start', gap: 9, textAlign: 'left', padding: '10px 11px', borderRadius: 7,
               cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box',
-              border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
-              background: selected ? ORANGE_SOFT : '#fff',
+              border: `1px solid ${selected ? 'var(--k-border-brand)' : BORDER}`,
+              background: selected ? ORANGE_SOFT : 'var(--k-bg)',
             }}>
               <input
                 type="radio" name={name} checked={selected}

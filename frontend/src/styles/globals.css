@@ -445,3 +445,18 @@ button, a, input, select, textarea,
 
 /* Brand-tinted selection (scrollbars handled by the macOS overlay rules above). */
 ::selection { background: color-mix(in srgb, var(--brand-2) 32%, transparent); color: var(--text-primary); }
+
+/* The app-level light/dark switch. Hover lifts it the same way the other
+   top-bar icon actions do, so it reads as one of them and not as a widget. */
+.sk-theme-toggle:hover {
+  color: var(--t-bright) !important;
+  border-color: color-mix(in srgb, var(--t-bright) 28%, transparent) !important;
+}
+.sk-theme-toggle:active > span { transform: scale(.86) rotate(-18deg); }
+.sk-theme-toggle:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-theme-toggle, .sk-theme-toggle > span { transition: none !important; }
+}

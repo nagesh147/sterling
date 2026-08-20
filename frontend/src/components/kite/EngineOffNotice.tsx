@@ -60,7 +60,7 @@ export function EngineOffNotice({
             style={{
               minHeight: 32, padding: '0 14px', borderRadius: 6, cursor: pending ? 'wait' : 'pointer',
               border: `1px solid ${k.blue}`, background: pending ? tint(k.blue, 10) : k.blue,
-              color: pending ? k.blue : '#fff', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700,
+              color: pending ? k.blue : 'var(--k-bg)', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700,
               opacity: pending ? 0.75 : 1, transition: 'background .12s ease, opacity .12s ease',
             }}
           >

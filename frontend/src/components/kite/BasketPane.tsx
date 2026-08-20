@@ -77,9 +77,9 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', zIndex: 1100 }} />
       <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', width: 620, maxWidth: '92vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f1f1' }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: '#444' }}>Basket <span style={{ color: '#9b9b9b', fontWeight: 400 }}>({entries.length})</span></h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--k-surface-hover)' }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: 'var(--k-text)' }}>Basket <span style={{ color: 'var(--k-dim)', fontWeight: 400 }}>({entries.length})</span></h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--k-dim)', cursor: 'pointer' }}>✕</button>
         </div>
 
         {variety === 'amo' && (
@@ -89,36 +89,36 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
         )}
 
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          {entries.length === 0 && <div style={{ padding: 24, color: '#9b9b9b', fontSize: 13 }}>Basket is empty. Add orders from the order ticket or a watchlist row.</div>}
+          {entries.length === 0 && <div style={{ padding: 24, color: 'var(--k-dim)', fontSize: 13 }}>Basket is empty. Add orders from the order ticket or a watchlist row.</div>}
           {entries.map((e) => (
-            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderBottom: '1px solid #f9f9f9' }}>
+            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderBottom: '1px solid var(--k-surface)' }}>
               <span style={{ width: 44, fontSize: 11, fontWeight: 700, color: e.side === 'BUY' ? k.blue : k.orange }}>{e.side}</span>
-              <span style={{ flex: 1, fontSize: 13, color: '#444' }}><InstrumentLabel symbol={`${e.exchange}:${e.symbol}`} /></span>
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--k-text)' }}><InstrumentLabel symbol={`${e.exchange}:${e.symbol}`} /></span>
               <input type="number" min={1} value={e.qty} disabled={e.status === 'placed' || placingAll}
                 onChange={(ev) => update(e.id, { qty: Number(ev.target.value) })}
-                style={{ width: 60, padding: '4px 6px', border: '1px solid #e0e0e0', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
+                style={{ width: 60, padding: '4px 6px', border: '1px solid var(--k-border)', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
               {needsPrice(e.orderType) && (
                 <input type="number" step={0.05} value={e.price} disabled={e.status === 'placed' || placingAll}
                   onChange={(ev) => update(e.id, { price: Number(ev.target.value) })}
-                  style={{ width: 70, padding: '4px 6px', border: '1px solid #e0e0e0', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
+                  style={{ width: 70, padding: '4px 6px', border: '1px solid var(--k-border)', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
               )}
               <span style={{ width: 90, fontSize: 11, color: statusColor[e.status], textAlign: 'right' }} title={e.error}>
                 {statusLabel[e.status]}
               </span>
               <button onClick={() => remove(e.id)} title="Remove from basket" disabled={e.status === 'placing'}
-                style={{ background: 'none', border: 'none', color: '#9b9b9b', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                style={{ background: 'none', border: 'none', color: 'var(--k-dim)', cursor: 'pointer', fontSize: 14 }}>✕</button>
             </div>
           ))}
         </div>
 
-        <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--k-surface-hover)', display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 12, color: k.dim }}>
-            Est. margin <b style={{ color: '#444' }}>{margin ? inr(margin.total) : (marginCalc.isPending ? '…' : '—')}</b>
+            Est. margin <b style={{ color: 'var(--k-text)' }}>{margin ? inr(margin.total) : (marginCalc.isPending ? '…' : '—')}</b>
           </span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
-            <button onClick={clear} disabled={placingAll} style={{ background: '#fff', color: '#444', border: '1px solid #e0e0e0', borderRadius: 3, padding: '8px 16px', fontSize: 13, cursor: placingAll ? 'not-allowed' : 'pointer' }}>Clear</button>
+            <button onClick={clear} disabled={placingAll} style={{ background: 'var(--k-bg)', color: 'var(--k-text)', border: '1px solid var(--k-border)', borderRadius: 3, padding: '8px 16px', fontSize: 13, cursor: placingAll ? 'not-allowed' : 'pointer' }}>Clear</button>
             <button onClick={placeAll} disabled={entries.length === 0 || placingAll || allPlaced}
-              style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: (entries.length === 0 || placingAll || allPlaced) ? 'not-allowed' : 'pointer', opacity: (entries.length === 0 || placingAll || allPlaced) ? 0.55 : 1 }}>
+              style={{ background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: (entries.length === 0 || placingAll || allPlaced) ? 'not-allowed' : 'pointer', opacity: (entries.length === 0 || placingAll || allPlaced) ? 0.55 : 1 }}>
               {placingAll ? 'Placing…' : allPlaced ? 'All placed' : 'Place Basket'}
             </button>
           </div>

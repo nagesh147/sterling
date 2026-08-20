@@ -84,8 +84,8 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
         {label}
         {sortKey && (
           <span className={`sort-icon ${isActive ? 'active' : ''}`}>
-             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
-             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? 'var(--k-blue-kite)' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? 'var(--k-blue-kite)' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
           </span>
         )}
       </div>
@@ -550,7 +550,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     style={{
                       fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
                       color: row.exit_reason.startsWith('trail breach') ? k.red : row.exit_reason.startsWith('time decay') ? k.orange : k.dim,
-                      background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : row.exit_reason.startsWith('time decay') ? '#fff3e0' : undefined,
+                      background: row.exit_reason.startsWith('trail breach') ? 'var(--k-tint-red)' : row.exit_reason.startsWith('time decay') ? 'var(--k-tint-amber)' : undefined,
                     }}>
                 {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : row.exit_reason.startsWith('time decay') ? 'Theta exit' : 'counter exit'}
               </span>
@@ -566,7 +566,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           {row.adx != null && (
             <Tip text={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}>
               <span style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
-                             background: row.adx >= 25 ? '#e8f5e9' : undefined,
+                             background: row.adx >= 25 ? 'var(--k-tint-green)' : undefined,
                              borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
                 ADX {row.adx.toFixed(0)}
               </span>
@@ -575,7 +575,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           {row.atr_pct != null && (
             <Tip text={`ATR percentile ${row.atr_pct.toFixed(0)}% — this bar's ATR ranked against the last 100 hourly bars (~15 sessions), not a % of price. Higher = unusually volatile for this instrument lately.`}>
               <span style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
-                             background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
+                             background: row.atr_pct >= 50 ? 'var(--k-tint-amber)' : undefined,
                              borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
                 ATR {row.atr_pct.toFixed(0)}%
               </span>
@@ -1355,7 +1355,7 @@ function Switch({ on, onChange, color, label }: { on: boolean; onChange: () => v
       }}>
       <span style={{
         position: 'absolute', top: 2, left: on ? 17 : 2, width: 15, height: 15, borderRadius: '50%',
-        background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+        background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
       }} />
     </button>
   );
@@ -1414,7 +1414,7 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
         }}>
         <span style={{
           position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+          background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
         }} />
       </button>
     </div>
@@ -1464,7 +1464,7 @@ function SignalTableSettingsPanel({
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 15 }}>
         <div>
           <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Signal table settings</div>
-          <div style={{ color: '#777', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
             These choices change only how this table looks. Entry, stop, exit and sizing rules live under Connect → Trade Rules.
           </div>
         </div>
@@ -1475,7 +1475,7 @@ function SignalTableSettingsPanel({
 
       <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(190px, 1fr) minmax(250px, 1.25fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
         <div className="sk-table-settings-group" style={{ padding: 13 }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: '#f6f6f7' }}>
             {([
               { value: 'list' as const, label: 'List', icon: <ListIcon /> },
@@ -1486,7 +1486,7 @@ function SignalTableSettingsPanel({
                 <button key={option.value} type="button" title={`${option.label} layout`} aria-pressed={selected} onClick={() => onLayoutChange(option.value)} style={{
                   minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   border: 'none', borderRadius: 6,
-                  background: selected ? k.bg : 'transparent', color: selected ? k.text : '#777',
+                  background: selected ? k.bg : 'transparent', color: selected ? k.text : 'var(--k-ink-5)',
                   boxShadow: selected ? `inset 0 -2px ${k.orange}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
                   padding: '0 8px', fontSize: 10.5, fontWeight: selected ? 700 : 550, fontFamily: 'inherit', cursor: 'pointer',
                 }}>
@@ -1498,7 +1498,7 @@ function SignalTableSettingsPanel({
         </div>
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Rows</div>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Rows</div>
           <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
             <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
             Best signal per instrument
@@ -1510,7 +1510,7 @@ function SignalTableSettingsPanel({
         </div>
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
           {/* The same five flags are also editable from the sliders button in the
               search bar, which is the only place the watchlist has. Both write one
               store, so they cannot drift — but a user who changes them here should
@@ -1531,7 +1531,7 @@ function SignalTableSettingsPanel({
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
         <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
-        <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: '#666', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+        <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: 'var(--k-ink-4)', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
           Reset table view
         </button>
       </div>
@@ -1667,7 +1667,7 @@ function BestOnlyToggle({ on, onChange }: { on: boolean; onChange: () => void })
         }}>
         <span style={{
           position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+          background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
         }} />
       </button>
     </div>
@@ -2061,7 +2061,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled', true)}
             disabled={setCfg.isPending}
             style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                     background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
+                     background: k.green, color: 'var(--k-bg)', fontSize: 13, fontWeight: 700,
                      opacity: setCfg.isPending ? 0.6 : 1, transition: 'opacity 0.15s' }}>
             Enable Engine
           </button>
@@ -2288,10 +2288,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-leg-row::-webkit-scrollbar { display: none; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .sort-header-div:hover { color: #444 !important; }
-        .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
+        .sort-header-div:hover { color: var(--k-text) !important; }
+        .sort-icon { opacity: 0; color: var(--k-dim); display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
-        .sort-icon.active { opacity: 1 !important; color: #444; }
+        .sort-icon.active { opacity: 1 !important; color: var(--k-text); }
         .st-actions-persistent {
           display: flex;
           gap: 8px;
@@ -2347,7 +2347,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <button
               type="button"
               onClick={revealRecentSignals}
-              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.orange, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.orange, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Show recent signals
             </button>
@@ -2369,7 +2369,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   type="button"
                   onClick={() => setCfg.mutate({ engine_enabled: true })}
                   disabled={setCfg.isPending}
-                  style={{ minHeight: 32, padding: '0 14px', border: `1px solid ${k.blue}`, borderRadius: 6, background: setCfg.isPending ? '#fff' : k.blue, color: setCfg.isPending ? k.blue : '#fff', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: setCfg.isPending ? 'wait' : 'pointer' }}
+                  style={{ minHeight: 32, padding: '0 14px', border: `1px solid ${k.blue}`, borderRadius: 6, background: setCfg.isPending ? 'var(--k-bg)' : k.blue, color: setCfg.isPending ? k.blue : 'var(--k-bg)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: setCfg.isPending ? 'wait' : 'pointer' }}
                 >
                   {setCfg.isPending ? 'Turning on…' : 'Turn on SuperTrend'}
                 </button>
@@ -2379,7 +2379,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 <button
                   type="button"
                   onClick={() => changeSignalMode('navigator')}
-                  style={{ minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                 >
                   Show Navigator setups
                 </button>
@@ -2413,7 +2413,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <button
               type="button"
               onClick={() => changeSignalMode('combined')}
-              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Switch to Combined lens
             </button>
@@ -2484,7 +2484,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             style={{
               margin: '12px 16px',
               padding: '10px 16px',
-              background: '#f9f9f9',
+              background: 'var(--k-surface)',
               border: `1px dashed ${k.blue}60`,
               borderRadius: 4,
               display: 'flex',

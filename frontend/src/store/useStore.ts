@@ -107,6 +107,14 @@ interface StoreState {
   theme: Theme;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
+  /**
+   * Flip light <-> dark for the app-level icon.
+   *
+   * Distinct from `toggleTheme`, which cycles all three: an icon that shows a
+   * moon has to produce dark, not "whatever is next in the list". Grey stays
+   * reachable from the status bar.
+   */
+  toggleLightDark: () => void;
   appMode: 'basic' | 'pro';
   setAppMode: (m: 'basic' | 'pro') => void;
   engineMode: 'sterling' | 'grok';
@@ -139,6 +147,15 @@ export const useStore = create<StoreState>((set) => ({
     applyThemeToDocument(t);
     set({ theme: t });
   },
+  toggleLightDark: () => set((s) => {
+    const next: Theme = s.theme === 'light' ? 'dark' : 'light';
+    try {
+      localStorage.setItem(THEME_KEY, next);
+      localStorage.setItem(THEME_DEFAULT_MIGRATION_KEY, 'true');
+    } catch { /* ignore */ }
+    applyThemeToDocument(next);
+    return { theme: next };
+  }),
   toggleTheme: () => set((s) => {
     const idx = THEME_CYCLE.indexOf(s.theme);
     const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length] ?? DEFAULT_THEME;
@@ -210,6 +227,7 @@ export type { Theme };
 export { DEFAULT_THEME, THEME_DEFAULT_MIGRATION_KEY };
 export const useTheme = () => useStore((s) => s.theme);
 export const useSetTheme = () => useStore((s) => s.setTheme);
+export const useToggleLightDark = () => useStore((s) => s.toggleLightDark);
 export const useToggleTheme = () => useStore((s) => s.toggleTheme);
 export const useAppMode = () => useStore((s) => s.appMode);
 export const useSetAppMode = () => useStore((s) => s.setAppMode);

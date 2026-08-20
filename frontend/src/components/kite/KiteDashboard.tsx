@@ -12,13 +12,17 @@ import {
 import { useCandles } from '../../hooks/useCandles';
 import { MacReveal, MacSkeleton } from './MacLoadingSurface';
 import { k } from '../../styles/kiteUI';
+import { readThemeHex } from '../../styles/theme';
+import { useTheme } from '../../store/useStore';
 
-const BLUE = '#387ed1';
-const GREEN = '#4caf50';
-const RED = '#df514c';
-const BORDER = '#eeeeee';
-const MUTED = '#9b9b9b';
-const TEXT = '#444';
+// These feed the CSS template below, so they can stay as variables and follow
+// the theme for free.
+const BLUE = 'var(--k-blue-kite)';
+const GREEN = 'var(--k-green)';
+const RED = 'var(--k-red)';
+const BORDER = 'var(--k-hairline-3)';
+const MUTED = 'var(--k-dim)';
+const TEXT = 'var(--k-text)';
 
 function nav(detail: 'holdings' | 'positions' | 'more') {
   window.dispatchEvent(new CustomEvent('kite-nav-click', { detail }));
@@ -110,22 +114,31 @@ function HoldingsSummary({ holdings }: { holdings: any[] }) {
 function MarketChart({ symbol }: { symbol: string }) {
   const host = useRef<HTMLDivElement>(null);
   const { data: candles = [], isLoading } = useCandles(symbol, 'D', 260);
+  const theme = useTheme();
 
   useEffect(() => {
     if (!host.current || !candles.length) return;
+    // A canvas never sees the cascade, so the chart reads the tokens' current
+    // values and rebuilds when `theme` changes. Without that dependency the
+    // grid and axis keep yesterday's palette after a switch.
+    const axis = readThemeHex('dim', '#9b9b9b');
+    const grid = readThemeHex('hairline-2', '#f2f2f2');
+    const line = readThemeHex('blue-kite', '#4587ed');
     const chart = createChart(host.current, {
       width: host.current.clientWidth,
       height: 145,
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: MUTED, fontSize: 10 },
-      grid: { vertLines: { visible: false }, horzLines: { color: '#f2f2f2' } },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: axis, fontSize: 10 },
+      grid: { vertLines: { visible: false }, horzLines: { color: grid } },
       rightPriceScale: { visible: false },
-      timeScale: { borderColor: '#ededed', timeVisible: false, secondsVisible: false },
+      timeScale: { borderColor: grid, timeVisible: false, secondsVisible: false },
       handleScroll: false,
       handleScale: false,
       crosshair: { vertLine: { visible: false }, horzLine: { visible: false } },
     });
     const series = chart.addSeries(AreaSeries, {
-      lineColor: '#4587ed', topColor: 'rgba(69,135,237,.18)', bottomColor: 'rgba(69,135,237,0)',
+      lineColor: line,
+      topColor: `color-mix(in srgb, ${line} 18%, transparent)`,
+      bottomColor: `color-mix(in srgb, ${line} 0%, transparent)`,
       lineWidth: 2, priceLineVisible: false, crosshairMarkerVisible: false,
     });
     const data = candles
@@ -140,7 +153,7 @@ function MarketChart({ symbol }: { symbol: string }) {
     observer?.observe(host.current);
     window.addEventListener('resize', resize);
     return () => { observer?.disconnect(); window.removeEventListener('resize', resize); chart.remove(); };
-  }, [candles]);
+  }, [candles, theme]);
 
   if (isLoading && !candles.length) return <MacSkeleton width="100%" height={145} radius={4} />;
   return <div ref={host} className="kd-market-chart" />;
@@ -238,7 +251,7 @@ export function KiteDashboard() {
   return (
     <div className="kite-dashboard-parity" aria-busy={busy}>
       <style>{`
-        .kite-dashboard-parity{--kd-border:${BORDER};--kd-text:${TEXT};--kd-muted:${MUTED};width:100%;min-height:100%;background:#fff;color:var(--kd-text);font-family:${k.fontFamily};font-size:12px}.kite-dashboard-parity *{box-sizing:border-box}.kd-shell{width:min(1240px,100%);margin:0 auto;padding:24px 28px 54px}.kd-greeting{font-size:21px;font-weight:400;margin:0 0 24px}.kd-margins{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--kd-border);padding-bottom:28px}.kd-margin-card{min-height:160px;padding:0 44px 0 0}.kd-margin-card+ .kd-margin-card{border-left:1px solid var(--kd-border);padding-left:44px;padding-right:0}.kd-card-title{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:20px}.kd-card-title svg{width:15px;height:15px;fill:none;stroke:#8d8d8d;stroke-width:1.6}.kd-margin-body{display:flex;justify-content:space-between;gap:32px}.kd-margin-main strong{display:block;font-size:42px;line-height:1.05;font-weight:300;letter-spacing:-1px}.kd-margin-main span,.kd-margin-meta span{color:var(--kd-muted)}.kd-margin-main span{display:block;margin-top:8px}.kd-margin-meta{min-width:180px;padding-top:8px}.kd-margin-meta div{display:flex;justify-content:space-between;gap:22px;margin-bottom:14px}.kd-margin-meta b{font-weight:500}.kd-link,.kd-link-button,.kd-view-all{color:${BLUE};text-decoration:none;border:0;background:none;padding:0;cursor:pointer;font-size:11px}.kd-margin-card>.kd-link{display:inline-block;margin-top:23px}.kd-holdings-zone{min-height:285px;border-bottom:1px solid var(--kd-border);display:flex;align-items:center;justify-content:center;padding:34px 0}.kd-empty-holdings{text-align:center;color:var(--kd-muted)}.kd-empty-holdings svg{width:62px;height:62px;fill:none;stroke:#c6c6c6;stroke-width:2}.kd-empty-holdings p{line-height:1.55;margin:18px 0}.kd-empty-holdings button{border:0;border-radius:3px;background:${BLUE};color:#fff;padding:10px 25px;cursor:pointer}.kd-holdings-summary{width:min(720px,100%);display:grid;grid-template-columns:repeat(3,1fr);gap:28px;text-align:center}.kd-holdings-summary div{padding:18px;border-right:1px solid var(--kd-border)}.kd-holdings-summary div:nth-child(3){border-right:0}.kd-holdings-summary span{display:block;color:var(--kd-muted);margin-bottom:8px}.kd-holdings-summary strong{font-size:24px;font-weight:400}.kd-holdings-summary button{grid-column:1/-1;margin:auto}.kd-middle{display:grid;grid-template-columns:1fr 1fr 1.8fr;gap:22px;padding:34px 0;border-bottom:1px solid var(--kd-border)}.kd-movers,.kd-calendar{min-width:0}.kd-movers header{display:flex;align-items:center;gap:8px;margin-bottom:13px;font-size:13px}.kd-movers header small{font-size:9px;color:var(--kd-muted);background:#f5f5f5;padding:2px 5px}.kd-movers header button{margin-left:auto;border:0;background:none;color:#777}.kd-mover-list{border:1px solid var(--kd-border)}.kd-mover-row{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-bottom:1px solid #f3f3f3}.kd-mover-row:last-child{border-bottom:0}.kd-mover-row>div{display:flex;flex-direction:column;gap:2px}.kd-mover-row>div:last-child{text-align:right}.kd-mover-row b{font-size:11px;font-weight:500}.kd-mover-row small{font-size:9px;color:var(--kd-muted)}.positive{color:${GREEN}!important}.negative{color:${RED}!important}.kd-view-all{margin-top:11px}.kd-calendar-tabs{display:flex;gap:20px;border-bottom:1px solid var(--kd-border);overflow:auto}.kd-calendar-tabs button{white-space:nowrap;border:0;background:none;padding:0 0 10px;color:var(--kd-muted);font-size:11px}.kd-calendar-tabs button.active{color:var(--kd-text);border-bottom:2px solid #ff5722}.kd-calendar-body{border:1px solid var(--kd-border);border-top:0;padding:11px}.kd-calendar-body>small{font-size:8px;color:#ef6c63}.kd-calendar-row{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid #f2f2f2;padding:8px 0}.kd-calendar-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.kd-calendar-row small{color:var(--kd-muted);white-space:nowrap;font-size:9px}.kd-bottom{display:grid;grid-template-columns:1fr 1fr;gap:46px;padding-top:34px}.kd-market h3,.kd-positions-chart h3{font-size:13px;font-weight:500;margin:0 0 20px}.kd-market-select{display:inline-flex;border:1px solid var(--kd-border);padding:5px 8px;color:var(--kd-muted);margin-bottom:8px}.kd-market-chart{width:100%;height:145px}.kd-position-bars{padding-top:8px}.kd-position-row{display:grid;grid-template-columns:minmax(150px,45%) 1fr;gap:16px;align-items:center;margin-bottom:10px}.kd-position-row>span{color:var(--kd-muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.kd-position-row i{height:7px;background:#f5f5f5;display:block}.kd-position-row i b{display:block;height:100%}.positive-bg{background:#3c80ec}.negative-bg{background:#ff7043}.kd-empty-mini{padding:18px;color:var(--kd-muted);text-align:center}@media(max-width:1050px){.kd-middle{grid-template-columns:1fr 1fr}.kd-calendar{grid-column:1/-1}.kd-margin-meta{min-width:150px}.kd-margin-card{padding-right:24px}.kd-margin-card+.kd-margin-card{padding-left:24px}}@media(max-width:760px){.kd-shell{padding:20px 16px}.kd-margins,.kd-bottom,.kd-middle{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-left:0;border-top:1px solid var(--kd-border);padding:24px 0 0;margin-top:24px}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%}.kd-calendar{grid-column:auto}.kd-holdings-summary{grid-template-columns:1fr}.kd-holdings-summary div{border-right:0;border-bottom:1px solid var(--kd-border)}.kd-position-row{grid-template-columns:42% 1fr}}
+        .kite-dashboard-parity{--kd-border:${BORDER};--kd-text:${TEXT};--kd-muted:${MUTED};width:100%;min-height:100%;background:var(--k-bg);color:var(--kd-text);font-family:${k.fontFamily};font-size:12px}.kite-dashboard-parity *{box-sizing:border-box}.kd-shell{width:min(1240px,100%);margin:0 auto;padding:24px 28px 54px}.kd-greeting{font-size:21px;font-weight:400;margin:0 0 24px}.kd-margins{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--kd-border);padding-bottom:28px}.kd-margin-card{min-height:160px;padding:0 44px 0 0}.kd-margin-card+ .kd-margin-card{border-left:1px solid var(--kd-border);padding-left:44px;padding-right:0}.kd-card-title{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:20px}.kd-card-title svg{width:15px;height:15px;fill:none;stroke:var(--k-ink-7);stroke-width:1.6}.kd-margin-body{display:flex;justify-content:space-between;gap:32px}.kd-margin-main strong{display:block;font-size:42px;line-height:1.05;font-weight:300;letter-spacing:-1px}.kd-margin-main span,.kd-margin-meta span{color:var(--kd-muted)}.kd-margin-main span{display:block;margin-top:8px}.kd-margin-meta{min-width:180px;padding-top:8px}.kd-margin-meta div{display:flex;justify-content:space-between;gap:22px;margin-bottom:14px}.kd-margin-meta b{font-weight:500}.kd-link,.kd-link-button,.kd-view-all{color:${BLUE};text-decoration:none;border:0;background:none;padding:0;cursor:pointer;font-size:11px}.kd-margin-card>.kd-link{display:inline-block;margin-top:23px}.kd-holdings-zone{min-height:285px;border-bottom:1px solid var(--kd-border);display:flex;align-items:center;justify-content:center;padding:34px 0}.kd-empty-holdings{text-align:center;color:var(--kd-muted)}.kd-empty-holdings svg{width:62px;height:62px;fill:none;stroke:var(--k-faint-4);stroke-width:2}.kd-empty-holdings p{line-height:1.55;margin:18px 0}.kd-empty-holdings button{border:0;border-radius:3px;background:${BLUE};color:var(--k-bg);padding:10px 25px;cursor:pointer}.kd-holdings-summary{width:min(720px,100%);display:grid;grid-template-columns:repeat(3,1fr);gap:28px;text-align:center}.kd-holdings-summary div{padding:18px;border-right:1px solid var(--kd-border)}.kd-holdings-summary div:nth-child(3){border-right:0}.kd-holdings-summary span{display:block;color:var(--kd-muted);margin-bottom:8px}.kd-holdings-summary strong{font-size:24px;font-weight:400}.kd-holdings-summary button{grid-column:1/-1;margin:auto}.kd-middle{display:grid;grid-template-columns:1fr 1fr 1.8fr;gap:22px;padding:34px 0;border-bottom:1px solid var(--kd-border)}.kd-movers,.kd-calendar{min-width:0}.kd-movers header{display:flex;align-items:center;gap:8px;margin-bottom:13px;font-size:13px}.kd-movers header small{font-size:9px;color:var(--kd-muted);background:var(--k-surface-4);padding:2px 5px}.kd-movers header button{margin-left:auto;border:0;background:none;color:var(--k-ink-5)}.kd-mover-list{border:1px solid var(--kd-border)}.kd-mover-row{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-bottom:1px solid var(--k-hairline)}.kd-mover-row:last-child{border-bottom:0}.kd-mover-row>div{display:flex;flex-direction:column;gap:2px}.kd-mover-row>div:last-child{text-align:right}.kd-mover-row b{font-size:11px;font-weight:500}.kd-mover-row small{font-size:9px;color:var(--kd-muted)}.positive{color:${GREEN}!important}.negative{color:${RED}!important}.kd-view-all{margin-top:11px}.kd-calendar-tabs{display:flex;gap:20px;border-bottom:1px solid var(--kd-border);overflow:auto}.kd-calendar-tabs button{white-space:nowrap;border:0;background:none;padding:0 0 10px;color:var(--kd-muted);font-size:11px}.kd-calendar-tabs button.active{color:var(--kd-text);border-bottom:2px solid var(--k-orange)}.kd-calendar-body{border:1px solid var(--kd-border);border-top:0;padding:11px}.kd-calendar-body>small{font-size:8px;color:var(--k-red-soft)}.kd-calendar-row{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid var(--k-hairline-2);padding:8px 0}.kd-calendar-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.kd-calendar-row small{color:var(--kd-muted);white-space:nowrap;font-size:9px}.kd-bottom{display:grid;grid-template-columns:1fr 1fr;gap:46px;padding-top:34px}.kd-market h3,.kd-positions-chart h3{font-size:13px;font-weight:500;margin:0 0 20px}.kd-market-select{display:inline-flex;border:1px solid var(--kd-border);padding:5px 8px;color:var(--kd-muted);margin-bottom:8px}.kd-market-chart{width:100%;height:145px}.kd-position-bars{padding-top:8px}.kd-position-row{display:grid;grid-template-columns:minmax(150px,45%) 1fr;gap:16px;align-items:center;margin-bottom:10px}.kd-position-row>span{color:var(--kd-muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.kd-position-row i{height:7px;background:var(--k-surface-4);display:block}.kd-position-row i b{display:block;height:100%}.positive-bg{background:var(--k-blue-bar)}.negative-bg{background:var(--k-orange-bar)}.kd-empty-mini{padding:18px;color:var(--kd-muted);text-align:center}@media(max-width:1050px){.kd-middle{grid-template-columns:1fr 1fr}.kd-calendar{grid-column:1/-1}.kd-margin-meta{min-width:150px}.kd-margin-card{padding-right:24px}.kd-margin-card+.kd-margin-card{padding-left:24px}}@media(max-width:760px){.kd-shell{padding:20px 16px}.kd-margins,.kd-bottom,.kd-middle{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-left:0;border-top:1px solid var(--kd-border);padding:24px 0 0;margin-top:24px}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%}.kd-calendar{grid-column:auto}.kd-holdings-summary{grid-template-columns:1fr}.kd-holdings-summary div{border-right:0;border-bottom:1px solid var(--kd-border)}.kd-position-row{grid-template-columns:42% 1fr}}
       `}</style>
       <div className="kd-shell">
         <MacReveal><h1 className="kd-greeting">Hi, {name}</h1></MacReveal>

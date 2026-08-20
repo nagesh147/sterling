@@ -154,9 +154,9 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       {/* Header Info & Sub-Selector */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: 'var(--k-surface-sunken)', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
             {symbol} Volume Analytics & Pace
           </span>
           <span
@@ -166,7 +166,7 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
               padding: '2px 7px',
               borderRadius: 4,
               background: latestRvol >= 1.5 ? 'rgba(16,185,129,.12)' : latestRvol <= 0.7 ? 'rgba(239,68,68,.12)' : 'rgba(37,99,235,.12)',
-              color: latestRvol >= 1.5 ? '#059669' : latestRvol <= 0.7 ? '#dc2626' : '#2563eb',
+              color: latestRvol >= 1.5 ? 'var(--k-emerald)' : latestRvol <= 0.7 ? 'var(--k-red-deep)' : 'var(--k-blue-strong)',
             }}
           >
             RVOL {latestRvol}x {latestRvol >= 1.5 ? '⚡ HIGH VOLUME SURGE' : latestRvol <= 0.7 ? '💤 BELOW AVERAGE' : 'NORMAL PACE'}
@@ -174,7 +174,7 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
         </div>
 
         {/* Sub-view switcher */}
-        <div style={{ display: 'flex', gap: 4, background: '#ffffff', padding: 2, borderRadius: 5, border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--k-bg)', padding: 2, borderRadius: 5, border: '1px solid var(--k-border-slate)' }}>
           {([
             { id: 'rvol', label: '1. RVOL Surge' },
             { id: 'vwap_bands', label: '2. VWAP Volatility Bands' },
@@ -187,8 +187,8 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
               onClick={() => setSubView(tab.id)}
               style={{
                 border: 0,
-                background: subView === tab.id ? '#2563eb' : 'transparent',
-                color: subView === tab.id ? '#ffffff' : '#64748b',
+                background: subView === tab.id ? 'var(--k-blue-strong)' : 'transparent',
+                color: subView === tab.id ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
                 fontWeight: subView === tab.id ? 700 : 550,
                 fontSize: 10.5,
                 padding: '4px 8px',
@@ -204,21 +204,21 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
       </div>
 
       {/* Main Content Area */}
-      <div style={{ minHeight: 310, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14 }}>
+      <div style={{ minHeight: 310, background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 8, padding: 14 }}>
         {/* SUBVIEW 1: INTRADAY RVOL & VOLUME SURGE */}
         {subView === 'rvol' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--k-ink-slate-3)' }}>
               <span>
-                Inspecting: <strong style={{ color: '#1e293b' }}>{activeBar?.timeStr}</strong> · Volume: <strong style={{ color: '#1e293b' }}>{activeBar?.volume.toLocaleString('en-IN')}</strong> · 20-SMA: <strong>{Math.round(activeBar?.avgVol ?? 0).toLocaleString('en-IN')}</strong>
+                Inspecting: <strong style={{ color: 'var(--k-ink-slate-1)' }}>{activeBar?.timeStr}</strong> · Volume: <strong style={{ color: 'var(--k-ink-slate-1)' }}>{activeBar?.volume.toLocaleString('en-IN')}</strong> · 20-SMA: <strong>{Math.round(activeBar?.avgVol ?? 0).toLocaleString('en-IN')}</strong>
               </span>
-              <span style={{ fontWeight: 700, color: (activeBar?.rvol ?? 1) >= 1.5 ? '#059669' : '#64748b' }}>
+              <span style={{ fontWeight: 700, color: (activeBar?.rvol ?? 1) >= 1.5 ? 'var(--k-emerald)' : 'var(--k-ink-slate-3)' }}>
                 RVOL Multiplier: {activeBar?.rvol}x
               </span>
             </div>
 
             {/* Volume Bars Visualization */}
-            <div style={{ height: 210, display: 'flex', alignItems: 'flex-end', gap: 4, padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ height: 210, display: 'flex', alignItems: 'flex-end', gap: 4, padding: '10px 0', borderBottom: '1px solid var(--k-border-slate)' }}>
               {processedBars.map((b, idx) => {
                 const h = Math.max(10, Math.min(180, Math.round((b.volume / maxBarVol) * 175)));
                 const isHovered = hoveredIdx === idx || (hoveredIdx === null && idx === processedBars.length - 1);
@@ -238,7 +238,7 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
                   >
                     {/* Surge Indicator Pin */}
                     {b.isSurge && (
-                      <span style={{ fontSize: 8, fontWeight: 800, color: '#059669', marginBottom: 2 }}>
+                      <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--k-emerald)', marginBottom: 2 }}>
                         ⚡
                       </span>
                     )}
@@ -247,17 +247,17 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
                         width: '100%',
                         height: h,
                         background: b.isSurge
-                          ? '#10b981'
+                          ? 'var(--k-emerald-2)'
                           : b.isUp
                           ? 'rgba(5,150,105,.65)'
                           : 'rgba(239,68,68,.65)',
-                        border: isHovered ? '1.5px solid #1e293b' : '1px solid transparent',
+                        border: isHovered ? '1.5px solid var(--k-ink-slate-1)' : '1px solid transparent',
                         borderRadius: '2px 2px 0 0',
                         transition: 'height 0.15s ease',
                       }}
                       title={`Time: ${b.timeStr} | Volume: ${b.volume.toLocaleString('en-IN')} | RVOL: ${b.rvol}x`}
                     />
-                    <span style={{ fontSize: 8, color: '#94a3b8', marginTop: 4, transform: 'rotate(-45deg)', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 8, color: 'var(--k-ink-slate-4)', marginTop: 4, transform: 'rotate(-45deg)', whiteSpace: 'nowrap' }}>
                       {idx % 4 === 0 ? b.timeStr : ''}
                     </span>
                   </div>
@@ -266,10 +266,10 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
             </div>
 
             {/* Legend & Insight */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10.5, color: '#64748b', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10.5, color: 'var(--k-ink-slate-3)', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
               <div style={{ display: 'flex', gap: 12 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 10, height: 10, background: '#10b981', borderRadius: 2 }} /> ⚡ High Volume Surge (≥ 1.75x RVOL)
+                  <span style={{ width: 10, height: 10, background: 'var(--k-emerald-2)', borderRadius: 2 }} /> ⚡ High Volume Surge (≥ 1.75x RVOL)
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ width: 10, height: 10, background: 'rgba(5,150,105,.65)', borderRadius: 2 }} /> Bullish Candle Volume
@@ -278,7 +278,7 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
                   <span style={{ width: 10, height: 10, background: 'rgba(239,68,68,.65)', borderRadius: 2 }} /> Bearish Candle Volume
                 </span>
               </div>
-              <span style={{ color: '#2563eb', fontWeight: 650 }}>
+              <span style={{ color: 'var(--k-blue-strong)', fontWeight: 650 }}>
                 Total Window Volume: {totalSessionVol.toLocaleString('en-IN')}
               </span>
             </div>
@@ -288,60 +288,60 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
         {/* SUBVIEW 2: VWAP STANDARD DEVIATION BANDS */}
         {subView === 'vwap_bands' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--k-ink-slate-3)' }}>
               <span>
                 <strong>VWAP Volatility Envelopes</strong>: Standard deviation bands (±1σ, ±2σ, ±3σ) weighted by institutional transaction volume.
               </span>
-              <span style={{ color: '#7c3aed', fontWeight: 700 }}>
+              <span style={{ color: 'var(--k-violet)', fontWeight: 700 }}>
                 Current VWAP: ₹{(propVwap ?? 24409.84).toLocaleString('en-IN')}
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
               <div style={{ padding: 10, borderRadius: 6, background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626' }}>+3σ Extreme Overbought</div>
-                <div style={{ fontSize: 14, fontWeight: 750, color: '#1e293b', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-red-deep)' }}>+3σ Extreme Overbought</div>
+                <div style={{ fontSize: 14, fontWeight: 750, color: 'var(--k-ink-slate-1)', marginTop: 2 }}>
                   ₹{(vwapPoints[vwapPoints.length - 1]?.upper3 ?? 24480).toLocaleString('en-IN')}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>Reversal / Take-Profit zone</div>
+                <div style={{ fontSize: 9.5, color: 'var(--k-ink-slate-3)', marginTop: 2 }}>Reversal / Take-Profit zone</div>
               </div>
 
               <div style={{ padding: 10, borderRadius: 6, background: 'rgba(245,158,11,.06)', border: '1px solid rgba(245,158,11,.2)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#d97706' }}>+2σ Upper Extension</div>
-                <div style={{ fontSize: 14, fontWeight: 750, color: '#1e293b', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-warn)' }}>+2σ Upper Extension</div>
+                <div style={{ fontSize: 14, fontWeight: 750, color: 'var(--k-ink-slate-1)', marginTop: 2 }}>
                   ₹{(vwapPoints[vwapPoints.length - 1]?.upper2 ?? 24455).toLocaleString('en-IN')}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>Momentum continuation band</div>
+                <div style={{ fontSize: 9.5, color: 'var(--k-ink-slate-3)', marginTop: 2 }}>Momentum continuation band</div>
               </div>
 
               <div style={{ padding: 10, borderRadius: 6, background: 'rgba(124,58,237,.06)', border: '1px solid rgba(124,58,237,.2)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>Center VWAP Anchor</div>
-                <div style={{ fontSize: 14, fontWeight: 750, color: '#7c3aed', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-violet)' }}>Center VWAP Anchor</div>
+                <div style={{ fontSize: 14, fontWeight: 750, color: 'var(--k-violet)', marginTop: 2 }}>
                   ₹{(vwapPoints[vwapPoints.length - 1]?.vwap ?? 24409.84).toLocaleString('en-IN')}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>Institutional fair-value center</div>
+                <div style={{ fontSize: 9.5, color: 'var(--k-ink-slate-3)', marginTop: 2 }}>Institutional fair-value center</div>
               </div>
 
               <div style={{ padding: 10, borderRadius: 6, background: 'rgba(16,185,129,.06)', border: '1px solid rgba(16,185,129,.2)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#059669' }}>-2σ Lower Support Band</div>
-                <div style={{ fontSize: 14, fontWeight: 750, color: '#1e293b', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-emerald)' }}>-2σ Lower Support Band</div>
+                <div style={{ fontSize: 14, fontWeight: 750, color: 'var(--k-ink-slate-1)', marginTop: 2 }}>
                   ₹{(vwapPoints[vwapPoints.length - 1]?.lower2 ?? 24365).toLocaleString('en-IN')}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>Institutional bounce zone</div>
+                <div style={{ fontSize: 9.5, color: 'var(--k-ink-slate-3)', marginTop: 2 }}>Institutional bounce zone</div>
               </div>
 
               <div style={{ padding: 10, borderRadius: 6, background: 'rgba(37,99,235,.06)', border: '1px solid rgba(37,99,235,.2)' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb' }}>-3σ Extreme Oversold</div>
-                <div style={{ fontSize: 14, fontWeight: 750, color: '#1e293b', marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue-strong)' }}>-3σ Extreme Oversold</div>
+                <div style={{ fontSize: 14, fontWeight: 750, color: 'var(--k-ink-slate-1)', marginTop: 2 }}>
                   ₹{(vwapPoints[vwapPoints.length - 1]?.lower3 ?? 24340).toLocaleString('en-IN')}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 2 }}>Deep value buy trigger</div>
+                <div style={{ fontSize: 9.5, color: 'var(--k-ink-slate-3)', marginTop: 2 }}>Deep value buy trigger</div>
               </div>
             </div>
 
             {/* Explainer card */}
-            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
-              Adaptive Edge utilizes volume-weighted standard deviation bands to calibrate <strong>favorable excursion targets</strong>. Trades entered above VWAP that expand through +1.5σ are automatically promoted from <strong style={{ color: '#2563eb' }}>MICRO</strong> to <strong style={{ color: '#059669' }}>SCALP</strong> and <strong style={{ color: '#7c3aed' }}>EXTENDED</strong>.
+            <div style={{ background: 'var(--k-surface-sunken)', padding: 12, borderRadius: 6, border: '1px solid var(--k-border-slate)', fontSize: 11, color: 'var(--k-ink-slate-3)', lineHeight: 1.5 }}>
+              Adaptive Edge utilizes volume-weighted standard deviation bands to calibrate <strong>favorable excursion targets</strong>. Trades entered above VWAP that expand through +1.5σ are automatically promoted from <strong style={{ color: 'var(--k-blue-strong)' }}>MICRO</strong> to <strong style={{ color: 'var(--k-emerald)' }}>SCALP</strong> and <strong style={{ color: 'var(--k-violet)' }}>EXTENDED</strong>.
             </div>
           </div>
         )}
@@ -349,39 +349,39 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
         {/* SUBVIEW 3: TIME-OF-DAY VOLUME PACE CURVE */}
         {subView === 'time_of_day' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 11, color: '#64748b' }}>
+            <div style={{ fontSize: 11, color: 'var(--k-ink-slate-3)' }}>
               <strong>Time-of-Day Volume Distribution</strong>: Compares the active session's volume pacing against the Indian Market's typical intraday U-Curve.
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {timeSlots.map((slot) => (
                 <div key={slot.time} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11 }}>
-                  <div style={{ width: 45, fontWeight: 700, color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ width: 45, fontWeight: 700, color: 'var(--k-ink-slate-1)', fontVariantNumeric: 'tabular-nums' }}>
                     {slot.time}
                   </div>
-                  <div style={{ width: 160, color: '#64748b', fontSize: 10.5 }}>
+                  <div style={{ width: 160, color: 'var(--k-ink-slate-3)', fontSize: 10.5 }}>
                     {slot.label}
                   </div>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {/* Actual Volume Bar */}
-                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: 8, background: 'var(--k-surface-slate)', borderRadius: 4, overflow: 'hidden' }}>
                       <div
                         style={{
                           width: `${slot.actualPct * 3.5}%`,
                           height: '100%',
-                          background: slot.actualPct >= slot.expectedPct ? '#10b981' : '#3b82f6',
+                          background: slot.actualPct >= slot.expectedPct ? 'var(--k-emerald-2)' : '#3b82f6',
                         }}
                       />
                     </div>
                   </div>
-                  <div style={{ width: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 650, color: '#1e293b' }}>
+                  <div style={{ width: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 650, color: 'var(--k-ink-slate-1)' }}>
                     {slot.actualPct}% (exp. {slot.expectedPct}%)
                   </div>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--k-ink-slate-3)', borderTop: '1px solid var(--k-border-slate)', paddingTop: 8 }}>
               <span>🟢 Green = Pace exceeding intraday baseline</span>
               <span>🔵 Blue = Standard expected baseline</span>
             </div>
@@ -391,15 +391,15 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
         {/* SUBVIEW 4: OPTION STRIKE VOLUME & PCR */}
         {subView === 'option_volume' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--k-ink-slate-3)' }}>
               <span><strong>Strike-by-Strike Volume & Open Interest Ladder</strong></span>
-              <span style={{ color: '#059669', fontWeight: 700 }}>Session Volume PCR: 0.94 (Healthy Bullish Demand)</span>
+              <span style={{ color: 'var(--k-emerald)', fontWeight: 700 }}>Session Volume PCR: 0.94 (Healthy Bullish Demand)</span>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'center' }}>
                 <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                  <tr style={{ background: 'var(--k-surface-sunken)', borderBottom: '1px solid var(--k-border-slate)', color: 'var(--k-ink-slate-3)' }}>
                     <th style={{ padding: '6px 8px', textAlign: 'left' }}>Call Vol (CE)</th>
                     <th style={{ padding: '6px 8px', textAlign: 'left' }}>Call OI</th>
                     <th style={{ padding: '6px 8px' }}>Strike</th>
@@ -414,18 +414,18 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
                     <tr
                       key={item.strike}
                       style={{
-                        borderBottom: '1px solid #f1f5f9',
+                        borderBottom: '1px solid var(--k-surface-slate)',
                         background: item.isAtm ? 'rgba(37,99,235,.05)' : 'transparent',
                         fontWeight: item.isAtm ? 700 : 500,
                       }}
                     >
-                      <td style={{ padding: '6px 8px', textAlign: 'left', color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--k-emerald)', fontVariantNumeric: 'tabular-nums' }}>
                         {item.ceVol.toLocaleString('en-IN')}
                       </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'left', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--k-ink-slate-3)', fontVariantNumeric: 'tabular-nums' }}>
                         {item.ceOi.toLocaleString('en-IN')}
                       </td>
-                      <td style={{ padding: '6px 8px', fontWeight: 750, color: item.isAtm ? '#2563eb' : '#1e293b', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', fontWeight: 750, color: item.isAtm ? 'var(--k-blue-strong)' : 'var(--k-ink-slate-1)', fontVariantNumeric: 'tabular-nums' }}>
                         ₹{item.strike.toLocaleString('en-IN')}
                       </td>
                       <td style={{ padding: '6px 8px' }}>
@@ -433,13 +433,13 @@ export function VolumeAnalyticsChart({ symbol, candles, currentSpot, vwap: propV
                           {item.moneyness}
                         </span>
                       </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--k-ink-slate-3)', fontVariantNumeric: 'tabular-nums' }}>
                         {item.peOi.toLocaleString('en-IN')}
                       </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--k-red-deep)', fontVariantNumeric: 'tabular-nums' }}>
                         {item.peVol.toLocaleString('en-IN')}
                       </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: item.pcr >= 1.0 ? '#059669' : '#d97706', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: item.pcr >= 1.0 ? 'var(--k-emerald)' : 'var(--k-warn)', fontVariantNumeric: 'tabular-nums' }}>
                         {item.pcr}
                       </td>
                     </tr>

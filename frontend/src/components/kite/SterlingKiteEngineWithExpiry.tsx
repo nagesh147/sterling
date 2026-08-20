@@ -50,10 +50,10 @@ const CONTRACT_PICKER_CSS = `
 .sk-expiry-action:focus-visible,
 .sk-expiry-refresh:focus-visible { outline:2px solid rgba(56,126,209,.42); outline-offset:-2px; }
 .sk-expiry-card:not(:disabled):not([aria-disabled="true"]):hover {
-  background:#fff5f0 !important;
+  background:var(--k-surface-warm) !important;
 }
 .sk-expiry-card:last-child { border-bottom:none !important; }
-.sk-expiry-action:hover:not(:disabled),.sk-expiry-refresh:hover:not(:disabled) { background:#f2f2f3 !important; color:#444 !important; }
+.sk-expiry-action:hover:not(:disabled),.sk-expiry-refresh:hover:not(:disabled) { background:#f2f2f3 !important; color:var(--k-text) !important; }
 .sk-expiry-scroll { scrollbar-gutter:stable; }
 @media (max-width:520px) {
   .sk-expiry-card { grid-template-columns:18px minmax(0,1fr) !important; }
@@ -157,7 +157,7 @@ function ExactExpiryCard({
         border: 'none',
         borderBottom: `1px solid ${k.border}`,
         borderRadius: 0,
-        background: active ? '#fff8f4' : '#fff',
+        background: active ? '#fff8f4' : 'var(--k-bg)',
         color: k.text,
         boxShadow: active ? `inset 3px 0 ${k.orange}` : 'none',
         fontFamily: 'inherit',
@@ -175,8 +175,8 @@ function ExactExpiryCard({
         justifyContent: 'center',
         borderRadius: 4,
         border: `1px solid ${active ? k.orange : '#cfcfcf'}`,
-        background: active ? k.orange : '#fff',
-        color: '#fff',
+        background: active ? k.orange : 'var(--k-bg)',
+        color: 'var(--k-bg)',
         fontSize: 10,
         fontWeight: 800,
         lineHeight: 1,
@@ -184,7 +184,7 @@ function ExactExpiryCard({
         {active ? '✓' : ''}
       </span>
 
-      <span className="sk-expiry-position" style={{ color: active ? '#b95020' : '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: '.045em', textTransform: 'uppercase' }}>
+      <span className="sk-expiry-position" style={{ color: active ? '#b95020' : 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: '.045em', textTransform: 'uppercase' }}>
         {seriesPosition(kind, option.rank)}
       </span>
 
@@ -194,12 +194,12 @@ function ExactExpiryCard({
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: k.text, fontSize: 11, fontWeight: 700 }}>
               {contract.owner}
               {contract.month && (
-                <span style={{ marginLeft: 5, color: '#888', fontSize: 9.5, fontWeight: 700 }}>
+                <span style={{ marginLeft: 5, color: 'var(--k-ink-6)', fontSize: 9.5, fontWeight: 700 }}>
                   {contract.month}
                 </span>
               )}
             </span>
-            <time dateTime={contract.expiry} style={{ color: active ? '#b95020' : '#666', fontSize: 10.5, fontWeight: active ? 700 : 560, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            <time dateTime={contract.expiry} style={{ color: active ? '#b95020' : 'var(--k-ink-4)', fontSize: 10.5, fontWeight: active ? 700 : 560, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
               {contract.date}
             </time>
           </span>
@@ -237,15 +237,15 @@ function ExpiryGroup({
   const allSelected = options.length > 0 && selectedOptions.length === options.length;
 
   return (
-    <section aria-label={title} style={{ overflow: 'hidden', border: `1px solid ${k.border}`, borderRadius: 9, background: '#fff' }}>
+    <section aria-label={title} style={{ overflow: 'hidden', border: `1px solid ${k.border}`, borderRadius: 9, background: 'var(--k-bg)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderBottom: options.length ? '1px solid #ededed' : 'none' }}>
         <span style={{ minWidth: 0, flex: 1 }}>
           <strong style={{ display: 'block', color: k.text, fontSize: 11.5, fontWeight: 750 }}>{title}</strong>
-          <span style={{ display: 'block', marginTop: 3, color: '#888', fontSize: 9.5, lineHeight: 1.4 }}>{description}</span>
+          <span style={{ display: 'block', marginTop: 3, color: 'var(--k-ink-6)', fontSize: 9.5, lineHeight: 1.4 }}>{description}</span>
         </span>
         {options.length > 0 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
-            <span style={{ color: '#777', fontSize: 9.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
               {selectedOptions.length} of {options.length}
             </span>
             {options.length > 1 && (
@@ -260,8 +260,8 @@ function ExpiryGroup({
                   border: `1px solid ${k.border}`,
                   borderRadius: 6,
                   padding: '0 9px',
-                  background: '#fff',
-                  color: '#555',
+                  background: 'var(--k-bg)',
+                  color: 'var(--k-ink-3)',
                   fontFamily: 'inherit',
                   fontSize: 9.5,
                   fontWeight: 650,
@@ -276,7 +276,7 @@ function ExpiryGroup({
       </div>
 
       {options.length ? (
-        <div style={{ display: 'grid', background: '#fff' }}>
+        <div style={{ display: 'grid', background: 'var(--k-bg)' }}>
           {options.map((option) => {
             const active = values.includes(option.rank);
             return (
@@ -378,7 +378,7 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
       {cfg && (
         <section
           aria-label="Option contract expiries"
-          style={{ flexShrink: 0, borderBottom: `1px solid ${k.border}`, background: '#fff' }}
+          style={{ flexShrink: 0, borderBottom: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
         >
           <button
             className="sk-expiry-trigger"
@@ -396,14 +396,14 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
               gap: 11,
               padding: '8px 12px',
               border: 'none',
-              background: contractsOpen ? '#fffaf7' : '#fff',
+              background: contractsOpen ? '#fffaf7' : 'var(--k-bg)',
               color: k.text,
               textAlign: 'left',
               fontFamily: 'inherit',
               cursor: 'pointer',
             }}
           >
-            <span aria-hidden style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: '#fff5f0', color: k.orange }}>
+            <span aria-hidden style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--k-surface-warm)', color: k.orange }}>
               <CalendarGlyph />
             </span>
             <span style={{ minWidth: 0 }}>
@@ -412,15 +412,15 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
                   Option contracts
                 </strong>
                 <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, color: '#33805b', fontSize: 9, fontWeight: 700 }}>
-                  <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: '#4caf50' }} />Live Kite dates
+                  <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--k-green)' }} />Live Kite dates
                 </span>
                 {saveState && (
-                  <span aria-live="polite" style={{ marginLeft: 'auto', color: setConfig.isError ? '#d14343' : '#777', fontSize: 9.5, fontWeight: 680 }}>
+                  <span aria-live="polite" style={{ marginLeft: 'auto', color: setConfig.isError ? '#d14343' : 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 680 }}>
                     {saveState}
                   </span>
                 )}
               </span>
-              <span style={{ display: 'block', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#888', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ display: 'block', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--k-ink-6)', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
                 {selectionSummary}
               </span>
             </span>
@@ -435,12 +435,12 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
               id={panelId}
               role="region"
               aria-label="Exact option contract picker"
-              style={{ maxHeight: 'min(68vh, 620px)', overflowY: 'auto', borderTop: '1px solid #ececec', background: '#f7f7f8' }}
+              style={{ maxHeight: 'min(68vh, 620px)', overflowY: 'auto', borderTop: '1px solid var(--k-border-3)', background: 'var(--k-surface-sunken-2)' }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 12px 9px' }}>
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <strong style={{ display: 'block', color: k.text, fontSize: 12, fontWeight: 760 }}>Choose the contracts Sterling scans</strong>
-                  <span style={{ display: 'block', marginTop: 4, color: '#888', fontSize: 10, lineHeight: 1.45 }}>
+                  <span style={{ display: 'block', marginTop: 4, color: 'var(--k-ink-6)', fontSize: 10, lineHeight: 1.45 }}>
                     One row represents the same listed position across your selected instruments; exact exchange dates may differ.
                   </span>
                 </span>
@@ -451,7 +451,7 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
                     aria-label="Refresh Kite contract dates"
                     disabled={calendar.isFetching}
                     onClick={() => calendar.refetch()}
-                    style={{ width: 32, height: 32, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${k.border}`, borderRadius: 7, background: '#fff', color: '#666', cursor: calendar.isFetching ? 'wait' : 'pointer' }}
+                    style={{ width: 32, height: 32, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${k.border}`, borderRadius: 7, background: 'var(--k-bg)', color: 'var(--k-ink-4)', cursor: calendar.isFetching ? 'wait' : 'pointer' }}
                   >
                     <RefreshGlyph />
                   </button>
@@ -459,7 +459,7 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
               </div>
 
               {calendar.data && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 11px', color: '#888', fontSize: 9.5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 11px', color: 'var(--k-ink-6)', fontSize: 9.5 }}>
                   <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: k.green, boxShadow: '0 0 0 2px rgba(76,175,80,.10)' }} />
                   <span>Kite instruments · as of {formatExpiryDate(calendar.data.as_of, calendar.data.as_of)}</span>
                   {calendar.isFetching && <span aria-live="polite" style={{ marginLeft: 'auto', color: k.orange }}>Refreshing…</span>}
@@ -467,7 +467,7 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
               )}
 
               {calendar.isLoading && !calendar.data && (
-                <div role="status" style={{ margin: '0 10px 10px', padding: '12px', border: `1px solid ${k.border}`, borderRadius: 8, background: '#fff', color: k.dim, fontSize: 9.5 }}>
+                <div role="status" style={{ margin: '0 10px 10px', padding: '12px', border: `1px solid ${k.border}`, borderRadius: 8, background: 'var(--k-bg)', color: k.dim, fontSize: 9.5 }}>
                   Loading exact dates from Kite instruments…
                 </div>
               )}
@@ -475,7 +475,7 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
               {calendar.isError && !calendar.data && (
                 <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '0 10px 10px', padding: '10px', border: '1px solid #f0d8d5', borderRadius: 8, background: '#fff8f7', color: '#8e5550', fontSize: 9.5, lineHeight: 1.4 }}>
                   <span style={{ minWidth: 0, flex: 1 }}>Exact dates are unavailable. Check the Kite connection and try again.</span>
-                  <button type="button" onClick={() => calendar.refetch()} style={{ flexShrink: 0, border: '1px solid #e3bbb6', borderRadius: 5, padding: '4px 7px', background: '#fff', color: '#a33f36', fontFamily: 'inherit', fontSize: 8.5, fontWeight: 680, cursor: 'pointer' }}>
+                  <button type="button" onClick={() => calendar.refetch()} style={{ flexShrink: 0, border: '1px solid #e3bbb6', borderRadius: 5, padding: '4px 7px', background: 'var(--k-bg)', color: '#a33f36', fontFamily: 'inherit', fontSize: 8.5, fontWeight: 680, cursor: 'pointer' }}>
                     Retry
                   </button>
                 </div>
@@ -520,8 +520,8 @@ export function SterlingKiteEngineWithExpiry(props: Props) {
                 </div>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px', borderTop: '1px solid #e7e7e7', color: '#888', fontSize: 9.5, lineHeight: 1.4 }}>
-                <span aria-hidden style={{ color: '#777', fontSize: 11 }}>ⓘ</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px', borderTop: '1px solid #e7e7e7', color: 'var(--k-ink-6)', fontSize: 9.5, lineHeight: 1.4 }}>
+                <span aria-hidden style={{ color: 'var(--k-ink-5)', fontSize: 11 }}>ⓘ</span>
                 <span>Expired contracts drop automatically. Dates are never inferred from weekdays or holidays.</span>
               </div>
             </div>
