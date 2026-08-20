@@ -283,7 +283,6 @@ class NiftyOrbConfigRequest(BaseModel):
     trend_lookback: int | None = None
     atr_period: int | None = None
     stop_buffer_atr: float | None = None
-    trail_atr: float | None = None
     target_r: float | None = None
     option_moneyness: str | None = None
     option_steps_itm: int | None = None

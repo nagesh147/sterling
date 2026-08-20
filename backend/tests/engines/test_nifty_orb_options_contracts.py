@@ -192,3 +192,67 @@ def test_trade_plan_rejects_mismatched_option_side():
     pe = contract("PE", AUG_MONTHLY, "PE")
     with pytest.raises(ValueError, match="does not match"):
         build_trade_plan(signal, pe, cfg, spot=25020)
+
+
+# --------------------------------------------------------------------------
+# moneyness is a risk choice, not a hint
+# --------------------------------------------------------------------------
+
+def _ladder(*strikes, expiry=AUG_MONTHLY):
+    return [contract(f"CE{s:g}", expiry, "CE", strike=s) for s in strikes]
+
+
+def test_an_unavailable_moneyness_is_refused_not_substituted():
+    """Asking for ITM x3 and getting the ATM strike changes delta, cost and payoff."""
+    cfg = StrategyConfig(option_moneyness="ITM", option_steps_itm=3,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    with pytest.raises(ValueError, match="No liquid CE contract at ITM x3"):
+        select_option(25000, "LONG", _ladder(25000), cfg, today=TODAY)
+
+
+def test_a_ladder_that_stops_short_of_the_target_is_refused():
+    cfg = StrategyConfig(option_moneyness="ITM", option_steps_itm=5,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    with pytest.raises(ValueError, match="nearest eligible"):
+        select_option(25000, "LONG", _ladder(24900, 25000, 25100), cfg, today=TODAY)
+
+
+@pytest.mark.parametrize("moneyness, steps, expected", [
+    ("ATM", 1, 25000),
+    ("ITM", 1, 24900),      # a long call goes ITM by moving down a strike
+    ("ITM", 2, 24800),
+    ("OTM", 1, 25100),
+    ("OTM", 2, 25200),
+])
+def test_an_available_moneyness_is_selected_exactly(moneyness, steps, expected):
+    cfg = StrategyConfig(option_moneyness=moneyness, option_steps_itm=steps,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    chain = _ladder(24800, 24900, 25000, 25100, 25200)
+    assert select_option(25000, "LONG", chain, cfg, today=TODAY).strike == expected
+
+
+def test_one_strike_step_of_tolerance_absorbs_a_missing_rung():
+    """Step is the smallest gap in the ladder, so OTM x2 targets 25100 here.
+
+    That rung is absent; 25050 and 25150 both sit exactly one step away, so the
+    tolerance admits the fill instead of refusing a tradable chain.
+    """
+    cfg = StrategyConfig(option_moneyness="OTM", option_steps_itm=2,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    chain = _ladder(25000, 25050, 25150, 25200)   # 25100 missing; step = 50
+    assert select_option(25000, "LONG", chain, cfg, today=TODAY).strike in {25050, 25150}
+
+
+def test_a_target_more_than_one_step_off_the_ladder_is_refused():
+    cfg = StrategyConfig(option_moneyness="OTM", option_steps_itm=3,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    chain = _ladder(25000, 25050)                 # step = 50, target 25150, nearest 25050
+    with pytest.raises(ValueError, match="No liquid CE contract at OTM x3"):
+        select_option(25000, "LONG", chain, cfg, today=TODAY)
+
+
+def test_a_short_signal_takes_moneyness_in_the_mirror_direction():
+    pes = [contract(f"PE{s:g}", AUG_MONTHLY, "PE", strike=s) for s in (24900, 25000, 25100)]
+    cfg = StrategyConfig(option_moneyness="ITM", option_steps_itm=1,
+                         expiry_dte_min=0, expiry_dte_max=8)
+    assert select_option(25000, "SHORT", pes, cfg, today=TODAY).strike == 25100

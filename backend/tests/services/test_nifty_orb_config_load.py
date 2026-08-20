@@ -83,3 +83,27 @@ def test_the_kite_expiry_rule_is_the_engine_rule():
     assert "is_monthly_expiry" in source
     assert is_monthly_expiry(date(2026, 8, 27)) is True      # last Thursday of August
     assert is_monthly_expiry(date(2026, 9, 3)) is False
+
+
+def test_orb_owns_no_trailing_knob(db):
+    """`trail_atr` was declared, validated, API-settable and documented as
+    "Trail: 1.25 ATR" -- and read by nothing. Trailing comes from the universal
+    trading mode's `trail_atr_mult`. A config field nothing honours is a claim
+    about behaviour the strategy does not have."""
+    assert "trail_atr" not in StrategyConfig.__dataclass_fields__
+    with pytest.raises(ValueError, match="Unknown NIFTY ORB config fields"):
+        service.set_config({"trail_atr": 1.25})
+
+
+def test_the_surviving_risk_knobs_are_all_honoured(db):
+    """Guard against another write-only field: every field must be read somewhere."""
+    import inspect
+    from app.engines import nifty_orb_options as engine
+    from app.services import nifty_orb_execution, nifty_orb_scanner
+    sources = "".join(inspect.getsource(m) for m in (engine, nifty_orb_execution, nifty_orb_scanner, service))
+    exempt = {"enabled", "underlying", "execution_broker"}   # read by callers/UI, not the math
+    unread = [
+        name for name in StrategyConfig.__dataclass_fields__
+        if name not in exempt and f".{name}" not in sources and f'"{name}"' not in sources
+    ]
+    assert unread == [], f"config fields nothing reads: {unread}"

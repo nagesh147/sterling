@@ -195,6 +195,38 @@ went green. Everything here was on a live path.
 | 13 | An unguarded `_save_state` after a filled, protected entry | A database failure raised out of `execute_scan`, so the day's trade count never persisted and the next 5-second tick would read the stale count and trade past `max_trades_per_day`. Now trips the kill switch and reports `executed_count_not_persisted` -- same failure class as the daily-PnL persistence gate. |
 | 14 | The daily-loss circuit breaker was inert for USD-denominated positions | See below. Reachable from `trading.py` and `order_router.py`, **not** from ORB. |
 
+| 15 | ATR, the volume baseline and the regime were computed across the session boundary | The entry window opens at 09:30 and the lookbacks are 14-20 bars, so for roughly the first eighty minutes of **every** session the strategy's own filters read yesterday's data. On a 500-point gap up, ATR read 43.50 instead of 8.00 (breakout threshold 6.5 points instead of 1.2) and the volume ratio read 0.15 against a 1.15 threshold -- the volume gate could barely pass. Worse, the result depended on how many bars the caller fetched: ATR was 8.00 at 5 bars and 43.50 at 20+. Kite fetches 240, TrueData 200. |
+| 16 | Moneyness was silently substituted | Asking for ITM x3 when the ladder does not reach that far returned the ATM strike -- a different delta, cost and payoff. Same class as the expiry fallback. Now refused beyond one strike step of tolerance. |
+| 17 | `trail_atr` was a config field nothing read | Declared, validated, settable through the API, present in the frontend type, and documented as "Trail: 1.25 ATR" -- and consumed nowhere. Trailing actually comes from the universal trading mode's `trail_atr_mult`. Removed, and a test now asserts every surviving config field is read somewhere. |
+
+### Finding 15 in detail
+
+```text
+                        before      after
+ATR (500pt gap up)      43.50        8.00
+breakout threshold       6.52        1.20
+volume ratio             0.15        1.00
+ATR @ 5 bars fetched     8.00        8.00
+ATR @ 240 bars fetched  43.50        8.00
+```
+
+VWAP and the opening range were session-scoped from the start; ATR, volume and
+regime were not. The overnight gap's true range was being measured as an
+intraday range. ATR keeps its cross-session lookback deliberately -- an
+estimator seeded from three bars is worse than one seeded from yesterday's
+ranges -- but the first bar of a session now contributes only its own high-low.
+Volume baseline and regime are scoped to the current session outright.
+
+### Open question: the assumed delta
+
+Kite publishes no Greeks, so `option.delta` is `None` in production and
+`build_trade_plan` assumes 0.50. Everything in the premium domain rests on it,
+and `stop_premium` is what gets armed at the broker. For a genuinely 0.25-delta
+OTM contract the modelled stop sits 2.5 points further out than intended and
+`risk_inr` doubles. `TradePlan.delta_is_estimated` now exposes this, but
+choosing a better estimate needs either a pricing model plus IV, or a Greeks
+feed. Not guessed at here.
+
 ### Finding 14 in detail
 
 `daily_realized_pnl_inr` read `realized_pnl_inr`, falling back to

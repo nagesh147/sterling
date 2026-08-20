@@ -74,3 +74,17 @@ def test_the_plan_dict_carries_the_honest_max_loss():
     payload = plan.to_dict()
     assert payload["max_loss_inr"] == plan.max_loss_inr
     assert payload["risk_inr"] == plan.risk_inr
+
+
+def test_an_assumed_delta_is_flagged_on_the_plan():
+    """Kite publishes no Greeks, so 0.50 is assumed -- and stop_premium is armed
+    at the broker from it. The plan must say the number rests on an assumption."""
+    estimated = build_trade_plan(_signal(), _option(delta=None),
+                                 StrategyConfig(max_risk_inr=3000), spot=24017)
+    known = build_trade_plan(_signal(), _option(delta=0.25),
+                             StrategyConfig(max_risk_inr=3000), spot=24017)
+    assert estimated.delta_is_estimated is True
+    assert known.delta_is_estimated is False
+    assert estimated.to_dict()["delta_is_estimated"] is True
+    # The assumption is not cosmetic: it moves the premium-domain stop.
+    assert estimated.stop_premium != known.stop_premium

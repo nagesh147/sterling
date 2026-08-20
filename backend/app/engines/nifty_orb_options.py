@@ -49,7 +49,6 @@ class StrategyConfig:
     trend_lookback: int = 5
     atr_period: int = 14
     stop_buffer_atr: float = 0.10
-    trail_atr: float = 1.25
     target_r: float = 2.0
     option_moneyness: str = "ATM"
     option_steps_itm: int = 1
@@ -102,7 +101,6 @@ class StrategyConfig:
         non_negative("min_option_volume", self.min_option_volume)
         non_negative("min_open_interest", self.min_open_interest)
         non_negative("max_quote_staleness_s", self.max_quote_staleness_s)
-        positive("trail_atr", self.trail_atr)
         positive("target_r", self.target_r)
 
         try:
@@ -221,6 +219,13 @@ class TradePlan:
     reason: str
     max_loss_inr: float = 0.0
     """Full premium outlay: what this position loses if the option expires worthless."""
+    delta_is_estimated: bool = False
+    """True when the contract carried no delta and 0.50 was assumed.
+
+    Kite publishes no Greeks, so this is the normal case there. Everything in the
+    premium domain -- ``stop_premium``, ``target_premium``, ``risk_inr`` -- rests
+    on that assumption, and ``stop_premium`` is what gets armed at the broker.
+    """
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -235,6 +240,10 @@ def _as_ist(ts: datetime) -> datetime:
     return ts.astimezone(IST)
 
 
+def _session_date(b: Bar) -> date:
+    return _as_ist(b.timestamp).date()
+
+
 def _typical_price(b: Bar) -> float:
     return (b.high + b.low + b.close) / 3.0
 
@@ -246,13 +255,31 @@ def vwap(bars: Sequence[Bar]) -> float:
 
 
 def atr(bars: Sequence[Bar], period: int = 14) -> float:
+    """Average true range, with the overnight gap excluded.
+
+    True range normally spans the previous close. Across a session boundary that
+    previous close is yesterday's, so an overnight gap was being measured as an
+    intraday range: a 500-point gap turned a real ATR of 8 into 43.5 and lifted
+    the 0.15-ATR breakout threshold from 1.2 to 6.5 points. The first bar of a
+    session therefore contributes only its own high-low.
+
+    The lookback still spans sessions, which is deliberate -- an intraday
+    estimator seeded from three bars is worse than one seeded from yesterday's
+    ranges. Only the gap artifact is removed.
+    """
     if len(bars) < 2:
         return 0.0
     trs = []
     prev = bars[0].close
+    prev_session = _session_date(bars[0])
     for b in bars[1:]:
-        trs.append(max(b.high - b.low, abs(b.high - prev), abs(b.low - prev)))
+        session = _session_date(b)
+        if session != prev_session:
+            trs.append(b.high - b.low)
+        else:
+            trs.append(max(b.high - b.low, abs(b.high - prev), abs(b.low - prev)))
         prev = b.close
+        prev_session = session
     return mean(trs[-max(1, period):]) if trs else 0.0
 
 
@@ -262,10 +289,20 @@ def _parse_time(value: str) -> time:
 
 
 def _volume_ratio(bars: Sequence[Bar], lookback: int = 20) -> float:
+    """Current bar's volume against the baseline *of its own session*.
+
+    The baseline used to be the previous ``lookback`` bars whatever session they
+    belonged to, so before ~10:55 every day the current bar was measured against
+    yesterday's tail. After a heavy prior session that put the ratio at 0.15
+    against a 1.15 threshold -- the volume gate could not pass during most of the
+    entry window. With no same-session baseline the ratio is a neutral 1.0, which
+    fails the default threshold and produces no trade.
+    """
     if not bars:
         return 0.0
     current = max(bars[-1].volume, 0.0)
-    prior = [max(b.volume, 0.0) for b in bars[-lookback - 1:-1]]
+    session = _session_date(bars[-1])
+    prior = [max(b.volume, 0.0) for b in bars[:-1] if _session_date(b) == session][-lookback:]
     baseline = mean(prior) if prior else 0.0
     return current / baseline if baseline > 0 else 1.0
 
@@ -341,8 +378,10 @@ def generate_signal(
     current_vwap = vwap(session_bars)
     slope = _vwap_slope(session_bars, cfg.vwap_slope_lookback)
     current_atr = atr(normalized, cfg.atr_period)
-    vol_ratio = _volume_ratio(normalized)
-    regime = _regime(normalized, cfg, current_vwap, current_atr)
+    vol_ratio = _volume_ratio(session_bars)
+    # Regime describes *today's* character. Measuring it across the session
+    # boundary let yesterday's path decide whether today was trending.
+    regime = _regime(session_bars, cfg, current_vwap, current_atr)
     t = _as_ist(current.timestamp).time()
 
     if not (_parse_time(cfg.entry_start) <= t <= _parse_time(cfg.entry_end)):
@@ -500,7 +539,18 @@ def select_option(
         target = atm - cfg.option_steps_itm * steps if direction == "LONG" else atm + cfg.option_steps_itm * steps
     else:
         target = atm + cfg.option_steps_itm * steps if direction == "LONG" else atm - cfg.option_steps_itm * steps
-    return min(candidates, key=lambda c: (abs(c.strike - target), c.dte_on(today) or 999, -c.volume, -c.open_interest, c.spread_pct))
+    chosen = min(candidates, key=lambda c: (abs(c.strike - target), c.dte_on(today) or 999, -c.volume, -c.open_interest, c.spread_pct))
+    # Moneyness is a risk choice, not a hint. Asking for ITM x3 and silently
+    # receiving the ATM strike because the ladder does not reach that far changes
+    # the position's delta, cost and payoff. One strike step of tolerance absorbs
+    # an irregular ladder; anything beyond it is a refusal.
+    if abs(chosen.strike - target) > steps:
+        raise ValueError(
+            f"No liquid {typ} contract at {moneyness}"
+            f"{'' if moneyness == 'ATM' else f' x{cfg.option_steps_itm}'} "
+            f"(wanted strike near {target:g}, nearest eligible is {chosen.strike:g})"
+        )
+    return chosen
 
 
 def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig, *, spot: float) -> TradePlan:
@@ -517,6 +567,7 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     stop = spot - risk_points if signal.direction == "LONG" else spot + risk_points
     target = spot + cfg.target_r * risk_points if signal.direction == "LONG" else spot - cfg.target_r * risk_points
     entry_premium = option.ask
+    delta_is_estimated = option.delta is None
     delta = abs(option.delta) if option.delta is not None else 0.50
     # A bought option cannot lose more than it cost, so the modelled stop loss is
     # capped at the premium. Without the cap, a stop wider than the premium
@@ -535,7 +586,7 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     quantity = max(0, lots * option.lot_size)
     risk = quantity * premium_risk_per_share
     max_loss = quantity * entry_premium
-    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss)
+    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_is_estimated)
 
 
 def summarize_pnl(pnls: Iterable[float]) -> dict:

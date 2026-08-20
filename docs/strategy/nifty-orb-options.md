@@ -37,7 +37,7 @@ There is no option selling and no cross-strategy signal input.
 - VWAP slope lookback: 3 bars
 - ATR period: 14
 - Initial stop buffer: 0.10 ATR
-- Trail: 1.25 ATR
+- Trailing: owned by the universal Trading Mode, not by ORB
 - Target: 2R
 - Option: ATM
 - ITM/OTM steps: 1
