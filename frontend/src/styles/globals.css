@@ -460,3 +460,40 @@ button, a, input, select, textarea,
 @media (prefers-reduced-motion: reduce) {
   .sk-theme-toggle, .sk-theme-toggle > span { transition: none !important; }
 }
+
+/* ── Signal board ─────────────────────────────────────────────────────────
+ * Hover and focus are the same weight, so keyboard use is not a second-class
+ * path through a board that places real orders. The left accent thickens
+ * rather than the row changing colour twice, which keeps the direction colour
+ * readable while hovered.
+ */
+.sb-row { transition: background .12s ease, box-shadow .12s ease; }
+.sb-row:hover { background: var(--k-surface-hover) !important; }
+.sb-row:focus-visible {
+  outline: none;
+  background: var(--k-surface-hover) !important;
+  box-shadow: inset 0 0 0 1px var(--k-blue);
+}
+.sb-row:active { background: var(--k-surface) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-row { transition: none !important; }
+}
+
+/* ── Engine toolbar ───────────────────────────────────────────────────── */
+.sb-tab { transition: color .13s ease, border-color .13s ease; }
+.sb-tab:hover { color: var(--k-text) !important; }
+.sb-tab:focus-visible { outline: 2px solid var(--k-blue); outline-offset: -2px; }
+
+.sb-tool { transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.sb-tool:hover:not(:disabled) { background: var(--k-surface-hover) !important; color: var(--k-text) !important; }
+.sb-tool:focus-visible { outline: 2px solid var(--k-blue); outline-offset: 1px; }
+
+/* Reserved for a live engine that has something armed — motion that means
+   one specific thing keeps meaning it. */
+@keyframes sb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-tab, .sb-tool { transition: none !important; }
+  [style*="sb-pulse"] { animation: none !important; }
+}

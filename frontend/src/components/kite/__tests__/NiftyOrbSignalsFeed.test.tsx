@@ -142,53 +142,53 @@ describe('ORB feed — expanded setup', () => {
   it('keeps the detail collapsed until asked', () => {
     show({ rows: [entry()] });
     expect(screen.queryByTestId('sizing')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /NIFTY CE setup/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /NIFTY CE Armed/ })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('hands the plan to the shared position calculator, which owns the Buy path', () => {
     show({ rows: [entry()] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
     expect(screen.getByTestId('sizing')).toHaveTextContent('sizing NIFTY26AUG24000CE @ 18 sl 14 on NFO');
   });
 
   it('shows the book and the underlying setup', () => {
     show({ rows: [entry()] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
-    expect(screen.getByText('MARKET DEPTH')).toBeInTheDocument();
-    expect(screen.getByText('UNDERLYING SETUP')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
+    expect(screen.getByText(/market depth/i)).toBeInTheDocument();
+    expect(screen.getByText(/opening range & vwap/i)).toBeInTheDocument();
     expect(screen.getByText('ORB high')).toBeInTheDocument();
   });
 
   it('says when depth is unavailable rather than rendering an empty ladder', () => {
     show({ rows: [entry()] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
     expect(screen.getByText(/Depth unavailable/)).toBeInTheDocument();
   });
 
   it('opens one setup at a time', () => {
     show({ rows: [entry({ underlying: 'NIFTY' }), entry({ underlying: 'SBIN' })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
-    fireEvent.click(screen.getByRole('button', { name: /SBIN CE setup/ }));
-    expect(screen.getByRole('button', { name: /NIFTY CE setup/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /SBIN CE setup/ })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
+    fireEvent.click(screen.getByRole('button', { name: /SBIN CE Armed/ }));
+    expect(screen.getByRole('button', { name: /NIFTY CE Armed/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /SBIN CE Armed/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('is keyboard operable', () => {
     show({ rows: [entry()] });
-    const row = screen.getByRole('button', { name: /NIFTY CE setup/ });
+    const row = screen.getByRole('button', { name: /NIFTY CE Armed/ });
     fireEvent.keyDown(row, { key: 'Enter' });
     expect(row).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('marks an assumed delta where the Greeks are shown', () => {
     show({ rows: [entry({ deltaSource: 'assumed', delta: 0.5, impliedVol: null })] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
     expect(screen.getByText('0.500 assumed')).toBeInTheDocument();
   });
 
   it('shows solved Greeks without a caveat', () => {
     show({ rows: [entry()] });
-    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE setup/ }));
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
     expect(screen.getByText('0.577')).toBeInTheDocument();
     expect(screen.getByText('22.4%')).toBeInTheDocument();
     expect(screen.queryByText(/assumed/)).not.toBeInTheDocument();

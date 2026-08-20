@@ -1,0 +1,124 @@
+/**
+ * ORB feed entries -> BoardSignal.
+ *
+ * ORB is long-options-only: a LONG underlying thesis is expressed by buying a
+ * call, a SHORT one by buying a put. It never sells, so the whole premium is at
+ * risk and `atRiskInr` is the outlay, not a stop-distance calculation.
+ *
+ * It quotes no trailing stop. That is not a gap in the adapter — trailing is
+ * owned by the universal Trading Mode once a position is open — so `trail` is
+ * null and the board drops the TSL column rather than printing a number the
+ * engine never produced.
+ */
+import type { OrbFeedEntry } from '../../../utils/niftyOrbSignalAdapter';
+import type { BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+
+function status(entry: OrbFeedEntry): BoardStatus {
+  if (entry.state === 'ERROR') return 'error';
+  if (entry.state === 'SIGNAL') return 'armed';
+  return 'watching';
+}
+
+function atMs(entry: OrbFeedEntry): number | null {
+  if (!entry.timestamp) return null;
+  const ms = new Date(entry.timestamp).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** The underlying thesis: the levels the option was chosen to express. */
+function setupSection(entry: OrbFeedEntry): BoardSection {
+  return {
+    title: 'Opening range & VWAP',
+    layout: 'tiles',
+    summary: entry.dataSource ?? undefined,
+    stats: [
+      { label: 'Spot', value: entry.spot?.toFixed(2), hint: 'Underlying last price at scan' },
+      { label: 'ORB high', value: entry.orbHigh?.toFixed(2), hint: 'High of the opening range' },
+      { label: 'ORB low', value: entry.orbLow?.toFixed(2), hint: 'Low of the opening range' },
+      { label: 'VWAP', value: entry.vwap?.toFixed(2), hint: 'Session volume-weighted average price' },
+      { label: 'ATR', value: entry.atr?.toFixed(2), hint: 'Average true range, session-scoped' },
+      { label: 'Volume', value: entry.volumeRatio == null ? undefined : `${entry.volumeRatio.toFixed(2)}×`, hint: 'Bar volume against this session’s baseline' },
+      { label: 'U. entry', value: entry.underlyingEntry?.toFixed(2), hint: 'Underlying level the breakout triggers at' },
+      { label: 'U. stop', value: entry.underlyingStop?.toFixed(2), hint: 'Underlying stop the premium stop is derived from' },
+    ],
+  };
+}
+
+/**
+ * Greeks, marked as modelled.
+ *
+ * Kite publishes none of these — they are solved from the traded premium — and
+ * the delta in particular is what the premium stop rests on, so a delta the
+ * model guessed must not look like one the broker quoted.
+ */
+function greeksSection(entry: OrbFeedEntry): BoardSection | null {
+  const has = entry.impliedVol != null || entry.delta != null || entry.gamma != null;
+  if (!has) return null;
+  const modelled = entry.deltaSource !== 'broker';
+  return {
+    title: 'Greeks',
+    layout: 'tiles',
+    summary: entry.deltaSource === 'assumed' ? 'assumed' : modelled ? 'solved from premium' : 'from broker',
+    stats: [
+      { label: 'IV', value: entry.impliedVol == null ? undefined : `${(entry.impliedVol * 100).toFixed(1)}%`, estimated: modelled, hint: 'Implied volatility solved from the traded premium' },
+      {
+        label: 'Δ delta',
+        value: entry.delta == null ? undefined
+          : entry.deltaSource === 'assumed' ? `${entry.delta.toFixed(3)} assumed` : entry.delta.toFixed(3),
+        estimated: modelled,
+        hint: entry.deltaSource === 'assumed'
+          ? 'Neither quoted nor solved — a default. The premium stop rests on it.'
+          : 'The premium stop is derived from this',
+      },
+      { label: 'Γ gamma', value: entry.gamma?.toFixed(5), estimated: modelled },
+      { label: 'Θ theta/day', value: entry.thetaPerDay?.toFixed(1), estimated: modelled, hint: 'Premium lost per calendar day, all else equal' },
+      { label: 'V vega', value: entry.vegaPerPoint?.toFixed(1), estimated: modelled, hint: 'Premium change per volatility point' },
+      { label: 'Lot', value: entry.lotSize ?? undefined },
+    ],
+  };
+}
+
+export function orbToBoard(entry: OrbFeedEntry): BoardSignal {
+  const sections = [setupSection(entry), greeksSection(entry)].filter(Boolean) as BoardSection[];
+  const exchange = entry.exchange ?? 'NFO';
+  const symbol = entry.optionSymbol ?? entry.underlying;
+
+  return {
+    id: entry.id,
+    engine: 'orb',
+    underlying: entry.underlying,
+    instrument: {
+      symbol,
+      exchange,
+      kind: entry.optionSymbol ? 'option' : 'index',
+      optionType: (entry.optionType ?? undefined) as 'CE' | 'PE' | undefined,
+      strike: entry.optionStrike ?? null,
+      expiry: entry.optionExpiry ?? null,
+      lotSize: entry.lotSize ?? null,
+      quoteKey: entry.optionSymbol ? `${exchange}:${entry.optionSymbol}` : null,
+    },
+    direction: entry.direction === 'short' ? 'short' : 'long',
+    status: status(entry),
+    atMs: atMs(entry),
+    levels: {
+      ltp: entry.optionPremium ?? null,
+      entry: entry.optionPremium ?? null,
+      stop: entry.stopPremium ?? null,
+      // Trailing belongs to Trading Mode, not to ORB.
+      trail: null,
+      target: entry.targetPremium ?? null,
+      exit: null,
+    },
+    sizing: {
+      lots: entry.lotSize && entry.quantity ? Math.round(entry.quantity / entry.lotSize) : null,
+      quantity: entry.quantity ?? null,
+      // A bought option can expire worthless, so the whole outlay is the risk.
+      atRiskInr: entry.maxLossInr ?? null,
+      deployedInr: entry.maxLossInr ?? null,
+    },
+    score: null,
+    reason: entry.reason ?? null,
+    quoteAgeS: entry.quoteAgeS ?? null,
+    sections,
+  };
+}

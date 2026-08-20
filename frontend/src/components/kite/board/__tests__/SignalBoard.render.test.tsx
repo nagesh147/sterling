@@ -1,0 +1,141 @@
+/**
+ * What the board actually renders.
+ *
+ * The logic tests next door cover grouping and column selection as functions;
+ * these cover the parts that only exist once it is on screen — that the header
+ * and the rows agree on a column count, that expanding shows the engine's own
+ * sections, and that the row is operable from the keyboard. A board that places
+ * real orders should not be mouse-only.
+ */
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { SignalBoard } from '../SignalBoard';
+import type { BoardSignal } from '../boardTypes';
+
+const IST = (5 * 60 + 30) * 60_000;
+const NOW = Date.UTC(2026, 7, 21, 10, 30) - IST;
+
+function sig(over: Partial<BoardSignal> = {}): BoardSignal {
+  return {
+    id: 'a',
+    engine: 'orb',
+    underlying: 'NIFTY',
+    instrument: {
+      symbol: 'NIFTY26AUG24000CE', exchange: 'NFO', kind: 'option',
+      optionType: 'CE', strike: 24000, expiry: '2026-08-27', lotSize: 75,
+      quoteKey: 'NFO:NIFTY26AUG24000CE',
+    },
+    direction: 'long',
+    status: 'armed',
+    atMs: NOW,
+    levels: { ltp: 18, entry: 18, stop: 14, trail: null, target: 26, exit: null },
+    sizing: { lots: 2, quantity: 150, atRiskInr: 2700, deployedInr: 2700 },
+    score: null,
+    reason: null,
+    sections: [{ title: 'Opening range & VWAP', layout: 'tiles', stats: [{ label: 'ORB high', value: '24012.00' }] }],
+    ...over,
+  };
+}
+
+const show = (signals: BoardSignal[], props: Partial<React.ComponentProps<typeof SignalBoard>> = {}) =>
+  render(<SignalBoard signals={signals} openId={null} onToggle={() => {}} nowMs={NOW} {...props} />);
+
+describe('SignalBoard rendering', () => {
+  it('names the columns a trader asked for', () => {
+    show([sig()]);
+    for (const label of ['Instrument', 'Status', 'Exc', 'Leg', 'LTP', 'Entry', 'SL', 'Exit', 'Qty', 'At risk', 'Time']) {
+      expect(screen.getByText(label), label).toBeInTheDocument();
+    }
+  });
+
+  it('gives the header and the rows the same grid template', () => {
+    // They are separate elements, so a mismatch silently misaligns every
+    // number under its heading — the failure a table with a sticky header has.
+    const { container } = show([sig()]);
+    const header = container.querySelector('[role="row"]') as HTMLElement;
+    const row = container.querySelector('.sb-row') as HTMLElement;
+    expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+  });
+
+  it('drops a column no signal fills, from the header as well as the rows', () => {
+    show([sig()]);
+    // Nothing here trails, so TSL would be a column of dashes.
+    expect(screen.queryByText('TSL')).not.toBeInTheDocument();
+  });
+
+  it('groups rows under their trading day', () => {
+    show([sig({ id: 'today' }), sig({ id: 'old', atMs: NOW - 86_400_000 })]);
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getByText('Yesterday')).toBeInTheDocument();
+  });
+
+  it('counts the live rows in each day heading', () => {
+    show([sig({ id: '1' }), sig({ id: '2', status: 'ended' })]);
+    expect(screen.getByText(/2 signals · 1 live/)).toBeInTheDocument();
+  });
+
+  it('shows the engine tag only when engines are mixed', () => {
+    show([sig()]);
+    expect(screen.queryByText('Engine')).not.toBeInTheDocument();
+    show([sig(), sig({ id: 'b', engine: 'supertrend' })]);
+    expect(screen.getByText('Engine')).toBeInTheDocument();
+  });
+
+  it('renders a missing level as a dash, never as zero', () => {
+    // With one signal the empty columns are dropped, so the case that matters
+    // is a mixed board: another row earns the SL column, and this one has no
+    // stop. A fabricated 0 there is a trade-destroying lie.
+    show([
+      sig({ id: 'stopped' }),
+      sig({ id: 'nostop', levels: { ltp: 20, entry: 20, stop: null, trail: null, target: null, exit: null } }),
+    ]);
+    expect(screen.getByText('SL')).toBeInTheDocument();
+    const rows = document.querySelectorAll('.sb-row');
+    const noStop = rows[rows.length - 1] as HTMLElement;
+    expect(within(noStop).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(noStop).queryByText('0.00')).not.toBeInTheDocument();
+  });
+});
+
+describe('SignalBoard expansion', () => {
+  it('keeps detail closed until asked, and says so to assistive tech', () => {
+    show([sig()]);
+    expect(screen.getByRole('button', { name: /NIFTY CE Armed/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Opening range & VWAP')).not.toBeInTheDocument();
+  });
+
+  it('renders the engine’s own sections when open', () => {
+    show([sig()], { openId: 'a' });
+    expect(screen.getByText('Opening range & VWAP')).toBeInTheDocument();
+    expect(screen.getByText('ORB high')).toBeInTheDocument();
+  });
+
+  it('renders the caller’s ticket above the sections', () => {
+    show([sig()], { openId: 'a', renderDetail: (s) => <div data-testid="ticket">{s.instrument.symbol}</div> });
+    expect(screen.getByTestId('ticket')).toHaveTextContent('NIFTY26AUG24000CE');
+  });
+
+  it('opens from the keyboard, both Enter and Space', () => {
+    const onToggle = vi.fn();
+    show([sig()], { onToggle });
+    const row = screen.getByRole('button', { name: /NIFTY CE Armed/ });
+    fireEvent.keyDown(row, { key: 'Enter' });
+    fireEvent.keyDown(row, { key: ' ' });
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    expect(onToggle).toHaveBeenCalledWith('a');
+  });
+
+  it('shows the reason on an expanded row that has one', () => {
+    show([sig({ reason: 'trail breach' })], { openId: 'a' });
+    expect(screen.getByText('trail breach')).toBeInTheDocument();
+  });
+});
+
+describe('SignalBoard empty state', () => {
+  it('explains itself rather than rendering an empty grid', () => {
+    show([], { emptyLabel: 'Nothing armed right now.' });
+    expect(screen.getByText('Nothing armed right now.')).toBeInTheDocument();
+    expect(document.querySelector('.sb-row')).toBeNull();
+  });
+});

@@ -1,0 +1,362 @@
+/**
+ * The signal board every engine renders through.
+ *
+ * Layout is a CSS grid whose column template is computed once from the visible
+ * column set, so every row aligns with the header without any of the horizontal
+ * scroll-syncing the old table needed. Columns an engine cannot fill are not
+ * rendered as empty cells — they are dropped from the template entirely, so a
+ * board never shows a run of dashes where another engine happens to have data.
+ *
+ * Rows are grouped by trading day. Sections stick to the top while their day is
+ * on screen, which is the only part of a long scroll that tells you where you
+ * are.
+ */
+import React from 'react';
+import { k, tint } from '../../../styles/kiteUI';
+import {
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, groupByDay, sessionDayLabel,
+  type BoardSignal, type BoardStatus, type EngineId,
+} from './boardTypes';
+import { StatCard, StatCardGrid } from './StatCard';
+
+export type ColumnId =
+  | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
+  | 'ltp' | 'entry' | 'stop' | 'trail' | 'target' | 'exit'
+  | 'qty' | 'risk' | 'score' | 'time';
+
+interface ColumnDef {
+  id: ColumnId;
+  label: string;
+  /** Grid track. Instrument flexes; the rest are fixed so numbers line up. */
+  width: string;
+  align: 'left' | 'right';
+  hint?: string;
+}
+
+/**
+ * Every column the board can show, in reading order: what it is, then what it
+ * is worth now, then where it gets out, then how big, then when.
+ */
+export const COLUMNS: readonly ColumnDef[] = [
+  { id: 'instrument', label: 'Instrument', width: 'minmax(150px, 1.6fr)', align: 'left' },
+  { id: 'engine', label: 'Engine', width: '48px', align: 'left', hint: 'Which engine produced this signal' },
+  { id: 'status', label: 'Status', width: '78px', align: 'left', hint: 'Armed = valid setup, not yet entered' },
+  { id: 'exchange', label: 'Exc', width: '44px', align: 'left', hint: 'Exchange the contract trades on' },
+  { id: 'leg', label: 'Leg', width: 'minmax(96px, 1fr)', align: 'left', hint: 'Strike and expiry of the traded contract' },
+  { id: 'ltp', label: 'LTP', width: '74px', align: 'right', hint: 'Last traded price of the instrument' },
+  { id: 'entry', label: 'Entry', width: '74px', align: 'right', hint: 'Price the position is taken at' },
+  { id: 'stop', label: 'SL', width: '74px', align: 'right', hint: 'Hard stop set at entry — the original risk' },
+  { id: 'trail', label: 'TSL', width: '74px', align: 'right', hint: 'Where the trailing stop has ratcheted to' },
+  { id: 'target', label: 'Exit', width: '74px', align: 'right', hint: 'Where the plan gets out — the profit objective, where the engine quotes one' },
+  { id: 'exit', label: 'Exited', width: '74px', align: 'right', hint: 'Where it actually got out, once it has' },
+  { id: 'qty', label: 'Qty', width: '64px', align: 'right', hint: 'Units, not lots' },
+  { id: 'risk', label: 'At risk', width: '82px', align: 'right', hint: 'Rupees lost if the stop is honoured' },
+  { id: 'score', label: 'Score', width: '56px', align: 'right', hint: 'Engine conviction. Not comparable across engines' },
+  { id: 'time', label: 'Time', width: '92px', align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+];
+
+const STATUS_TONE: Record<BoardStatus, string> = {
+  armed: k.blue,
+  running: k.green,
+  weakening: k.amber,
+  ended: k.dim,
+  watching: k.dim,
+  error: k.red,
+};
+
+const num = (v: number | null | undefined, dp = 2) =>
+  v == null || !Number.isFinite(v) ? '—' : v.toFixed(dp);
+
+export const inr = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? '—' : `₹${Math.round(v).toLocaleString('en-IN')}`;
+
+/** Older than this and a quote is not describing the market any more. */
+const STALE_AFTER_S = 15;
+
+const hhmm = (ms: number | null) =>
+  ms == null ? '—' : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+      aria-hidden style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .14s ease', flexShrink: 0 }}>
+      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Pill({ tone, children, title }: { tone: string; children: React.ReactNode; title?: string }) {
+  return (
+    <span title={title} style={{
+      fontSize: 8.5, fontWeight: 700, letterSpacing: '.04em', color: tone,
+      background: tint(tone, 12), border: `1px solid ${tint(tone, 35)}`,
+      borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap',
+    }}>
+      {children}
+    </span>
+  );
+}
+
+/** The value of one column for one signal, plus how to colour it. */
+function cellContent(signal: BoardSignal, id: ColumnId): { node: React.ReactNode; color?: string } {
+  const dirTone = signal.direction === 'long' ? k.green : k.red;
+  switch (id) {
+    case 'instrument':
+      return {
+        node: (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            <span style={{ fontWeight: 700, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {signal.underlying}
+            </span>
+            <Pill tone={dirTone} title={`${signal.direction} ${signal.instrument.optionType ?? signal.instrument.kind}`}>
+              {signal.instrument.optionType ?? signal.instrument.kind.toUpperCase()} · {signal.direction.toUpperCase()}
+            </Pill>
+          </span>
+        ),
+      };
+    case 'engine':
+      return { node: <Pill tone={k.dim}>{ENGINE_TAG[signal.engine]}</Pill> };
+    case 'status':
+      return { node: <Pill tone={STATUS_TONE[signal.status]}>{STATUS_LABEL[signal.status]}</Pill> };
+    case 'exchange':
+      return { node: signal.instrument.exchange || '—', color: k.dim };
+    case 'leg': {
+      // The full contract symbol, because that is the string a trader searches
+      // for, reads back to a broker, and matches against a fill. Strike and
+      // expiry are the same information pre-parsed, so they go in the tooltip
+      // rather than competing for the width.
+      const { symbol, strike, expiry } = signal.instrument;
+      const parts = [strike ?? null, expiry ?? null].filter(Boolean).join(' · ');
+      return { node: <span title={parts || undefined}>{symbol}</span>, color: k.dim };
+    }
+    case 'ltp': return { node: num(signal.levels.ltp) };
+    case 'entry': return { node: num(signal.levels.entry) };
+    case 'stop': return { node: num(signal.levels.stop), color: signal.levels.stop == null ? undefined : k.red };
+    case 'trail': return { node: num(signal.levels.trail), color: signal.levels.trail == null ? undefined : k.amber };
+    case 'target': return { node: num(signal.levels.target), color: signal.levels.target == null ? undefined : k.green };
+    case 'exit': return { node: num(signal.levels.exit) };
+    case 'qty': return { node: signal.sizing.quantity ?? '—' };
+    case 'risk': return { node: inr(signal.sizing.atRiskInr) };
+    case 'score': return { node: signal.score == null ? '—' : signal.score.toFixed(0) };
+    case 'time': {
+      // A stale quote says so in words as well as in colour. Colour alone is
+      // not a message on a board where several columns are already coloured by
+      // direction, and it is no message at all to a colour-blind reader.
+      const stale = signal.quoteAgeS != null && signal.quoteAgeS > STALE_AFTER_S;
+      return {
+        node: stale
+          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{hhmm(signal.atMs)} · stale</span>
+          : hhmm(signal.atMs),
+        color: stale ? k.red : k.dim,
+      };
+    }
+    default: return { node: '—' };
+  }
+}
+
+/**
+ * Which columns to show.
+ *
+ * A column survives if at least one signal can fill it — a board of equities
+ * should not carry an empty Leg column, and an engine that quotes no target
+ * should not imply it forgot to. `always` columns are the row's identity and
+ * stay even when sparse.
+ */
+export function visibleColumns(signals: readonly BoardSignal[], requested: readonly ColumnId[]): ColumnDef[] {
+  const always = new Set<ColumnId>(['instrument', 'status', 'time']);
+  const filled = new Set<ColumnId>();
+  for (const s of signals) {
+    if (s.instrument.exchange) filled.add('exchange');
+    if (s.instrument.strike != null || s.instrument.expiry) filled.add('leg');
+    if (s.levels.ltp != null) filled.add('ltp');
+    if (s.levels.entry != null) filled.add('entry');
+    if (s.levels.stop != null) filled.add('stop');
+    if (s.levels.trail != null) filled.add('trail');
+    if (s.levels.target != null) filled.add('target');
+    if (s.levels.exit != null) filled.add('exit');
+    if (s.sizing.quantity != null) filled.add('qty');
+    if (s.sizing.atRiskInr != null) filled.add('risk');
+    if (s.score != null) filled.add('score');
+    filled.add('engine');
+  }
+  return COLUMNS.filter((c) => requested.includes(c.id) && (always.has(c.id) || filled.has(c.id)));
+}
+
+/** True when more than one engine is on the board, so the Engine tag earns its width. */
+export const isMixedEngine = (signals: readonly BoardSignal[]) =>
+  new Set(signals.map((s) => s.engine)).size > 1;
+
+function Row({ signal, columns, template, open, onToggle, renderDetail }: {
+  signal: BoardSignal;
+  columns: ColumnDef[];
+  template: string;
+  open: boolean;
+  onToggle: () => void;
+  renderDetail?: (signal: BoardSignal) => React.ReactNode;
+}) {
+  const dirTone = signal.direction === 'long' ? k.green : k.red;
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        aria-label={`${signal.underlying} ${signal.instrument.optionType ?? ''} ${STATUS_LABEL[signal.status]}`}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        className="sb-row"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `18px ${template}`,
+          alignItems: 'center',
+          gap: 10,
+          padding: '0 12px',
+          minHeight: 38,
+          cursor: 'pointer',
+          outlineOffset: -2,
+          borderBottom: `1px solid ${k.border}`,
+          // The accent is the direction while a row is closed and the open
+          // marker while it is open, so an expanded row is findable after a scroll.
+          borderLeft: `3px solid ${open ? k.blue : tint(dirTone, 55)}`,
+          background: open ? k.surfaceHover : 'transparent',
+        }}
+      >
+        <span style={{ color: k.dim, display: 'inline-flex' }}><Chevron open={open} /></span>
+        {columns.map((col) => {
+          const { node, color } = cellContent(signal, col.id);
+          return (
+            <span
+              key={col.id}
+              style={{
+                fontSize: 11,
+                color: color ?? k.text,
+                textAlign: col.align,
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
+              }}
+            >
+              {node}
+            </span>
+          );
+        })}
+      </div>
+      {open && (
+        <div style={{ padding: 10, background: k.surface, borderBottom: `2px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {renderDetail?.(signal)}
+          {signal.sections.length > 0 && (
+            <StatCardGrid min={236}>
+              {signal.sections.map((section) => (
+                <StatCard
+                  key={section.title}
+                  title={section.title}
+                  summary={section.summary}
+                  layout={section.layout ?? 'tiles'}
+                  stats={section.stats}
+                  dense
+                />
+              ))}
+            </StatCardGrid>
+          )}
+          {signal.reason && (
+            <p style={{ margin: 0, fontSize: 10.5, color: k.dim, lineHeight: 1.55 }}>{signal.reason}</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+export function SignalBoard({
+  signals, columns: requested, openId, onToggle, renderDetail, nowMs, emptyLabel,
+}: {
+  signals: readonly BoardSignal[];
+  requested?: readonly ColumnId[];
+  columns?: readonly ColumnId[];
+  openId: string | null;
+  onToggle: (id: string) => void;
+  renderDetail?: (signal: BoardSignal) => React.ReactNode;
+  /** Passed in so day labels are deterministic and testable. */
+  nowMs: number;
+  emptyLabel?: string;
+}) {
+  const wanted = requested ?? COLUMNS.map((c) => c.id);
+  const withoutEngine = isMixedEngine(signals) ? wanted : wanted.filter((c) => c !== 'engine');
+  const cols = visibleColumns(signals, withoutEngine);
+  const template = cols.map((c) => c.width).join(' ');
+  const days = groupByDay(signals);
+
+  if (!signals.length) {
+    return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
+  }
+
+  return (
+    <div>
+      <div
+        role="row"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `18px ${template}`,
+          gap: 10,
+          padding: '7px 12px',
+          borderBottom: `1px solid ${k.border}`,
+          borderLeft: '3px solid transparent',
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          background: k.bg,
+        }}
+      >
+        <span />
+        {cols.map((col) => (
+          <span
+            key={col.id}
+            title={col.hint}
+            style={{
+              fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim,
+              textTransform: 'uppercase', textAlign: col.align, whiteSpace: 'nowrap',
+              overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {col.label}
+          </span>
+        ))}
+      </div>
+
+      {days.map(({ key, signals: rows }) => (
+        <section key={key}>
+          <h3 style={{
+            margin: 0, position: 'sticky', top: 28, zIndex: 1,
+            padding: '4px 12px', background: k.surface, borderBottom: `1px solid ${k.border}`,
+            fontSize: 8.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: k.dim,
+            display: 'flex', justifyContent: 'space-between',
+          }}>
+            <span>{sessionDayLabel(key, nowMs)}</span>
+            <span style={{ fontWeight: 500 }}>
+              {rows.length} signal{rows.length === 1 ? '' : 's'}
+              {(() => {
+                const live = rows.filter((r) => ACTIONABLE.includes(r.status)).length;
+                return live ? ` · ${live} live` : '';
+              })()}
+            </span>
+          </h3>
+          {rows.map((signal) => (
+            <Row
+              key={signal.id}
+              signal={signal}
+              columns={cols}
+              template={template}
+              open={openId === signal.id}
+              onToggle={() => onToggle(signal.id)}
+              renderDetail={renderDetail}
+            />
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+export type { EngineId };
