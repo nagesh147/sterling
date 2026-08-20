@@ -1995,7 +1995,17 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // copy, which implies a search/showEnded filter is the cause.
   const navigatorLensEmpty = rows.length > 0 && groupedRows.length === 0
     && (signalMode === 'navigator' || signalMode === 'common');
-  const hiddenRecentCount = !isScanning && !navigatorLensEmpty && rows.length > 0 && groupedRows.length === 0
+
+  // With the engine off there are no SuperTrend rows by construction, so the
+  // lenses that depend on them cannot fill regardless of the market. Saying
+  // "no setups" there blames the market for a switch. The Navigator lens is
+  // deliberately excluded: its whole point is working while SuperTrend is off.
+  const engineEnabled = cfg?.engine_enabled !== false;
+  const supertrendLensBlocked = !engineEnabled
+    && groupedRows.length === 0
+    && (signalMode === 'supertrend' || signalMode === 'common' || (signalMode === 'combined' && rows.length === 0));
+
+  const hiddenRecentCount = !isScanning && !navigatorLensEmpty && !supertrendLensBlocked && rows.length > 0 && groupedRows.length === 0
     ? rows.length
     : 0;
   const revealRecentSignals = () => {
@@ -2341,6 +2351,43 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             >
               Show recent signals
             </button>
+          </div>
+        ) : supertrendLensBlocked ? (
+          <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
+            <div style={{ fontWeight: 700, color: k.text, fontSize: 12.5 }}>SuperTrend is off</div>
+            <div style={{ marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+              {signalMode === 'common'
+                ? <>“Where both agree” needs a SuperTrend setup for Navigator to agree <em>with</em>, so this lens cannot fill while the engine is off.</>
+                : signalMode === 'supertrend'
+                ? <>This lens shows only SuperTrend setups, and the engine is not scanning.</>
+                : <>Neither engine has produced a setup, and SuperTrend is not scanning.</>}
+              {navigatorEnabled && signalMode !== 'supertrend' && <> Navigator is on — its own setups appear under the <strong>Navigator only</strong> lens.</>}
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {cfg && (
+                <button
+                  type="button"
+                  onClick={() => setCfg.mutate({ engine_enabled: true })}
+                  disabled={setCfg.isPending}
+                  style={{ minHeight: 32, padding: '0 14px', border: `1px solid ${k.blue}`, borderRadius: 6, background: setCfg.isPending ? '#fff' : k.blue, color: setCfg.isPending ? k.blue : '#fff', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: setCfg.isPending ? 'wait' : 'pointer' }}
+                >
+                  {setCfg.isPending ? 'Turning on…' : 'Turn on SuperTrend'}
+                </button>
+              )}
+              {/* The Navigator lens can never reach this branch, so no guard for it. */}
+              {navigatorEnabled && (
+                <button
+                  type="button"
+                  onClick={() => changeSignalMode('navigator')}
+                  style={{ minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Show Navigator setups
+                </button>
+              )}
+            </div>
+            {setCfg.isError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: k.red }}>Could not turn it on: {(setCfg.error as Error).message}</div>
+            )}
           </div>
         ) : navigatorLensEmpty ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
