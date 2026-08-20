@@ -2,14 +2,29 @@
 
 ## Contract
 
-The strategy generates direction from the NIFTY 50 underlying and uses a CE/PE only as the execution vehicle.
+NIFTY ORB is an independent directional **option-buying** strategy. It generates direction from the NIFTY 50 underlying and uses the option only as the execution vehicle.
 
 ```text
-NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
-                                      -> CE/PE selection
-                                      -> risk sizing
-                                      -> universal Kite execution mode
+NIFTY 5m completed bars
+        |
+        +--> 09:15-09:30 opening range
+        +--> VWAP + VWAP slope
+        +--> ATR-normalized breakout
+        +--> volume confirmation
+        +--> TREND / EXPANSION regime
+        |
+        v
+   LONG / SHORT / NONE
+        |
+        +--> LONG  -> BUY CE
+        +--> SHORT -> BUY PE
+        +--> NONE  -> NO ORDER
+        |
+        v
+liquidity -> expiry -> lot sizing -> protection -> universal execution
 ```
+
+There is no option selling and no cross-strategy signal input.
 
 ## Default configuration
 
@@ -18,72 +33,210 @@ NIFTY 50 -> ORB + VWAP + ATR + regime -> LONG/SHORT/NONE
 - Opening range: 15 minutes (09:15-09:30 IST)
 - Entry window: 09:30-12:00 IST
 - Breakout threshold: 0.15 ATR
-- Volume confirmation: 1.15x prior-volume baseline
-- VWAP slope: required in the signal direction
+- Volume confirmation: 1.15x recent baseline
+- VWAP slope lookback: 3 bars
 - ATR period: 14
 - Initial stop buffer: 0.10 ATR
 - Trail: 1.25 ATR
 - Target: 2R
 - Option: ATM
-- Maximum risk: Rs 3,000/trade
+- ITM/OTM steps: 1
+- Maximum risk: ₹3,000/trade
 - Maximum trades: 2/day
+- Expiry DTE: 0-7 days
 - Maximum spread: 1.5% of mid
 - Minimum option volume: 1,000
 - Minimum open interest: 10,000
-- Data source: **Kite**
-- Alternative: **TrueData**
-- Execution broker: **Kite**
-- Execution mode: **universal Trading Mode** (Paper/Live + Manual/Auto)
+- Quote freshness: 15 seconds when enabled
+- Primary/default data source: Kite
+- Advanced alternative: TrueData
+- Execution broker: Kite
+- Execution mode: universal Trading Mode
+
+## Implemented logic
+
+### Signal
+
+A LONG requires all of the following:
+
+1. A completed bar is available.
+2. The current bar is inside the configured entry window.
+3. Close exceeds the 09:15 opening-range high by at least `min_breakout_atr * ATR`.
+4. Close is above VWAP.
+5. VWAP slope is positive.
+6. Volume ratio meets the configured threshold.
+7. Regime is `TREND` or `EXPANSION`.
+
+SHORT mirrors the logic below the opening-range low with negative VWAP slope.
+
+`RANGE`, `UNKNOWN`, unavailable ATR, missing opening-range bars, or failed filters produce no directional trade.
+
+### Option selection
+
+- LONG -> CE only.
+- SHORT -> PE only.
+- ATM/ITM/OTM supported.
+- Configurable strike steps.
+- DTE bounds enforced.
+- Expiry-day avoidance supported.
+- Nearest/weekly selection supported by the current implementation.
+- Lot size must be positive.
+- Premium must be positive.
+- Bid/ask, spread, OI, volume, and quote-freshness gates are configurable.
+
+### Risk
+
+- Quantity is whole-lot aligned.
+- Risk is constrained by the INR risk budget.
+- Underlying stop/target levels are represented separately from premium-domain protection.
+- Direction and selected option type must agree.
+
+## TrueData policy
+
+TrueData advanced data is used where it improves **data quality and execution-vehicle selection**, not as a replacement directional strategy.
+
+```text
+Underlying bars
+    -> ORB/VWAP/ATR/regime signal
+
+TrueData advanced option observations
+    -> bid/ask
+    -> spread
+    -> OI
+    -> volume
+    -> quote freshness
+    -> contract quality
+
+Both
+    -> risk sizing
+    -> execution admission
+```
+
+This keeps ORB independent from Adaptive Edge while still exploiting TrueData where the additional observations are causally relevant.
 
 ## Execution ownership
 
-NIFTY ORB does **not** own a paper/live switch. The active Kite account owns Paper/Live, and the universal Trading Mode owns Manual/Auto. This prevents contradictory execution controls between signal engines.
-
-The strategy's own `enabled` flag answers only whether NIFTY ORB may generate signals.
+ORB does not own Paper/Live or Manual/Auto controls.
 
 ```text
-Strategy enabled?  -> ORB signal engine ON/OFF
-Paper / Live?      -> universal account mode
-Manual / Auto?     -> universal execution mode
+ORB enabled   -> signal generation ON/OFF
+Paper / Live  -> universal account mode
+Manual / Auto -> universal execution mode
 ```
 
-Automatic execution runs through the same live-safety, idempotency, Kite order and position-protection infrastructure used by SuperTrend. A strategy-local `paper_only` setting is intentionally forbidden.
+Automatic execution uses the shared safety, idempotency, order, reconciliation, and position-protection infrastructure. A strategy-local `paper_only` control is intentionally forbidden.
 
-## Signal rules
+## Current implementation status
 
-LONG requires:
+The core strategy implementation and the surrounding TrueData/liquidity controls are substantially implemented. The Adaptive Edge reconciliation is green with **141 tests passing**.
 
-1. Current bar is inside the configured entry window.
-2. Close is above the opening-range high by at least the configured ATR threshold.
-3. Price is above VWAP.
-4. VWAP slope is positive over the configured lookback.
-5. Volume meets the configured multiplier.
-6. Regime is TREND or EXPANSION.
+The ORB targeted suite is **not yet green**. The latest local verification had **15 passing and 5 failing tests**. The remaining failures are concentrated in ORB fixture/semantic alignment; the production liquidity and freshness gates must not be weakened merely to obtain a green test count.
 
-SHORT mirrors these conditions below the opening-range low, including a negative VWAP slope.
+A zero-threshold edge case in confidence calculation was also identified and locally guarded. That change remains part of the local follow-on work and must be validated before it is considered complete.
 
-A RANGE regime produces no trade.
+Therefore:
 
-## Option selection and liquidity
+```text
+Implemented
+    !=
+Production-ready automated trading
+```
 
-For LONG, select CE. For SHORT, select PE. Contracts are selected from the nearest eligible expiry and configured ATM/ITM moneyness. The option is not used to generate the directional signal.
+Automatic/live graduation remains blocked until the complete ORB signal, option, risk, execution, and historical option-replay gates are green.
 
-Before a contract can be selected for execution it must have a valid bid/ask, acceptable spread, minimum volume and minimum open interest. The quantity is lot-aligned and constrained by the INR risk budget.
+## Exact next work
 
-## Protection and lifecycle
+### 1. Signal fixtures and mathematical contract
 
-The generated plan contains both underlying risk levels and premium-domain protection levels. Automatic execution registers the position through the existing protection subsystem so broker GTT and/or server-side monitoring follow the universal `stop_mode` configuration. Existing reconciliation, expiry square-off and position monitoring remain responsible for the resulting open position.
+Make the test fixture itself satisfy the strategy rather than weakening the strategy:
 
-The ORB background runner is multi-tenant, processes only active connected Kite accounts, is market-hours gated, and isolates failures per account. Daily trade count and the last executed signal are persisted so a process restart cannot reset the daily limit.
+```text
+opening-range breakout
++ VWAP alignment
++ VWAP slope alignment
++ ATR threshold
++ volume confirmation
++ TREND/EXPANSION regime
+= valid signal
+```
+
+Add one test per gate and one test proving removal of each gate returns `NONE`.
+
+Keep the opening range anchored to 09:15 IST even when the entry window changes.
+
+### 2. Configuration validation
+
+Decide and enforce whether zero `volume_multiplier` is legal. Preferred production behavior is to reject invalid zero thresholds at configuration validation rather than rely on a confidence-calculation special case.
+
+### 3. Expiry semantics
+
+Specify and test the exact meaning of `nearest`, `weekly`, and `any/all`. Use fixed dates in tests; do not use `datetime.now()` for deterministic expiry-selection tests.
+
+### 4. TrueData contract
+
+Complete deterministic tests for:
+
+- stale quote;
+- missing quote;
+- crossed bid/ask;
+- zero/invalid bid/ask;
+- low OI;
+- low volume;
+- excessive spread;
+- invalid DTE;
+- invalid lot size.
+
+The provider boundary must reject bad observations before order admission.
+
+### 5. Risk/execution
+
+Verify actual premium-domain stop/target translation, worst-case lot-based INR risk, partial fills, order rejection, retries, idempotency, restart recovery, protection arming, position reconciliation, and expiry square-off.
+
+### 6. Historical option replay
+
+Build option-level replay from real historical contracts and premiums. Include spread, slippage, charges, liquidity, expiry, partial fills, actual lot sizes, and quote availability. Never infer option P&L from underlying points alone.
+
+### 7. Research validation
+
+Run walk-forward and out-of-sample tests across distinct market regimes. Report expectancy, profit factor, drawdown, win/loss distribution, MAE, MFE, trade frequency, costs, and sensitivity to parameters.
+
+### 8. Graduation gate
+
+Do not enable unattended live execution until:
+
+```text
+ORB tests green
+      |
+      v
+TrueData tests green
+      |
+      v
+risk/execution replay green
+      |
+      v
+historical option replay green
+      |
+      v
+walk-forward + OOS stable
+      |
+      v
+cost/slippage validated
+      |
+      v
+production safety review
+      |
+      v
+LIVE AUTOMATION ELIGIBLE
+```
 
 ## Backtest integrity
 
-The baseline signal backtest reports underlying-point/R statistics. It must not be presented as historical option P&L. True option replay requires historical option premiums/contracts and must model spread, slippage, charges, expiry, liquidity and available contracts.
+The underlying ORB backtest is a signal-validation layer. It must not be represented as historical option P&L.
 
-## Provider architecture
-
-Kite and TrueData feed the same canonical bar/option representations. Switching the market-data provider must not change the execution broker. Execution remains routed through the existing Kite safety/protection path.
+Option-level performance requires actual historical option contracts/premiums and realistic transaction costs, spread, slippage, liquidity, expiry, contract availability, and execution timing.
 
 ## Production graduation criteria
 
-Do not enable automatic/live execution merely because the signal engine is enabled. Require a sufficiently large out-of-sample option-level sample and demonstrate stable profit factor, expectancy and drawdown after costs and slippage across market regimes.
+Do not enable automatic/live execution merely because the signal engine is enabled. Require deterministic replay, a sufficiently large out-of-sample option-level sample, positive expectancy after realistic costs, stable drawdown, and robustness across market regimes.
+
+See `docs/strategy/nifty-orb-options/README.md` for the implementation audit and exact next-step program.
