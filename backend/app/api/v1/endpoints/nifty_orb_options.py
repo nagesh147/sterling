@@ -1,7 +1,14 @@
-"""NIFTY ORB option-level replay and universe scan endpoints."""
+"""NIFTY ORB option-level replay and universe scan endpoints.
+
+NOTE: this router is not currently mounted -- the live ORB routes are served
+under ``/api/v1/config/nifty-orb-options``. It is kept auth-correct anyway, so
+that mounting it later cannot introduce a tenant-isolation hole.
+"""
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import UserContext, get_current_user
 
 from app.engines.nifty_orb_option_replay import (
     OptionBar,
@@ -89,11 +96,17 @@ async def replay(body: dict) -> dict:
 
 
 @router.post("/scan")
-async def scan(body: dict) -> dict:
-    """Scan a bounded ORB universe and return ranked actionable signals."""
-    uid = str(body.get("user_id") or "").strip()
+async def scan(body: dict, user: UserContext = Depends(get_current_user)) -> dict:
+    """Scan a bounded ORB universe and return ranked actionable signals.
+
+    The tenant comes from the authenticated session, never from the body. Taking
+    `user_id` from the request let any caller scan as any user -- reading their
+    configured universe and issuing broker calls against their Kite credentials
+    and rate limit.
+    """
+    uid = str(user.user_id or "").strip()
     if not uid:
-        raise HTTPException(422, "user_id is required")
+        raise HTTPException(401, "authenticated user is required")
     try:
         raw = body.get("config") or {}
         cfg = StrategyConfig(**raw)
