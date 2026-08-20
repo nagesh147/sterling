@@ -13,8 +13,10 @@ import pytest
 
 from app.engines.nifty_orb_greeks import (
     black_scholes_delta,
+    black_scholes_greeks,
     black_scholes_price,
     implied_delta,
+    implied_greeks,
     implied_volatility,
     years_to_expiry,
 )
@@ -164,3 +166,84 @@ def test_an_implied_delta_moves_the_stop_the_broker_will_arm():
                                StrategyConfig(max_risk_inr=60000), spot=24050.0, now=NOW)
     assert implied.stop_premium > assumed.stop_premium      # tighter, because delta is lower
     assert implied.premium_risk_per_share < assumed.premium_risk_per_share
+
+
+# --------------------------------------------------------------------------
+# gamma, theta and vega -- the numbers the board prints beside delta
+# --------------------------------------------------------------------------
+
+def test_greeks_match_the_textbook_case():
+    """S=100 K=100 t=1 vol=20% r=5%, in the units the UI reads them in."""
+    call = black_scholes_greeks(100, 100, 1, 0.20, 0.05, "CE")
+    assert call.delta == pytest.approx(0.6368, abs=1e-4)
+    assert call.gamma == pytest.approx(0.018762, abs=1e-6)
+    assert call.vega == pytest.approx(0.375240, abs=1e-6)   # per 1 vol point
+    assert call.theta == pytest.approx(-0.017572, abs=1e-6)  # per calendar day
+    assert call.implied_volatility == 0.20
+
+
+def test_a_put_shares_gamma_and_vega_but_decays_slower_here():
+    call = black_scholes_greeks(100, 100, 1, 0.20, 0.05, "CE")
+    put = black_scholes_greeks(100, 100, 1, 0.20, 0.05, "PE")
+    assert put.gamma == pytest.approx(call.gamma, abs=1e-12)
+    assert put.vega == pytest.approx(call.vega, abs=1e-12)
+    assert put.delta == pytest.approx(-0.3632, abs=1e-4)
+    # carry works against the call and for the put, so the put bleeds less
+    assert put.theta == pytest.approx(-0.004542, abs=1e-6)
+    assert put.theta > call.theta
+
+
+def test_vega_is_quoted_per_point_not_per_100_percent():
+    """A 1-point vol move must reprice by roughly one vega."""
+    greeks = black_scholes_greeks(100, 100, 1, 0.20, 0.05, "CE")
+    moved = black_scholes_price(100, 100, 1, 0.21, 0.05, "CE") - black_scholes_price(
+        100, 100, 1, 0.20, 0.05, "CE"
+    )
+    assert moved == pytest.approx(greeks.vega, rel=0.01)
+
+
+def test_theta_is_quoted_per_day_not_per_year():
+    """One day less of life must cost roughly one theta."""
+    greeks = black_scholes_greeks(100, 100, 1.0, 0.20, 0.05, "CE")
+    decayed = black_scholes_price(100, 100, 1.0 - 1 / 365, 0.20, 0.05, "CE") - black_scholes_price(
+        100, 100, 1.0, 0.20, 0.05, "CE"
+    )
+    assert decayed == pytest.approx(greeks.theta, rel=0.01)
+
+
+@pytest.mark.parametrize("years,vol", [(0.0, 0.20), (-1.0, 0.20), (1.0, 0.0), (1.0, -0.1)])
+def test_degenerate_inputs_report_zero_risk_not_a_crash(years, vol):
+    """No time or no volatility means no convexity -- but delta still steps."""
+    greeks = black_scholes_greeks(110, 100, years, vol, 0.05, "CE")
+    assert (greeks.gamma, greeks.theta, greeks.vega) == (0.0, 0.0, 0.0)
+    assert greeks.delta == 1.0
+
+
+def test_implied_greeks_round_trip_the_traded_premium():
+    years = years_to_expiry(EXPIRY, NOW)
+    premium = black_scholes_price(24000, 24000, years, 0.18, 0.065, "CE")
+    greeks = implied_greeks(premium, 24000, 24000, EXPIRY, "CE", now=NOW, rate=0.065)
+    assert greeks is not None
+    assert greeks.implied_volatility == pytest.approx(0.18, abs=1e-4)
+    modelled = black_scholes_greeks(24000, 24000, years, 0.18, 0.065, "CE")
+    assert greeks.gamma == pytest.approx(modelled.gamma, rel=1e-3)
+    assert greeks.theta == pytest.approx(modelled.theta, rel=1e-3)
+    assert greeks.vega == pytest.approx(modelled.vega, rel=1e-3)
+
+
+@pytest.mark.parametrize(
+    "premium,why",
+    [
+        (1.0, "below intrinsic"),
+        (24000.0, "richer than the underlying"),
+        (0.0, "no premium at all"),
+    ],
+)
+def test_an_unsolvable_premium_yields_no_greeks(premium, why):
+    """Better no gamma on screen than gamma from a volatility that never solved."""
+    assert implied_greeks(premium, 24000, 20000, EXPIRY, "CE", now=NOW, rate=0.065) is None, why
+
+
+def test_greeks_vanish_once_the_contract_has_expired():
+    expired = implied_greeks(120.0, 24000, 24000, date(2026, 8, 20), "CE", now=NOW, rate=0.065)
+    assert expired is None

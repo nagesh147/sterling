@@ -1,7 +1,7 @@
 import React from 'react';
 import { useOrbConfig, useSetOrbConfig, type OrbConfig } from '../hooks/useOrbConfig';
 import {
-  BORDER, ChoiceRow, Field, NumberField, Section, Switch, TEXT,
+  BORDER, ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
@@ -32,6 +32,15 @@ const EXPIRY_OPTIONS = [
   { value: 'weekly', label: 'Weekly', hint: 'Nearest eligible non-monthly contract. Refuses rather than substituting a monthly.' },
   { value: 'monthly', label: 'Monthly', hint: 'Nearest eligible monthly contract.' },
 ] as const;
+
+/** Settings inside Advanced. Counts fields, the way every other panel labels it. */
+const ADVANCED_SETTING_COUNT = 9;
+
+const THRESHOLD_KEYS = [
+  'min_breakout_atr', 'volume_multiplier', 'vwap_slope_lookback', 'trend_lookback', 'atr_period',
+] as const;
+const STOP_KEYS = ['stop_buffer_atr', 'target_r'] as const;
+const PRICING_KEYS = ['risk_free_rate', 'max_quote_staleness_s'] as const;
 
 export function NiftyOrbOptionsSettings() {
   const { data, isLoading } = useOrbConfig();
@@ -77,11 +86,33 @@ export function NiftyOrbOptionsSettings() {
   };
 
   const nonDefaultCount = defaults ? changedFrom(defaults).filter((key) => key !== 'enabled').length : 0;
+  /** Changed-from-default count for one section, so a summary never reports another section's edits. */
+  const changedIn = (keys: readonly (keyof OrbConfig)[]) =>
+    defaults ? keys.filter((key) => JSON.stringify(cfg[key]) !== JSON.stringify(defaults[key])).length : 0;
+  const changedSummary = (keys: readonly (keyof OrbConfig)[], atDefault: string) => {
+    const n = changedIn(keys);
+    return n ? `${n} changed from default` : atDefault;
+  };
   const universeSummary = cfg.scan_all_stocks
     ? `All F&O · ${cfg.scan_indices.length} indices`
     : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
   const num = (key: keyof OrbConfig) => Number(cfg[key]);
   const def = (key: keyof OrbConfig) => (defaults ? Number(defaults[key]) : undefined);
+
+  /** The same default badge a NumberField shows, for choices and switches. */
+  const defBadge = (key: keyof OrbConfig, show?: (v: unknown) => string) => {
+    if (!defaults) return undefined;
+    const fallback = defaults[key];
+    const label = show ? show(fallback) : String(fallback);
+    return (
+      <DefaultBadge
+        isDefault={JSON.stringify(cfg[key]) === JSON.stringify(fallback)}
+        defaultLabel={label}
+        onRestore={() => patch({ [key]: fallback } as Partial<OrbConfig>)}
+      />
+    );
+  };
+  const onOff = (v: unknown) => (v ? 'on' : 'off');
 
   return (
     <>
@@ -105,6 +136,15 @@ export function NiftyOrbOptionsSettings() {
         offNote="Not scanning. No ORB signals and no ORB entries."
       />
 
+      {/* Panel-wide, so "Reset to defaults" is discoverable and its effect is known
+          before it is pressed. Section summaries carry their own scoped counts. */}
+      <ConfigNote>
+        {nonDefaultCount
+          ? <>{nonDefaultCount} setting{nonDefaultCount === 1 ? '' : 's'} differ from the engine defaults. Each one is badged
+            with its default and restores on click; <b>Reset to defaults</b> restores all of them and leaves the engine on or off as it is.</>
+          : <>Every setting is at the engine default.</>}
+      </ConfigNote>
+
       <PanelCard>
         <Section
           title="Chart source"
@@ -112,7 +152,8 @@ export function NiftyOrbOptionsSettings() {
           summary={cfg.data_source === 'kite' ? 'Zerodha Kite' : 'TrueData'}
           defaultOpen
           persistKey="orb-source">
-          <Field label="Market data" hint="Order execution stays on Zerodha Kite either way." wide>
+          <Field label="Market data" hint="Order execution stays on Zerodha Kite either way." wide
+            badge={defBadge('data_source', (v) => (v === 'kite' ? 'Zerodha Kite' : 'TrueData'))}>
             <ChoiceRow
               value={cfg.data_source}
               options={DATA_SOURCE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
@@ -144,7 +185,8 @@ export function NiftyOrbOptionsSettings() {
           summary={`${cfg.option_moneyness}${cfg.option_moneyness === 'ATM' ? '' : ` ×${cfg.option_steps_itm}`} · ${cfg.expiry_selection} · ${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
           defaultOpen
           persistKey="orb-contracts">
-          <Field label="Moneyness" hint="An unavailable moneyness is refused, not silently swapped for the nearest strike." wide>
+          <Field label="Moneyness" hint="An unavailable moneyness is refused, not silently swapped for the nearest strike." wide
+            badge={defBadge('option_moneyness')}>
             <ChoiceRow
               value={cfg.option_moneyness}
               options={MONEYNESS_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
@@ -159,7 +201,8 @@ export function NiftyOrbOptionsSettings() {
               onChange={(v) => patch({ option_steps_itm: v })} min={1} max={5} suffix="strikes"
             />
           )}
-          <Field label="Expiry" hint="Weekly and monthly are separated by the venue calendar, not by DTE guesswork." wide>
+          <Field label="Expiry" hint="Weekly and monthly are separated by the venue calendar, not by DTE guesswork." wide
+            badge={defBadge('expiry_selection')}>
             <ChoiceRow
               value={cfg.expiry_selection}
               options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
@@ -174,7 +217,8 @@ export function NiftyOrbOptionsSettings() {
             label="Maximum days to expiry" value={num('expiry_dte_max')} defaultValue={def('expiry_dte_max')}
             onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={365} suffix="days"
           />
-          <Field label="Expiry day" hint="Expiry-day options gain and lose value fastest.">
+          <Field label="Expiry day" hint="Expiry-day options gain and lose value fastest."
+            badge={defBadge('avoid_expiry_day', (v) => (v ? 'skipped' : 'allowed'))}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <Switch
                 checked={cfg.avoid_expiry_day} label="Avoid expiry-day entries"
@@ -191,7 +235,14 @@ export function NiftyOrbOptionsSettings() {
           summary={`${cfg.opening_range_minutes}m range · ${cfg.entry_start}–${cfg.entry_end} · ${cfg.interval_minutes}m bars`}
           defaultOpen
           persistKey="orb-session">
-          <Field label="Entry window" hint="The opening range is always anchored to 09:15 IST regardless of this window." wide>
+          <Field label="Entry window" hint="The opening range is always anchored to 09:15 IST regardless of this window." wide
+            badge={defaults ? (
+              <DefaultBadge
+                isDefault={cfg.entry_start === defaults.entry_start && cfg.entry_end === defaults.entry_end}
+                defaultLabel={`${defaults.entry_start}\u2013${defaults.entry_end}`}
+                onRestore={() => patch({ entry_start: defaults.entry_start, entry_end: defaults.entry_end })}
+              />
+            ) : undefined}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="time" value={cfg.entry_start} onChange={(e) => patch({ entry_start: e.target.value })}
                 style={{ border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 }} />
@@ -258,7 +309,8 @@ export function NiftyOrbOptionsSettings() {
             description="Which TrueData observations gate a contract."
             summary={[cfg.truedata_use_ticks && 'ticks', cfg.truedata_use_bid_ask && 'bid/ask', cfg.truedata_use_oi && 'OI', cfg.truedata_use_quote_freshness && 'freshness'].filter(Boolean).join(' · ') || 'all off'}
             persistKey="orb-truedata">
-            <Field label="Realtime ticks" hint="Quote freshness is measured from the tick stamp, so it requires ticks.">
+            <Field label="Realtime ticks" hint="Quote freshness is measured from the tick stamp, so it requires ticks."
+              badge={defBadge('truedata_use_ticks', onOff)}>
               <Switch
                 checked={cfg.truedata_use_ticks} label="Use ticks"
                 onChange={() => patch({
@@ -267,28 +319,31 @@ export function NiftyOrbOptionsSettings() {
                 })}
               />
             </Field>
-            <Field label="Quote freshness" hint={cfg.truedata_use_ticks ? 'Reject a contract whose last tick is stale.' : 'Requires realtime ticks.'}>
+            <Field label="Quote freshness" hint={cfg.truedata_use_ticks ? 'Reject a contract whose last tick is stale.' : 'Requires realtime ticks.'}
+              badge={defBadge('truedata_use_quote_freshness', onOff)}>
               <Switch
                 checked={cfg.truedata_use_quote_freshness} label="Reject stale quotes" disabled={!cfg.truedata_use_ticks}
                 onChange={() => cfg.truedata_use_ticks && patch({ truedata_use_quote_freshness: !cfg.truedata_use_quote_freshness })}
               />
             </Field>
-            <Field label="Bid / ask" hint="Enforce the spread ceiling and reject a crossed market.">
+            <Field label="Bid / ask" hint="Enforce the spread ceiling and reject a crossed market."
+              badge={defBadge('truedata_use_bid_ask', onOff)}>
               <Switch checked={cfg.truedata_use_bid_ask} label="Use bid/ask"
                 onChange={() => patch({ truedata_use_bid_ask: !cfg.truedata_use_bid_ask })} />
             </Field>
-            <Field label="Open interest" hint="Enforce the open-interest floor.">
+            <Field label="Open interest" hint="Enforce the open-interest floor."
+              badge={defBadge('truedata_use_oi', onOff)}>
               <Switch checked={cfg.truedata_use_oi} label="Use OI"
                 onChange={() => patch({ truedata_use_oi: !cfg.truedata_use_oi })} />
             </Field>
           </Section>
         )}
 
-        <AdvancedSection count={nonDefaultCount || undefined}>
+        <AdvancedSection count={ADVANCED_SETTING_COUNT}>
           <Section
             title="Signal thresholds"
             description="The filters a bar must clear. Every value shows whether it is still the engine default."
-            summary={nonDefaultCount ? `${nonDefaultCount} changed from default` : 'all at default'}
+            summary={changedSummary(THRESHOLD_KEYS, 'all at default')}
             defaultOpen
             persistKey="orb-thresholds">
             <NumberField
@@ -319,7 +374,7 @@ export function NiftyOrbOptionsSettings() {
           <Section
             title="Stop and target"
             description="How the underlying stop and target are derived."
-            summary={`${cfg.stop_buffer_atr} ATR stop · ${cfg.target_r}R target`}
+            summary={changedSummary(STOP_KEYS, `${cfg.stop_buffer_atr} ATR stop · ${cfg.target_r}R target`)}
             persistKey="orb-stop">
             <NumberField
               label="Stop buffer" hint="Underlying stop distance in ATR. The premium stop is derived from it via delta."
@@ -339,7 +394,7 @@ export function NiftyOrbOptionsSettings() {
           <Section
             title="Pricing and quotes"
             description="Inputs to the implied-volatility solve and the freshness gate."
-            summary={`${(cfg.risk_free_rate * 100).toFixed(2)}% rate · ${cfg.max_quote_staleness_s}s`}
+            summary={changedSummary(PRICING_KEYS, `${(cfg.risk_free_rate * 100).toFixed(2)}% rate · ${cfg.max_quote_staleness_s}s`)}
             persistKey="orb-pricing">
             <NumberField
               label="Risk-free rate" hint="Used to solve implied volatility from the traded premium, which gives the delta behind the premium stop."

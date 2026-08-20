@@ -396,6 +396,49 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
  * cannot drift from the engine, and a changed field shows what it was and
  * offers one click back.
  */
+/**
+ * "default" / "changed · default X ↺" for any setting, not just numbers.
+ *
+ * A panel of fields is only readable at a glance if every one of them answers
+ * the same question the same way, so choices, switches and time windows use
+ * this too — a number was never the only kind of value a user can move.
+ */
+export function DefaultBadge({ isDefault, defaultLabel, onRestore, restoreTitle }: {
+  isDefault: boolean;
+  /** The default, already formatted for reading. */
+  defaultLabel: string;
+  onRestore: () => void;
+  restoreTitle?: string;
+}) {
+  if (isDefault) {
+    return (
+      <span
+        title="Unchanged from the engine default"
+        style={{
+          color: k.dim, fontSize: 9, fontWeight: 600, letterSpacing: '.03em',
+          border: `1px solid ${k.border}`, borderRadius: 3, padding: '0 5px', height: 16, lineHeight: '15px',
+        }}
+      >
+        default
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onRestore}
+      title={restoreTitle ?? `Restore the default, ${defaultLabel}`}
+      style={{
+        border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), color: k.orange,
+        borderRadius: 3, padding: '0 5px', height: 16, fontSize: 9, fontWeight: 700,
+        letterSpacing: '.03em', cursor: 'pointer', fontFamily: 'inherit',
+      }}
+    >
+      changed · default {defaultLabel} ↺
+    </button>
+  );
+}
+
 export function NumberField({
   label, hint, value, defaultValue, onChange,
   min, max, step = 1, suffix, disabled = false, format,
@@ -424,26 +467,12 @@ export function NumberField({
     <Field
       label={label}
       hint={hint}
-      badge={known && !isDefault ? (
-        <button
-          type="button"
-          onClick={() => onChange(defaultValue as number)}
-          title={`Restore the default, ${show(defaultValue as number)}`}
-          style={{
-            border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), color: k.orange,
-            borderRadius: 3, padding: '0 5px', height: 16, fontSize: 9, fontWeight: 700,
-            letterSpacing: '.03em', cursor: 'pointer', fontFamily: 'inherit',
-          }}
-        >
-          changed · default {show(defaultValue as number)} ↺
-        </button>
-      ) : known ? (
-        <span
-          title="Unchanged from the engine default"
-          style={{ color: k.dim, fontSize: 9, fontWeight: 600, letterSpacing: '.03em', border: `1px solid ${k.border}`, borderRadius: 3, padding: '0 5px', height: 16, lineHeight: '15px' }}
-        >
-          default
-        </span>
+      badge={known ? (
+        <DefaultBadge
+          isDefault={isDefault}
+          defaultLabel={show(defaultValue as number)}
+          onRestore={() => onChange(defaultValue as number)}
+        />
       ) : undefined}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

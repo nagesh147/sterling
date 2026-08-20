@@ -20,6 +20,31 @@ def test_orb_config_is_disabled_by_default():
     assert payload["execution_brokers"] == ["kite"]
 
 
+def test_orb_config_publishes_the_engines_own_defaults():
+    """The board marks which fields are still at default off this payload.
+
+    A second copy of the defaults in the client is the drift this codebase keeps
+    hitting, so the endpoint must publish them and they must cover every field.
+    """
+    import json
+
+    from app.engines.nifty_orb_options import StrategyConfig
+
+    payload = client().get("/api/v1/config/nifty-orb-options").json()
+    defaults = payload["defaults"]
+    # through JSON, so the engine's tuples arrive as lists -- compare like for like
+    assert defaults == json.loads(json.dumps(StrategyConfig().__dict__))
+    assert set(defaults) == set(payload["config"])
+
+
+def test_the_published_defaults_are_themselves_valid():
+    """Reset-to-defaults must not hand the engine a config it would reject."""
+    from app.engines.nifty_orb_options import StrategyConfig
+
+    defaults = client().get("/api/v1/config/nifty-orb-options").json()["defaults"]
+    StrategyConfig(**defaults).validate()
+
+
 def test_orb_does_not_own_a_paper_live_control():
     """Paper/Live and Manual/Auto belong to the universal trading mode.
 
