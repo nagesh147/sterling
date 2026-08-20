@@ -7,8 +7,9 @@ Last updated: 2026-08-20
 **Unit-green and measurement-honest. Not approved for unattended automated options trading.**
 
 ```text
-200 passed
+249 passed
 0 failed          (backend, -k orb)
+frontend tsc      clean
 ```
 
 Verified against a full-suite run on the pre-work commit: **25 failures fixed,
@@ -161,6 +162,65 @@ infrastructure. A strategy-local `paper_only` control is forbidden, and a test
 asserts no such field exists — a UI flag claiming a safety the shared execution
 path never reads is the recurring failure mode this guards against.
 
+## Audit findings closed
+
+A pass over the service, scanner, universe and frontend layers after the suite
+went green. Everything here was on a live path.
+
+| # | Defect | Consequence |
+| --- | --- | --- |
+| 1 | `execute_auto` was an unreferenced second auto-execution path | Passed `positions=[], check_daily_loss=False`, bypassing the daily-loss breaker. On a broker read failure it set `filled = qty`, treating an unfilled order as fully filled. Never checked `armed.protected`. No market-hours, entry-window, liquidity, freshness, drift or premium-budget guard. **Deleted**; `execute_scan` is the only auto path. |
+| 2 | Four independent implementations of weekly-vs-monthly expiry | The live Kite scan resolved "weekly" to the nearest eligible expiry, which *is* the monthly during the week it expires -- a weekly mandate bought monthly contracts. **All four now use `is_monthly_expiry`**, and an unmatched preference refuses rather than substituting. |
+| 3 | `scan_universe` called `generate_signal` with no clock, and `scan_kite_universe` did not drop the forming candle | The universe scan signalled off an **unclosed bar**. The other two bar adapters filtered; this one did not. Fixed at the choke point so no adapter can reintroduce it. |
+| 4 | `build_trade_plan` sized by the modelled stop; the executor sized by the full premium | Measured 16x divergence: the board showed 2400 units of an 18-rupee option (Rs 43,200 of premium) labelled "risk Rs 3,000" while the executor would buy 150. Plan and executor quantities are now identical, and `max_loss_inr` reports the premium actually committed. |
+| 5 | `get_config()` loaded a stored config without validating it | An invalid persisted row would surface as an exception deep in the engine mid-session. Now validates on load and falls back to disabled. |
+| 6 | The scanner duplicated the TrueData provider's gates in a different order | The same bad tick raised a different error depending on the caller, and either copy could be hardened without the other. Now delegates to `refresh_contract`. |
+| 7 | `filter_chain` defaulted to the host's local date, `select_option` to IST | On a UTC host they named different sessions for 5.5 hours a day, shifting every DTE. One IST session date now anchors both. |
+| 8 | Scan caches were never evicted | The runner ticks every 5s forever and the option key carries the session date: one dead entry per underlying per user per day. Writes now evict. |
+| 9 | `NiftyOrbSignalsPanel` read `s.orHigh`, which does not exist | The opening-range column rendered "—" for every row, always. Two pre-existing `tsc` errors; the frontend typecheck is now clean. |
+| 10 | A stop wider than the premium produced `stop_premium = 0.05` | Hold-to-zero presented as a stop. `premium_risk_per_share` is capped at the premium paid. |
+| 11 | `_selection_config` appeared to relax liquidity before selection but was a no-op | Removed rather than left to mislead. |
+| 12 | Refusals consumed the daily trade budget | `len(executed)` counted every blocked row, so with the default cap of 2 a pair of illiquid candidates exhausted the day before a tradable third was examined. Only fills count now. |
+| 13 | An unguarded `_save_state` after a filled, protected entry | A database failure raised out of `execute_scan`, so the day's trade count never persisted and the next 5-second tick would read the stale count and trade past `max_trades_per_day`. Now trips the kill switch and reports `executed_count_not_persisted` -- same failure class as the daily-PnL persistence gate. |
+| 14 | The daily-loss circuit breaker was inert for USD-denominated positions | See below. Reachable from `trading.py` and `order_router.py`, **not** from ORB. |
+
+### Finding 14 in detail
+
+`daily_realized_pnl_inr` read `realized_pnl_inr`, falling back to
+`realized_pnl` -- but paper and crypto positions expose **only**
+`realized_pnl_usd`. Every such position therefore contributed 0.00 and the
+breaker reported `clear` regardless of the loss:
+
+```text
+configured halt threshold : -500
+realised P&L in the book  : -600
+what the breaker read     :    0.00
+assert_safe_to_trade      : allowed=True     <-- order permitted
+```
+
+ORB was never exposed: both of its `assert_safe_to_trade` call sites pass
+`uid=`, which routes to `state.daily_realized_pnl_strict(uid)` -- the
+authoritative account read -- rather than the positions cascade. A regression
+test now pins ORB to that path so it cannot silently inherit the other one.
+
+The cascade now ends at `realized_pnl_usd`, so the breaker halts again. Three
+`test_live_safety` daily-loss tests plus one each in `test_order_router` and
+`test_algo_mode` were failing on this and are now green; they were encoding the
+correct behaviour all along.
+
+**Residual, needs a decision:** `DailyLossConfig` holds a single threshold pair
+and accepts either `*_inr` or `*_usd`, storing one number. A book must therefore
+be configured in its own currency, and a genuinely mixed-currency deployment
+needs separate thresholds. That limitation predates this fix and this cascade
+cannot resolve it.
+
+Two hazards introduced by the config-validation work were caught in the same
+pass: `scan_one` would have swallowed a `ValueError` from an invalid config once
+per instrument and reported an empty scan, and `set_config`'s duplicate of the
+TrueData tick/freshness coupling would have drifted from `validate()`. Both are
+fixed -- the config is validated once before any fan-out, and the coupling lives
+on `validate()`.
+
 ## Remaining work
 
 ### Step 1 — Execution truth (mostly closed)
@@ -184,6 +244,9 @@ path never reads is the recurring failure mode this guards against.
 | Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget and >0.30% underlying drift each refuse. |
 | Daily limit | The count persists, and a second scan returns `daily_limit`. |
 | Advisory mode | `auto_execute` off places nothing. |
+
+Also covered since: refusals no longer consume the daily budget, and a failed
+trade-count write trips the kill switch instead of silently raising the cap.
 
 Still uncovered, and still blocking:
 

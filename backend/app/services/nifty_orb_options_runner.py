@@ -50,7 +50,7 @@ async def _tick():
     results=await asyncio.gather(*(_run_user(uid) for uid in sorted(users)),return_exceptions=True)
     for result in results:
         if isinstance(result,Exception):log.warning("NIFTY ORB tenant tick exception: %s",result);continue
-        if result.get("status") in {"executed","blocked","error","daily_limit","critical_unknown_position","critical_unprotected"}:log.info("NIFTY ORB auto tick status=%s",result["status"])
+        if result.get("status") in {"executed","blocked","error","daily_limit","critical_unknown_position","critical_unprotected","executed_count_not_persisted"}:log.info("NIFTY ORB auto tick status=%s",result["status"])
 
 async def run_forever():
     while True:

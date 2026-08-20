@@ -141,7 +141,10 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
         age=_signal_age(signal.get("timestamp"))
         if age is None or age>cfg.interval_minutes*60:
             executed.append({"status":"blocked","symbol":symbol,"reason":f"signal stale/invalid age={age}"});continue
-        if len(executed)+int(trade_state.get("count",0))>=max_trades:break
+        # Only filled entries consume the daily budget. `len(executed)` counted
+        # every refusal too, so with the default cap of 2 a pair of illiquid
+        # candidates exhausted the day before a tradable third was ever examined.
+        if sum(1 for e in executed if e.get("status")=="executed")+int(trade_state.get("count",0))>=max_trades:break
         key=f"{underlying}:{signal.get('timestamp')}:{direction}:{symbol}"; idem=live_safety.make_idempotency_key(uid,key,"BUY")
         decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True,uid=uid)
         if not decision.allowed:
@@ -151,7 +154,7 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"blocked","symbol":symbol,"reason":"contract no longer exists"});continue
         # The broker-resolved contract, not the scanner payload, is authoritative.
         broker_type=str(instrument.get("instrument_type") or instrument.get("option_type") or "").upper()
-        if broker_type and broker_type not in {expected,"CE" if expected=="CE" else "PE"}:
+        if broker_type and broker_type!=expected:
             executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract option type mismatch"});continue
         plan_strike=float(contract.get("strike") or 0); broker_strike=float(instrument.get("strike") or 0)
         if plan_strike>0 and broker_strike>0 and abs(plan_strike-broker_strike)>0.001:
@@ -226,6 +229,17 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
                 executed.append({"status":"critical_unprotected","symbol":symbol,"order_id":oid,"quantity":actual,"reason":str(exc),"close":note})
             else:executed.append({"status":"entry_closed_protection_failure","symbol":symbol,"order_id":oid,"quantity":actual,"reason":str(exc),"close":note})
             continue
-        trade_state["count"]=int(trade_state.get("count",0))+1; trade_state["signals"].append(key); _save_state(uid,trade_state); seen.add(underlying)
+        trade_state["count"]=int(trade_state.get("count",0))+1; trade_state["signals"].append(key)
+        try:
+            _save_state(uid,trade_state)
+        except Exception as exc:
+            # The position is open and protected, but the day's trade count did
+            # not persist. The next tick would read the stale count and could
+            # trade past max_trades_per_day, so stop trading instead of silently
+            # raising the cap. Same failure class as the daily-PnL persistence gate.
+            live_safety.set_kill_switch(True,f"ORB trade count did not persist after {symbol}: {exc}")
+            executed.append({"status":"executed_count_not_persisted","underlying":underlying,"symbol":symbol,"quantity":actual,"order_id":oid,"protected":True,"reason":str(exc)})
+            seen.add(underlying);continue
+        seen.add(underlying)
         executed.append({"status":"executed","underlying":underlying,"symbol":symbol,"quantity":actual,"requested_quantity":quantity,"fill_price":fill_price,"broker_status":status,"order_id":oid,"protected":True,"conservative_max_loss_inr":round(quote["ask"]*actual,2),"plan":plan})
     return {"status":"executed" if executed else "no_trade","executed":executed,"count":trade_state["count"]}

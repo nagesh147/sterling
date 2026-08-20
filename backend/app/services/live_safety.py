@@ -31,10 +31,26 @@ def _today_start_ms_ist():
     ist=timezone(timedelta(hours=5,minutes=30)); n=datetime.now(ist); return int(n.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()*1000)
 
 def daily_realized_pnl_inr(positions):
+    """Today's realised P&L across the supplied positions.
+
+    The field cascade ends at ``realized_pnl_usd`` because paper/crypto positions
+    expose *only* that field. Omitting it made every such position contribute
+    0.00, so the daily-loss breaker read "clear" no matter how much the book had
+    lost -- a realised -600 against a -500 halt threshold was allowed through. A
+    risk read that cannot see a loss must not be treated as no loss.
+
+    The threshold is whatever ``DailyLossConfig`` was given (it already accepts
+    either ``*_inr`` or ``*_usd`` and stores one number), so a book must be
+    configured in its own currency. Mixed-currency books need separate
+    thresholds; that is a pre-existing limitation of the single-threshold config,
+    not something this cascade can resolve.
+    """
     total=0.0; start=_today_start_ms_ist()
     for p in positions:
-        ts=getattr(p,"exit_timestamp_ms",None) or getattr(p,"closed_ms",None); pnl=getattr(p,"realized_pnl_inr",None)
+        ts=getattr(p,"exit_timestamp_ms",None) or getattr(p,"closed_ms",None)
+        pnl=getattr(p,"realized_pnl_inr",None)
         if pnl is None:pnl=getattr(p,"realized_pnl",None)
+        if pnl is None:pnl=getattr(p,"realized_pnl_usd",None)
         if ts and pnl is not None and int(ts)>=start:total+=float(pnl)
     return round(total,2)
 

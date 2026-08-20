@@ -159,6 +159,7 @@ def harness(monkeypatch, tmp_path):
     return {
         "rec": rec, "store": store, "patch": monkeypatch.setattr,
         "protection": protection, "state": engine_state, "accounts": accounts,
+        "safety": live_safety,
     }
 
 
@@ -411,3 +412,89 @@ async def test_the_underlying_drifting_past_the_tolerance_is_refused(harness):
     out = await _run(harness, client)
     assert "underlying moved" in out["executed"][0]["reason"]
     assert client.placed == []
+
+
+# --------------------------------------------------------------------------
+# daily-budget accounting and state persistence
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_refusals_do_not_consume_the_daily_trade_budget(harness):
+    """Two illiquid candidates must not spend a two-trade day."""
+    harness["patch"](execution, "_fresh_quote", _async({"ask": 18.0, "bid": 17.9, "volume": 10.0, "oi": 50000.0}))
+    rows = [_signal_row(), dict(_signal_row(), underlying="BANKNIFTY"), dict(_signal_row(), underlying="FINNIFTY")]
+    out = await _run(harness, FakeClient(), rows=rows, max_trades=2)
+    # Every row was examined and refused; none was skipped by an exhausted budget.
+    assert len(out["executed"]) == 3
+    assert {e["reason"] for e in out["executed"]} == {"option liquidity below configured minimum"}
+    assert harness["store"]["u1"]["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_before_a_tradable_candidate_still_leaves_room(harness):
+    """The regression: a leading refusal used to eat one of the two slots."""
+    quotes = iter([
+        {"ask": 18.0, "bid": 17.9, "volume": 10.0, "oi": 50000.0},        # illiquid
+        {"ask": 18.0, "bid": 17.9, "volume": 5000.0, "oi": 50000.0},      # tradable
+    ])
+
+    async def quote(*a, **k):
+        return next(quotes)
+
+    harness["patch"](execution, "_fresh_quote", quote)
+    rows = [_signal_row(), dict(_signal_row(), underlying="BANKNIFTY")]
+    out = await _run(harness, FakeClient(), rows=rows, max_trades=1)
+    statuses = [e["status"] for e in out["executed"]]
+    assert statuses == ["blocked", "executed"]
+    assert harness["store"]["u1"]["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_state_write_stops_trading_instead_of_raising_the_cap(harness):
+    """The count did not persist, so the next tick would trade past the limit."""
+    def explode(uid, state):
+        raise RuntimeError("database unavailable")
+
+    harness["patch"](execution, "_save_state", explode)
+    out = await _run(harness, FakeClient())
+    entry = out["executed"][0]
+    assert entry["status"] == "executed_count_not_persisted"
+    assert entry["protected"] is True                      # the position is real and armed
+    assert entry["quantity"] == 75
+    assert any("trade count did not persist" in r for r in harness["rec"].kill)
+
+
+@pytest.mark.asyncio
+async def test_a_broker_option_type_disagreeing_with_the_signal_is_refused(harness):
+    harness["patch"](execution, "_find_contract", _async((
+        "NFO",
+        {"instrument_type": "PE", "strike": 25000.0, "expiry": EXPIRY, "lot_size": 75, "instrument_token": 1},
+    )))
+    client = FakeClient()
+    out = await _run(harness, client)
+    assert out["executed"][0]["reason"] == "broker contract option type mismatch"
+    assert client.placed == []
+
+
+@pytest.mark.asyncio
+async def test_orb_uses_the_authoritative_account_daily_loss_read(harness):
+    """ORB must pass `uid=` so the breaker uses the account read.
+
+    The positions cascade in `live_safety` was inert for USD-denominated
+    positions -- it contributed 0.00 for every one and reported "clear" against
+    any threshold. ORB escaped that only because it passes `uid`, which routes to
+    `daily_realized_pnl_strict`. Pin it so a future edit cannot drop the uid and
+    silently inherit the weaker path.
+    """
+    seen: list[dict] = []
+
+    def record(positions, idem=None, **kwargs):
+        seen.append(kwargs)
+        return FakeDecision()
+
+    harness["patch"](harness["safety"], "assert_safe_to_trade", record)
+    await _run(harness, FakeClient())
+    assert seen, "the safety gate was never consulted"
+    for call in seen:
+        assert call.get("check_daily_loss") is True
+        assert call.get("uid") == "u1"
