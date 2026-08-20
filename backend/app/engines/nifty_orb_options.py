@@ -122,6 +122,12 @@ class StrategyConfig:
             raise ValueError(f"option_moneyness must be one of {sorted(MONEYNESS)}")
         if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
             raise ValueError("avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
+        if self.data_source == "truedata" and self.truedata_use_quote_freshness and not self.truedata_use_ticks:
+            # TrueData freshness is measured from the tick stamp, so switching
+            # ticks off silently disables the freshness gate rather than keeping
+            # it. The provider is allowed to return early when ticks are off, and
+            # this invariant is what makes that safe.
+            raise ValueError("truedata_use_quote_freshness requires truedata_use_ticks")
         return self
 
 
