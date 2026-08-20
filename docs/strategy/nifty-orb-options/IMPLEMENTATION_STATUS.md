@@ -43,8 +43,24 @@ NONE  -> NO ORDER
 
 All ORB work lives on a single branch, `feature/nifty-orb-options`.
 `feature/nifty-orb-options-scan` and `feature/nifty-orb-options-universe` were
-identical to each other and fully contained in it (zero unique commits), so the
-consolidation required no merge. The branch is level with `main`.
+identical to each other and fully contained in it (zero unique commits), so that
+part required no merge. Both are now retired.
+
+ORB has been fast-forwarded into `main`, and local `main`'s 29 commits of
+parallel adaptive-edge work (TrueData/Kite diagnostics, Strategy Semantics
+Pipeline A->K, canonical E2E runner, historical corpus replay) have been merged
+back in. Those commits existed on **no remote** beforehand and are additionally
+backed up at `origin/backup/local-main-adaptive-edge-2026-08-20`.
+
+The merge conflicted in five files where both branches had evolved the same
+execution-authorization code. Each was resolved as a **union**, because each side
+held a control the other lacked: the F-110 admission token (bound to the order
+fingerprint) from this branch, and the ExecutionMode / ReplayContext simulation
+path from `main`. A test now pins the combination, including that a formula scope
+cannot be passed *instead* of the admission token.
+
+Adaptive-edge went from 32 failing to 0 -- `main`'s commits were the newer,
+correct implementations of what this branch was red on.
 
 ## What is implemented
 
