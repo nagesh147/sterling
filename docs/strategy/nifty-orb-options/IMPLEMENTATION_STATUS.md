@@ -7,14 +7,25 @@ Last updated: 2026-08-20
 **Unit-green and measurement-honest. Not approved for unattended automated options trading.**
 
 ```text
-249 passed
+250 passed
 0 failed          (backend, -k orb)
-frontend tsc      clean
+frontend tsc      clean  (0 errors, down from 2 pre-existing)
 ```
 
-Verified against a full-suite run on the pre-work commit: **25 failures fixed,
-0 newly broken**. The 39 that remain red are pre-existing and outside ORB
-(adaptive-edge, live-safety daily-loss, TrueData tick history).
+Verified by isolated-worktree full-suite runs at the pre-work commit and at
+HEAD, same command:
+
+```text
+baseline   64 failing
+HEAD       34 failing
+fixed      30
+newly broken 0
+```
+
+The 34 still red are pre-existing and outside ORB: adaptive-edge (32) and
+TrueData tick history (2). The five live-safety / order-router / algo-mode
+daily-loss failures are now green -- see finding 14, they were reporting a real
+hole, not drifting.
 
 No production filter was weakened to reach green. Where a test and the
 implementation disagreed, the stricter side won and the fixture was rebuilt to
