@@ -3,7 +3,15 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
-from app.engines.nifty_orb_option_replay import OptionBar, ReplayCostConfig, replay_trade, summarize_replay
+from app.engines.nifty_orb_option_replay import (
+    OptionBar,
+    ReplayAdmission,
+    ReplayCostConfig,
+    ReplayRejection,
+    replay_signal,
+    summarize_replay,
+)
+from app.engines.nifty_orb_validation import TradingCosts
 from app.engines.nifty_orb_options import StrategyConfig
 
 router = APIRouter(prefix="/nifty-orb-options", tags=["nifty-orb-options"])
@@ -35,6 +43,14 @@ def _option_bar(row: dict) -> OptionBar:
 
 @router.post("/replay")
 async def replay(body: dict) -> dict:
+    """Replay option-buy trades against real option bars.
+
+    ``entry_index`` names the bar whose close produced the signal; the fill
+    lands ``entry_delay_bars`` later (default 1), so no trade is priced off
+    information the strategy did not have. Signals that could not be traded are
+    returned under ``rejections`` rather than dropped, because a replay that
+    silently discards untradeable signals reports a strategy nobody ran.
+    """
     rows = body.get("bars")
     if not isinstance(rows, list) or not rows:
         raise HTTPException(422, "bars must be a non-empty option OHLC list")
@@ -44,14 +60,30 @@ async def replay(body: dict) -> dict:
             slippage_points=float(body.get("slippage_points") or 0),
             brokerage_per_order=float(body.get("brokerage_per_order") or 0),
             charges_per_order=float(body.get("charges_per_order") or 0),
+            statutory=TradingCosts(**body["statutory_costs"]) if body.get("statutory_costs") else None,
         )
-        trades = []
+        admission = ReplayAdmission(**body["admission"]) if body.get("admission") else ReplayAdmission()
+        entry_delay = int(body.get("entry_delay_bars") or 1)
+        trades, rejections = [], []
         for item in body.get("trades", []):
-            start = int(item["entry_index"])
-            trade = replay_trade(bars, start, float(item["risk_points"]), float(item.get("target_r") or 2), costs)
-            if trade:
-                trades.append(trade)
-        return {"trades": [trade.to_dict() for trade in trades], "metrics": summarize_replay(trades), "option_pnl": True}
+            outcome = replay_signal(
+                bars,
+                int(item["entry_index"]),
+                float(item["risk_points"]),
+                float(item.get("target_r") or 2),
+                costs,
+                lots=int(item.get("lots") or 1),
+                admission=admission,
+                entry_delay_bars=entry_delay,
+            )
+            (rejections if isinstance(outcome, ReplayRejection) else trades).append(outcome)
+        return {
+            "trades": [trade.to_dict() for trade in trades],
+            "rejections": [{"entry_index": r.signal_index, "reason": r.reason} for r in rejections],
+            "metrics": summarize_replay(trades),
+            "option_pnl": True,
+            "entry_delay_bars": entry_delay,
+        }
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(422, str(exc)) from exc
 
