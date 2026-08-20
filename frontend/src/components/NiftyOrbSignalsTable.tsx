@@ -61,11 +61,10 @@ export function NiftyOrbSignalsTable() {
                 worthless. "Stop Risk" alone understated a plan by up to 16x. */}
             <td style={{ ...cell, textAlign: 'right', color: 'var(--t-bright)', fontWeight: 600 }}>
               {row.maxLossInr == null ? '—' : `₹${row.maxLossInr.toFixed(0)}`}
-              {row.deltaIsEstimated && (
-                /* Kite publishes no Greeks, so delta 0.50 is assumed and every
-                   premium-domain number here -- including the stop armed at the
-                   broker -- rests on that assumption. */
-                <span title="Delta assumed 0.50: broker publishes no Greeks" style={{ marginLeft: 4, color: 'var(--t-orange, #f06428)' }}>≈</span>
+              {row.deltaSource === 'assumed' && (
+                /* Only a fallback deserves a caveat. A delta solved from the
+                   traded premium is a measurement, so it is not flagged. */
+                <span title="Delta assumed 0.50 — the premium could not be solved for volatility" style={{ marginLeft: 4, color: 'var(--t-orange, #f06428)' }}>≈</span>
               )}
             </td>
             {/* A stale quote is the most common reason a plan is unexecutable. */}

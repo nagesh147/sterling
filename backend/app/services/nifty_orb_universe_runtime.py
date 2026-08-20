@@ -41,7 +41,12 @@ def _bar(row: Any) -> Bar:
     )
 
 
-def _stock_meta(symbol: str, row: dict) -> InstrumentMeta:
+def _stock_meta(symbol: str, row: dict, *, exchange: str = "NSE") -> InstrumentMeta:
+    """Build InstrumentMeta from a Kite instrument row.
+
+    ``exchange`` prefixes the quote key, so a BSE index does not get an NSE
+    prefix that would make every quote lookup miss.
+    """
     return InstrumentMeta(
         underlying=symbol,
         quote_currency="INR",
@@ -54,7 +59,7 @@ def _stock_meta(symbol: str, row: dict) -> InstrumentMeta:
         perp_symbol="",
         index_name=str(row.get("tradingsymbol") or symbol),
         zerodha_token=int(row.get("instrument_token") or 0),
-        zerodha_index_symbol=f"NSE:{row.get('tradingsymbol') or symbol}",
+        zerodha_index_symbol=f"{exchange}:{row.get('tradingsymbol') or symbol}",
         description="NSE F&O equity underlying",
     )
 

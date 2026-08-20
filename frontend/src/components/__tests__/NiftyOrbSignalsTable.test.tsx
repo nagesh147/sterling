@@ -17,7 +17,8 @@ const entry = (over: Partial<OrbFeedEntry> = {}): OrbFeedEntry => ({
   optionExpiry: '2026-08-27', optionPremium: 18, stopPremium: 14, targetPremium: 26,
   quantity: 150, riskInr: 187.5, maxLossInr: 2700, dataSource: 'kite', quoteAgeS: 3.2,
   reason: 'ORB high break + VWAP + positive VWAP slope + momentum + volume',
-  timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: false, ...over,
+  timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: false,
+  deltaSource: 'implied', impliedVol: 0.224, ...over,
 });
 
 function show(rows: OrbFeedEntry[], state: Partial<typeof signals> = {}) {
@@ -33,13 +34,19 @@ describe('ORB signals table', () => {
     expect(screen.getByText('150')).toBeInTheDocument();
   });
 
-  it('marks a plan whose delta was assumed', () => {
-    show([entry({ deltaIsEstimated: true })]);
+  it('marks a plan whose delta was only assumed', () => {
+    show([entry({ deltaSource: 'assumed', deltaIsEstimated: true, impliedVol: null })]);
     expect(screen.getByTitle(/Delta assumed 0\.50/i)).toBeInTheDocument();
   });
 
-  it('leaves an unmarked plan unmarked', () => {
-    show([entry({ deltaIsEstimated: false })]);
+  it('does not caveat a delta solved from the traded premium', () => {
+    // An implied delta is a measurement, not an assumption, so it carries no marker.
+    show([entry({ deltaSource: 'implied', deltaIsEstimated: true, impliedVol: 0.224 })]);
+    expect(screen.queryByTitle(/Delta assumed 0\.50/i)).not.toBeInTheDocument();
+  });
+
+  it('does not caveat a broker-supplied delta', () => {
+    show([entry({ deltaSource: 'broker', deltaIsEstimated: false, impliedVol: null })]);
     expect(screen.queryByTitle(/Delta assumed 0\.50/i)).not.toBeInTheDocument();
   });
 

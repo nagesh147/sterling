@@ -58,3 +58,38 @@ describe('ORB signal adapter', () => {
     expect(toOrbFeedEntries(null)).toEqual([]);
   });
 });
+
+describe('failed scan rows', () => {
+  it('keeps an errored underlying instead of dropping it', () => {
+    // Dropping these made a scan where all 18 underlyings errored render as
+    // "no configured underlyings" — a failure shown as an absence.
+    const rows = [
+      { underlying: 'NIFTY', status: 'error', signal: null, trade: null, error: "'str' object has no attribute 'zerodha_token'" },
+      { underlying: 'BANKNIFTY', status: 'error', signal: null, trade: null, error: 'No Kite instrument matches BANKNIFTY on NSE' },
+    ];
+    const entries = toOrbFeedEntries({ signals: rows });
+    expect(entries).toHaveLength(2);
+    expect(entries.map(e => e.state)).toEqual(['ERROR', 'ERROR']);
+    expect(entries[0].reason).toContain('zerodha_token');
+    expect(entries[0].underlying).toBe('NIFTY');
+    expect(entries[0].maxLossInr).toBeNull();
+  });
+
+  it('falls back to a generic reason when the row carries none', () => {
+    const [entry] = toOrbFeedEntries({ signals: [{ underlying: 'NIFTY', status: 'error', signal: null }] });
+    expect(entry.state).toBe('ERROR');
+    expect(entry.reason).toBe('scan failed');
+  });
+
+  it('still ignores a row with no identifiable underlying', () => {
+    expect(toOrbFeedEntries({ signals: [{ status: 'error' }] })).toEqual([]);
+  });
+
+  it('reports an unresolved signal by its status', () => {
+    const [entry] = toOrbFeedEntries({
+      signals: [{ underlying: 'NIFTY', status: 'signal_unresolved', signal: null, trade_error: 'No liquid CE contracts satisfy expiry and liquidity settings' }],
+    });
+    expect(entry.state).toBe('SIGNAL_UNRESOLVED');
+    expect(entry.reason).toContain('No liquid CE contracts');
+  });
+});

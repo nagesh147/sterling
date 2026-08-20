@@ -7,9 +7,10 @@ Last updated: 2026-08-20
 **Unit-green and measurement-honest. Not approved for unattended automated options trading.**
 
 ```text
-250 passed
-0 failed          (backend, -k orb)
-frontend tsc      clean  (0 errors, down from 2 pre-existing)
+315 passed        (backend, -k orb)
+0 failed
+frontend          444+ tests passing, tsc clean
+live scan         18/18 underlyings resolving against the real broker
 ```
 
 Verified by isolated-worktree full-suite runs at the pre-work commit and at
@@ -214,6 +215,40 @@ went green. Everything here was on a live path.
 | 15 | ATR, the volume baseline and the regime were computed across the session boundary | The entry window opens at 09:30 and the lookbacks are 14-20 bars, so for roughly the first eighty minutes of **every** session the strategy's own filters read yesterday's data. On a 500-point gap up, ATR read 43.50 instead of 8.00 (breakout threshold 6.5 points instead of 1.2) and the volume ratio read 0.15 against a 1.15 threshold -- the volume gate could barely pass. Worse, the result depended on how many bars the caller fetched: ATR was 8.00 at 5 bars and 43.50 at 20+. Kite fetches 240, TrueData 200. |
 | 16 | Moneyness was silently substituted | Asking for ITM x3 when the ladder does not reach that far returned the ATM strike -- a different delta, cost and payoff. Same class as the expiry fallback. Now refused beyond one strike step of tolerance. |
 | 17 | `trail_atr` was a config field nothing read | Declared, validated, settable through the API, present in the frontend type, and documented as "Trail: 1.25 ATR" -- and consumed nowhere. Trailing actually comes from the universal trading mode's `trail_atr_mult`. Removed, and a test now asserts every surviving config field is read somewhere. |
+
+| 18 | **The live scan was broken for every underlying.** `_kite_bars_for_underlying` passed `get_candles` a `"NSE:SYMBOL"` string, but the Kite client reads `instrument.zerodha_token`, so all 18 configured underlyings failed with `'str' object has no attribute 'zerodha_token'`. The scan had never returned a single bar. Resolution now goes through `InstrumentMeta`, with index aliases (FINNIFTY -> `NSE:NIFTY FIN SERVICE`, SENSEX -> `BSE:SENSEX`) and a legible error naming what was tried. 18/18 now return live prices. |
+| 19 | The UI reported that failure as an absence | The signal adapter dropped any row with `signal: null`, so a scan where every underlying errored rendered as "No configured underlyings". Error rows are kept now, and a wholesale scan failure is called out explicitly. |
+| 20 | The ORB settings panel had never rendered | `useMutation` sat below the `if (isLoading) return` guard, so the loaded render ran one hook more than the loading render -- React threw straight into the ErrorBoundary. Every hook now runs before the early return. |
+| 21 | The ORB UI was unreachable | `OrbMomentumOptionsSettingsPanel` was mounted nowhere. ORB is now a settings section *and* a tab in the live signals dock. |
+| 22 | Delta was assumed 0.50 for every contract | Now solved from the traded premium: implied volatility by bisection on Black-Scholes, then delta from that volatility. See below. |
+
+### Finding 22 in detail: delta is measured, not assumed
+
+`stop_premium` is the number armed at the broker and it is derived from delta.
+Kite publishes no Greeks, so 0.50 was used for every contract -- roughly double
+the truth for a 0.25-delta OTM option.
+
+The premium is an observable, so it can be solved rather than guessed:
+
+```text
+contract        premium   implied vol   delta
+ITM  K=23500     650.0        21.8%     0.807
+ATM  K=24000     320.0        22.4%     0.549
+OTM  K=24500      90.0        19.5%     0.250
+```
+
+Bisection, not Newton-Raphson: price is monotone in volatility, so bisection
+cannot diverge, and a bracket that fails to contain the premium is a definitive
+"this quote is inconsistent with the model" rather than a silently wrong root.
+The implementation is pinned against textbook values and put-call parity.
+
+`TradePlan.delta_source` is `broker`, `implied` or `assumed`. A quote that cannot
+be solved -- below intrinsic, unparseable expiry, expired -- still falls back to
+0.50, but says so, and only that case is flagged in the UI. An implied delta is a
+measurement and carries no caveat.
+
+Still not modelled: dividends, and the volatility smile (each strike is solved
+independently, which is the standard practical treatment).
 
 ### Finding 15 in detail
 

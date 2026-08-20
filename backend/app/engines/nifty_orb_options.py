@@ -64,6 +64,7 @@ class StrategyConfig:
     min_option_volume: float = 1000.0
     min_open_interest: float = 10000.0
     max_quote_staleness_s: int = 15
+    risk_free_rate: float = 0.065
     truedata_use_ticks: bool = True
     truedata_use_oi: bool = True
     truedata_use_bid_ask: bool = True
@@ -101,6 +102,7 @@ class StrategyConfig:
         non_negative("min_option_volume", self.min_option_volume)
         non_negative("min_open_interest", self.min_open_interest)
         non_negative("max_quote_staleness_s", self.max_quote_staleness_s)
+        non_negative("risk_free_rate", self.risk_free_rate)
         positive("target_r", self.target_r)
 
         try:
@@ -220,12 +222,18 @@ class TradePlan:
     max_loss_inr: float = 0.0
     """Full premium outlay: what this position loses if the option expires worthless."""
     delta_is_estimated: bool = False
-    """True when the contract carried no delta and 0.50 was assumed.
+    """True whenever the delta did not come from the broker."""
+    delta_source: str = "assumed"
+    """Where the delta came from: ``broker``, ``implied`` or ``assumed``.
 
-    Kite publishes no Greeks, so this is the normal case there. Everything in the
-    premium domain -- ``stop_premium``, ``target_premium``, ``risk_inr`` -- rests
-    on that assumption, and ``stop_premium`` is what gets armed at the broker.
+    Kite publishes no Greeks, so ``broker`` is rare there. ``implied`` means the
+    delta was solved from the traded premium via Black-Scholes -- derived from an
+    observable, not guessed. ``assumed`` means 0.50 was used because the premium
+    could not support a solution, and everything in the premium domain
+    (``stop_premium``, ``target_premium``, ``risk_inr``) is only as good as that.
+    ``stop_premium`` is the number armed at the broker, so the distinction matters.
     """
+    implied_volatility: float | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -553,7 +561,45 @@ def select_option(
     return chosen
 
 
-def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig, *, spot: float) -> TradePlan:
+def _resolve_delta(
+    option: OptionContract, cfg: StrategyConfig, *, spot: float, now: datetime | None
+) -> tuple[float, str, float | None]:
+    """Delta from the broker, else implied from the premium, else 0.50.
+
+    The premium is an observable, so solving it for volatility and taking the
+    resulting delta is a measurement rather than a guess. Only when that solve
+    fails -- a quote below intrinsic, a missing expiry, an expired contract -- do
+    we fall back to 0.50, and the caller is told which happened.
+    """
+    if option.delta is not None:
+        return abs(option.delta), "broker", None
+
+    expiry = option.expiry_date
+    mark = option.ltp if option.ltp > 0 else (option.bid + option.ask) / 2.0
+    if expiry is not None and mark > 0 and spot > 0 and option.strike > 0:
+        from app.engines.nifty_orb_greeks import implied_delta, implied_volatility, years_to_expiry
+
+        reference = _as_ist(now) if now is not None else datetime.now(IST)
+        years = years_to_expiry(expiry, reference)
+        vol = implied_volatility(mark, spot, option.strike, years, cfg.risk_free_rate, option.option_type)
+        if vol is not None:
+            delta = implied_delta(
+                mark, spot, option.strike, expiry, option.option_type,
+                now=reference, rate=cfg.risk_free_rate,
+            )
+            if delta is not None and 0.0 < abs(delta) <= 1.0:
+                return abs(delta), "implied", vol
+    return 0.50, "assumed", None
+
+
+def build_trade_plan(
+    signal: Signal,
+    option: OptionContract,
+    cfg: StrategyConfig,
+    *,
+    spot: float,
+    now: datetime | None = None,
+) -> TradePlan:
     cfg.validate()
     if signal.direction not in ("LONG", "SHORT"):
         raise ValueError("No trade plan for a neutral signal")
@@ -567,8 +613,7 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     stop = spot - risk_points if signal.direction == "LONG" else spot + risk_points
     target = spot + cfg.target_r * risk_points if signal.direction == "LONG" else spot - cfg.target_r * risk_points
     entry_premium = option.ask
-    delta_is_estimated = option.delta is None
-    delta = abs(option.delta) if option.delta is not None else 0.50
+    delta, delta_source, implied_vol = _resolve_delta(option, cfg, spot=spot, now=now or signal.timestamp)
     # A bought option cannot lose more than it cost, so the modelled stop loss is
     # capped at the premium. Without the cap, a stop wider than the premium
     # produced a 0.05 stop -- "hold to zero" dressed up as a stop.
@@ -586,7 +631,7 @@ def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig
     quantity = max(0, lots * option.lot_size)
     risk = quantity * premium_risk_per_share
     max_loss = quantity * entry_premium
-    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_is_estimated)
+    return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_source != "broker", delta_source=delta_source, implied_volatility=implied_vol)
 
 
 def summarize_pnl(pnls: Iterable[float]) -> dict:

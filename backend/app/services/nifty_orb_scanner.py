@@ -12,11 +12,15 @@ from app.services.providers.truedata.orb_provider import TrueDataOrbProvider
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 _BAR_CACHE_TTL_S = 4.0
+#: Instrument metadata is stable for a session; re-searching it every tick would
+#: spend the broker's rate limit on an answer that does not change.
+_META_CACHE_TTL_S = 900.0
+_meta_cache: dict[str, tuple[float, object]] = {}
 _option_cache: dict[tuple, tuple[float, list[OptionContract]]] = {}
 _bar_cache: dict[tuple[str, str, str], tuple[float, list[Bar]]] = {}
 
 
-def _cache_put(cache: dict, key, value) -> None:
+def _cache_put(cache: dict, key, value, ttl: float = _BAR_CACHE_TTL_S) -> None:
     """Store an entry and drop every expired one.
 
     The runner ticks every five seconds for the life of the process, and the
@@ -24,7 +28,7 @@ def _cache_put(cache: dict, key, value) -> None:
     without bound -- one dead entry per underlying per user per day, forever.
     """
     now = datetime.now().timestamp()
-    for stale in [k for k, (stamp, _) in cache.items() if now - stamp >= _BAR_CACHE_TTL_S]:
+    for stale in [k for k, (stamp, _) in cache.items() if now - stamp >= ttl]:
         cache.pop(stale, None)
     cache[key] = (now, value)
 
@@ -35,6 +39,19 @@ def _canonical(symbol: str) -> str:
 
 def _truedata_symbol(underlying: str) -> str:
     return {"NIFTY": "NIFTY 50", "BANKNIFTY": "NIFTY BANK", "FINNIFTY": "NIFTY FIN SERVICE"}.get(underlying, underlying)
+
+
+#: Kite tradingsymbol and exchange for indices whose canonical ORB name differs.
+#: Searching NSE for "FINNIFTY" or "SENSEX" finds nothing -- the dump lists them
+#: as "NIFTY FIN SERVICE" (NSE) and "SENSEX" (BSE) under instrument_type INDICES.
+_KITE_INDEX_ALIASES: dict[str, tuple[str, ...]] = {
+    "NIFTY": (("NSE", "NIFTY 50"),),
+    "BANKNIFTY": (("NSE", "NIFTY BANK"),),
+    "FINNIFTY": (("NSE", "NIFTY FIN SERVICE"),),
+    "MIDCPNIFTY": (("NSE", "NIFTY MID SELECT"),),
+    "SENSEX": (("BSE", "SENSEX"),),
+    "BANKEX": (("BSE", "BANKEX"),),
+}
 
 
 def configured_underlyings(cfg: StrategyConfig) -> list[str]:
@@ -59,10 +76,47 @@ def configured_underlyings(cfg: StrategyConfig) -> list[str]:
     return values
 
 
-def _kite_symbol(underlying: str) -> str:
+async def _kite_instrument(client, underlying: str):
+    """Resolve an underlying to the InstrumentMeta `get_candles` needs.
+
+    This used to hand `get_candles` a plain `"NSE:SYMBOL"` string. The Kite
+    client reads `instrument.zerodha_token`, so every underlying failed with
+    `'str' object has no attribute 'zerodha_token'` -- the whole scan returned
+    errors for every symbol. An unresolvable symbol now says which symbol and
+    why, instead of surfacing an AttributeError.
+    """
     from app.services.exchanges import instrument_registry as reg
+    from app.services.nifty_orb_universe_runtime import _stock_meta
+
+    cached = _meta_cache.get(underlying)
+    if cached and datetime.now().timestamp() - cached[0] < _META_CACHE_TTL_S:
+        return cached[1]
+
     meta = reg.get_instrument(underlying)
-    return str(meta.zerodha_index_symbol) if meta is not None and getattr(meta, "zerodha_index_symbol", "") else f"NSE:{underlying}"
+    if meta is None:
+        # Try the equity name first, then any aliased index tradingsymbol. An
+        # index is a legitimate ORB underlying, so INDICES is accepted alongside EQ.
+        attempts = [("NSE", underlying), *_KITE_INDEX_ALIASES.get(underlying, ())]
+        tried: list[str] = []
+        for exchange, tradingsymbol in attempts:
+            tried.append(f"{exchange}:{tradingsymbol}")
+            try:
+                rows = await client.search_instruments(tradingsymbol, exchange, limit=20)
+            except Exception:
+                continue
+            exact = next(
+                (r for r in (rows or [])
+                 if str(r.get("tradingsymbol") or "").upper() == tradingsymbol.upper()
+                 and str(r.get("instrument_type") or "").upper() in {"EQ", "INDICES", ""}),
+                None,
+            )
+            if exact is not None:
+                meta = _stock_meta(underlying, exact, exchange=exchange)
+                break
+        if meta is None:
+            raise RuntimeError(f"No Kite instrument matches {underlying} (tried {', '.join(tried)})")
+    _cache_put(_meta_cache, underlying, meta, _META_CACHE_TTL_S)
+    return meta
 
 
 def _completed_bars(bars: list[Bar], interval_minutes: int, now: datetime | None = None) -> list[Bar]:
@@ -89,7 +143,7 @@ async def _kite_bars_for_underlying(uid: str, underlying: str, interval: str) ->
     if cached and datetime.now().timestamp() - cached[0] < _BAR_CACHE_TTL_S:
         return _completed_bars(cached[1], int(interval.rstrip("m")))
     client = await accounts.acquire_client(acct)
-    rows = await client.get_candles(_kite_symbol(underlying), interval, limit=240)
+    rows = await client.get_candles(await _kite_instrument(client, underlying), interval, limit=240)
     bars = [_bar({"timestamp_ms": r.timestamp_ms, "open": r.open, "high": r.high, "low": r.low, "close": r.close, "volume": r.volume}) for r in rows]
     _cache_put(_bar_cache, key, bars)
     return _completed_bars(bars, int(interval.rstrip("m")))

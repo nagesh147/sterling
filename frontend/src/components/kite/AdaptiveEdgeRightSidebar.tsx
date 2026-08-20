@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { AdaptiveEdgePanel, rowsFromSnapshot } from './AdaptiveEdgePanel';
+import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { k } from '../../styles/kiteUI';
 
@@ -10,13 +11,15 @@ interface Props {
 }
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props) {
-  const [engine, setEngine] = useState<'signals' | 'adaptive_edge'>('signals');
+  const [engine, setEngine] = useState<'signals' | 'adaptive_edge' | 'orb'>('signals');
   const snapshot = useAdaptiveEdgeSnapshot();
   const rows = useMemo(() => (snapshot.data ? rowsFromSnapshot(snapshot.data) : []), [snapshot.data]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
-      if ((event as CustomEvent<string>).detail === 'adaptiveEdge') setEngine('adaptive_edge');
+      const target = (event as CustomEvent<string>).detail;
+      if (target === 'adaptiveEdge') setEngine('adaptive_edge');
+      if (target === 'orbOptions') setEngine('orb');
     };
     window.addEventListener('kite-nav-click', onNav);
     return () => window.removeEventListener('kite-nav-click', onNav);
@@ -37,18 +40,26 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
         >
           ADAPTIVE EDGE
         </button>
+        <button
+          onClick={() => setEngine('orb')}
+          style={{ flex: 1, padding: '7px 8px', border: 0, borderBottom: engine === 'orb' ? `2px solid ${k.blue}` : '2px solid transparent', background: 'transparent', color: engine === 'orb' ? k.text : k.dim, fontSize: 9, fontWeight: engine === 'orb' ? 700 : 500, letterSpacing: '.06em', cursor: 'pointer' }}
+        >
+          ORB
+        </button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: engine === 'adaptive_edge' ? '0 10px 12px' : 0 }}>
-        {engine === 'signals' ? (
+        {engine === 'signals' && (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
-        ) : (
+        )}
+        {engine === 'adaptive_edge' && (
           <AdaptiveEdgePanel
             rows={rows}
             inlineExpand={true}
             onInspectSymbol={onOpenChart ? (sym) => onOpenChart(sym, 'chart') : undefined}
           />
         )}
+        {engine === 'orb' && <NiftyOrbSignalsFeed />}
       </div>
     </div>
   );
