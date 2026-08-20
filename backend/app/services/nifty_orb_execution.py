@@ -95,9 +95,15 @@ async def _fresh_quote(client,exchange,symbol,max_age_s,max_spread_pct):
     if spread>max_spread_pct:raise RuntimeError(f"spread {spread:.2f}% exceeds {max_spread_pct:.2f}%")
     return {"bid":bid,"ask":ask,"ltp":ltp,"spread_pct":spread,"age_s":age,"volume":float(q.get("volume") or 0),"oi":float(q.get("oi") or 0)}
 
-def _conservative_quantity(requested,lot_size,ask,max_risk):
-    if requested<=0 or lot_size<=0 or ask<=0 or max_risk<=0:return 0
-    return min(requested,int(max_risk//(ask*lot_size))*lot_size)
+def _conservative_quantity(requested,lot_size,ask,max_risk_inr):
+    """Lot-aligned quantity whose *entire premium* fits the INR risk budget.
+
+    A bought option can go to zero, so the conservative ceiling is the full
+    premium outlay rather than the modelled stop distance. The name matches
+    ``StrategyConfig.max_risk_inr`` so the budget being spent is unambiguous.
+    """
+    if requested<=0 or lot_size<=0 or ask<=0 or max_risk_inr<=0:return 0
+    return min(requested,int(max_risk_inr//(ask*lot_size))*lot_size)
 
 def _signal_age(value):
     ts=_parse_timestamp(value); return None if ts is None else max(0,(datetime.now(IST)-ts.astimezone(IST)).total_seconds())

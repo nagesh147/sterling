@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.engines.nifty_orb_options import Bar, OptionContract, StrategyConfig
+from app.engines.nifty_orb_options import Bar, OptionContract, StrategyConfig, is_monthly_expiry
 from app.services.market_data.truedata import TrueDataHistoricalClient
 from app.services.nifty_orb_option_chain import filter_chain, normalize_chain
 
@@ -64,26 +64,38 @@ class TrueDataOrbProvider:
         visit(payload)
         return sorted(values)
 
-    async def resolve_expiry(self, symbol: str, cfg: StrategyConfig) -> str:
+    async def resolve_expiry(self, symbol: str, cfg: StrategyConfig, *, today: date | None = None) -> str:
+        """Resolve the configured expiry preference against TrueData's calendar.
+
+        The preference vocabulary and the weekly/monthly rule are the engine's
+        (:func:`is_monthly_expiry`), so a provider-resolved expiry and an
+        engine-selected contract can never disagree about what "weekly" means.
+        """
+        cfg.validate()
         payload = await self.client.get_all_symbols("NFO", search=symbol, allexpiry=True)
-        today = datetime.now(IST).date()
-        expiries = [d for d in self._extract_expiries(payload) if d >= today]
-        eligible = [d for d in expiries if cfg.expiry_dte_min <= (d - today).days <= cfg.expiry_dte_max and not (cfg.avoid_expiry_day and d == today)]
+        today = today or datetime.now(IST).date()
+        eligible = [
+            d for d in self._extract_expiries(payload)
+            if d >= today
+            and cfg.expiry_dte_min <= (d - today).days <= cfg.expiry_dte_max
+            and not (cfg.avoid_expiry_day and d == today)
+        ]
         if not eligible:
             raise ValueError(f"No TrueData expiry for {symbol} satisfies configured DTE range")
-        if cfg.expiry_selection == "monthly":
-            by_month: dict[tuple[int, int], list[date]] = {}
-            for d in eligible:
-                by_month.setdefault((d.year, d.month), []).append(d)
-            return min(max(ds) for ds in by_month.values()).isoformat()
-        if cfg.expiry_selection not in {"nearest", "weekly"}:
-            raise ValueError("expiry_selection must be nearest, weekly or monthly")
-        return min(eligible).isoformat()
+        selection = cfg.expiry_selection.strip().lower()
+        if selection in {"nearest", "any"}:
+            return min(eligible).isoformat()
+        want_monthly = selection == "monthly"
+        matching = [d for d in eligible if is_monthly_expiry(d) is want_monthly]
+        if not matching:
+            raise ValueError(f"No eligible {selection} TrueData expiry for {symbol}")
+        return min(matching).isoformat()
 
-    async def option_chain(self, symbol: str, expiry: str, cfg: StrategyConfig) -> list[OptionContract]:
-        resolved = await self.resolve_expiry(symbol, cfg) if expiry in {"nearest", "weekly", "monthly", ""} else expiry
+    async def option_chain(self, symbol: str, expiry: str, cfg: StrategyConfig, *, today: date | None = None) -> list[OptionContract]:
+        today = today or datetime.now(IST).date()
+        resolved = await self.resolve_expiry(symbol, cfg, today=today) if expiry.strip().lower() in {"nearest", "weekly", "monthly", "any", ""} else expiry
         payload = await self.client.get_option_chain(symbol, resolved)
-        return filter_chain(normalize_chain(payload), cfg, today=datetime.now(IST).date())
+        return filter_chain(normalize_chain(payload), cfg, today=today)
 
     async def refresh_contract(self, contract: OptionContract, cfg: StrategyConfig) -> tuple[OptionContract, float | None]:
         if not cfg.truedata_use_ticks:

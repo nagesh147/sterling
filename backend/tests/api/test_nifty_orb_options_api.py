@@ -10,15 +10,41 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_orb_config_is_disabled_and_paper_only_by_default():
+def test_orb_config_is_disabled_by_default():
     response = client().get("/api/v1/config/nifty-orb-options")
     assert response.status_code == 200
     payload = response.json()
     assert payload["config"]["enabled"] is False
-    assert payload["config"]["paper_only"] is True
     assert payload["config"]["execution_broker"] == "kite"
     assert payload["supported_data_sources"] == ["kite", "truedata"]
     assert payload["execution_brokers"] == ["kite"]
+
+
+def test_orb_does_not_own_a_paper_live_control():
+    """Paper/Live and Manual/Auto belong to the universal trading mode.
+
+    A strategy-local ``paper_only`` flag would let the UI claim a safety the
+    shared execution path never reads.
+    """
+    config = client().get("/api/v1/config/nifty-orb-options").json()["config"]
+    assert "paper_only" not in config
+    assert not [k for k in config if "paper" in k or "live" in k]
+
+
+def test_orb_config_rejects_a_zero_volume_multiplier():
+    """Zero used to disable the volume gate and divide by zero downstream."""
+    response = client().put("/api/v1/config/nifty-orb-options", json={"volume_multiplier": 0})
+    assert response.status_code == 422
+    assert "volume_multiplier" in response.json()["detail"]
+
+
+def test_orb_config_rejects_an_inverted_dte_range():
+    response = client().put(
+        "/api/v1/config/nifty-orb-options",
+        json={"expiry_dte_min": 5, "expiry_dte_max": 2},
+    )
+    assert response.status_code == 422
+    assert "expiry_dte_max" in response.json()["detail"]
 
 
 def test_orb_config_rejects_non_kite_execution():

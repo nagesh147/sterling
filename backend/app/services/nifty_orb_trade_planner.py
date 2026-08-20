@@ -6,6 +6,7 @@ signal plus a normalized option chain into one executable BUY-CE/BUY-PE plan.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Sequence
 
 from app.engines.nifty_orb_options import (
@@ -32,8 +33,14 @@ def plan_signal(
     candidate: UniverseSignal,
     contracts: Sequence[OptionContract],
     cfg: StrategyConfig,
+    *,
+    today: date | None = None,
 ) -> PlannedSignal:
-    """Resolve the best liquid option and construct the risk-capped BUY plan."""
+    """Resolve the best liquid option and construct the risk-capped BUY plan.
+
+    ``today`` anchors expiry eligibility; replay and tests pass the session date
+    so a plan is reproducible instead of depending on the wall clock.
+    """
     signal = candidate.signal
     if signal.direction not in ("LONG", "SHORT"):
         raise ValueError("Cannot create an option plan from a neutral signal")
@@ -43,6 +50,7 @@ def plan_signal(
         direction=signal.direction,
         contracts=contracts,
         cfg=cfg,
+        today=today,
     )
     plan = build_trade_plan(
         signal,

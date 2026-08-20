@@ -5,7 +5,9 @@ import pytest
 from app.services import nifty_orb_options_runner as runner
 
 
-def test_runner_start_is_singleton(monkeypatch):
+@pytest.mark.asyncio
+async def test_runner_start_is_singleton(monkeypatch):
+    """start() schedules on the running loop, exactly as the startup hook does."""
     async def idle():
         await asyncio.sleep(60)
 
@@ -15,6 +17,7 @@ def test_runner_start_is_singleton(monkeypatch):
     second = runner.start()
     assert first is second
     runner.stop()
+    assert first.cancelled() or first.cancelling() or first.done()
 
 
 def test_market_open_fails_closed_when_calendar_unavailable(monkeypatch):

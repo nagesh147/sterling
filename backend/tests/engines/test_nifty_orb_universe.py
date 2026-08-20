@@ -12,18 +12,22 @@ from app.engines.nifty_orb_universe import (
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
-def breakout_bars():
+def breakout_bars(count: int = 30):
+    """A LONG ORB day whose final bar closes at 11:40 IST, inside 09:30-12:00."""
     start = datetime(2026, 8, 18, 9, 15, tzinfo=IST)
     rows = []
     price = 24000.0
-    for i in range(40):
+    for i in range(count):
         ts = start + timedelta(minutes=5 * i)
         if i < 3:
-            o, h, l, c = price, price + 10, price - 10, price + 2
+            o, h, l, c, v = price, price + 12, price - 12, price, 1200
+        elif i < count - 5:
+            c = price + (2.0 if i % 2 else -2.0)
+            o, h, l, v = price, max(price, c) + 3, min(price, c) - 3, 1000
         else:
-            o = price
-            h, l, c = price + 8, price - 2, price + 6
-        rows.append(Bar(ts, o, h, l, c, 1000 if i < 3 else 2500))
+            c = price + 18.0
+            o, h, l, v = price, max(price, c) + 4, min(price, c) - 4, 1000 + 500 * (i - (count - 6))
+        rows.append(Bar(ts, o, h, l, c, v))
         price = c
     return rows
 

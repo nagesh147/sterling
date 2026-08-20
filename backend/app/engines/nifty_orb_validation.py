@@ -46,26 +46,44 @@ class ValidationResult:
     warnings: tuple[str, ...] = ()
 
 
+def _profit_factor(profit: float, loss: float) -> float:
+    return profit/loss if loss else (float("inf") if profit else 0.0)
+
+
 def validate_option_trades(trades: Sequence[OptionTrade], costs: TradingCosts = TradingCosts()) -> ValidationResult:
-    pnls=[]
+    """Score realised option-buy trades, keeping gross and net strictly apart.
+
+    ``gross_*`` is pre-cost and exists only for reference. Every decision metric
+    -- win rate, expectancy, profit factor, drawdown -- is computed from the
+    net series, because a trade that is green before charges and red after is a
+    loss. Reporting a pre-cost profit factor as *the* profit factor is how a
+    costed strategy gets approved on numbers it never earned.
+    """
+    gross_pnls=[]; net_pnls=[]; total_costs=0.0
     for t in trades:
         if t.direction != "BUY": raise ValueError("ORB validation accepts option buying only")
         if t.quantity <= 0 or t.entry <= 0 or t.exit < 0: raise ValueError("Invalid option trade")
         if t.max_adverse is not None and not isfinite(t.max_adverse): raise ValueError("Invalid adverse excursion")
         gross=(t.exit-t.entry)*t.quantity
-        pnls.append(gross-costs.round_trip(t.entry*t.quantity,t.exit*t.quantity,t.quantity))
-    wins=[x for x in pnls if x>0]; losses=[x for x in pnls if x<0]
-    gross_profit=sum(wins); gross_loss=abs(sum(losses)); equity=peak=max_dd=0.0
-    for pnl in pnls:
+        cost=costs.round_trip(t.entry*t.quantity,t.exit*t.quantity,t.quantity)
+        gross_pnls.append(gross); total_costs+=cost; net_pnls.append(gross-cost)
+    wins=[x for x in net_pnls if x>0]; losses=[x for x in net_pnls if x<0]
+    net_profit=sum(wins); net_loss=abs(sum(losses))
+    gross_profit=sum(x for x in gross_pnls if x>0); gross_loss=abs(sum(x for x in gross_pnls if x<0))
+    equity=peak=max_dd=0.0
+    for pnl in net_pnls:
         equity+=pnl; peak=max(peak,equity); max_dd=max(max_dd,peak-equity)
     return ValidationResult({
-        "trades":len(pnls),"wins":len(wins),"losses":len(losses),
-        "win_rate":len(wins)/len(pnls) if pnls else 0.0,"net_pnl":sum(pnls),
+        "trades":len(net_pnls),"wins":len(wins),"losses":len(losses),
+        "win_rate":len(wins)/len(net_pnls) if net_pnls else 0.0,
+        "net_pnl":sum(net_pnls),"gross_pnl":sum(gross_pnls),"total_costs":total_costs,
         "gross_profit":gross_profit,"gross_loss":gross_loss,
-        "profit_factor":gross_profit/gross_loss if gross_loss else (float("inf") if gross_profit else 0.0),
-        "expectancy":mean(pnls) if pnls else 0.0,"max_drawdown":max_dd,
+        "net_profit":net_profit,"net_loss":net_loss,
+        "profit_factor":_profit_factor(net_profit,net_loss),
+        "gross_profit_factor":_profit_factor(gross_profit,gross_loss),
+        "expectancy":mean(net_pnls) if net_pnls else 0.0,"max_drawdown":max_dd,
         "average_win":mean(wins) if wins else 0.0,"average_loss":mean(losses) if losses else 0.0,
-        "cost_model":costs.__dict__},len(pnls),("fewer than 30 trades: metrics are statistically weak",) if len(pnls)<30 else ())
+        "cost_model":costs.__dict__},len(net_pnls),("fewer than 30 trades: metrics are statistically weak",) if len(net_pnls)<30 else ())
 
 
 def regime_metrics(trades: Sequence[OptionTrade], costs: TradingCosts = TradingCosts()) -> dict[str,dict]:

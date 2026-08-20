@@ -32,10 +32,12 @@ def set_config(values:dict[str,Any])->StrategyConfig:
     if not 0<c["max_spread_pct"]<=10: raise ValueError("max_spread_pct must be > 0 and <= 10")
     if c["min_option_volume"]<0 or c["min_open_interest"]<0: raise ValueError("option liquidity thresholds cannot be negative")
     if c["expiry_selection"] not in {"nearest","weekly","monthly"}: raise ValueError("expiry_selection must be nearest, weekly or monthly")
-    if c["expiry_dte_min"]<0 or c["expiry_dte_max"]<c["expiry_dte_min"]: raise ValueError("invalid expiry DTE bounds")
     if c["avoid_expiry_day"] and c["expiry_dte_max"]==0: raise ValueError("avoid_expiry_day cannot be enabled with expiry_dte_max=0")
     if c["data_source"]=="truedata" and c["truedata_use_quote_freshness"] and not c["truedata_use_ticks"]: raise ValueError("truedata_use_quote_freshness requires truedata_use_ticks")
-    cfg=StrategyConfig(**c)
+    # Shared invariants live on StrategyConfig so the API boundary and the engine
+    # cannot drift apart -- an operator must never be able to persist a config
+    # the engine will later reject mid-session.
+    cfg=StrategyConfig(**c).validate()
     from app.services import db
     db.set_config(_CONFIG_KEY,json.dumps(cfg.__dict__,separators=(",",":"))); return cfg
 

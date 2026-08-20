@@ -28,15 +28,20 @@ def normalize_chain(rows: Sequence[dict[str, Any]] | dict[str, Any], *, default_
     return result
 
 def filter_chain(contracts: Sequence[OptionContract], cfg: StrategyConfig, *, today: date | None = None) -> list[OptionContract]:
-    today = today or date.today(); result = []
+    """Drop every contract that fails an eligibility gate.
+
+    The gates mirror :func:`app.engines.nifty_orb_options.select_option` exactly
+    so a contract can never pass the chain boundary and then be rejected (or
+    worse, accepted) on a different rule at selection time.
+    """
+    cfg.validate(); today = today or date.today(); result = []
     for c in contracts:
         if not c.symbol or c.lot_size <= 0 or c.ltp <= 0: continue
         if cfg.truedata_use_bid_ask and (c.bid <= 0 or c.ask < c.bid or c.spread_pct > cfg.max_spread_pct): continue
         if cfg.truedata_use_oi and c.open_interest < cfg.min_open_interest: continue
         if c.volume < cfg.min_option_volume: continue
-        try: dte = (date.fromisoformat(c.expiry[:10]) - today).days
-        except ValueError: continue
-        if dte < cfg.expiry_dte_min or dte > cfg.expiry_dte_max: continue
+        dte = c.dte_on(today)
+        if dte is None or dte < cfg.expiry_dte_min or dte > cfg.expiry_dte_max: continue
         if cfg.avoid_expiry_day and dte == 0: continue
         result.append(c)
     return result

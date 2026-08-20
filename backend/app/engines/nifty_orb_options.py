@@ -6,7 +6,7 @@ vehicle only: LONG -> BUY CE and SHORT -> BUY PE.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from math import isfinite
 from statistics import mean
 from typing import Iterable, Literal, Sequence
@@ -15,6 +15,10 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 Direction = Literal["LONG", "SHORT", "NONE"]
 Regime = Literal["EXPANSION", "TREND", "RANGE", "UNKNOWN"]
+
+#: Canonical expiry-preference vocabulary shared by the engine and every provider.
+EXPIRY_SELECTIONS = frozenset({"nearest", "weekly", "monthly", "any"})
+MONEYNESS = frozenset({"ATM", "ITM", "OTM"})
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,60 @@ class StrategyConfig:
     truedata_use_oi: bool = True
     truedata_use_bid_ask: bool = True
     truedata_use_quote_freshness: bool = True
+
+    def validate(self) -> "StrategyConfig":
+        """Reject configuration that would silently bypass a strategy filter.
+
+        An invalid value is a configuration error, never an implicit bypass: a
+        zero ``volume_multiplier`` used to disable volume confirmation *and*
+        divide by zero in the confidence term. Disabling a liquidity floor is
+        expressed by setting that floor to zero, or by the explicit
+        ``truedata_use_*`` switches -- not by an out-of-range value.
+        """
+        def positive(name: str, value: float) -> None:
+            if not (isfinite(float(value)) and float(value) > 0):
+                raise ValueError(f"{name} must be greater than zero")
+
+        def non_negative(name: str, value: float) -> None:
+            if not (isfinite(float(value)) and float(value) >= 0):
+                raise ValueError(f"{name} must be zero or greater")
+
+        positive("interval_minutes", self.interval_minutes)
+        positive("opening_range_minutes", self.opening_range_minutes)
+        positive("atr_period", self.atr_period)
+        positive("vwap_slope_lookback", self.vwap_slope_lookback)
+        positive("trend_lookback", self.trend_lookback)
+        positive("volume_multiplier", self.volume_multiplier)
+        positive("max_risk_inr", self.max_risk_inr)
+        positive("max_trades_per_day", self.max_trades_per_day)
+        positive("max_spread_pct", self.max_spread_pct)
+        positive("option_steps_itm", self.option_steps_itm)
+        non_negative("min_breakout_atr", self.min_breakout_atr)
+        non_negative("stop_buffer_atr", self.stop_buffer_atr)
+        non_negative("min_option_volume", self.min_option_volume)
+        non_negative("min_open_interest", self.min_open_interest)
+        non_negative("max_quote_staleness_s", self.max_quote_staleness_s)
+        positive("trail_atr", self.trail_atr)
+        positive("target_r", self.target_r)
+
+        try:
+            start, end = _parse_time(self.entry_start), _parse_time(self.entry_end)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError("entry_start and entry_end must be HH:MM") from exc
+        if start >= end:
+            raise ValueError("entry_start must be earlier than entry_end")
+
+        if self.expiry_dte_min < 0:
+            raise ValueError("expiry_dte_min must be zero or greater")
+        if self.expiry_dte_max < self.expiry_dte_min:
+            raise ValueError("expiry_dte_max must be greater than or equal to expiry_dte_min")
+        if self.expiry_selection.strip().lower() not in EXPIRY_SELECTIONS:
+            raise ValueError(f"expiry_selection must be one of {sorted(EXPIRY_SELECTIONS)}")
+        if self.option_moneyness.strip().upper() not in MONEYNESS:
+            raise ValueError(f"option_moneyness must be one of {sorted(MONEYNESS)}")
+        if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
+            raise ValueError("avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
+        return self
 
 
 @dataclass(frozen=True)
@@ -119,12 +177,24 @@ class OptionContract:
         return max(0.0, (datetime.now(IST) - ts.astimezone(IST)).total_seconds())
 
     @property
-    def dte(self) -> int | None:
+    def expiry_date(self) -> date | None:
         try:
-            expiry = datetime.strptime(self.expiry[:10], "%Y-%m-%d").date()
-            return max(0, (expiry - datetime.now(IST).date()).days)
+            return datetime.strptime(self.expiry[:10], "%Y-%m-%d").date()
         except (ValueError, TypeError, AttributeError):
             return None
+
+    def dte_on(self, today: date) -> int | None:
+        """Days to expiry measured against an explicit reference date.
+
+        Callers that must be reproducible (tests, replay, walk-forward) pass the
+        session date instead of inheriting the wall clock.
+        """
+        expiry = self.expiry_date
+        return None if expiry is None else max(0, (expiry - today).days)
+
+    @property
+    def dte(self) -> int | None:
+        return self.dte_on(datetime.now(IST).date())
 
 
 @dataclass(frozen=True)
@@ -235,6 +305,7 @@ def generate_signal(
     because their input is already closed data. A realtime caller must pass the
     current clock so a still-forming candle cannot become a signal.
     """
+    cfg.validate()
     if not bars:
         raise ValueError("No bars supplied")
 
@@ -273,21 +344,70 @@ def generate_signal(
 
     long_break = current.close - or_high
     short_break = or_low - current.close
-    long_ok = long_break >= cfg.min_breakout_atr * current_atr and current.close > current_vwap and slope > 0
-    short_ok = short_break >= cfg.min_breakout_atr * current_atr and current.close < current_vwap and slope < 0
+    threshold = cfg.min_breakout_atr * current_atr
+    breakout_distance = max(long_break, short_break, 0.0)
     volume_ok = vol_ratio >= cfg.volume_multiplier
 
-    if long_ok and volume_ok and regime in ("EXPANSION", "TREND"):
-        confidence = min(0.99, 0.50 + 0.15 * min(long_break / current_atr, 2.0) + 0.10 * min(vol_ratio / cfg.volume_multiplier, 2.0))
+    def none(reason: str) -> Signal:
+        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, breakout_distance, vol_ratio, 0.0, reason)
+
+    # Gate order is the diagnostic order: the first unmet prerequisite is the
+    # reported reason, so a rejected bar says which filter stopped it. It runs
+    # from the strategy's defining condition outwards -- structure, magnitude,
+    # location, direction, participation, context -- so the reason names the
+    # most specific thing that was missing.
+    if long_break <= 0 and short_break <= 0:
+        return none("no opening-range breakout")
+    side = "LONG" if long_break >= short_break else "SHORT"
+    distance = long_break if side == "LONG" else short_break
+    if distance < threshold:
+        return none("breakout below ATR threshold")
+    if side == "LONG" and current.close <= current_vwap:
+        return none("close is not above VWAP")
+    if side == "SHORT" and current.close >= current_vwap:
+        return none("close is not below VWAP")
+    if side == "LONG" and slope <= 0:
+        return none("VWAP slope is not positive")
+    if side == "SHORT" and slope >= 0:
+        return none("VWAP slope is not negative")
+    if not volume_ok:
+        return none("volume below confirmation threshold")
+    if regime not in ("EXPANSION", "TREND"):
+        return none(f"regime is {regime}")
+
+    confidence = _confidence(distance, current_atr, vol_ratio, cfg)
+    if side == "LONG":
         return Signal("LONG", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, long_break, vol_ratio, confidence, "ORB high break + VWAP + positive VWAP slope + momentum + volume")
-    if short_ok and volume_ok and regime in ("EXPANSION", "TREND"):
-        confidence = min(0.99, 0.50 + 0.15 * min(short_break / current_atr, 2.0) + 0.10 * min(vol_ratio / cfg.volume_multiplier, 2.0))
-        return Signal("SHORT", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, short_break, vol_ratio, confidence, "ORB low break + VWAP + negative VWAP slope + momentum + volume")
-    return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, max(long_break, short_break, 0.0), vol_ratio, 0.0, "filters not aligned")
+    return Signal("SHORT", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, short_break, vol_ratio, confidence, "ORB low break + VWAP + negative VWAP slope + momentum + volume")
 
 
-def _expiry_allowed(c: OptionContract, cfg: StrategyConfig) -> bool:
-    dte = c.dte
+def is_monthly_expiry(expiry: date, *, monthly_expiries: frozenset[date] | None = None) -> bool:
+    """Classify an expiry as monthly under an explicit calendar rule.
+
+    When the caller supplies the venue's real ``monthly_expiries`` set that set
+    is authoritative. Otherwise the NSE convention applies: the monthly contract
+    is the last occurrence of that expiry's own weekday inside its calendar
+    month. The rule is self-contained and depends on no wall clock, so replay
+    and walk-forward classify an expiry the same way live does.
+    """
+    if monthly_expiries is not None:
+        return expiry in monthly_expiries
+    return (expiry + timedelta(days=7)).month != expiry.month
+
+
+def _confidence(distance: float, current_atr: float, vol_ratio: float, cfg: StrategyConfig) -> float:
+    """Blend breakout strength and volume expansion into a bounded score.
+
+    Both terms are ratios against a configured reference, so both denominators
+    are guaranteed positive by :meth:`StrategyConfig.validate`.
+    """
+    breakout_term = 0.15 * min(distance / current_atr, 2.0)
+    volume_term = 0.10 * min(vol_ratio / cfg.volume_multiplier, 2.0)
+    return min(0.99, 0.50 + breakout_term + volume_term)
+
+
+def _expiry_allowed(c: OptionContract, cfg: StrategyConfig, today: date) -> bool:
+    dte = c.dte_on(today)
     if dte is None or not cfg.expiry_dte_min <= dte <= cfg.expiry_dte_max:
         return False
     if cfg.avoid_expiry_day and dte == 0:
@@ -295,9 +415,59 @@ def _expiry_allowed(c: OptionContract, cfg: StrategyConfig) -> bool:
     return True
 
 
-def select_option(spot: float, direction: Direction, contracts: Sequence[OptionContract], cfg: StrategyConfig) -> OptionContract:
+def _preferred_expiries(
+    candidates: Sequence[OptionContract],
+    cfg: StrategyConfig,
+    monthly_expiries: frozenset[date] | None,
+) -> list[OptionContract]:
+    """Narrow eligible contracts to the configured expiry preference.
+
+    ``nearest`` = minimum eligible DTE. ``weekly`` = nearest eligible non-monthly
+    expiry. ``monthly`` = nearest eligible monthly expiry. ``any`` = no
+    preference beyond eligibility. A preference that matches nothing is an
+    error, never a silent fallback to a different expiry bucket.
+    """
+    selection = cfg.expiry_selection.strip().lower()
+    if selection == "any":
+        return list(candidates)
+
+    dated = [c for c in candidates if c.expiry_date is not None]
+    if not dated:
+        raise ValueError("No eligible contract carries a parseable expiry")
+
+    if selection == "nearest":
+        best = min(c.expiry_date for c in dated)
+    else:
+        want_monthly = selection == "monthly"
+        matching = [
+            c.expiry_date for c in dated
+            if is_monthly_expiry(c.expiry_date, monthly_expiries=monthly_expiries) is want_monthly
+        ]
+        if not matching:
+            raise ValueError(f"No eligible {selection} expiry is available in the supplied chain")
+        best = min(matching)
+    return [c for c in dated if c.expiry_date == best]
+
+
+def select_option(
+    spot: float,
+    direction: Direction,
+    contracts: Sequence[OptionContract],
+    cfg: StrategyConfig,
+    *,
+    today: date | None = None,
+    monthly_expiries: frozenset[date] | None = None,
+) -> OptionContract:
+    """Pick the single executable contract for a directional signal.
+
+    ``today`` anchors every DTE decision. Realtime callers may omit it and
+    inherit the IST session date; replay and tests pass it so selection is
+    reproducible.
+    """
+    cfg.validate()
     if direction not in ("LONG", "SHORT"):
         raise ValueError("Cannot select an option without a directional signal")
+    today = today or datetime.now(IST).date()
     typ = "CE" if direction == "LONG" else "PE"
     candidates = [
         c for c in contracts
@@ -305,34 +475,28 @@ def select_option(spot: float, direction: Direction, contracts: Sequence[OptionC
         and (not cfg.truedata_use_bid_ask or (c.bid > 0 and c.ask >= c.bid and c.spread_pct <= cfg.max_spread_pct))
         and (not cfg.truedata_use_oi or c.open_interest >= cfg.min_open_interest)
         and c.volume >= cfg.min_option_volume
-        and _expiry_allowed(c, cfg)
+        and _expiry_allowed(c, cfg, today)
         and (not cfg.truedata_use_quote_freshness or c.quote_age_seconds is None or c.quote_age_seconds <= cfg.max_quote_staleness_s)
     ]
     if not candidates:
         raise ValueError(f"No liquid {typ} contracts satisfy expiry and liquidity settings")
 
-    if cfg.expiry_selection.lower() in {"weekly", "nearest"}:
-        candidates = sorted(candidates, key=lambda c: (c.dte if c.dte is not None else 999, abs(c.strike - spot), -c.volume, -c.open_interest))
-        if cfg.expiry_selection.lower() == "weekly":
-            candidates = [c for c in candidates if c.dte is not None and c.dte <= 7] or candidates
-    elif cfg.expiry_selection.lower() not in {"any", "all"}:
-        raise ValueError("expiry_selection must be nearest, weekly, any or all")
+    candidates = _preferred_expiries(candidates, cfg, monthly_expiries)
     strikes = sorted({c.strike for c in candidates})
     atm = min(strikes, key=lambda x: abs(x - spot))
     steps = min((b - a for a, b in zip(strikes, strikes[1:]) if b > a), default=50.0)
-    moneyness = cfg.option_moneyness.upper()
+    moneyness = cfg.option_moneyness.strip().upper()
     if moneyness == "ATM":
         target = atm
     elif moneyness == "ITM":
         target = atm - cfg.option_steps_itm * steps if direction == "LONG" else atm + cfg.option_steps_itm * steps
-    elif moneyness == "OTM":
-        target = atm + cfg.option_steps_itm * steps if direction == "LONG" else atm - cfg.option_steps_itm * steps
     else:
-        raise ValueError("option_moneyness must be ATM, ITM or OTM")
-    return min(candidates, key=lambda c: (abs(c.strike - target), c.dte or 999, -c.volume, -c.open_interest, c.spread_pct))
+        target = atm + cfg.option_steps_itm * steps if direction == "LONG" else atm - cfg.option_steps_itm * steps
+    return min(candidates, key=lambda c: (abs(c.strike - target), c.dte_on(today) or 999, -c.volume, -c.open_interest, c.spread_pct))
 
 
 def build_trade_plan(signal: Signal, option: OptionContract, cfg: StrategyConfig, *, spot: float) -> TradePlan:
+    cfg.validate()
     if signal.direction not in ("LONG", "SHORT"):
         raise ValueError("No trade plan for a neutral signal")
     expected = "CE" if signal.direction == "LONG" else "PE"

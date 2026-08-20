@@ -11,7 +11,8 @@ def test_normalize_chain_returns_engine_contracts():
 
 
 def test_filter_chain_honors_truedata_switches():
-    contract=OptionContract('CE',25000,'2026-08-27','CE',100,99,101,75,0.5,5000,50000)
+    # 1.0% spread: inside the 1.5% ceiling, so open interest is the only gate under test.
+    contract=OptionContract('CE',25000,'2026-08-27','CE',100,99.5,100.5,75,0.5,5000,50000)
     strict=StrategyConfig(min_open_interest=100000,truedata_use_oi=True,max_spread_pct=1.5)
     loose=StrategyConfig(min_open_interest=100000,truedata_use_oi=False,max_spread_pct=1.5)
     assert filter_chain([contract],strict)==[]

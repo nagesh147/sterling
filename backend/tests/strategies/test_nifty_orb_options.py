@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from app.engines.nifty_orb_options import (
     Bar,
@@ -9,6 +9,9 @@ from app.engines.nifty_orb_options import (
     generate_signal,
     select_option,
 )
+
+TODAY = date(2026, 8, 20)
+EXPIRY = "2026-08-27"       # 7 DTE from TODAY
 
 
 def _bars(direction: str) -> list[Bar]:
@@ -45,11 +48,11 @@ def test_completed_bar_signal_is_directional_only():
 def test_option_selection_never_crosses_direction():
     cfg = StrategyConfig(expiry_dte_min=0, expiry_dte_max=7, min_option_volume=100, min_open_interest=100)
     contracts = [
-        OptionContract("NIFTYCE", 100, "2026-08-20", "CE", 100, 99, 101, 75, 0.5, 10000, 20000),
-        OptionContract("NIFTYPE", 100, "2026-08-20", "PE", 100, 99, 101, 75, -0.5, 10000, 20000),
+        OptionContract("NIFTYCE", 100, EXPIRY, "CE", 100, 99.5, 100.5, 75, 0.5, 10000, 20000),
+        OptionContract("NIFTYPE", 100, EXPIRY, "PE", 100, 99.5, 100.5, 75, -0.5, 10000, 20000),
     ]
-    assert select_option(100, "LONG", contracts, cfg).option_type == "CE"
-    assert select_option(100, "SHORT", contracts, cfg).option_type == "PE"
+    assert select_option(100, "LONG", contracts, cfg, today=TODAY).option_type == "CE"
+    assert select_option(100, "SHORT", contracts, cfg, today=TODAY).option_type == "PE"
 
 
 def test_trade_plan_is_lot_aligned_and_risk_bounded():

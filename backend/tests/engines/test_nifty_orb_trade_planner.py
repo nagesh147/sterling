@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -23,11 +23,15 @@ def _signal(direction: str) -> Signal:
     )
 
 
+TODAY = date(2026, 8, 20)
+EXPIRY = "2026-08-27"       # 7 DTE from TODAY, inside the 0-7 default range
+
+
 def _contract(symbol: str, strike: float, option_type: str) -> OptionContract:
     return OptionContract(
         symbol=symbol,
         strike=strike,
-        expiry="2099-01-01",
+        expiry=EXPIRY,
         option_type=option_type,
         ltp=100.0,
         bid=99.5,
@@ -44,8 +48,9 @@ def test_long_signal_can_only_plan_a_ce_buy():
     candidate = UniverseSignal(UniverseInstrument("SBIN", "stock"), _signal("LONG"))
     planned = plan_signal(
         candidate,
-        [_contract("SBIN2099CE", 100, "CE"), _contract("SBIN2099PE", 100, "PE")],
+        [_contract("SBIN_CE", 100, "CE"), _contract("SBIN_PE", 100, "PE")],
         cfg,
+        today=TODAY,
     )
     assert planned.option.option_type == "CE"
     assert planned.trade_plan.direction == "LONG"
@@ -58,8 +63,9 @@ def test_short_signal_can_only_plan_a_pe_buy():
     candidate = UniverseSignal(UniverseInstrument("SBIN", "stock"), _signal("SHORT"))
     planned = plan_signal(
         candidate,
-        [_contract("SBIN2099CE", 90, "CE"), _contract("SBIN2099PE", 90, "PE")],
+        [_contract("SBIN_CE", 90, "CE"), _contract("SBIN_PE", 90, "PE")],
         cfg,
+        today=TODAY,
     )
     assert planned.option.option_type == "PE"
     assert planned.trade_plan.direction == "SHORT"
@@ -75,15 +81,15 @@ def test_spot_reconstruction_matches_breakout_definition():
 def test_neutral_signal_is_rejected():
     candidate = UniverseSignal(UniverseInstrument("SBIN", "stock"), _signal("NONE"))
     with pytest.raises(ValueError):
-        plan_signal(candidate, [_contract("SBIN2099CE", 100, "CE")], StrategyConfig())
+        plan_signal(candidate, [_contract("SBIN_CE", 100, "CE")], StrategyConfig(), today=TODAY)
 
 
 def test_no_liquid_option_is_rejected():
     cfg = StrategyConfig(max_spread_pct=1.0)
     candidate = UniverseSignal(UniverseInstrument("SBIN", "stock"), _signal("LONG"))
     wide = OptionContract(
-        symbol="SBIN2099CE", strike=100, expiry="2099-01-01", option_type="CE",
+        symbol="SBIN_CE", strike=100, expiry=EXPIRY, option_type="CE",
         ltp=100, bid=90, ask=110, lot_size=50, volume=5000, open_interest=50000,
     )
     with pytest.raises(ValueError):
-        plan_signal(candidate, [wide], cfg)
+        plan_signal(candidate, [wide], cfg, today=TODAY)

@@ -49,8 +49,10 @@ def test_selection_respects_dte_and_liquidity():
 
 
 def test_option_direction_mismatch_is_rejected():
-    cfg=StrategyConfig()
+    # Same window as the other signals in this module: _bars() runs to 12:30 IST.
+    cfg=StrategyConfig(opening_range_minutes=15,entry_start='09:30',entry_end='15:00',volume_multiplier=1.0)
     signal=generate_signal(_bars('LONG'),cfg)
+    assert signal.direction=='LONG'
     option=OptionContract('PE',100,'2026-08-27','PE',10,9.9,10.1,75,0.5,5000,50000)
     try:
         build_trade_plan(signal,option,cfg,spot=103)
