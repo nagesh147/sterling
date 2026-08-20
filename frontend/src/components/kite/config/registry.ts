@@ -24,8 +24,8 @@ import type {
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
   | 'account' | 'truedata' | 'diagnostics' | 'mode' | 'manualRules' | 'autoRules'
-  | 'engine' | 'navigator' | 'adaptiveEdge' | 'markets' | 'notifications' | 'experience'
-  | 'dataLake';
+  | 'engine' | 'navigator' | 'adaptiveEdge' | 'orbOptions' | 'markets' | 'notifications'
+  | 'experience' | 'dataLake';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
 export type Applies = 'manual' | 'auto' | 'both';
@@ -422,9 +422,13 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
   settings: 'experience',
 };
 
+// Must list every SectionId. A missing entry makes `isSectionId` false for it,
+// which silently turns `openSettingsSection` into a no-op and stops the section
+// from being restored on reload -- 'diagnostics' was absent and had both bugs.
 export const SECTION_IDS: SectionId[] = [
-  'account', 'truedata', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
-  'adaptiveEdge', 'markets', 'notifications', 'experience', 'dataLake',
+  'account', 'truedata', 'diagnostics', 'mode', 'manualRules', 'autoRules', 'engine',
+  'navigator', 'adaptiveEdge', 'orbOptions', 'markets', 'notifications', 'experience',
+  'dataLake',
 ];
 
 export function isSectionId(value: unknown): value is SectionId {

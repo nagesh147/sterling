@@ -18,6 +18,7 @@ import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
 import { DataLakeSettingsPanel } from '../datalake/DataLakeSettingsPanel';
 import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
+import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -761,6 +762,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   engine: <Icons.Chart />,
   navigator: <Icons.Pulse />,
   adaptiveEdge: <Icons.Chart />,
+  orbOptions: <Icons.Chart />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -786,6 +788,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
   { id: 'adaptiveEdge', label: 'Adaptive Edge', eyebrow: 'Score, modes, TBT structure & protection', group: 'Signal engines',
     pageDescription: 'Score, modes, structure and protection.' },
+  { id: 'orbOptions', label: 'ORB + VWAP Options', eyebrow: 'Opening range breakout, buy-only', group: 'Signal engines',
+    pageDescription: 'Opening-range breakout with VWAP confirmation. Buys calls on LONG and puts on SHORT; never sells options. Paper/live and manual/auto stay with Trading Mode.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -1011,6 +1015,12 @@ export function ConnectPane() {
             {section === 'adaptiveEdge' && (
               <>
                 <AdaptiveEdgeSettingsPanel />
+              </>
+            )}
+
+            {section === 'orbOptions' && (
+              <>
+                <OrbMomentumOptionsSettingsPanel />
               </>
             )}
 

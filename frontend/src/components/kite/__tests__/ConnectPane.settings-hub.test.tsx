@@ -53,6 +53,7 @@ vi.mock('../KiteTelegramPanel', () => ({
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
 vi.mock('../AdaptiveEdgeSettingsPanel', () => ({ AdaptiveEdgeSettingsPanel: () => <div>Adaptive Edge settings panel</div> }));
+vi.mock('../OrbMomentumOptionsSettingsPanel', () => ({ OrbMomentumOptionsSettingsPanel: () => <div>ORB options settings panel</div> }));
 vi.mock('../../datalake/DataLakeSettingsPanel', () => ({ DataLakeSettingsPanel: () => <div>Offline data settings</div> }));
 
 describe('ConnectPane settings hub', () => {
@@ -101,6 +102,23 @@ describe('ConnectPane settings hub', () => {
     fireEvent.click(adaptive);
     expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
     expect(screen.getByText('Adaptive Edge settings panel')).toBeInTheDocument();
+  });
+
+  it('gives ORB + VWAP Options a home in the rail', () => {
+    // The panel existed but was mounted nowhere, so the whole ORB UI was
+    // unreachable from the app. This is the assertion that would have caught it.
+    render(<ConnectPane />);
+    const orb = screen.getByRole('button', { name: /ORB \+ VWAP Options Opening range breakout, buy-only/i });
+    fireEvent.click(orb);
+    expect(screen.getByRole('heading', { name: 'ORB + VWAP Options' })).toBeInTheDocument();
+    expect(screen.getByText('ORB options settings panel')).toBeInTheDocument();
+  });
+
+  it('groups ORB with the other signal engines', () => {
+    render(<ConnectPane />);
+    const adaptive = screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i });
+    const orb = screen.getByRole('button', { name: /ORB \+ VWAP Options/i });
+    expect(adaptive.compareDocumentPosition(orb) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('gives manual and automatic rules separate homes, not one filtered page', () => {
