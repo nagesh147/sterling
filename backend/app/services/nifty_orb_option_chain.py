@@ -1,8 +1,11 @@
 """Normalize broker option-chain quotes for ORB option buying."""
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Awaitable, Callable, Sequence
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 from app.engines.nifty_orb_options import OptionContract, StrategyConfig
 
 @dataclass(frozen=True)
@@ -34,7 +37,10 @@ def filter_chain(contracts: Sequence[OptionContract], cfg: StrategyConfig, *, to
     so a contract can never pass the chain boundary and then be rejected (or
     worse, accepted) on a different rule at selection time.
     """
-    cfg.validate(); today = today or date.today(); result = []
+    # The strategy trades one exchange in one timezone, so the session date is
+    # IST. `date.today()` on a UTC host is the previous session for the first
+    # five and a half hours of every IST day, which silently shifts every DTE.
+    cfg.validate(); today = today or datetime.now(IST).date(); result = []
     for c in contracts:
         if not c.symbol or c.lot_size <= 0 or c.ltp <= 0: continue
         if cfg.truedata_use_bid_ask and (c.bid <= 0 or c.ask < c.bid or c.spread_pct > cfg.max_spread_pct): continue
