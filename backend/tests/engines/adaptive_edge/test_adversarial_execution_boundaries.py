@@ -34,6 +34,14 @@ def test_duplicate_intent_submission_is_not_implicitly_authorized():
 
 
 def test_unmapped_broker_status_fails_closed_before_position_projection():
+    """An unmapped status must never reach position projection.
+
+    The gate is `validate()`, not `map()`: mapping an unrecognised provider
+    status to UNKNOWN keeps the fill data the reconciler needs, and every
+    production consumer -- `ExecutionGateway.receive` included -- validates
+    before using the event. So the refusal is asserted where it actually
+    happens rather than at translation time.
+    """
     mapper = BrokerEventMapper({"FILLED": CanonicalExecutionStatus.FILLED})
     event = BrokerExecutionEvent(
         broker_event_id="evt-1",
@@ -43,8 +51,10 @@ def test_unmapped_broker_status_fails_closed_before_position_projection():
         filled_quantity=25,
         fill_price=100.0,
     )
+    canonical = mapper.map(event)
+    assert canonical.event_type is CanonicalExecutionStatus.UNKNOWN
     with pytest.raises(Exception):
-        mapper.map(event)
+        canonical.validate()
 
 
 def test_invalid_fill_quantity_fails_closed():

@@ -48,15 +48,18 @@ def research_formula_table() -> dict[str, SpecGap]:
     table: dict[str, SpecGap] = {}
     for formula_id in STRATEGY_FORMULA_IDS:
         definition = get_formula(formula_id)
-        if definition.status is FormulaStatus.LOCKED:
-            reason = recovered[formula_id]
-            status = "SOURCE_RECOVERED_REGISTRY_LOCKED"
-        elif definition.status is FormulaStatus.IMPLEMENTED:
+        # A formula with no recovered closed-form is a SPEC_GAP, not an
+        # implicitly-recovered one: the unguarded `recovered[formula_id]` this
+        # replaced raised KeyError instead of reporting the gap.
+        if definition.status is FormulaStatus.IMPLEMENTED:
             reason = "registry IMPLEMENTED"
             status = "IMPLEMENTED"
+        elif formula_id in recovered:
+            reason = recovered[formula_id]
+            status = "RESEARCH_CODE_PRESENT_REGISTRY_LOCKED"
         else:
-            reason = f"registry status {definition.status.value}"
-            status = "NON_EXECUTABLE"
+            reason = "no recovered closed-form; fail closed"
+            status = "SPEC_GAP"
         table[formula_id] = SpecGap(
             formula_id=formula_id,
             name=definition.name,

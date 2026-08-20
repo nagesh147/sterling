@@ -163,7 +163,7 @@ def _intent():
 
 def test_execution_gateway_separates_submission_and_execution():
     gateway, transport = _gateway()
-    broker_id = gateway.submit(_intent())
+    broker_id = gateway.submit(_intent(), formula_ids=("F-004",))
     assert broker_id == "broker-oi-1"
     assert len(transport.submissions) == 1
 

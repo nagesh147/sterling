@@ -533,7 +533,7 @@ def run_research_e2e(
         BrokerEventMapper({"SIM_FILL": CanonicalExecutionStatus.FILLED}),
         ExecutionEventRegistry(),
     )
-    broker_ref = gateway.submit(order)
+    broker_ref = gateway.submit(order, formula_ids=())
     fill = gateway.receive(
         BrokerExecutionEvent(
             broker_event_id=f"SIMFILL-{chosen.bar_record_id}",
@@ -892,7 +892,7 @@ def run_research_session(
                         ExecutionEventRegistry(),
                     )
                     side_map[close_order.order_intent_id] = close_side
-                    broker_ref = gateway.submit(close_order)
+                    broker_ref = gateway.submit(close_order, formula_ids=())
                     exit_event = gateway.receive(
                         BrokerExecutionEvent(
                             broker_event_id=f"SIMEXIT-{row.bar_record_id}",

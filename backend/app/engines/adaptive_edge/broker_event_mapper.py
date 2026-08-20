@@ -29,13 +29,16 @@ class BrokerEventMapper:
         self._status_map = dict(status_map)
 
     def map(self, event: BrokerExecutionEvent) -> CanonicalExecutionEvent:
-        if event.broker_status not in self._status_map:
-            raise ValueError(f"unmapped broker status: {event.broker_status}")
+        # An unrecognised provider status maps to UNKNOWN rather than raising:
+        # refusing to build the event would lose the fill data the reconciler
+        # needs, and UNKNOWN is what every downstream consumer treats
+        # conservatively. Fill data is still validated, so an unknown status
+        # cannot smuggle a negative quantity or a non-positive price through.
+        status = self._status_map.get(event.broker_status, CanonicalExecutionStatus.UNKNOWN)
         if event.filled_quantity < 0:
             raise ValueError("filled_quantity cannot be negative")
         if event.fill_price is not None and event.fill_price <= 0:
             raise ValueError("fill_price must be positive")
-        status = self._status_map[event.broker_status]
         return CanonicalExecutionEvent(
             execution_event_id=event.broker_event_id,
             order_intent_id=event.order_intent_id,

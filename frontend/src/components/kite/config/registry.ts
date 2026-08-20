@@ -23,7 +23,7 @@ import type {
 // Exported so the board and other panes can deep-link without duplicating the
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
-  | 'account' | 'truedata' | 'mode' | 'manualRules' | 'autoRules'
+  | 'account' | 'truedata' | 'diagnostics' | 'mode' | 'manualRules' | 'autoRules'
   | 'engine' | 'navigator' | 'adaptiveEdge' | 'markets' | 'notifications' | 'experience'
   | 'dataLake';
 

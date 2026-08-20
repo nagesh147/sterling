@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   useAddTrueDataCredential,
   useDeleteTrueDataCredential,
+  useRunTrueDataDiagnostics,
   useTrueDataCredentials,
   useTrueDataSettings,
   useTrueDataStatus,
@@ -96,6 +97,7 @@ function initials(s: string): string {
 function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
   const del = useDeleteTrueDataCredential();
   const update = useUpdateTrueDataCredential();
+  const runDiag = useRunTrueDataDiagnostics();
 
   const [expanded, setExpanded] = useState(false);
   const [edit, setEdit] = useState(false);
@@ -103,6 +105,31 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [port, setPort] = useState(cred.realtime_port || 8082);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleTest = async () => {
+    setTestResult(null);
+    try {
+      const res = await runDiag.mutateAsync({ category_id: 'truedata_auth' });
+      const authCat = res.categories?.find((c) => c.id === 'truedata_auth') || res.categories?.[0];
+      if (authCat && authCat.status === 'PASS') {
+        setTestResult({
+          ok: true,
+          message: `✓ Connection Verified (${authCat.latency_ms.toFixed(1)} ms) — WebAPI HTTP 200`,
+        });
+      } else {
+        setTestResult({
+          ok: false,
+          message: `✗ ${authCat?.error_message || 'Authentication check failed'}`,
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        ok: false,
+        message: `✗ ${err?.message || 'Connection failed'}`,
+      });
+    }
+  };
 
   const subParts = [
     cred.username_hint ? `User: ${cred.username_hint}` : null,
@@ -178,6 +205,37 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
           }}
         >
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              style={{
+                ...S.btn,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                borderColor: '#cbd5e1',
+                background: '#f8fafc',
+              }}
+              onClick={handleTest}
+              disabled={runDiag.isPending}
+            >
+              {runDiag.isPending ? (
+                <>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      border: '2px solid rgba(0,0,0,0.2)',
+                      borderTopColor: '#0f172a',
+                      borderRadius: '50%',
+                      animation: 'spin 0.6s linear infinite',
+                      display: 'inline-block',
+                    }}
+                  />
+                  Testing…
+                </>
+              ) : (
+                '▶ Test Connection'
+              )}
+            </button>
             <button style={S.btn} onClick={() => setEdit((v) => !v)}>
               {edit ? 'Cancel' : 'Edit Credential'}
             </button>
@@ -190,6 +248,22 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
               Remove
             </button>
           </div>
+
+          {testResult && (
+            <div
+              style={{
+                fontSize: 11,
+                padding: '6px 10px',
+                borderRadius: 6,
+                background: testResult.ok ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${testResult.ok ? '#bbf7d0' : '#fecaca'}`,
+                color: testResult.ok ? '#15803d' : '#b91c1c',
+                lineHeight: 1.4,
+              }}
+            >
+              {testResult.message}
+            </div>
+          )}
 
           {edit ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -281,7 +355,28 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
           ) : (
             <div style={{ marginTop: 14, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
               <div><strong>Port:</strong> {cred.realtime_port || 8082}</div>
-              <div><strong>Status:</strong> {cred.connected ? 'Connected' : 'Not Connected'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong>Status:</strong>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: cred.connected ? '#16a34a' : '#ea580c',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: cred.connected ? '#16a34a' : '#ea580c',
+                    }}
+                  />
+                  {cred.connected ? 'Connected & Verified' : 'Configured (Standby)'}
+                </span>
+              </div>
               <div><strong>Configured:</strong> {new Date(cred.created_at_ms).toLocaleDateString()}</div>
             </div>
           )}
@@ -530,3 +625,4 @@ export function TrueDataCredentialsPanel() {
     </div>
   );
 }
+
