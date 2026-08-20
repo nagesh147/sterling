@@ -1,14 +1,21 @@
 # NIFTY ORB Options — Implementation Status and Execution Plan
 
-Date: 2026-08-20
+Last updated: 2026-08-20
 
 ## Status
 
-**Implemented, but not approved for unattended automated options trading.**
+**Unit-green and measurement-honest. Not approved for unattended automated options trading.**
 
-The current implementation has the core ORB/VWAP/ATR signal path, option selection, liquidity controls, risk sizing, TrueData integration controls, and shared execution ownership.
+```text
+178 passed
+0 failed          (backend, -k orb)
+```
 
-The strategy remains a **long-options-only** system:
+No production filter was weakened to reach green. Where a test and the
+implementation disagreed, the stricter side won and the fixture was rebuilt to
+satisfy it.
+
+The strategy remains **long-options-only**:
 
 ```text
 LONG  -> BUY CE
@@ -16,263 +23,205 @@ SHORT -> BUY PE
 NONE  -> NO ORDER
 ```
 
-No option selling is permitted.
+## Branch consolidation
 
-## Verified green
+All ORB work lives on a single branch, `feature/nifty-orb-options`.
+`feature/nifty-orb-options-scan` and `feature/nifty-orb-options-universe` were
+identical to each other and fully contained in it (zero unique commits), so the
+consolidation required no merge. The branch is level with `main`.
 
-Adaptive Edge was reconciled with `main` and its dedicated suite reached:
-
-```text
-141 passed
-0 failed
-```
-
-The ORB work is intentionally tested separately because ORB is an independent strategy and must not inherit Adaptive Edge signal semantics.
-
-## ORB implementation currently present
+## What is implemented
 
 ### A. Market structure
 
-- NIFTY underlying.
-- 5-minute bars.
-- IST normalization.
-- 15-minute opening range anchored to 09:15 IST.
-- Completed-bar protection for realtime callers.
+NIFTY and a bounded stock/index universe. 5-minute bars, IST-normalized.
+15-minute opening range anchored to 09:15 IST regardless of the entry window.
+Completed-bar protection for realtime callers.
 
 ### B. Signal model
 
-- ORB breakout distance normalized by ATR.
-- VWAP calculated from typical price and volume.
-- Directional VWAP alignment.
-- VWAP slope confirmation.
-- Volume confirmation.
-- TREND/EXPANSION regime requirement.
-- RANGE/UNKNOWN produces no trade.
-- Entry-window gate.
+ATR-normalized ORB breakout, VWAP level and slope confirmation, volume
+confirmation, TREND/EXPANSION regime requirement, entry-window gate.
 
-### C. Option model
-
-- CE for LONG.
-- PE for SHORT.
-- ATM/ITM/OTM selection.
-- Strike-step configuration.
-- DTE bounds.
-- Expiry-day avoidance.
-- Liquidity filtering.
-- Spread filtering.
-- OI filtering.
-- Volume filtering.
-- Quote freshness filtering.
-
-### D. Risk model
-
-- Whole-lot quantity.
-- INR risk ceiling.
-- Underlying stop representation.
-- Premium-domain protection fields.
-- Maximum daily trade count.
-
-### E. Data architecture
-
-Kite and TrueData are normalized into the same ORB market-data representation. TrueData advanced observations are used for data quality and option-contract selection, not as an additional directional signal engine.
-
-### F. Execution architecture
-
-ORB does not own Paper/Live or Manual/Auto mode. It uses the universal account/execution mode and shared safety/idempotency/protection infrastructure.
-
-## Current blocker
-
-The latest local ORB targeted verification is not green. The latest run reported:
+A rejected bar now names the first unmet gate rather than reporting "filters not
+aligned". The order runs from the strategy's defining condition outwards:
 
 ```text
-15 passed
-5 failed
+structure     -> no opening-range breakout
+magnitude     -> breakout below ATR threshold
+location      -> close is not above/below VWAP
+direction     -> VWAP slope is not positive/negative
+participation -> volume below confirmation threshold
+context       -> regime is RANGE / UNKNOWN
 ```
 
-The failures are primarily around test fixture semantics and the stricter canonical ORB contract. They must be fixed without weakening the production filters.
+Each gate has one test that leaves it as the *only* unmet prerequisite.
 
-A zero `volume_multiplier` edge case also exposed a division-by-zero path in confidence calculation. A local guard has been added during the current work but still requires final validation and an explicit decision on whether zero is a legal configuration value.
+### C. Configuration validation
 
-## Exact next changes
+`StrategyConfig.validate()` rejects every out-of-range value and runs at
+`generate_signal`, `select_option`, `build_trade_plan`, `filter_chain` and the
+config PUT. `set_config` delegates its shared rules to it, so an operator cannot
+persist a configuration the engine will later refuse mid-session.
 
-### Step 1 — Repair signal fixtures
+The rule is that **an invalid value is a configuration error, never an implicit
+bypass**. `volume_multiplier=0` used to disable volume confirmation *and* divide
+by zero in the confidence term; it is now rejected. Disabling a liquidity floor
+is expressed by setting that floor to zero or by the explicit `truedata_use_*`
+switches.
 
-Create deterministic fixture bars that satisfy the complete canonical LONG and SHORT predicates.
+### D. Option model and expiry semantics
 
-LONG fixture must demonstrate:
+CE for LONG, PE for SHORT, strictly. ATM/ITM/OTM with configurable strike steps.
+Spread, OI, volume and quote-freshness gates.
 
 ```text
-close > OR_high
-close - OR_high >= min_breakout_atr * ATR
-close > VWAP
-VWAP_slope > 0
-volume_ratio >= volume_multiplier
-regime in {TREND, EXPANSION}
+nearest  = minimum eligible DTE
+weekly   = nearest eligible non-monthly expiry
+monthly  = nearest eligible monthly expiry
+any      = no preference beyond eligibility
 ```
 
-SHORT must mirror the inequalities.
+Monthly is the last occurrence of that expiry's weekday in its calendar month,
+overridable by passing the venue's real monthly-expiry set. The rule lives in
+`is_monthly_expiry()` and is shared by the engine and the TrueData provider, so
+a provider-resolved expiry and an engine-selected contract cannot disagree about
+what "weekly" means. **An expiry preference that matches nothing raises** — it no
+longer falls back to a different bucket.
 
-Do not set `volume_multiplier=0` to make fixtures pass.
+Every DTE decision takes an explicit reference date (`dte_on(today)`), so replay
+and live classify a contract identically and the test suite is not a time bomb.
 
-### Step 2 — Isolate every signal gate
+### E. Risk model
 
-Add independent tests for:
+Whole-lot quantity, INR risk ceiling, underlying stop representation,
+premium-domain protection fields, maximum daily trade count.
+`_conservative_quantity` sizes against the **full premium outlay**, because a
+bought option can go to zero.
 
-- entry window;
-- OR breakout;
-- ATR threshold;
-- VWAP side;
-- VWAP slope;
-- volume;
-- regime;
-- completed-bar requirement;
-- missing opening range.
+### F. Data architecture
 
-Each failed prerequisite must produce `NONE` or a deliberate validation error.
+Kite (default) and TrueData normalize into one ORB representation. TrueData
+advanced observations improve data quality and contract selection; they are not
+a second directional engine.
 
-### Step 3 — Validate configuration
-
-Explicitly validate:
-
-- interval > 0;
-- opening-range duration > 0;
-- valid entry window;
-- ATR period > 0;
-- slope lookback > 0;
-- volume multiplier > 0 unless a zero value is intentionally specified as a supported bypass;
-- max risk > 0;
-- max trades > 0;
-- spread >= 0;
-- minimum volume/OI >= 0;
-- DTE range valid.
-
-Preferred behavior: invalid configuration is rejected at configuration validation rather than interpreted as a strategy bypass.
-
-### Step 4 — Make expiry semantics explicit
-
-Define:
-
-- `nearest` = minimum eligible DTE;
-- `weekly` = nearest eligible weekly contract according to an explicit expiry-calendar rule;
-- `any/all` = no preference beyond eligibility.
-
-Tests must use fixed dates and explicit expiry calendars.
-
-### Step 5 — Complete TrueData contract
-
-Canonical quote observation:
+Every required check at the provider boundary **raises**:
 
 ```text
-symbol
-quote_timestamp
-ltp
-bid
-ask
-volume
-oi
+missing quote | stale quote | undated quote | crossed market
+invalid bid/ask | excessive spread | insufficient OI | insufficient volume
 ```
 
-Reject at the provider boundary when required:
+Previously a stale quote could return an empty result a caller might mistake for
+"valid, nothing to do".
 
-```text
-missing quote
-stale quote
-crossed market
-non-positive premium
-invalid bid/ask
-insufficient OI
-insufficient volume
-excessive spread
-invalid DTE
-invalid lot size
-```
+### G. Costed validation
 
-The option candidate must not reach order admission after a failed required data-quality check.
+`validate_option_trades` reported net-of-cost figures under `gross_profit` and
+built `profit_factor` from them. Gross and net are now strictly separate, and
+every decision metric — win rate, expectancy, profit factor, drawdown — is net.
+Reporting a pre-cost profit factor as *the* profit factor is how a costed
+strategy gets approved on numbers it never earned.
 
-### Step 6 — Complete execution truth
+### H. Option replay
 
-Test:
+The replay engine models the broker, not the chart. Every default is the
+pessimistic one:
+
+| Modelled | Behaviour |
+| --- | --- |
+| Execution timing | Fill lands `entry_delay_bars` (default 1) after the signal bar. A same-bar fill is refused. |
+| Spread | Buy pays the open plus half the quoted spread; sell receives the reference less half the spread. |
+| Slippage | Applied to both fills; a statutory cost model carrying its own slippage term is rejected as double-counting. |
+| Sizing | `lots * lot_size`, not one lot. |
+| Liquidity admission | `ReplayAdmission.from_strategy_config()` mirrors the live spread/volume/OI gates. |
+| Partial fills | Size capped at a share of the bar's traded volume, lot-aligned. Too thin for one lot is a refusal. |
+| Intrabar sequencing | A bar touching both stop and target resolves as a stop. |
+| Expiry | Squared off on the expiry date, not carried to the end of data. |
+| Charges | Statutory Indian stack (STT, exchange, SEBI, GST, stamp) on turnover. |
+| Impossible stops | A stop wider than the premium paid is refused. |
+
+`replay_signal` returns a `ReplayRejection` with the reason, and the endpoint
+reports them under `rejections`. **A replay that silently drops untradeable
+signals reports a strategy nobody ran.**
+
+Reported per run: net and gross P&L, total costs, net and gross profit factor,
+expectancy, drawdown, average R, MAE, MFE, max consecutive losses, partial-fill
+count, exit-reason mix.
+
+### I. Execution architecture
+
+ORB owns neither Paper/Live nor Manual/Auto. It uses the universal account and
+execution mode and the shared safety, idempotency and protection
+infrastructure. A strategy-local `paper_only` control is forbidden, and a test
+asserts no such field exists — a UI flag claiming a safety the shared execution
+path never reads is the recurring failure mode this guards against.
+
+## Remaining work
+
+### Step 1 — Execution truth (open)
+
+Partial fills and expiry square-off are modelled in *replay*. The **live order
+path** still needs its own end-to-end coverage:
 
 - signal-to-order idempotency;
 - duplicate execution attempts;
 - broker rejection;
-- partial fill;
-- remaining quantity;
+- partial fill and remaining quantity;
 - position reconciliation;
 - restart recovery;
-- stop/protection registration;
-- stop/protection disarming;
-- expiry square-off;
+- stop/protection registration and disarming;
+- expiry square-off at the broker;
 - daily trade-limit persistence.
 
-### Step 7 — Build real option replay
+### Step 2 — Historical option dataset (open)
 
-The current underlying signal backtest is insufficient for automated options approval.
-
-Build historical option replay with:
+The replay engine exists; no historical option dataset has been replayed through
+it. Required per contract:
 
 ```text
-underlying bars
-+ actual option contract
-+ actual option premium
-+ bid/ask
-+ spread
-+ slippage
-+ charges
-+ lot size
-+ liquidity
-+ expiry
-+ partial fills
-+ execution timing
+timestamp symbol option_type expiry strike open high low close bid ask
+volume open_interest lot_size
 ```
 
-No synthetic option P&L from underlying points.
+`require_historical_option_fields` enforces the schema. No synthetic option P&L
+derived from underlying points.
 
-### Step 8 — Walk-forward and OOS
+### Step 3 — Walk-forward and out-of-sample (open)
 
-Evaluate across separate regimes and periods. Report:
+Evaluate across separate regimes and periods and report expectancy, profit
+factor, net P&L after costs, maximum drawdown, win rate, average win/loss, MAE,
+MFE, trade frequency, consecutive losses and parameter sensitivity. Reject
+configurations that depend on narrow historical parameter choices.
 
-- expectancy;
-- profit factor;
-- net P&L after costs;
-- maximum drawdown;
-- win rate;
-- average win/loss;
-- MAE;
-- MFE;
-- trade frequency;
-- consecutive losses;
-- parameter sensitivity.
+Until this runs there is **no evidence of edge** — only evidence that the
+measurement is now sound.
 
-Reject configurations that depend on narrow historical parameter choices.
-
-### Step 9 — Production gate
-
-Automation is eligible only when:
+### Step 4 — Production gate (open)
 
 ```text
-ORB unit tests green
+ORB unit tests green                    [DONE]
         |
         v
-TrueData contract green
+provider boundary contract green        [DONE]
         |
         v
-execution/reconciliation replay green
+costed replay model honest              [DONE]
         |
         v
-historical option replay green
+live execution/reconciliation replay    [OPEN]
         |
         v
-walk-forward green
+historical option replay on real data   [OPEN]
         |
         v
-out-of-sample stable
+walk-forward                            [OPEN]
         |
         v
-realistic costs/slippage validated
+out-of-sample stable                    [OPEN]
         |
         v
-production safety audit green
+production safety audit                 [OPEN]
         |
         v
 UNATTENDED LIVE ELIGIBLE
@@ -281,9 +230,13 @@ UNATTENDED LIVE ELIGIBLE
 ## Explicit design decisions
 
 1. ORB remains independent from Adaptive Edge.
-2. TrueData advanced data is used where it improves observation quality and option-contract selection, not to inject Adaptive Edge-style signal intelligence.
+2. TrueData advanced data improves observation quality and contract selection;
+   it does not inject Adaptive Edge-style signal intelligence.
 3. The underlying generates direction; the option is the execution vehicle.
 4. Only option buying is permitted.
 5. Shared execution infrastructure owns Paper/Live and Manual/Auto.
 6. Backtests must not fabricate option P&L.
-7. Safety and causal-data gates must not be removed to make tests or backtests look better.
+7. Safety and causal-data gates are never removed to make tests or backtests
+   look better. Where a test and a gate disagreed, the gate won.
+8. An invalid configuration value is rejected, never reinterpreted as a bypass.
+9. A refusal is data. Anything that declines to trade says why.

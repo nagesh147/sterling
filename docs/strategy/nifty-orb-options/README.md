@@ -62,7 +62,7 @@ Implemented:
 - Configurable ITM/OTM strike steps.
 - Expiry DTE minimum/maximum filters.
 - Optional expiry-day avoidance.
-- Nearest/weekly selection handling.
+- `nearest` / `weekly` / `monthly` / `any` selection, separated by an explicit expiry-calendar rule.
 - Minimum lot-size and positive-premium checks.
 - Bid/ask validation when enabled.
 - Maximum spread percentage gate.
@@ -186,7 +186,7 @@ As of the current reconciliation work:
 - Adaptive Edge suite: **141 passed**.
 - ORB/TrueData targeted suite: **15 passed, 5 failures remain** in the latest local run.
 - The remaining ORB failures are concentrated in test-fixture/strategy-semantic alignment; the production data-quality gates should not be weakened to make tests pass.
-- A production zero-division defect was identified when `volume_multiplier=0`; the local working tree contains the safety fix, but that follow-on change has not yet been committed/pushed at the time this document was written.
+- The `volume_multiplier=0` zero-division defect is fixed at its root: the value is rejected by `StrategyConfig.validate()` rather than special-cased inside the confidence calculation, so it can no longer double as a silent filter bypass.
 
 Therefore the ORB strategy is **implemented but not yet production-trustworthy for unattended automated options trading**.
 
@@ -203,7 +203,7 @@ Therefore the ORB strategy is **implemented but not yet production-trustworthy f
 
 ### P1 — finish option-selection semantics
 
-7. Define `expiry_selection` precisely: `nearest`, `weekly`, and any/all behavior must have explicit semantics and tests.
+7. ~~Define `expiry_selection` precisely.~~ Done: `nearest`/`weekly`/`monthly`/`any`, resolved against an explicit calendar rule, tested on fixed dates.
 8. Test expiry selection using fixed dates rather than `datetime.now()` so tests are deterministic.
 9. Test ATM/ITM/OTM strike selection across asymmetric strike availability.
 10. Test missing bid/ask, crossed markets, stale quotes, low volume, low OI, excessive spread, invalid DTE, and zero/invalid lot sizes independently.

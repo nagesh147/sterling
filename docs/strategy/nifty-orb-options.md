@@ -79,7 +79,13 @@ SHORT mirrors the logic below the opening-range low with negative VWAP slope.
 - Configurable strike steps.
 - DTE bounds enforced.
 - Expiry-day avoidance supported.
-- Nearest/weekly selection supported by the current implementation.
+- `expiry_selection` is one of `nearest`, `weekly`, `monthly`, `any`.
+- Weekly/monthly are separated by an explicit calendar rule: the monthly
+  contract is the last occurrence of that expiry's weekday in its calendar
+  month, overridable by passing the venue's real monthly-expiry set. An expiry
+  preference that matches nothing raises instead of falling back to another
+  bucket.
+- All DTE decisions take an explicit reference date, so replay and live agree.
 - Lot size must be positive.
 - Premium must be positive.
 - Bid/ask, spread, OI, volume, and quote-freshness gates are configurable.
@@ -128,79 +134,47 @@ Automatic execution uses the shared safety, idempotency, order, reconciliation, 
 
 ## Current implementation status
 
-The core strategy implementation and the surrounding TrueData/liquidity controls are substantially implemented. The Adaptive Edge reconciliation is green with **141 tests passing**.
+The ORB targeted suite is **green: 178 passing, 0 failing**. No production filter
+was weakened to get there.
 
-The ORB targeted suite is **not yet green**. The latest local verification had **15 passing and 5 failing tests**. The remaining failures are concentrated in ORB fixture/semantic alignment; the production liquidity and freshness gates must not be weakened merely to obtain a green test count.
+Closed since the previous revision:
 
-A zero-threshold edge case in confidence calculation was also identified and locally guarded. That change remains part of the local follow-on work and must be validated before it is considered complete.
+| Area | What changed |
+| --- | --- |
+| Configuration | `StrategyConfig.validate()` rejects every out-of-range value, including the `volume_multiplier=0` that both disabled volume confirmation and divided by zero. It runs at `generate_signal`, `select_option`, `build_trade_plan`, `filter_chain` and the config PUT, and `set_config` delegates its shared rules to it so the API and the engine cannot drift. |
+| Signal diagnosis | A rejected bar named "filters not aligned". It now names the first unmet gate, and each gate has an isolating test. |
+| Expiry semantics | `nearest`/`weekly`/`monthly`/`any` are defined against an explicit calendar rule shared by the engine and the TrueData provider. Weekly no longer falls back to a monthly contract. |
+| Determinism | DTE takes an explicit reference date instead of the wall clock, so the expiry suite is pinned to fixed dates. |
+| Provider boundary | Every required TrueData data-quality check raises rather than returning a sentinel a caller could mistake for a valid empty result. |
+| Costed validation | `validate_option_trades` reported net figures under `gross_profit` and built `profit_factor` from them. Gross and net are now separate and every decision metric is net. |
+| Option replay | Next-bar fills, half-spread on each side, `lots * lot_size` sizing, live-mirroring liquidity admission, volume-capped partial fills, expiry square-off, statutory charges on turnover, and refusals returned as data. |
 
-Therefore:
+Still open, and still blocking:
 
 ```text
-Implemented
+Implemented and unit-green
     !=
 Production-ready automated trading
 ```
 
-Automatic/live graduation remains blocked until the complete ORB signal, option, risk, execution, and historical option-replay gates are green.
+### 1. Execution truth (open)
 
-## Exact next work
+Signal-to-order idempotency, duplicate execution attempts, broker rejection,
+partial fill and remaining quantity, position reconciliation, restart recovery,
+protection arming and disarming, expiry square-off at the broker, and daily
+trade-limit persistence. Partial fills and expiry are modelled in *replay*; the
+live order path still needs its own end-to-end coverage.
 
-### 1. Signal fixtures and mathematical contract
+### 2. Research validation (open)
 
-Make the test fixture itself satisfy the strategy rather than weakening the strategy:
+Walk-forward and out-of-sample runs across distinct regimes on real historical
+option data. The replay engine can now produce honest numbers -- expectancy,
+net and gross profit factor, drawdown, MAE, MFE, consecutive losses, exit-reason
+mix, partial-fill count -- but no historical option dataset has been replayed
+through it yet. Until it has, there is **no evidence of edge**, only evidence
+that the measurement is sound.
 
-```text
-opening-range breakout
-+ VWAP alignment
-+ VWAP slope alignment
-+ ATR threshold
-+ volume confirmation
-+ TREND/EXPANSION regime
-= valid signal
-```
-
-Add one test per gate and one test proving removal of each gate returns `NONE`.
-
-Keep the opening range anchored to 09:15 IST even when the entry window changes.
-
-### 2. Configuration validation
-
-Decide and enforce whether zero `volume_multiplier` is legal. Preferred production behavior is to reject invalid zero thresholds at configuration validation rather than rely on a confidence-calculation special case.
-
-### 3. Expiry semantics
-
-Specify and test the exact meaning of `nearest`, `weekly`, and `any/all`. Use fixed dates in tests; do not use `datetime.now()` for deterministic expiry-selection tests.
-
-### 4. TrueData contract
-
-Complete deterministic tests for:
-
-- stale quote;
-- missing quote;
-- crossed bid/ask;
-- zero/invalid bid/ask;
-- low OI;
-- low volume;
-- excessive spread;
-- invalid DTE;
-- invalid lot size.
-
-The provider boundary must reject bad observations before order admission.
-
-### 5. Risk/execution
-
-Verify actual premium-domain stop/target translation, worst-case lot-based INR risk, partial fills, order rejection, retries, idempotency, restart recovery, protection arming, position reconciliation, and expiry square-off.
-
-### 6. Historical option replay
-
-Build option-level replay from real historical contracts and premiums. Include spread, slippage, charges, liquidity, expiry, partial fills, actual lot sizes, and quote availability. Never infer option P&L from underlying points alone.
-
-### 7. Research validation
-
-Run walk-forward and out-of-sample tests across distinct market regimes. Report expectancy, profit factor, drawdown, win/loss distribution, MAE, MFE, trade frequency, costs, and sensitivity to parameters.
-
-### 8. Graduation gate
+### 3. Graduation gate (open)
 
 Do not enable unattended live execution until:
 

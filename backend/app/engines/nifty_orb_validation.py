@@ -123,8 +123,25 @@ def parameter_sensitivity(observations: Sequence, parameter_grid: Sequence[dict]
     return out
 
 
-def require_historical_option_fields(rows: Iterable[dict]) -> None:
-    required={"timestamp","symbol","option_type","expiry","strike","open","high","low","close"}
+#: Identity and price of a historical option bar.
+OPTION_OHLC_FIELDS = frozenset({"timestamp","symbol","option_type","expiry","strike","open","high","low","close"})
+
+#: Fields the replay engine needs to model execution rather than assume it.
+#: Without ``bid``/``ask`` the modelled spread silently collapses to zero;
+#: without ``volume``/``open_interest`` liquidity admission passes everything;
+#: without ``lot_size`` sizing and partial fills cannot be lot-aligned. A dataset
+#: missing them does not fail loudly -- it produces a flattering result -- so the
+#: schema demands them by default.
+OPTION_EXECUTION_FIELDS = frozenset({"bid","ask","volume","open_interest","lot_size"})
+
+
+def require_historical_option_fields(rows: Iterable[dict], *, require_execution_fields: bool = True) -> None:
+    """Reject a historical option dataset that cannot support an honest replay.
+
+    Pass ``require_execution_fields=False`` only for a signal-level study whose
+    output is explicitly not option P&L.
+    """
+    required = OPTION_OHLC_FIELDS | (OPTION_EXECUTION_FIELDS if require_execution_fields else frozenset())
     missing=set(); count=0
     for row in rows: count+=1; missing |= required-set(row)
     if not count: raise ValueError("historical option dataset is empty")

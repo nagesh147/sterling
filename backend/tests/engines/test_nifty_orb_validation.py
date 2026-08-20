@@ -1,5 +1,5 @@
 import pytest
-from app.engines.nifty_orb_validation import OptionTrade, TradingCosts, expiry_metrics, parameter_sensitivity, regime_metrics, require_historical_option_fields, validate_option_trades, walk_forward
+from app.engines.nifty_orb_validation import OPTION_EXECUTION_FIELDS, OPTION_OHLC_FIELDS, OptionTrade, TradingCosts, expiry_metrics, parameter_sensitivity, regime_metrics, require_historical_option_fields, validate_option_trades, walk_forward
 
 
 def test_costs_reduce_gross_option_pnl():
@@ -37,6 +37,15 @@ def test_parameter_sensitivity_requires_results():
 
 
 def test_historical_option_dataset_must_be_real_option_data():
-    fields={"timestamp","symbol","option_type","expiry","strike","open","high","low","close"}
-    require_historical_option_fields([dict.fromkeys(fields)])
+    require_historical_option_fields([dict.fromkeys(OPTION_OHLC_FIELDS|OPTION_EXECUTION_FIELDS)])
     with pytest.raises(ValueError): require_historical_option_fields([{"timestamp":1}])
+    with pytest.raises(ValueError, match="empty"): require_historical_option_fields([])
+
+
+def test_ohlc_alone_cannot_support_an_execution_replay():
+    """Missing bid/ask/volume/OI/lot_size makes the replay silently optimistic."""
+    ohlc_only=[dict.fromkeys(OPTION_OHLC_FIELDS)]
+    with pytest.raises(ValueError) as exc: require_historical_option_fields(ohlc_only)
+    assert {"bid","ask","volume","open_interest","lot_size"} <= set(str(exc.value).replace(",","").split())
+    # A signal-level study may opt out, but it must say so.
+    require_historical_option_fields(ohlc_only,require_execution_fields=False)
