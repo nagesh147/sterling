@@ -6,51 +6,18 @@ F-110 produces the canonical order intent consumed by the execution boundary.
 
 ## Contract
 
-A valid intent requires:
-
-```text
-order_intent_id
-selection_id
-instrument_id
-side ∈ {BUY, SELL}
-quantity > 0
-intent_version
-idempotency_key
-created_at
-```
+A valid intent requires `order_intent_id`, `selection_id`, `instrument_id`, `side`, positive `quantity`, `intent_version`, `idempotency_key`, and `created_at`.
 
 The intent is immutable and fingerprintable. The factory derives deterministic identity from the causal selection, instrument, side, quantity, version, timestamp, and deterministic namespace.
 
 ## Boundary
 
-The factory does not authorize or submit execution.
-
-```text
-Decision
-  -> Risk
-  -> Instrument
-  -> OrderIntentFactory
-  -> CanonicalOrderIntent
-  -> ExecutionGateway
-  -> require_execution_authorized()
-  -> broker
-```
-
-This preserves the execution governance boundary. `ExecutionGateway.submit()` remains the crossing point and fails closed when required strategy formulas are not authorized.
+The factory does not authorize or submit execution. `ExecutionGateway.submit()` remains the crossing point and fails closed when required strategy formulas are not authorized.
 
 ## Idempotency
 
-Identical causal inputs produce identical `order_intent_id`, `idempotency_key`, and fingerprint. Changing a causal input such as quantity produces a different identity.
+Identical causal inputs produce identical identity and fingerprint. Changing a causal input produces a different identity. The downstream execution adapter rejects reuse of an idempotency key with a different intent fingerprint.
 
-The downstream `ExecutionAdapter` additionally rejects reuse of an idempotency key with a different intent fingerprint.
+## Production status
 
-## Resolution
-
-```text
-Canonical fields       RECOVERED
-Deterministic identity  IMPLEMENTED
-Idempotency             IMPLEMENTED
-Validation              IMPLEMENTED
-Execution authorization GATED
-Production promotion    LOCKED
-```
+The contract is implemented and gated. Production execution remains locked until the complete required formula set is promoted.
