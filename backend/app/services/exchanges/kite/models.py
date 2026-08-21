@@ -228,6 +228,9 @@ class MarginOrderLeg(BaseModel):
 class TickerSubscribeRequest(BaseModel):
     instrument_tokens: List[int]
     mode: str = K.MODE_QUOTE               # ltp | quote | full
+    # Unsubscribe only: drop the token even if a strategy still claims it. Off by
+    # default so a client tidying its own view cannot blind a running strategy.
+    force: bool = False
 
 
 # ─── Generic envelope ───────────────────────────────────────────────────────

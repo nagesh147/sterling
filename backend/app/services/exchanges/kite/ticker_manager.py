@@ -147,17 +147,41 @@ async def subscribe(user_id: str, tokens: List[int], mode: str = K.MODE_QUOTE,
     return {"ok": True, **ticker.status()}
 
 
-async def unsubscribe(user_id: str, tokens: List[int]) -> dict:
-    # An explicit unsubscribe is an instruction, not a hint, so it drops every
-    # claim on the token -- otherwise a later release() would try to unsubscribe
-    # something already gone, or worse, believe an owner still holds it.
+async def unsubscribe(user_id: str, tokens: List[int], *, force: bool = False) -> dict:
+    """Stop streaming these tokens.
+
+    The caller is normally a client tidying up its own view -- the frontend
+    reconciler dropping a chart nobody is looking at. That must not blind a
+    running strategy that is watching the same token for an exit, so a token a
+    named owner still claims is kept, and only the caller's own untagged claim
+    goes.
+
+    ``force`` is the operator's override: drop it regardless of who wants it.
+    """
+    kept: List[int] = []
+    drop: List[int] = []
     for t in tokens:
-        _owners.pop((user_id, int(t)), None)
+        key = (user_id, int(t))
+        claimed = {o for o in _owners.get(key, set()) if o != _ANY}
+        if claimed and not force:
+            _owners[key].discard(_ANY)          # the caller is done, the owner is not
+            kept.append(int(t))
+            continue
+        _owners.pop(key, None)
+        drop.append(int(t))
+
     ticker = _tickers.get(user_id)
     if not ticker:
         return {"ok": True, "message": "No active ticker"}
-    await ticker.unsubscribe(tokens)
-    return {"ok": True, **ticker.status()}
+    if drop:
+        await ticker.unsubscribe(drop)
+    out = {"ok": True, **ticker.status()}
+    if kept:
+        # Say so rather than reporting a clean success: a caller that asked for a
+        # token to go and was refused should be able to see that in the reply.
+        out["kept_for_owners"] = {str(t): sorted(_owners.get((user_id, t), set()))
+                                  for t in kept}
+    return out
 
 
 async def release(user_id: str, tokens: List[int], owner: str) -> dict:
@@ -179,7 +203,9 @@ async def release(user_id: str, tokens: List[int], owner: str) -> dict:
             drop.append(int(t))
     if not drop:
         return {"ok": True, "unsubscribed": []}
-    result = await unsubscribe(user_id, drop)
+    # The claims for these tokens are already gone, so force is not overriding
+    # anybody -- it just stops unsubscribe() from re-deciding what we decided.
+    result = await unsubscribe(user_id, drop, force=True)
     return {**result, "unsubscribed": drop}
 
 

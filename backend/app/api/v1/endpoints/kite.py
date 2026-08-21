@@ -896,7 +896,8 @@ async def ticker_subscribe(body: TickerSubscribeRequest, user: UserContext = Dep
 
 @router.post("/ticker/unsubscribe")
 async def ticker_unsubscribe(body: TickerSubscribeRequest, user: UserContext = Depends(get_current_user)):
-    return await ticker_manager.unsubscribe(user.user_id, body.instrument_tokens)
+    return await ticker_manager.unsubscribe(user.user_id, body.instrument_tokens,
+                                            force=body.force)
 
 
 @router.get("/ticker/status")

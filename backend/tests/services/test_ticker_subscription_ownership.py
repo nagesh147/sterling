@@ -103,12 +103,12 @@ async def test_release_is_idempotent(ticker):
 
 
 @pytest.mark.asyncio
-async def test_explicit_unsubscribe_clears_every_claim(ticker):
-    """An operator unsubscribe is an instruction, not a hint."""
+async def test_a_forced_unsubscribe_clears_every_claim(ticker):
+    """force is the operator saying "drop it anyway", so no claim survives."""
     await TM.subscribe("u1", [111], "full", owner="strategy_a")
     await TM.subscribe("u1", [111], "ltp", owner="protection")
 
-    await TM.unsubscribe("u1", [111])
+    await TM.unsubscribe("u1", [111], force=True)
     assert ticker.status()["subscribed"] == []
     assert TM.owners_of("u1", 111) == set()
 
@@ -127,3 +127,47 @@ async def test_claims_do_not_leak_across_users(ticker):
     assert TM.owners_of("u2", 111) == set()
     await TM.release("u2", [111], "strategy_a")
     assert ticker.status()["subscribed"] == [111]
+
+
+# ------------------- a client tidying up must not blind a running strategy
+
+@pytest.mark.asyncio
+async def test_a_client_unsubscribe_keeps_a_token_a_strategy_is_watching(ticker):
+    """The frontend drops a chart; the strategy still needs the exit price."""
+    await TM.subscribe("u1", [111], "full", owner="strategy_a")   # armed session
+    await TM.subscribe("u1", [111], "quote")                      # a chart opens
+
+    await TM.unsubscribe("u1", [111])                             # the chart closes
+    assert ticker.status()["subscribed"] == [111]
+    assert TM.owners_of("u1", 111) == {"strategy_a"}
+
+
+@pytest.mark.asyncio
+async def test_the_reply_says_which_tokens_were_kept_and_why(ticker):
+    await TM.subscribe("u1", [111], "full", owner="strategy_a")
+    out = await TM.unsubscribe("u1", [111])
+    assert out["kept_for_owners"] == {"111": ["strategy_a"]}
+
+
+@pytest.mark.asyncio
+async def test_an_unclaimed_token_is_dropped_normally(ticker):
+    await TM.subscribe("u1", [111], "quote")
+    out = await TM.unsubscribe("u1", [111])
+    assert ticker.status()["subscribed"] == []
+    assert "kept_for_owners" not in out
+
+
+@pytest.mark.asyncio
+async def test_force_is_the_operator_override(ticker):
+    await TM.subscribe("u1", [111], "full", owner="strategy_a")
+    await TM.unsubscribe("u1", [111], force=True)
+    assert ticker.status()["subscribed"] == []
+    assert TM.owners_of("u1", 111) == set()
+
+
+@pytest.mark.asyncio
+async def test_the_owner_can_still_release_its_own_token(ticker):
+    """release() must not be blocked by the guard that protects it."""
+    await TM.subscribe("u1", [111], "full", owner="strategy_a")
+    await TM.release("u1", [111], "strategy_a")
+    assert ticker.status()["subscribed"] == []
