@@ -28,61 +28,73 @@ a deflated-Sharpe gate. Provenance vocabulary:
 | `quantity` | operator-entered | OBSERVED | `Enter Quantity : 100` (V1); 20 (V17, from `PnL 469.0 / 23.45`); 80 (V0821, from the Upstox notification `80/80`). All multiples of the **externally confirmed** SENSEX lot size of 20 |
 | `tick_size` | `0.05` | OBSERVED (external) | Kite instrument master: uniform 0.05 across all 2,396 SENSEX option contracts. Makes the observed `148.70` and `126.60` valid tick-aligned prices |
 | `lot_size` | `20` | OBSERVED (external) | Kite instrument master, uniform across the expiry. Confirms `PnL 469.0 = 23.45 × 20` |
-| `entry_price_source` | two real paths: `MANUAL_FILE` and `FIRST_TICK_PLUS_BUFFER` | OBSERVED | V17 `Using manual strike price from strike_prices.txt : 288.75 (strike 77600CE)`, `MPP (Upper Circuit) : 1745.45`, `Calculated Order Price (before cap) : 288.75` |
-| `entry_buffer_points` (first-tick path) | **`10.25`** | **OBSERVED** | 2026-08-20 prints `Buffer : 10.25` under `FIRST-TICK ENTRY ATTEMPT 1/3`, giving `Order Price : 113.1` from `First Tick Price : 102.85`. This document previously rejected it — see below |
+| `entry_price_source` | two real paths: `MANUAL_FILE` and `FIRST_TICK_PERCENT` | OBSERVED | V17 `Using manual strike price from strike_prices.txt : 288.75 (strike 77600CE)`, `MPP (Upper Circuit) : 1745.45`, `Calculated Order Price (before cap) : 288.75` |
+| `entry_through_pct` (first-tick path) | **`0.10`** (10.0%) | **OBSERVED** | Both sessions print `Buffer : 10.0%`; `102.85 × 1.10 → 113.1` and `379.0 × 1.10 → 416.9`. See below — this was recorded two other ways first |
+| ~~`entry_buffer_points` as a points buffer~~ | ~~`10.25`~~ | **REJECTED** | Arithmetically impossible across both sessions (needs 10.25 and 37.90) |
 | `stop_enabled` | `false` | OBSERVED-DERIVED | no stop line, no stop field, in any recording |
 | `max_hold_seconds` | `0` (disabled) | OBSERVED-DERIVED | no time-stop observed |
 | `max_quote_age_ms` | `2000` | SterlingDEFAULT | the source bot has no freshness gate; we will not ship without one |
 | `max_ce_pe_skew_ms` | `1000` | SterlingDEFAULT | needed for the SYNCHRONIZED research view only |
 | `daily_loss_limit` | required | SterlingDEFAULT | Sterling risk invariant; absent from the source bot |
 
-## `entry_buffer_points = 10.25` — OBSERVED (this document previously rejected it)
+## The entry buffer is `10.0%`, not `10.25` points — and I got here the long way
 
-**I got this wrong, and the correction matters more than the original claim.**
-
-The 2026-08-20 session's entry block became legible from a higher-quality copy of
-the recording, and it prints the buffer as a named parameter:
+This parameter has been recorded three different ways. The final answer is a
+**percentage of the selected leg's first price**, and the evidence is an exact
+arithmetic identity that holds in both decoded sessions.
 
 ```
-=========================================
-STRIKE SELECTED
-=========================================
-Strike       : 77500
-Option Type  : CE
-Premium      : 102.85
-=========================================
-FIRST-TICK ENTRY ATTEMPT 1/3
-=========================================
-First Tick Price : 102.85
-Buffer           : 10.25
-Order Price      : 113.1
-API Time : 98.19 ms
-Order ID : 260820000004685
+2026-08-20                        2026-08-21
+STRIKE SELECTED                   STRIKE SELECTED
+Strike      : 77500               Strike      : 77700
+Option Type : CE                  Option Type : PE
+Premium     : 102.85              Premium     : 379.0
+FIRST-TICK ENTRY ATTEMPT 1/3      FIRST-TICK ENTRY ATTEMPT 1/3
+First Tick Price : 102.85         First Tick Price : 379.0
+Buffer           : 10.0%          Buffer           : 10.0%
+Order Price      : 113.1          Order Price      : 416.9
 ```
 
-`102.85 + 10.25 = 113.10`. The block is *titled* `FIRST-TICK ENTRY ATTEMPT`, the
-buffer is *labelled* `Buffer`, and the resulting `Order Price` is printed. This is
-a rule, not a residual.
+* `102.85 × 1.10 = 113.135` → printed **113.1**
+* `379.00 × 1.10 = 416.90`  → printed **416.9**
 
-### Why it was rejected, and why that was wrong
+Both to one decimal place. The bot rounds to 1 dp, not to the 0.05 tick grid —
+harmless, because one-decimal prices are multiples of 0.10 and so always
+tick-valid.
 
-The earlier argument was: V17 prints `First Tick 167.50`, `Order Price 288.75`,
-`fill 133.40`, so no `+10.25` exists anywhere, therefore V1's
-`113.10 − 102.85 = 10.25` must be open-auction slippage.
+### A points buffer is arithmetically impossible
 
-The flaw was treating the two sessions as evidence about **one** mechanism. They
-are two different code paths, and V17 says so in its own output: *"Using
-**manual** strike price from strike_prices.txt"*. The word "manual" implies an
-automatic alternative, and V1 is that alternative. Both are real:
+| Session | first tick | printed order price | points needed |
+|---|---|---|---|
+| 2026-08-20 | 102.85 | 113.1 | **10.25** |
+| 2026-08-21 | 379.00 | 416.9 | **37.90** |
 
-| Session | Path taken | Order price |
-|---|---|---|
-| V17, 2026-07-30 | `MANUAL_FILE` — `strike_prices.txt` had an entry for 77600CE | 288.75 (from the file) |
-| V1, 2026-08-20 | `FIRST_TICK_PLUS_BUFFER` — automatic | 113.10 = 102.85 + 10.25 |
-| V0821, 2026-08-21 | first tick 379.0 printed; fill 340.10 | consistent with a marketable limit at 389.25 filling better |
+No single points value fits both. `10.25` fits 2026-08-20 *by coincidence*,
+because at that price level `+10.25` and `×1.10` differ by only 0.035. At 379.0
+they differ by 27.65, and the printed value picks the percentage decisively.
 
-`FIRST_TICK_PLUS_BUFFER` is therefore no longer research-only, and
-`entry_buffer_points = 10.25` is `OBSERVED`.
+`FIRST_TICK_PLUS_BUFFER` is therefore research-only. `FIRST_TICK_PERCENT` with
+`entry_through_pct = 0.10` is the observed rule.
+
+### The reference is the SELECTED leg, not the first tick of either leg
+
+`Premium` in `STRIKE SELECTED` and `First Tick Price` in the entry block are the
+same number, and it is the chosen leg's price: 102.85 was the CE it bought,
+379.0 the PE. Pricing off whichever leg ticked first would have produced 540.3
+on 2026-08-21 instead of 416.9 — a test asserts this.
+
+### The three readings, in order
+
+1. **Rejected as slippage.** Reasoning wrong (the buffer is real), conclusion
+   accidentally right (10.25 points is not the parameter).
+2. **Accepted as 10.25 points.** A misread of `10.0%` at low resolution, made
+   credible by the coincidence above. I reported this to the user as a
+   correction of (1); it was itself wrong.
+3. **`10.0%` of the selected leg's first price.** Fits both sessions exactly.
+
+The lesson is the same one this document keeps recording: an arithmetic identity
+that holds at *one* price level proves very little. It took a session at a
+four-times-higher premium to separate the two hypotheses.
 
 ### The `OPEN PRICE CHECK (reference only)` block does not contradict this
 

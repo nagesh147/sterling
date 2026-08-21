@@ -6,7 +6,8 @@ const SNAPSHOT_KEY = ['atm-premium-imbalance-snapshot'];
 
 export type QuoteMode = 'COMPATIBILITY' | 'SYNCHRONIZED' | 'EXECUTABLE';
 export type EntryPricePolicy =
-  | 'MARKETABLE_ASK' | 'PERCENT_THROUGH' | 'MANUAL_FILE' | 'FIRST_TICK_PLUS_BUFFER';
+  | 'MARKETABLE_ASK' | 'PERCENT_THROUGH' | 'MANUAL_FILE'
+  | 'FIRST_TICK_PERCENT' | 'FIRST_TICK_PLUS_BUFFER';
 export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE';
 export type ProtectionMode = 'NONE' | 'RESTING_TARGET_LIMIT' | 'GTT';
 export type ExpiryPolicy = 'SAME_DAY' | 'NEAREST' | 'NEXT' | 'EXPLICIT';

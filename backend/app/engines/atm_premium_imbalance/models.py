@@ -344,7 +344,7 @@ class TradeRecord:
     first_tick_price: Optional[float] = None
     signal_difference: Optional[float] = None
     quote_mode: QuoteMode = "COMPATIBILITY"
-    contract_version: str = "A230.3"
+    contract_version: str = "A230.4"
 
     @property
     def exit_price(self) -> Optional[float]:

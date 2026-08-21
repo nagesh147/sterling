@@ -32,17 +32,24 @@ EXECUTION_MODES: frozenset[str] = frozenset({"paper", "live"})
 #: How the entry limit price is produced. Every policy is then capped at the
 #: instrument's upper circuit.
 ENTRY_PRICE_POLICIES: frozenset[str] = frozenset(
-    {"MARKETABLE_ASK", "PERCENT_THROUGH", "MANUAL_FILE", "FIRST_TICK_PLUS_BUFFER"}
+    {"MARKETABLE_ASK", "PERCENT_THROUGH", "MANUAL_FILE",
+     "FIRST_TICK_PERCENT", "FIRST_TICK_PLUS_BUFFER"}
 )
+
+#: The observed automatic entry path: ``first_tick x (1 + entry_through_pct)``
+#: rounded to one decimal, with ``entry_through_pct = 0.10``. Both decoded
+#: sessions satisfy it exactly -- 102.85 -> 113.1 and 379.0 -> 416.9 -- and no
+#: fixed *points* buffer fits both (A232).
+OBSERVED_ENTRY_POLICY = "FIRST_TICK_PERCENT"
+OBSERVED_ENTRY_THROUGH_PCT = 0.10
 
 #: Policies we refuse to run against real money.
 #:
-#: ``FIRST_TICK_PLUS_BUFFER`` used to be listed here, on the reading that its
-#: 10.25 was measured slippage. That was wrong: the 2026-08-20 build prints
-#: ``Buffer : 10.25`` and ``Order Price : 113.1`` under a heading of
-#: ``FIRST-TICK ENTRY ATTEMPT 1/3``, so it is a named parameter of the observed
-#: automatic entry path. It is now a first-class policy (A232).
-RESEARCH_ONLY_ENTRY_POLICIES: frozenset[str] = frozenset()
+#: ``FIRST_TICK_PLUS_BUFFER`` is a *points* variant that no observed session
+#: satisfies -- it fits 2026-08-20 only by coincidence and fails 2026-08-21
+#: outright (A232). Kept because the written specification asked for it, but it
+#: is research-only. The observed rule is ``FIRST_TICK_PERCENT``.
+RESEARCH_ONLY_ENTRY_POLICIES: frozenset[str] = frozenset({"FIRST_TICK_PLUS_BUFFER"})
 
 EXIT_POLICIES: frozenset[str] = frozenset({"FIXED_POINT_TARGET", "PREMIUM_CONVERGENCE"})
 
@@ -95,8 +102,8 @@ class ATMPremiumImbalanceConfig:
 
     # --- entry --------------------------------------------------------------
     # MARKETABLE_ASK is an operator choice, not the observed default. The
-    # faithful reproduction of the automatic path is FIRST_TICK_PLUS_BUFFER with
-    # entry_buffer_points = 10.25 (OBSERVED, 2026-08-20). See A232.
+    # faithful reproduction of the automatic path is FIRST_TICK_PERCENT with
+    # entry_through_pct = 0.10. See A232.
     entry_price_policy: str = "MARKETABLE_ASK"
     entry_buffer_points: float = 0.50
     entry_through_pct: float = 0.0

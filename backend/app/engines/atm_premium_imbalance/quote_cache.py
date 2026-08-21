@@ -46,6 +46,7 @@ class PremiumQuoteCache:
         self._ce_updates = 0
         self._pe_updates = 0
         self._first_option_tick: Optional[tuple[OptionType, LegQuote]] = None
+        self._first_by_leg: dict[str, LegQuote] = {}
 
     # ------------------------------------------------------------------ ingest
 
@@ -83,6 +84,7 @@ class PremiumQuoteCache:
 
         if self._first_option_tick is None:
             self._first_option_tick = (leg, quote)
+        self._first_by_leg.setdefault(leg, quote)
         return leg
 
     def on_underlying_tick(self, ltp: float, ts_ms: int = 0) -> None:
@@ -116,6 +118,18 @@ class PremiumQuoteCache:
         for replay, and because the forensic report compares it against the fill.
         """
         return self._first_option_tick
+
+    def first_price_for(self, option_type: OptionType) -> Optional[float]:
+        """The first price ever seen for one leg.
+
+        This -- not the first tick of *either* leg -- is what the source bot
+        prices its entry from. Its ``STRIKE SELECTED`` block prints the selected
+        leg's price as ``Premium`` and the entry block repeats it as
+        ``First Tick Price``: 102.85 for the CE it chose on 2026-08-20, 379.0 for
+        the PE it chose on 2026-08-21.
+        """
+        q = self._first_by_leg.get(option_type)
+        return None if q is None else float(q.ltp)
 
     def both_legs_present(self) -> bool:
         return self._ce is not None and self._pe is not None

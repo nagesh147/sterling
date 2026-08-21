@@ -173,7 +173,6 @@ class ATMPremiumImbalanceStrategy:
 
         self.signal = sig
         leg = self.pair.leg(sig.option_type)  # type: ignore[arg-type]
-        first = self.cache.first_option_tick
         self.trade = TradeRecord(
             trade_id=self.trade_id,
             instrument_id=leg.instrument_id,
@@ -183,7 +182,9 @@ class ATMPremiumImbalanceStrategy:
             expiry=leg.expiry,
             quantity=self.quantity,
             state=PositionState.ENTRY_PENDING,
-            first_tick_price=None if first is None else q2(first[1].ltp),
+            first_tick_price=(lambda v: None if v is None else q2(v))(
+                self.cache.first_price_for(sig.option_type)  # type: ignore[arg-type]
+            ),
             signal_difference=sig.difference,
             quote_mode=self.cfg.quote_mode,  # type: ignore[arg-type]
         )
@@ -232,13 +233,14 @@ class ATMPremiumImbalanceStrategy:
 
     def _price_entry(self, leg) -> PricedEntry:
         quote = self.cache.ce if leg.option_type == "CE" else self.cache.pe
-        first = self.cache.first_option_tick
         return price_entry(
             self.cfg,
             leg,
             best_ask=None if quote is None else quote.executable_buy_price(),
             last_price=None if quote is None else quote.ltp,
-            first_tick_price=None if first is None else first[1].ltp,
+            # The SELECTED leg's first price, which is what the source bot prints
+            # as both `Premium` and `First Tick Price`.
+            first_tick_price=self.cache.first_price_for(leg.option_type),
             manual_table=self.manual_table,
         )
 

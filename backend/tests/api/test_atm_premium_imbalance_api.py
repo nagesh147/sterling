@@ -22,7 +22,7 @@ def test_get_publishes_identity_defaults_and_vocabularies():
 
     assert payload["strategy"]["id"] == "atm_premium_imbalance"
     assert payload["strategy"]["name"] == "ATM Premium Imbalance"
-    assert payload["strategy"]["contract_version"] == "A230.3"
+    assert payload["strategy"]["contract_version"] == "A230.4"
     # Not live-ready until the A274 gate passes.
     assert payload["strategy"]["live_ready"] is False
     assert payload["strategy"]["enabled"] is False
@@ -45,9 +45,10 @@ def test_get_publishes_identity_defaults_and_vocabularies():
 
     # The UI must be told which options validate() will refuse, not discover it
     # through a 422 after the operator has already clicked.
-    # No entry policy is research-only any more: FIRST_TICK_PLUS_BUFFER is the
-    # observed automatic path (the build prints "Buffer : 10.25").
-    assert payload["research_only"]["entry_price_policy"] == []
+    # The points variant is research-only: no single points buffer fits both
+    # decoded sessions. FIRST_TICK_PERCENT is the observed rule.
+    assert payload["research_only"]["entry_price_policy"] == ["FIRST_TICK_PLUS_BUFFER"]
+    assert "FIRST_TICK_PERCENT" in payload["vocabularies"]["entry_price_policy"]
     assert "PREMIUM_CONVERGENCE" in payload["research_only"]["exit_policy"]
 
 

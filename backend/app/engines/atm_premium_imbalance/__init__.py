@@ -34,7 +34,7 @@ from .strategy import ATMPremiumImbalanceStrategy, Intent, Phase
 
 STRATEGY_ID = "atm_premium_imbalance"
 STRATEGY_NAME = "ATM Premium Imbalance"
-CONTRACT_VERSION = "A230.3"
+CONTRACT_VERSION = "A230.4"
 
 __all__ = [
     "STRATEGY_ID", "STRATEGY_NAME", "CONTRACT_VERSION",

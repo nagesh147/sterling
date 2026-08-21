@@ -40,8 +40,9 @@ const QUOTE_MODE_OPTIONS: Array<{ value: QuoteMode; label: string; hint: string 
 const ENTRY_POLICY_OPTIONS: Array<{ value: EntryPricePolicy; label: string; hint: string }> = [
   { value: 'MARKETABLE_ASK', label: 'Ask + buffer', hint: 'Limit set through the ask by the buffer, then capped at the upper circuit. The default.' },
   { value: 'PERCENT_THROUGH', label: 'Ask + %', hint: 'Limit a percentage through the ask. Mimics the very aggressive observed limit as a rule.' },
+  { value: 'FIRST_TICK_PERCENT', label: 'First tick + %', hint: 'The observed rule: the selected leg\'s first price times (1 + percent), to one decimal. The recorded sessions used 10%.' },
   { value: 'MANUAL_FILE', label: 'Price file', hint: 'Operator-maintained price per strike, as the observed bot read from strike_prices.txt.' },
-  { value: 'FIRST_TICK_PLUS_BUFFER', label: 'First tick + buffer', hint: 'The observed automatic path: the bot logs First Tick Price, Buffer and the resulting Order Price. Buffer was 10.25 in the recorded session.' },
+  { value: 'FIRST_TICK_PLUS_BUFFER', label: 'First tick + points', hint: 'A points variant. No single points buffer fits both recorded sessions, so it is research-only.' },
 ];
 
 const EXIT_POLICY_OPTIONS: Array<{ value: ExitPolicy; label: string; hint: string }> = [
@@ -273,7 +274,8 @@ export function AtmPremiumImbalanceSettings() {
             suffix="pts"
           />
         )}
-        {cfg.entry_price_policy === 'PERCENT_THROUGH' && (
+        {(cfg.entry_price_policy === 'PERCENT_THROUGH'
+          || cfg.entry_price_policy === 'FIRST_TICK_PERCENT') && (
           <NumberField
             label="Through the ask"
             hint="Fraction above the ask. The observed limit sat about 0.72 above its ask."

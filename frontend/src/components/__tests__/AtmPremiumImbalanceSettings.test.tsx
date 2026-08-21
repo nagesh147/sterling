@@ -56,7 +56,7 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
 const STRATEGY: AtmPremiumImbalanceResponse['strategy'] = {
   id: 'atm_premium_imbalance',
   name: 'ATM Premium Imbalance',
-  contract_version: 'A230.3',
+  contract_version: 'A230.4',
   tagline: 'Buys the cheaper ATM leg at the open and takes a fixed +15 points.',
   how_it_works: 'Compares ATM call and put premiums at the open.',
   provenance: 'Reverse-engineered from recordings',
@@ -81,7 +81,7 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
           data_source: ['kite', 'truedata'],
         },
         research_only: {
-          entry_price_policy: [],
+          entry_price_policy: ['FIRST_TICK_PLUS_BUFFER'],
           exit_policy: ['PREMIUM_CONVERGENCE'],
         },
       },
@@ -115,10 +115,9 @@ describe('AtmPremiumImbalanceSettings', () => {
 
   it('marks research-only policies as unable to run live', () => {
     render(<AtmPremiumImbalanceSettings />);
-    // Driven by the server's research_only list, not a client copy. Only the
-    // convergence exit is research-only now: FIRST_TICK_PLUS_BUFFER was
-    // reclassified as the observed automatic entry path.
-    expect(screen.getAllByTitle(/Cannot run live/)).toHaveLength(1);
+    // Driven by the server's research_only list, not a client copy: the points
+    // entry variant and the convergence exit are both research-only.
+    expect(screen.getAllByTitle(/Cannot run live/)).toHaveLength(2);
   });
 
   it('renders the observed defaults from the server payload', () => {

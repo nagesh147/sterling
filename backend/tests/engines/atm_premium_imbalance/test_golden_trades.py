@@ -213,17 +213,17 @@ def test_v1_golden_trade_reproduces_the_broker_pnl():
         Premium      : 102.85
         FIRST-TICK ENTRY ATTEMPT 1/3
         First Tick Price : 102.85
-        Buffer           : 10.25
+        Buffer           : 10.0%
         Order Price      : 113.1
         Order ID : 260820000004685
 
-    So this case pins the *order price* as well as the P&L, using the observed
-    automatic entry policy rather than a placeholder.
+    and the Upstox notification confirms the fill independently: "Order for
+    100/100 was traded at the price of Rs. 113.10".
     """
     pair = make_pair(77500.0, "V1CE", "V1PE", "2026-08-20", upper=2000.0)
     cfg = ATMPremiumImbalanceConfig(
         enabled=True, quantity=100,
-        entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
+        entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
     ).validate()
     strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=100, trade_id="v1")
     broker = ScriptedBroker(entry_fill=113.10, exit_fill=126.60,
@@ -242,7 +242,7 @@ def test_v1_golden_trade_reproduces_the_broker_pnl():
     assert strategy.signal.action == "BUY_CE"          # 102.85 < 168.25
     assert (s["strike"], s["option"]) == (77500.0, "CE")
     assert strategy.trade.first_tick_price == 102.85   # "First Tick Price : 102.85"
-    assert s["entry_order_price"] == 113.10            # 102.85 + 10.25, as printed
+    assert s["entry_order_price"] == 113.10            # 102.85 x 1.10, as printed
     assert s["entry"] == 113.10                        # broker fill
     assert s["target"] == 128.10                       # 113.10 + 15
     assert s["exit_order_price"] == 126.60             # best bid 127.1 - 0.50
@@ -252,20 +252,22 @@ def test_v1_golden_trade_reproduces_the_broker_pnl():
     assert strategy.trade.entry_order_id == "260820000004685"
 
 
-def test_the_evidence_record_documents_the_buffer_as_observed():
-    """The 10.25 buffer is a printed parameter, and the record must say so.
+def test_the_evidence_record_documents_the_percent_buffer():
+    """The buffer is 10.0% of the selected leg's first price.
 
-    It was previously recorded as REJECTED on the reading that it was measured
-    slippage. Guarding the corrected wording so the reversal cannot silently be
-    undone by a later edit.
+    This parameter has been recorded three ways (rejected, 10.25 points, 10.0%).
+    Guarding the settled wording, and guarding that the two superseded readings
+    are still explained rather than quietly deleted — a reader needs to know the
+    points value is a coincidence, not an alternative.
     """
     from app.engines.atm_premium_imbalance import CONTRACT_VERSION
-    assert CONTRACT_VERSION == "A230.3"
+    assert CONTRACT_VERSION == "A230.4"
     prov = open("../docs/strategy/atm-premium-imbalance/A232_PARAMETER_PROVENANCE.md").read()
-    assert "10.25" in prov
+    assert "10.0%" in prov                      # the settled value
     assert "OBSERVED" in prov
-    # and the un-rejection is explained rather than just swapped
-    assert "Buffer : 10.25" in prov
+    assert "416.9" in prov and "113.1" in prov  # the identity that settles it
+    assert "37.90" in prov                      # why a points buffer is impossible
+    assert "REJECTED" in prov                   # the points variant, recorded as such
 
 
 # ------------------------------------------------------ lifecycle guarantees
@@ -338,28 +340,40 @@ def test_2026_08_21_put_side_trade():
       * The contract is ``SENSEX26AUG7...`` -- the *monthly* August symbol, on a
         day that is not an expiry day, so the expiry policy is NEAREST.
 
-    Not established: the strike (the notification truncates it), and the exit.
-    The exit fill below is therefore scripted only to drive the lifecycle; the
-    assertions cover the entry side and the target, nothing more.
+    The entry block is now decoded too::
+
+        STRIKE SELECTED            FIRST-TICK ENTRY ATTEMPT 1/3
+        Strike      : 77700        First Tick Price : 379.0
+        Option Type : PE           Buffer           : 10.0%
+        Premium     : 379.0        Order Price      : 416.9
+
+    Not established: the exit. The exit fill below is scripted only to drive the
+    lifecycle; the assertions cover the entry side and the target.
     """
-    pair = make_pair(81000.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
-    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80, expiry_policy="NEAREST").validate()
+    pair = make_pair(77700.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
+    cfg = ATMPremiumImbalanceConfig(
+        enabled=True, quantity=80, expiry_policy="NEAREST",
+        entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
+    ).validate()
     strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=80, trade_id="v0821")
     broker = ScriptedBroker(entry_fill=340.10, exit_fill=356.00,
                             entry_order_id="260821000004158")
 
     intent = drive(strategy, broker, [
-        ("CE", 491.15, 490.5, 491.6), ("PE", 337.15, 336.6, 337.6),
-        ("PE", 350.00, 349.5, 350.5),
+        ("CE", 491.15, 490.5, 491.6), ("PE", 379.00, 378.5, 379.5),
+        ("PE", 390.00, 389.5, 390.5),
         ("PE", 355.10, 355.20, 355.6),      # crosses 340.10 + 15
     ])
     assert intent.kind == "complete"
     s = strategy.summary()
+    assert s["strike"] == 77700.0
+    assert s["entry_order_price"] == 416.90            # 379.0 x 1.10, as printed
+    assert strategy.trade.first_tick_price == 379.00   # the selected (PE) leg
 
     # --- signal: the cheaper leg is the PUT here
     assert strategy.signal.action == "BUY_PE"
     assert strategy.signal.option_type == "PE"
-    assert strategy.signal.difference == 154.00      # absolute, not -154.00
+    assert strategy.signal.difference == 112.15      # |379.00 - 491.15|, absolute
     assert strategy.trade.instrument_id == "BSE_FO|A21PE"
     # --- entry accounting uses the broker fill from the notification
     assert s["entry"] == 340.10

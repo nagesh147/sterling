@@ -77,14 +77,16 @@ instrument's upper circuit (MPP)** in every case:
 | `MARKETABLE_ASK` | `best_ask + entry_buffer_points` | **DEFAULT** |
 | `PERCENT_THROUGH` | `best_ask × (1 + entry_through_pct)` | research |
 | `MANUAL_FILE` | operator table keyed by `{strike}{CE\|PE}` | reproduces V17 verbatim |
-| `FIRST_TICK_PLUS_BUFFER` | `first_tick + entry_buffer_points` | **OBSERVED** — the automatic path. 2026-08-20 prints `First Tick Price : 102.85`, `Buffer : 10.25`, `Order Price : 113.1`. (An earlier version of this contract wrongly marked it rejected.) |
+| `FIRST_TICK_PERCENT` | `round(first_tick × (1 + pct), 1)`, pct = 0.10 | **OBSERVED** — the automatic path. Reproduces both sessions exactly: 102.85 → 113.1 and 379.0 → 416.9. The reference is the *selected* leg's first price. |
+| `FIRST_TICK_PLUS_BUFFER` | `first_tick + entry_buffer_points` | **research-only** — a points variant no single value can fit (needs 10.25 and 37.90). Earlier versions of this contract marked it first rejected, then observed; both were wrong (A232). |
 
 The limit is a *fill-guarantee device*, not a price target: the observed bot sent
 288.75 against a 167.50 ask (A231/E4). Choosing a limit through the market does
 not change the signal.
 
-Both `MANUAL_FILE` and `FIRST_TICK_PLUS_BUFFER` are real observed paths — V17
-took the first ("Using **manual** strike price…"), V1 the second (A231/E11).
+Both `MANUAL_FILE` and `FIRST_TICK_PERCENT` are real observed paths — V17 took
+the first ("Using **manual** strike price…"), V1 and V0821 the second
+(A231/E11).
 
 ### Accounting invariant
 
@@ -177,7 +179,7 @@ convergence is retained only as a research-only exit policy.
 
 ## 12. Version
 
-`contract_version = "A230.3"`. A230.1 → A230.2: absolute difference, NEAREST
-expiry. A230.2 → A230.3: `FIRST_TICK_PLUS_BUFFER` reclassified from rejected to
-observed, and broker-side protection added (§9). Any change to §4, §5's accounting invariant, §6
+`contract_version = "A230.4"`. A230.1 → .2: absolute difference, NEAREST expiry.
+.2 → .3: broker-side protection (§9). .3 → .4: the entry buffer is `10.0%` of the
+*selected* leg's first price, not a points offset (A232). Any change to §4, §5's accounting invariant, §6
 or §8 is a new contract version and re-runs the A274 gate.

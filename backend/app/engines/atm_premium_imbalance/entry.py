@@ -125,6 +125,15 @@ def price_entry(
             )
         reference, kind = float(manual), "manual_file"
         raw = reference
+    elif policy == "FIRST_TICK_PERCENT":
+        # The observed automatic path. 2026-08-20: 102.85 x 1.10 = 113.135 ->
+        # printed 113.1. 2026-08-21: 379.0 x 1.10 = 416.90 -> printed 416.9.
+        # The bot rounds to ONE decimal, not to the tick grid; one-decimal
+        # prices are multiples of 0.10 and so are always tick-valid anyway.
+        if first_tick_price is None or first_tick_price <= 0:
+            raise ValueError("FIRST_TICK_PERCENT requires a first tick price")
+        reference, kind = float(first_tick_price), "first_tick"
+        raw = round(reference * (1.0 + cfg.entry_through_pct), 1)
     elif policy == "FIRST_TICK_PLUS_BUFFER":
         # The observed automatic path. The 2026-08-20 build prints exactly this
         # arithmetic: First Tick Price 102.85 + Buffer 10.25 -> Order Price 113.1.
@@ -135,6 +144,8 @@ def price_entry(
     else:
         raise ValueError(f"unknown entry_price_policy: {policy}")
 
+    # FIRST_TICK_PERCENT already carries the source system's one-decimal
+    # rounding; q2 preserves it exactly (113.1 -> 113.10).
     raw = q2(raw)
     capped = False
     limit = raw

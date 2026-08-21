@@ -82,7 +82,7 @@ remains inferred:
 | Signal fidelity | **PASS** | `Difference = \|PE − CE\|` verified on every legible line across all five recordings; cheaper-leg rule reproduced in **both** directions |
 | Quote-model fidelity | **PASS** | independent per-leg caching reproduces the observed one-leg-moved sequences |
 | Entry mechanics | **PASS** | 3-attempt limit-buy, upper-circuit cap, fill-not-limit accounting |
-| Entry *price rule* | **PASS** | two observed paths: an operator price file (V17) and `first_tick + 10.25` (V1, printed verbatim). An earlier version of this report called the buffer falsified — that was wrong (A232) |
+| Entry *price rule* | **PASS** | two observed paths: an operator price file (V17) and `first_tick × 1.10` to 1 dp (V1 and V0821, both reproduced exactly). Earlier versions of this report called the buffer falsified, then called it 10.25 points; both were wrong (A232) |
 | Exit fidelity | **PASS** | `+15` off the fill and `bid − 0.50` reproduced in both builds |
 | Execution fidelity | **PARTIAL** | order lifecycle, reconciliation and broker-side protection modelled and driven end-to-end against a fake broker; not yet exercised against a live Kite session |
 | Risk fidelity | **N/A** | the source bot had no risk controls; ours are additions, not reproductions |
@@ -136,33 +136,48 @@ samples agreeing by coincidence, generalised into a rule:
 |---|---|---|---|
 | `difference` | signed `PE − CE` | **`\|PE − CE\|`** | V1/V17/V21/V04 all had the put dearer, making signed and absolute identical. V0821 has the **call** dearer (`CE 491.15 \| PE 337.15`) and still prints `154.00`. |
 | `expiry_policy` | `SAME_DAY` | **`NEAREST`** | V0821 ran on a non-expiry day and traded the *monthly* `SENSEX26AUG7…`. `SAME_DAY` would have refused to arm. |
-| `entry_buffer_points` | **REJECTED** | **`10.25`, OBSERVED** | A higher-quality copy of the 2026-08-20 recording made the entry block legible: `First Tick Price : 102.85`, `Buffer : 10.25`, `Order Price : 113.1`. I had inferred from two sessions that no such buffer existed; they were exercising different code paths, and V17 says so itself ("Using **manual** strike price…"). |
+| entry buffer | **REJECTED**, then **`10.25` points** | **`10.0%` of the selected leg's first price** | Recorded three ways. Higher-quality copies made both entry blocks legible: `102.85 × 1.10 → 113.1` and `379.0 × 1.10 → 416.9`, both printed to one decimal. No single *points* value fits both (needs 10.25 and 37.90); `+10.25` matches the lower-premium session to within 0.04, which is why the points reading survived one session. |
 
 One gap also **closed**: a put-side entry, previously `UNRESOLVED`, is now
 observed — the Upstox notification reports `Order for 80/80 was traded at the
 price of Rs. 340.10`, against the ~337 put rather than the ~491 call.
 
-None of the three was a misreading — every number was read correctly. The
-inferences drawn from them were over-general: rules declared from two or four
-samples that happened to agree, or that happened to exercise different code
-paths. That is worth stating plainly, because it is the same criticism this
-report makes of the strategy's own track record, and it applies to my analysis as
-readily as to its.
+Two of the three were over-general inferences from samples that happened to
+agree; the third (`10.25` points) was a genuine misreading of `10.0%` at low
+resolution, made credible by an arithmetic coincidence that only breaks at a
+higher premium.
+
+Both failure modes are the same criticism this report makes of the strategy's own
+track record — too few samples, too much confidence — and it applies to the
+analysis as readily as to the strategy. The practical lesson: an identity that
+holds at one price level proves very little. It took a session at four times the
+premium to separate `+10.25` from `×1.10`.
 
 ## What is still not done
 
-**No walk-forward or deflated-Sharpe evaluation.** Three sessions with a
-decodable outcome, all winners, all chosen by whoever decided what to record. On
-a sample of three with selection bias, an expectancy claim is not available at
-any confidence.
+**No walk-forward or deflated-Sharpe evaluation.** Every session with a decodable
+outcome was a winner, and all were chosen by whoever decided what to record. On a
+sample this small with selection bias, an expectancy claim is not available at any
+confidence.
+
+**Two items remain genuinely open**, both by absence of evidence rather than
+illegibility: no recording shows a minimum-difference threshold (A231/S3) or any
+stop-loss or time-stop (A231/X7). Absence cannot be upgraded by better video;
+only source access would settle them.
 
 **V1's entry block is now fully decoded** — from a 720×1280 copy of the same
 recording, not from image processing. Strike 77500, option CE, first tick 102.85,
 buffer 10.25, order price 113.10, order id 260820000004685. Every field the
 supplied specification asserted about that session turned out to be correct.
 
-The remaining unresolved item is the **2026-08-21 strike**, which its Upstox
-notification truncates (`SENSEX26AUG7…`).
+**The 2026-08-21 entry block is also decoded**: `Strike : 77700`,
+`Option Type : PE`, `Premium : 379.0`, `Buffer : 10.0%`, `Order Price : 416.9`,
+`Order ID : 260821000004158`. Its Upstox notification truncates the symbol, but
+the terminal prints the strike outright.
+
+**V1's entry fill is no longer inferred.** The Upstox notification states it:
+`Order for 100/100 was traded at the price of Rs. 113.10`. It had been derived
+from `126.60 − 1350.00/100`; the broker now confirms the same number directly.
 
 **The live path is now partly built.** Broker-side protection exists
 (`protection_mode` parks a sell at the target on the exchange, so a dead process

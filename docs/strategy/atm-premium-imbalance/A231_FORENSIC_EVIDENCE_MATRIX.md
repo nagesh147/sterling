@@ -79,7 +79,9 @@ non-authoritative.
 | S1 | Cheaper leg is bought. In V17 `CE LTP 167.50 < PE LTP 214.85` → bought **CE** | V17 `Premium Difference : 47.35` then `Option : CE` | CONFIRMED |
 | S2 | The gate is named `Premium Validated` and fires 0–1 ms after the first tick — no indicator, no bar, no lookback | V17 `[TIMING] First Tick Received 09:15:00.946` → `[TIMING] Premium Validated 09:15:00.946` | CONFIRMED |
 | S3 | No minimum difference threshold is enforced | V17 entered on a 47.35 difference with no threshold line printed | INFERRED (absence of evidence) |
-| S5 | The entry leg is named in the log: `[TIMING] Entry Order Filled (PE)` | V0821 | CONFIRMED |
+| S5 | The entry leg is named in the log: `[TIMING] Entry Order Filled (PE)`, and the `STRIKE SELECTED` block prints `Option Type : PE` | V0821 | CONFIRMED |
+| M11 | V0821's contract is **strike 77700, PE, expiry 2026-08-27** (monthly). The notification truncates the symbol, but the terminal prints the strike outright | V0821 `STRIKE SELECTED` | CONFIRMED (was UNRESOLVED) |
+| M12 | The selection step is timed and logged: `[TIMING] ATM Strike Selected` then `[TIMING] CE/PE Instruments Found`, followed by `CE KEY` / `PE KEY` | V0821 | CONFIRMED |
 | S4 | The rule is symmetric: when the **put** is cheaper it is the put that is bought | V0821: `CE 491.15 > PE 337.15` and the Upstox notification reports `Order for 80/80 was traded at the price of Rs. 340.10` — against the ~337 put, not the ~491 call | CONFIRMED (was UNRESOLVED until 2026-08-21) |
 
 ## Entry — where the supplied spec is wrong
@@ -91,8 +93,9 @@ non-authoritative.
 | E3 | That price is then capped by the instrument's upper circuit | V17 `MPP (Upper Circuit) : 1745.45` → `Calculated Order Price (before cap) : 288.75` → `Order Price : 288.75` | CONFIRMED |
 | E4 | The limit is deliberately far **through** the market (288.75 vs `Best Ask 167.50`, +72%) — it is a fill-guarantee device, not a price target | V17 entry block | CONFIRMED |
 | E9 | The latest build prints an **`OPEN PRICE CHECK (reference only)`** block containing `First Tick Used : 379.0` and `Official Open : 356.7`. It compares the tick the bot used against the exchange's official open — a diagnostic about *data quality*, not a statement that the first tick is unused for pricing | V0821 | CONFIRMED |
-| E10 | V0821's `First Tick Used 379.0` against a **fill** of 340.10 is not a counter-example to the buffer: a marketable buy limit at 389.25 (= 379.0 + 10.25) fills at or below its limit. Order price and fill are different quantities (A231/E6) | V0821 | CONSISTENT |
-| E5 | **`entry_buffer_points = 10.25` is a real, printed parameter.** V1's entry block (legible in the 720×1280 copy) reads `FIRST-TICK ENTRY ATTEMPT 1/3` / `First Tick Price : 102.85` / `Buffer : 10.25` / `Order Price : 113.1` | V1 entry block | CONFIRMED — **this row previously read REJECTED; that was my error** (A232) |
+| E10 | V0821's `Order Price : 416.9` against a **fill** of 340.10 (Upstox notification) is consistent: a marketable buy limit fills at or below its limit. Order price and fill are different quantities (A231/E6) | V0821 | CONFIRMED |
+| E5 | **The entry buffer is `10.0%` of the selected leg's first price**, not a points offset. `102.85 × 1.10 → 113.1` (V1) and `379.0 × 1.10 → 416.9` (V0821), both printed to one decimal. No single *points* value fits both (needs 10.25 and 37.90) | V1 + V0821 entry blocks | CONFIRMED — **this row has read REJECTED and then `10.25 points`; both were wrong** (A232) |
+| E13 | The pricing reference is the **selected** leg, not whichever leg ticked first: `Premium` in `STRIKE SELECTED` equals `First Tick Price` in the entry block (102.85 = the bought CE; 379.0 = the bought PE) | V1 + V0821 | CONFIRMED |
 | E11 | There are **two** entry-price paths, and V17 names its own: *"Using **manual** strike price from strike_prices.txt"*. V17 took the manual path (order 288.75); V1 took the automatic one (order 113.10 = 102.85 + 10.25) | V17 + V1 | CONFIRMED |
 | E12 | V1's strike and option type are printed in a `STRIKE SELECTED` block: `Strike : 77500`, `Option Type : CE`, `Premium : 102.85` — the values the supplied spec asserted | V1 entry block | CONFIRMED (was UNRESOLVED) |
 | E6 | Accounting entry price is the **broker average fill**, never the requested limit | V17 `Average Price : 133.4` = `ENTRY FILLED at 133.4` = `Entry : 133.4` in the summary, while the order price was 288.75 | CONFIRMED |
@@ -146,16 +149,16 @@ non-authoritative.
 | Field | Value | Confidence |
 |-------|-------|------------|
 | Quantity | 100 | CONFIRMED (`Enter Quantity : 100`) |
-| Instruments loaded | 26305 → `SENSEX Options Loaded : 2445` | VERIFIED |
+| Instruments loaded | **26385** → `SENSEX Options Loaded : 2445` | CONFIRMED (corrects an earlier read of 26305) |
 | Best bid / exit order price | 127.1 / 126.6 | CONFIRMED (buffer 0.50 ✓ X3) |
 | Exit fill (`Average Price`) | **126.60** | CONFIRMED |
 | Exit order id | 260820000007450 | CONFIRMED |
-| Entry fill | **113.10** | INFERRED — `126.60 − 1350.00/100`. Triangulated three ways: log exit fill, Upstox `Day P&L 1,350.00` **and** `Overall P&L 1,350.00`, and `Points × qty` |
+| Entry fill | **113.10** | CONFIRMED — the Upstox notification states it: `Order for 100/100 was traded at the price of Rs. 113.10. Order #2608200000046…`. Previously INFERRED from `126.60 − 1350.00/100` |
 | Points / PnL | 13.50 / 1350.00 | CONFIRMED (broker UI) |
 | Post-trade LTP | 107.70 | VERIFIED (Upstox positions row) |
 | Strike / option | **77500 / CE** | CONFIRMED — `STRIKE SELECTED` block |
-| First tick price | **102.85** | CONFIRMED — `First Tick Price : 102.85` |
-| Entry buffer / order price | **10.25 / 113.10** | CONFIRMED — `Buffer : 10.25`, `Order Price : 113.1` |
+| First tick price | **102.85** | CONFIRMED — `First Tick Price : 102.85` (= `Premium`) |
+| Entry buffer / order price | **10.0% / 113.10** | CONFIRMED — `Buffer : 10.0%`, `Order Price : 113.1` |
 | Entry order id | 260820000004685 | CONFIRMED |
 | Instruments loaded | 26385 → 2445 SENSEX options | CONFIRMED (corrects an earlier read of 26305) |
 

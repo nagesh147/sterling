@@ -35,12 +35,12 @@ here rather than a discovered rule. The default, `best_ask + buffer`, expresses
 the *mechanism* that was observed — a limit deliberately through the market so it
 fills like a market order — without hard-coding one morning's numbers.
 
-The written specification's `entry_buffer_points = 10.25` is **correct**, and this
-README previously said otherwise. The 2026-08-20 entry block prints
-`First Tick Price : 102.85`, `Buffer : 10.25`, `Order Price : 113.1` under a
-heading of `FIRST-TICK ENTRY ATTEMPT 1/3`. There are two real entry paths — an
-operator price file, and `first_tick + buffer` — and the two sessions I first
-compared happened to exercise different ones. See A232 for the full correction.
+The written specification's `entry_buffer_points = 10.25` is **close but not the
+rule**. The bot prints `Buffer : 10.0%` and multiplies: `102.85 × 1.10 = 113.1`
+on 2026-08-20 and `379.0 × 1.10 = 416.9` on 2026-08-21. At the lower premium a
+`+10.25` points offset lands within 0.04 of the same answer, which is why the
+points reading survived until a session at four times the premium separated them.
+See A232 — this parameter was recorded three different ways before settling.
 
 ## Parameters
 
@@ -52,7 +52,7 @@ Defaults reproduce the observed baseline. `enabled` is false.
 | Expiry | NEAREST | observed (monthly traded on a non-expiry day) |
 | Strike | nearest listed, ties to lower | observed |
 | Quote mode | COMPATIBILITY | observed behaviour |
-| Entry price | `first_tick + 10.25`, capped at upper circuit (or an operator price file) | observed |
+| Entry price | `first_tick × 1.10` to 1 dp, capped at upper circuit (or an operator price file) | observed |
 | Max entry attempts | 3 | observed |
 | Target | +15.0 points off the fill | observed |
 | Exit | best bid − 0.50 | observed |
@@ -86,7 +86,8 @@ validation but cannot evidence asynchronous tick behaviour.
   chose what to record. That is selection bias, not a result.
 - The latest recording's entry block was not legible; its strike and entry order
   price remain `UNRESOLVED` (A231).
-- The 2026-08-21 session's strike is unresolved (the notification truncates it).
+- Both observed sessions used a 10% buffer; whether that value is configurable
+  in the source system is unknown.
 - Three rules in the contract were corrected by later recordings after earlier
   ones had agreed. Small samples mislead about mechanics, not just profit.
 - The source bot ran on Upstox. Sterling executes through Kite, which does serve

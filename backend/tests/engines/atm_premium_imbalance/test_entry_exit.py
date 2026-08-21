@@ -98,31 +98,63 @@ def test_manual_table_rejects_malformed_lines():
         ManualPriceTable.parse("77600CE 288.75\nbroken line here now\n")
 
 
-def test_first_tick_policy_is_live_allowed_because_it_is_the_observed_path():
-    """It was wrongly classified research-only; the build prints it as a rule."""
+def test_first_tick_percent_is_the_observed_path_and_is_live_allowed():
     ATMPremiumImbalanceConfig(
-        entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
+        entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
         execution_mode="live", quote_mode="EXECUTABLE", quantity=100,
         protection_mode="RESTING_TARGET_LIMIT",
     ).validate()
 
 
-def test_first_tick_plus_buffer_reproduces_the_printed_order_price():
-    """2026-08-20, verbatim:
+@pytest.mark.parametrize(
+    "first_tick,order_price,session",
+    [
+        (102.85, 113.10, "2026-08-20: Buffer 10.0% -> Order Price 113.1"),
+        (379.00, 416.90, "2026-08-21: Buffer 10.0% -> Order Price 416.9"),
+    ],
+)
+def test_first_tick_percent_reproduces_both_printed_order_prices(first_tick, order_price, session):
+    """The only rule that fits both sessions.
 
         FIRST-TICK ENTRY ATTEMPT 1/3
-        First Tick Price : 102.85
-        Buffer           : 10.25
-        Order Price      : 113.1
+        First Tick Price : <ft>
+        Buffer           : 10.0%
+        Order Price      : <ft x 1.10, to one decimal>
+    """
+    cfg = ATMPremiumImbalanceConfig(
+        entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
+    ).validate()
+    priced = price_entry(cfg, inst(strike=77500.0, upper=3000.0),
+                         best_ask=None, first_tick_price=first_tick)
+    assert priced.limit_price == order_price, session
+    assert priced.reference_price == first_tick
+    assert priced.reference_kind == "first_tick"
+
+
+def test_a_points_buffer_cannot_fit_both_sessions():
+    """Why FIRST_TICK_PLUS_BUFFER is research-only.
+
+    102.85 + b = 113.1 needs b = 10.25; 379.0 + b = 416.9 needs b = 37.9.
+    A single points buffer is impossible, so the points variant fits 2026-08-20
+    only by coincidence.
     """
     cfg = ATMPremiumImbalanceConfig(
         entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
     ).validate()
-    priced = price_entry(cfg, inst(strike=77500.0), best_ask=None, first_tick_price=102.85)
-    assert priced.limit_price == 113.10
-    assert priced.reference_price == 102.85
-    assert priced.reference_kind == "first_tick"
-    assert not priced.capped_by_upper_circuit
+    a = price_entry(cfg, inst(strike=77500.0, upper=3000.0), best_ask=None, first_tick_price=102.85)
+    b = price_entry(cfg, inst(strike=77700.0, upper=3000.0), best_ask=None, first_tick_price=379.00)
+    assert a.limit_price == 113.10          # coincidentally right
+    assert b.limit_price != 416.90          # and wrong for the other session
+    assert b.limit_price == 389.25
+
+
+def test_the_points_variant_is_research_only():
+    with pytest.raises(ValueError, match="research-only"):
+        ATMPremiumImbalanceConfig(
+            entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
+            execution_mode="live", quote_mode="EXECUTABLE", quantity=100,
+            protection_mode="RESTING_TARGET_LIMIT",
+        ).validate()
 
 
 def test_live_mode_requires_executable_quotes():
