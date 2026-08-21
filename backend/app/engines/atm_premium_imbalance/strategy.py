@@ -21,7 +21,8 @@ from typing import Literal, Optional
 
 from .config import ATMPremiumImbalanceConfig
 from .entry import ActionKind, EntryEngine, ManualPriceTable, PricedEntry, price_entry
-from .exit import build_exit_event, exit_order_price, should_exit, target_price
+from .exit import (build_exit_event, exit_order_price, should_exit, target_price,
+                   trailing_stop_price)
 from .models import (
     ExitEvent,
     LegQuote,
@@ -99,6 +100,10 @@ class ATMPremiumImbalanceStrategy:
 
     phase: Phase = Phase.IDLE
     trades_taken: int = 0
+    #: Realised P&L booked this session, in rupees. Drives the daily loss limit,
+    #: which is why it accumulates across trades rather than describing the last
+    #: one -- a limit that resets per trade would never stop anything.
+    realised_pnl: float = 0.0
     halt_reason: str = ""
 
     cache: PremiumQuoteCache = field(init=False)
@@ -110,6 +115,10 @@ class ATMPremiumImbalanceStrategy:
     protection: Optional[ProtectionOrder] = None
     _pending_exit_intent: Optional[Intent] = None
     _entry_ts_ms: Optional[int] = None
+    #: Best price seen since entry. Owned here rather than derived in the exit
+    #: policy because it is a fact about this position's history, and a trail
+    #: computed from the latest price instead would never actually trail.
+    _high_water: Optional[float] = None
     _last_now_ms: int = 0
     #: Session open on the exchange clock. Derived from ``cfg.session_start`` for
     #: the day the first tick arrives, so a stale quote can be dated.
@@ -174,6 +183,7 @@ class ATMPremiumImbalanceStrategy:
             risk_authorized=risk_authorized,
             trades_taken=self.trades_taken,
             session_open_ms=self.session_open_ms,
+            realised_pnl=self.realised_pnl,
         )
         if not sig.is_actionable:
             return _NONE
@@ -211,6 +221,18 @@ class ATMPremiumImbalanceStrategy:
                 # Cannot price this attempt (e.g. no ask yet). Stay armed to
                 # entering and wait for the next tick rather than guessing.
                 return Intent(kind="none", reason=f"entry_unpriceable:{exc}")
+            # The money at risk is only knowable here: it is the limit price
+            # times the quantity, and the limit price is decided per attempt.
+            # A bought option can lose all of its premium, so the outlay *is*
+            # the risk -- there is nothing further to subtract.
+            outlay = float(priced.limit_price) * float(self.quantity)
+            cap = float(self.cfg.max_premium_at_risk_inr)
+            if cap > 0 and outlay > cap:
+                self.phase = Phase.HALTED
+                self.halt_reason = (
+                    f"premium_at_risk_exceeded: ₹{outlay:.2f} over the ₹{cap:.2f} ceiling"
+                )
+                return Intent(kind="halt", reason=self.halt_reason)
             return Intent(
                 kind="submit_entry",
                 instrument_id=leg.instrument_id,
@@ -317,6 +339,9 @@ class ATMPremiumImbalanceStrategy:
             self.halt_reason = "filled_without_price"
             return Intent(kind="halt", reason=self.halt_reason)
         self._entry_ts_ms = self._last_now_ms
+        # The fill itself is the first high-water mark: at entry there is no gain
+        # yet, so a trail must not already be in front of the price.
+        self._high_water = float(fill)
         self.trade = replace(
             self.trade,
             entry_price=fill,
@@ -367,12 +392,19 @@ class ATMPremiumImbalanceStrategy:
         if self._entry_ts_ms:
             held = max(0.0, (now_ms - self._entry_ts_ms) / 1000.0)
 
+        # Ratchet the high-water mark before asking, so the trail can only ever
+        # move up. The mark is taken from the traded price, not the bid: a bid
+        # that momentarily widens is not a price the position achieved.
+        price = float(quote.ltp)
+        self._high_water = price if self._high_water is None else max(self._high_water, price)
+
         hit, reason = should_exit(
-            last_price=float(quote.ltp),
+            last_price=price,
             entry_fill=self.trade.entry_price,
             cfg=self.cfg,
             held_seconds=held,
             counter_leg_price=None if counter is None else float(counter.ltp),
+            high_water=self._high_water,
         )
         if not hit:
             return _NONE
@@ -456,6 +488,7 @@ class ATMPremiumImbalanceStrategy:
         self._exit = ev
         self.trade = replace(self.trade, exit=ev, state=PositionState.CLOSED)
         self.trades_taken += 1
+        self.realised_pnl += float(self.trade.pnl or 0.0)
         self.phase = Phase.DONE
         return Intent(kind="complete", reason="protection_filled")
 
@@ -503,16 +536,26 @@ class ATMPremiumImbalanceStrategy:
         )
         self.trade = replace(self.trade, exit=self._exit, state=PositionState.CLOSED)
         self.trades_taken += 1
+        self.realised_pnl += float(self.trade.pnl or 0.0)
         self.phase = Phase.DONE
         return Intent(kind="complete", reason=self._exit.reason)
 
     # ------------------------------------------------------------------ report
 
+    @property
+    def live_stop(self) -> Optional[float]:
+        """The stop price in force right now, or ``None`` if there is no stop."""
+        if self.trade is None or self.trade.entry_price is None:
+            return None
+        peak = self._high_water if self._high_water is not None else self.trade.entry_price
+        return trailing_stop_price(self.trade.entry_price, peak, self.cfg)
+
     def summary(self) -> dict:
         """The observed ``LIVE SELL`` summary block, as data."""
         t = self.trade
         if t is None:
-            return {"phase": self.phase.value, "trades_taken": self.trades_taken}
+            return {"phase": self.phase.value, "trades_taken": self.trades_taken,
+                    "realised_pnl": self.realised_pnl}
         return {
             "phase": self.phase.value,
             "state": t.state.value,
@@ -526,6 +569,10 @@ class ATMPremiumImbalanceStrategy:
             # alone cannot show whether it came from a session price.
             "first_tick_price": t.first_tick_price,
             "target": t.target_price,
+            # Where the stop sits *now*. The operator watching a trailing stop
+            # needs the current level, not the one it started at.
+            "stop": self.live_stop,
+            "high_water": self._high_water,
             "trigger": None if t.exit is None else t.exit.trigger_price,
             "exit_order_price": None if t.exit is None else t.exit.exit_order_price,
             "exit": t.exit_price,
@@ -533,6 +580,7 @@ class ATMPremiumImbalanceStrategy:
             "pnl": t.pnl,
             "slippage_vs_target": None if t.exit is None else t.exit.slippage_vs_target,
             "attempts": len(t.entry_attempts),
+            "realised_pnl": self.realised_pnl,
             "quote_mode": t.quote_mode,
             "protection": None if self.protection is None else {
                 "kind": self.protection.kind, "state": self.protection.state.value,

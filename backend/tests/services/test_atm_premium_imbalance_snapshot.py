@@ -79,7 +79,12 @@ async def test_lots_are_reported_as_the_quantity_they_become(monkeypatch, resolv
     """The board should show what will actually be ordered, not just "2 lots"."""
     _with_lots(monkeypatch, 2)
     out = await svc.snapshot("u1")
-    assert out["sizing"] == {"mode": "LOTS", "lot_size": 20, "quantity": 40}
+    assert out["sizing"]["mode"] == "LOTS"
+    assert out["sizing"]["lot_size"] == 20
+    assert out["sizing"]["quantity"] == 40
+    # And the dearest option this size can afford under the risk ceiling, so the
+    # operator is not told about it for the first time as a halt at the open.
+    assert out["sizing"]["max_affordable_premium"] == 625.0        # 25000 / 40
     assert out["blockers"] == []
 
 

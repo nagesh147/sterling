@@ -60,7 +60,18 @@ FIRST_TICK_SOURCES: frozenset[str] = frozenset({"SESSION_TICK", "OFFICIAL_OPEN"}
 #: is research-only. The observed rule is ``FIRST_TICK_PERCENT``.
 RESEARCH_ONLY_ENTRY_POLICIES: frozenset[str] = frozenset({"FIRST_TICK_PLUS_BUFFER"})
 
-EXIT_POLICIES: frozenset[str] = frozenset({"FIXED_POINT_TARGET", "PREMIUM_CONVERGENCE"})
+EXIT_POLICIES: frozenset[str] = frozenset(
+    {"FIXED_POINT_TARGET", "PREMIUM_CONVERGENCE", "TRAILING_STOP"}
+)
+
+# How every stop and trail distance in this config is expressed. One basis for
+# all of them on purpose: a per-field choice, or a "percent wins over points"
+# precedence rule, is how a config ends up meaning something nobody intended.
+#
+# PERCENT is the safer basis for an option premium. These trade anywhere from
+# ~50 to ~500, so a 15-point stop is a 30% risk on one and a 3% risk on the
+# other -- the same number means two completely different trades.
+STOP_BASES: frozenset[str] = frozenset({"POINTS", "PERCENT"})
 
 #: Where the protective exit lives. NONE = nowhere, i.e. only this process.
 PROTECTION_MODES: frozenset[str] = frozenset({"NONE", "RESTING_TARGET_LIMIT", "GTT"})
@@ -139,7 +150,20 @@ class ATMPremiumImbalanceConfig:
     # bot (which had none); live mode refuses NONE.
     protection_mode: str = "NONE"
     stop_enabled: bool = False
+    stop_basis: str = "POINTS"
     stop_points: float = 0.0
+    stop_percent: float = 0.0
+    # Trailing. A zero trail distance means no trailing, which keeps
+    # FIXED_POINT_TARGET behaving exactly as observed even if a stop is on.
+    trail_points: float = 0.0
+    trail_percent: float = 0.0
+    # Profit required before the trail starts following. 0 = from entry.
+    trail_start_points: float = 0.0
+    trail_start_percent: float = 0.0
+    # Profit at which the stop jumps to the entry fill, so the trade can no
+    # longer lose. 0 = never.
+    breakeven_points: float = 0.0
+    breakeven_percent: float = 0.0
     max_hold_seconds: int = 0
 
     # --- session policy -----------------------------------------------------
@@ -194,7 +218,12 @@ class ATMPremiumImbalanceConfig:
         if start >= end:
             raise ValueError("session_start must be before session_end")
 
-        if self.target_points <= 0:
+        # A target is mandatory for the observed policy -- it *is* the exit. Under
+        # TRAILING_STOP zero is meaningful and is the point: no ceiling, the stop
+        # comes up to meet the price instead.
+        if self.target_points < 0:
+            raise ValueError("target_points cannot be negative")
+        if self.target_points <= 0 and self.exit_policy != "TRAILING_STOP":
             raise ValueError("target_points must be > 0")
         if self.exit_buffer_points < 0:
             raise ValueError("exit_buffer_points cannot be negative")
@@ -217,8 +246,24 @@ class ATMPremiumImbalanceConfig:
         if self.max_ce_pe_skew_ms <= 0:
             raise ValueError("max_ce_pe_skew_ms must be > 0")
 
-        if self.stop_enabled and self.stop_points <= 0:
-            raise ValueError("stop_enabled requires stop_points > 0")
+        if self.stop_basis not in STOP_BASES:
+            raise ValueError(f"stop_basis must be one of {sorted(STOP_BASES)}")
+        for name in ("stop_points", "stop_percent", "trail_points", "trail_percent",
+                     "trail_start_points", "trail_start_percent",
+                     "breakeven_points", "breakeven_percent"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} cannot be negative")
+        if self.stop_percent >= 100.0:
+            raise ValueError("stop_percent must be below 100 — a 100% stop is the premium")
+        if self.stop_enabled and self.stop_distance <= 0:
+            raise ValueError(
+                f"stop_enabled requires a positive stop distance "
+                f"({'stop_percent' if self.stop_basis == 'PERCENT' else 'stop_points'})")
+        if self.exit_policy == "TRAILING_STOP":
+            # Trailing with no floor is not a stop, it is a hope.
+            if not self.stop_enabled or self.stop_distance <= 0:
+                raise ValueError("TRAILING_STOP requires stop_enabled and a positive "
+                                 "stop distance as its initial risk")
         if self.max_hold_seconds < 0:
             raise ValueError("max_hold_seconds cannot be negative")
 
@@ -270,6 +315,44 @@ class ATMPremiumImbalanceConfig:
                     "watching it"
                 )
         return self
+
+    # --- stop / trail distances --------------------------------------------
+    # One basis decides which half of each pair is live, so a distance can never
+    # be ambiguous about its unit. Callers ask for a price, not a number.
+
+    def _distance(self, points: float, percent: float, reference: float) -> float:
+        """A configured distance in rupees, whichever way it was expressed."""
+        if self.stop_basis == "PERCENT":
+            return abs(float(reference)) * (float(percent) / 100.0)
+        return float(points)
+
+    @property
+    def stop_distance(self) -> float:
+        """The initial stop distance in its own unit, for validation messages."""
+        return self.stop_percent if self.stop_basis == "PERCENT" else self.stop_points
+
+    @property
+    def trails(self) -> bool:
+        """Whether a trail is configured at all."""
+        d = self.trail_percent if self.stop_basis == "PERCENT" else self.trail_points
+        return d > 0
+
+    def stop_distance_inr(self, reference: float) -> float:
+        return self._distance(self.stop_points, self.stop_percent, reference)
+
+    def trail_distance_inr(self, reference: float) -> float:
+        return self._distance(self.trail_points, self.trail_percent, reference)
+
+    def trail_start_inr(self, reference: float) -> float:
+        return self._distance(self.trail_start_points, self.trail_start_percent, reference)
+
+    def breakeven_inr(self, reference: float) -> float:
+        return self._distance(self.breakeven_points, self.breakeven_percent, reference)
+
+    @property
+    def breakeven_enabled(self) -> bool:
+        d = self.breakeven_percent if self.stop_basis == "PERCENT" else self.breakeven_points
+        return d > 0
 
     @property
     def size_is_set(self) -> bool:

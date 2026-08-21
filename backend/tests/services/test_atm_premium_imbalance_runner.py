@@ -308,8 +308,10 @@ async def test_a_session_price_prices_off_the_real_open(monkeypatch):
     _pin_clock(monkeypatch, SESSION_OPEN_MS + 1000)
     s = _session(quantity=80); R.register(s)
     s.strategy.cfg = ATMPremiumImbalanceConfig(
+        # 80 x ~392 is above the Rs25,000 default risk ceiling; the recorded size
+        # is the fixture, so the ceiling is stated rather than the trade shrunk.
         enabled=True, quantity=80, entry_price_policy="FIRST_TICK_PERCENT",
-        entry_through_pct=0.10).validate()
+        entry_through_pct=0.10, max_premium_at_risk_inr=40000.0).validate()
     b = FakeBroker(entry_fill=340.10, exit_fill=400.0)
     traded = SESSION_OPEN + timedelta(milliseconds=900)
     await R.on_ticks("u1", [

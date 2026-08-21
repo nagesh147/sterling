@@ -18,6 +18,7 @@ from typing import Any, Optional
 from app.core.logging import get_logger
 from app.engines.atm_premium_imbalance import (
     ATMPremiumImbalanceConfig,
+    q2,
     InstrumentRef,
     OptionPairRef,
     STRATEGY_ID,
@@ -225,10 +226,20 @@ async def snapshot(uid: str) -> dict:
         # per session. Report it here so the board shows it before arming, not
         # after the entry fails. Same function arm() uses, so they cannot differ.
         lot = int(pair.ce.lot_size or 0)
+        qty = cfg.effective_quantity(lot) if cfg.size_is_set else 0
         out["sizing"] = {
             "mode": cfg.sizing_mode,
             "lot_size": lot,
-            "quantity": cfg.effective_quantity(lot) if cfg.size_is_set else 0,
+            "quantity": qty,
+            "max_premium_at_risk_inr": cfg.max_premium_at_risk_inr,
+            # The premium ceiling divided by the size: the dearest option this
+            # configuration can actually buy. Shown because the alternative is
+            # discovering it as a halt at the open, and the entry happens
+            # milliseconds after the bell -- too late to change anything.
+            "max_affordable_premium": (
+                q2(cfg.max_premium_at_risk_inr / qty)
+                if qty > 0 and cfg.max_premium_at_risk_inr > 0 else None
+            ),
         }
         blocker = cfg.sizing_blocker(lot) if cfg.size_is_set else None
         if blocker:

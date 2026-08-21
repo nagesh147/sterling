@@ -27,6 +27,7 @@ def evaluate(
     risk_authorized: bool = True,
     trades_taken: int = 0,
     session_open_ms: Optional[int] = None,
+    realised_pnl: float = 0.0,
 ) -> PremiumSignal:
     """Decide from one CE/PE view.
 
@@ -48,6 +49,11 @@ def evaluate(
         return _no(view, "position_open")
     if trades_taken >= cfg.max_trades_per_session:
         return _no(view, "session_trade_limit_reached")
+    # A loss limit that only stops the *next* day is not a loss limit. This is
+    # checked before any quote arithmetic so a breached limit cannot be argued
+    # with by a good-looking price.
+    if cfg.daily_loss_limit_inr > 0 and realised_pnl <= -abs(cfg.daily_loss_limit_inr):
+        return _no(view, "daily_loss_limit_reached")
 
     if view.ce_price <= 0 or view.pe_price <= 0:
         return _no(view, "invalid_quote")

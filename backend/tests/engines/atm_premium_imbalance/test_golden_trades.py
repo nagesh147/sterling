@@ -352,7 +352,10 @@ def test_2026_08_21_put_side_trade():
     """
     pair = make_pair(77700.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
     cfg = ATMPremiumImbalanceConfig(
-        enabled=True, quantity=80, expiry_policy="NEAREST",
+        # The recorded trade cost ~Rs31,400 (80 x ~392), above the Rs25,000
+        # default ceiling. The recorded size is a fact, so the ceiling is raised
+        # here rather than the trade being reshaped to fit our default.
+        enabled=True, quantity=80, expiry_policy="NEAREST", max_premium_at_risk_inr=40000.0,
         entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
     ).validate()
     strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=80, trade_id="v0821")
@@ -387,7 +390,8 @@ def test_put_side_conformance_marks_the_unknown_fields_unverified():
     """The 2026-08-21 strike and exit were not legible; they must not be faked."""
     from app.engines.atm_premium_imbalance.conformance import build_report
     pair = make_pair(81000.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
-    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80, expiry_policy="NEAREST").validate()
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80, expiry_policy="NEAREST",
+                                    max_premium_at_risk_inr=40000.0).validate()
     strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=80, trade_id="v0821")
     broker = ScriptedBroker(entry_fill=340.10, exit_fill=356.00)
     drive(strategy, broker, [
