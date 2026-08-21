@@ -119,6 +119,30 @@ class PremiumQuoteCache:
         """
         return self._first_option_tick
 
+    def first_session_price_for(self, option_type: OptionType, session_open_ms: int,
+                                *, require_proof: bool = False) -> Optional[float]:
+        """First price for one leg that is not a previous session's.
+
+        Walks the leg's history in arrival order and skips any quote whose trade
+        is *proven* to predate the session open. ``require_proof`` decides how an
+        undatable quote is treated -- rejected when positive evidence is demanded
+        (live), accepted otherwise (paper and replay, where reproducing a feed
+        that carries no trade stamps is legitimate).
+
+        The same three-way policy is applied by the signal gate, so a quote can
+        never be good enough to trade on but not good enough to price from, or
+        the reverse.
+        """
+        hist = self._ce_hist if option_type == "CE" else self._pe_hist
+        for q in hist:
+            verdict = q.is_session_origin(session_open_ms)
+            if verdict is True:
+                return float(q.ltp)
+            if verdict is None and not require_proof:
+                return float(q.ltp)
+            # verdict is False -> proven stale, skip it entirely
+        return None
+
     def first_price_for(self, option_type: OptionType) -> Optional[float]:
         """The first price ever seen for one leg.
 
@@ -130,6 +154,13 @@ class PremiumQuoteCache:
         """
         q = self._first_by_leg.get(option_type)
         return None if q is None else float(q.ltp)
+
+    def official_open_for(self, option_type: OptionType) -> Optional[float]:
+        """The exchange's published open for one leg, if the feed has sent it."""
+        q = self._ce if option_type == "CE" else self._pe
+        if q is None or q.official_open is None or q.official_open <= 0:
+            return None
+        return float(q.official_open)
 
     def both_legs_present(self) -> bool:
         return self._ce is not None and self._pe is not None
@@ -164,6 +195,10 @@ class PremiumQuoteCache:
             pe_age_ms=pe.age_ms(now_ms),
             ce_sequence=ce.sequence,
             pe_sequence=pe.sequence,
+            ce_last_trade_ts_ms=ce.last_trade_ts_ms,
+            pe_last_trade_ts_ms=pe.last_trade_ts_ms,
+            ce_official_open=ce.official_open,
+            pe_official_open=pe.official_open,
         )
 
     def _synchronized_view(self, now_ms: int, max_skew_ms: int) -> Optional[PremiumPairView]:
@@ -197,6 +232,10 @@ class PremiumQuoteCache:
             pe_age_ms=pe.age_ms(now_ms),
             ce_sequence=ce.sequence,
             pe_sequence=pe.sequence,
+            ce_last_trade_ts_ms=ce.last_trade_ts_ms,
+            pe_last_trade_ts_ms=pe.last_trade_ts_ms,
+            ce_official_open=ce.official_open,
+            pe_official_open=pe.official_open,
         )
 
     def _executable_view(self, now_ms: int) -> Optional[PremiumPairView]:
@@ -222,6 +261,10 @@ class PremiumQuoteCache:
             pe_age_ms=pe.age_ms(now_ms),
             ce_sequence=ce.sequence,
             pe_sequence=pe.sequence,
+            ce_last_trade_ts_ms=ce.last_trade_ts_ms,
+            pe_last_trade_ts_ms=pe.last_trade_ts_ms,
+            ce_official_open=ce.official_open,
+            pe_official_open=pe.official_open,
         )
 
     def all_views(self, now_ms: int, *, max_skew_ms: int = 1000) -> dict[str, Optional[PremiumPairView]]:

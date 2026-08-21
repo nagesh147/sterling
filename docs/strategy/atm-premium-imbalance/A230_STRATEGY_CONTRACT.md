@@ -88,6 +88,31 @@ Both `MANUAL_FILE` and `FIRST_TICK_PERCENT` are real observed paths — V17 took
 the first ("Using **manual** strike price…"), V1 and V0821 the second
 (A231/E11).
 
+### Session-origin invariant
+
+> A quote may only be signalled on, or priced from, if its **trade** is stamped
+> at or after the session open.
+
+Three-valued, and applied identically by the signal gate and the pricing path so
+a quote can never be tradable but not priceable:
+
+| Evidence | Paper / replay | Live |
+|---|---|---|
+| trade stamped at/after the open | use | use |
+| trade stamped before the open | **refuse** | **refuse** |
+| no trade stamp at all | use | **refuse** |
+
+Only `last_trade_time` counts. `exchange_timestamp` is *not* a fallback: it stamps
+when the exchange sent the packet, not when the price traded, and a carried-over
+last-traded price arrives inside a packet with a perfectly current exchange
+timestamp. Receipt age cannot see this class of fault either — a day-old price
+received a millisecond ago has an age of zero.
+
+This exists because the source bot had no such gate. On 2026-08-21 it priced from
+`First Tick Used : 379.0` when the exchange opened at 356.70, and its ×1.10 rule
+turned that into a 416.90 order (A231/E14). `require_session_origin_tick` cannot
+be disabled in live mode.
+
 ### Accounting invariant
 
 > The entry price used for the target, for P&L and for every report is the

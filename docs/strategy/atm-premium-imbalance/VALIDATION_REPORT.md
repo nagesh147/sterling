@@ -150,6 +150,39 @@ opinion, it is "take whatever the book has". That is how the fill landed at
 the strategy never controlled, which is a materially weaker claim than "enter at
 the open and take 15 points".
 
+### The same fault was present in this implementation, and is now closed
+
+Two defects, both found by reading our own code rather than inferred:
+
+1. **The runner discarded the trade clock.** `_tick_to_quote` tested
+   `isinstance(ts, datetime)`, but Kite's binary ticker emits `last_trade_time`
+   and `exchange_timestamp` as u32 **epoch seconds**. The check therefore always
+   failed and the receipt time was written into the exchange stamp — destroying
+   the only field that can date a price, and silently breaking SYNCHRONIZED
+   mode's skew calculation as well.
+2. **Nothing gated on session origin.** The freshness gate measured *receipt*
+   age, which a stale-content tick passes trivially: a day-old price received a
+   millisecond ago has an age of zero.
+
+The fix is the session-origin invariant in A230 §5, applied identically by the
+signal gate and the pricing path. `last_trade_time` alone is consulted — using
+`exchange_timestamp` as a fallback would have masked the fault, since a
+carried-over price arrives in a packet with a current exchange timestamp. That
+mistake was made and then removed during this work; the reasoning is recorded in
+`LegQuote.is_session_origin`.
+
+Proven end-to-end in `tests/services/test_atm_premium_imbalance_runner.py`, using
+the real prices from this session:
+
+| Feed | Our behaviour |
+|---|---|
+| CE 500.00 / PE 379.00, both stamped 2026-08-20 15:33 | **no order placed** |
+| CE 500.00 / PE 356.70, stamped 2026-08-21 09:15:00.9 | BUY at **392.40** |
+
+and in `tests/engines/atm_premium_imbalance/test_stale_tick.py`, which also keeps
+the defective behaviour reachable (`require_session_origin_tick=False`) so the
+recordings stay reproducible — and asserts that live mode refuses that setting.
+
 Also confirmed from the real index, for the canonical session: SENSEX opened
 2026-08-20 at **77468.45**, whose nearest listed strike is **77500** — the strike
 video 1 printed (31.55 away, against 68.45 for 77400).

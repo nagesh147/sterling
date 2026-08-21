@@ -43,6 +43,12 @@ ENTRY_PRICE_POLICIES: frozenset[str] = frozenset(
 OBSERVED_ENTRY_POLICY = "FIRST_TICK_PERCENT"
 OBSERVED_ENTRY_THROUGH_PCT = 0.10
 
+#: Where the "first tick" reference comes from.
+#:
+#: ``SESSION_TICK``   the first tick proven to have traded in this session.
+#: ``OFFICIAL_OPEN``  the exchange's published open, which needs no dating.
+FIRST_TICK_SOURCES: frozenset[str] = frozenset({"SESSION_TICK", "OFFICIAL_OPEN"})
+
 #: Policies we refuse to run against real money.
 #:
 #: ``FIRST_TICK_PLUS_BUFFER`` is a *points* variant that no observed session
@@ -105,6 +111,11 @@ class ATMPremiumImbalanceConfig:
     # faithful reproduction of the automatic path is FIRST_TICK_PERCENT with
     # entry_through_pct = 0.10. See A232.
     entry_price_policy: str = "MARKETABLE_ASK"
+    #: Refuse to signal or price from a quote whose trade is stamped before the
+    #: session open. The recorded bot had no such gate and priced an entry from a
+    #: day-old price; see A231/E14. Cannot be disabled in live mode.
+    require_session_origin_tick: bool = True
+    first_tick_source: str = "SESSION_TICK"
     entry_buffer_points: float = 0.50
     entry_through_pct: float = 0.0
     manual_price_file: str = ""
@@ -146,6 +157,8 @@ class ATMPremiumImbalanceConfig:
             raise ValueError(f"quote_mode must be one of {sorted(QUOTE_MODES)}")
         if self.signal_mode not in SIGNAL_MODES:
             raise ValueError(f"signal_mode must be one of {sorted(SIGNAL_MODES)}")
+        if self.first_tick_source not in FIRST_TICK_SOURCES:
+            raise ValueError(f"first_tick_source must be one of {sorted(FIRST_TICK_SOURCES)}")
         if self.entry_price_policy not in ENTRY_PRICE_POLICIES:
             raise ValueError(f"entry_price_policy must be one of {sorted(ENTRY_PRICE_POLICIES)}")
         if self.protection_mode not in PROTECTION_MODES:
@@ -226,6 +239,12 @@ class ATMPremiumImbalanceConfig:
                 )
             if self.quantity <= 0:
                 raise ValueError("live mode requires an explicit positive quantity")
+            if not self.require_session_origin_tick:
+                raise ValueError(
+                    "live mode requires require_session_origin_tick: pricing a real order "
+                    "from a quote that cannot be proved to belong to this session is how "
+                    "the recorded bot sent 416.90 into a market that opened at 356.70"
+                )
             if self.protection_mode == "NONE":
                 raise ValueError(
                     "live mode requires broker-side protection: with protection_mode=NONE "

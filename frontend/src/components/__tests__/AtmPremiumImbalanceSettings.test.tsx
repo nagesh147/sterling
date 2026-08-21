@@ -32,6 +32,8 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   minimum_difference: 0,
   minimum_difference_percent: 0,
   entry_price_policy: 'MARKETABLE_ASK',
+  require_session_origin_tick: true,
+  first_tick_source: 'SESSION_TICK',
   entry_buffer_points: 0.5,
   entry_through_pct: 0,
   manual_price_file: '',

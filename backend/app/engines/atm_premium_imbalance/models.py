@@ -136,9 +136,52 @@ class LegQuote:
     sequence: int = 0
     source: str = ""
 
+    #: When the trade behind ``ltp`` actually happened, on the exchange clock.
+    #: This -- not receipt time -- is what proves an LTP belongs to this session.
+    last_trade_ts_ms: Optional[int] = None
+    #: Today's official open, and the previous session's close, as the feed
+    #: reports them (Kite's ``ohlc.open`` / ``ohlc.close``).
+    official_open: Optional[float] = None
+    prev_close: Optional[float] = None
+    #: Today's cumulative traded volume. Zero before the session's first trade.
+    volume_traded: int = 0
+
     def age_ms(self, now_ms: int) -> int:
-        """Age against our own receipt stamp, floored at zero."""
+        """Age against our own receipt stamp, floored at zero.
+
+        Deliberately *not* a staleness test for content. A tick carrying
+        yesterday's last-traded price and received a millisecond ago has an age
+        of zero: receipt freshness and content freshness are different
+        properties, and conflating them is what let a day-old price be used as a
+        session opening price. See :meth:`is_session_origin`.
+        """
         return max(0, int(now_ms) - int(self.received_ts_ms))
+
+    def is_session_origin(self, session_open_ms: int) -> Optional[bool]:
+        """Did the trade behind this price happen in *this* session?
+
+        Three-valued on purpose:
+
+        * ``True``  -- the trade is stamped at or after the session open.
+        * ``False`` -- the trade is stamped before it. Proven stale.
+        * ``None``  -- no trade stamp available, so unknowable. Absence of
+          evidence is not evidence of freshness, so this must not collapse to
+          ``True``; the caller decides how much it needs to know (live refuses,
+          paper may proceed).
+
+        Only ``last_trade_ts_ms`` is consulted. ``exchange_ts_ms`` is
+        deliberately *not* used as a fallback: it stamps when the exchange sent
+        the packet, not when the price traded, and a carried-over last-traded
+        price arrives in a packet with a perfectly current exchange timestamp.
+        Falling back to it would mask precisely the fault this method exists to
+        catch.
+
+        Kite supplies ``last_trade_time`` only in FULL mode, which is why the
+        runner subscribes in that mode and why live refuses undatable quotes.
+        """
+        if self.last_trade_ts_ms is None:
+            return None
+        return int(self.last_trade_ts_ms) >= int(session_open_ms)
 
     def executable_buy_price(self) -> Optional[float]:
         """Ask if we have one. ``None`` means 'not executable', not 'use LTP'."""
@@ -161,6 +204,20 @@ class PremiumPairView:
     pe_age_ms: int = 0
     ce_sequence: int = 0
     pe_sequence: int = 0
+    #: Carried through so the signal gate can date each leg without the cache
+    #: needing to know where a session boundary is.
+    ce_last_trade_ts_ms: Optional[int] = None
+    pe_last_trade_ts_ms: Optional[int] = None
+    ce_official_open: Optional[float] = None
+    pe_official_open: Optional[float] = None
+
+    def session_origin(self, session_open_ms: int) -> tuple[Optional[bool], Optional[bool]]:
+        """``(ce, pe)`` session-origin verdicts, each True / False / None."""
+        def verdict(stamp: Optional[int]) -> Optional[bool]:
+            # Trade time only -- see LegQuote.is_session_origin for why the
+            # exchange packet timestamp is not a substitute.
+            return None if stamp is None else int(stamp) >= int(session_open_ms)
+        return verdict(self.ce_last_trade_ts_ms), verdict(self.pe_last_trade_ts_ms)
 
     @property
     def difference(self) -> float:

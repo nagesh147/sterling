@@ -6,6 +6,7 @@ import {
   type EntryPricePolicy,
   type ExitPolicy,
   type ExpiryPolicy,
+  type FirstTickSource,
   type ProtectionMode,
   type QuoteMode,
 } from '../hooks/useAtmPremiumImbalance';
@@ -55,6 +56,11 @@ const EXPIRY_OPTIONS: Array<{ value: ExpiryPolicy; label: string; hint: string }
   { value: 'NEAREST', label: 'Nearest', hint: 'Soonest listed expiry, today included.' },
   { value: 'NEXT', label: 'Next', hint: 'Soonest expiry strictly after today.' },
   { value: 'EXPLICIT', label: 'Explicit', hint: 'A named expiry. Must be listed.' },
+];
+
+const FIRST_TICK_SOURCE_OPTIONS: Array<{ value: FirstTickSource; label: string; hint: string }> = [
+  { value: 'SESSION_TICK', label: 'First session tick', hint: 'The first tick whose trade is stamped inside this session. What the observed bot meant to use.' },
+  { value: 'OFFICIAL_OPEN', label: 'Exchange open', hint: "The exchange's own published open. Needs no dating, so a carried-over price can never be mistaken for it." },
 ];
 
 const PROTECTION_OPTIONS: Array<{ value: ProtectionMode; label: string; hint: string }> = [
@@ -297,6 +303,26 @@ export function AtmPremiumImbalanceSettings() {
                 background: 'transparent', color: TEXT, border: 'none', outline: 'none',
                 font: 'inherit', width: 180, textAlign: 'right',
               }}
+            />
+          </Field>
+        )}
+        <Field
+          label="Reject stale quotes"
+          hint="Refuse to signal or price from a quote whose trade is stamped before the session open. The observed bot priced an entry from a day-old price; live cannot disable this."
+        >
+          <Switch
+            checked={cfg.require_session_origin_tick}
+            label="Reject stale quotes"
+            onChange={() => patch({ require_session_origin_tick: !cfg.require_session_origin_tick })}
+          />
+        </Field>
+        {(cfg.entry_price_policy === 'FIRST_TICK_PERCENT'
+          || cfg.entry_price_policy === 'FIRST_TICK_PLUS_BUFFER') && (
+          <Field label="Price reference" hint="Which session price the entry limit is derived from." wide>
+            <ChoiceRow
+              value={cfg.first_tick_source}
+              options={FIRST_TICK_SOURCE_OPTIONS}
+              onChange={(first_tick_source) => patch({ first_tick_source })}
             />
           </Field>
         )}

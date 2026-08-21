@@ -396,6 +396,8 @@ class ATMPremiumImbalanceConfigRequest(BaseModel):
     minimum_difference: float | None = None
     minimum_difference_percent: float | None = None
     entry_price_policy: str | None = None
+    require_session_origin_tick: bool | None = None
+    first_tick_source: str | None = None
     entry_buffer_points: float | None = None
     entry_through_pct: float | None = None
     manual_price_file: str | None = None
@@ -426,9 +428,9 @@ async def get_atm_premium_imbalance_config() -> dict:
     is a UI that claims backend behaviour the backend does not honour.
     """
     from app.engines.atm_premium_imbalance.config import (
-        ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, PROTECTION_MODES,
-        QUOTE_MODES, RESEARCH_ONLY_ENTRY_POLICIES, RESEARCH_ONLY_EXIT_POLICIES,
-        STRIKE_POLICIES, ATMPremiumImbalanceConfig,
+        ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, FIRST_TICK_SOURCES,
+        PROTECTION_MODES, QUOTE_MODES, RESEARCH_ONLY_ENTRY_POLICIES,
+        RESEARCH_ONLY_EXIT_POLICIES, STRIKE_POLICIES, ATMPremiumImbalanceConfig,
     )
     from app.services.atm_premium_imbalance import descriptor, get_config
     cfg = get_config()
@@ -443,6 +445,7 @@ async def get_atm_premium_imbalance_config() -> dict:
             "entry_price_policy": sorted(ENTRY_PRICE_POLICIES),
             "exit_policy": sorted(EXIT_POLICIES),
             "protection_mode": sorted(PROTECTION_MODES),
+            "first_tick_source": sorted(FIRST_TICK_SOURCES),
             "data_source": ["kite", "truedata"],
             "execution_mode": ["paper", "live"],
         },
@@ -455,7 +458,8 @@ async def get_atm_premium_imbalance_config() -> dict:
         # Live refuses NONE: a crash while long would leave the position with
         # nothing watching it. Published so the UI can say so up front.
         "live_requires": {"protection_mode": sorted(PROTECTION_MODES - {"NONE"}),
-                          "quote_mode": ["EXECUTABLE"]},
+                          "quote_mode": ["EXECUTABLE"],
+                          "require_session_origin_tick": [True]},
     }
 
 

@@ -38,6 +38,7 @@ from .protection import (
     ProtectionOrder, ProtectionState, plan_protection, requires_cancel_before_exit,
 )
 from .quote_cache import PremiumQuoteCache
+from .session import session_open_ms_for
 from .signal import evaluate
 
 
@@ -110,6 +111,9 @@ class ATMPremiumImbalanceStrategy:
     _pending_exit_intent: Optional[Intent] = None
     _entry_ts_ms: Optional[int] = None
     _last_now_ms: int = 0
+    #: Session open on the exchange clock. Derived from ``cfg.session_start`` for
+    #: the day the first tick arrives, so a stale quote can be dated.
+    session_open_ms: Optional[int] = None
 
     def __post_init__(self) -> None:
         self.cfg.validate()
@@ -138,6 +142,8 @@ class ATMPremiumImbalanceStrategy:
         must never act on another strike's tick.
         """
         self._last_now_ms = int(now_ms)
+        if self.session_open_ms is None:
+            self.session_open_ms = session_open_ms_for(now_ms, self.cfg.session_start)
         if self.cache.on_option_tick(quote) is None:
             return _NONE
         if self.phase in (Phase.DONE, Phase.HALTED):
@@ -167,6 +173,7 @@ class ATMPremiumImbalanceStrategy:
             flat=True,
             risk_authorized=risk_authorized,
             trades_taken=self.trades_taken,
+            session_open_ms=self.session_open_ms,
         )
         if not sig.is_actionable:
             return _NONE
@@ -183,7 +190,7 @@ class ATMPremiumImbalanceStrategy:
             quantity=self.quantity,
             state=PositionState.ENTRY_PENDING,
             first_tick_price=(lambda v: None if v is None else q2(v))(
-                self.cache.first_price_for(sig.option_type)  # type: ignore[arg-type]
+                self._pricing_reference(sig.option_type)  # type: ignore[arg-type]
             ),
             signal_difference=sig.difference,
             quote_mode=self.cfg.quote_mode,  # type: ignore[arg-type]
@@ -239,10 +246,26 @@ class ATMPremiumImbalanceStrategy:
             best_ask=None if quote is None else quote.executable_buy_price(),
             last_price=None if quote is None else quote.ltp,
             # The SELECTED leg's first price, which is what the source bot prints
-            # as both `Premium` and `First Tick Price`.
-            first_tick_price=self.cache.first_price_for(leg.option_type),
+            # as both `Premium` and `First Tick Price` -- but only counting ticks
+            # proven to belong to this session when the gate is on, so a
+            # carried-over price cannot become an opening price.
+            first_tick_price=self._pricing_reference(leg.option_type),
+            official_open=self.cache.official_open_for(leg.option_type),
             manual_table=self.manual_table,
         )
+
+    def _pricing_reference(self, option_type) -> Optional[float]:
+        """The first price this leg may be priced from.
+
+        Mirrors the signal gate exactly: a proven previous-session price is never
+        used; an undatable one is used only outside live mode.
+        """
+        if self.cfg.require_session_origin_tick and self.session_open_ms is not None:
+            return self.cache.first_session_price_for(
+                option_type, self.session_open_ms,
+                require_proof=self.cfg.execution_mode == "live",
+            )
+        return self.cache.first_price_for(option_type)
 
     def record_entry_submit(
         self, priced: PricedEntry, *, order_id: Optional[str],

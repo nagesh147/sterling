@@ -26,6 +26,7 @@ def evaluate(
     flat: bool = True,
     risk_authorized: bool = True,
     trades_taken: int = 0,
+    session_open_ms: Optional[int] = None,
 ) -> PremiumSignal:
     """Decide from one CE/PE view.
 
@@ -54,6 +55,17 @@ def evaluate(
         return _no(view, "stale_quote")
     if view.mode == "SYNCHRONIZED" and view.skew_ms > cfg.max_ce_pe_skew_ms:
         return _no(view, "ce_pe_skew_exceeded")
+
+    # Content freshness, which the receipt-age gate above cannot see. A quote
+    # carrying a previous session's last-traded price arrives instantly and so is
+    # perfectly "fresh" by age; only its trade stamp gives it away.
+    if cfg.require_session_origin_tick and session_open_ms is not None:
+        ce_ok, pe_ok = view.session_origin(session_open_ms)
+        if ce_ok is False or pe_ok is False:
+            return _no(view, "stale_session_quote")
+        if (ce_ok is None or pe_ok is None) and cfg.execution_mode == "live":
+            # Undatable is not tradable with real money.
+            return _no(view, "undatable_quote")
 
     leg = view.cheaper_leg
     if leg is None:

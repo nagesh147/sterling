@@ -56,7 +56,9 @@ exists to *reproduce*, not to trade.
 |---|---|
 | Snapshot shows `instrument resolution failed` | Check an active Kite account exists and is connected. The BFO dump is cached 15 min; a fresh session may need one refresh. |
 | `no contract expires today` | Expected under `SAME_DAY` on a non-expiry day. It refuses rather than sliding to the next expiry. Change the policy deliberately if that is what you want. |
-| Strategy armed but never signals | Read `blockers`, then the signal reason: `stale_quote`, `equal_premiums`, `no_quote_pair`, `below_minimum_difference`. |
+| Strategy armed but never signals | Read `blockers`, then the signal reason: `stale_quote`, `stale_session_quote`, `undatable_quote`, `equal_premiums`, `no_quote_pair`, `below_minimum_difference`. |
+| Reason `stale_session_quote` | A leg's last trade is stamped **before** today's open — a carried-over price. Correct refusal: this is the fault that made the observed bot price 416.90 into a 356.70 market. It clears itself on the first real trade. |
+| Reason `undatable_quote` | The feed sent no `last_trade_time`, which only happens outside FULL mode. Live refuses to price off a quote it cannot date. Check the subscription mode. |
 | `EXECUTABLE` mode never produces a view | One leg has no ask. There is no LTP fallback by design. |
 | Trade state `reconciliation_required` | An order's outcome is genuinely unknown. **Do not restart the strategy.** Reconcile the broker's order book and positions by hand first; the state machine is refusing to guess. |
 | `halt: protection_cancel_failed` | The resting protective sell could not be cancelled, so the strategy refused to send a second sell. Cancel it by hand, then check the position. Two live sells against one long option is a short position. |

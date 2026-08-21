@@ -80,21 +80,52 @@ class Session:
         return None
 
 
+def _epoch_ms(value: Any) -> Optional[int]:
+    """Normalise a Kite timestamp to epoch milliseconds.
+
+    Kite's binary ticker emits ``last_trade_time`` and ``exchange_timestamp`` as
+    u32 **epoch seconds** (see ``exchanges/kite/ticker.parse_packet``), while the
+    REST/pykiteconnect paths hand back ``datetime``. Both are accepted, and a
+    value already in milliseconds is passed through: epoch seconds are ~1.8e9 and
+    epoch milliseconds ~1.8e12, so 1e11 separates them unambiguously for any date
+    this software will see.
+
+    Returning ``None`` for a missing or zero stamp is deliberate. The previous
+    implementation substituted the receipt time here, which silently destroyed the
+    only evidence that could date a price -- and so let a previous session's
+    last-traded price be used as an opening price.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return int(value.timestamp() * 1000)
+    try:
+        raw = float(value)
+    except (TypeError, ValueError):
+        return None
+    if raw <= 0:
+        return None
+    return int(raw if raw > 1e11 else raw * 1000)
+
+
 def _tick_to_quote(instrument_id: str, tick: dict, now_ms: int) -> LegQuote:
-    """Normalise a Kite tick, keeping both timestamps and the depth top.
+    """Normalise a Kite tick, preserving everything needed to date the price.
 
     Depth is read from the L1 book rather than synthesised from LTP: the entry
-    prices off the ask and the exit off the bid, and inventing them from the
-    last trade would silently change both.
+    prices off the ask and the exit off the bid, and inventing them from the last
+    trade would silently change both.
     """
     depth = (tick.get("depth") or {}) if isinstance(tick.get("depth"), dict) else {}
     buy = (depth.get("buy") or [{}])[0] if depth.get("buy") else {}
     sell = (depth.get("sell") or [{}])[0] if depth.get("sell") else {}
-    ex_ts = tick.get("exchange_timestamp") or tick.get("last_trade_time")
-    if isinstance(ex_ts, datetime):
-        ex_ms = int(ex_ts.timestamp() * 1000)
-    else:
-        ex_ms = now_ms
+    ohlc = tick.get("ohlc") if isinstance(tick.get("ohlc"), dict) else {}
+
+    last_trade_ms = _epoch_ms(tick.get("last_trade_time"))
+    exchange_ms = _epoch_ms(tick.get("exchange_timestamp"))
+
+    official_open = float(ohlc.get("open") or 0.0) or None
+    prev_close = float(ohlc.get("close") or 0.0) or None
+
     return LegQuote(
         instrument_id=instrument_id,
         ltp=float(tick.get("last_price") or 0.0),
@@ -102,10 +133,16 @@ def _tick_to_quote(instrument_id: str, tick: dict, now_ms: int) -> LegQuote:
         ask=float(sell.get("price") or 0.0) or None,
         bid_qty=int(buy.get("quantity") or 0),
         ask_qty=int(sell.get("quantity") or 0),
-        exchange_ts_ms=ex_ms,
+        # Keep the exchange's own stamp when it sent one; fall back to receipt
+        # time only for the *packet* clock, never for the trade clock.
+        exchange_ts_ms=exchange_ms if exchange_ms is not None else now_ms,
         received_ts_ms=now_ms,
         sequence=now_ms,
         source="kite_ticker",
+        last_trade_ts_ms=last_trade_ms,
+        official_open=official_open,
+        prev_close=prev_close,
+        volume_traded=int(tick.get("volume_traded") or 0),
     )
 
 

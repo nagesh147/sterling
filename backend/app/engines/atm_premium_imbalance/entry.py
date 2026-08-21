@@ -96,6 +96,7 @@ def price_entry(
     last_price: Optional[float] = None,
     first_tick_price: Optional[float] = None,
     manual_table: Optional[ManualPriceTable] = None,
+    official_open: Optional[float] = None,
 ) -> PricedEntry:
     """Compute the entry limit for the configured policy, then cap it.
 
@@ -130,9 +131,17 @@ def price_entry(
         # printed 113.1. 2026-08-21: 379.0 x 1.10 = 416.90 -> printed 416.9.
         # The bot rounds to ONE decimal, not to the tick grid; one-decimal
         # prices are multiples of 0.10 and so are always tick-valid anyway.
-        if first_tick_price is None or first_tick_price <= 0:
-            raise ValueError("FIRST_TICK_PERCENT requires a first tick price")
-        reference, kind = float(first_tick_price), "first_tick"
+        if cfg.first_tick_source == "OFFICIAL_OPEN":
+            # The exchange's own opening price. Needs no dating, so it cannot be
+            # a carried-over previous-session price -- which is the failure that
+            # made the recorded bot price 416.90 against a 356.70 open.
+            if official_open is None or official_open <= 0:
+                raise ValueError("first_tick_source=OFFICIAL_OPEN requires the exchange open")
+            reference, kind = float(official_open), "official_open"
+        else:
+            if first_tick_price is None or first_tick_price <= 0:
+                raise ValueError("FIRST_TICK_PERCENT requires a first tick price")
+            reference, kind = float(first_tick_price), "first_tick"
         raw = round(reference * (1.0 + cfg.entry_through_pct), 1)
     elif policy == "FIRST_TICK_PLUS_BUFFER":
         # The observed automatic path. The 2026-08-20 build prints exactly this

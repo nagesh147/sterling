@@ -10,6 +10,7 @@ export type EntryPricePolicy =
   | 'FIRST_TICK_PERCENT' | 'FIRST_TICK_PLUS_BUFFER';
 export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE';
 export type ProtectionMode = 'NONE' | 'RESTING_TARGET_LIMIT' | 'GTT';
+export type FirstTickSource = 'SESSION_TICK' | 'OFFICIAL_OPEN';
 export type ExpiryPolicy = 'SAME_DAY' | 'NEAREST' | 'NEXT' | 'EXPLICIT';
 
 export interface AtmPremiumImbalanceConfig {
@@ -27,6 +28,8 @@ export interface AtmPremiumImbalanceConfig {
   minimum_difference: number;
   minimum_difference_percent: number;
   entry_price_policy: EntryPricePolicy;
+  require_session_origin_tick: boolean;
+  first_tick_source: FirstTickSource;
   entry_buffer_points: number;
   entry_through_pct: number;
   manual_price_file: string;
@@ -72,7 +75,8 @@ export interface AtmPremiumImbalanceResponse {
    */
   research_only: { entry_price_policy: string[]; exit_policy: string[] };
   /** What live mode will insist on, published so the UI can say so up front. */
-  live_requires?: { protection_mode: string[]; quote_mode: string[] };
+  live_requires?: { protection_mode: string[]; quote_mode: string[];
+    require_session_origin_tick?: boolean[] };
 }
 
 export interface AtmPremiumImbalanceSnapshot {
