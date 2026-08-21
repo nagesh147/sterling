@@ -8,7 +8,7 @@ connected Kite account). Decoded ticks are broadcast to the StreamManager channe
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from app.core.logging import get_logger
 
@@ -19,6 +19,19 @@ from .ticker import KiteTicker
 log = get_logger(__name__)
 
 _tickers: Dict[str, KiteTicker] = {}
+
+# Which components asked for a token. There is exactly one subscription set per
+# account, so a component that has finished with a token cannot just unsubscribe
+# it -- the operator may have its chart open, or the protection monitor may be
+# watching it for a stop. This registry lets release() tell "nobody wants this
+# any more" from "someone else still does".
+#
+# _ANY records a subscription that arrived without an owner tag: the operator's
+# UI, the protection monitor. It is never removed by release(), because a caller
+# that did not claim ownership cannot be assumed to be finished, and starving the
+# protection monitor of ticks would leave a real stop unguarded.
+_ANY = "*"
+_owners: Dict[Tuple[str, int], Set[str]] = {}
 
 
 async def _warm_client(user_id: str):
@@ -116,15 +129,30 @@ async def ensure(user_id: str) -> Optional[KiteTicker]:
     return ticker
 
 
-async def subscribe(user_id: str, tokens: List[int], mode: str = K.MODE_QUOTE) -> dict:
+async def subscribe(user_id: str, tokens: List[int], mode: str = K.MODE_QUOTE,
+                    owner: Optional[str] = None) -> dict:
+    """Subscribe tokens, optionally claiming them for ``owner``.
+
+    Passing ``owner`` opts into refcounted cleanup via :func:`release`. Callers
+    that omit it keep the historical behaviour: the subscription lives until
+    something unsubscribes it explicitly or the ticker restarts.
+    """
     ticker = await ensure(user_id)
     if not ticker:
         return {"ok": False, "message": "No connected (live) Kite account — log in first."}
     await ticker.subscribe(tokens, mode)
+    tag = owner or _ANY
+    for t in tokens:
+        _owners.setdefault((user_id, int(t)), set()).add(tag)
     return {"ok": True, **ticker.status()}
 
 
 async def unsubscribe(user_id: str, tokens: List[int]) -> dict:
+    # An explicit unsubscribe is an instruction, not a hint, so it drops every
+    # claim on the token -- otherwise a later release() would try to unsubscribe
+    # something already gone, or worse, believe an owner still holds it.
+    for t in tokens:
+        _owners.pop((user_id, int(t)), None)
     ticker = _tickers.get(user_id)
     if not ticker:
         return {"ok": True, "message": "No active ticker"}
@@ -132,8 +160,39 @@ async def unsubscribe(user_id: str, tokens: List[int]) -> dict:
     return {"ok": True, **ticker.status()}
 
 
+async def release(user_id: str, tokens: List[int], owner: str) -> dict:
+    """Drop ``owner``'s claim, unsubscribing only what nobody else wants.
+
+    A token is unsubscribed only when ``owner`` was its last remaining claimant.
+    A token that any untagged caller subscribed is never unsubscribed here, and a
+    token this registry has never seen is left alone: not knowing who wants a
+    token is a reason to keep it, not to drop it.
+    """
+    drop: List[int] = []
+    for t in tokens:
+        key = (user_id, int(t))
+        owners = _owners.get(key)
+        if owners is None:
+            continue
+        owners.discard(owner)
+        if not owners:
+            drop.append(int(t))
+    if not drop:
+        return {"ok": True, "unsubscribed": []}
+    result = await unsubscribe(user_id, drop)
+    return {**result, "unsubscribed": drop}
+
+
+def owners_of(user_id: str, token: int) -> Set[str]:
+    """Test/diagnostic hook: who currently claims this token."""
+    return set(_owners.get((user_id, int(token)), set()))
+
+
 async def stop(user_id: str) -> dict:
     ticker = _tickers.pop(user_id, None)
+    # The ticker's own subscription set dies with it, so the claims must go too.
+    for key in [k for k in _owners if k[0] == user_id]:
+        _owners.pop(key, None)
     if ticker:
         await ticker.stop()
     return {"ok": True}
@@ -154,3 +213,4 @@ async def stop_all() -> None:
 def clear() -> None:
     """Test hook — drop references without awaiting (no live sockets in tests)."""
     _tickers.clear()
+    _owners.clear()

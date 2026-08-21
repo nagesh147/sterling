@@ -320,3 +320,179 @@ async def test_a_session_price_prices_off_the_real_open(monkeypatch):
     assert len(buys) == 1
     assert buys[0]["price"] == 392.40
     assert s.strategy.trade.option_type == "PE"        # 356.70 < 500.00
+
+
+# ------------------------------------------- releasing the tick subscriptions
+
+class FakeTM:
+    """Records release/subscribe calls the way ticker_manager would act on them."""
+
+    def __init__(self):
+        self.released: list[tuple[list[int], str]] = []
+        self.subscribed: list[tuple[list[int], str, str | None]] = []
+
+    async def release(self, user_id, tokens, owner):
+        self.released.append(([int(t) for t in tokens], owner))
+        return {"ok": True, "unsubscribed": [int(t) for t in tokens]}
+
+    async def subscribe(self, user_id, tokens, mode="quote", owner=None):
+        self.subscribed.append(([int(t) for t in tokens], mode, owner))
+        return {"ok": True}
+
+
+@pytest.fixture
+def fake_tm(monkeypatch):
+    tm = FakeTM()
+    import app.services.exchanges.kite as kite_pkg
+    monkeypatch.setattr(kite_pkg, "ticker_manager", tm, raising=False)
+    return tm
+
+
+@pytest.mark.asyncio
+async def test_completing_a_trade_gives_the_legs_back(fake_tm):
+    """A finished session must not keep two tokens of the shared set forever."""
+    s = _session(); R.register(s)
+    b = FakeBroker(entry_fill=133.40, exit_fill=156.85)
+    await R.on_ticks("u1", [tick(111, 167.50, 167.0, 167.50),
+                            tick(222, 214.85, 214.4, 215.3)], b)
+    assert await R.on_ticks("u1", [tick(111, 149.10, 149.2, 149.6)], b) == "complete"
+    assert fake_tm.released == [([111, 222], R.TICKER_OWNER)]
+
+
+@pytest.mark.asyncio
+async def test_release_happens_once_however_often_it_is_asked(fake_tm):
+    sess = _session()
+    await R.release_subscriptions(sess)
+    await R.release_subscriptions(sess)
+    assert len(fake_tm.released) == 1
+    assert sess.released is True
+
+
+@pytest.mark.asyncio
+async def test_a_rolled_over_session_releases_before_it_is_discarded(fake_tm):
+    """The session holds the only record of which tokens were ours.
+
+    Dropping it first leaked both legs until the backend restarted.
+    """
+    from datetime import date
+    sess = _session()
+    sess.session_date = date(2020, 1, 1)
+    R.register(sess)
+
+    assert await R.on_ticks("u1", [tick(111, 100.0, 99.5, 100.5)], FakeBroker()) == "session_rolled"
+    assert fake_tm.released == [([111, 222], R.TICKER_OWNER)]
+    assert R.active_session("u1") is None
+
+
+@pytest.mark.asyncio
+async def test_a_failing_release_never_breaks_the_tick_loop(monkeypatch):
+    class Boom:
+        async def release(self, *a, **k):
+            raise RuntimeError("socket gone")
+
+    import app.services.exchanges.kite as kite_pkg
+    monkeypatch.setattr(kite_pkg, "ticker_manager", Boom(), raising=False)
+    sess = _session()
+    await R.release_subscriptions(sess)          # must not raise
+    assert sess.released is True
+
+
+@pytest.mark.asyncio
+async def test_a_halt_also_gives_the_legs_back(fake_tm):
+    """A halted session is finished too -- it must not hold the legs either."""
+    s = _session(protection_mode="RESTING_TARGET_LIMIT"); R.register(s)
+    b = FakeBroker(fail_cancel=True)
+    await R.on_ticks("u1", [tick(111, 167.50, 167.0, 167.50),
+                            tick(222, 214.85, 214.4, 215.3)], b)
+    assert (await R.on_ticks("u1", [tick(111, 149.10, 149.2, 149.6)], b)).startswith("halt:")
+    assert fake_tm.released == [([111, 222], R.TICKER_OWNER)]
+
+
+def _pair_at(strike, ce_token, pe_token):
+    def leg(ot, token):
+        return InstrumentRef(instrument_id=token, tradingsymbol=f"SENSEX{int(strike)}{ot}",
+                             option_type=ot, strike=float(strike), expiry="2026-07-30",
+                             lot_size=20, tick_size=0.05, upper_circuit=1745.45)
+    return OptionPairRef(underlying="SENSEX", expiry="2026-07-30", strike=float(strike),
+                         ce=leg("CE", ce_token), pe=leg("PE", pe_token))
+
+
+@pytest.fixture
+def arming(monkeypatch):
+    """arm() with the config and pair resolution stubbed, market open."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=20).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    monkeypatch.setattr(R, "_is_market_open", lambda: True)
+    box = {"pair": _pair_at(77600, "111", "222")}
+
+    async def resolve(user_id, c):
+        return box["pair"]
+
+    monkeypatch.setattr(svc, "resolve_option_pair", resolve, raising=False)
+    return box
+
+
+@pytest.mark.asyncio
+async def test_arming_claims_the_legs_for_this_strategy(fake_tm, arming):
+    out = await R.arm("u1")
+    assert out["status"] == "armed"
+    assert fake_tm.subscribed == [([111, 222], "full", R.TICKER_OWNER)]
+
+
+@pytest.mark.asyncio
+async def test_re_arming_on_a_new_strike_gives_back_only_the_old_legs(fake_tm, arming):
+    await R.arm("u1")
+    R.active_session("u1").finished = True          # yesterday's trade is done
+
+    arming["pair"] = _pair_at(77700, "333", "444")
+    assert (await R.arm("u1"))["status"] == "armed"
+
+    assert fake_tm.released == [([111, 222], R.TICKER_OWNER)]
+    assert fake_tm.subscribed[-1] == ([333, 444], "full", R.TICKER_OWNER)
+
+
+@pytest.mark.asyncio
+async def test_re_arming_never_releases_a_leg_the_new_pair_reuses(fake_tm, arming):
+    """One owner tag per strategy, so releasing a carried-over token would
+    revoke the claim the *new* session depends on."""
+    await R.arm("u1")
+    R.active_session("u1").finished = True
+
+    arming["pair"] = _pair_at(77600, "111", "999")   # CE carried over, PE moved
+    assert (await R.arm("u1"))["status"] == "armed"
+
+    assert fake_tm.released == [([222], R.TICKER_OWNER)]
+
+
+@pytest.mark.asyncio
+async def test_a_replaced_session_cannot_later_yank_the_live_legs(fake_tm, arming):
+    """The outgoing session is marked released, so a stray release is a no-op."""
+    await R.arm("u1")
+    stale = R.active_session("u1")
+    stale.finished = True
+    arming["pair"] = _pair_at(77600, "111", "222")   # same pair, re-armed
+    await R.arm("u1")
+
+    fake_tm.released.clear()
+    await R.release_subscriptions(stale)
+    assert fake_tm.released == []
+
+
+@pytest.mark.asyncio
+async def test_a_live_session_is_not_re_armed(fake_tm, arming):
+    await R.arm("u1")
+    assert (await R.arm("u1"))["status"] == "already_armed"
+    assert len(fake_tm.subscribed) == 1
+    assert fake_tm.released == []
+
+
+@pytest.mark.asyncio
+async def test_refusals_claim_nothing(fake_tm, arming, monkeypatch):
+    """A refusal must not subscribe: no quantity, no claim."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=0)
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    assert (await R.arm("u1"))["status"] == "no_quantity"
+    assert fake_tm.subscribed == []
+

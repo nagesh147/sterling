@@ -71,6 +71,7 @@ class Session:
     ce_token: int
     pe_token: int
     finished: bool = False
+    released: bool = False
 
     def token_leg(self, token: int) -> Optional[str]:
         if token == self.ce_token:
@@ -282,10 +283,12 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
     if intent.kind == "halt":
         log.error("ATM PI halted for %s: %s", session.user_id, intent.reason)
         session.finished = True
+        await release_subscriptions(session)
         return f"halt:{intent.reason}"
     if intent.kind == "complete":
         session.finished = True
         log.info("ATM PI trade complete for %s: %s", session.user_id, s.summary())
+        await release_subscriptions(session)
         return "complete"
     return "idle"
 
@@ -299,6 +302,9 @@ async def on_ticks(user_id: str, ticks: list[dict], broker: Optional[BrokerPort]
     if session is None or session.finished:
         return "inactive"
     if session.session_date != datetime.now(_IST).date():
+        # Release before dropping the session: it holds the only record of which
+        # tokens were ours, so discarding it first leaks them until a restart.
+        await release_subscriptions(session)
         _sessions.pop(user_id, None)
         return "session_rolled"
     if not _is_market_open():
@@ -418,6 +424,33 @@ def clear(user_id: Optional[str] = None) -> None:
         _sessions.pop(user_id, None)
 
 
+# Claims this strategy's tick subscriptions so they can be released when the
+# session ends. Without an owner tag the release would have to unsubscribe
+# blindly, which could pull ticks out from under the protection monitor.
+TICKER_OWNER = "atm_premium_imbalance"
+
+
+async def release_subscriptions(session: Session) -> None:
+    """Give back the session's two legs. Safe to call more than once.
+
+    A finished session must not keep the ticker busy: subscriptions are one
+    shared set per account with a hard broker cap, and a strategy that arms on a
+    new strike every morning would otherwise accumulate a dead pair per day.
+    Nothing here may raise -- this runs from the tick loop and from arm().
+    """
+    if session.released:
+        return
+    session.released = True
+    try:
+        from app.services.exchanges.kite import ticker_manager
+        await ticker_manager.release(
+            session.user_id, [session.ce_token, session.pe_token], TICKER_OWNER,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ATM PI could not release subscriptions for %s: %s",
+                    session.user_id, exc)
+
+
 def register(session: Session) -> None:
     _sessions[session.user_id] = session
 
@@ -453,7 +486,24 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
         trade_id=f"api-{user_id}-{today.isoformat()}",
     )
     from app.services.exchanges.kite import ticker_manager
-    await ticker_manager.subscribe(user_id, [ce_token, pe_token], "full")
+
+    # Re-arming replaces the outgoing session, so give back the legs it held --
+    # except any the new pair reuses. The claim is per token and this strategy
+    # holds one owner tag, so releasing a carried-over token would revoke the
+    # claim the new session is about to depend on. Marking the old session
+    # released stops a later stray release from doing exactly that.
+    if existing is not None:
+        stale = [t for t in (existing.ce_token, existing.pe_token)
+                 if t not in (ce_token, pe_token)]
+        existing.released = True
+        if stale:
+            try:
+                await ticker_manager.release(user_id, stale, TICKER_OWNER)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("ATM PI could not release stale legs for %s: %s", user_id, exc)
+
+    await ticker_manager.subscribe(user_id, [ce_token, pe_token], "full",
+                                   owner=TICKER_OWNER)
 
     register(Session(user_id=user_id, cfg=cfg, pair=pair, strategy=strategy,
                      session_date=today, ce_token=ce_token, pe_token=pe_token))
