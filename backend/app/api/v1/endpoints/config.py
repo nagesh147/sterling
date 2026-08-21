@@ -520,16 +520,21 @@ async def atm_premium_imbalance_adopt(
 
 @router.post("/atm-premium-imbalance/simulate")
 async def atm_premium_imbalance_simulate(
-    speed: float = 60.0, lots: Optional[int] = None,
+    speed: float = 1.0, lots: Optional[int] = None, continuous: bool = True,
     overrides: Optional[dict] = Body(default=None, embed=True),
     user: UserContext = Depends(get_current_user),
 ) -> dict:
     """Replay the last traded session through the live code path, on a fake clock.
 
-    The clock starts at 09:14 IST so the pre-open refusal is visible, then the
-    strategy runs against real minute bars. Nothing reaches a broker: the session
-    is marked as a simulation, which is also what stops today's live ticks from
-    driving it.
+    Real time by default: one simulated second per real second, advancing the
+    clock second by second so it reads like a live session. The clock starts at
+    09:14 IST so the pre-open refusal is visible, then the strategy runs against
+    real minute bars. Nothing reaches a broker: the session is marked as a
+    simulation, which is also what stops today's live ticks from driving it.
+
+    ``continuous`` (the default) keeps the session working after a trade closes
+    rather than stopping at the first one. It relaxes the per-session trade limit
+    and the entry window, and reports which in ``relaxed``.
 
     Results are illustrative, not a backtest — see the module docstring for the
     two structural reasons (minute bars have no intrabar order, and fills are
@@ -540,7 +545,8 @@ async def atm_premium_imbalance_simulate(
     if not uid:
         raise HTTPException(status_code=401, detail="authenticated user is required")
     try:
-        return await start(uid, speed=speed, lots=lots, overrides=overrides)
+        return await start(uid, speed=speed, lots=lots, continuous=continuous,
+                           overrides=overrides)
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

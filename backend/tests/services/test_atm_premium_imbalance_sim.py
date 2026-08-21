@@ -40,13 +40,14 @@ def _bars(prices, *, day=DAY, start_hhmm=(9, 15)):
 
 @pytest.fixture(autouse=True)
 def clean():
-    R.clear()
-    S._states.clear()
-    S._tasks.clear()
+    # The terminal buffer is module-level and shared, so a test that counts log
+    # lines would otherwise count the previous test's as well.
+    from app.services.kite_engine import state
+    for reset in (R.clear, S._states.clear, S._tasks.clear, state._activity.clear):
+        reset()
     yield
-    R.clear()
-    S._states.clear()
-    S._tasks.clear()
+    for reset in (R.clear, S._states.clear, S._tasks.clear, state._activity.clear):
+        reset()
 
 
 @pytest.fixture
@@ -171,15 +172,87 @@ async def test_nothing_is_traded_before_the_bell(wired):
 @pytest.mark.asyncio
 async def test_the_replay_buys_the_cheaper_leg_and_reaches_the_target(wired):
     """PE at 100 against CE at 500, then PE runs to 120: target is 115."""
-    await S.start("u1", speed=600.0)
-    task = S._tasks["u1"]
-    await task
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
     s = R.active_session("u1")
     assert s.strategy.trade is not None
     assert s.strategy.trade.option_type == "PE"
     # ask 100.05 (price + half tick) + the 0.50 default entry buffer
     assert s.strategy.trade.entry_price == 100.55
+    assert s.strategy.trades_taken == 1
     assert s.finished is True
+
+
+@pytest.fixture
+def long_day(wired, monkeypatch):
+    """A rising put, which is what actually produces repeated round trips.
+
+    After an exit the strategy re-arms and buys again at whatever the price is
+    now — the exit price — so the next target sits 15 points above *that*. A
+    price that comes back down never reaches it; a rising one does. Worth
+    knowing about continuous mode generally: it exits on target and immediately
+    re-enters, so it holds a position nearly all the time.
+    """
+    import app.services.atm_premium_imbalance_replay as replay
+    ce = _bars([500.0] * 6)
+    pe = _bars([100.0, 120.0, 140.0, 160.0, 180.0, 200.0])
+
+    async def bars(uid, token, day):
+        if day != DAY:
+            return []
+        return ce if int(token) == 111 else pe
+    monkeypatch.setattr(replay, "kite_minute_bars", bars, raising=False)
+    return wired
+
+
+@pytest.mark.asyncio
+async def test_continuous_mode_keeps_trading_after_the_first_close(long_day):
+    """The point of continuous: one closed trade is not the end of the session."""
+    await S.start("u1", speed=600.0)          # continuous is the default
+    await S._tasks["u1"]
+    s = R.active_session("u1")
+    assert s.strategy.trades_taken >= 2, "it should have re-armed and traded again"
+    assert s.finished is False, "the session stays alive while it can still trade"
+    assert S.state("u1")["trades"] == s.strategy.trades_taken
+
+
+@pytest.mark.asyncio
+async def test_without_continuous_it_stops_at_the_first_trade(long_day):
+    """The same day, the same bars — the difference is only the flag."""
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
+    s = R.active_session("u1")
+    assert s.strategy.trades_taken == 1
+    assert s.finished is True
+
+
+@pytest.mark.asyncio
+async def test_a_re_arm_is_announced(long_day):
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    from app.services.kite_engine import state
+    assert any(e.kind == "api_rearmed" for e in state.activity("u1"))
+
+
+@pytest.mark.asyncio
+async def test_continuous_mode_says_what_it_relaxed(wired):
+    """A replay running a different config from the live one must not be silent."""
+    out = await S.start("u1", speed=600.0)
+    assert out["continuous"] is True
+    assert "trade limit lifted to 50" in out["relaxed"]
+    assert "entry window off" in out["relaxed"]
+    from app.services.kite_engine import state
+    assert any("continuous" in e.message for e in state.activity("u1"))
+
+
+@pytest.mark.asyncio
+async def test_the_session_trade_count_survives_a_re_arm(long_day):
+    """Resetting it would make the trade limit and the loss limit unenforceable."""
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    s = R.active_session("u1")
+    assert s.strategy.trades_taken >= 2
+    assert s.strategy.realised_pnl != 0.0
 
 
 @pytest.mark.asyncio
@@ -227,7 +300,41 @@ async def test_a_day_with_no_bars_is_reported_not_guessed(wired, monkeypatch):
 async def test_the_speed_is_clamped_to_something_sane(wired):
     assert (await S.start("u1", speed=99_999.0))["speed"] == 600.0
     await S.stop("u1")
-    assert (await S.start("u1", speed=0.0))["speed"] == 1.0
+    # The floor allows slower than real time; zero would be a stopped clock.
+    assert (await S.start("u1", speed=0.0))["speed"] == 0.1
+
+
+@pytest.mark.asyncio
+async def test_real_time_is_the_default(wired):
+    """One simulated second per real second, so the clock reads like a live one."""
+    assert (await S.start("u1"))["speed"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_the_clock_reads_as_a_market_clock(wired):
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
+    st = S.state("u1")
+    assert st["clock_ist"] is not None
+    # 12-hour with AM/PM: an operator reads "09:14:00 AM", not "09:14:00"
+    assert st["clock_ist"].endswith("AM") or st["clock_ist"].endswith("PM")
+
+
+@pytest.mark.asyncio
+async def test_the_clock_advances_one_second_at_a_time(wired, monkeypatch):
+    """A clock that jumped a minute would not read like a live session."""
+    seen: list[int] = []
+    real_emit = S._emit
+
+    async def spy(session, broker, legs, **kw):
+        seen.append(session.clock_ms)
+        return await real_emit(session, broker, legs, **kw)
+
+    monkeypatch.setattr(S, "_emit", spy)
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
+    gaps = {b - a for a, b in zip(seen, seen[1:])}
+    assert gaps and max(gaps) <= S.SECOND_MS, f"clock jumped: {sorted(gaps)}"
 
 
 @pytest.mark.asyncio
@@ -311,3 +418,22 @@ async def test_no_data_anywhere_reports_what_it_tried(wired, monkeypatch):
     assert out["status"] == "no_data"
     assert out["skipped"], "it should say which days it tried"
 
+
+
+@pytest.mark.asyncio
+async def test_every_closed_trade_reports_its_result(long_day):
+    """A re-arm clears the trade, so the result must be captured before that.
+
+    Without it only the final trade's outcome was ever logged and the rest
+    vanished between the exit line and the re-arm line.
+    """
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    from app.services.kite_engine import state
+    events = state.activity("u1")
+    done = [e for e in events if e.kind == "api_done"]
+    rearmed = [e for e in events if e.kind == "api_rearmed"]
+    taken = R.active_session("u1").strategy.trades_taken
+    assert len(done) == taken, f"{taken} trades but {len(done)} results reported"
+    assert all("pts" in e.message and "P&L" in e.message for e in done)
+    assert len(rearmed) >= 1

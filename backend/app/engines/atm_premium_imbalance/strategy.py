@@ -115,6 +115,8 @@ class ATMPremiumImbalanceStrategy:
     protection: Optional[ProtectionOrder] = None
     _pending_exit_intent: Optional[Intent] = None
     _entry_ts_ms: Optional[int] = None
+    #: The most recently closed trade, kept so its result survives a re-arm.
+    last_closed_trade: Optional[TradeRecord] = None
     #: Best price seen since entry. Owned here rather than derived in the exit
     #: policy because it is a fact about this position's history, and a trail
     #: computed from the latest price instead would never actually trail.
@@ -509,7 +511,7 @@ class ATMPremiumImbalanceStrategy:
         self.trade = replace(self.trade, exit=ev, state=PositionState.CLOSED)
         self.trades_taken += 1
         self.realised_pnl += float(self.trade.pnl or 0.0)
-        self.phase = Phase.DONE
+        self.phase = self._settle_after_close()
         return Intent(kind="complete", reason="protection_filled")
 
     def record_protection_cancelled(self, *, ok: bool) -> Intent:
@@ -557,8 +559,9 @@ class ATMPremiumImbalanceStrategy:
         self.trade = replace(self.trade, exit=self._exit, state=PositionState.CLOSED)
         self.trades_taken += 1
         self.realised_pnl += float(self.trade.pnl or 0.0)
-        self.phase = Phase.DONE
-        return Intent(kind="complete", reason=self._exit.reason)
+        reason = self._exit.reason
+        self.phase = self._settle_after_close()
+        return Intent(kind="complete", reason=reason)
 
     # ------------------------------------------------------------------ report
 
@@ -601,6 +604,35 @@ class ATMPremiumImbalanceStrategy:
         self._high_water = float(entry_fill)
         self._last_now_ms = int(now_ms)
         self.phase = Phase.IN_POSITION
+
+    def _settle_after_close(self) -> Phase:
+        """Where the strategy goes once a trade is closed.
+
+        ``max_trades_per_session`` implied more than one trade was possible, but
+        every close went to DONE regardless, so a limit above 1 could never take
+        effect -- the gate existed and the phase machine forbade reaching it.
+
+        Re-arming resets only the per-trade state. ``trades_taken`` and
+        ``realised_pnl`` deliberately survive, because the trade limit and the
+        daily loss limit are session facts and a reset would make both
+        unenforceable.
+        """
+        # Keep the closed trade reachable. Re-arming clears `trade` for the next
+        # one, and anything reporting the result -- the log line, the board --
+        # runs after that, so without this a re-armed session silently loses the
+        # outcome of the trade it just finished.
+        self.last_closed_trade = self.trade
+        if self.trades_taken >= self.cfg.max_trades_per_session:
+            return Phase.DONE
+        self.trade = None
+        self.signal = None
+        self.entry = None
+        self.protection = None
+        self._exit = None
+        self._exit_order_id = None
+        self._entry_ts_ms = None
+        self._high_water = None
+        return Phase.ARMED if self.cache.both_legs_present() else Phase.IDLE
 
     @property
     def live_stop(self) -> Optional[float]:

@@ -333,9 +333,15 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
         await release_subscriptions(session)
         return f"halt:{intent.reason}"
     if intent.kind == "complete":
-        session.finished = True
+        # A closed trade is not necessarily a finished session: under a trade
+        # limit above one the strategy re-arms for the next signal, and marking
+        # the session finished here would drop it and release its legs.
+        from app.engines.atm_premium_imbalance.strategy import Phase
+        session.finished = s.phase in (Phase.DONE, Phase.HALTED)
         log.info("ATM PI trade complete for %s: %s", session.user_id, s.summary())
-        t = s.trade
+        # `trade` is cleared by a re-arm, so fall back to the trade that just
+        # closed -- otherwise the result of every trade but the last is lost.
+        t = s.trade if s.trade is not None else s.last_closed_trade
         if t is not None and t.exit_price is not None:
             note(session.user_id, "api_done",
                  f"closed {t.option_type} {t.quantity} @ {t.exit_price:.2f} — "
@@ -347,7 +353,17 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
             # worse than saying what actually happened.
             note(session.user_id, "api_done",
                  f"finished with no position — {intent.reason or 'no reason given'}")
-        await release_subscriptions(session)
+        if session.finished:
+            await release_subscriptions(session)
+            return "complete"
+        # Re-armed. Let the next trade start from a clean slate of log topics,
+        # or its refusal and stop lines would be deduped against the last one's.
+        session.logged.pop("fill", None)
+        session.logged.pop("stop", None)
+        session.logged.pop("refusal", None)
+        note(session.user_id, "api_rearmed",
+             f"trade {s.trades_taken} of {session.cfg.max_trades_per_session} done — "
+             f"watching for the next signal")
         return "complete"
 
     # Nothing to do this tick. Two things are still worth saying once: why a

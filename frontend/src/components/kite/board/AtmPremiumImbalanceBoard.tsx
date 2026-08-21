@@ -101,11 +101,12 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
 
         <button
           type="button"
-          onClick={() => (sim?.running ? stopSim.mutate() : simulate.mutate(60))}
+          onClick={() => (sim?.running ? stopSim.mutate() : simulate.mutate())}
           disabled={simulate.isPending || stopSim.isPending}
           title={sim?.running
             ? 'Stop the replay'
-            : 'Replay the last traded session from 09:14 IST on real data. Nothing is sent to a broker.'}
+            : 'Replay the last traded session in real time from 09:14 AM IST on real data. '
+              + 'Keeps trading until you stop it. Nothing is sent to a broker.'}
           style={{
             background: 'transparent', border: `1px solid ${k.border}`,
             color: sim?.running ? k.amber : k.dim,
@@ -151,9 +152,18 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
           borderBottom: `1px solid ${k.border}`, color: k.text,
         }}>
           <strong style={{ color: k.amber }}>REPLAY</strong>
-          <span>{sim.session_date} · {sim.clock_ist ?? '—'} IST · {sim.speed}×</span>
+          <span>
+            {sim.session_date} ·{' '}
+            {/* The clock is the thing being watched, so it gets the emphasis. */}
+            <strong style={{ color: k.text, fontVariantNumeric: 'tabular-nums' }}>
+              {sim.clock_ist ?? '—'}
+            </strong>{' '}
+            IST{sim.speed === 1 ? '' : ` · ${sim.speed}×`}
+          </span>
           <span style={{ color: k.dim }}>
-            bar {sim.bars_done}/{sim.bars_total} · {sim.note}
+            min {sim.bars_done}/{sim.bars_total}
+            {sim.trades ? ` · ${sim.trades} trade${sim.trades === 1 ? '' : 's'}` : ''}
+            {sim.continuous ? ' · continuous' : ''} · {sim.note}
           </span>
           <span style={{ color: k.dim, marginLeft: 'auto' }}>
             Real prices, simulated fills — not a backtest.

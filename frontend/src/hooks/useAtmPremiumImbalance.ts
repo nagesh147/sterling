@@ -214,6 +214,9 @@ export interface AtmSimulationState {
   error: string | null;
   outcome: string | null;
   halt_reason: string | null;
+  /** Keeps trading after the first close, relaxing the trade limit and window. */
+  continuous: boolean;
+  trades: number;
   illustrative_only: true;
 }
 
@@ -279,9 +282,13 @@ export function useArmAtmPremiumImbalance() {
 export function useSimulateAtmPremiumImbalance() {
   const qc = useQueryClient();
   return useMutation<{ status: string; session_date?: string; speed?: number;
-                       quantity?: number; message?: string }, Error, number | void>({
-    mutationFn: (speed) =>
-      api.post(`/api/v1/config/atm-premium-imbalance/simulate?speed=${speed ?? 60}`, {}),
+                       quantity?: number; message?: string; relaxed?: string[] },
+                     Error, { speed?: number; continuous?: boolean } | void>({
+    // Real time by default, because the clock is the point: at 1x the replay
+    // reads like a live session rather than a fast-forward.
+    mutationFn: (opts) => api.post(
+      `/api/v1/config/atm-premium-imbalance/simulate?speed=${opts?.speed ?? 1}`
+      + `&continuous=${opts?.continuous ?? true}`, {}),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: SNAPSHOT_KEY }); },
   });
 }

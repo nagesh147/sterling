@@ -179,18 +179,22 @@ describe('what arming would buy', () => {
 
 const REPLAY = {
   running: true, session_date: '2026-08-21', speed: 60, clock_ms: OPEN,
-  clock_ist: '09:14:00', bars_total: 385, bars_done: 0, progress: 0,
-  note: 'pre-open: refusing a carried-over quote', error: null,
-  outcome: null, halt_reason: null, illustrative_only: true as const,
+  clock_ist: '09:14:00 AM', bars_total: 385, bars_done: 0, progress: 0,
+  note: 'pre-open — both legs still carry yesterday\'s close', error: null,
+  outcome: null, halt_reason: null, continuous: true, trades: 0,
+  illustrative_only: true as const,
 };
 
 describe('replaying a past session', () => {
   it('offers a replay, and says nothing reaches a broker', () => {
     view();
     const btn = screen.getByRole('button', { name: 'Simulate' });
+    expect(btn.title).toMatch(/in real time from 09:14 AM IST/);
+    expect(btn.title).toMatch(/Keeps trading until you stop it/);
     expect(btn.title).toMatch(/Nothing is sent to a broker/);
     fireEvent.click(btn);
-    expect(simState.mutate).toHaveBeenCalledWith(60);
+    // No argument: real time and continuous are the defaults the hook applies.
+    expect(simState.mutate).toHaveBeenCalledWith();
   });
 
   it('marks the whole panel as a replay, unmissably', () => {
@@ -200,13 +204,41 @@ describe('replaying a past session', () => {
     view();
     expect(screen.getByText('REPLAY')).toBeTruthy();
     expect(screen.getByText(/Real prices, simulated fills — not a backtest/)).toBeTruthy();
-    expect(screen.getByText(/2026-08-21 · 09:14:00 IST · 60×/)).toBeTruthy();
+    expect(screen.getByText(/2026-08-21/)).toBeTruthy();
+    expect(screen.getByText('09:14:00 AM')).toBeTruthy();
   });
 
   it('shows what the strategy is doing right now', () => {
     snap = { ...snap, data: { ...snap.data, simulation: REPLAY } };
     view();
-    expect(screen.getByText(/refusing a carried-over quote/)).toBeTruthy();
+    expect(screen.getByText(/still carry yesterday/)).toBeTruthy();
+  });
+
+  it('hides the multiplier at real time — 1x is not worth saying', () => {
+    snap = { ...snap, data: { ...snap.data, simulation: REPLAY } };
+    view();
+    expect(screen.queryByText(/1×/)).toBeNull();
+  });
+
+  it('shows the multiplier when the clock is not real time', () => {
+    snap = { ...snap, data: { ...snap.data, simulation: { ...REPLAY, speed: 300 } } };
+    view();
+    expect(screen.getByText(/300×/)).toBeTruthy();
+  });
+
+  it('counts the trades taken, since it no longer stops at one', () => {
+    snap = { ...snap, data: { ...snap.data,
+      simulation: { ...REPLAY, trades: 3, bars_done: 96 } } };
+    view();
+    expect(screen.getByText(/3 trades/)).toBeTruthy();
+    expect(screen.getByText(/continuous/)).toBeTruthy();
+  });
+
+  it('says one trade in the singular', () => {
+    snap = { ...snap, data: { ...snap.data,
+      simulation: { ...REPLAY, trades: 1 } } };
+    view();
+    expect(screen.getByText(/1 trade[^s]/)).toBeTruthy();
   });
 
   it('turns the button into a stop while it runs', () => {

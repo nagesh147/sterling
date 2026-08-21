@@ -29,7 +29,7 @@ presented as one.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -51,7 +51,16 @@ START_HHMM = "09:14"
 #: How many wall-clock milliseconds one simulated minute takes at speed 1.
 MINUTE_MS = 60_000
 
-#: Ticks emitted per minute bar, in the order they are emitted.
+#: The clock advances one simulated second per step, so at speed 1 the replay
+#: runs in real time and the displayed clock ticks the way a live one does.
+SECOND_MS = 1_000
+
+#: Which quarter of a minute takes which field of the bar. A minute bar gives
+#: four real prices and says nothing about the order they occurred in, so the
+#: price is held as a step function over them rather than interpolated --
+#: inventing intermediate prices would be inventing the very thing the replay is
+#: supposed to show. The order puts the high before the low, which lets a peak
+#: set a trailing stop before the low tests it.
 BAR_PATH = ("open", "high", "low", "close")
 
 
@@ -61,7 +70,9 @@ class SimState:
 
     running: bool = False
     session_date: Optional[date] = None
-    speed: float = 60.0
+    speed: float = 1.0
+    continuous: bool = True
+    trades: int = 0
     clock_ms: int = 0
     bars_total: int = 0
     bars_done: int = 0
@@ -77,8 +88,12 @@ class SimState:
             "session_date": None if self.session_date is None else self.session_date.isoformat(),
             "speed": self.speed,
             "clock_ms": self.clock_ms,
-            "clock_ist": (datetime.fromtimestamp(self.clock_ms / 1000, tz=IST).strftime("%H:%M:%S")
-                          if self.clock_ms else None),
+            # 12-hour with AM/PM: this is a market clock and an operator reads
+            # "09:14:00 AM", not "09:14:00".
+            "clock_ist": (datetime.fromtimestamp(self.clock_ms / 1000, tz=IST)
+                          .strftime("%I:%M:%S %p") if self.clock_ms else None),
+            "continuous": self.continuous,
+            "trades": self.trades,
             "bars_total": self.bars_total,
             "bars_done": self.bars_done,
             "progress": (round(self.bars_done / self.bars_total, 3)
@@ -210,10 +225,22 @@ async def stop(user_id: str) -> dict:
     return {"ok": True}
 
 
-async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None,
-                overrides: Optional[dict] = None,
+async def start(user_id: str, *, speed: float = 1.0, lots: Optional[int] = None,
+                continuous: bool = True, overrides: Optional[dict] = None,
                 cfg: Optional[ATMPremiumImbalanceConfig] = None) -> dict:
-    """Begin a simulation. Refuses rather than competing with a live session."""
+    """Begin a simulation. Refuses rather than competing with a live session.
+
+    Runs in real time by default: one simulated second per real second, so the
+    clock reads like a live one. ``speed`` still scales it for anyone who wants
+    to skip ahead.
+
+    ``continuous`` keeps the session working after a trade closes instead of
+    stopping at the first one. It relaxes exactly two settings and says so in
+    the log, because a replay that quietly ran a different configuration from
+    the live one would be worse than useless: the per-session trade limit, and
+    the entry window (which exists to keep live entries near the open and would
+    otherwise refuse every later signal).
+    """
     from app.services import atm_premium_imbalance_runner as R
     from app.services.atm_premium_imbalance import get_config, resolve_option_pair
 
@@ -225,6 +252,16 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
     await stop(user_id)
 
     cfg = cfg or get_config()
+    relaxed: list[str] = []
+    if continuous:
+        # Stated, not silent. An operator reading a replay has to know it is not
+        # running the config that a live session would.
+        if cfg.max_trades_per_session <= 1:
+            relaxed.append("trade limit lifted to 50")
+        if cfg.entry_window_seconds > 0:
+            relaxed.append("entry window off")
+        cfg = replace(cfg, max_trades_per_session=max(50, cfg.max_trades_per_session),
+                      entry_window_seconds=0).validate()
     if overrides:
         # Try a policy without committing it. Validated through the engine's own
         # config, so a replay cannot run a combination the live path would refuse
@@ -240,7 +277,7 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
             cfg = ATMPremiumImbalanceConfig(**merged).validate()
         except (ValueError, TypeError) as exc:
             return {"status": "invalid_overrides", "message": str(exc)}
-    speed = max(1.0, min(600.0, float(speed)))
+    speed = max(0.1, min(600.0, float(speed)))
     try:
         pair = await resolve_option_pair(user_id, cfg)
     except Exception as exc:                          # noqa: BLE001
@@ -279,7 +316,7 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
     else:
         quantity = pair.ce.lot_size
 
-    st = SimState(running=True, session_date=day, speed=speed,
+    st = SimState(running=True, session_date=day, speed=speed, continuous=continuous,
                   bars_total=min(len(ce_bars), len(pe_bars)),
                   note=f"replaying {day.isoformat()} at {speed:g}x")
     _states[user_id] = st
@@ -295,18 +332,30 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
 
     R.note(user_id, "api_replay",
            f"replaying {day.isoformat()} at {speed:g}x — {quantity} contracts, "
-           f"{cfg.exit_policy.lower().replace('_', ' ')}. Real prices, simulated "
-           f"fills; not a backtest.")
+           f"{cfg.exit_policy.lower().replace('_', ' ')}"
+           + (f"; continuous ({', '.join(relaxed)})" if relaxed else "")
+           + ". Real prices, simulated fills; not a backtest.")
     _tasks[user_id] = asyncio.create_task(
         _run(user_id, session, st, ce_bars, pe_bars, speed))
     return {"status": "started", "session_date": day.isoformat(), "speed": speed,
             "quantity": quantity, "strike": pair.strike, "expiry": pair.expiry,
             "exit_policy": cfg.exit_policy, "skipped": skipped,
+            "continuous": continuous, "relaxed": relaxed,
             "illustrative_only": True}
 
 
 async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: float) -> None:
-    """Step the clock through the session, feeding one bar at a time."""
+    """Step the clock one simulated second at a time, feeding the day's bars.
+
+    A second rather than a minute because the clock is the point: at speed 1 this
+    reads like a live session, and a clock that jumped a minute at a time would
+    not. Within each minute the price is held as a step function over the bar's
+    four real values -- see BAR_PATH.
+
+    It does not stop at the first closed trade. Under continuous mode the
+    strategy re-arms and this keeps running to the end of the session, or until
+    the task is cancelled.
+    """
     from app.services import atm_premium_imbalance_runner as R
 
     broker = SimBroker()
@@ -315,57 +364,63 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
         + 12 * 3600 * 1000,                      # midday, so the date cannot slip
         session.cfg.session_start,
     )
-    # The pre-open minute. Both legs carry the previous session's close, which is
-    # exactly the quote the strategy must refuse.
     # One second before the bell, not a full minute. A pre-open tick at 09:14:00
     # is still 60s old when the 09:15 bar arrives, so the freshness gate reports
     # "the feed has gone quiet" for one tick -- true from the strategy's point of
-    # view, and an artifact of the clock jumping rather than anything real. The
-    # last pre-open tick would in fact land just before the open.
-    session.clock_ms = open_ms - 1_000
+    # view, and an artifact of the clock jumping rather than anything real.
     prior_ms = open_ms - 12 * 3600 * 1000        # "yesterday", for the trade stamp
+    pause = SECOND_MS / 1000.0 / speed
+
     try:
-        await _emit(session, broker, [
-            (session.pair.ce.instrument_id, ce_bars[0].open),
-            (session.pair.pe.instrument_id, pe_bars[0].open),
-        ], traded_ms=prior_ms, official_open=None)
-        st.clock_ms = session.clock_ms
-        st.note = "pre-open: refusing a carried-over quote"
-        R.note(user_id, "api_replay",
-               "09:14 — both legs still carry yesterday's closing price")
-        await asyncio.sleep(MINUTE_MS / 1000.0 / speed)
+        # The pre-open minute, one visible second at a time, so the operator can
+        # watch the clock reach the bell and see the carried-over quote refused.
+        for offset in range(-60, 0):
+            session.clock_ms = open_ms + offset * SECOND_MS
+            st.clock_ms = session.clock_ms
+            if offset == -60:
+                st.note = "pre-open — both legs still carry yesterday's close"
+                R.note(user_id, "api_replay",
+                       "09:14 — both legs still carry yesterday's closing price")
+            if offset >= -1:
+                # Only the last pre-open second emits, so the quote is fresh by
+                # age at the bell while still stamped with yesterday's trade.
+                await _emit(session, broker, [
+                    (session.pair.ce.instrument_id, ce_bars[0].open),
+                    (session.pair.pe.instrument_id, pe_bars[0].open),
+                ], traded_ms=prior_ms, official_open=None)
+            await asyncio.sleep(pause)
 
         pairs = list(zip(ce_bars, pe_bars))
         for i, (ce, pe) in enumerate(pairs):
-            if session.finished:
-                break
             minute_ms = int(ce.ts.timestamp() * 1000)
-            for step, field_name in enumerate(BAR_PATH):
-                session.clock_ms = minute_ms + step * 15_000
+            for second in range(60):
+                session.clock_ms = minute_ms + second * SECOND_MS
+                field_name = BAR_PATH[min(second // 15, len(BAR_PATH) - 1)]
                 await _emit(session, broker, [
                     (session.pair.ce.instrument_id, getattr(ce, field_name)),
                     (session.pair.pe.instrument_id, getattr(pe, field_name)),
                 ], traded_ms=session.clock_ms, official_open=ce.open)
+                st.clock_ms = session.clock_ms
+                st.trades = session.strategy.trades_taken
+                st.note = _phase_note(session)
                 if session.finished:
                     break
-            st.clock_ms = session.clock_ms
+                await asyncio.sleep(pause)
             st.bars_done = i + 1
-            st.note = f"{session.strategy.phase.value} at " \
-                      f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%H:%M}"
-            await asyncio.sleep(MINUTE_MS / 1000.0 / speed)
+            if session.finished:
+                break
 
         R.note(user_id, "api_replay_done",
                f"replay ended at "
-               f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%H:%M} "
-               f"after {st.bars_done} of {st.bars_total} minutes")
+               f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%I:%M:%S %p} "
+               f"after {st.bars_done} of {st.bars_total} minutes and "
+               f"{session.strategy.trades_taken} trade(s)")
         st.outcome = session.strategy.phase.value
-        # Carry the halt reason through. "finished: halted" on its own sends the
-        # operator to the logs for something the UI already knows.
         reason = session.strategy.halt_reason
         st.note = f"finished: {st.outcome}" + (f" — {reason}" if reason else "")
         st.halt_reason = reason or None
     except asyncio.CancelledError:
-        st.note = "cancelled"
+        st.note = "stopped"
         raise
     except Exception as exc:                      # noqa: BLE001
         st.error = str(exc)
@@ -373,6 +428,22 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
         log.exception("ATM PI simulation failed for %s", user_id)
     finally:
         st.running = False
+
+
+def _phase_note(session) -> str:
+    """A one-line "what is it doing" for the banner."""
+    strat = session.strategy
+    clock = datetime.fromtimestamp(session.clock_ms / 1000, tz=IST).strftime("%I:%M:%S %p")
+    phase = strat.phase.value
+    if strat.trade is not None and strat.trade.entry_price:
+        return (f"{phase} at {clock} — {strat.trade.option_type} @ "
+                f"{strat.trade.entry_price:.2f}"
+                + (f", stop {strat.live_stop:.2f}" if strat.live_stop else "")
+                + (f", target {strat.trade.target_price:.2f}"
+                   if strat.trade.target_price else ""))
+    if strat.trades_taken:
+        return f"{phase} at {clock} — {strat.trades_taken} trade(s) done, watching"
+    return f"{phase} at {clock}"
 
 
 async def _emit(session, broker: SimBroker, legs, *, traded_ms: int,
