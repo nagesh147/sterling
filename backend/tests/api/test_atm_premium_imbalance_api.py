@@ -149,3 +149,50 @@ def test_arm_refuses_while_disabled_rather_than_half_arming():
     assert got.status_code == 200
     # A refusal with a reason, never a partially armed session.
     assert got.json()["status"] in ("disabled", "no_quantity", "market_closed")
+
+
+def test_every_config_field_is_settable_through_the_api():
+    """The endpoint must not be a filter that drops settings it has not heard of.
+
+    A hand-written request model used to list every field by name and fell behind
+    the dataclass, so new settings were silently discarded on the way in: the UI
+    looked like it saved and nothing changed. This asserts the two cannot drift.
+    """
+    from dataclasses import fields
+    from app.engines.atm_premium_imbalance import ATMPremiumImbalanceConfig
+
+    c = client()
+    served = set(c.get("/api/v1/config/atm-premium-imbalance").json()["config"])
+    assert served == {f.name for f in fields(ATMPremiumImbalanceConfig)}
+
+    # and each one actually round-trips, not just appears in the payload
+    probes = {
+        "sizing_mode": "LOTS", "lots": 2, "stop_basis": "PERCENT",
+        "stop_percent": 20.0, "trail_percent": 8.0, "trail_start_percent": 5.0,
+        "breakeven_percent": 3.0, "entry_window_seconds": 240,
+        "close_at_session_end": False, "target_points": 12.0,
+    }
+    for key, value in probes.items():
+        out = c.put("/api/v1/config/atm-premium-imbalance", json={key: value})
+        assert out.status_code == 200, (key, out.text)
+        assert out.json()["config"][key] == value, key
+
+
+def test_an_unknown_setting_is_refused_rather_than_ignored():
+    """A dropped setting is worse than a 422: the UI cannot tell it failed."""
+    out = client().put("/api/v1/config/atm-premium-imbalance",
+                       json={"not_a_real_setting": 1})
+    assert out.status_code == 422
+    assert "not_a_real_setting" in out.text
+
+
+def test_an_invalid_value_is_refused_with_its_reason():
+    out = client().put("/api/v1/config/atm-premium-imbalance",
+                       json={"stop_basis": "SOMETIMES"})
+    assert out.status_code == 422
+    assert "stop_basis" in out.text
+
+
+def test_an_empty_body_changes_nothing():
+    assert client().put("/api/v1/config/atm-premium-imbalance", json={}).status_code == 422
+

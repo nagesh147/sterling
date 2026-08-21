@@ -20,7 +20,7 @@ engine with no broker at all.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -80,6 +80,9 @@ class Session:
     #: Virtual "now" in epoch ms, set by the simulator before each step. None
     #: means the wall clock, which is what every live session uses.
     clock_ms: Optional[int] = None
+    #: Last terminal line written per topic, so a condition that stays true for
+    #: thousands of ticks is reported once rather than thousands of times.
+    logged: dict = field(default_factory=dict)
 
     def now_ms(self) -> int:
         """This session's clock: virtual while simulating, wall clock otherwise."""
@@ -264,9 +267,20 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
             return "intent_loop_unsettled"
         k = intent.kind
         if k == "submit_entry":
+            view = s.signal.view if s.signal is not None else None
+            if view is not None:
+                note(session.user_id, "api_signal",
+                     f"CE {view.ce_price:.2f} | PE {view.pe_price:.2f} | "
+                     f"diff {abs(view.pe_price - view.ce_price):.2f} → buy the "
+                     f"{intent.option_type}")
+            note(session.user_id, "api_entry",
+                 f"BUY {intent.quantity} {intent.option_type} @ limit "
+                 f"{intent.limit_price:.2f} (attempt {intent.attempt})")
             oid, err = await broker.place(instrument_id=intent.instrument_id, side="BUY",
                                           quantity=intent.quantity, limit_price=intent.limit_price,
                                           tag="api-entry")
+            if err:
+                note(session.user_id, "api_order_failed", f"entry rejected: {err}")
             intent = s.record_entry_submit(intent.priced, order_id=oid, error=err)
         elif k == "poll_entry":
             intent = s.record_entry_status(await broker.status(intent.order_id))
@@ -284,9 +298,16 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
             ok = await broker.cancel(intent.order_id) if intent.order_id else False
             intent = s.record_protection_cancelled(ok=ok)
         elif k == "submit_exit":
+            ev = s.trade.exit if s.trade is not None else None
+            note(session.user_id, "api_exit",
+                 f"SELL {intent.quantity} {intent.option_type} @ limit "
+                 f"{intent.limit_price:.2f}"
+                 + (f" — {ev.reason}" if ev is not None and ev.reason else ""))
             oid, err = await broker.place(instrument_id=intent.instrument_id, side="SELL",
                                           quantity=intent.quantity, limit_price=intent.limit_price,
                                           tag="api-exit")
+            if err:
+                note(session.user_id, "api_order_failed", f"exit rejected: {err}")
             intent = s.record_exit_submit(order_id=oid, error=err)
         elif k == "poll_exit":
             intent = s.record_exit_status(await broker.status(intent.order_id))
@@ -296,17 +317,70 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
         else:
             log.error("ATM PI unhandled intent %s for %s", k, session.user_id)
             return f"unhandled_intent:{k}"
+
+        # The fill becomes known on a poll, not on the submit, so this is checked
+        # once per pass rather than in the submit branch where it is always None.
+        if s.trade is not None and s.trade.entry_price:
+            _note_once(session, "fill", "api_filled",
+                       f"filled {s.trade.quantity} {s.trade.option_type} @ "
+                       f"{s.trade.entry_price:.2f} — target "
+                       f"{(s.trade.target_price or 0):.2f}"
+                       + (f", stop {s.live_stop:.2f}" if s.live_stop else ""))
     if intent.kind == "halt":
         log.error("ATM PI halted for %s: %s", session.user_id, intent.reason)
+        note(session.user_id, "api_halt", f"halted — {intent.reason}")
         session.finished = True
         await release_subscriptions(session)
         return f"halt:{intent.reason}"
     if intent.kind == "complete":
         session.finished = True
         log.info("ATM PI trade complete for %s: %s", session.user_id, s.summary())
+        t = s.trade
+        if t is not None and t.exit_price is not None:
+            note(session.user_id, "api_done",
+                 f"closed {t.option_type} {t.quantity} @ {t.exit_price:.2f} — "
+                 f"{(t.points or 0.0):+.2f} pts, P&L ₹{(t.pnl or 0.0):+.2f}"
+                 + (f" ({t.exit.reason})" if t.exit is not None and t.exit.reason else ""))
+        elif t is not None:
+            # A session can complete without a fill -- a broker that never
+            # accepted the order, for instance. Saying "closed @ None" would be
+            # worse than saying what actually happened.
+            note(session.user_id, "api_done",
+                 f"finished with no position — {intent.reason or 'no reason given'}")
         await release_subscriptions(session)
         return "complete"
+
+    # Nothing to do this tick. Two things are still worth saying once: why a
+    # signal is being refused, and where a trailing stop has moved to.
+    if s.signal is not None and s.signal.action == "NO_TRADE" and s.trade is None:
+        _note_once(session, "refusal", "api_waiting",
+                   f"no trade — {_refusal_text(s.signal.reason)}")
+    if s.trade is not None and s.live_stop is not None and s.trade.exit is None:
+        _note_once(session, "stop", "api_stop",
+                   f"stop {s.live_stop:.2f} (peak {s._high_water:.2f}, "
+                   f"entry {s.trade.entry_price:.2f})")
     return "idle"
+
+
+#: Refusal reasons in the operator's language. Anything unmapped falls through
+#: as-is rather than being swallowed, so a new reason is visible immediately.
+_REFUSAL_TEXT = {
+    "stale_session_quote": "a quote traded before today's open",
+    "undatable_quote": "a quote with no trade time",
+    "equal_premiums": "CE and PE are equal",
+    "entry_window_closed": "too long after the open",
+    "daily_loss_limit_reached": "the daily loss limit is reached",
+    "session_trade_limit_reached": "already traded this session",
+    "below_minimum_difference": "the CE/PE gap is below the minimum",
+    "below_minimum_difference_percent": "the CE/PE gap is below the minimum percent",
+    "stale_quote": "the feed has gone quiet",
+    "no_quote_pair": "one leg has not quoted yet",
+    "invalid_quote": "a leg quoted zero",
+}
+
+
+def _refusal_text(reason: Optional[str]) -> str:
+    return _REFUSAL_TEXT.get(str(reason or ""), str(reason or "no reason given"))
 
 
 async def on_ticks(user_id: str, ticks: list[dict], broker: Optional[BrokerPort] = None) -> str:
@@ -447,6 +521,33 @@ def clear(user_id: Optional[str] = None) -> None:
         _sessions.pop(user_id, None)
 
 
+def note(user_id: str, kind: str, message: str) -> None:
+    """Write one line to the operator's terminal. Never raises.
+
+    The terminal is where an operator watches this strategy think, so the lines
+    are transitions, not ticks: premiums update dozens of times a second and a
+    log that repeated them would bury the four moments that matter.
+    """
+    try:
+        from app.services.kite_engine import state
+        state.log(user_id, kind, message)
+    except Exception:  # noqa: BLE001
+        pass          # a log line is never worth breaking a trade over
+
+
+def _note_once(session: "Session", key: str, kind: str, message: str) -> None:
+    """Log only when the message for ``key`` has changed.
+
+    A refusal reason is true on every tick until it stops being true. Printed
+    each time it would drown out everything else; printed never, the operator
+    cannot see why nothing is happening.
+    """
+    if session.logged.get(key) == message:
+        return
+    session.logged[key] = message
+    note(session.user_id, kind, message)
+
+
 # Claims this strategy's tick subscriptions so they can be released when the
 # session ends. Without an owner tag the release would have to unsubscribe
 # blindly, which could pull ticks out from under the protection monitor.
@@ -579,6 +680,10 @@ async def adopt(user_id: str, symbol: str,
                      session_date=today, ce_token=ce_token, pe_token=pe_token))
     log.warning("ATM PI adopted %s for %s: %s x %s @ %s", match["symbol"], user_id,
                 match["option_type"], match["quantity"], match["entry_price"])
+    note(user_id, "api_adopted",
+         f"took charge of {match['symbol']} — {match['quantity']} @ "
+         f"{match['entry_price']:.2f}; peak since entry is unknown, so the trail "
+         f"restarts from the entry")
     return {"status": "adopted", **match,
             "target": strategy.trade.target_price,
             "stop": strategy.live_stop,
@@ -604,6 +709,8 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     if orphans:
         # Arming on top of an existing position doubles the exposure, and the
         # strategy would then exit a size it did not open.
+        note(user_id, "api_blocked",
+             f"refusing to arm — {orphans[0]['symbol']} is open and unaccounted for")
         return {"status": "open_position_unaccounted",
                 "message": "an open position exists that no session explains; "
                            "adopt or close it first",
@@ -656,6 +763,10 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     register(Session(user_id=user_id, cfg=cfg, pair=pair, strategy=strategy,
                      session_date=today, ce_token=ce_token, pe_token=pe_token))
     log.info("ATM PI armed for %s: %s %s strike=%s", user_id, pair.underlying, pair.expiry, pair.strike)
+    note(user_id, "api_armed",
+         f"{pair.underlying} {pair.strike:g} {pair.expiry} — {quantity} "
+         f"({quantity // max(1, lot)} lot{'s' if quantity // max(1, lot) != 1 else ''}), "
+         f"{cfg.exit_policy.lower().replace('_', ' ')}, {cfg.execution_mode}")
     return {
         "status": "armed", "underlying": pair.underlying, "expiry": pair.expiry,
         "strike": pair.strike, "quantity": quantity, "lots": quantity // max(1, lot),

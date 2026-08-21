@@ -254,3 +254,60 @@ async def test_a_halt_reports_its_reason_not_just_the_word_halted(wired, monkeyp
     assert st["outcome"] == "halted"
     assert "premium_at_risk_exceeded" in (st["halt_reason"] or "")
     assert "premium_at_risk_exceeded" in st["note"]
+
+
+@pytest.mark.asyncio
+async def test_the_pre_open_tick_lands_just_before_the_bell(wired):
+    """A full minute early makes the *other* leg look stale at the open.
+
+    The freshness gate would then report "the feed has gone quiet" for one tick,
+    which is true of the clock and false of the market.
+    """
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    from app.services.kite_engine import state
+    quiet = [e for e in state.activity("u1")
+             if e.kind == "api_waiting" and "gone quiet" in e.message]
+    assert quiet == []
+
+@pytest.mark.asyncio
+async def test_a_skipped_day_is_reported_not_silently_stepped_over(wired, monkeypatch):
+    """A failed request on the newest day must not look like a holiday.
+
+    Without this the replay quietly moves back a day and the operator reads
+    numbers off a session they did not ask for.
+    """
+    # This is what happened for real: 2026-08-21 rate-limited, so the replay
+    # quietly used 2026-08-20 instead.
+    import app.services.atm_premium_imbalance_replay as replay
+    from datetime import date as _date
+    earlier = _date(2026, 8, 20)
+
+    async def flaky(uid, token, day):
+        if day >= DAY:
+            raise RuntimeError("kite rate limited")
+        bars = _bars([100.0], day=day) if int(token) == 222 else _bars([500.0], day=day)
+        return bars
+
+    monkeypatch.setattr(replay, "kite_minute_bars", flaky, raising=False)
+    out = await S.start("u1", speed=600.0)
+    assert out["status"] == "started"
+    assert out["session_date"] == earlier.isoformat()
+    assert any("kite rate limited" in line for line in out["skipped"]), out["skipped"]
+
+    from app.services.kite_engine import state
+    assert any("skipped" in e.message and "rate limited" in e.message
+               for e in state.activity("u1"))
+
+
+@pytest.mark.asyncio
+async def test_no_data_anywhere_reports_what_it_tried(wired, monkeypatch):
+    import app.services.atm_premium_imbalance_replay as replay
+
+    async def none(uid, token, day):
+        return []
+    monkeypatch.setattr(replay, "kite_minute_bars", none, raising=False)
+    out = await S.start("u1")
+    assert out["status"] == "no_data"
+    assert out["skipped"], "it should say which days it tried"
+

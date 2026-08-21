@@ -195,10 +195,13 @@ class ATMPremiumImbalanceStrategy:
             session_open_ms=self.session_open_ms,
             realised_pnl=self.realised_pnl,
         )
+        # Record the refusal too, not just the decision. The reason a strategy is
+        # doing nothing is the thing an operator actually needs, and dropping it
+        # here left both the board and the terminal with nothing to say.
+        self.signal = sig
         if not sig.is_actionable:
             return _NONE
 
-        self.signal = sig
         leg = self.pair.leg(sig.option_type)  # type: ignore[arg-type]
         self.trade = TradeRecord(
             trade_id=self.trade_id,

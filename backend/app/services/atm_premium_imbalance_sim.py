@@ -136,15 +136,22 @@ class SimBroker:
         return True
 
 
-async def last_traded_day(uid: str, token: int, *, look_back: int = 12) -> Optional[date]:
-    """The most recent day this instrument actually has bars for.
+async def last_traded_day(uid: str, token: int, *,
+                          look_back: int = 12) -> tuple[Optional[date], list[str]]:
+    """The most recent day this instrument has bars for, and what was skipped.
 
     Walks back from today rather than consulting a holiday calendar: "a day Kite
     will give us data for" is the property that matters, and it is the one a
     calendar can be wrong about.
+
+    The skip list is returned rather than logged and forgotten. A transient Kite
+    error on the newest day silently moves the replay back a day, and "yesterday
+    was a holiday" and "yesterday's request failed" are very different facts
+    about a replay the operator is about to read numbers off.
     """
     from app.services.atm_premium_imbalance_replay import kite_minute_bars
     today = datetime.now(IST).date()
+    skipped: list[str] = []
     for back in range(0, look_back + 1):
         day = today - timedelta(days=back)
         if day.weekday() >= 5:            # cheap skip; holidays fall out below
@@ -153,10 +160,12 @@ async def last_traded_day(uid: str, token: int, *, look_back: int = 12) -> Optio
             bars = await kite_minute_bars(uid, token, day)
         except Exception as exc:          # noqa: BLE001
             log.debug("ATM PI sim: no bars for %s: %s", day, exc)
+            skipped.append(f"{day.isoformat()}: {exc}")
             continue
         if bars:
-            return day
-    return None
+            return day, skipped
+        skipped.append(f"{day.isoformat()}: no bars")
+    return None, skipped
 
 
 def _quote(instrument_id: str, price: float, now_ms: int, *,
@@ -242,10 +251,16 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
     except (TypeError, ValueError):
         return {"status": "error", "message": "instrument ids are not Kite tokens"}
 
-    day = await last_traded_day(user_id, ce_token)
+    day, skipped = await last_traded_day(user_id, ce_token)
     if day is None:
         return {"status": "no_data",
-                "message": "Kite returned no minute bars for the last 12 days"}
+                "message": "Kite returned no minute bars for the last 12 days",
+                "skipped": skipped}
+    for line in skipped:
+        # Say which days were passed over and why. Without this, a failed request
+        # on the newest day looks identical to a holiday.
+        from app.services import atm_premium_imbalance_runner as _R
+        _R.note(user_id, "api_replay", f"skipped {line}")
 
     from app.services.atm_premium_imbalance_replay import kite_minute_bars
     ce_bars = await kite_minute_bars(user_id, ce_token, day)
@@ -278,11 +293,16 @@ async def start(user_id: str, *, speed: float = 60.0, lots: Optional[int] = None
                         sim=True, released=True)
     R.register(session)
 
+    R.note(user_id, "api_replay",
+           f"replaying {day.isoformat()} at {speed:g}x — {quantity} contracts, "
+           f"{cfg.exit_policy.lower().replace('_', ' ')}. Real prices, simulated "
+           f"fills; not a backtest.")
     _tasks[user_id] = asyncio.create_task(
         _run(user_id, session, st, ce_bars, pe_bars, speed))
     return {"status": "started", "session_date": day.isoformat(), "speed": speed,
             "quantity": quantity, "strike": pair.strike, "expiry": pair.expiry,
-            "exit_policy": cfg.exit_policy, "illustrative_only": True}
+            "exit_policy": cfg.exit_policy, "skipped": skipped,
+            "illustrative_only": True}
 
 
 async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: float) -> None:
@@ -297,7 +317,12 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
     )
     # The pre-open minute. Both legs carry the previous session's close, which is
     # exactly the quote the strategy must refuse.
-    session.clock_ms = open_ms - MINUTE_MS
+    # One second before the bell, not a full minute. A pre-open tick at 09:14:00
+    # is still 60s old when the 09:15 bar arrives, so the freshness gate reports
+    # "the feed has gone quiet" for one tick -- true from the strategy's point of
+    # view, and an artifact of the clock jumping rather than anything real. The
+    # last pre-open tick would in fact land just before the open.
+    session.clock_ms = open_ms - 1_000
     prior_ms = open_ms - 12 * 3600 * 1000        # "yesterday", for the trade stamp
     try:
         await _emit(session, broker, [
@@ -306,6 +331,8 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
         ], traded_ms=prior_ms, official_open=None)
         st.clock_ms = session.clock_ms
         st.note = "pre-open: refusing a carried-over quote"
+        R.note(user_id, "api_replay",
+               "09:14 — both legs still carry yesterday's closing price")
         await asyncio.sleep(MINUTE_MS / 1000.0 / speed)
 
         pairs = list(zip(ce_bars, pe_bars))
@@ -327,6 +354,10 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
                       f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%H:%M}"
             await asyncio.sleep(MINUTE_MS / 1000.0 / speed)
 
+        R.note(user_id, "api_replay_done",
+               f"replay ended at "
+               f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%H:%M} "
+               f"after {st.bars_done} of {st.bars_total} minutes")
         st.outcome = session.strategy.phase.value
         # Carry the halt reason through. "finished: halted" on its own sends the
         # operator to the logs for something the UI already knows.

@@ -381,42 +381,13 @@ async def _start_nifty_orb_runner() -> None:
 # identity on GET instead.
 # --------------------------------------------------------------------------
 
-class ATMPremiumImbalanceConfigRequest(BaseModel):
-    enabled: bool | None = None
-    underlying: str | None = None
-    expiry_policy: str | None = None
-    explicit_expiry: str | None = None
-    strike_policy: str | None = None
-    session_start: str | None = None
-    session_end: str | None = None
-    quote_mode: str | None = None
-    max_quote_age_ms: int | None = None
-    max_ce_pe_skew_ms: int | None = None
-    signal_mode: str | None = None
-    minimum_difference: float | None = None
-    minimum_difference_percent: float | None = None
-    entry_price_policy: str | None = None
-    require_session_origin_tick: bool | None = None
-    first_tick_source: str | None = None
-    entry_buffer_points: float | None = None
-    entry_through_pct: float | None = None
-    manual_price_file: str | None = None
-    max_entry_attempts: int | None = None
-    entry_attempt_timeout_ms: int | None = None
-    exit_policy: str | None = None
-    protection_mode: str | None = None
-    target_points: float | None = None
-    exit_buffer_points: float | None = None
-    stop_enabled: bool | None = None
-    stop_points: float | None = None
-    max_hold_seconds: int | None = None
-    max_trades_per_session: int | None = None
-    quantity: int | None = None
-    max_quantity: int | None = None
-    max_premium_at_risk_inr: float | None = None
-    daily_loss_limit_inr: float | None = None
-    data_source: str | None = None
-    execution_mode: str | None = None
+# No hand-written mirror of the config here on purpose. The previous one listed
+# every field by name and fell behind the dataclass, so newly added settings were
+# silently dropped by pydantic on the way in -- the UI looked like it saved and
+# nothing changed. `set_config` already rejects unknown fields and validates
+# through the engine's own rules, so this endpoint takes the body as-is and lets
+# the single definition do the work. `test_every_config_field_is_settable` is
+# what keeps it honest.
 
 
 @router.get("/atm-premium-imbalance")
@@ -465,11 +436,20 @@ async def get_atm_premium_imbalance_config() -> dict:
 
 
 @router.put("/atm-premium-imbalance")
-async def update_atm_premium_imbalance_config(body: ATMPremiumImbalanceConfigRequest) -> dict:
+async def update_atm_premium_imbalance_config(body: dict = Body(...)) -> dict:
+    """Apply a partial config change.
+
+    Only the keys present are changed. Unknown keys are refused rather than
+    ignored: a silently dropped setting is worse than a 422, because the UI has
+    no way to tell it did not take.
+    """
     from app.services.atm_premium_imbalance import set_config
+    values = {k: v for k, v in dict(body).items() if v is not None}
+    if not values:
+        raise HTTPException(status_code=422, detail="no settings to change")
     try:
-        cfg = set_config({k: v for k, v in body.model_dump().items() if v is not None})
-    except ValueError as exc:
+        cfg = set_config(values)
+    except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"config": cfg.as_dict()}
 
