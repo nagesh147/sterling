@@ -250,7 +250,10 @@ class ATMPremiumImbalanceStrategy:
             # proven to belong to this session when the gate is on, so a
             # carried-over price cannot become an opening price.
             first_tick_price=self._pricing_reference(leg.option_type),
-            official_open=self.cache.official_open_for(leg.option_type),
+            official_open=self.cache.official_open_for(
+                leg.option_type, self.session_open_ms,
+                require_proof=self.cfg.execution_mode == "live",
+            ),
             manual_table=self.manual_table,
         )
 

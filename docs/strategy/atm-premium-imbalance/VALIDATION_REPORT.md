@@ -150,6 +150,56 @@ opinion, it is "take whatever the book has". That is how the fill landed at
 the strategy never controlled, which is a materially weaker claim than "enter at
 the open and take 15 points".
 
+### The arrival mechanism is now captured, and it found one more hole
+
+The residual doubt was *how* a previous session's price reaches the feed. Settled
+by capturing a real binary tick through `ticker.parse_packet` — the exact path the
+runner consumes — with the market closed on 2026-08-21 at 23:16 IST:
+
+```
+token 212614405 (SENSEX26AUG77700PE)  mode=full
+  last_price         = 358.65
+  last_trade_time    = 1787306999   -> 2026-08-21 15:39:59 IST
+  exchange_timestamp = 1787309751   -> 2026-08-21 16:25:51 IST
+  ohlc               = {open 356.70, high 433.0, low 318.0, close 369.75}
+  volume_traded      = 10152900
+  L1 bid/ask         = 0.0 / 0.0
+```
+
+Three things this settles, none of them by inference:
+
+1. **The stamps arrive as `int` epoch seconds**, not `datetime`. That is exactly
+   why the old `isinstance(ts, datetime)` check always failed and the trade clock
+   was replaced with receipt time. Defect 1 is now confirmed empirically, not
+   only by reading the parser.
+2. **The two clocks are 2752 seconds apart in a single tick.** The packet clock
+   advanced 46 minutes past the last trade. So `exchange_timestamp >= session_open`
+   does **not** imply the price traded in the session, and using it as a fallback —
+   which I briefly did — would have passed a stale price straight through.
+3. **`ohlc.open` = 356.70 is Friday's open**, independently equal to the
+   2026-08-21 09:15 bar open. The field is session-to-date and carries no
+   timestamp of its own.
+
+Point 3 exposed a hole in the fix as first written: `first_tick_source=OFFICIAL_OPEN`
+was documented as needing "no dating", which is false — before a session's first
+trade it reports the *previous* session's open. `official_open_for` now withholds
+it until the leg has traded in this session, under the same three-way policy as
+the tick reference. Pricing Monday's entry off Friday's open is exactly the class
+of fault being closed, so shipping that would have reintroduced it by another
+route.
+
+Also captured: with the market closed the L1 book is empty, so an ask-referenced
+policy refuses rather than guessing.
+
+**What a pre-open capture would still add.** The capture above was taken after the
+close, not between 09:00 and 09:15, so both clocks sit before the next session's
+open. A Monday pre-open capture would additionally show the packet clock advancing
+past 09:15 while the trade clock stays at Friday. That is the one step still
+inferred — but it is inferred from an observed 2752-second divergence between the
+two clocks in real data, not from an assumption about how the feed behaves. The
+gate does not depend on it either way: it refuses any quote whose trade predates
+the open, whatever the packet clock says.
+
 ### Replay re-run with the fix in place
 
 Same real bars, the carried-over 379.0 fed in first exactly as the feed delivered

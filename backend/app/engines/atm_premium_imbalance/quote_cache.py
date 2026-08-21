@@ -155,11 +155,31 @@ class PremiumQuoteCache:
         q = self._first_by_leg.get(option_type)
         return None if q is None else float(q.ltp)
 
-    def official_open_for(self, option_type: OptionType) -> Optional[float]:
-        """The exchange's published open for one leg, if the feed has sent it."""
+    def official_open_for(self, option_type: OptionType,
+                          session_open_ms: Optional[int] = None,
+                          *, require_proof: bool = False) -> Optional[float]:
+        """The exchange's published open for one leg -- **only if it is today's**.
+
+        ``ohlc.open`` carries no timestamp of its own, and it does not become the
+        current session's open until that session's first trade. A quote captured
+        before then reports the *previous* session's open: a real capture taken
+        after Friday's close returned ``ohlc.open = 356.70``, which was Friday's
+        09:15 open, not Monday's.
+
+        So the open is dated indirectly, by the only evidence available -- the
+        leg's last trade. If a trade has happened at or after the session open,
+        ``ohlc.open`` is necessarily this session's. The same three-way policy as
+        :meth:`first_session_price_for` applies, so the two cannot disagree.
+        """
         q = self._ce if option_type == "CE" else self._pe
         if q is None or q.official_open is None or q.official_open <= 0:
             return None
+        if session_open_ms is not None:
+            verdict = q.is_session_origin(session_open_ms)
+            if verdict is False:
+                return None                     # a previous session's open
+            if verdict is None and require_proof:
+                return None
         return float(q.official_open)
 
     def both_legs_present(self) -> bool:

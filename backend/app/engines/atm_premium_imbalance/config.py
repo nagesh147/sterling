@@ -46,7 +46,10 @@ OBSERVED_ENTRY_THROUGH_PCT = 0.10
 #: Where the "first tick" reference comes from.
 #:
 #: ``SESSION_TICK``   the first tick proven to have traded in this session.
-#: ``OFFICIAL_OPEN``  the exchange's published open, which needs no dating.
+#: ``OFFICIAL_OPEN``  the exchange's published open. Still dated indirectly --
+#:                     ohlc.open reports the PREVIOUS session's open until this
+#:                     session's first trade, so it is withheld until the leg has
+#:                     traded today.
 FIRST_TICK_SOURCES: frozenset[str] = frozenset({"SESSION_TICK", "OFFICIAL_OPEN"})
 
 #: Policies we refuse to run against real money.

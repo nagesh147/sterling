@@ -132,9 +132,11 @@ def price_entry(
         # The bot rounds to ONE decimal, not to the tick grid; one-decimal
         # prices are multiples of 0.10 and so are always tick-valid anyway.
         if cfg.first_tick_source == "OFFICIAL_OPEN":
-            # The exchange's own opening price. Needs no dating, so it cannot be
-            # a carried-over previous-session price -- which is the failure that
-            # made the recorded bot price 416.90 against a 356.70 open.
+            # The exchange's own opening price. It still has to be *dated*: a
+            # real capture taken after Friday's close reported ohlc.open = 356.70,
+            # which was Friday's open rather than the next session's. The caller
+            # (PremiumQuoteCache.official_open_for) withholds it until the leg has
+            # traded in this session, so reaching here means it is today's.
             if official_open is None or official_open <= 0:
                 raise ValueError("first_tick_source=OFFICIAL_OPEN requires the exchange open")
             reference, kind = float(official_open), "official_open"
