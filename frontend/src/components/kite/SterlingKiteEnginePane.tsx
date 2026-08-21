@@ -1386,20 +1386,23 @@ function Collapsible({ label, summary, open, onToggle, children }: {
   );
 }
 
+/**
+ * How this board looks.
+ *
+ * Deliberately not what it shows: Best leg and Ended are live filters and live
+ * in the toolbar, where their state is visible without opening a panel. This
+ * used to carry a second copy of both as checkboxes, which is two controls for
+ * one setting and a pair that will eventually drift.
+ *
+ * "Reset board view" therefore resets appearance only. A button in an
+ * appearance panel that silently un-filters your list is a surprise.
+ */
 function SignalTableSettingsPanel({
   viewLayout,
   onLayoutChange,
-  bestOnly,
-  onBestOnlyChange,
-  showEnded,
-  onShowEndedChange,
 }: {
   viewLayout: 'grid' | 'list';
   onLayoutChange: (layout: 'grid' | 'list') => void;
-  bestOnly: boolean;
-  onBestOnlyChange: (next: boolean) => void;
-  showEnded: boolean;
-  onShowEndedChange: (next: boolean) => void;
 }) {
   const settings = useKiteSettings();
   const columns: Array<{ key: 'showExchange' | 'showLeg' | 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection'; label: string; hint: string }> = [
@@ -1413,8 +1416,6 @@ function SignalTableSettingsPanel({
   const reset = () => {
     settings.resetSignalTableSettings();
     onLayoutChange('list');
-    onBestOnlyChange(false);
-    onShowEndedChange(true);
   };
 
   // One navigation helper for the whole app. There used to be two incompatible
@@ -1428,9 +1429,11 @@ function SignalTableSettingsPanel({
     <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 15 }}>
         <div>
-          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Signal table settings</div>
+          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>SuperTrend board settings</div>
           <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
-            These choices change only how this table looks. Entry, stop, exit and sizing rules live under Connect → Trade Rules.
+            How this board looks — nothing here changes what is scanned or how a trade exits. Best leg and
+            Ended are live filters and sit in the toolbar above. Entry, stop, exit and sizing rules live
+            under Connect → Trade Rules.
           </div>
         </div>
         <button type="button" onClick={openTradeRules} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 7, background: k.bg, color: k.text, padding: '0 11px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
@@ -1438,10 +1441,10 @@ function SignalTableSettingsPanel({
         </button>
       </div>
 
-      <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(190px, 1fr) minmax(250px, 1.25fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(250px, 1.5fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
         <div className="sk-table-settings-group" style={{ padding: 13 }}>
           <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: '#f6f6f7' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: k.surface }}>
             {([
               { value: 'list' as const, label: 'List', icon: <ListIcon /> },
               { value: 'grid' as const, label: 'Grid', icon: <GridIcon /> },
@@ -1460,18 +1463,6 @@ function SignalTableSettingsPanel({
               );
             })}
           </div>
-        </div>
-
-        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
-          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Rows</div>
-          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
-            Best signal per instrument
-          </label>
-          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showEnded} onChange={(event) => onShowEndedChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
-            Show ended setups
-          </label>
         </div>
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
@@ -1497,7 +1488,7 @@ function SignalTableSettingsPanel({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
         <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
         <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: 'var(--k-ink-4)', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-          Reset table view
+          Reset board view
         </button>
       </div>
       <style>{`
@@ -1511,12 +1502,6 @@ function SignalTableSettingsPanel({
   );
 }
 
-// Inline dropdown for changing a signal-source-tier setting (scan source, exit rule)
-// right from the table toolbar — same open/close/select interaction as the chart's
-// candle-type and indicator pickers (a button showing the current choice + chevron,
-// which opens a positioned popover list with a checkmark on the active option).
-/** The caps name that sits in front of a header dropdown, so a bare value pill
- *  never has to be guessed at. */
 /** Where this setup came from — the underlying's chart, the option's own premium
  *  chart, both agreeing, or Navigator. In "both" mode one contract can produce a
  *  Spot row AND a Premium row with different entries; without this they looked
@@ -2265,10 +2250,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <SignalTableSettingsPanel
               viewLayout={viewLayout}
               onLayoutChange={setViewLayout}
-              bestOnly={bestOnly}
-              onBestOnlyChange={changeBestOnly}
-              showEnded={showEnded}
-              onShowEndedChange={changeShowEnded}
             />
           )}
         </div>

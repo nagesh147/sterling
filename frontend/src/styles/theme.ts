@@ -57,6 +57,7 @@ const SURFACES: readonly Token[] = [
   ['tint-warm', '#ffd7c7', '#3a241a'],
   ['tint-warm-2', '#ffe8dc', '#33221a'],
   ['surface-6', '#f4f4f5', '#191d24'],
+  ['surface-7', '#f4f4f4', '#191d24'],
   ['surface-3', '#fbfbfc', '#14171d'],
   ['surface-4', '#f5f5f5', '#1a1e26'],
   ['surface-5', '#fbfbfb', '#14171d'],
@@ -89,6 +90,7 @@ const INK: readonly Token[] = [
   ['ink-7', '#8d8d8d', '#9aa2b0'],
   ['faint-4', '#c6c6c6', '#7d8593'],
   ['faint-5', '#ccc', '#7d8593'],
+  ['faint-6', '#cfcfcf', '#7d8593'],
 ];
 
 /**
@@ -116,6 +118,7 @@ const ACCENTS: readonly Token[] = [
   ['amber-2', '#ff9800', '#ffab2e'],
   ['amber-3', '#f59e0b', '#ffb03a'],
   ['warn', '#d97706', '#f0951f'],
+  ['warn-ink', '#8a6100', '#f0b755'],
   ['warn-deep', '#e65100', '#ff8a3d'],
   ['orange', '#ff5722', '#ff7a45'],
   ['brand', '#f06428', '#ff7a45'],

@@ -33,7 +33,7 @@ const inr = (n: number) => '₹' + (Number.isFinite(n) ? n : 0).toLocaleString('
 const num = (v: any) => Number(v ?? 0);
 const fmtPx = (v: any) => (v != null && !isNaN(Number(v)) ? Number(v).toFixed(2) : '0.00');
 const fmtExpiry = (e?: string) => { if (!e) return ''; const d = new Date(e); return isNaN(d.getTime()) ? e : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase(); };
-const HATCH = 'repeating-linear-gradient(-45deg,#f4f4f4,#f4f4f4 5px,var(--k-surface-2) 5px,var(--k-surface-2) 10px)';
+const HATCH = 'repeating-linear-gradient(-45deg,var(--k-surface-7),var(--k-surface-7) 5px,var(--k-surface-2) 5px,var(--k-surface-2) 10px)';
 
 // ── icons ────────────────────────────────────────────────────────────────────
 const Box = () => (
@@ -342,7 +342,7 @@ export function OrderWindow({ options, onClose }: Props) {
               {(['quick', 'regular'] as Tab[]).map((tb) => (
                 <div key={tb} onClick={() => switchTab(tb)} style={{ padding: '11px 18px', fontSize: 13, cursor: 'pointer', textTransform: 'capitalize', color: tab === tb ? accent : k.text, fontWeight: tab === tb ? 600 : 400, borderBottom: tab === tb ? `2px solid ${accent}` : '2px solid transparent', marginBottom: -1 }}>{tb}</div>
               ))}
-              <div title="Iceberg unavailable" style={{ padding: '11px 18px', fontSize: 13, color: '#cfcfcf', cursor: 'not-allowed' }}>Iceberg</div>
+              <div title="Iceberg unavailable" style={{ padding: '11px 18px', fontSize: 13, color: 'var(--k-faint-6)', cursor: 'not-allowed' }}>Iceberg</div>
               <button onClick={() => setDepthOpen((d) => !d)} title={depthOpen ? 'Close market depth' : 'Market depth'} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', padding: '0 14px', color: k.dim, background: depthOpen ? k.surfaceHover : 'transparent', border: 'none', borderLeft: `1px solid ${k.border}`, cursor: 'pointer' }}>{depthOpen ? <XIcon s={15} /> : <Pencil />}</button>
             </div>
 
@@ -448,7 +448,7 @@ export function OrderWindow({ options, onClose }: Props) {
             {error && <div style={{ padding: '8px 16px', background: tint(k.red, 10), color: k.red, fontSize: 12 }}>{error}</div>}
 
             {amoConfirmNeeded && (
-              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: '#8a6100', fontSize: 12 }}>
+              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: 'var(--k-warn-ink)', fontSize: 12 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={amoConfirmed} onChange={(e) => setAmoConfirmed(e.target.checked)} style={{ accentColor: k.amber, width: 14, height: 14, flexShrink: 0 }} />
                   Market is closed — this will be placed as an After Market Order (AMO) for the next session.
