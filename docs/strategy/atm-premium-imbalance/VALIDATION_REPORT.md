@@ -114,6 +114,25 @@ Sources: `bars/interval=minute/exchange=BSE/segment=INDICES/265__SENSEX.parquet`
 and `instruments/latest.parquet` (114,851 rows, 2,396 SENSEX option contracts).
 Prices are stored as `int64 = round(rupees × 10_000)` per `kitelake/config.py`.
 
+### Bar-level replay against Kite (built, not yet run)
+
+`app/services/atm_premium_imbalance_replay.py` replays a recorded session against
+Kite minute bars for the actual traded contract, resolving its token from the
+lake's instrument snapshot. The harness is proven by 11 fixture tests — including
+negative cases, so it demonstrably *can* contradict the recording — but it has
+**not been run against live data**: Kite access tokens expire daily and the
+available one is six days old.
+
+Replayable: `2026-08-20` (CE token 219005189) and `2026-08-21` (PE token
+212614405). Not replayable: `2026-07-30`, whose expiry had lapsed before the
+instrument snapshot was taken, so its token cannot be recovered.
+
+Ceiling of that check, stated in advance so the result is not oversold: it can
+confirm the first tick, the ATM strike, which leg was cheaper, the computed order
+price and whether the target was reached. It cannot confirm the fills or the
+bid-derived exit price — those are bracketed by the bar range, and a fill outside
+its bar is reported as a mismatch.
+
 ### What this cross-check still cannot reach
 
 - **Option premiums.** The lake holds no BFO/NFO bars — only `BSE`, `NSE` and

@@ -75,9 +75,35 @@ exists to *reproduce*, not to trade.
   still closes the position. `NONE` reproduces the observed bot and has no
   backstop at all, which is why live refuses it.
 
-## Replay
+## Replay against real Kite data
 
-The golden trades are the replay harness:
+```bash
+cd backend && python3 -m app.services.atm_premium_imbalance_replay 2026-08-20
+```
+
+Resolves the traded contract's Kite token from the offline lake's instrument
+snapshot (which preserves tokens for contracts that have since expired), pulls
+minute bars from Kite historical for both legs, and compares them against what
+the recording printed. Requires a **live Kite session**; Kite access tokens
+expire daily.
+
+What it checks: the index open and the ATM strike it implies, which leg was
+cheaper, the selected leg's first tick, the order price the policy computes from
+it, whether the target was reached and in which minute, and whether the recorded
+fills lie inside their bars.
+
+What it cannot check: the fills themselves, the bid the exit was priced off, and
+tick ordering. Minute bars are a four-way summary of sixty seconds. Fills are
+*bracketed* — a fill outside its bar's range is reported as a mismatch, which is
+the strongest statement bars support.
+
+Sessions: `2026-08-20` and `2026-08-21` are replayable. `2026-07-30` is **not** —
+that expiry had already lapsed when the instrument snapshot was taken, so its
+token cannot be resolved.
+
+## Replay against the recordings
+
+The golden trades are the offline replay harness:
 
 ```bash
 cd backend && PYTHONWARNINGS=ignore python3 -m pytest tests/engines/atm_premium_imbalance/ -q
