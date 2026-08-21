@@ -114,24 +114,76 @@ Sources: `bars/interval=minute/exchange=BSE/segment=INDICES/265__SENSEX.parquet`
 and `instruments/latest.parquet` (114,851 rows, 2,396 SENSEX option contracts).
 Prices are stored as `int64 = round(rupees × 10_000)` per `kitelake/config.py`.
 
-### Bar-level replay against Kite (built, not yet run)
+### Bar-level replay against Kite — RUN, and it found a defect
 
-`app/services/atm_premium_imbalance_replay.py` replays a recorded session against
-Kite minute bars for the actual traded contract, resolving its token from the
-lake's instrument snapshot. The harness is proven by 11 fixture tests — including
-negative cases, so it demonstrably *can* contradict the recording — but it has
-**not been run against live data**: Kite access tokens expire daily and the
-available one is six days old.
+Run 2026-08-21 against real Kite minute bars for the traded contract
+(`SENSEX26AUG77700PE`, token 212614405):
 
-Replayable: `2026-08-20` (CE token 219005189) and `2026-08-21` (PE token
-212614405). Not replayable: `2026-07-30`, whose expiry had lapsed before the
-instrument snapshot was taken, so its token cannot be recovered.
+| Check | Recording | Real Kite bars | Verdict |
+|---|---|---|---|
+| ATM strike | 77700 | 77700 (index 09:15 open **77701.07**) | **MATCH** |
+| Which leg was cheaper | PE | PE — CE open 500.00 vs PE open 356.70 | **MATCH** |
+| Entry fill possible in its minute | 340.10 | within [318.00, 356.70] | **MATCH** |
+| Target reached | 355.10 | yes, in the 09:16 minute (high 360.00) | **MATCH** |
+| First tick | 379.0 | **356.70** | **MISMATCH** |
+| Order price | 416.9 | **392.40** | **MISMATCH** |
 
-Ceiling of that check, stated in advance so the result is not oversold: it can
-confirm the first tick, the ATM strike, which leg was cheaper, the computed order
-price and whether the target was reached. It cannot confirm the fills or the
-bid-derived exit price — those are bracketed by the bar range, and a fill outside
-its bar is reported as a mismatch.
+**All three mismatches are one root cause, and it is a defect in the source
+strategy rather than in this implementation.**
+
+The bot priced its entry from a **stale tick**. It used 379.0 when the exchange's
+official open was 356.70 — 22.3 points, 6.3% high. 379.0 does not occur anywhere
+in the 09:15 bar (318.00–356.70); it sits inside the *previous* session's closing
+minutes (373.90–379.90). The `×1.10` rule then amplified the error: 416.90 sent,
+against the 392.40 the true open implies.
+
+Our engine reproduces the bot's arithmetic exactly — given 379.0 it produces
+416.9, asserted by test. Fed the exchange's real open it produces 392.40. So the
+**rule is confirmed and the input is not.**
+
+The build is aware: it prints both numbers under `OPEN PRICE CHECK (reference
+only)`. It surfaces the discrepancy and then trades on the stale value anyway.
+
+Consequence for viability: a limit 16.9% through the true open is not a price
+opinion, it is "take whatever the book has". That is how the fill landed at
+340.10 — *below* the official open. The `+15` target is then measured from a fill
+the strategy never controlled, which is a materially weaker claim than "enter at
+the open and take 15 points".
+
+Also confirmed from the real index, for the canonical session: SENSEX opened
+2026-08-20 at **77468.45**, whose nearest listed strike is **77500** — the strike
+video 1 printed (31.55 away, against 68.45 for 77400).
+
+**2026-08-20's option premiums are not replayable.** That expiry lapsed the day
+before this run, so the contract has been removed from Kite's instrument dump and
+historical rejects its token. The index check above is the most that session
+supports.
+
+Frozen bar values and these conclusions live in
+`tests/engines/atm_premium_imbalance/test_real_data_replay.py`, so they survive
+the contracts being delisted.
+
+### Harness provenance
+
+`app/services/atm_premium_imbalance_replay.py` fetches the bars and
+`engines/atm_premium_imbalance/replay.py` does the comparison. The harness is
+proven by 11 fixture tests with a negative case for every positive one — a
+disagreeing first tick, a target never reached, a fill outside its bar, the wrong
+leg cheaper — because a replay that cannot contradict the recording is not a
+check. Entry decisions come from the real strategy engine, not from arithmetic
+repeated in the harness.
+
+Its ceiling, stated so the result is not oversold: minute bars can confirm the
+first tick, the ATM strike, which leg was cheaper, the computed order price and
+whether the target was reached. They cannot confirm the fills or the bid-derived
+exit price — those are *bracketed*, and a fill outside its bar is a mismatch,
+which is the strongest statement bars support. Tick ordering is untestable at
+this granularity.
+
+Sessions: `2026-08-21` replayed in full (above). `2026-08-20` index-only, its
+option contract delisted. `2026-07-30` not replayable at all — that expiry had
+lapsed before the instrument snapshot was taken, so its token cannot be
+recovered.
 
 ### What this cross-check still cannot reach
 
