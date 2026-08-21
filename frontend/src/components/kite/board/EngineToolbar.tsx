@@ -24,6 +24,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import { ENGINE_LABEL, type EngineId } from './boardTypes';
+import { Tip } from '../InfoTooltip';
 
 export interface EngineTabState {
   id: EngineId;
@@ -138,8 +139,12 @@ export function ToolbarControl({ label, hint, tone = k.dim, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <span title={hint} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-      <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.07em', color: tone }}>{label}</span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <Tip text={`${label} — ${hint}`}>
+        <span tabIndex={0} style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.07em', color: tone, cursor: 'help', outlineOffset: 2 }}>
+          {label}
+        </span>
+      </Tip>
       {children}
     </span>
   );
@@ -155,11 +160,13 @@ export function ToolbarControl({ label, hint, tone = k.dim, children }: {
  */
 export function ScopeDivider() {
   return (
-    <span
-      title="Left: engine settings, saved on the server and applied to trading. Right: local view filters that never change what is scanned."
-      aria-hidden
-      style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 2px' }}
-    />
+    <Tip text="Scope — left of this line, settings are saved on the server and change what is scanned and how live trades exit. Right of it, filters change only what this browser shows.">
+      <span
+        tabIndex={0}
+        aria-label="Scope divider between engine settings and local view filters"
+        style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 4px', cursor: 'help', outlineOffset: 3 }}
+      />
+    </Tip>
   );
 }
 

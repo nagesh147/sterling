@@ -18,6 +18,7 @@ import {
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
+import { Tip } from '../InfoTooltip';
 
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
@@ -338,17 +339,21 @@ export function SignalBoard({
       >
         <span />
         {cols.map((col) => (
-          <span
-            key={col.id}
-            title={col.hint}
-            style={{
-              fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim,
-              textTransform: 'uppercase', textAlign: col.align, whiteSpace: 'nowrap',
-              overflow: 'hidden', textOverflow: 'ellipsis',
-            }}
-          >
-            {col.label}
-          </span>
+          <Tip key={col.id} text={col.hint ? `${col.label} — ${col.hint}` : undefined}>
+            <span
+              // Focusable so the explanation is reachable without a mouse; the
+              // header is where the board says what each number means.
+              tabIndex={col.hint ? 0 : undefined}
+              style={{
+                fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim,
+                textTransform: 'uppercase', textAlign: col.align, whiteSpace: 'nowrap',
+                overflow: 'hidden', textOverflow: 'ellipsis', cursor: col.hint ? 'help' : undefined,
+                outlineOffset: 2,
+              }}
+            >
+              {col.label}
+            </span>
+          </Tip>
         ))}
       </div>
 

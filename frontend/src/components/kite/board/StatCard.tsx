@@ -18,6 +18,7 @@
  */
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
+import { Tip } from '../InfoTooltip';
 
 export interface Stat {
   label: string;
@@ -53,11 +54,17 @@ function EstimateMark({ hint }: { hint?: string }) {
 
 export function StatRow({ label, value, color, hint, note, estimated }: Stat) {
   return (
-    <div
-      title={hint}
-      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}
-    >
-      <span style={{ color: k.dim, whiteSpace: 'nowrap' }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+      {/* The hint hangs off the label, not the whole row: a tooltip that
+          follows your pointer across a value you are trying to read is noise. */}
+      <Tip text={hint ? `${label} — ${hint}` : undefined}>
+        <span
+          tabIndex={hint ? 0 : undefined}
+          style={{ color: k.dim, whiteSpace: 'nowrap', cursor: hint ? 'help' : undefined, outlineOffset: 2 }}
+        >
+          {label}
+        </span>
+      </Tip>
       <span style={{ ...numeric, color: color ?? k.text, textAlign: 'right', minWidth: 0 }}>
         {value}
         {estimated && <EstimateMark hint={hint} />}
@@ -69,13 +76,19 @@ export function StatRow({ label, value, color, hint, note, estimated }: Stat) {
 
 export function StatTile({ label, value, color, hint, note, estimated }: Stat) {
   return (
-    <div title={hint} style={{ minWidth: 0 }}>
-      <div style={{
-        fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: '.04em',
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>
-        {label}
-      </div>
+    <div style={{ minWidth: 0 }}>
+      <Tip text={hint ? `${label} — ${hint}` : undefined}>
+        <div
+          tabIndex={hint ? 0 : undefined}
+          style={{
+            fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: '.04em',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            cursor: hint ? 'help' : undefined, outlineOffset: 2,
+          }}
+        >
+          {label}
+        </div>
+      </Tip>
       <div style={{
         ...numeric, fontSize: 12, fontWeight: 600, color: color ?? k.text,
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1,

@@ -23,6 +23,12 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
   const [visible, setVisible] = React.useState(false);
   const [pos, setPos] = React.useState<{ top: number; left: number; placement: 'top' | 'bottom' } | null>(null);
   const hideTimer = React.useRef<number | null>(null);
+  // Read once per mount: a tooltip that animates against an explicit OS
+  // preference is exactly the kind of motion the preference exists to stop.
+  const reduceMotion = React.useMemo(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
 
   const show = () => {
     if (hideTimer.current) { window.clearTimeout(hideTimer.current); hideTimer.current = null; }
@@ -78,16 +84,20 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            transform: `translate(-50%, ${pos.placement === 'top' ? '-100%' : '0'}) translateY(${visible ? 0 : pos.placement === 'top' ? 3 : -3}px)`,
+            transform: `translate(-50%, ${pos.placement === 'top' ? '-100%' : '0'}) translateY(${visible || reduceMotion ? 0 : pos.placement === 'top' ? 3 : -3}px)`,
             opacity: visible ? 1 : 0,
-            transition: 'opacity 110ms ease-out, transform 110ms ease-out',
+            transition: reduceMotion ? 'none' : 'opacity 110ms ease-out, transform 110ms ease-out',
             zIndex: 20000,
             pointerEvents: 'none',
             maxWidth: 290,
             background: 'var(--k-bg)',
-            border: '1px solid rgba(0,0,0,0.09)',
+            // A hairline of near-black was invisible against a dark surface,
+            // leaving the card floating with no edge. The token carries an
+            // edge in both themes, and the shadow deepens for dark, where a
+            // light wash reads as fog rather than elevation.
+            border: '1px solid var(--k-border-strong)',
             borderRadius: 8,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06)',
+            boxShadow: '0 12px 28px rgba(0, 0, 0, .28), 0 2px 6px rgba(0, 0, 0, .14)',
             padding: '9px 11px',
             fontFamily: k.fontFamily,
           }}
@@ -106,6 +116,7 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
               ...(pos.placement === 'top'
                 ? { bottom: -6, borderTop: '6px solid var(--k-bg)' }
                 : { top: -6, borderBottom: '6px solid var(--k-bg)' }),
+              filter: 'drop-shadow(0 0 0 var(--k-border-strong))',
             }}
           />
         </div>,
