@@ -168,6 +168,14 @@ class ATMPremiumImbalanceConfig:
 
     # --- session policy -----------------------------------------------------
     max_trades_per_session: int = 1
+    # How long after the open an entry may still be taken. This strategy is
+    # defined as buying at the open; without a window it would enter on the first
+    # valid tick pair after arming, which at 14:00 is a different strategy
+    # wearing the same name. 0 disables the window.
+    entry_window_seconds: int = 300
+    # Close any open position at session_end. Held past it -- and on expiry day,
+    # held to expiry -- a bought option can settle worthless.
+    close_at_session_end: bool = True
 
     # --- sizing & risk ------------------------------------------------------
     # QUANTITY is the default only for compatibility: a config saved before this
@@ -235,6 +243,8 @@ class ATMPremiumImbalanceConfig:
             raise ValueError("max_entry_attempts must be between 1 and 10")
         if self.entry_attempt_timeout_ms <= 0:
             raise ValueError("entry_attempt_timeout_ms must be > 0")
+        if self.entry_window_seconds < 0:
+            raise ValueError("entry_window_seconds cannot be negative")
         if self.max_trades_per_session < 1:
             raise ValueError("max_trades_per_session must be >= 1")
         if self.minimum_difference < 0:

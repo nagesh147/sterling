@@ -27,3 +27,16 @@ def session_open_ms_for(now_ms: int, session_start: str = "09:15") -> int:
     local = datetime.fromtimestamp(int(now_ms) / 1000, tz=IST)
     opened = local.replace(hour=hh, minute=mm, second=0, microsecond=0)
     return int(opened.timestamp() * 1000)
+
+
+def session_close_ms_for(now_ms: int, session_end: str = "15:25") -> int:
+    """Epoch ms of ``session_end`` IST on the day containing ``now_ms``.
+
+    Same anchoring as :func:`session_open_ms_for`. Exists because a position that
+    outlives the session is a different risk from the one that was taken on: held
+    to expiry, a bought option can settle worthless.
+    """
+    hh, mm = parse_hhmm(session_end)
+    local = datetime.fromtimestamp(int(now_ms) / 1000, tz=IST)
+    closed = local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return int(closed.timestamp() * 1000)

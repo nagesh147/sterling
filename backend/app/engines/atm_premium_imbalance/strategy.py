@@ -39,7 +39,7 @@ from .protection import (
     ProtectionOrder, ProtectionState, plan_protection, requires_cancel_before_exit,
 )
 from .quote_cache import PremiumQuoteCache
-from .session import session_open_ms_for
+from .session import session_close_ms_for, session_open_ms_for
 from .signal import evaluate
 
 
@@ -123,6 +123,8 @@ class ATMPremiumImbalanceStrategy:
     #: Session open on the exchange clock. Derived from ``cfg.session_start`` for
     #: the day the first tick arrives, so a stale quote can be dated.
     session_open_ms: Optional[int] = None
+    #: End of the trading window on the same day. A position must not outlive it.
+    session_close_ms: Optional[int] = None
 
     def __post_init__(self) -> None:
         self.cfg.validate()
@@ -153,6 +155,7 @@ class ATMPremiumImbalanceStrategy:
         self._last_now_ms = int(now_ms)
         if self.session_open_ms is None:
             self.session_open_ms = session_open_ms_for(now_ms, self.cfg.session_start)
+            self.session_close_ms = session_close_ms_for(now_ms, self.cfg.session_end)
         if self.cache.on_option_tick(quote) is None:
             return _NONE
         if self.phase in (Phase.DONE, Phase.HALTED):
@@ -162,6 +165,13 @@ class ATMPremiumImbalanceStrategy:
             self.phase = Phase.ARMED
 
         if self.phase is Phase.ARMED:
+            # "At the open" is part of what this strategy is. Without a window it
+            # would enter on the first valid tick pair after arming, whenever
+            # that happened to be.
+            window = int(self.cfg.entry_window_seconds)
+            if (window > 0 and self.session_open_ms is not None
+                    and now_ms - self.session_open_ms > window * 1000):
+                return Intent(kind="none", reason="entry_window_closed")
             return self._try_entry(now_ms, session_open=session_open, risk_authorized=risk_authorized)
         if self.phase is Phase.ENTERING:
             return self._drive_entry()
@@ -398,14 +408,21 @@ class ATMPremiumImbalanceStrategy:
         price = float(quote.ltp)
         self._high_water = price if self._high_water is None else max(self._high_water, price)
 
-        hit, reason = should_exit(
-            last_price=price,
-            entry_fill=self.trade.entry_price,
-            cfg=self.cfg,
-            held_seconds=held,
-            counter_leg_price=None if counter is None else float(counter.ltp),
-            high_water=self._high_water,
-        )
+        # Session end wins over every policy. A target that has not been reached
+        # by the close is not going to be, and holding a bought option past the
+        # session -- to expiry, on expiry day -- risks the whole premium.
+        if (self.cfg.close_at_session_end and self.session_close_ms is not None
+                and now_ms >= self.session_close_ms):
+            hit, reason = True, "session_end"
+        else:
+            hit, reason = should_exit(
+                last_price=price,
+                entry_fill=self.trade.entry_price,
+                cfg=self.cfg,
+                held_seconds=held,
+                counter_leg_price=None if counter is None else float(counter.ltp),
+                high_water=self._high_water,
+            )
         if not hit:
             return _NONE
 
