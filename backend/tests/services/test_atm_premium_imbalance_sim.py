@@ -1,0 +1,256 @@
+"""The simulator.
+
+Two kinds of test here. The safety ones are the point: a simulation must never
+reach a broker, never be driven by live ticks, and never run on top of a live
+armed session. The rest check that the replay actually exercises the strategy.
+"""
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+
+from app.engines.atm_premium_imbalance import (
+    ATMPremiumImbalanceConfig, InstrumentRef, OptionPairRef,
+)
+from app.engines.atm_premium_imbalance.replay import Bar
+import app.services.atm_premium_imbalance_runner as R
+import app.services.atm_premium_imbalance_sim as S
+
+IST = timezone(timedelta(hours=5, minutes=30))
+DAY = date(2026, 8, 21)
+
+
+def _pair(lot=20):
+    def leg(ot, token):
+        return InstrumentRef(instrument_id=token, tradingsymbol=f"SENSEX77700{ot}",
+                             option_type=ot, strike=77700.0, expiry="2026-08-27",
+                             lot_size=lot, tick_size=0.05, upper_circuit=3000.0)
+    return OptionPairRef(underlying="SENSEX", expiry="2026-08-27", strike=77700.0,
+                         ce=leg("CE", "111"), pe=leg("PE", "222"))
+
+
+def _bars(prices, *, day=DAY, start_hhmm=(9, 15)):
+    """One bar per price, each a flat bar so the path is unambiguous."""
+    out = []
+    for i, px in enumerate(prices):
+        ts = datetime(day.year, day.month, day.day, start_hhmm[0], start_hhmm[1],
+                      tzinfo=IST) + timedelta(minutes=i)
+        out.append(Bar(ts, px, px, px, px, 0.0))
+    return out
+
+
+@pytest.fixture(autouse=True)
+def clean():
+    R.clear()
+    S._states.clear()
+    S._tasks.clear()
+    yield
+    R.clear()
+    S._states.clear()
+    S._tasks.clear()
+
+
+@pytest.fixture
+def wired(monkeypatch):
+    """resolve + bars stubbed; CE dear, PE cheap and then rising."""
+    import app.services.atm_premium_imbalance as svc
+    import app.services.atm_premium_imbalance_replay as replay
+
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=1,
+                                    target_points=15.0,
+                                    max_premium_at_risk_inr=40_000.0).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+
+    async def resolve(uid, c):
+        return _pair()
+    monkeypatch.setattr(svc, "resolve_option_pair", resolve, raising=False)
+
+    ce = _bars([500.0, 501.0, 502.0])
+    pe = _bars([100.0, 110.0, 120.0])
+
+    async def bars(uid, token, day):
+        if day != DAY:
+            return []
+        return ce if int(token) == 111 else pe
+    monkeypatch.setattr(replay, "kite_minute_bars", bars, raising=False)
+    # keep the sleeps out of the test
+    monkeypatch.setattr(S.asyncio, "sleep", _instant, raising=False)
+    return {"cfg": cfg, "ce": ce, "pe": pe}
+
+
+async def _instant(_seconds):
+    return None
+
+
+# ------------------------------------------------------------------ the safety
+
+@pytest.mark.asyncio
+async def test_a_simulation_is_never_driven_by_live_ticks(wired):
+    """Today's real ticks and a replayed day are two timelines.
+
+    Letting both into one position is the failure this flag exists to prevent.
+    """
+    await S.start("u1", speed=600.0)
+    session = R.active_session("u1")
+    assert session is not None and session.sim is True
+
+    class Boom(R.BrokerPort):
+        async def place(self, **kw):
+            raise AssertionError("a live tick reached the simulated session")
+
+    assert await R.on_ticks("u1", [{"instrument_token": 111, "last_price": 1.0}],
+                            Boom()) == "simulated"
+
+
+@pytest.mark.asyncio
+async def test_a_simulation_refuses_to_run_over_a_live_armed_session(wired):
+    """Replaying over real money would show the operator a fiction."""
+    live = R.Session(user_id="u1", cfg=wired["cfg"], pair=_pair(),
+                     strategy=R.ATMPremiumImbalanceStrategy(
+                         cfg=wired["cfg"], pair=_pair(), quantity=20, trade_id="live"),
+                     session_date=datetime.now(IST).date(), ce_token=111, pe_token=222)
+    R.register(live)
+    assert (await S.start("u1"))["status"] == "live_session_active"
+    assert R.active_session("u1") is live          # untouched
+
+
+@pytest.mark.asyncio
+async def test_a_finished_live_session_may_be_replayed_over(wired):
+    live = R.Session(user_id="u1", cfg=wired["cfg"], pair=_pair(),
+                     strategy=R.ATMPremiumImbalanceStrategy(
+                         cfg=wired["cfg"], pair=_pair(), quantity=20, trade_id="live"),
+                     session_date=datetime.now(IST).date(), ce_token=111, pe_token=222,
+                     finished=True)
+    R.register(live)
+    assert (await S.start("u1"))["status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_stopping_a_simulation_does_not_release_live_subscriptions(wired, monkeypatch):
+    """The simulator subscribed nothing, so it must hand nothing back."""
+    released = []
+
+    class TM:
+        async def release(self, uid, tokens, owner):
+            released.append(tokens)
+            return {"ok": True}
+
+    import app.services.exchanges.kite as kite_pkg
+    monkeypatch.setattr(kite_pkg, "ticker_manager", TM(), raising=False)
+    await S.start("u1", speed=600.0)
+    await S.stop("u1")
+    assert released == []
+    assert R.active_session("u1") is None
+
+
+@pytest.mark.asyncio
+async def test_every_payload_says_it_is_illustrative(wired):
+    started = await S.start("u1", speed=600.0)
+    assert started["illustrative_only"] is True
+    assert S.state("u1")["illustrative_only"] is True
+
+
+# ------------------------------------------------------------------- the replay
+
+@pytest.mark.asyncio
+async def test_nothing_is_traded_before_the_bell(wired):
+    """The clock starts at 09:14 with a quote stamped the previous day.
+
+    The observable consequence is what is asserted: the entry cannot have
+    happened before the open, because the pre-open quote is refusable and is
+    refused. The session clock must also be anchored on the *replayed* day.
+    """
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    s = R.active_session("u1")
+    open_ms = s.strategy.session_open_ms
+    opened = datetime.fromtimestamp(open_ms / 1000, tz=IST)
+    assert opened.strftime("%Y-%m-%d %H:%M") == "2026-08-21 09:15"
+    assert s.strategy._entry_ts_ms >= open_ms
+
+
+@pytest.mark.asyncio
+async def test_the_replay_buys_the_cheaper_leg_and_reaches_the_target(wired):
+    """PE at 100 against CE at 500, then PE runs to 120: target is 115."""
+    await S.start("u1", speed=600.0)
+    task = S._tasks["u1"]
+    await task
+    s = R.active_session("u1")
+    assert s.strategy.trade is not None
+    assert s.strategy.trade.option_type == "PE"
+    # ask 100.05 (price + half tick) + the 0.50 default entry buffer
+    assert s.strategy.trade.entry_price == 100.55
+    assert s.finished is True
+
+
+@pytest.mark.asyncio
+async def test_the_size_comes_from_the_config(wired):
+    """1 lot of 20, not a hardcoded number."""
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    assert R.active_session("u1").strategy.quantity == 20
+
+
+@pytest.mark.asyncio
+async def test_an_unsized_config_still_simulates_one_lot(wired, monkeypatch):
+    """A simulation with no size would show every gate passing and nothing happen."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=0,
+                                    max_premium_at_risk_inr=40_000.0).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    assert R.active_session("u1").strategy.quantity == 20
+
+
+@pytest.mark.asyncio
+async def test_progress_is_reported(wired):
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    st = S.state("u1")
+    assert st["bars_total"] == 3
+    assert st["running"] is False
+    assert st["outcome"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_day_with_no_bars_is_reported_not_guessed(wired, monkeypatch):
+    import app.services.atm_premium_imbalance_replay as replay
+
+    async def none(uid, token, day):
+        return []
+    monkeypatch.setattr(replay, "kite_minute_bars", none, raising=False)
+    out = await S.start("u1")
+    assert out["status"] == "no_data"
+
+
+@pytest.mark.asyncio
+async def test_the_speed_is_clamped_to_something_sane(wired):
+    assert (await S.start("u1", speed=99_999.0))["speed"] == 600.0
+    await S.stop("u1")
+    assert (await S.start("u1", speed=0.0))["speed"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_ticks_walk_the_bar_in_a_documented_order(wired):
+    """open, high, low, close: the peak sets the trail before the low tests it.
+
+    A minute bar cannot say which came first, so this ordering is an assumption
+    and is the reason a simulation is not a backtest.
+    """
+    assert S.BAR_PATH == ("open", "high", "low", "close")
+
+
+@pytest.mark.asyncio
+async def test_a_halt_reports_its_reason_not_just_the_word_halted(wired, monkeypatch):
+    """A ceiling that stops the trade must say so where the operator is looking."""
+    import app.services.atm_premium_imbalance as svc
+    # 20 x ~100.55 = Rs2,011, so a Rs1,000 ceiling refuses the entry.
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=1,
+                                    max_premium_at_risk_inr=1_000.0).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    await S.start("u1", speed=600.0)
+    await S._tasks["u1"]
+    st = S.state("u1")
+    assert st["outcome"] == "halted"
+    assert "premium_at_risk_exceeded" in (st["halt_reason"] or "")
+    assert "premium_at_risk_exceeded" in st["note"]

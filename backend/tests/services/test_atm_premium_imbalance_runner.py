@@ -274,6 +274,20 @@ def _pin_clock(monkeypatch, at_ms):
     monkeypatch.setattr(R, "_now_ms", lambda: at_ms)
 
 
+def _session_on(monkeypatch, at_ms, **kw):
+    """A session registered for the same day the clock is pinned to.
+
+    The day-rollover check reads the session's own clock, so a fixture pinned to
+    2026-08-21 with a session dated today would correctly be treated as rolled
+    over — which is a broken fixture, not a finding.
+    """
+    _pin_clock(monkeypatch, at_ms)
+    s = _session(**kw)
+    s.session_date = datetime.fromtimestamp(at_ms / 1000, tz=IST).date()
+    R.register(s)
+    return s
+
+
 def full_tick(token, ltp, bid, ask, *, traded_at, official_open=356.7, volume=222120):
     return {"instrument_token": token, "last_price": ltp,
             "last_trade_time": int(traded_at.timestamp()),
@@ -287,8 +301,7 @@ def full_tick(token, ltp, bid, ask, *, traded_at, official_open=356.7, volume=22
 @pytest.mark.asyncio
 async def test_a_previous_session_price_places_no_order(monkeypatch):
     """The real 2026-08-21 fault, driven through the runner."""
-    _pin_clock(monkeypatch, SESSION_OPEN_MS + 1000)
-    s = _session(); R.register(s)
+    s = _session_on(monkeypatch, SESSION_OPEN_MS + 1000)
     b = FakeBroker()
     out = await R.on_ticks("u1", [
         full_tick(111, 500.00, 499.5, 500.5, traded_at=PRIOR_TRADE),
@@ -305,8 +318,7 @@ async def test_a_session_price_prices_off_the_real_open(monkeypatch):
 
     356.70 x 1.10 = 392.37 -> 392.4, against the 416.90 the stale tick produced.
     """
-    _pin_clock(monkeypatch, SESSION_OPEN_MS + 1000)
-    s = _session(quantity=80); R.register(s)
+    s = _session_on(monkeypatch, SESSION_OPEN_MS + 1000, quantity=80)
     s.strategy.cfg = ATMPremiumImbalanceConfig(
         # 80 x ~392 is above the Rs25,000 default risk ceiling; the recorded size
         # is the fixture, so the ceiling is stated rather than the trade shrunk.

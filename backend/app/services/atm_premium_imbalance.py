@@ -198,11 +198,15 @@ async def snapshot(uid: str) -> dict:
     """Operator view: config, resolved pair, and why it is or is not armed."""
     cfg = get_config()
     from app.services.atm_premium_imbalance_runner import session_status
+    from app.services.atm_premium_imbalance_sim import state as _sim_state
     out: dict[str, Any] = {
         "strategy": {**descriptor(), "enabled": cfg.enabled},
         "config": cfg.as_dict(),
         "resolved": None,
         "session": session_status(uid),
+        # Present only while a simulation is running or has just finished. The
+        # board must never render replayed numbers as live ones.
+        "simulation": _sim_state(uid),
         "blockers": [],
     }
     if not cfg.enabled:

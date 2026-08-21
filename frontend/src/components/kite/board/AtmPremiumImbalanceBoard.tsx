@@ -15,6 +15,8 @@ import {
   useArmAtmPremiumImbalance,
   useAtmPremiumImbalanceConfig,
   useAtmPremiumImbalanceSnapshot,
+  useSimulateAtmPremiumImbalance,
+  useStopAtmPremiumImbalanceSimulation,
 } from '../../../hooks/useAtmPremiumImbalance';
 import { atmPremiumImbalanceToBoard } from './atmPremiumImbalanceAdapter';
 import { SignalBoard } from './SignalBoard';
@@ -35,20 +37,32 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
   const enabled = config.data?.config?.enabled ?? false;
   const [armedOnce, setArmedOnce] = React.useState(false);
   // Poll only while there is live state to poll for.
-  const snapshot = useAtmPremiumImbalanceSnapshot(true, armedOnce ? 3000 : 0);
+  const [pollMs, setPollMs] = React.useState(0);
+  const snapshot = useAtmPremiumImbalanceSnapshot(true, pollMs);
   const arm = useArmAtmPremiumImbalance();
+  const simulate = useSimulateAtmPremiumImbalance();
+  const stopSim = useStopAtmPremiumImbalanceSimulation();
 
   const session = snapshot.data?.session ?? null;
   const sizing = snapshot.data?.sizing ?? null;
+  const sim = snapshot.data?.simulation ?? null;
   React.useEffect(() => {
     if (session && !session.finished) setArmedOnce(true);
   }, [session]);
+  // A replay changes every second, so it needs the poll even if nothing is armed.
+  React.useEffect(() => {
+    // 1s while replaying because the point is to watch it move; 3s for a live
+    // session, which changes on ticks rather than on a clock we control.
+    setPollMs(sim?.running ? 1000 : (armedOnce ? 3000 : 0));
+  }, [sim?.running, armedOnce]);
 
   const signals = React.useMemo(
     () => atmPremiumImbalanceToBoard(snapshot.data),
     [snapshot.data],
   );
-  const view = useBoardView(signals);
+  // One session, one row: hiding it once it ends would leave the board blank at
+  // exactly the moment there is a result to read.
+  const view = useBoardView(signals, { endedByDefault: true });
   const [openId, setOpenId] = React.useState<string | null>(null);
 
   if (snapshot.isLoading && !snapshot.data) {
@@ -85,6 +99,23 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
           {arm.isPending ? 'Arming…' : session && !session.finished ? 'Re-arm' : 'Arm session'}
         </button>
 
+        <button
+          type="button"
+          onClick={() => (sim?.running ? stopSim.mutate() : simulate.mutate(60))}
+          disabled={simulate.isPending || stopSim.isPending}
+          title={sim?.running
+            ? 'Stop the replay'
+            : 'Replay the last traded session from 09:14 IST on real data. Nothing is sent to a broker.'}
+          style={{
+            background: 'transparent', border: `1px solid ${k.border}`,
+            color: sim?.running ? k.amber : k.dim,
+            borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {simulate.isPending ? 'Starting…'
+            : sim?.running ? 'Stop replay' : 'Simulate'}
+        </button>
+
         {session && (
           <span style={{ fontSize: 11, color: k.dim }}>
             {session.underlying} {session.strike ?? '—'} · {session.expiry ?? '—'} ·{' '}
@@ -102,6 +133,9 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
                 {' '}Will buy <strong style={{ color: k.text }}>{sizing.quantity}</strong>
                 {sizing.mode === 'LOTS' && sizing.lot_size > 0
                   ? ` (${sizing.quantity / sizing.lot_size} × ${sizing.lot_size})`
+                  : ''}
+                {sizing.max_affordable_premium
+                  ? `, premium up to ₹${sizing.max_affordable_premium.toFixed(2)}`
                   : ''}.
               </>
             )}
@@ -109,8 +143,35 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
         )}
       </div>
 
+      {sim && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '6px 12px', fontSize: 11,
+          background: 'color-mix(in srgb, var(--k-amber) 12%, transparent)',
+          borderBottom: `1px solid ${k.border}`, color: k.text,
+        }}>
+          <strong style={{ color: k.amber }}>REPLAY</strong>
+          <span>{sim.session_date} · {sim.clock_ist ?? '—'} IST · {sim.speed}×</span>
+          <span style={{ color: k.dim }}>
+            bar {sim.bars_done}/{sim.bars_total} · {sim.note}
+          </span>
+          <span style={{ color: k.dim, marginLeft: 'auto' }}>
+            Real prices, simulated fills — not a backtest.
+          </span>
+        </div>
+      )}
+      {sim?.error && (
+        <p style={{ ...note, color: k.red }}>Replay failed: {sim.error}</p>
+      )}
+
       {arm.error && (
         <p style={{ ...note, color: k.red }}>Arm failed: {(arm.error as Error).message}</p>
+      )}
+      {simulate.data && simulate.data.status !== 'started' && (
+        <p style={{ ...note, color: k.amber }}>
+          Replay not started — {simulate.data.status.replace(/_/g, ' ')}
+          {simulate.data.message ? `: ${simulate.data.message}` : ''}.
+        </p>
       )}
       {armResult && armResult.status !== 'armed' && armResult.status !== 'already_armed' && (
         <p style={{ ...note, color: k.amber }}>

@@ -65,9 +65,18 @@ function bestLegPerUnderlying(signals: BoardSignal[]): BoardSignal[] {
   return signals.filter((s) => best.get(`${s.engine}:${s.underlying}:${s.direction}`) === s);
 }
 
-export function useBoardView(signals: readonly BoardSignal[]): BoardView {
+/**
+ * @param endedByDefault  Start with finished signals visible. For a board whose
+ *   whole content is one session's single trade, hiding the ended row leaves an
+ *   empty board and the operator with nothing to read — the scanning engines
+ *   have the opposite problem, hundreds of old rows burying the live ones.
+ */
+export function useBoardView(
+  signals: readonly BoardSignal[],
+  { endedByDefault = false }: { endedByDefault?: boolean } = {},
+): BoardView {
   const [query, setQuery] = useState('');
-  const [showEnded, setShowEnded] = useState(false);
+  const [showEnded, setShowEnded] = useState(endedByDefault);
   const [bestOnly, setBestOnly] = useState(false);
 
   return useMemo(() => {

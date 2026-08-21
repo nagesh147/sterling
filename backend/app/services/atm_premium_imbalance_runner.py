@@ -72,6 +72,22 @@ class Session:
     pe_token: int
     finished: bool = False
     released: bool = False
+    #: True for a replayed session. Kept on the session rather than in a separate
+    #: registry so the board renders it through exactly the same path -- but it
+    #: is what stops real ticks driving a simulation, and a simulation from ever
+    #: reaching a real broker.
+    sim: bool = False
+    #: Virtual "now" in epoch ms, set by the simulator before each step. None
+    #: means the wall clock, which is what every live session uses.
+    clock_ms: Optional[int] = None
+
+    def now_ms(self) -> int:
+        """This session's clock: virtual while simulating, wall clock otherwise."""
+        return int(self.clock_ms) if self.clock_ms is not None else _now_ms()
+
+    def today(self) -> date:
+        """The session's own calendar date, so a simulation is not "yesterday"."""
+        return datetime.fromtimestamp(self.now_ms() / 1000, tz=_IST).date()
 
     def token_leg(self, token: int) -> Optional[str]:
         if token == self.ce_token:
@@ -301,7 +317,11 @@ async def on_ticks(user_id: str, ticks: list[dict], broker: Optional[BrokerPort]
     session = _sessions.get(user_id)
     if session is None or session.finished:
         return "inactive"
-    if session.session_date != datetime.now(_IST).date():
+    if session.sim:
+        # A simulation is driven by its own replay loop on its own clock. Letting
+        # today's live ticks in would mix two timelines in one position.
+        return "simulated"
+    if session.session_date != session.today():
         # Release before dropping the session: it holds the only record of which
         # tokens were ours, so discarding it first leaks them until a restart.
         await release_subscriptions(session)
@@ -317,7 +337,7 @@ async def on_ticks(user_id: str, ticks: list[dict], broker: Optional[BrokerPort]
         # A tick arriving mid-order must not start a second order.
         return "busy"
     async with lock:
-        now = _now_ms()
+        now = session.now_ms()
         status = "idle"
         for tick in ticks:
             token = int(tick.get("instrument_token") or 0)
@@ -361,7 +381,9 @@ def _leg_state(session: "Session", option_type: str) -> Optional[dict]:
     }
     if q is None:
         return out
-    now = _now_ms()
+    # The session's clock, not the wall clock: a replayed quote is not stale
+    # merely because the replay is of an earlier day.
+    now = session.now_ms()
     open_ms = session.strategy.session_open_ms
     out.update({
         "ltp": q.ltp, "bid": q.bid, "ask": q.ask,
@@ -387,7 +409,8 @@ def session_status(user_id: str) -> Optional[dict]:
     cfg = session.cfg
     view = None
     if strat.session_open_ms is not None:
-        view = strat.cache.view(cfg.quote_mode, _now_ms(), max_skew_ms=cfg.max_ce_pe_skew_ms)
+        view = strat.cache.view(cfg.quote_mode, session.now_ms(),
+                                max_skew_ms=cfg.max_ce_pe_skew_ms)
 
     sig = strat.signal
     return {
@@ -453,6 +476,15 @@ async def release_subscriptions(session: Session) -> None:
 
 def register(session: Session) -> None:
     _sessions[session.user_id] = session
+
+
+def forget(user_id: str) -> None:
+    """Drop a session without touching subscriptions.
+
+    For the simulator, which never subscribed anything: calling the release path
+    would hand back tokens a live session might be holding.
+    """
+    _sessions.pop(user_id, None)
 
 
 async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> dict:

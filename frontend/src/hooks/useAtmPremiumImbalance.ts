@@ -170,11 +170,40 @@ export interface AtmPremiumImbalanceSnapshot {
     pe: { instrument_id: string; tradingsymbol: string; lot_size: number };
   } | null;
   /** What will actually be ordered, once the lot size is known. */
-  sizing?: { mode: SizingMode; lot_size: number; quantity: number };
+  sizing?: {
+    mode: SizingMode; lot_size: number; quantity: number;
+    max_premium_at_risk_inr?: number;
+    /** The dearest option this size can buy under the risk ceiling. */
+    max_affordable_premium?: number | null;
+  };
+  /** Present only while a replay is running or has just finished. */
+  simulation?: AtmSimulationState | null;
   /** Every reason the strategy is not armed. Never empty when `resolved` is null. */
   blockers: string[];
   /** Live session state, or null when nothing is armed. */
   session: AtmSessionStatus | null;
+}
+
+/**
+ * A replay of a past session on a fake clock.
+ *
+ * `illustrative_only` is repeated in every payload the backend sends so a client
+ * cannot render replayed numbers as live ones by forgetting a flag somewhere.
+ */
+export interface AtmSimulationState {
+  running: boolean;
+  session_date: string | null;
+  speed: number;
+  clock_ms: number;
+  clock_ist: string | null;
+  bars_total: number;
+  bars_done: number;
+  progress: number;
+  note: string;
+  error: string | null;
+  outcome: string | null;
+  halt_reason: string | null;
+  illustrative_only: true;
 }
 
 export function useAtmPremiumImbalanceConfig() {
@@ -226,5 +255,30 @@ export function useArmAtmPremiumImbalance() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SNAPSHOT_KEY });
     },
+  });
+}
+
+
+/**
+ * Start a replay of the last traded session.
+ *
+ * Invalidates nothing on its own: the board's snapshot poll is what shows the
+ * replay progressing, and it starts polling because a session appears.
+ */
+export function useSimulateAtmPremiumImbalance() {
+  const qc = useQueryClient();
+  return useMutation<{ status: string; session_date?: string; speed?: number;
+                       quantity?: number; message?: string }, Error, number | void>({
+    mutationFn: (speed) =>
+      api.post(`/api/v1/config/atm-premium-imbalance/simulate?speed=${speed ?? 60}`, {}),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: SNAPSHOT_KEY }); },
+  });
+}
+
+export function useStopAtmPremiumImbalanceSimulation() {
+  const qc = useQueryClient();
+  return useMutation<{ ok: boolean }, Error, void>({
+    mutationFn: () => api.post('/api/v1/config/atm-premium-imbalance/simulate/stop', {}),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: SNAPSHOT_KEY }); },
   });
 }

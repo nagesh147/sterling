@@ -3,9 +3,9 @@ Runtime risk config — adjust sizing params without restart.
 Data source switching — hot-swap market data adapter.
 """
 import time
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, Body, HTTPException, Request, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from app.schemas.risk import RiskParams, ScoringWeights
 from app.core.config import settings
 from app.core.auth import UserContext, get_current_user
@@ -512,3 +512,45 @@ async def atm_premium_imbalance_arm(user: UserContext = Depends(get_current_user
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"ATM Premium Imbalance arm failed: {exc}") from exc
+
+
+@router.post("/atm-premium-imbalance/simulate")
+async def atm_premium_imbalance_simulate(
+    speed: float = 60.0, lots: Optional[int] = None,
+    overrides: Optional[dict] = Body(default=None, embed=True),
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Replay the last traded session through the live code path, on a fake clock.
+
+    The clock starts at 09:14 IST so the pre-open refusal is visible, then the
+    strategy runs against real minute bars. Nothing reaches a broker: the session
+    is marked as a simulation, which is also what stops today's live ticks from
+    driving it.
+
+    Results are illustrative, not a backtest — see the module docstring for the
+    two structural reasons (minute bars have no intrabar order, and fills are
+    modelled at the limit price).
+    """
+    from app.services.atm_premium_imbalance_sim import start
+    uid = str(user.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    try:
+        return await start(uid, speed=speed, lots=lots, overrides=overrides)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"ATM Premium Imbalance simulation failed: {exc}"
+        ) from exc
+
+
+@router.post("/atm-premium-imbalance/simulate/stop")
+async def atm_premium_imbalance_simulate_stop(
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    from app.services.atm_premium_imbalance_sim import stop
+    uid = str(user.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    return await stop(uid)
