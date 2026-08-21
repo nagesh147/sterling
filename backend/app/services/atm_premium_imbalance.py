@@ -250,4 +250,19 @@ async def snapshot(uid: str) -> dict:
             out["blockers"].append(blocker)
     except Exception as exc:
         out["blockers"].append(f"instrument resolution failed: {exc}")
+
+    # A position nothing accounts for is the most dangerous state this strategy
+    # can be in: arming would double the exposure. It belongs in the blockers,
+    # not only in a log line.
+    try:
+        from app.services.atm_premium_imbalance_runner import orphan_positions
+        orphans = await orphan_positions(uid, cfg)
+    except Exception as exc:  # noqa: BLE001
+        orphans = []
+        log.debug("ATM PI orphan check failed for %s: %s", uid, exc)
+    out["orphan_positions"] = orphans
+    for o in orphans:
+        out["blockers"].append(
+            f"open position {o['symbol']} ({o['quantity']} @ {o['entry_price']}) "
+            f"is not accounted for — adopt or close it")
     return out

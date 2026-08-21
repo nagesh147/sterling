@@ -400,6 +400,10 @@ class TradeRecord:
 
     first_tick_price: Optional[float] = None
     signal_difference: Optional[float] = None
+    #: True when this position was taken over from the broker after a restart
+    #: rather than opened here. Its pricing reference and its peak since entry
+    #: are unknowable after the fact, so anything reporting on those must say so.
+    adopted: bool = False
     quote_mode: QuoteMode = "COMPATIBILITY"
     contract_version: str = "A230.4"
 

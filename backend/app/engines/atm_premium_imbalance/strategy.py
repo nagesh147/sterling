@@ -542,6 +542,46 @@ class ATMPremiumImbalanceStrategy:
 
     # ------------------------------------------------------------------ report
 
+    def adopt_open_position(self, *, option_type: OptionType, entry_fill: float,
+                            quantity: int, now_ms: int) -> None:
+        """Take charge of a position that already exists at the broker.
+
+        After a restart the strategy's state is gone but the position is not.
+        Adopting it puts the stop and the target back to work; the alternative is
+        a bought option with nothing watching it.
+
+        Deliberately incomplete, and honest about it. The high-water mark is
+        seeded from the entry fill because the peak since entry is unknowable
+        after the fact -- so a trail resumes from scratch rather than from an
+        invented peak, which would place the stop somewhere the price never
+        actually reached. ``first_tick_price`` stays None for the same reason:
+        the reference this position was priced from is gone.
+        """
+        if quantity <= 0 or entry_fill <= 0:
+            raise ValueError("adopting a position needs a positive size and fill")
+        leg = self.pair.leg(option_type)
+        self.quantity = int(quantity)
+        self.trade = TradeRecord(
+            trade_id=self.trade_id,
+            instrument_id=leg.instrument_id,
+            tradingsymbol=leg.tradingsymbol,
+            option_type=leg.option_type,
+            strike=leg.strike,
+            expiry=leg.expiry,
+            quantity=int(quantity),
+            state=PositionState.OPEN,
+            entry_price=q2(entry_fill),
+            entry_order_price=None,
+            first_tick_price=None,
+            target_price=target_price(entry_fill, self.cfg),
+            quote_mode=self.cfg.quote_mode,  # type: ignore[arg-type]
+            adopted=True,
+        )
+        self._entry_ts_ms = int(now_ms)
+        self._high_water = float(entry_fill)
+        self._last_now_ms = int(now_ms)
+        self.phase = Phase.IN_POSITION
+
     @property
     def live_stop(self) -> Optional[float]:
         """The stop price in force right now, or ``None`` if there is no stop."""

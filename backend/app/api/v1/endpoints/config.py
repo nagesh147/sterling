@@ -514,6 +514,30 @@ async def atm_premium_imbalance_arm(user: UserContext = Depends(get_current_user
         raise HTTPException(status_code=502, detail=f"ATM Premium Imbalance arm failed: {exc}") from exc
 
 
+@router.post("/atm-premium-imbalance/adopt")
+async def atm_premium_imbalance_adopt(
+    symbol: str, user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Take charge of an open position the app has no session for.
+
+    Requires the symbol rather than adopting whatever is found: a long option on
+    this underlying may be a hand-placed trade, and the operator is the one who
+    knows which position is the strategy's.
+    """
+    from app.services.atm_premium_imbalance_runner import adopt
+    uid = str(user.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    try:
+        return await adopt(uid, symbol)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"ATM Premium Imbalance adopt failed: {exc}"
+        ) from exc
+
+
 @router.post("/atm-premium-imbalance/simulate")
 async def atm_premium_imbalance_simulate(
     speed: float = 60.0, lots: Optional[int] = None,

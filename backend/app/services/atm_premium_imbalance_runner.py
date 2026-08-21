@@ -487,6 +487,104 @@ def forget(user_id: str) -> None:
     _sessions.pop(user_id, None)
 
 
+async def orphan_positions(user_id: str,
+                           cfg: Optional[ATMPremiumImbalanceConfig] = None) -> list[dict]:
+    """Open option positions in this underlying that no session explains.
+
+    After a restart the strategy's state is gone but a position is not. Arming
+    fresh on top of one would double the exposure, and never finding it leaves a
+    bought option with nothing watching its stop.
+
+    Reported rather than adopted automatically: a long option on this underlying
+    might be something the operator placed by hand, and quietly taking control of
+    somebody else's trade is worse than telling them about it.
+    """
+    from app.services.atm_premium_imbalance import get_config
+    cfg = cfg or get_config()
+    session = _sessions.get(user_id)
+    if session is not None and not session.finished and not session.sim:
+        return []
+    try:
+        from app.services.exchanges.kite import accounts
+        acct = accounts.get_active(user_id)
+        if not acct or not acct.connected:
+            return []
+        client = await accounts.acquire_client(acct)
+        positions = await client.get_positions()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("ATM PI could not read positions for %s: %s", user_id, exc)
+        return []
+
+    want = str(cfg.underlying).upper()
+    out: list[dict] = []
+    for pos in positions or []:
+        symbol = str(getattr(pos, "symbol", "") or "").upper()
+        size = float(getattr(pos, "size", 0) or 0)
+        if size <= 0 or not symbol.startswith(want):
+            continue
+        if not (symbol.endswith("CE") or symbol.endswith("PE")):
+            continue
+        out.append({
+            "symbol": symbol,
+            "option_type": symbol[-2:],
+            "quantity": int(abs(size)),
+            "entry_price": float(getattr(pos, "entry_price", 0) or 0),
+            "mark_price": float(getattr(pos, "mark_price", 0) or 0),
+            "unrealized_pnl": float(getattr(pos, "unrealized_pnl", 0) or 0),
+        })
+    return out
+
+
+async def adopt(user_id: str, symbol: str,
+                cfg: Optional[ATMPremiumImbalanceConfig] = None) -> dict:
+    """Take charge of one orphaned position, by name.
+
+    Requires the symbol so this cannot be a blanket "adopt whatever you find":
+    the operator is confirming which position is the strategy's.
+    """
+    from app.services.atm_premium_imbalance import get_config, resolve_option_pair
+    cfg = cfg or get_config()
+    orphans = await orphan_positions(user_id, cfg)
+    match = next((o for o in orphans if o["symbol"] == str(symbol).upper()), None)
+    if match is None:
+        return {"status": "not_found", "message": f"no open position named {symbol}"}
+
+    pair = await resolve_option_pair(user_id, cfg)
+    leg = pair.ce if match["option_type"] == "CE" else pair.pe
+    if leg.tradingsymbol.upper() != match["symbol"]:
+        # The resolved ATM pair has moved on. Adopting against the wrong contract
+        # would watch one option's price to exit a different one.
+        return {"status": "contract_mismatch",
+                "message": f"the open position is {match['symbol']} but the ATM "
+                           f"{match['option_type']} is now {leg.tradingsymbol}"}
+
+    today = datetime.now(_IST).date()
+    strategy = ATMPremiumImbalanceStrategy(
+        cfg=cfg, pair=pair, quantity=match["quantity"],
+        trade_id=f"adopted-{user_id}-{today.isoformat()}",
+    )
+    strategy.adopt_open_position(
+        option_type=match["option_type"], entry_fill=match["entry_price"],
+        quantity=match["quantity"], now_ms=_now_ms(),
+    )
+    try:
+        ce_token, pe_token = int(pair.ce.instrument_id), int(pair.pe.instrument_id)
+    except (TypeError, ValueError):
+        return {"status": "error", "message": "instrument ids are not Kite tokens"}
+
+    from app.services.exchanges.kite import ticker_manager
+    await ticker_manager.subscribe(user_id, [ce_token, pe_token], "full",
+                                   owner=TICKER_OWNER)
+    register(Session(user_id=user_id, cfg=cfg, pair=pair, strategy=strategy,
+                     session_date=today, ce_token=ce_token, pe_token=pe_token))
+    log.warning("ATM PI adopted %s for %s: %s x %s @ %s", match["symbol"], user_id,
+                match["option_type"], match["quantity"], match["entry_price"])
+    return {"status": "adopted", **match,
+            "target": strategy.trade.target_price,
+            "stop": strategy.live_stop,
+            "peak_unknown": True}
+
+
 async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> dict:
     """Resolve the ATM pair, subscribe both legs, and arm the strategy.
 
@@ -501,6 +599,15 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
         return {"status": "no_quantity"}
     if not _is_market_open():
         return {"status": "market_closed"}
+
+    orphans = await orphan_positions(user_id, cfg)
+    if orphans:
+        # Arming on top of an existing position doubles the exposure, and the
+        # strategy would then exit a size it did not open.
+        return {"status": "open_position_unaccounted",
+                "message": "an open position exists that no session explains; "
+                           "adopt or close it first",
+                "positions": orphans}
 
     existing = _sessions.get(user_id)
     today = datetime.now(_IST).date()
