@@ -49,6 +49,16 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   max_trades_per_session: 1,
   sizing_mode: 'QUANTITY',
   lots: 0,
+  stop_basis: 'POINTS',
+  stop_percent: 0,
+  trail_points: 0,
+  trail_percent: 0,
+  trail_start_points: 0,
+  trail_start_percent: 0,
+  breakeven_points: 0,
+  breakeven_percent: 0,
+  entry_window_seconds: 300,
+  close_at_session_end: true,
   quantity: 0,
   max_quantity: 500,
   max_premium_at_risk_inr: 25000,
@@ -83,6 +93,7 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
         vocabularies: {
           quote_mode: ['COMPATIBILITY', 'EXECUTABLE', 'SYNCHRONIZED'],
           sizing_mode: ['LOTS', 'QUANTITY'],
+          stop_basis: ['PERCENT', 'POINTS'],
           data_source: ['kite', 'truedata'],
         },
         research_only: {
@@ -213,3 +224,58 @@ describe('stating the trade size', () => {
     expect(setConfig).not.toHaveBeenCalled();                  // but nothing is sent
   });
 });
+
+describe('the stop ladder', () => {
+  it('stays hidden until a stop is switched on', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.queryByText('Trail distance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Break even at')).not.toBeInTheDocument();
+  });
+
+  it('shows every rung once a stop is on', () => {
+    serverConfig = { ...DEFAULTS, stop_enabled: true, stop_points: 15 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText('Stop distance')).toBeInTheDocument();
+    expect(screen.getByText('Break even at')).toBeInTheDocument();
+    expect(screen.getByText('Trail starts at')).toBeInTheDocument();
+    expect(screen.getByText('Trail distance')).toBeInTheDocument();
+  });
+
+  it('says the stop only ever moves up', () => {
+    // The ratchet is the safety property; the panel should not leave it implied.
+    serverConfig = { ...DEFAULTS, stop_enabled: true, stop_points: 15 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(/only ever moves up/)).toBeInTheDocument();
+  });
+
+  it('shows one unit at a time, so a number always means its suffix', () => {
+    serverConfig = { ...DEFAULTS, stop_enabled: true, stop_basis: 'PERCENT',
+                     stop_percent: 20 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(/share of the entry premium/)).toBeInTheDocument();
+    expect(screen.queryByText(/Rupees below the entry fill/)).not.toBeInTheDocument();
+  });
+
+  it('offers a trailing stop, and does not pretend it came from the video', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    const opt = screen.getAllByTitle(/No fixed target/)[0];
+    expect(opt).toBeTruthy();
+    expect(opt.title).toMatch(/the recordings show no stop of any kind/);
+  });
+});
+
+describe('the session window', () => {
+  it('exposes the entry window rather than hiding it in code', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText('Entry window')).toBeInTheDocument();
+    expect(screen.getByText(/without a window it would enter whenever it was armed/))
+      .toBeInTheDocument();
+  });
+
+  it('says why a position is closed at the end of the session', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(/held to expiry — a bought option can settle worthless/))
+      .toBeInTheDocument();
+  });
+});
+

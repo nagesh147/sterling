@@ -340,6 +340,45 @@ analysis as readily as to the strategy. The practical lesson: an identity that
 holds at one price level proves very little. It took a session at four times the
 premium to separate `+10.25` from `×1.10`.
 
+## Gaps closed since the first report (2026-08-22)
+
+Everything here is **ours**, not the recording's. Where a rule is our own
+addition the config default says so and the panel labels it.
+
+| Was | Now |
+|---|---|
+| `max_premium_at_risk_inr` and `daily_loss_limit_inr` had no reader — they looked like protection and were not | the premium ceiling is checked at entry against limit price x quantity; the loss limit is checked in the signal gate before any quote arithmetic. Neither can be switched off |
+| no stop of any kind | `TRAILING_STOP`: initial stop, break-even rung, then a trail behind the high-water mark. Ratcheting — a property test asserts the ladder is monotonic in the peak. `PERCENT` basis, because these premiums run ~50–500 and one number of points means very different risk at each end |
+| nothing checked the broker on startup | a long option on the underlying with no session is reported, blocks arming, and can be adopted by symbol. An adopted trade seeds its high-water mark from the entry fill, because the peak since entry is unknowable after the fact |
+| `session_end` was dead config | a position is closed at `session_end`, ahead of every exit policy |
+| an entry could be taken hours after the open | `entry_window_seconds` (default 300) |
+| tick subscriptions leaked one pair per armed day | refcounted `release()` in `ticker_manager`; untagged subscriptions are never auto-released, so the protection monitor cannot be starved |
+| quantity was not checked against the lot size | `sizing_mode` (`LOTS` or `QUANTITY`); a bad quantity names the two nearest sizes that work |
+
+**Worth knowing:** the Rs25,000 default premium ceiling would have refused the
+trade the recording took (80 x 338.10 = Rs27,048). The default is deliberately
+conservative; the snapshot publishes `max_affordable_premium` so the ceiling is
+visible before arming rather than as a halt at the open.
+
+## The simulator
+
+`POST /config/atm-premium-imbalance/simulate` replays the last traded session
+through the live runner on a virtual clock starting 09:14 IST, so the pre-open
+refusal of a carried-over quote is visible on screen. Real Kite minute bars,
+simulated fills, nothing reaches a broker.
+
+**It is illustrative, not evidence**, for two structural reasons:
+
+* minute bars have no intrabar order. Ticks walk open, high, low, close, which
+  lets the peak set the trail before the low tests it — but that ordering is an
+  assumption and a trailing stop's outcome depends on exactly it.
+* fills are modelled at the limit price, which is optimistic.
+
+On 2026-08-21 the observed policy returns +18.70 points and a 15%/8% trailing
+stop returns +22.15 on the same session (the price ran to 319.55; the fixed +15
+target had capped it at 283.65). **That is one session, not a result** — the same
+error this report criticises the strategy's own track record for.
+
 ## What is still not done
 
 **No walk-forward or deflated-Sharpe evaluation.** Every session with a decodable
@@ -372,11 +411,26 @@ still closes the position) and so does a tick-driven runner that hangs off the
 Kite tick fan-out rather than polling — because entry happens 1 ms after the
 first tick and a 1-second poll cannot express that.
 
-Still missing before live: the daily-loss breaker and premium-at-risk ceiling are
-config fields but are **not yet enforced by the runner**, and there is no
-position reconciliation on startup. `config.validate()` refuses live without both
-broker-side protection and executable quotes, so the gate is code, not
-discipline — but the gate is not yet complete.
+Still missing before live, after the 2026-08-22 pass: **nothing structural**
+remains on the risk side — the limits are enforced, a stop exists, positions are
+reconciled and the session is bounded. What remains is evidence, and no amount of
+code produces it:
+
+* **no external check on option premiums.** The lake holds no BFO/NFO bars and
+  Kite publishes no historical option ticks, so CE/PE levels remain verified
+  only against the recording's own arithmetic. Asserted as a boundary by
+  `test_lake_has_no_option_bars_so_premiums_stay_unverified`.
+* **no expectancy claim is available.** Every decodable session was a winner and
+  each was chosen by whoever recorded it. The simulator does not change this: one
+  replayed day is one sample, and its fills are modelled.
+* **two rules remain unknown**, by absence rather than illegibility: no recording
+  shows a minimum-difference threshold (A231/S3) or any stop or time stop
+  (A231/X7). Both are now *implemented as options*, defaulting off, so the build
+  no longer lacks the capability — but what the source bot did is still unknown
+  and only source access would settle it.
+
+`config.validate()` refuses live without broker-side protection and executable
+quotes, so the gate is code rather than discipline.
 
 ## Promotion decision
 

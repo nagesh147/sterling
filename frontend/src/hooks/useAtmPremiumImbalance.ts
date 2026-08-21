@@ -8,11 +8,12 @@ export type QuoteMode = 'COMPATIBILITY' | 'SYNCHRONIZED' | 'EXECUTABLE';
 export type EntryPricePolicy =
   | 'MARKETABLE_ASK' | 'PERCENT_THROUGH' | 'MANUAL_FILE'
   | 'FIRST_TICK_PERCENT' | 'FIRST_TICK_PLUS_BUFFER';
-export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE';
+export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE' | 'TRAILING_STOP';
 export type ProtectionMode = 'NONE' | 'RESTING_TARGET_LIMIT' | 'GTT';
 export type FirstTickSource = 'SESSION_TICK' | 'OFFICIAL_OPEN';
 export type ExpiryPolicy = 'SAME_DAY' | 'NEAREST' | 'NEXT' | 'EXPLICIT';
 export type SizingMode = 'LOTS' | 'QUANTITY';
+export type StopBasis = 'POINTS' | 'PERCENT';
 
 export interface AtmPremiumImbalanceConfig {
   enabled: boolean;
@@ -25,6 +26,16 @@ export interface AtmPremiumImbalanceConfig {
   quote_mode: QuoteMode;
   sizing_mode: SizingMode;
   lots: number;
+  stop_basis: StopBasis;
+  stop_percent: number;
+  trail_points: number;
+  trail_percent: number;
+  trail_start_points: number;
+  trail_start_percent: number;
+  breakeven_points: number;
+  breakeven_percent: number;
+  entry_window_seconds: number;
+  close_at_session_end: boolean;
   max_quote_age_ms: number;
   max_ce_pe_skew_ms: number;
   signal_mode: string;

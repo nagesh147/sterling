@@ -11,6 +11,7 @@ import {
   type ProtectionMode,
   type QuoteMode,
   type SizingMode,
+  type StopBasis,
 } from '../hooks/useAtmPremiumImbalance';
 import {
   ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT, DIM,
@@ -56,6 +57,12 @@ const ENTRY_POLICY_OPTIONS: Array<{ value: EntryPricePolicy; label: string; hint
 const EXIT_POLICY_OPTIONS: Array<{ value: ExitPolicy; label: string; hint: string }> = [
   { value: 'FIXED_POINT_TARGET', label: 'Fixed target', hint: 'Exit at the entry fill plus the target points. This is what the observed bot did.' },
   { value: 'PREMIUM_CONVERGENCE', label: 'Convergence', hint: 'Exit when the bought leg reaches the other leg. An older hypothesis — research only.' },
+  { value: 'TRAILING_STOP', label: 'Trailing stop', hint: 'No fixed target: a stop that only ever moves up. Safer than the observed policy, but it is ours — the recordings show no stop of any kind.' },
+];
+
+const STOP_BASIS_OPTIONS: Array<{ value: StopBasis; label: string; hint: string }> = [
+  { value: 'PERCENT', label: 'Percent', hint: 'Distances as a share of the entry premium. Safer here: these options trade from ~50 to ~500, so one number of points means very different risk at each end.' },
+  { value: 'POINTS', label: 'Points', hint: 'Distances as absolute rupees, whatever the premium.' },
 ];
 
 const EXPIRY_OPTIONS: Array<{ value: ExpiryPolicy; label: string; hint: string }> = [
@@ -81,7 +88,7 @@ const DATA_SOURCE_OPTIONS = [
   { value: 'truedata' as const, label: 'TrueData', hint: 'Independent tick feed, for replay and cross-checking.' },
 ];
 
-const ADVANCED_SETTING_COUNT = 10;
+const ADVANCED_SETTING_COUNT = 12;
 
 export function AtmPremiumImbalanceSettings() {
   const { data, isLoading } = useAtmPremiumImbalanceConfig();
@@ -102,6 +109,9 @@ export function AtmPremiumImbalanceSettings() {
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
   const cfg = draft ?? server ?? null;
+  // Which half of each distance pair is live. Only one is ever shown, so a
+  // number on screen always means what its suffix says.
+  const pct = cfg?.stop_basis === 'PERCENT';
   const dirty = draft != null && server != null
     && (Object.keys(draft) as (keyof AtmPremiumImbalanceConfig)[])
       .some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
@@ -443,21 +453,101 @@ export function AtmPremiumImbalanceSettings() {
           />
         </Field>
         {cfg.stop_enabled && (
-          <NumberField
-            label="Stop distance"
-            hint="Points below the entry fill."
-            value={cfg.stop_points}
-            defaultValue={defaults.stop_points}
-            onChange={(stop_points) => patch({ stop_points })}
-            min={0.05}
-            max={500}
-            step={0.05}
-            suffix="pts"
-          />
+          <>
+            <Field
+              label="Distances in"
+              hint="One basis for every stop and trail distance below, so a distance can never be ambiguous about its unit."
+              wide
+            >
+              <ChoiceRow
+                value={cfg.stop_basis}
+                options={STOP_BASIS_OPTIONS}
+                onChange={(stop_basis) => patch({ stop_basis })}
+              />
+            </Field>
+            {pct ? (
+              <NumberField
+                label="Stop distance"
+                hint="The most this trade may lose, as a share of the entry premium."
+                value={cfg.stop_percent}
+                defaultValue={defaults.stop_percent}
+                onChange={(stop_percent) => patch({ stop_percent })}
+                min={0} max={99} step={0.5} suffix="%"
+              />
+            ) : (
+              <NumberField
+                label="Stop distance"
+                hint="Rupees below the entry fill. The most this trade may lose."
+                value={cfg.stop_points}
+                defaultValue={defaults.stop_points}
+                onChange={(stop_points) => patch({ stop_points })}
+                min={0} max={500} step={0.05} suffix="pts"
+              />
+            )}
+            <NumberField
+              label="Break even at"
+              hint="Profit at which the stop moves to the entry fill, after which the trade can no longer lose. 0 never moves it."
+              value={pct ? cfg.breakeven_percent : cfg.breakeven_points}
+              defaultValue={pct ? defaults.breakeven_percent : defaults.breakeven_points}
+              onChange={(v) => patch(pct ? { breakeven_percent: v } : { breakeven_points: v })}
+              min={0} max={pct ? 200 : 500} step={pct ? 0.5 : 0.05}
+              suffix={pct ? '%' : 'pts'}
+            />
+            <NumberField
+              label="Trail starts at"
+              hint="Profit before the stop begins following the high-water mark. 0 follows from entry."
+              value={pct ? cfg.trail_start_percent : cfg.trail_start_points}
+              defaultValue={pct ? defaults.trail_start_percent : defaults.trail_start_points}
+              onChange={(v) => patch(pct ? { trail_start_percent: v } : { trail_start_points: v })}
+              min={0} max={pct ? 200 : 500} step={pct ? 0.5 : 0.05}
+              suffix={pct ? '%' : 'pts'}
+            />
+            <NumberField
+              label="Trail distance"
+              hint="How far behind the best price seen the stop sits. 0 means no trailing — the stop stays where the rungs above put it."
+              value={pct ? cfg.trail_percent : cfg.trail_points}
+              defaultValue={pct ? defaults.trail_percent : defaults.trail_points}
+              onChange={(v) => patch(pct ? { trail_percent: v } : { trail_points: v })}
+              min={0} max={pct ? 99 : 500} step={pct ? 0.5 : 0.05}
+              suffix={pct ? '%' : 'pts'}
+            />
+            <ConfigNote>
+              The stop only ever moves up. Whichever of these rungs is highest is
+              the stop in force, and none of them can pull it back down.
+            </ConfigNote>
+          </>
         )}
       </Section>
 
       <AdvancedSection count={ADVANCED_SETTING_COUNT}>
+        <NumberField
+          label="Entry window"
+          hint="How long after the open an entry may still be taken. Buying at the open is what this strategy is; without a window it would enter whenever it was armed. 0 removes the window."
+          value={cfg.entry_window_seconds}
+          defaultValue={defaults.entry_window_seconds}
+          onChange={(entry_window_seconds) => patch({ entry_window_seconds })}
+          min={0}
+          max={21600}
+          step={30}
+          suffix="s"
+        />
+        <Field
+          label="Close at session end"
+          hint="Held past the close — and on expiry day, held to expiry — a bought option can settle worthless. This wins over every exit policy."
+          badge={(
+            <DefaultBadge
+              isDefault={isDefault('close_at_session_end')}
+              defaultLabel={defaults.close_at_session_end ? 'on' : 'off'}
+              onRestore={restore('close_at_session_end')}
+            />
+          )}
+        >
+          <Switch
+            checked={cfg.close_at_session_end}
+            label="Close at session end"
+            onChange={() => patch({ close_at_session_end: !cfg.close_at_session_end })}
+          />
+        </Field>
         <NumberField
           label="Max quote age"
           hint="Stale quotes suppress entry. The observed bot had no freshness gate; this is ours."
