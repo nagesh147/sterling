@@ -3,14 +3,17 @@ import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
 import { AdaptiveEdgeBoard } from './board/AdaptiveEdgeBoard';
+import { AtmPremiumImbalanceBoard } from './board/AtmPremiumImbalanceBoard';
 import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
 import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
 import { orbToBoard } from './board/orbAdapter';
+import { atmPremiumImbalanceToBoard } from './board/atmPremiumImbalanceAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
+import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { k } from '../../styles/kiteUI';
 
@@ -39,6 +42,7 @@ interface Props {
 const NAV_TARGET: Record<string, EngineId> = {
   adaptiveEdge: 'adaptive_edge',
   orbOptions: 'orb',
+  atmPremiumImbalance: 'atm_premium_imbalance',
 };
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
@@ -52,18 +56,26 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   const orbConfig = useOrbConfig();
   const orbEnabled = orbConfig.data?.config?.enabled;
   const orb = useOrbSignals(orbEnabled !== false);
+  const apiSnapshot = useAtmPremiumImbalanceSnapshot();
 
   const tabs: EngineTabState[] = useMemo(() => {
     const st = supertrendToBoard(engineSignals.data?.rows ?? []);
     const ae = snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : [];
     const ob = orb.signals.map(orbToBoard);
+    const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
     return [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
       { id: 'adaptive_edge', running: !!snapshot.data, live: live(ae), scanned: ae.length },
       { id: 'orb', running: orbEnabled !== false, live: live(ob), scanned: ob.length },
+      // "running" here means armed, not merely enabled: this engine does nothing
+      // until a session is armed, so an enabled-but-unarmed tab must not claim to
+      // be running.
+      { id: 'atm_premium_imbalance',
+        running: !!apiSnapshot.data?.session && !apiSnapshot.data.session.finished,
+        live: live(api), scanned: api.length },
     ];
-  }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled]);
+  }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled, apiSnapshot.data]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
@@ -86,6 +98,9 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         )}
         {engine === 'adaptive_edge' && <AdaptiveEdgeBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />}
         {engine === 'orb' && <NiftyOrbSignalsFeed onOpenDetail={onOpenBoardDetail} />}
+        {engine === 'atm_premium_imbalance' && (
+          <AtmPremiumImbalanceBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
+        )}
       </div>
     </div>
   );

@@ -335,6 +335,82 @@ def active_session(user_id: str) -> Optional[Session]:
     return _sessions.get(user_id)
 
 
+def _leg_state(session: "Session", option_type: str) -> Optional[dict]:
+    """One leg's live quote, including whether it can be traded on.
+
+    ``session_origin`` is surfaced rather than kept internal because it is the
+    difference between "no signal yet" and "refusing a carried-over price", and an
+    operator staring at a board needs to be able to tell those apart.
+    """
+    ref = session.pair.ce if option_type == "CE" else session.pair.pe
+    q = session.strategy.cache.ce if option_type == "CE" else session.strategy.cache.pe
+    out = {
+        "instrument_id": ref.instrument_id,
+        "tradingsymbol": ref.tradingsymbol,
+        "option_type": option_type,
+        "lot_size": ref.lot_size,
+        "ltp": None, "bid": None, "ask": None,
+        "last_trade_ts_ms": None, "session_origin": None, "age_ms": None,
+        "official_open": None,
+    }
+    if q is None:
+        return out
+    now = _now_ms()
+    open_ms = session.strategy.session_open_ms
+    out.update({
+        "ltp": q.ltp, "bid": q.bid, "ask": q.ask,
+        "last_trade_ts_ms": q.last_trade_ts_ms,
+        "session_origin": None if open_ms is None else q.is_session_origin(open_ms),
+        "age_ms": q.age_ms(now),
+        "official_open": q.official_open,
+    })
+    return out
+
+
+def session_status(user_id: str) -> Optional[dict]:
+    """Everything a board needs to render this strategy, or ``None`` if unarmed.
+
+    Deliberately includes the *reason* the strategy is doing nothing. A surface
+    that shows a quiet engine without saying why is the recurring complaint about
+    this codebase's panels.
+    """
+    session = _sessions.get(user_id)
+    if session is None:
+        return None
+    strat = session.strategy
+    cfg = session.cfg
+    view = None
+    if strat.session_open_ms is not None:
+        view = strat.cache.view(cfg.quote_mode, _now_ms(), max_skew_ms=cfg.max_ce_pe_skew_ms)
+
+    sig = strat.signal
+    return {
+        "armed": not session.finished,
+        "finished": session.finished,
+        "session_date": session.session_date.isoformat(),
+        "session_open_ms": strat.session_open_ms,
+        "phase": strat.phase.value,
+        "halt_reason": strat.halt_reason or None,
+        "underlying": session.pair.underlying,
+        "expiry": session.pair.expiry,
+        "strike": session.pair.strike,
+        "quantity": session.strategy.quantity,
+        "execution_mode": cfg.execution_mode,
+        "quote_mode": cfg.quote_mode,
+        "protection_mode": cfg.protection_mode,
+        "trades_taken": strat.trades_taken,
+        "legs": {"CE": _leg_state(session, "CE"), "PE": _leg_state(session, "PE")},
+        "difference": None if view is None else view.difference,
+        "cheaper_leg": None if view is None else view.cheaper_leg,
+        "signal": {
+            "action": None if sig is None else sig.action,
+            "reason": None if sig is None else sig.reason,
+            "option_type": None if sig is None else sig.option_type,
+        },
+        "trade": strat.summary() if strat.trade is not None else None,
+    }
+
+
 def clear(user_id: Optional[str] = None) -> None:
     if user_id is None:
         _sessions.clear()

@@ -79,6 +79,81 @@ export interface AtmPremiumImbalanceResponse {
     require_session_origin_tick?: boolean[] };
 }
 
+/** One leg's live quote, plus whether it may be traded on at all. */
+export interface AtmLegState {
+  instrument_id: string;
+  tradingsymbol: string;
+  option_type: 'CE' | 'PE';
+  lot_size: number | null;
+  ltp: number | null;
+  bid: number | null;
+  ask: number | null;
+  last_trade_ts_ms: number | null;
+  /**
+   * Did the trade behind `ltp` happen in this session?
+   * `false` means a carried-over price and the strategy will refuse it;
+   * `null` means the feed sent no trade time, so it cannot be judged.
+   */
+  session_origin: boolean | null;
+  age_ms: number | null;
+  official_open: number | null;
+}
+
+export interface AtmTradeState {
+  state: string;
+  option: 'CE' | 'PE' | null;
+  strike: number | null;
+  quantity: number | null;
+  first_tick_price: number | null;
+  entry_order_price: number | null;
+  entry: number | null;
+  target: number | null;
+  trigger: number | null;
+  exit_order_price: number | null;
+  exit: number | null;
+  points: number | null;
+  pnl: number | null;
+  slippage_vs_target: number | null;
+  attempts: number | null;
+  quote_mode: string;
+  halt_reason: string | null;
+  protection: { kind: string; state: string; limit_price: number | null; order_id: string | null } | null;
+}
+
+/** The live armed session, or null when nothing is armed. */
+export interface AtmSessionStatus {
+  armed: boolean;
+  finished: boolean;
+  session_date: string;
+  session_open_ms: number | null;
+  phase: string;
+  halt_reason: string | null;
+  underlying: string;
+  expiry: string | null;
+  strike: number | null;
+  quantity: number | null;
+  execution_mode: string;
+  quote_mode: string;
+  protection_mode: string;
+  trades_taken: number;
+  legs: { CE: AtmLegState; PE: AtmLegState } | null;
+  difference: number | null;
+  cheaper_leg: 'CE' | 'PE' | null;
+  signal: { action: string | null; reason: string | null; option_type: 'CE' | 'PE' | null } | null;
+  trade: AtmTradeState | null;
+}
+
+export interface AtmArmResult {
+  status: 'armed' | 'already_armed' | 'disabled' | 'no_quantity' | 'market_closed' | 'error';
+  underlying?: string;
+  expiry?: string;
+  strike?: number;
+  quantity?: number;
+  protection_mode?: string;
+  execution_mode?: string;
+  message?: string;
+}
+
 export interface AtmPremiumImbalanceSnapshot {
   strategy: AtmPremiumImbalanceResponse['strategy'];
   config: AtmPremiumImbalanceConfig;
@@ -91,6 +166,8 @@ export interface AtmPremiumImbalanceSnapshot {
   } | null;
   /** Every reason the strategy is not armed. Never empty when `resolved` is null. */
   blockers: string[];
+  /** Live session state, or null when nothing is armed. */
+  session: AtmSessionStatus | null;
 }
 
 export function useAtmPremiumImbalanceConfig() {
@@ -115,12 +192,32 @@ export function useSetAtmPremiumImbalanceConfig() {
   });
 }
 
-export function useAtmPremiumImbalanceSnapshot(enabled = true) {
+export function useAtmPremiumImbalanceSnapshot(enabled = true, refetchMs = 0) {
   return useQuery<AtmPremiumImbalanceSnapshot>({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => api.get('/api/v1/config/atm-premium-imbalance/snapshot'),
     enabled,
-    staleTime: 15000,
+    staleTime: 2000,
+    // Polled only while something is armed: an unarmed strategy has no live
+    // state worth a request every few seconds.
+    refetchInterval: refetchMs > 0 ? refetchMs : false,
     retry: false,
+  });
+}
+
+/**
+ * Arm the session: resolve the ATM pair and subscribe both legs.
+ *
+ * Idempotent for the day on the server, which is what makes it safe to expose
+ * as a button — a double click returns `already_armed` rather than creating a
+ * second session that could place a second entry.
+ */
+export function useArmAtmPremiumImbalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<AtmArmResult>('/api/v1/config/atm-premium-imbalance/arm'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SNAPSHOT_KEY });
+    },
   });
 }

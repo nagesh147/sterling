@@ -196,10 +196,12 @@ def descriptor() -> dict:
 async def snapshot(uid: str) -> dict:
     """Operator view: config, resolved pair, and why it is or is not armed."""
     cfg = get_config()
+    from app.services.atm_premium_imbalance_runner import session_status
     out: dict[str, Any] = {
         "strategy": {**descriptor(), "enabled": cfg.enabled},
         "config": cfg.as_dict(),
         "resolved": None,
+        "session": session_status(uid),
         "blockers": [],
     }
     if not cfg.enabled:

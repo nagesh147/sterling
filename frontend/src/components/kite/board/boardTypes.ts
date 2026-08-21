@@ -17,13 +17,14 @@
  */
 import type { Stat } from './StatCard';
 
-export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb';
+export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb' | 'atm_premium_imbalance';
 
 export const ENGINE_LABEL: Record<EngineId, string> = {
   supertrend: 'SuperTrend',
   navigator: 'Navigator',
   adaptive_edge: 'Adaptive Edge',
   orb: 'ORB + VWAP',
+  atm_premium_imbalance: 'ATM Premium Imbalance',
 };
 
 /** Short form for a badge, where the full name will not fit. */
@@ -32,6 +33,7 @@ export const ENGINE_TAG: Record<EngineId, string> = {
   navigator: 'NAV',
   adaptive_edge: 'AE',
   orb: 'ORB',
+  atm_premium_imbalance: 'API',
 };
 
 /**

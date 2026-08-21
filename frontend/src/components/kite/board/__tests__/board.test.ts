@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  groupByDay, sessionDayKey, sessionDayLabel, ACTIONABLE, ENGINE_TAG, STATUS_LABEL,
+  groupByDay, sessionDayKey, sessionDayLabel, ACTIONABLE, ENGINE_TAG, ENGINE_LABEL, STATUS_LABEL,
   type BoardSignal,
 } from '../boardTypes';
 import { visibleColumns, isMixedEngine, COLUMNS } from '../SignalBoard';
@@ -209,8 +209,18 @@ describe('ORB adapter', () => {
 
 describe('shared vocabulary', () => {
   it('names every status and engine', () => {
-    expect(Object.keys(STATUS_LABEL)).toHaveLength(6);
-    expect(Object.keys(ENGINE_TAG)).toHaveLength(4);
+    // The Record<> types already force every key to exist, so a count here
+    // would only break when an engine is added. What can actually go wrong is
+    // a blank name, or a tag and a label that disagree about which engines
+    // exist — the header would then render an unlabelled column.
+    expect(Object.keys(ENGINE_TAG).sort()).toEqual(Object.keys(ENGINE_LABEL).sort());
+    for (const [id, tag] of Object.entries(ENGINE_TAG)) {
+      expect(tag, id).toBeTruthy();
+      expect(ENGINE_LABEL[id as keyof typeof ENGINE_LABEL], id).toBeTruthy();
+    }
+    for (const [status, label] of Object.entries(STATUS_LABEL)) {
+      expect(label, status).toBeTruthy();
+    }
   });
 
   it('counts armed, running and weakening as live', () => {
