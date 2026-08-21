@@ -497,3 +497,13 @@ button, a, input, select, textarea,
   .sb-tab, .sb-tool { transition: none !important; }
   [style*="sb-pulse"] { animation: none !important; }
 }
+
+/* The instrument label is a link into the full detail page, and it sits inside
+   a row that also responds to clicks. Underlining on hover is what separates
+   "this opens something else" from "this expands here". */
+.sb-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sb-name:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

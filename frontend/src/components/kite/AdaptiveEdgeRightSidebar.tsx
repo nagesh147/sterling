@@ -7,7 +7,7 @@ import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
 import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
 import { orbToBoard } from './board/orbAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
-import { ACTIONABLE, type EngineId } from './board/boardTypes';
+import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
@@ -31,6 +31,8 @@ import { k } from '../../styles/kiteUI';
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: any) => void;
+  /** Opens a board signal as a full detail page in the centre column. */
+  onOpenBoardDetail?: (signal: BoardSignal) => void;
 }
 
 /** Which engine each nav destination should land on. */
@@ -39,7 +41,7 @@ const NAV_TARGET: Record<string, EngineId> = {
   orbOptions: 'orb',
 };
 
-export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props) {
+export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
   const [engine, setEngine] = useState<EngineId>('supertrend');
   // One clock per render, so every day heading in a paint agrees on "today".
   const nowMs = Date.now();
@@ -82,8 +84,8 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
         {engine === 'supertrend' && (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         )}
-        {engine === 'adaptive_edge' && <AdaptiveEdgeBoard nowMs={nowMs} />}
-        {engine === 'orb' && <NiftyOrbSignalsFeed />}
+        {engine === 'adaptive_edge' && <AdaptiveEdgeBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />}
+        {engine === 'orb' && <NiftyOrbSignalsFeed onOpenDetail={onOpenBoardDetail} />}
       </div>
     </div>
   );

@@ -87,7 +87,9 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function NiftyOrbSignalsFeed() {
+export function NiftyOrbSignalsFeed({ onOpenDetail }: {
+  onOpenDetail?: (signal: BoardSignal) => void;
+} = {}) {
   const config = useOrbConfig();
   const setEnabled = useSetOrbEnabled();
   const enabled = config.data?.config?.enabled;
@@ -153,6 +155,7 @@ export function NiftyOrbSignalsFeed() {
         openId={openId}
         onToggle={(id) => setOpenId((prev) => (prev === id ? null : id))}
         renderDetail={(s) => <OrbTicket signal={s} />}
+        onOpenDetail={onOpenDetail}
         nowMs={nowMs}
         emptyLabel="No tradable ORB setup right now. The universe is being scanned — the list below says what each underlying is waiting on."
       />

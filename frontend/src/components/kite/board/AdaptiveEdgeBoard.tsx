@@ -12,9 +12,13 @@ import { adaptiveEdgeToBoard } from './adaptiveEdgeAdapter';
 import { SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
 import { useBoardView } from './useBoardView';
+import type { BoardSignal } from './boardTypes';
 import { k } from '../../../styles/kiteUI';
 
-export function AdaptiveEdgeBoard({ nowMs }: { nowMs: number }) {
+export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
+  nowMs: number;
+  onOpenDetail?: (signal: BoardSignal) => void;
+}) {
   const snapshot = useAdaptiveEdgeSnapshot();
   const signals = React.useMemo(
     () => (snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : []),
@@ -38,6 +42,7 @@ export function AdaptiveEdgeBoard({ nowMs }: { nowMs: number }) {
         requested={['instrument', 'status', 'exchange', 'leg', 'entry', 'stop', 'trail', 'target', 'exit', 'ltp', 'score', 'time']}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
+        onOpenDetail={onOpenDetail}
         nowMs={nowMs}
         emptyLabel={
           view.counts.total

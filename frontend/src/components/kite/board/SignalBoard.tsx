@@ -98,16 +98,40 @@ function Pill({ tone, children, title }: { tone: string; children: React.ReactNo
 }
 
 /** The value of one column for one signal, plus how to colour it. */
-function cellContent(signal: BoardSignal, id: ColumnId): { node: React.ReactNode; color?: string } {
+function cellContent(
+  signal: BoardSignal,
+  id: ColumnId,
+  onOpenDetail?: (signal: BoardSignal) => void,
+): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
     case 'instrument':
       return {
         node: (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-            <span style={{ fontWeight: 700, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {signal.underlying}
-            </span>
+            {onOpenDetail ? (
+              // A real button, not a click handler on a span: the row itself
+              // expands on click, so the label needs its own focus stop and its
+              // own announced action or the two are indistinguishable.
+              <button
+                type="button"
+                className="sb-name"
+                title={`Open ${signal.underlying} detail`}
+                aria-label={`Open ${signal.underlying} detail`}
+                onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
+                style={{
+                  border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+                  fontWeight: 700, color: k.text, cursor: 'pointer',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                }}
+              >
+                {signal.underlying}
+              </button>
+            ) : (
+              <span style={{ fontWeight: 700, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {signal.underlying}
+              </span>
+            )}
             <Pill tone={dirTone} title={`${signal.direction} ${signal.instrument.optionType ?? signal.instrument.kind}`}>
               {signal.instrument.optionType ?? signal.instrument.kind.toUpperCase()} · {signal.direction.toUpperCase()}
             </Pill>
@@ -186,13 +210,14 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
 export const isMixedEngine = (signals: readonly BoardSignal[]) =>
   new Set(signals.map((s) => s.engine)).size > 1;
 
-function Row({ signal, columns, template, open, onToggle, renderDetail }: {
+function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDetail }: {
   signal: BoardSignal;
   columns: ColumnDef[];
   template: string;
   open: boolean;
   onToggle: () => void;
   renderDetail?: (signal: BoardSignal) => React.ReactNode;
+  onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   return (
@@ -223,7 +248,7 @@ function Row({ signal, columns, template, open, onToggle, renderDetail }: {
       >
         <span style={{ color: k.dim, display: 'inline-flex' }}><Chevron open={open} /></span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined);
           return (
             <span
               key={col.id}
@@ -270,7 +295,7 @@ function Row({ signal, columns, template, open, onToggle, renderDetail }: {
 }
 
 export function SignalBoard({
-  signals, columns: requested, openId, onToggle, renderDetail, nowMs, emptyLabel,
+  signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -278,6 +303,8 @@ export function SignalBoard({
   openId: string | null;
   onToggle: (id: string) => void;
   renderDetail?: (signal: BoardSignal) => React.ReactNode;
+  /** Opens the full detail page. Makes the instrument label a control. */
+  onOpenDetail?: (signal: BoardSignal) => void;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -351,6 +378,7 @@ export function SignalBoard({
               open={openId === signal.id}
               onToggle={() => onToggle(signal.id)}
               renderDetail={renderDetail}
+              onOpenDetail={onOpenDetail}
             />
           ))}
         </section>
