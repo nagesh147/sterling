@@ -13,6 +13,7 @@ import type { KiteAccount } from '../../types/kite';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
+import { OptionContractsPicker } from './config/OptionContractsPicker';
 import { TickerStripSettings } from './ticker/TickerStripSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
@@ -1007,6 +1008,7 @@ export function ConnectPane() {
             {section === 'engine' && (
               <>
                 <SuperTrendEnginePanel />
+                <OptionContractsPicker />
               </>
             )}
 

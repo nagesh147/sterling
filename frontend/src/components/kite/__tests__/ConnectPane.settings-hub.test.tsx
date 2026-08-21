@@ -31,6 +31,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useSetEngineConfig: () => ({ mutate: setConfig, isPending: false }),
   usePatchEngineConfig: () => ({ mutate: setConfig, isPending: false }),
   useEngineSignals: () => ({ data: { rows: [] } }),
+  // SuperTrend's contract picker moved onto this page, and it reads the live
+  // Kite expiry calendar.
+  useExpiryCalendar: () => ({ data: undefined, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+  useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The rail summarises which engines are running, so ConnectPane itself reads the
