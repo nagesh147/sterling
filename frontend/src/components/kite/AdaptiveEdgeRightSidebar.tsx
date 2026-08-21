@@ -1,25 +1,72 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
-import { AdaptiveEdgePanel, rowsFromSnapshot } from './AdaptiveEdgePanel';
+import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
+import { AdaptiveEdgeBoard } from './board/AdaptiveEdgeBoard';
+import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
+import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
+import { orbToBoard } from './board/orbAdapter';
+import { supertrendToBoard } from './board/supertrendAdapter';
+import { ACTIONABLE, type EngineId } from './board/boardTypes';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
+import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useOrbSignals } from '../../hooks/useOrbSignals';
+import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { k } from '../../styles/kiteUI';
 
+/**
+ * The engine workspace: pick an engine, see its board.
+ *
+ * The picker used to be three flat words. Choosing between them meant opening
+ * each one to find out whether it was running and whether it had anything —
+ * which is backwards, because the point of a picker is to make that choice
+ * without paying for it.
+ *
+ * Each tab now carries live state: a dot for running / running-but-quiet / off,
+ * and a count of what is live. Every tab therefore has to know its engine's
+ * state whether or not it is the visible one, which is why the counts are read
+ * here rather than inside each board. All three already poll on their own
+ * schedule, so this shares their cached data rather than adding requests.
+ */
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: any) => void;
 }
 
+/** Which engine each nav destination should land on. */
+const NAV_TARGET: Record<string, EngineId> = {
+  adaptiveEdge: 'adaptive_edge',
+  orbOptions: 'orb',
+};
+
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props) {
-  const [engine, setEngine] = useState<'signals' | 'adaptive_edge' | 'orb'>('signals');
+  const [engine, setEngine] = useState<EngineId>('supertrend');
+  // One clock per render, so every day heading in a paint agrees on "today".
+  const nowMs = Date.now();
+
   const snapshot = useAdaptiveEdgeSnapshot();
-  const rows = useMemo(() => (snapshot.data ? rowsFromSnapshot(snapshot.data) : []), [snapshot.data]);
+  const engineSignals = useEngineSignals();
+  const engineConfig = useEngineConfig();
+  const orbConfig = useOrbConfig();
+  const orbEnabled = orbConfig.data?.config?.enabled;
+  const orb = useOrbSignals(orbEnabled !== false);
+
+  const tabs: EngineTabState[] = useMemo(() => {
+    const st = supertrendToBoard(engineSignals.data?.rows ?? []);
+    const ae = snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : [];
+    const ob = orb.signals.map(orbToBoard);
+    const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
+    return [
+      { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
+      { id: 'adaptive_edge', running: !!snapshot.data, live: live(ae), scanned: ae.length },
+      { id: 'orb', running: orbEnabled !== false, live: live(ob), scanned: ob.length },
+    ];
+  }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
-      const target = (event as CustomEvent<string>).detail;
-      if (target === 'adaptiveEdge') setEngine('adaptive_edge');
-      if (target === 'orbOptions') setEngine('orb');
+      const target = NAV_TARGET[(event as CustomEvent<string>).detail];
+      if (target) setEngine(target);
     };
     window.addEventListener('kite-nav-click', onNav);
     return () => window.removeEventListener('kite-nav-click', onNav);
@@ -28,40 +75,16 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart }: Props)
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: k.bg }}>
       <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${k.border}`, background: k.bg }}>
-        <button
-          onClick={() => setEngine('signals')}
-          style={{ flex: 1, padding: '7px 8px', border: 0, borderBottom: engine === 'signals' ? `2px solid ${k.blue}` : '2px solid transparent', background: 'transparent', color: engine === 'signals' ? k.text : k.dim, fontSize: 9, fontWeight: engine === 'signals' ? 700 : 500, letterSpacing: '.06em', cursor: 'pointer' }}
-        >
-          SIGNALS
-        </button>
-        <button
-          onClick={() => setEngine('adaptive_edge')}
-          style={{ flex: 1, padding: '7px 8px', border: 0, borderBottom: engine === 'adaptive_edge' ? `2px solid ${k.blue}` : '2px solid transparent', background: 'transparent', color: engine === 'adaptive_edge' ? k.text : k.dim, fontSize: 9, fontWeight: engine === 'adaptive_edge' ? 700 : 500, letterSpacing: '.06em', cursor: 'pointer' }}
-        >
-          ADAPTIVE EDGE
-        </button>
-        <button
-          onClick={() => setEngine('orb')}
-          style={{ flex: 1, padding: '7px 8px', border: 0, borderBottom: engine === 'orb' ? `2px solid ${k.blue}` : '2px solid transparent', background: 'transparent', color: engine === 'orb' ? k.text : k.dim, fontSize: 9, fontWeight: engine === 'orb' ? 700 : 500, letterSpacing: '.06em', cursor: 'pointer' }}
-        >
-          ORB
-        </button>
+        <EngineTabs tabs={tabs} active={engine} onSelect={setEngine} />
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: engine === 'adaptive_edge' ? '0 10px 12px' : 0 }}>
-        {engine === 'signals' && (
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {engine === 'supertrend' && (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         )}
-        {engine === 'adaptive_edge' && (
-          <AdaptiveEdgePanel
-            rows={rows}
-            inlineExpand={true}
-            onInspectSymbol={onOpenChart ? (sym) => onOpenChart(sym, 'chart') : undefined}
-          />
-        )}
+        {engine === 'adaptive_edge' && <AdaptiveEdgeBoard nowMs={nowMs} />}
         {engine === 'orb' && <NiftyOrbSignalsFeed />}
       </div>
     </div>
   );
 }
-

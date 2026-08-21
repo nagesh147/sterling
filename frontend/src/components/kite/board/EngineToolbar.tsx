@@ -29,23 +29,23 @@ export interface EngineTabState {
   id: EngineId;
   /** Server-side on/off. A stopped engine still gets a tab — it explains itself. */
   running: boolean;
-  /** Rows worth acting on right now. Drives the count badge. */
-  armed: number;
+  /** Live rows: armed, running or weakening. Drives the count badge. */
+  live: number;
   /** Total scanned, for the "0 of 18" case that means "working, nothing yet". */
   scanned: number;
 }
 
-function StateDot({ running, armed }: { running: boolean; armed: number }) {
-  const tone = !running ? k.dim : armed > 0 ? k.green : k.amber;
+function StateDot({ running, live }: { running: boolean; live: number }) {
+  const tone = !running ? k.dim : live > 0 ? k.green : k.amber;
   return (
     <span
       aria-hidden
-      title={!running ? 'Not scanning' : armed > 0 ? `${armed} armed` : 'Scanning, nothing armed'}
+      title={!running ? 'Not scanning' : live > 0 ? `${live} live` : 'Scanning, nothing live'}
       style={{
         width: 6, height: 6, borderRadius: '50%', background: tone, flexShrink: 0,
         // Only a live, armed engine pulses. Motion is reserved for the one
         // state that wants attention, or it stops meaning anything.
-        animation: running && armed > 0 ? 'sb-pulse 1.8s ease-in-out infinite' : undefined,
+        animation: running && live > 0 ? 'sb-pulse 1.8s ease-in-out infinite' : undefined,
       }}
     />
   );
@@ -65,7 +65,7 @@ export function EngineTabs({ tabs, active, onSelect }: {
             key={tab.id}
             role="tab"
             aria-selected={on}
-            aria-label={`${ENGINE_LABEL[tab.id]}, ${tab.running ? `${tab.armed} armed of ${tab.scanned} scanned` : 'not scanning'}`}
+            aria-label={`${ENGINE_LABEL[tab.id]}, ${tab.running ? `${tab.live} live of ${tab.scanned} scanned` : 'not scanning'}`}
             onClick={() => onSelect(tab.id)}
             className="sb-tab"
             style={{
@@ -78,14 +78,14 @@ export function EngineTabs({ tabs, active, onSelect }: {
               fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            <StateDot running={tab.running} armed={tab.armed} />
+            <StateDot running={tab.running} live={tab.live} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ENGINE_LABEL[tab.id].toUpperCase()}</span>
-            {tab.running && tab.armed > 0 && (
+            {tab.running && tab.live > 0 && (
               <span style={{
                 fontSize: 8.5, fontWeight: 700, color: k.green, background: tint(k.green, 14),
                 border: `1px solid ${tint(k.green, 35)}`, borderRadius: 8, padding: '0 4px', minWidth: 14, textAlign: 'center',
               }}>
-                {tab.armed}
+                {tab.live}
               </span>
             )}
           </button>

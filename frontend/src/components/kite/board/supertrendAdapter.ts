@@ -22,6 +22,16 @@ import type { AlignmentChip, EngineSignalRow, OptionLeg } from '../../../types/k
 import { k } from '../../../styles/kiteUI';
 import type { BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 
+/**
+ * A tradable price, or nothing.
+ *
+ * A premium of zero is not a level. A feed emitting `0` for "no stop set"
+ * renders as a "0.00" stop indistinguishable from a real one, which on a bought
+ * option is the difference between a protected position and an unprotected one.
+ */
+const price = (v: number | null | undefined): number | null =>
+  v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
 const engineOf = (row: EngineSignalRow): EngineId =>
   row.source === 'navigator' ? 'navigator' : 'supertrend';
 
@@ -148,23 +158,23 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
     status: status(row, leg),
     atMs,
     levels: {
-      ltp: leg.premium_spot ?? null,
-      entry: leg.premium_spot ?? null,
+      ltp: price(leg.premium_spot),
+      entry: price(leg.premium_spot),
       // The hard stop set at entry and the ratchet are different numbers, and
       // the board shows both: one says what was risked, the other what is left.
-      stop: leg.entry_sl ?? null,
-      trail: leg.premium_sl ?? null,
-      target: leg.premium_target ?? null,
+      stop: price(leg.entry_sl),
+      trail: price(leg.premium_sl),
+      target: price(leg.premium_target),
       exit: null,
     },
     sizing: {
       lots: null,
       quantity,
       // Premium risked per lot, if both ends of the stop are known.
-      atRiskInr: leg.premium_spot != null && leg.entry_sl != null && leg.lot_size
-        ? Math.max(0, (leg.premium_spot - leg.entry_sl) * leg.lot_size)
+      atRiskInr: price(leg.premium_spot) != null && price(leg.entry_sl) != null && leg.lot_size
+        ? Math.max(0, (price(leg.premium_spot)! - price(leg.entry_sl)!) * leg.lot_size)
         : null,
-      deployedInr: leg.premium_spot != null && leg.lot_size ? leg.premium_spot * leg.lot_size : null,
+      deployedInr: price(leg.premium_spot) != null && leg.lot_size ? price(leg.premium_spot)! * leg.lot_size : null,
     },
     score: row.score ?? null,
     reason: row.exit_reason ?? row.resolution_reason ?? null,

@@ -15,6 +15,28 @@
 import type { AdaptiveEdgeRow } from '../AdaptiveEdgePanel';
 import type { BoardSection, BoardSignal, BoardStatus } from './boardTypes';
 
+/**
+ * A tradable price, or nothing.
+ *
+ * Zero and negative premiums are not levels. Several feeds emit `0` for "no
+ * stop set", which renders as a "0.00" stop indistinguishable from a real one
+ * — on a bought option that is the difference between a protected position and
+ * an unprotected one.
+ */
+const price = (v: number | null | undefined): number | null =>
+  v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
+/**
+ * Options trade on the derivatives venue, not the cash one.
+ *
+ * The rows carry the underlying's exchange, so an NFO contract arrives tagged
+ * NSE. Printing that on an order-facing board is wrong: you cannot buy
+ * KOTAKBANK26AUG385CE on NSE.
+ */
+const DERIVATIVE_VENUE: Record<string, string> = { NSE: 'NFO', BSE: 'BFO' };
+const venueFor = (exchange: string, kind: string) =>
+  kind === 'option' ? (DERIVATIVE_VENUE[exchange] ?? exchange) : exchange;
+
 const ms = (iso: string | null | undefined): number | null => {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -85,8 +107,32 @@ function modeSection(row: AdaptiveEdgeRow): BoardSection | null {
   };
 }
 
+/**
+ * Per-lot economics.
+ *
+ * Deliberately "per lot" and not "at risk": the engine sizes nothing, so the
+ * only honest statement is what one lot would cost and risk.
+ */
+function lotSection(row: AdaptiveEdgeRow): BoardSection | null {
+  if (!row.lotSize) return null;
+  const entry = price(row.entry);
+  const stop = price(row.sl);
+  const perLotRisk = entry != null && stop != null ? Math.max(0, (entry - stop) * row.lotSize) : null;
+  const rupees = (v: number | null) => (v == null ? undefined : `₹${Math.round(v).toLocaleString('en-IN')}`);
+  return {
+    title: 'Per lot',
+    layout: 'rows',
+    summary: `${row.lotSize} per lot`,
+    stats: [
+      { label: 'Lot size', value: row.lotSize },
+      { label: 'Cost of one lot', value: rupees(entry != null ? entry * row.lotSize : null), hint: 'Premium outlay for a single lot at the entry price' },
+      { label: 'Risk on one lot', value: rupees(perLotRisk), hint: 'Entry to stop, for one lot. The engine does not choose a position size.' },
+    ],
+  };
+}
+
 export function adaptiveEdgeToBoard(row: AdaptiveEdgeRow): BoardSignal {
-  const sections = [spotSection(row), modeSection(row)].filter(Boolean) as BoardSection[];
+  const sections = [spotSection(row), lotSection(row), modeSection(row)].filter(Boolean) as BoardSection[];
   // A SELL side is a short even when the contract is a call, so the option type
   // alone cannot tell you which way the position leans.
   const direction = row.side === 'SELL' ? 'short' : 'long';
@@ -97,7 +143,7 @@ export function adaptiveEdgeToBoard(row: AdaptiveEdgeRow): BoardSignal {
     underlying: row.underlying,
     instrument: {
       symbol: row.instrument,
-      exchange: row.exchange,
+      exchange: venueFor(row.exchange, row.kind === 'spot' ? 'equity' : 'option'),
       kind: row.kind === 'spot' ? 'equity' : 'option',
       optionType: row.kind === 'option' ? row.optionType : undefined,
       strike: row.strike ?? null,
@@ -109,23 +155,22 @@ export function adaptiveEdgeToBoard(row: AdaptiveEdgeRow): BoardSignal {
     status: status(row),
     atMs: ms(row.entryTime) ?? row.observationTime ?? null,
     levels: {
-      ltp: row.ltp,
-      entry: row.entry,
-      stop: row.sl,
-      trail: row.tsl,
+      ltp: price(row.ltp),
+      entry: price(row.entry),
+      stop: price(row.sl),
+      trail: price(row.tsl),
       // Adaptive Edge quotes one exit level, which is the planned exit until
       // the row closes and it becomes the realised one.
-      target: row.open ? row.exit : null,
-      exit: row.open ? null : row.exit,
+      target: row.open ? price(row.exit) : null,
+      exit: row.open ? null : price(row.exit),
     },
-    sizing: {
-      lots: null,
-      quantity: row.lotSize ?? null,
-      atRiskInr: row.entry != null && row.sl != null && row.lotSize
-        ? Math.max(0, (row.entry - row.sl) * row.lotSize)
-        : null,
-      deployedInr: row.entry != null && row.lotSize ? row.entry * row.lotSize : null,
-    },
+    // Adaptive Edge rows carry a lot size but no position size — the panel has
+    // never had a Qty column, because the engine does not decide one. Putting
+    // lot size under "Qty" would claim a position this app never sized, which
+    // is the exact class of bug that once showed 2,400 units of an 18-rupee
+    // option labelled "risk Rs 3,000". The columns stay empty and the per-lot
+    // figures go in the detail, where they are labelled for what they are.
+    sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score,
     reason: row.whyClosed ?? row.resolutionReason ?? null,
     sections,

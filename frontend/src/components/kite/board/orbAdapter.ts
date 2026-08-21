@@ -13,6 +13,10 @@
 import type { OrbFeedEntry } from '../../../utils/niftyOrbSignalAdapter';
 import type { BoardSection, BoardSignal, BoardStatus } from './boardTypes';
 
+/** A tradable price, or nothing. A zero premium is not a level. */
+const price = (v: number | null | undefined): number | null =>
+  v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
 function status(entry: OrbFeedEntry): BoardStatus {
   if (entry.state === 'ERROR') return 'error';
   if (entry.state === 'SIGNAL') return 'armed';
@@ -101,12 +105,12 @@ export function orbToBoard(entry: OrbFeedEntry): BoardSignal {
     status: status(entry),
     atMs: atMs(entry),
     levels: {
-      ltp: entry.optionPremium ?? null,
-      entry: entry.optionPremium ?? null,
-      stop: entry.stopPremium ?? null,
+      ltp: price(entry.optionPremium),
+      entry: price(entry.optionPremium),
+      stop: price(entry.stopPremium),
       // Trailing belongs to Trading Mode, not to ORB.
       trail: null,
-      target: entry.targetPremium ?? null,
+      target: price(entry.targetPremium),
       exit: null,
     },
     sizing: {
