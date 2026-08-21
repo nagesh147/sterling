@@ -219,6 +219,14 @@ async def snapshot(uid: str) -> dict:
             "pe": {"instrument_id": pair.pe.instrument_id, "tradingsymbol": pair.pe.tradingsymbol,
                    "lot_size": pair.pe.lot_size},
         }
+        # An order for a fraction of a lot is rejected by the broker, and it
+        # would be rejected at the open -- the one moment this strategy trades,
+        # with a three-attempt budget and one trade per session. Report it here
+        # so the board shows it before arming, not after the entry fails.
+        lot = int(pair.ce.lot_size or 0)
+        if lot > 1 and cfg.quantity > 0 and cfg.quantity % lot:
+            out["blockers"].append(
+                f"quantity {cfg.quantity} is not a whole multiple of the lot size {lot}")
     except Exception as exc:
         out["blockers"].append(f"instrument resolution failed: {exc}")
     return out

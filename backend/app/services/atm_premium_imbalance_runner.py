@@ -481,6 +481,14 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     except (TypeError, ValueError):
         return {"status": "error", "message": "instrument ids are not Kite tokens"}
 
+    # Refuse a fraction of a lot now rather than at the open. The lot size is
+    # only known once the pair resolves, which is why this is not a config rule.
+    lot = int(pair.ce.lot_size or 0)
+    if lot > 1 and cfg.quantity % lot:
+        return {"status": "quantity_not_whole_lots",
+                "message": f"quantity {cfg.quantity} is not a whole multiple "
+                           f"of the lot size {lot}"}
+
     strategy = ATMPremiumImbalanceStrategy(
         cfg=cfg, pair=pair, quantity=cfg.quantity,
         trade_id=f"api-{user_id}-{today.isoformat()}",

@@ -496,3 +496,24 @@ async def test_refusals_claim_nothing(fake_tm, arming, monkeypatch):
     assert (await R.arm("u1"))["status"] == "no_quantity"
     assert fake_tm.subscribed == []
 
+
+@pytest.mark.asyncio
+async def test_a_fraction_of_a_lot_is_refused_before_the_open(fake_tm, arming, monkeypatch):
+    """The broker would reject this, and it would reject it at the open."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=5).validate()   # lot is 20
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+
+    out = await R.arm("u1")
+    assert out["status"] == "quantity_not_whole_lots"
+    assert "lot size 20" in out["message"]
+    assert fake_tm.subscribed == []          # a refusal claims nothing
+    assert R.active_session("u1") is None
+
+
+@pytest.mark.asyncio
+async def test_whole_lots_are_accepted(fake_tm, arming, monkeypatch):
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=40).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    assert (await R.arm("u1"))["status"] == "armed"
