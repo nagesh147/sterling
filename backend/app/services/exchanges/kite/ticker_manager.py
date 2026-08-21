@@ -44,6 +44,19 @@ def _make_broadcaster(user_id: str):
                     await monitor.on_ticks(user_id, ticks, client=client)
         except Exception as exc:  # never let the monitor kill the tick loop
             log.debug("kite monitor on_ticks failed for %s: %s", user_id, exc)
+        # Then the ATM Premium Imbalance session, for the same reason: it enters
+        # and exits on ticks, and must not depend on a UI being connected.
+        try:
+            from app.services import atm_premium_imbalance_runner as api_runner
+            session = api_runner.active_session(user_id)
+            if session is not None and not session.finished:
+                client = await _warm_client(user_id)
+                if client is not None:
+                    await api_runner.on_ticks(
+                        user_id, ticks, api_runner.KiteBrokerPort(client, session.pair)
+                    )
+        except Exception as exc:  # never let this kill the tick loop
+            log.debug("ATM PI on_ticks failed for %s: %s", user_id, exc)
         try:
             from app.api.v1.endpoints.stream import stream_manager
             await stream_manager.broadcast_to_channel(

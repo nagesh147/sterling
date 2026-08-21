@@ -22,7 +22,7 @@ def test_get_publishes_identity_defaults_and_vocabularies():
 
     assert payload["strategy"]["id"] == "atm_premium_imbalance"
     assert payload["strategy"]["name"] == "ATM Premium Imbalance"
-    assert payload["strategy"]["contract_version"] == "A230.1"
+    assert payload["strategy"]["contract_version"] == "A230.3"
     # Not live-ready until the A274 gate passes.
     assert payload["strategy"]["live_ready"] is False
     assert payload["strategy"]["enabled"] is False
@@ -45,7 +45,9 @@ def test_get_publishes_identity_defaults_and_vocabularies():
 
     # The UI must be told which options validate() will refuse, not discover it
     # through a 422 after the operator has already clicked.
-    assert "FIRST_TICK_PLUS_BUFFER" in payload["research_only"]["entry_price_policy"]
+    # No entry policy is research-only any more: FIRST_TICK_PLUS_BUFFER is the
+    # observed automatic path (the build prints "Buffer : 10.25").
+    assert payload["research_only"]["entry_price_policy"] == []
     assert "PREMIUM_CONVERGENCE" in payload["research_only"]["exit_policy"]
 
 
@@ -60,13 +62,14 @@ def test_put_round_trip_and_unknown_field_rejected():
     assert "target_points" in bad.json()["detail"]
 
 
-def test_put_rejects_research_only_policy_in_live_mode():
+def test_put_rejects_research_only_exit_policy_in_live_mode():
     c = client()
     bad = c.put(
         "/api/v1/config/atm-premium-imbalance",
         json={
             "execution_mode": "live", "quote_mode": "EXECUTABLE", "quantity": 20,
-            "entry_price_policy": "FIRST_TICK_PLUS_BUFFER",
+            "protection_mode": "RESTING_TARGET_LIMIT",
+            "exit_policy": "PREMIUM_CONVERGENCE",
         },
     )
     assert bad.status_code == 422
@@ -113,3 +116,35 @@ def test_snapshot_reports_blockers_rather_than_pretending_to_be_armed():
     # and that must be reported, never silently treated as armed.
     assert payload["resolved"] is None
     assert any("instrument resolution failed" in b for b in blockers)
+
+
+def test_get_publishes_protection_modes_and_live_requirements():
+    payload = client().get("/api/v1/config/atm-premium-imbalance").json()
+    vocab = payload["vocabularies"]
+    assert set(vocab["protection_mode"]) == {"NONE", "RESTING_TARGET_LIMIT", "GTT"}
+    assert payload["defaults"]["protection_mode"] == "NONE"   # fidelity by default
+    assert payload["defaults"]["expiry_policy"] == "NEAREST"  # corrected 2026-08-21
+
+    # The UI must be able to state live's requirements before the operator tries.
+    req = payload["live_requires"]
+    assert "NONE" not in req["protection_mode"]
+    assert req["quote_mode"] == ["EXECUTABLE"]
+
+
+def test_put_rejects_live_without_broker_side_protection():
+    bad = client().put(
+        "/api/v1/config/atm-premium-imbalance",
+        json={"execution_mode": "live", "quote_mode": "EXECUTABLE", "quantity": 20,
+              "protection_mode": "NONE"},
+    )
+    assert bad.status_code == 422
+    assert "broker-side protection" in bad.json()["detail"]
+
+
+def test_arm_refuses_while_disabled_rather_than_half_arming():
+    c = client()
+    c.put("/api/v1/config/atm-premium-imbalance", json={"enabled": False})
+    got = c.post("/api/v1/config/atm-premium-imbalance/arm")
+    assert got.status_code == 200
+    # A refusal with a reason, never a partially armed session.
+    assert got.json()["status"] in ("disabled", "no_quantity", "market_closed")

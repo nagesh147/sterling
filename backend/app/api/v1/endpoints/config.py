@@ -402,6 +402,7 @@ class ATMPremiumImbalanceConfigRequest(BaseModel):
     max_entry_attempts: int | None = None
     entry_attempt_timeout_ms: int | None = None
     exit_policy: str | None = None
+    protection_mode: str | None = None
     target_points: float | None = None
     exit_buffer_points: float | None = None
     stop_enabled: bool | None = None
@@ -425,9 +426,9 @@ async def get_atm_premium_imbalance_config() -> dict:
     is a UI that claims backend behaviour the backend does not honour.
     """
     from app.engines.atm_premium_imbalance.config import (
-        ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, QUOTE_MODES,
-        RESEARCH_ONLY_ENTRY_POLICIES, RESEARCH_ONLY_EXIT_POLICIES, STRIKE_POLICIES,
-        ATMPremiumImbalanceConfig,
+        ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, PROTECTION_MODES,
+        QUOTE_MODES, RESEARCH_ONLY_ENTRY_POLICIES, RESEARCH_ONLY_EXIT_POLICIES,
+        STRIKE_POLICIES, ATMPremiumImbalanceConfig,
     )
     from app.services.atm_premium_imbalance import descriptor, get_config
     cfg = get_config()
@@ -441,6 +442,7 @@ async def get_atm_premium_imbalance_config() -> dict:
             "quote_mode": sorted(QUOTE_MODES),
             "entry_price_policy": sorted(ENTRY_PRICE_POLICIES),
             "exit_policy": sorted(EXIT_POLICIES),
+            "protection_mode": sorted(PROTECTION_MODES),
             "data_source": ["kite", "truedata"],
             "execution_mode": ["paper", "live"],
         },
@@ -450,6 +452,10 @@ async def get_atm_premium_imbalance_config() -> dict:
             "entry_price_policy": sorted(RESEARCH_ONLY_ENTRY_POLICIES),
             "exit_policy": sorted(RESEARCH_ONLY_EXIT_POLICIES),
         },
+        # Live refuses NONE: a crash while long would leave the position with
+        # nothing watching it. Published so the UI can say so up front.
+        "live_requires": {"protection_mode": sorted(PROTECTION_MODES - {"NONE"}),
+                          "quote_mode": ["EXECUTABLE"]},
     }
 
 
@@ -481,3 +487,23 @@ async def atm_premium_imbalance_snapshot(user: UserContext = Depends(get_current
         raise HTTPException(
             status_code=502, detail=f"ATM Premium Imbalance snapshot failed: {exc}"
         ) from exc
+
+
+@router.post("/atm-premium-imbalance/arm")
+async def atm_premium_imbalance_arm(user: UserContext = Depends(get_current_user)) -> dict:
+    """Resolve the ATM pair, subscribe both legs, and arm the session.
+
+    Idempotent for the day: arming twice returns ``already_armed`` rather than
+    creating a second session that could place a second entry. The strategy then
+    runs off the Kite tick stream, not off this call.
+    """
+    from app.services.atm_premium_imbalance_runner import arm
+    uid = str(user.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    try:
+        return await arm(uid)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ATM Premium Imbalance arm failed: {exc}") from exc

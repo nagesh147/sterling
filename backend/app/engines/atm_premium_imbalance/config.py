@@ -35,12 +35,19 @@ ENTRY_PRICE_POLICIES: frozenset[str] = frozenset(
     {"MARKETABLE_ASK", "PERCENT_THROUGH", "MANUAL_FILE", "FIRST_TICK_PLUS_BUFFER"}
 )
 
-#: Policies we refuse to run against real money. FIRST_TICK_PLUS_BUFFER encodes
-#: one morning's measured slippage as an order price (A232); it may be replayed,
-#: never traded.
-RESEARCH_ONLY_ENTRY_POLICIES: frozenset[str] = frozenset({"FIRST_TICK_PLUS_BUFFER"})
+#: Policies we refuse to run against real money.
+#:
+#: ``FIRST_TICK_PLUS_BUFFER`` used to be listed here, on the reading that its
+#: 10.25 was measured slippage. That was wrong: the 2026-08-20 build prints
+#: ``Buffer : 10.25`` and ``Order Price : 113.1`` under a heading of
+#: ``FIRST-TICK ENTRY ATTEMPT 1/3``, so it is a named parameter of the observed
+#: automatic entry path. It is now a first-class policy (A232).
+RESEARCH_ONLY_ENTRY_POLICIES: frozenset[str] = frozenset()
 
 EXIT_POLICIES: frozenset[str] = frozenset({"FIXED_POINT_TARGET", "PREMIUM_CONVERGENCE"})
+
+#: Where the protective exit lives. NONE = nowhere, i.e. only this process.
+PROTECTION_MODES: frozenset[str] = frozenset({"NONE", "RESTING_TARGET_LIMIT", "GTT"})
 RESEARCH_ONLY_EXIT_POLICIES: frozenset[str] = frozenset({"PREMIUM_CONVERGENCE"})
 
 
@@ -65,7 +72,10 @@ class ATMPremiumImbalanceConfig:
 
     # --- universe -----------------------------------------------------------
     underlying: str = "SENSEX"
-    expiry_policy: str = "SAME_DAY"
+    # NEAREST, not SAME_DAY: the 2026-08-21 recording traded the *monthly*
+    # August contract (`SENSEX26AUG7...`) on a non-expiry day, so the bot takes
+    # whichever expiry is soonest rather than requiring one to expire today.
+    expiry_policy: str = "NEAREST"
     explicit_expiry: str = ""
     strike_policy: str = "ATM_NEAREST"
 
@@ -84,6 +94,9 @@ class ATMPremiumImbalanceConfig:
     minimum_difference_percent: float = 0.0
 
     # --- entry --------------------------------------------------------------
+    # MARKETABLE_ASK is an operator choice, not the observed default. The
+    # faithful reproduction of the automatic path is FIRST_TICK_PLUS_BUFFER with
+    # entry_buffer_points = 10.25 (OBSERVED, 2026-08-20). See A232.
     entry_price_policy: str = "MARKETABLE_ASK"
     entry_buffer_points: float = 0.50
     entry_through_pct: float = 0.0
@@ -95,6 +108,9 @@ class ATMPremiumImbalanceConfig:
     exit_policy: str = "FIXED_POINT_TARGET"
     target_points: float = 15.0
     exit_buffer_points: float = 0.50
+    # Broker-side protection for an open position. NONE reproduces the observed
+    # bot (which had none); live mode refuses NONE.
+    protection_mode: str = "NONE"
     stop_enabled: bool = False
     stop_points: float = 0.0
     max_hold_seconds: int = 0
@@ -125,6 +141,8 @@ class ATMPremiumImbalanceConfig:
             raise ValueError(f"signal_mode must be one of {sorted(SIGNAL_MODES)}")
         if self.entry_price_policy not in ENTRY_PRICE_POLICIES:
             raise ValueError(f"entry_price_policy must be one of {sorted(ENTRY_PRICE_POLICIES)}")
+        if self.protection_mode not in PROTECTION_MODES:
+            raise ValueError(f"protection_mode must be one of {sorted(PROTECTION_MODES)}")
         if self.exit_policy not in EXIT_POLICIES:
             raise ValueError(f"exit_policy must be one of {sorted(EXIT_POLICIES)}")
         if self.entry_price_policy == "MANUAL_FILE" and not self.manual_price_file:
@@ -201,6 +219,12 @@ class ATMPremiumImbalanceConfig:
                 )
             if self.quantity <= 0:
                 raise ValueError("live mode requires an explicit positive quantity")
+            if self.protection_mode == "NONE":
+                raise ValueError(
+                    "live mode requires broker-side protection: with protection_mode=NONE "
+                    "a crash or a dropped socket leaves the open position with nothing "
+                    "watching it"
+                )
         return self
 
     def as_dict(self) -> dict:

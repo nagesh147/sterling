@@ -41,7 +41,8 @@ def _prices(rng):
     return round(rng.uniform(0.05, 900.0), 2), round(rng.uniform(0.05, 900.0), 2)
 
 
-def test_difference_is_always_pe_minus_ce():
+def test_difference_is_always_the_absolute_gap():
+    """The source bot prints |PE - CE|; it stays positive when CE is dearer."""
     rng = random.Random(SEED)
     pair = _pair()
     for _ in range(3000):
@@ -50,7 +51,9 @@ def test_difference_is_always_pe_minus_ce():
         cache.on_option_tick(LegQuote(instrument_id=pair.ce.instrument_id, ltp=ce, received_ts_ms=1))
         cache.on_option_tick(LegQuote(instrument_id=pair.pe.instrument_id, ltp=pe, received_ts_ms=1))
         view = cache.view("COMPATIBILITY", 1)
-        assert view.difference == q2(pe - ce)
+        assert view.difference == q2(abs(pe - ce))
+        assert view.difference >= 0
+        assert view.signed_difference == q2(pe - ce)
 
 
 def test_cheaper_leg_is_always_the_one_bought():
@@ -65,8 +68,10 @@ def test_cheaper_leg_is_always_the_one_bought():
         cache.on_option_tick(LegQuote(instrument_id=pair.pe.instrument_id, ltp=pe, received_ts_ms=1))
         sig = evaluate(cache.view("COMPATIBILITY", 1), CFG)
         assert sig.action == ("BUY_CE" if ce < pe else "BUY_PE")
-        # the signed difference always points the same way as the choice
-        assert (sig.difference > 0) == (ce < pe)
+        # Direction comes from which leg is cheaper, never from a sign: the
+        # reported difference is absolute and so carries no direction at all.
+        assert sig.difference >= 0
+        assert (sig.view.signed_difference > 0) == (ce < pe)
 
 
 def test_target_is_always_fill_plus_target_points():

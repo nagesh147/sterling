@@ -61,9 +61,13 @@ def q(instrument_id, ltp, *, bid=None, ask=None, ts=1000, recv=1000, seq=1):
         (167.50, 214.85, 47.35),    # V17 entry block
         (482.05, 620.00, 137.95),   # V04
         (126.90, 168.25, 41.35),    # V1 exit block
+        # 2026-08-21 -- the first recording with the CALL dearer. The bot still
+        # printed a positive 154.00, which is what proves the value is absolute.
+        (491.15, 337.15, 154.00),
+        (489.90, 335.05, 154.85),
     ],
 )
-def test_difference_is_pe_minus_ce(pair, ce, pe, expected):
+def test_difference_is_the_absolute_gap(pair, ce, pe, expected):
     cache = PremiumQuoteCache(pair)
     cache.on_option_tick(q(pair.ce.instrument_id, ce))
     cache.on_option_tick(q(pair.pe.instrument_id, pe))
@@ -78,6 +82,29 @@ def test_difference_line_matches_observed_format(pair):
     cache.on_option_tick(q(pair.pe.instrument_id, 196.95))
     view = cache.view("COMPATIBILITY", 1000)
     assert format_difference_line(view) == "CE : 141.00 | PE : 196.95 | Difference : 55.95"
+
+
+def test_difference_line_stays_positive_when_the_call_is_dearer(pair):
+    """Verbatim from the 2026-08-21 recording."""
+    cache = PremiumQuoteCache(pair)
+    cache.on_option_tick(q(pair.ce.instrument_id, 491.15))
+    cache.on_option_tick(q(pair.pe.instrument_id, 337.15))
+    view = cache.view("COMPATIBILITY", 1000)
+    assert format_difference_line(view) == "CE : 491.15 | PE : 337.15 | Difference : 154.00"
+
+
+def test_put_side_entry_is_taken_when_the_call_is_dearer(pair):
+    """2026-08-21: CE 491.15 > PE 337.15 -> the put is bought.
+
+    The first observed put-side entry; the Upstox notification in that recording
+    confirms a fill at Rs. 340.10, i.e. against the ~337 put, not the ~491 call.
+    """
+    cache = PremiumQuoteCache(pair)
+    cache.on_option_tick(q(pair.ce.instrument_id, 491.15))
+    cache.on_option_tick(q(pair.pe.instrument_id, 337.15))
+    sig = evaluate(cache.view("COMPATIBILITY", 1000), ATMPremiumImbalanceConfig())
+    assert (sig.action, sig.option_type) == ("BUY_PE", "PE")
+    assert sig.difference == 154.00
 
 
 # ------------------------------------------------------- independent caching

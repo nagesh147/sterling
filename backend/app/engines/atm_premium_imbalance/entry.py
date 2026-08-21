@@ -126,7 +126,8 @@ def price_entry(
         reference, kind = float(manual), "manual_file"
         raw = reference
     elif policy == "FIRST_TICK_PLUS_BUFFER":
-        # Research/replay only; config.validate() blocks it in live mode.
+        # The observed automatic path. The 2026-08-20 build prints exactly this
+        # arithmetic: First Tick Price 102.85 + Buffer 10.25 -> Order Price 113.1.
         if first_tick_price is None or first_tick_price <= 0:
             raise ValueError("FIRST_TICK_PLUS_BUFFER requires a first tick price")
         reference, kind = float(first_tick_price), "first_tick"

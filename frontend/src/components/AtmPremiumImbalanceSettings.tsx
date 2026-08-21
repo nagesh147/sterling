@@ -6,6 +6,7 @@ import {
   type EntryPricePolicy,
   type ExitPolicy,
   type ExpiryPolicy,
+  type ProtectionMode,
   type QuoteMode,
 } from '../hooks/useAtmPremiumImbalance';
 import {
@@ -40,7 +41,7 @@ const ENTRY_POLICY_OPTIONS: Array<{ value: EntryPricePolicy; label: string; hint
   { value: 'MARKETABLE_ASK', label: 'Ask + buffer', hint: 'Limit set through the ask by the buffer, then capped at the upper circuit. The default.' },
   { value: 'PERCENT_THROUGH', label: 'Ask + %', hint: 'Limit a percentage through the ask. Mimics the very aggressive observed limit as a rule.' },
   { value: 'MANUAL_FILE', label: 'Price file', hint: 'Operator-maintained price per strike, as the observed bot read from strike_prices.txt.' },
-  { value: 'FIRST_TICK_PLUS_BUFFER', label: 'First tick + buffer', hint: 'The model the written spec assumed. Evidence contradicts it — replay only.' },
+  { value: 'FIRST_TICK_PLUS_BUFFER', label: 'First tick + buffer', hint: 'The observed automatic path: the bot logs First Tick Price, Buffer and the resulting Order Price. Buffer was 10.25 in the recorded session.' },
 ];
 
 const EXIT_POLICY_OPTIONS: Array<{ value: ExitPolicy; label: string; hint: string }> = [
@@ -53,6 +54,12 @@ const EXPIRY_OPTIONS: Array<{ value: ExpiryPolicy; label: string; hint: string }
   { value: 'NEAREST', label: 'Nearest', hint: 'Soonest listed expiry, today included.' },
   { value: 'NEXT', label: 'Next', hint: 'Soonest expiry strictly after today.' },
   { value: 'EXPLICIT', label: 'Explicit', hint: 'A named expiry. Must be listed.' },
+];
+
+const PROTECTION_OPTIONS: Array<{ value: ProtectionMode; label: string; hint: string }> = [
+  { value: 'NONE', label: 'None', hint: 'Reproduces the observed bot, which had none. If this process dies while holding, nothing exits. Paper only — live refuses this.' },
+  { value: 'RESTING_TARGET_LIMIT', label: 'Resting limit', hint: 'Parks a sell at the target on the exchange the moment the entry fills, so a crash still takes the profit.' },
+  { value: 'GTT', label: 'Broker GTT', hint: 'A server-side trigger instead of a resting order, for when a resting limit is not wanted.' },
 ];
 
 const DATA_SOURCE_OPTIONS = [
@@ -143,7 +150,8 @@ export function AtmPremiumImbalanceSettings() {
         operator-supplied per session, so it is a policy here rather than a discovered rule.
         Nothing has been through a walk-forward. See{' '}
         <code>docs/strategy/atm-premium-imbalance/</code> for the evidence behind every value.
-        {!strategy.live_ready && ' Live execution stays blocked until the readiness gate passes.'}
+        {!strategy.live_ready && ' Live execution stays blocked until the readiness gate passes,'}
+        {!strategy.live_ready && ' and will then require broker-side protection and executable quotes.'}
       </ConfigNote>
 
       <Section
@@ -313,6 +321,17 @@ export function AtmPremiumImbalanceSettings() {
             value={cfg.exit_policy}
             options={exitOptions}
             onChange={(exit_policy) => patch({ exit_policy })}
+          />
+        </Field>
+        <Field
+          label="Broker-side protection"
+          hint="Where the protective exit lives. Anything but None survives this process dying while a position is open."
+          wide
+        >
+          <ChoiceRow
+            value={cfg.protection_mode}
+            options={PROTECTION_OPTIONS}
+            onChange={(protection_mode) => patch({ protection_mode })}
           />
         </Field>
         <NumberField

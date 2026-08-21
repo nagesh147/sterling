@@ -98,23 +98,31 @@ def test_manual_table_rejects_malformed_lines():
         ManualPriceTable.parse("77600CE 288.75\nbroken line here now\n")
 
 
-def test_rejected_first_tick_policy_is_blocked_in_live():
-    cfg = ATMPremiumImbalanceConfig(
-        entry_price_policy="FIRST_TICK_PLUS_BUFFER", execution_mode="live",
-        quote_mode="EXECUTABLE", quantity=20,
-    )
-    with pytest.raises(ValueError, match="research-only"):
-        cfg.validate()
+def test_first_tick_policy_is_live_allowed_because_it_is_the_observed_path():
+    """It was wrongly classified research-only; the build prints it as a rule."""
+    ATMPremiumImbalanceConfig(
+        entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
+        execution_mode="live", quote_mode="EXECUTABLE", quantity=100,
+        protection_mode="RESTING_TARGET_LIMIT",
+    ).validate()
 
 
-def test_rejected_first_tick_policy_still_replays():
-    """The spec's 10.25 model must remain reproducible, just not tradable."""
+def test_first_tick_plus_buffer_reproduces_the_printed_order_price():
+    """2026-08-20, verbatim:
+
+        FIRST-TICK ENTRY ATTEMPT 1/3
+        First Tick Price : 102.85
+        Buffer           : 10.25
+        Order Price      : 113.1
+    """
     cfg = ATMPremiumImbalanceConfig(
         entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
     ).validate()
-    priced = price_entry(cfg, inst(), best_ask=None, first_tick_price=102.85)
-    assert priced.limit_price == 113.10          # the supplied spec's arithmetic
+    priced = price_entry(cfg, inst(strike=77500.0), best_ask=None, first_tick_price=102.85)
+    assert priced.limit_price == 113.10
+    assert priced.reference_price == 102.85
     assert priced.reference_kind == "first_tick"
+    assert not priced.capped_by_upper_circuit
 
 
 def test_live_mode_requires_executable_quotes():

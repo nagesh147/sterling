@@ -24,7 +24,7 @@ execution mechanics.
 | Underlying | Index. `SENSEX` is the only one observed; the engine accepts any configured index. |
 | Legs considered | ATM CE and ATM PE of the same strike and expiry |
 | Strike | nearest **available listed** strike to the underlying LTP, deterministic tie-break to the lower strike |
-| Expiry | `SAME_DAY` by default (see A232 — `RECONSTRUCTED`, not observed) |
+| Expiry | `NEAREST` by default — observed: a monthly contract traded on a non-expiry day (A231/M8) |
 
 ## 3. Quote model
 
@@ -41,7 +41,13 @@ Three views over the same tick stream. **One signal implementation** consumes a
 mode. Legs update **independently** — a tick may move one leg or both, and the
 difference is recomputed from whatever pair is currently cached (A231/Q3).
 
-`difference = PE − CE` — signed, PE minus CE (A231/Q2). Not `abs`.
+`difference = |PE − CE|` — the **absolute** gap (A231/Q2). It carries no
+direction; direction comes from which leg is cheaper. `signed_difference` exists
+for research only.
+
+> This was originally specified as signed `PE − CE`. Four recordings all had the
+> put dearer, making the two indistinguishable; the fifth had the call dearer and
+> printed a positive number. Corrected 2026-08-21.
 
 ## 4. Signal
 
@@ -55,8 +61,9 @@ No indicator, no bar, no lookback, no OI, no PCR. Gates are liveness only:
 both legs quoted, same strike, same expiry, quotes fresher than
 `max_quote_age_ms`, session open, flat, risk authorized.
 
-`minimum_difference` defaults to `0.0` (disabled). A PE-side entry was never
-observed (A231/S4); symmetry is assumed and is flagged `UNRESOLVED`.
+`minimum_difference` defaults to `0.0` (disabled). Both directions are observed:
+the call is bought when cheaper (V1/V17/V21/V04) and the put when cheaper
+(V0821, filled at Rs. 340.10 against a ~337 put beside a ~491 call).
 
 ## 5. Entry
 
@@ -70,11 +77,14 @@ instrument's upper circuit (MPP)** in every case:
 | `MARKETABLE_ASK` | `best_ask + entry_buffer_points` | **DEFAULT** |
 | `PERCENT_THROUGH` | `best_ask × (1 + entry_through_pct)` | research |
 | `MANUAL_FILE` | operator table keyed by `{strike}{CE\|PE}` | reproduces V17 verbatim |
-| `FIRST_TICK_PLUS_BUFFER` | `first_tick + entry_buffer_points` | **REJECTED by evidence** (A232). Retained only so the supplied spec's model stays replayable. Never a default. |
+| `FIRST_TICK_PLUS_BUFFER` | `first_tick + entry_buffer_points` | **OBSERVED** — the automatic path. 2026-08-20 prints `First Tick Price : 102.85`, `Buffer : 10.25`, `Order Price : 113.1`. (An earlier version of this contract wrongly marked it rejected.) |
 
 The limit is a *fill-guarantee device*, not a price target: the observed bot sent
 288.75 against a 167.50 ask (A231/E4). Choosing a limit through the market does
 not change the signal.
+
+Both `MANUAL_FILE` and `FIRST_TICK_PLUS_BUFFER` are real observed paths — V17
+took the first ("Using **manual** strike price…"), V1 the second (A231/E11).
 
 ### Accounting invariant
 
@@ -167,5 +177,7 @@ convergence is retained only as a research-only exit policy.
 
 ## 12. Version
 
-`contract_version = "A230.1"`. Any change to §4, §5's accounting invariant, §6
+`contract_version = "A230.3"`. A230.1 → A230.2: absolute difference, NEAREST
+expiry. A230.2 → A230.3: `FIRST_TICK_PLUS_BUFFER` reclassified from rejected to
+observed, and broker-side protection added (§9). Any change to §4, §5's accounting invariant, §6
 or §8 is a new contract version and re-runs the A274 gate.

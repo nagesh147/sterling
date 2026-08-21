@@ -20,7 +20,7 @@ import type {
 const DEFAULTS: AtmPremiumImbalanceConfig = {
   enabled: false,
   underlying: 'SENSEX',
-  expiry_policy: 'SAME_DAY',
+  expiry_policy: 'NEAREST',
   explicit_expiry: '',
   strike_policy: 'ATM_NEAREST',
   session_start: '09:15',
@@ -38,6 +38,7 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   max_entry_attempts: 3,
   entry_attempt_timeout_ms: 1500,
   exit_policy: 'FIXED_POINT_TARGET',
+  protection_mode: 'NONE',
   target_points: 15,
   exit_buffer_points: 0.5,
   stop_enabled: false,
@@ -55,7 +56,7 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
 const STRATEGY: AtmPremiumImbalanceResponse['strategy'] = {
   id: 'atm_premium_imbalance',
   name: 'ATM Premium Imbalance',
-  contract_version: 'A230.1',
+  contract_version: 'A230.3',
   tagline: 'Buys the cheaper ATM leg at the open and takes a fixed +15 points.',
   how_it_works: 'Compares ATM call and put premiums at the open.',
   provenance: 'Reverse-engineered from recordings',
@@ -80,7 +81,7 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
           data_source: ['kite', 'truedata'],
         },
         research_only: {
-          entry_price_policy: ['FIRST_TICK_PLUS_BUFFER'],
+          entry_price_policy: [],
           exit_policy: ['PREMIUM_CONVERGENCE'],
         },
       },
@@ -114,9 +115,10 @@ describe('AtmPremiumImbalanceSettings', () => {
 
   it('marks research-only policies as unable to run live', () => {
     render(<AtmPremiumImbalanceSettings />);
-    // Driven by the server's research_only list, not a client copy: one entry
-    // policy and one exit policy are flagged, so both must carry the warning.
-    expect(screen.getAllByTitle(/Cannot run live/)).toHaveLength(2);
+    // Driven by the server's research_only list, not a client copy. Only the
+    // convergence exit is research-only now: FIRST_TICK_PLUS_BUFFER was
+    // reclassified as the observed automatic entry path.
+    expect(screen.getAllByTitle(/Cannot run live/)).toHaveLength(1);
   });
 
   it('renders the observed defaults from the server payload', () => {

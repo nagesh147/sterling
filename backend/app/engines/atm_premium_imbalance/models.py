@@ -164,11 +164,25 @@ class PremiumPairView:
 
     @property
     def difference(self) -> float:
-        """``PE - CE``, signed.
+        """``|PE - CE|`` -- the absolute gap, as the source bot prints it.
 
-        Signed, not absolute: the sign *is* the direction. The observed bot
-        printed this exact quantity as ``Difference`` and it was always
-        ``PE - CE`` (A231/Q2).
+        This was originally implemented as signed ``PE - CE``, because in the
+        first four recordings the put was always the dearer leg, which makes the
+        two indistinguishable. The 2026-08-21 recording is the first with
+        ``CE > PE`` -- ``CE 491.15 | PE 337.15 | Difference : 154.00`` -- and it
+        prints a *positive* 154.00. So the quantity is absolute (A231/Q2).
+
+        Direction never came from this sign anyway; it comes from
+        :attr:`cheaper_leg`. :attr:`signed_difference` is kept for research.
+        """
+        return q2(abs(self.pe_price - self.ce_price))
+
+    @property
+    def signed_difference(self) -> float:
+        """``PE - CE``, keeping the sign. Research/diagnostic only.
+
+        Positive means the put is dearer (so the call is bought). Not what the
+        source bot printed, so never used for conformance comparison.
         """
         return q2(self.pe_price - self.ce_price)
 
@@ -330,7 +344,7 @@ class TradeRecord:
     first_tick_price: Optional[float] = None
     signal_difference: Optional[float] = None
     quote_mode: QuoteMode = "COMPATIBILITY"
-    contract_version: str = "A230.1"
+    contract_version: str = "A230.3"
 
     @property
     def exit_price(self) -> Optional[float]:

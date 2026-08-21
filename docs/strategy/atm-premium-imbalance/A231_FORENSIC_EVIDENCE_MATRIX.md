@@ -14,12 +14,16 @@ cross-check) · `STRONGLY_SUPPORTED` (consistent across ≥2 recordings) ·
 
 | Tag | File | Res / fps | Host | Working dir | Session date | Role |
 |-----|------|-----------|------|-------------|--------------|------|
-| **V1** | `strategy.mp4` | 478×850 @60 | iPhone SSH client (camera-of-phone) | server `13.207.46.230` | **2026-08-20** | **LATEST — authoritative** |
+| **V0821** | `Video by rahul_kishoreswamy [DcSkiaRzRLq].mp4` | **1440×2560** @60 | iPhone SSH client (camera-of-phone) | server `13.207.46.230` | **2026-08-21** | **LATEST — authoritative.** Same 3150-frame session as the 720×1280 copy, at 4× the linear resolution: the terminal is directly legible, no reconstruction needed |
+| V1 | `4444.mp4` (720×1280) / `strategy.mp4` (478×850) | 720×1280 @30 | iPhone SSH client (camera-of-phone) | server `13.207.46.230` | 2026-08-20 | prior session — the 720×1280 copy made the entry block legible and overturned E5 |
 | V17 | `video_..._05-21-17.mp4` | 720×1280 @60 | macOS Terminal → `ubuntu@ip-172-31-3-254` | `~/update` | 2026-07-30 | prior version |
 | V21 | `video_..._05-21-21.mp4` | 720×1280 @60 | iPhone SSH client | `~/backup_20260730_1254` | ≥2026-07-30 | prior version (30-Jul backup) |
 | V04 | `video_..._05-21-04.mp4` | 720×1280 @30 | VS Code terminal, `Raguls-MacBook-Air` | `SENSEX_MEETING_POINT_BOT` | earlier | local dev build |
 
-**Version discipline.** V1 is the latest build and wins every conflict. The
+**Version discipline.** V0821 is the latest build and wins every conflict; V1 is
+second. Two rules below were *corrected* by V0821 after being stated from the
+first four recordings — see Q2 and S4. Both were cases where four samples
+happened to agree by coincidence rather than by rule. The
 older recordings are used to establish *log vocabulary and output templates*,
 which is what makes V1's ~5px-tall text decodable at all. Where a rule is only
 evidenced in an older build, the row says so and the contract marks it
@@ -35,6 +39,8 @@ non-authoritative.
 | P4 | Order types available: MARKET, LIMIT, SL, SL-M | V21/V17 login payload `'order_types'` | CONFIRMED |
 | P5 | Runs as a single-file `python3 main.py`, quantity typed at an interactive prompt | V21/V1 `Enter Quantity : 100`; V17 `python3 main.py` | CONFIRMED |
 | P6 | Broker profile JSON is dumped to stdout in V17/V21 but **not** in V1 (`Logged in as: N/A`) — logging was changed | V1 startup block vs V17/V21 | CONFIRMED |
+| P7 | Fills also arrive as **Upstox push notifications**, which are far more legible than the terminal and carry quantity, traded price and order id: `Order Traded for SENSEX26AUG7… / Order for 80/80 was traded at the price of Rs. 340.10. Order #260821000004158` | V0821 | CONFIRMED |
+| P8 | A Telegram channel ("SENSEX ALGO TRADING") also receives bot output | V1 notification banners | VERIFIED |
 
 > PII note: the recordings expose a broker email, `user_id` and account name.
 > They are deliberately **not** reproduced here. Only the `broker` field matters
@@ -50,17 +56,20 @@ non-authoritative.
 | M4 | Strike used in V17 = **77600**, option **CE** | V17 `Strike : 77600` / `Option : CE` in both the `LIVE BUY` and `LIVE SELL` summary blocks | CONFIRMED |
 | M5 | 77600 is the nearest 100-point strike to the open SENSEX LTP 77638.86 (distance 38.86 vs 61.14 for 77700) — consistent with nearest-available-strike ATM | V17 `SENSEX LTP : 77638.86` + M4 | STRONGLY_SUPPORTED |
 | M6 | Put-call parity does **not** hold on the first post-open tick, so parity cannot be used to verify the strike | V17: `C−P = 167.50−214.85 = −47.35` implies K≈77686, contradicting the printed 77600. Cause: CE/PE last-traded prices at 09:15:00.9 are independently stale | CONFIRMED (as a caveat) |
-| M7 | V04 premiums (CE 482.05 / PE 620.00 at SENSEX 77370.77) imply K≈77508.7 by parity — **not** the nearest 100-strike (77400) | V04 frame | UNRESOLVED — V04 is a dev build; may be a fixed strike or a non-same-day expiry |
-| M8 | Same-day expiry is **not** directly printed in any recording | — | UNRESOLVED — inferred only from premium magnitudes in V1/V17 |
+| M7 | V04's parity anomaly (CE 482.05 / PE 620.00 at SENSEX 77370.77 implies K≈77508.7, not the nearest 100-strike 77400) is explained by a **non-same-day expiry**: with days to run, `C − P = S − K·e^(−rT)` carries time value, so parity no longer pins K. Consistent with M8 | V04 + M8 | RESOLVED (was UNRESOLVED) |
+| M8 | The expiry rule is **NEAREST**, not same-day | V0821 ran on 2026-08-21 — *not* an expiry date (weeklies are 08-20 and 08-27) — and traded `SENSEX26AUG7…`, the **monthly** August symbol. A same-day policy would have refused to arm. Its ~828-point straddle also matches a multi-day expiry | CONFIRMED (was UNRESOLVED) |
+| M9 | Contract metadata verified against Kite's own instrument master: **lot size 20**, **tick 0.05**, uniform **100-point** strike ladder, and 2026-08-20 listed as an expiry | offline lake snapshot (114,851 instruments, 2,396 SENSEX option rows) — see `test_market_crosscheck.py` | CONFIRMED (external) |
+| M10 | **`SENSEX LTP : 77638.86`** in V17 matches Kite's SENSEX minute bar open for 2026-07-30 at 09:15 IST **exactly**, and the nearest listed strike to it is 77600 — the strike V17 printed | offline lake `265__SENSEX.parquet`, 09:15 IST bar | CONFIRMED (external) |
 
 ## Quote model — the core observation
 
 | # | Rule | Evidence | Confidence |
 |---|------|----------|------------|
 | Q1 | Two lines print per tick: `LIVE WS PRICE: <ce> <pe>` (raw Python floats, trailing zeros dropped) then `CE : <ce> | PE : <pe> | Difference : <d>` (`%.2f`) | V17 frames 0032/0056/0084 — strictly alternating over dozens of consecutive lines | CONFIRMED |
-| Q2 | **`Difference = PE − CE`** (signed PE-minus-CE, not `abs`) | verified on **every** legible line in V17/V04/V1. e.g. `245.15−106.80=138.35`, `199.30−138.10=61.20`, `192.60−149.10=43.50`, `620.00−482.05=137.95` | CONFIRMED |
+| Q2 | **`Difference = \|PE − CE\|`** — the **absolute** gap. Verified on 9 further lines at full readability in the 1440×2560 copy, every one with the **call** dearer: `498.00/334.20→163.80`, `494.35/334.20→160.15`, `494.35/327.45→166.90`, `490.70/339.60→151.10`, `479.10/338.55→140.55`, `489.35/327.75→161.60` | Originally recorded here as signed `PE − CE`, because in V1/V17/V21/V04 the put was *always* the dearer leg, which makes signed and absolute indistinguishable. **V0821 is the first recording with the call dearer** and it prints a positive value: `CE : 491.15 \| PE : 337.15 \| Difference : 154.00` (= 491.15−337.15), confirmed on a second frame at `489.90 / 335.05 / 154.85`. Also still holds on all earlier lines: `245.15−106.80=138.35`, `199.30−138.10=61.20`, `620.00−482.05=137.95` | CONFIRMED (corrected 2026-08-21) |
 | Q3 | CE and PE are cached **independently**; a tick may move one leg or both, and the difference is recomputed from the current cached pair | V17 sequence `106.80/245.15 → 103.80/246.40` (both) → `103.70/246.40` (CE only) → `103.70/249.15` (PE only) | CONFIRMED |
 | Q4 | Underlying ticks are logged separately from option ticks | V04 `RAW TICK RECEIVED` / `TICK RECEIVED : dict_keys(['BSE_INDEX|SENSEX'])` / `BSE_INDEX|SENSEX LTP UPDATE : 77370.77` | VERIFIED (V04 dev build only) |
+| Q6 | Instrument counts corroborate against real data: V0821 loaded `26523 instruments` / `SENSEX Options Loaded : 2397`; the Kite instrument master snapshot holds **2396** SENSEX option contracts — one apart, a week earlier | V0821 + offline lake | CONFIRMED (external) |
 | Q5 | Live L1 depth is read separately from LTP: `Best Ask (live depth)` before entry, `Best Bid (live depth)` before exit | V17 entry + exit blocks | CONFIRMED |
 
 ## Signal
@@ -70,7 +79,8 @@ non-authoritative.
 | S1 | Cheaper leg is bought. In V17 `CE LTP 167.50 < PE LTP 214.85` → bought **CE** | V17 `Premium Difference : 47.35` then `Option : CE` | CONFIRMED |
 | S2 | The gate is named `Premium Validated` and fires 0–1 ms after the first tick — no indicator, no bar, no lookback | V17 `[TIMING] First Tick Received 09:15:00.946` → `[TIMING] Premium Validated 09:15:00.946` | CONFIRMED |
 | S3 | No minimum difference threshold is enforced | V17 entered on a 47.35 difference with no threshold line printed | INFERRED (absence of evidence) |
-| S4 | A PE-side entry (`PE < CE`) was **never observed** | all four recordings bought CE | UNRESOLVED — symmetry assumed, not observed |
+| S5 | The entry leg is named in the log: `[TIMING] Entry Order Filled (PE)` | V0821 | CONFIRMED |
+| S4 | The rule is symmetric: when the **put** is cheaper it is the put that is bought | V0821: `CE 491.15 > PE 337.15` and the Upstox notification reports `Order for 80/80 was traded at the price of Rs. 340.10` — against the ~337 put, not the ~491 call | CONFIRMED (was UNRESOLVED until 2026-08-21) |
 
 ## Entry — where the supplied spec is wrong
 
@@ -80,7 +90,11 @@ non-authoritative.
 | E2 | The limit price is read from an operator-maintained file, keyed by strike | V17 `Using manual strike price from strike_prices.txt : 288.75 (strike 77600CE)` | CONFIRMED |
 | E3 | That price is then capped by the instrument's upper circuit | V17 `MPP (Upper Circuit) : 1745.45` → `Calculated Order Price (before cap) : 288.75` → `Order Price : 288.75` | CONFIRMED |
 | E4 | The limit is deliberately far **through** the market (288.75 vs `Best Ask 167.50`, +72%) — it is a fill-guarantee device, not a price target | V17 entry block | CONFIRMED |
-| E5 | **`entry_buffer_points = 10.25` is REJECTED as a strategy parameter.** In V17 `first_tick_CE=167.50`, `order=288.75`, `fill=133.40` — no fixed offset exists between first tick and either the order price or the fill. The 10.25 in the supplied spec equals V1's `fill 113.10 − first_tick 102.85`, i.e. **open-auction slippage**, not a configured buffer | V17 entry block + V1 arithmetic | REJECTED |
+| E9 | The latest build prints an **`OPEN PRICE CHECK (reference only)`** block containing `First Tick Used : 379.0` and `Official Open : 356.7`. It compares the tick the bot used against the exchange's official open — a diagnostic about *data quality*, not a statement that the first tick is unused for pricing | V0821 | CONFIRMED |
+| E10 | V0821's `First Tick Used 379.0` against a **fill** of 340.10 is not a counter-example to the buffer: a marketable buy limit at 389.25 (= 379.0 + 10.25) fills at or below its limit. Order price and fill are different quantities (A231/E6) | V0821 | CONSISTENT |
+| E5 | **`entry_buffer_points = 10.25` is a real, printed parameter.** V1's entry block (legible in the 720×1280 copy) reads `FIRST-TICK ENTRY ATTEMPT 1/3` / `First Tick Price : 102.85` / `Buffer : 10.25` / `Order Price : 113.1` | V1 entry block | CONFIRMED — **this row previously read REJECTED; that was my error** (A232) |
+| E11 | There are **two** entry-price paths, and V17 names its own: *"Using **manual** strike price from strike_prices.txt"*. V17 took the manual path (order 288.75); V1 took the automatic one (order 113.10 = 102.85 + 10.25) | V17 + V1 | CONFIRMED |
+| E12 | V1's strike and option type are printed in a `STRIKE SELECTED` block: `Strike : 77500`, `Option Type : CE`, `Premium : 102.85` — the values the supplied spec asserted | V1 entry block | CONFIRMED (was UNRESOLVED) |
 | E6 | Accounting entry price is the **broker average fill**, never the requested limit | V17 `Average Price : 133.4` = `ENTRY FILLED at 133.4` = `Entry : 133.4` in the summary, while the order price was 288.75 | CONFIRMED |
 | E7 | Order-status lookup can transiently fail and is retried (`Order not found after retries.`) before `ORDER DETAILS` resolves to `Status : complete` | V17 entry block | CONFIRMED |
 | E8 | Order IDs are date-stamped `YYMMDD…`: V17 `260730000006021` → 2026-07-30; V1 `260820000007450` → **2026-08-20** | both | CONFIRMED |
@@ -139,7 +153,11 @@ non-authoritative.
 | Entry fill | **113.10** | INFERRED — `126.60 − 1350.00/100`. Triangulated three ways: log exit fill, Upstox `Day P&L 1,350.00` **and** `Overall P&L 1,350.00`, and `Points × qty` |
 | Points / PnL | 13.50 / 1350.00 | CONFIRMED (broker UI) |
 | Post-trade LTP | 107.70 | VERIFIED (Upstox positions row) |
-| Strike / instrument / first tick / entry order price | — | **UNRESOLVED** — V1's entry block falls inside a burst where the terminal repaints at 30 Hz with ~5 px glyph height; no static frame stack exists to super-resolve. The supplied spec's `77500 CE` and `first tick 102.85` are **not** independently confirmed by me |
+| Strike / option | **77500 / CE** | CONFIRMED — `STRIKE SELECTED` block |
+| First tick price | **102.85** | CONFIRMED — `First Tick Price : 102.85` |
+| Entry buffer / order price | **10.25 / 113.10** | CONFIRMED — `Buffer : 10.25`, `Order Price : 113.1` |
+| Entry order id | 260820000004685 | CONFIRMED |
+| Instruments loaded | 26385 → 2445 SENSEX options | CONFIRMED (corrects an earlier read of 26305) |
 
 ## Method
 

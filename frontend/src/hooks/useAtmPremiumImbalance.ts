@@ -8,6 +8,7 @@ export type QuoteMode = 'COMPATIBILITY' | 'SYNCHRONIZED' | 'EXECUTABLE';
 export type EntryPricePolicy =
   | 'MARKETABLE_ASK' | 'PERCENT_THROUGH' | 'MANUAL_FILE' | 'FIRST_TICK_PLUS_BUFFER';
 export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE';
+export type ProtectionMode = 'NONE' | 'RESTING_TARGET_LIMIT' | 'GTT';
 export type ExpiryPolicy = 'SAME_DAY' | 'NEAREST' | 'NEXT' | 'EXPLICIT';
 
 export interface AtmPremiumImbalanceConfig {
@@ -31,6 +32,7 @@ export interface AtmPremiumImbalanceConfig {
   max_entry_attempts: number;
   entry_attempt_timeout_ms: number;
   exit_policy: ExitPolicy;
+  protection_mode: ProtectionMode;
   target_points: number;
   exit_buffer_points: number;
   stop_enabled: boolean;
@@ -68,6 +70,8 @@ export interface AtmPremiumImbalanceResponse {
    * they have already clicked it.
    */
   research_only: { entry_price_policy: string[]; exit_policy: string[] };
+  /** What live mode will insist on, published so the UI can say so up front. */
+  live_requires?: { protection_mode: string[]; quote_mode: string[] };
 }
 
 export interface AtmPremiumImbalanceSnapshot {

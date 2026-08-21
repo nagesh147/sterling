@@ -80,9 +80,10 @@ def format_difference_line(view: PremiumPairView) -> str:
     """Reproduce the source bot's line, byte for byte.
 
     Used by the replay conformance report to diff our output against the
-    recordings: ``CE : 141.00 | PE : 196.95 | Difference : 55.95``.
+    recordings: ``CE : 141.00 | PE : 196.95 | Difference : 55.95``, and
+    ``CE : 491.15 | PE : 337.15 | Difference : 154.00`` when the call is dearer.
     """
     return (
         f"CE : {view.ce_price:.2f} | PE : {view.pe_price:.2f} "
-        f"| Difference : {q2(view.pe_price - view.ce_price):.2f}"
+        f"| Difference : {q2(abs(view.pe_price - view.ce_price)):.2f}"
     )

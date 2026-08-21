@@ -203,15 +203,31 @@ def test_v17_target_would_be_wrong_if_built_on_the_requested_limit(v17):
 # --------------------------------------------------------- V1 -- 2026-08-20
 
 def test_v1_golden_trade_reproduces_the_broker_pnl():
-    """The canonical case. Broker UI showed Day P&L 1,350.00.
+    """The canonical case, now fully decoded from the 720x1280 copy.
 
-    Strike and instrument are placeholders: V1's entry block was not legible
-    (A231, V1 table). The *arithmetic* is what this case pins down.
+    The entry block reads verbatim::
+
+        STRIKE SELECTED
+        Strike       : 77500
+        Option Type  : CE
+        Premium      : 102.85
+        FIRST-TICK ENTRY ATTEMPT 1/3
+        First Tick Price : 102.85
+        Buffer           : 10.25
+        Order Price      : 113.1
+        Order ID : 260820000004685
+
+    So this case pins the *order price* as well as the P&L, using the observed
+    automatic entry policy rather than a placeholder.
     """
     pair = make_pair(77500.0, "V1CE", "V1PE", "2026-08-20", upper=2000.0)
-    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=100).validate()
+    cfg = ATMPremiumImbalanceConfig(
+        enabled=True, quantity=100,
+        entry_price_policy="FIRST_TICK_PLUS_BUFFER", entry_buffer_points=10.25,
+    ).validate()
     strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=100, trade_id="v1")
     broker = ScriptedBroker(entry_fill=113.10, exit_fill=126.60,
+                            entry_order_id="260820000004685",
                             exit_order_id="260820000007450")
 
     ticks = [
@@ -224,25 +240,32 @@ def test_v1_golden_trade_reproduces_the_broker_pnl():
 
     s = strategy.summary()
     assert strategy.signal.action == "BUY_CE"          # 102.85 < 168.25
-    assert s["entry"] == 113.10
+    assert (s["strike"], s["option"]) == (77500.0, "CE")
+    assert strategy.trade.first_tick_price == 102.85   # "First Tick Price : 102.85"
+    assert s["entry_order_price"] == 113.10            # 102.85 + 10.25, as printed
+    assert s["entry"] == 113.10                        # broker fill
     assert s["target"] == 128.10                       # 113.10 + 15
     assert s["exit_order_price"] == 126.60             # best bid 127.1 - 0.50
     assert s["exit"] == 126.60
     assert s["points"] == 13.50
     assert s["pnl"] == 1350.0                          # matches the Upstox UI
-    assert strategy.trade.first_tick_price == 102.85
+    assert strategy.trade.entry_order_id == "260820000004685"
 
 
-def test_v1_entry_block_is_unresolved_not_invented():
-    """The forensic gap is recorded in code, so nobody later mistakes the
-    placeholder strike for evidence."""
+def test_the_evidence_record_documents_the_buffer_as_observed():
+    """The 10.25 buffer is a printed parameter, and the record must say so.
+
+    It was previously recorded as REJECTED on the reading that it was measured
+    slippage. Guarding the corrected wording so the reversal cannot silently be
+    undone by a later edit.
+    """
     from app.engines.atm_premium_imbalance import CONTRACT_VERSION
-    assert CONTRACT_VERSION == "A230.1"
-    doc = open("../docs/strategy/atm-premium-imbalance/A231_FORENSIC_EVIDENCE_MATRIX.md").read()
-    assert "UNRESOLVED" in doc
-    # The rejected buffer must be recorded as rejected, not as a parameter.
+    assert CONTRACT_VERSION == "A230.3"
     prov = open("../docs/strategy/atm-premium-imbalance/A232_PARAMETER_PROVENANCE.md").read()
-    assert "REJECTED" in prov and "10.25" in prov
+    assert "10.25" in prov
+    assert "OBSERVED" in prov
+    # and the un-rejection is explained rather than just swapped
+    assert "Buffer : 10.25" in prov
 
 
 # ------------------------------------------------------ lifecycle guarantees
@@ -300,3 +323,66 @@ def test_unresolved_reconciliation_halts_instead_of_retrying():
     intent = strategy.record_entry_reconciliation(ReconcileState.DIVERGED)
     assert intent.kind == "halt"
     assert strategy.trade.state.value == "reconciliation_required"
+
+# ------------------------------------------------- 2026-08-21 -- the put side
+
+def test_2026_08_21_put_side_trade():
+    """The first observed put-side entry, and the case that corrected two rules.
+
+    Established by the recording:
+      * ``CE : 491.15 | PE : 337.15 | Difference : 154.00`` -- a *positive*
+        difference with the call dearer, which is what proves the printed value
+        is absolute rather than signed ``PE - CE``.
+      * The Upstox notification: ``Order for 80/80 was traded at the price of
+        Rs. 340.10. Order #260821000004158``.
+      * The contract is ``SENSEX26AUG7...`` -- the *monthly* August symbol, on a
+        day that is not an expiry day, so the expiry policy is NEAREST.
+
+    Not established: the strike (the notification truncates it), and the exit.
+    The exit fill below is therefore scripted only to drive the lifecycle; the
+    assertions cover the entry side and the target, nothing more.
+    """
+    pair = make_pair(81000.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80, expiry_policy="NEAREST").validate()
+    strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=80, trade_id="v0821")
+    broker = ScriptedBroker(entry_fill=340.10, exit_fill=356.00,
+                            entry_order_id="260821000004158")
+
+    intent = drive(strategy, broker, [
+        ("CE", 491.15, 490.5, 491.6), ("PE", 337.15, 336.6, 337.6),
+        ("PE", 350.00, 349.5, 350.5),
+        ("PE", 355.10, 355.20, 355.6),      # crosses 340.10 + 15
+    ])
+    assert intent.kind == "complete"
+    s = strategy.summary()
+
+    # --- signal: the cheaper leg is the PUT here
+    assert strategy.signal.action == "BUY_PE"
+    assert strategy.signal.option_type == "PE"
+    assert strategy.signal.difference == 154.00      # absolute, not -154.00
+    assert strategy.trade.instrument_id == "BSE_FO|A21PE"
+    # --- entry accounting uses the broker fill from the notification
+    assert s["entry"] == 340.10
+    assert s["quantity"] == 80                        # 4 SENSEX lots of 20
+    # --- target is the same +15 rule, on the put
+    assert s["target"] == 355.10
+    assert s["option"] == "PE"
+
+
+def test_put_side_conformance_marks_the_unknown_fields_unverified():
+    """The 2026-08-21 strike and exit were not legible; they must not be faked."""
+    from app.engines.atm_premium_imbalance.conformance import build_report
+    pair = make_pair(81000.0, "A21CE", "A21PE", "2026-08-27", upper=3000.0)
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80, expiry_policy="NEAREST").validate()
+    strategy = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=80, trade_id="v0821")
+    broker = ScriptedBroker(entry_fill=340.10, exit_fill=356.00)
+    drive(strategy, broker, [
+        ("CE", 491.15, 490.5, 491.6), ("PE", 337.15, 336.6, 337.6),
+        ("PE", 355.10, 355.20, 355.6),
+    ])
+    observed = {"option": "PE", "quantity": 80, "entry": 340.10}   # all we actually have
+    report = build_report(case="2026-08-21 put side", observed=observed, summary=strategy.summary())
+    assert report["mismatch"] == 0
+    assert report["match"] == 3
+    assert report["unverified"] >= 8          # strike, exit, points, pnl, ...
+

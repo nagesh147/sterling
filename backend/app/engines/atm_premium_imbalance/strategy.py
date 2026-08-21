@@ -34,6 +34,9 @@ from .models import (
     TradeRecord,
     q2,
 )
+from .protection import (
+    ProtectionOrder, ProtectionState, plan_protection, requires_cancel_before_exit,
+)
 from .quote_cache import PremiumQuoteCache
 from .signal import evaluate
 
@@ -53,6 +56,8 @@ IntentKind = Literal[
     "submit_entry",
     "poll_entry",
     "reconcile_entry",
+    "place_protection",
+    "cancel_protection",
     "submit_exit",
     "poll_exit",
     "reconcile_exit",
@@ -75,6 +80,7 @@ class Intent:
     attempt: int = 0
     reason: str = ""
     priced: Optional[PricedEntry] = None
+    protection: Optional[ProtectionOrder] = None
 
 
 _NONE = Intent(kind="none")
@@ -100,6 +106,8 @@ class ATMPremiumImbalanceStrategy:
     trade: Optional[TradeRecord] = None
     _exit: Optional[ExitEvent] = None
     _exit_order_id: Optional[str] = None
+    protection: Optional[ProtectionOrder] = None
+    _pending_exit_intent: Optional[Intent] = None
     _entry_ts_ms: Optional[int] = None
     _last_now_ms: int = 0
 
@@ -291,6 +299,31 @@ class ATMPremiumImbalanceStrategy:
             entry_attempts=tuple(self.entry.attempts),
         )
         self.phase = Phase.IN_POSITION
+
+        # Park a protective exit at the exchange before anything else happens,
+        # so a crash from here on does not leave the position unwatched.
+        leg = self.pair.leg(self.trade.option_type)
+        planned = plan_protection(
+            self.cfg,
+            instrument_id=leg.instrument_id,
+            option_type=leg.option_type,
+            quantity=self.quantity,
+            entry_fill=fill,
+            target_price=self.trade.target_price or target_price(fill, self.cfg),
+            tick_size=leg.tick_size,
+        )
+        if planned is not None:
+            self.protection = planned
+            return Intent(
+                kind="place_protection",
+                instrument_id=leg.instrument_id,
+                option_type=leg.option_type,
+                side="SELL",
+                quantity=self.quantity,
+                limit_price=planned.limit_price,
+                protection=planned,
+                reason="protect_open_position",
+            )
         return Intent(kind="none", reason="entry_filled")
 
     # -------------------------------------------------------------- monitoring
@@ -332,7 +365,7 @@ class ATMPremiumImbalanceStrategy:
             self.phase = Phase.HALTED
             self.halt_reason = "no_exit_price"
             return Intent(kind="halt", reason=self.halt_reason)
-        return Intent(
+        exit_intent = Intent(
             kind="submit_exit",
             instrument_id=leg.instrument_id,
             option_type=leg_type,
@@ -341,6 +374,77 @@ class ATMPremiumImbalanceStrategy:
             limit_price=self._exit.exit_order_price,
             reason=reason,
         )
+        if requires_cancel_before_exit(self.protection):
+            # Cancel first, then exit. Two live sells on one long position is a
+            # short position waiting to happen.
+            self.protection = replace(self.protection, state=ProtectionState.CANCEL_PENDING)
+            self._pending_exit_intent = exit_intent
+            return Intent(
+                kind="cancel_protection",
+                instrument_id=leg.instrument_id,
+                order_id=self.protection.order_id,
+                reason="cancel_before_exit",
+            )
+        return exit_intent
+
+    def record_protection_submit(
+        self, *, order_id: Optional[str], error: Optional[str] = None
+    ) -> Intent:
+        """Record the protective order's acknowledgement.
+
+        A protective order we cannot confirm is worse than none, because the
+        exit path would then have to guess whether a resting sell exists. So an
+        unacknowledged protection halts rather than proceeding unprotected while
+        believing itself protected.
+        """
+        if self.protection is None:
+            return _NONE
+        if not order_id:
+            self.protection = replace(self.protection, state=ProtectionState.FAILED)
+            self.phase = Phase.HALTED
+            self.halt_reason = error or "protection_unacknowledged"
+            if self.trade is not None:
+                self.trade = self.trade.with_state(PositionState.RECONCILIATION_REQUIRED)
+            return Intent(kind="halt", reason=self.halt_reason)
+        self.protection = replace(self.protection, order_id=order_id, state=ProtectionState.ACTIVE)
+        return Intent(kind="none", reason="protection_active")
+
+    def record_protection_filled(self, fill_price: float) -> Intent:
+        """The protective order filled -- the exchange closed us out.
+
+        This is a legitimate exit, not an error: it is exactly what protection
+        is for. The trade closes on the protective fill.
+        """
+        if self.trade is None or self.protection is None:
+            return _NONE
+        self.protection = replace(self.protection, state=ProtectionState.FILLED)
+        ev = self._exit or build_exit_event(
+            trigger_price=fill_price, trigger_ts_ms=self._last_now_ms,
+            entry_fill=self.trade.entry_price or fill_price, cfg=self.cfg,
+            best_bid=None, reason="protection_filled",
+        )
+        ev = replace(ev, exit_fill_price=q2(fill_price), exit_fill_ts_ms=self._last_now_ms,
+                     exit_order_id=self.protection.order_id, reason="protection_filled")
+        self._exit = ev
+        self.trade = replace(self.trade, exit=ev, state=PositionState.CLOSED)
+        self.trades_taken += 1
+        self.phase = Phase.DONE
+        return Intent(kind="complete", reason="protection_filled")
+
+    def record_protection_cancelled(self, *, ok: bool) -> Intent:
+        """Resolve the cancel we asked for before sending our own exit."""
+        if self.protection is None:
+            return _NONE
+        if not ok:
+            # A live resting sell plus a second sell turns one long into a short.
+            self.phase = Phase.HALTED
+            self.halt_reason = "protection_cancel_failed"
+            if self.trade is not None:
+                self.trade = self.trade.with_state(PositionState.RECONCILIATION_REQUIRED)
+            return Intent(kind="halt", reason=self.halt_reason)
+        self.protection = replace(self.protection, state=ProtectionState.CANCELLED)
+        pending, self._pending_exit_intent = self._pending_exit_intent, None
+        return pending or _NONE
 
     def record_exit_submit(self, *, order_id: Optional[str], error: Optional[str] = None) -> Intent:
         assert self.trade is not None and self._exit is not None
@@ -398,5 +502,10 @@ class ATMPremiumImbalanceStrategy:
             "slippage_vs_target": None if t.exit is None else t.exit.slippage_vs_target,
             "attempts": len(t.entry_attempts),
             "quote_mode": t.quote_mode,
+            "protection": None if self.protection is None else {
+                "kind": self.protection.kind, "state": self.protection.state.value,
+                "limit_price": self.protection.limit_price,
+                "order_id": self.protection.order_id,
+            },
             "halt_reason": self.halt_reason or None,
         }

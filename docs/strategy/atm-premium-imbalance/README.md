@@ -2,7 +2,8 @@
 
 **What it does.** At the index option market open, compares the at-the-money
 call and put premiums, buys whichever is cheaper, and exits at the entry fill
-plus a fixed +15 points. One trade per session.
+plus a fixed +15 points. One trade per session. Both directions are observed:
+the call is bought when it is cheaper, the put when it is.
 
 **What it does not do.** No indicators. No stop loss. No time stop. No
 convergence exit. No auto-sizing. It is one comparison and one target.
@@ -34,9 +35,12 @@ here rather than a discovered rule. The default, `best_ask + buffer`, expresses
 the *mechanism* that was observed — a limit deliberately through the market so it
 fills like a market order — without hard-coding one morning's numbers.
 
-The written specification's `entry_buffer_points = 10.25` is **rejected**. It was
-derived from a single arithmetic coincidence in one recording; the other
-recording prints every term and falsifies it. See A232.
+The written specification's `entry_buffer_points = 10.25` is **correct**, and this
+README previously said otherwise. The 2026-08-20 entry block prints
+`First Tick Price : 102.85`, `Buffer : 10.25`, `Order Price : 113.1` under a
+heading of `FIRST-TICK ENTRY ATTEMPT 1/3`. There are two real entry paths — an
+operator price file, and `first_tick + buffer` — and the two sessions I first
+compared happened to exercise different ones. See A232 for the full correction.
 
 ## Parameters
 
@@ -45,10 +49,10 @@ Defaults reproduce the observed baseline. `enabled` is false.
 | Setting | Default | Provenance |
 |---|---|---|
 | Underlying | SENSEX | observed |
-| Expiry | SAME_DAY | reconstructed — never printed |
+| Expiry | NEAREST | observed (monthly traded on a non-expiry day) |
 | Strike | nearest listed, ties to lower | observed |
 | Quote mode | COMPATIBILITY | observed behaviour |
-| Entry price | best ask + 0.50, capped at upper circuit | mechanism observed, formula ours |
+| Entry price | `first_tick + 10.25`, capped at upper circuit (or an operator price file) | observed |
 | Max entry attempts | 3 | observed |
 | Target | +15.0 points off the fill | observed |
 | Exit | best bid − 0.50 | observed |
@@ -78,11 +82,12 @@ validation but cannot evidence asynchronous tick behaviour.
 
 ## Limitations
 
-- **Two sessions of evidence, both winners**, selected by whoever chose what to
-  record. That is selection bias, not a result.
+- **Three sessions with a decodable outcome, all winners**, selected by whoever
+  chose what to record. That is selection bias, not a result.
 - The latest recording's entry block was not legible; its strike and entry order
   price remain `UNRESOLVED` (A231).
-- Same-day expiry is inferred from premium magnitudes, not observed.
-- A put-side entry was never observed; symmetry is assumed.
+- The 2026-08-21 session's strike is unresolved (the notification truncates it).
+- Three rules in the contract were corrected by later recordings after earlier
+  ones had agreed. Small samples mislead about mechanics, not just profit.
 - The source bot ran on Upstox. Sterling executes through Kite, which does serve
   BSE F&O. Order-id and instrument-key formats in the evidence are Upstox's.

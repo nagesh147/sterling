@@ -24,8 +24,21 @@ snapshot endpoint is the one to read when it is not doing anything: it lists
 every blocker (disabled, quantity unset, instrument resolution failure) rather
 than silently reporting armed.
 
-Nothing is scheduled yet — there is no background runner. This is deliberate:
-an unvalidated strategy should not have a loop that can fire.
+### Arming
+
+```
+POST /api/v1/config/atm-premium-imbalance/arm
+```
+
+Resolves the ATM pair, subscribes both legs to the Kite ticker and arms the
+session. Idempotent for the day — arming twice returns `already_armed` rather
+than creating a second session that could place a second entry.
+
+There is deliberately **no polling loop**. The strategy enters on the first
+usable tick after the open (the recordings show the decision 1 ms after that
+tick), which a 1-second poll cannot express. It therefore hangs off the same
+Kite tick fan-out the exit monitor uses, so it runs whether or not any UI is
+connected. Arming is the only scheduled act, and it is manual.
 
 ## Paper vs live
 
@@ -46,6 +59,8 @@ exists to *reproduce*, not to trade.
 | Strategy armed but never signals | Read `blockers`, then the signal reason: `stale_quote`, `equal_premiums`, `no_quote_pair`, `below_minimum_difference`. |
 | `EXECUTABLE` mode never produces a view | One leg has no ask. There is no LTP fallback by design. |
 | Trade state `reconciliation_required` | An order's outcome is genuinely unknown. **Do not restart the strategy.** Reconcile the broker's order book and positions by hand first; the state machine is refusing to guess. |
+| `halt: protection_cancel_failed` | The resting protective sell could not be cancelled, so the strategy refused to send a second sell. Cancel it by hand, then check the position. Two live sells against one long option is a short position. |
+| `halt: protection_unacknowledged` | The protective order was not acknowledged. The position may be protected, unprotected, or double-protected. Check the broker's order book before doing anything else. |
 | Entry attempts exhausted | Three attempts were rejected. No position was opened. Check reject reasons on the attempt records. |
 | Exit filled far from the target | Normal and recorded. `slippage_vs_target` is stored; the observed V17 trade filled 8.45 points *above* its target. |
 
@@ -54,9 +69,11 @@ exists to *reproduce*, not to trade.
 - **While flat**: reconnect, re-subscribe both legs, re-arm. The cache refuses
   to serve a view until both legs are present again.
 - **While in position**: reconnect. Do not exit off a stale cache — the exit
-  trigger reads live quotes, and a stale one can fabricate a target hit. Broker-
-  side protection is the correct backstop, and it does not exist yet, which is
-  one reason live is blocked.
+  trigger reads live quotes, and a stale one can fabricate a target hit. The
+  backstop is `protection_mode`: with `RESTING_TARGET_LIMIT` or `GTT` the
+  exchange holds a sell at the target, so a dropped socket (or a dead process)
+  still closes the position. `NONE` reproduces the observed bot and has no
+  backstop at all, which is why live refuses it.
 
 ## Replay
 
@@ -80,9 +97,9 @@ All must hold. None may be waived silently.
 - [x] Duplicate-order protection proven (`UNKNOWN` never resubmits)
 - [x] Full backend suite green with the strategy present
 - [x] Frontend typecheck and tests green
-- [ ] **Broker-side protection for an open position** (no stop exists; a feed loss while long is currently unprotected)
-- [ ] **A background runner** with market-hours gating and per-tenant locking
-- [ ] **Risk integration**: daily-loss breaker, premium-at-risk sizing, position reconciliation on startup
+- [x] **Broker-side protection for an open position** — `protection_mode` parks a sell at the target on the exchange; `validate()` refuses live without it
+- [x] **A tick-driven runner** with market-hours gating, per-tenant locking and a bounded intent loop
+- [ ] **Risk integration**: the daily-loss breaker and premium-at-risk ceiling are config fields but are not yet enforced by the runner; position reconciliation on startup is not implemented
 - [ ] **Historical tick replay** over more than two sessions — two winning trades is not evidence of an edge
 - [ ] **Walk-forward / deflated-Sharpe evaluation.** Two observed winners prove the mechanics reproduce, nothing about expectancy.
 - [ ] Paper-trading parity run over a full session
@@ -92,7 +109,12 @@ All must hold. None may be waived silently.
 It supports: the mechanics reproduce exactly. Two independent sessions, every
 printed number, cross-checked against the broker's own P&L.
 
-It does not support: that the strategy makes money. Both recorded sessions were
-winners, selected by whoever chose what to record. Selection bias on a sample of
-two is not a result. Treat `target_points` and `exit_buffer_points` as faithfully
-reproduced constants, not as optimised parameters.
+It does not support: that the strategy makes money. Every recorded session with
+a decodable outcome was a winner, and the sessions were chosen by whoever decided
+what to record. Selection bias on a sample this small is not a result. Treat
+`target_points` and `exit_buffer_points` as faithfully reproduced constants, not
+as optimised parameters.
+
+Also worth remembering: two rules in this contract were *corrected* by the fifth
+recording after four had agreed. Small biased samples mislead about mechanics as
+readily as about profitability.
