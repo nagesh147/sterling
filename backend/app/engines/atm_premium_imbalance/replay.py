@@ -80,6 +80,12 @@ class ObservedSession:
     exit_fill: Optional[float] = None
     quantity: Optional[int] = None
     index_at_open: Optional[float] = None
+    #: A price the recording used that did NOT come from this session, with the
+    #: session it did come from. Supplying it makes the replay feed that value in
+    #: first, exactly as the feed delivered it, and check that the engine refuses
+    #: to price from it. Leave unset for sessions with no such fault.
+    stale_price: Optional[float] = None
+    stale_traded_at_ms: Optional[int] = None
 
 
 def open_bar(bars: Sequence[Bar], session: date) -> Optional[Bar]:
@@ -240,12 +246,29 @@ def replay_session(
     if pair is not None:
         res.engine_summary = _drive_engine(cfg, pair, observed, ce0, pe0, cheaper)
         if res.engine_summary:
+            engine_px = res.engine_summary.get("entry_order_price")
             res.checks.append(_cmp("engine_option_type", observed.option_type,
                                    res.engine_summary.get("option"),
                                    "decided by the live strategy engine"))
-            res.checks.append(_cmp("engine_order_price", observed.entry_order_price,
-                                   res.engine_summary.get("entry_order_price"),
-                                   "priced by the live strategy engine", tol=0.005))
+            # Two different questions, kept apart. Comparing the engine to the
+            # recording asks "do we reproduce the bot"; comparing it to the
+            # market asks "are we right". When the bot was wrong those answers
+            # must differ, and a single row would hide that.
+            res.checks.append(_cmp("engine_vs_recording", observed.entry_order_price,
+                                   engine_px,
+                                   "our order price vs what the bot sent", tol=0.005))
+            if cfg.entry_price_policy == "FIRST_TICK_PERCENT":
+                market_px = round(sel0.open * (1.0 + cfg.entry_through_pct), 1)
+                res.checks.append(_cmp("engine_vs_market", q2(market_px), engine_px,
+                                       "our order price vs the exchange open x "
+                                       f"(1 + {cfg.entry_through_pct:g})", tol=0.005))
+            if observed.stale_price is not None:
+                used = res.engine_summary.get("first_tick_price")
+                res.checks.append(FieldComparison(
+                    "stale_price_rejected", observed.stale_price, used,
+                    MATCH if (used is not None and abs(used - observed.stale_price) > 1e-9)
+                    else MISMATCH,
+                    "the out-of-session price was fed in first; the engine must not price from it"))
     res.notes.append(
         "Minute bars only. Fill prices and the bid-derived exit price are bracketed, "
         "not reproduced; tick ordering is not testable at this granularity."
@@ -256,23 +279,46 @@ def replay_session(
 def _drive_engine(cfg, pair, observed, ce0: Bar, pe0: Bar, cheaper) -> dict:
     """Feed the two 09:15 opens to the real engine and read its decision.
 
-    Only the two prices the bars actually evidence are emitted. The engine's
-    entry order price is then a production-code output, not arithmetic repeated
-    inside this module.
+    Only prices the bars actually evidence are emitted, and each is **dated**
+    from its bar: a trade inside the 09:15 bar happened at or after the session
+    open, so the quote is genuinely session-origin rather than merely undatable.
+    Leaving it undated would make the session-origin gate a no-op here and the
+    replay would silently stop testing it.
+
+    When ``observed.stale_price`` is set, that value is fed in *first*, stamped in
+    the session it really came from -- reproducing the feed order the recording
+    saw -- so the replay exercises the rejection path rather than assuming it.
     """
     if observed.quantity is None or observed.quantity <= 0:
         return {}
     strat = ATMPremiumImbalanceStrategy(
         cfg=cfg, pair=pair, quantity=observed.quantity, trade_id=f"replay-{observed.label}"
     )
-    now = int(ce0.ts.timestamp() * 1000)
-    for inst_id, price in ((pair.ce.instrument_id, ce0.open), (pair.pe.instrument_id, pe0.open)):
+    bar_ms = int(ce0.ts.timestamp() * 1000)
+    now = bar_ms
+    intent = None
+
+    def emit(inst_id, price, traded_ms, official_open):
+        nonlocal now, intent
         now += 50
         intent = strat.on_option_tick(
             LegQuote(instrument_id=inst_id, ltp=float(price), bid=None, ask=None,
-                     exchange_ts_ms=now, received_ts_ms=now, sequence=now, source="kite_minute_bar"),
+                     exchange_ts_ms=now, received_ts_ms=now, sequence=now,
+                     last_trade_ts_ms=traded_ms, official_open=official_open,
+                     source="kite_minute_bar"),
             now,
         )
+
+    if observed.stale_price is not None and observed.stale_traded_at_ms is not None:
+        # The carried-over price, on the leg the recording actually bought.
+        stale_leg = pair.leg(observed.option_type or "PE")
+        other = pair.pe if stale_leg is pair.ce else pair.ce
+        other_bar = pe0 if stale_leg is pair.ce else ce0
+        emit(other.instrument_id, other_bar.open, observed.stale_traded_at_ms, None)
+        emit(stale_leg.instrument_id, observed.stale_price, observed.stale_traded_at_ms, None)
+
+    for inst_id, bar in ((pair.ce.instrument_id, ce0), (pair.pe.instrument_id, pe0)):
+        emit(inst_id, bar.open, bar_ms, bar.open)
     # Acknowledge the entry so the summary carries the computed order price. The
     # fill used is the recording's, because bars cannot supply one.
     if intent.kind == "submit_entry" and observed.entry_fill is not None:

@@ -518,6 +518,10 @@ class ATMPremiumImbalanceStrategy:
             "quantity": t.quantity,
             "entry": t.entry_price,
             "entry_order_price": t.entry_order_price,
+            # The reference the order price was derived from. Exposed because
+            # this is the field the stale-tick fault lived in: an order price
+            # alone cannot show whether it came from a session price.
+            "first_tick_price": t.first_tick_price,
             "target": t.target_price,
             "trigger": None if t.exit is None else t.exit.trigger_price,
             "exit_order_price": None if t.exit is None else t.exit.exit_order_price,

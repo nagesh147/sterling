@@ -150,6 +150,39 @@ opinion, it is "take whatever the book has". That is how the fill landed at
 the strategy never controlled, which is a materially weaker claim than "enter at
 the open and take 15 points".
 
+### Replay re-run with the fix in place
+
+Same real bars, the carried-over 379.0 fed in first exactly as the feed delivered
+it (stamped in the session it actually came from, 2026-08-20 15:33):
+
+| Check | Recording | Real Kite bars | Verdict |
+|---|---|---|---|
+| ATM strike | 77700 | 77700 | MATCH |
+| Which leg | PE | PE | MATCH |
+| Entry fill possible | 340.10 | in [318.00, 356.70] | MATCH |
+| Target reached | 355.10 | 09:16 minute | MATCH |
+| **`stale_price_rejected`** | fed 379.0 | **priced from 356.70** | **MATCH** |
+| **`engine_vs_market`** | 392.40 | **392.40** | **MATCH** |
+| `first_tick_price` | 379.0 | 356.70 | MISMATCH |
+| `entry_order_price` | 416.9 | 392.40 | MISMATCH |
+| `engine_vs_recording` | 416.9 | 392.40 | MISMATCH |
+
+7 match · 3 mismatch · 1 unverified.
+
+The three mismatches are the *point*, not a regression: they are the recording
+disagreeing with the exchange. `engine_vs_recording` and `engine_vs_market` are
+reported as separate rows for exactly this reason — a single "does the engine
+match" row would hide which of the two we are matching. Where the source bot was
+wrong those answers must differ, and here they do: we side with the market.
+
+Two things had to be fixed in the harness before this re-run meant anything.
+The bar-derived quotes were previously **undated**, so the session-origin gate
+treated them as unknowable and skipped — the replay would have reported success
+while testing nothing. Each quote is now stamped from its own bar. And
+`summary()` did not expose the pricing reference, so the rejection could not be
+observed; `first_tick_price` is now part of the summary, since an order price
+alone cannot show whether it came from a session price.
+
 ### The same fault was present in this implementation, and is now closed
 
 Two defects, both found by reading our own code rather than inferred:

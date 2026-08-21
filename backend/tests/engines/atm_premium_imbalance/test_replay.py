@@ -101,8 +101,32 @@ def test_replay_agrees_with_the_recording_on_every_checkable_field():
     assert by["exit_fill_within_target_bar"].verdict == MATCH
     # and the decision came from the real engine, not from arithmetic here
     assert by["engine_option_type"].verdict == MATCH
-    assert by["engine_order_price"].verdict == MATCH
+    # this recording had no stale-tick fault, so agreeing with the recording and
+    # agreeing with the market are the same thing
+    assert by["engine_vs_recording"].verdict == MATCH
+    assert by["engine_vs_market"].verdict == MATCH
     assert res.engine_summary["entry_order_price"] == 113.10
+    # the bar quotes are dated, so the session-origin gate is genuinely exercised
+    # here rather than skipped as "undatable"
+    assert res.engine_summary["state"] in ("open", "closed", "entry_pending")
+
+
+def test_a_stale_price_fed_first_is_rejected_and_the_session_open_is_used():
+    """Reproduces the 2026-08-21 feed order with this fixture's prices.
+
+    A carried-over 150.00 arrives before the real 102.85 open. The engine must
+    ignore it: pricing from 150.00 would give 165.0, from 102.85 gives 113.1.
+    """
+    from datetime import datetime as _dt
+    prior = int(_dt(2026, 8, 19, 15, 33, tzinfo=IST).timestamp() * 1000)
+    obs = ObservedSession(**{**OBSERVED.__dict__,
+                             "stale_price": 150.00, "stale_traded_at_ms": prior})
+    res = replay_session(obs, cfg=cfg(), ce_bars=CE_BARS, pe_bars=PE_BARS,
+                         index_bars=INDEX_BARS, listed_strikes=LISTED, pair=pair())
+    by = {c.field: c for c in res.checks}
+    assert by["stale_price_rejected"].verdict == MATCH
+    assert by["engine_vs_market"].verdict == MATCH
+    assert res.engine_summary["entry_order_price"] == 113.10      # not 165.0
 
 
 # ----------------------------------------------------------------- negative
@@ -114,6 +138,9 @@ def test_a_disagreeing_first_tick_is_reported_not_absorbed():
     by = {c.field: c for c in res.checks}
     assert by["first_tick_price"].verdict == MISMATCH
     assert by["entry_order_price"].verdict == MISMATCH   # 150 x 1.10 != 113.1
+    # we still agree with the market -- it is the recording that is out
+    assert by["engine_vs_market"].verdict == MATCH
+    assert by["engine_vs_recording"].verdict == MISMATCH
     assert res.contradicted is True
 
 
