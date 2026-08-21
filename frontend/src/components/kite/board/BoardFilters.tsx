@@ -12,7 +12,14 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import type { BoardView } from './useBoardView';
 
-function Toggle({ on, label, hint, onChange }: {
+/**
+ * A local view filter.
+ *
+ * Exported because SuperTrend's board has its own filter row and had its own
+ * differently-shaped toggles. Two controls that do the same job should not look
+ * like two different jobs.
+ */
+export function FilterToggle({ on, label, hint, onChange }: {
   on: boolean; label: string; hint: string; onChange: () => void;
 }) {
   return (
@@ -68,7 +75,7 @@ export function BoardFilters({ view, children }: { view: BoardView; children?: R
       </label>
 
       {view.offers.best && (
-        <Toggle
+        <FilterToggle
           on={view.bestOnly}
           label="BEST LEG"
           hint="Show only the nearest-the-money leg of each underlying — the one whose premium tracks the thesis most directly. A local filter."
@@ -76,7 +83,7 @@ export function BoardFilters({ view, children }: { view: BoardView; children?: R
         />
       )}
       {view.offers.ended && (
-        <Toggle
+        <FilterToggle
           on={view.showEnded}
           label={`ENDED ${counts.ended}`}
           hint="Include closed positions. They are kept for the record and are not calls to action."
