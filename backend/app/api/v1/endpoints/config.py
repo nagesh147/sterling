@@ -368,3 +368,116 @@ async def nifty_orb_options_execute(user: UserContext = Depends(get_current_user
 async def _start_nifty_orb_runner() -> None:
     from app.services.nifty_orb_options_runner import start
     start()
+
+# --------------------------------------------------------------------------
+# ATM Premium Imbalance
+#
+# Registered exactly the way NIFTY ORB is: engine package + service config
+# store + these endpoints. The repository has no central strategy registry to
+# add to -- app/engines/edge/catalog.py catalogues backtest-validated
+# (symbol, tf, profile) combos for the edge feed, which is a different concept
+# -- so inventing a second registry here would create the parallel
+# infrastructure the strategy contract forbids. The strategy publishes its own
+# identity on GET instead.
+# --------------------------------------------------------------------------
+
+class ATMPremiumImbalanceConfigRequest(BaseModel):
+    enabled: bool | None = None
+    underlying: str | None = None
+    expiry_policy: str | None = None
+    explicit_expiry: str | None = None
+    strike_policy: str | None = None
+    session_start: str | None = None
+    session_end: str | None = None
+    quote_mode: str | None = None
+    max_quote_age_ms: int | None = None
+    max_ce_pe_skew_ms: int | None = None
+    signal_mode: str | None = None
+    minimum_difference: float | None = None
+    minimum_difference_percent: float | None = None
+    entry_price_policy: str | None = None
+    entry_buffer_points: float | None = None
+    entry_through_pct: float | None = None
+    manual_price_file: str | None = None
+    max_entry_attempts: int | None = None
+    entry_attempt_timeout_ms: int | None = None
+    exit_policy: str | None = None
+    target_points: float | None = None
+    exit_buffer_points: float | None = None
+    stop_enabled: bool | None = None
+    stop_points: float | None = None
+    max_hold_seconds: int | None = None
+    max_trades_per_session: int | None = None
+    quantity: int | None = None
+    max_quantity: int | None = None
+    max_premium_at_risk_inr: float | None = None
+    daily_loss_limit_inr: float | None = None
+    data_source: str | None = None
+    execution_mode: str | None = None
+
+
+@router.get("/atm-premium-imbalance")
+async def get_atm_premium_imbalance_config() -> dict:
+    """Current config plus the engine's own defaults and vocabularies.
+
+    Defaults and enums are published rather than mirrored in the client, so the
+    UI cannot drift from the engine -- the recurring bug class in this codebase
+    is a UI that claims backend behaviour the backend does not honour.
+    """
+    from app.engines.atm_premium_imbalance.config import (
+        ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, QUOTE_MODES,
+        RESEARCH_ONLY_ENTRY_POLICIES, RESEARCH_ONLY_EXIT_POLICIES, STRIKE_POLICIES,
+        ATMPremiumImbalanceConfig,
+    )
+    from app.services.atm_premium_imbalance import descriptor, get_config
+    cfg = get_config()
+    return {
+        "strategy": {**descriptor(), "enabled": cfg.enabled},
+        "config": cfg.as_dict(),
+        "defaults": ATMPremiumImbalanceConfig().as_dict(),
+        "vocabularies": {
+            "expiry_policy": sorted(EXPIRY_POLICIES),
+            "strike_policy": sorted(STRIKE_POLICIES),
+            "quote_mode": sorted(QUOTE_MODES),
+            "entry_price_policy": sorted(ENTRY_PRICE_POLICIES),
+            "exit_policy": sorted(EXIT_POLICIES),
+            "data_source": ["kite", "truedata"],
+            "execution_mode": ["paper", "live"],
+        },
+        # The UI must be able to grey these out rather than offer a switch that
+        # validate() will refuse.
+        "research_only": {
+            "entry_price_policy": sorted(RESEARCH_ONLY_ENTRY_POLICIES),
+            "exit_policy": sorted(RESEARCH_ONLY_EXIT_POLICIES),
+        },
+    }
+
+
+@router.put("/atm-premium-imbalance")
+async def update_atm_premium_imbalance_config(body: ATMPremiumImbalanceConfigRequest) -> dict:
+    from app.services.atm_premium_imbalance import set_config
+    try:
+        cfg = set_config({k: v for k, v in body.model_dump().items() if v is not None})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"config": cfg.as_dict()}
+
+
+@router.get("/atm-premium-imbalance/snapshot")
+async def atm_premium_imbalance_snapshot(user: UserContext = Depends(get_current_user)) -> dict:
+    """Config, the resolved ATM pair, and every reason the strategy is not armed.
+
+    The tenant comes from the authenticated session, never from the request:
+    taking it from the body would let any caller resolve instruments against
+    another user's broker credentials and rate limit.
+    """
+    from app.services.atm_premium_imbalance import snapshot
+    uid = str(user.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    try:
+        return await snapshot(uid)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"ATM Premium Imbalance snapshot failed: {exc}"
+        ) from exc

@@ -24,7 +24,8 @@ import type {
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
   | 'account' | 'truedata' | 'diagnostics' | 'mode' | 'manualRules' | 'autoRules'
-  | 'engine' | 'navigator' | 'adaptiveEdge' | 'orbOptions' | 'markets' | 'notifications'
+  | 'engine' | 'navigator' | 'adaptiveEdge' | 'orbOptions' | 'atmPremiumImbalance'
+  | 'markets' | 'notifications'
   | 'experience' | 'dataLake';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
@@ -427,7 +428,8 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
 // from being restored on reload -- 'diagnostics' was absent and had both bugs.
 export const SECTION_IDS: SectionId[] = [
   'account', 'truedata', 'diagnostics', 'mode', 'manualRules', 'autoRules', 'engine',
-  'navigator', 'adaptiveEdge', 'orbOptions', 'markets', 'notifications', 'experience',
+  'navigator', 'adaptiveEdge', 'orbOptions', 'atmPremiumImbalance', 'markets',
+  'notifications', 'experience',
   'dataLake',
 ];
 
