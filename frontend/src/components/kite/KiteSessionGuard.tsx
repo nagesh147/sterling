@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  useKiteStatus, useKiteLoginUrl, useGenerateKiteSession, useRefreshKiteSession,
+  useKiteStatus, useKiteAuthBroadcast, useGenerateKiteSession, useOpenKiteLogin,
+  useRefreshKiteSession,
 } from '../../hooks/useKite';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { authSuccess, authIdle } from '../../store/useAuthFeedback';
@@ -16,8 +17,12 @@ const DISMISS_KEY = 'sterling_kite_session_guard_dismissed';
 // If the account has a refresh_token, useKiteAutoSession is already trying a silent
 // renewal — so we hold the modal briefly to let that win before prompting.
 export function KiteSessionGuard() {
+  // Mounted for the lifetime of the Kite tab, so this is where the app listens for
+  // the callback tab's "connected" broadcast — the modal then closes itself as soon
+  // as the redirect login lands, without the user touching anything here.
+  useKiteAuthBroadcast();
   const { data: status } = useKiteStatus();
-  const { data: lu } = useKiteLoginUrl(true);
+  const kiteLogin = useOpenKiteLogin();
   const gen = useGenerateKiteSession();
   const refresh = useRefreshKiteSession();
   const [open, setOpen] = useState(false);
@@ -165,18 +170,18 @@ export function KiteSessionGuard() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
-            disabled={!lu?.login_url}
-            onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}
+            disabled={kiteLogin.opening}
+            onClick={kiteLogin.open}
             style={{
               width: '100%', padding: '10px 12px', borderRadius: 5, border: 'none',
               background: 'var(--k-green)', color: 'var(--k-on-accent)', fontSize: 13, fontWeight: 700,
-              cursor: lu?.login_url ? 'pointer' : 'not-allowed', opacity: lu?.login_url ? 1 : 0.5,
+              cursor: kiteLogin.opening ? 'wait' : 'pointer', opacity: kiteLogin.opening ? 0.6 : 1,
             }}
           >
-            1 · Open Kite Login ↗
+            {kiteLogin.opening ? 'Opening…' : '1 · Open Kite Login ↗'}
           </button>
           <label style={{ fontSize: 10, letterSpacing: 1, color: 'var(--k-dim)', marginTop: 4 }}>
-            2 · PASTE request_token
+            2 · PASTE request_token — only needed if no Redirect URL is registered
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input

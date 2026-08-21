@@ -1327,6 +1327,14 @@ async def lifespan(app: FastAPI):
     exchange_account_store.bootstrap()
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
+    # Adopt KITE_API_KEY / KITE_API_SECRET (and optionally KITE_ACCESS_TOKEN) from
+    # the environment so a fresh DB or a new machine boots already provisioned —
+    # no retyping credentials into the UI before anything works.
+    try:
+        from app.services.exchanges.kite import auth as _kite_auth
+        _kite_auth.seed_from_env()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Kite env seeding skipped: %s", exc)
     _webhook_store_svc.bootstrap()
     _alert_store_svc.bootstrap()
     _pnl_history_svc.bootstrap()
@@ -1564,6 +1572,14 @@ async def lifespan(app: FastAPI):
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
     log.info("Kite Sterling Kite Engine auto-scan loop started (every 5 min)")
 
+    # Kite session keeper — renews access tokens shortly before the 06:00 IST reset
+    # for accounts Zerodha issued a refresh_token to. The strategy engines run
+    # headless, so without this a token that lapses overnight leaves the 09:15
+    # scans sessionless until someone opens the UI.
+    from app.services.exchanges.kite.auth import session_keeper_loop as _kite_session_keeper
+    kite_session_task = asyncio.create_task(_kite_session_keeper())
+    log.info("Kite session keeper started (every 10 min)")
+
     # Sterling Value-Flow Navigator — independent strategy scanner. It reuses
     # the Kite account/client/instrument caches, but does not depend on the
     # Triple-Supertrend engine being enabled or scanning.
@@ -1656,6 +1672,11 @@ async def lifespan(app: FastAPI):
     kite_engine_task.cancel()
     try:
         await kite_engine_task
+    except (Exception, BaseException):
+        pass
+    kite_session_task.cancel()
+    try:
+        await kite_session_task
     except (Exception, BaseException):
         pass
     navigator_task.cancel()

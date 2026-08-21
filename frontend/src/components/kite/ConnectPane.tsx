@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
   useActivateKiteAccount, useAddKiteAccount, useDeleteKiteAccount, useGenerateKiteSession,
-  useKiteAccounts, useKiteBasketMargins, useKiteLoginUrl, useKiteLogout, useKiteOrderCharges,
+  useKiteAccounts, useKiteBasketMargins, useKiteLogout, useKiteOrderCharges,
   useKiteOrderMargins, useKiteMargins, useKiteStatus, useKiteTickerStatus,
-  useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
+  useKiteTickerSubscribe, useKiteTickerUnsubscribe, useOpenKiteLogin, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
@@ -218,13 +218,70 @@ function Funds() {
   );
 }
 
+// The Redirect URL to register in the Kite developer console.
+//
+// Deliberately built from the *app's* origin rather than the backend's. In dev the
+// Vite server proxies /api to the backend, so this resolves to the same page origin
+// the app runs on — which is what lets the callback tab broadcast its success back
+// here (BroadcastChannel and postMessage are both origin-scoped). Hard-coding the
+// backend's :8000 origin would serve the callback cross-origin and silently break
+// that hand-off, leaving the login looking like it failed.
+function callbackUrl(): string {
+  return `${window.location.origin}/api/v1/kite/callback`;
+}
+
+function CopyableUrl({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+      <code>{url}</code>
+      <button
+        style={{ ...S.btn, padding: '1px 6px', fontSize: 10 }}
+        onClick={() => {
+          navigator.clipboard?.writeText(url).then(
+            () => { setCopied(true); setTimeout(() => setCopied(false), 1500); },
+            () => { /* clipboard blocked — the URL is on screen to copy by hand */ },
+          );
+        }}
+      >
+        {copied ? '✓ copied' : 'copy'}
+      </button>
+    </span>
+  );
+}
+
+// "Auto-connect" explainer. Shown above the manual paste box because the redirect
+// is the path that removes the copy-paste entirely — the paste is the fallback.
+function AutoConnectHint() {
+  return (
+    <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
+      ↪ <strong>Log in once, stay logged in:</strong> set your Kite app’s{' '}
+      <strong>Redirect URL</strong> to <CopyableUrl url={callbackUrl()} /> — the login then
+      completes itself and the session is stored, encrypted, across restarts. No token to paste.
+    </div>
+  );
+}
+
+// How much of the session is left. Kite invalidates every access_token at 06:00
+// IST, so "connected" alone is not the useful fact — when it lapses is.
+function sessionValidity(expiresAtMs?: number | null): string {
+  if (!expiresAtMs) return '';
+  const left = expiresAtMs - Date.now();
+  if (left <= 0) return 'expired';
+  const until = new Date(expiresAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const hours = Math.floor(left / 3_600_000);
+  const mins = Math.round((left % 3_600_000) / 60_000);
+  const span = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  return `valid ${span} more (until ${until})`;
+}
+
 function LoginFlow({ account }: { account: KiteAccount }) {
   // Fetch the login URL whenever credentials exist — NOT only when disconnected.
   // `account.connected` just means a token is *stored*, not that it's *valid*: after
   // Kite's daily ~6 AM expiry the token is stale-but-saved (connected=true), which
   // would otherwise leave the "Open Kite Login" button permanently disabled during
   // re-login. The /login-url endpoint only needs the api_key, so this is safe.
-  const { data: lu } = useKiteLoginUrl(account.has_credentials);
+  const kiteLogin = useOpenKiteLogin();
   const gen = useGenerateKiteSession();
   const logout = useKiteLogout();
   const refresh = useRefreshKiteSession();
@@ -238,27 +295,30 @@ function LoginFlow({ account }: { account: KiteAccount }) {
   const connected = account.connected
     && !(status?.account_id === account.id && status?.connected === false);
 
+  // Prefer the live status (it reflects a silent renewal that has not yet been
+  // re-read into the account list) and fall back to the stored account row.
+  const validity = sessionValidity(
+    status?.account_id === account.id
+      ? status?.token_expires_at_ms ?? account.token_expires_at_ms
+      : account.token_expires_at_ms,
+  );
+
   // The manual login steps (Open Kite Login + paste request_token). Shown when
   // NOT connected, or behind the "Re-login manually" toggle when a live session
   // has lapsed and the user wants to re-authenticate without logging out.
   const loginSteps = (
     <>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-        <button
-          style={S.btnGreen}
-          disabled={!lu?.login_url}
-          onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}
-        >
-          1 · Open Kite Login ↗
+        <button style={S.btnGreen} disabled={kiteLogin.opening} onClick={kiteLogin.open}>
+          {kiteLogin.opening ? 'Opening…' : '1 · Open Kite Login ↗'}
         </button>
-        <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
+        <span style={S.hint}>
+          With the Redirect URL set (below), this is the only step — you land back connected.
+        </span>
       </div>
       <KiteTroubleshooter />
-      <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
-        ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
-        <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
-      </div>
-      <label style={S.label}>2 · PASTE request_token (manual)</label>
+      <AutoConnectHint />
+      <label style={S.label}>2 · PASTE request_token (only without a Redirect URL)</label>
       <div style={{ display: 'flex', gap: 8 }}>
         <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
         <button
@@ -291,7 +351,8 @@ function LoginFlow({ account }: { account: KiteAccount }) {
       {account.has_credentials && connected && (
         <>
           <div style={{ ...S.hint, marginBottom: 10, lineHeight: 1.6 }}>
-            Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}.{' '}
+            Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}
+            {validity ? ` · ${validity}` : ''}.{' '}
             {account.has_refresh_token
               ? <>Kite Engine <strong>auto-recovers</strong> this session from the stored refresh token whenever it lapses — no
                 clicking needed. A fresh 2FA login may still be required at Zerodha’s daily ~6 AM IST reset.</>
@@ -340,7 +401,7 @@ function initials(s: string): string {
 /** Unified account card — compact row by default, full controls on expand. */
 function AccountCard({ acc }: { acc: KiteAccount }) {
   const { data: status } = useKiteStatus();
-  const { data: lu } = useKiteLoginUrl(acc.has_credentials);
+  const kiteLogin = useOpenKiteLogin();
   const activate = useActivateKiteAccount();
   const del = useDeleteKiteAccount();
   const test = useTestKiteAccount();
@@ -358,6 +419,14 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
   const connected = acc.connected
     && !(status?.account_id === acc.id && status?.connected === false);
+
+  // How long this session has left. Prefer the live status (it reflects a silent
+  // renewal the account list has not re-read yet) over the stored row.
+  const validity = sessionValidity(
+    status?.account_id === acc.id
+      ? status?.token_expires_at_ms ?? acc.token_expires_at_ms
+      : acc.token_expires_at_ms,
+  );
 
   // Real Zerodha account holder name comes from /status (only for the connected
   // account). Prefer it over the user-chosen label, then fall back to the label.
@@ -411,7 +480,12 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
           {connected ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--k-text)' }}>
-                Session active{acc.has_refresh_token ? ' · auto-renews' : ' · manual re-login required after 6 AM IST'}
+                Session active
+                {/* The concrete window beats the generic warning when we know it. */}
+                {validity
+                  ? ` · ${validity}`
+                  : (acc.has_refresh_token ? '' : ' · manual re-login required after 6 AM IST')}
+                {acc.has_refresh_token ? ' · auto-renews' : ''}
               </span>
               {acc.has_refresh_token && (
                 <button style={S.btn} onClick={() => refresh.mutate({ account_id: acc.id })} disabled={refresh.isPending}>
@@ -436,15 +510,13 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
             <div style={{ background: 'var(--k-surface-2)', border: '1px solid var(--k-border-2)', borderRadius: 6, padding: 12 }}>
               <div style={{ ...S.label, marginBottom: 8 }}>KITE LOGIN</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-                <button style={S.btnGreen} disabled={!lu?.login_url} onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}>
-                  1 · Open Kite Login ↗
+                <button style={S.btnGreen} disabled={kiteLogin.opening} onClick={kiteLogin.open}>
+                  {kiteLogin.opening ? 'Opening…' : '1 · Open Kite Login ↗'}
                 </button>
-                <span style={S.hint}>Log in, then copy the <code>request_token</code> from the redirect URL.</span>
+                <span style={S.hint}>With the Redirect URL set, this is the only step.</span>
               </div>
-              <div style={{ ...S.hint, marginBottom: 8 }}>
-                Or set Redirect URL to <code>http://localhost:8000/api/v1/kite/callback</code> for auto-connect.
-              </div>
-              <label style={S.label}>2 · Paste request_token (manual)</label>
+              <AutoConnectHint />
+              <label style={S.label}>2 · Paste request_token (only without a Redirect URL)</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   style={S.input}
