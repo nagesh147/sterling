@@ -437,3 +437,68 @@ async def test_every_closed_trade_reports_its_result(long_day):
     assert len(done) == taken, f"{taken} trades but {len(done)} results reported"
     assert all("pts" in e.message and "P&L" in e.message for e in done)
     assert len(rearmed) >= 1
+
+# ------------------------------------------- the replay must agree with live
+
+@pytest.mark.asyncio
+async def test_no_signal_before_the_bell(wired):
+    """Live never asks the strategy before 09:15 — the runner's market-hours
+    check answers "market_closed" first. The replay must reach the same "no" by
+    the same route, or it teaches the operator something untrue about 09:14.
+    """
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
+    s = R.active_session("u1")
+    open_ms = s.strategy.session_open_ms
+    assert s.strategy._entry_ts_ms >= open_ms
+
+    from app.services.kite_engine import state
+    pre = [e for e in state.activity("u1") if e.kind == "api_waiting"]
+    assert pre, "it should say why it is doing nothing before the open"
+    assert any("exchange is not open" in e.message for e in pre), \
+        [e.message for e in pre]
+
+
+@pytest.mark.asyncio
+async def test_the_market_gate_uses_the_virtual_clock_not_the_real_one():
+    """Otherwise a replay run at 3am would think the exchange was shut all day."""
+    from datetime import datetime as _dt
+    bell = int(_dt(2026, 8, 21, 9, 15, tzinfo=IST).timestamp() * 1000)
+    assert S._market_open_at(bell - 1_000) is False
+    assert S._market_open_at(bell) is True
+    assert S._market_open_at(bell + 5 * 3600 * 1000) is True        # 14:15
+    assert S._market_open_at(bell + 7 * 3600 * 1000) is False       # 16:15
+
+
+@pytest.mark.asyncio
+async def test_a_date_the_calendar_cannot_answer_still_replays(monkeypatch):
+    """A short holiday table must not be able to block a replay outright."""
+    from app.services.navigator import calendar as cal
+
+    def boom(_ts):
+        raise RuntimeError("year not covered")
+    monkeypatch.setattr(cal, "is_market_open_at", boom, raising=False)
+    from datetime import datetime as _dt
+    bell = int(_dt(2026, 8, 21, 9, 15, tzinfo=IST).timestamp() * 1000)
+    assert S._market_open_at(bell) is True
+    assert S._market_open_at(bell - 60_000) is False
+
+@pytest.mark.asyncio
+async def test_the_clock_starts_a_quarter_minute_before_the_bell(wired, monkeypatch):
+    """09:14:45, not 09:14:00. At real speed a full minute of a shut exchange is
+    a minute of nothing; fifteen seconds shows the same thing and starts.
+    """
+    seen: list[int] = []
+    real_emit = S._emit
+
+    async def spy(session, broker, legs, **kw):
+        seen.append(session.clock_ms)
+        return await real_emit(session, broker, legs, **kw)
+
+    monkeypatch.setattr(S, "_emit", spy)
+    await S.start("u1", speed=600.0, continuous=False)
+    await S._tasks["u1"]
+    first = datetime.fromtimestamp(min(seen) / 1000, tz=IST)
+    assert first.strftime("%H:%M:%S") == "09:14:59"        # last pre-open second
+    assert S.PRE_OPEN_SECONDS == 15
+

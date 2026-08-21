@@ -21,8 +21,8 @@ from typing import Literal, Optional
 
 from .config import ATMPremiumImbalanceConfig
 from .entry import ActionKind, EntryEngine, ManualPriceTable, PricedEntry, price_entry
-from .exit import (build_exit_event, exit_order_price, should_exit, target_price,
-                   trailing_stop_price)
+from .exit import (build_exit_event, exit_order_price, optional_target_price,
+                   should_exit, target_price, trailing_stop_price)
 from .models import (
     ExitEvent,
     LegQuote,
@@ -362,7 +362,7 @@ class ATMPremiumImbalanceStrategy:
             entry_price=fill,
             entry_order_id=self.entry.fill_order_id or self.trade.entry_order_id,
             entry_ts_ms=self._last_now_ms,
-            target_price=target_price(fill, self.cfg),
+            target_price=optional_target_price(fill, self.cfg),
             state=PositionState.OPEN,
             entry_attempts=tuple(self.entry.attempts),
         )
@@ -596,7 +596,7 @@ class ATMPremiumImbalanceStrategy:
             entry_price=q2(entry_fill),
             entry_order_price=None,
             first_tick_price=None,
-            target_price=target_price(entry_fill, self.cfg),
+            target_price=optional_target_price(entry_fill, self.cfg),
             quote_mode=self.cfg.quote_mode,  # type: ignore[arg-type]
             adopted=True,
         )

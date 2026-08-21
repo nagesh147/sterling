@@ -172,3 +172,25 @@ def test_logging_never_breaks_a_trade(monkeypatch):
         raise RuntimeError("log backend gone")
     monkeypatch.setattr(state, "log", boom)
     R.note("u1", "api_entry", "anything")        # must not raise
+
+
+@pytest.mark.asyncio
+async def test_a_peak_that_moves_without_the_stop_is_not_news():
+    """The stop line reports the stop. A rising peak that leaves the stop where
+    it was is context, not an event, and reporting it fills the terminal.
+    """
+    cfg = ATMPremiumImbalanceConfig(
+        enabled=True, quantity=20, exit_policy="TRAILING_STOP", stop_enabled=True,
+        stop_basis="PERCENT", stop_percent=20.0, trail_percent=10.0,
+        trail_start_percent=50.0, breakeven_percent=50.0, target_points=0.0,
+        max_premium_at_risk_inr=40_000.0).validate()
+    s = _session(); s.strategy.cfg = cfg; R.register(s)
+    b = FakeBroker(entry_fill=133.40, exit_fill=500.0)
+    await R.on_ticks("u1", [tick(111, 167.50, 167.0, 167.50),
+                            tick(222, 214.85, 214.4, 215.3)], b)
+    # the peak climbs, but 50% triggers keep every rung out of reach
+    for px in (140.0, 150.0, 160.0, 170.0):
+        await R.on_ticks("u1", [tick(111, px, px - 0.5, px + 0.5)], b)
+    stops = [m for k, m in lines() if k == "api_stop"]
+    assert len(stops) == 1, stops
+

@@ -16,6 +16,19 @@ from .config import ATMPremiumImbalanceConfig
 from .models import ExitEvent, OptionType, align_to_tick, q2
 
 
+def optional_target_price(entry_fill: float,
+                          cfg: ATMPremiumImbalanceConfig) -> Optional[float]:
+    """The target, or ``None`` when the policy has no ceiling.
+
+    Under TRAILING_STOP with zero target points, ``entry + 0`` is the entry, and
+    reporting the entry price as a target reads as a target of zero profit. There
+    is no target; saying so is the honest answer.
+    """
+    if cfg.target_points <= 0:
+        return None
+    return target_price(entry_fill, cfg)
+
+
 def target_price(entry_fill: float, cfg: ATMPremiumImbalanceConfig) -> float:
     """``entry_fill + target_points``.
 

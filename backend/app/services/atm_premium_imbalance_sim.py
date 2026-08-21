@@ -44,9 +44,10 @@ log = get_logger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
-#: Where the clock starts. One minute before the bell, so the pre-open refusal
-#: is visible rather than something the operator has to be told about.
-START_HHMM = "09:14"
+#: How long before the bell the clock starts, in seconds. Long enough to watch
+#: it walk up to the open and see the exchange reported shut; short enough that
+#: at real speed the wait is seconds rather than a minute.
+PRE_OPEN_SECONDS = 15
 
 #: How many wall-clock milliseconds one simulated minute takes at speed 1.
 MINUTE_MS = 60_000
@@ -372,15 +373,18 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
     pause = SECOND_MS / 1000.0 / speed
 
     try:
-        # The pre-open minute, one visible second at a time, so the operator can
-        # watch the clock reach the bell and see the carried-over quote refused.
-        for offset in range(-60, 0):
+        # The pre-open seconds, one at a time, so the operator can watch the
+        # clock reach the bell.
+        for offset in range(-PRE_OPEN_SECONDS, 0):
             session.clock_ms = open_ms + offset * SECOND_MS
             st.clock_ms = session.clock_ms
-            if offset == -60:
-                st.note = "pre-open — both legs still carry yesterday's close"
+            if offset == -PRE_OPEN_SECONDS:
+                st.note = ("pre-open — the exchange is closed, and both legs "
+                           "still carry yesterday's close")
                 R.note(user_id, "api_replay",
-                       "09:14 — both legs still carry yesterday's closing price")
+                       f"{datetime.fromtimestamp(session.clock_ms/1000, tz=IST):%I:%M:%S %p}"
+                       " — exchange closed; both legs still carry yesterday's "
+                       "closing price")
             if offset >= -1:
                 # Only the last pre-open second emits, so the quote is fresh by
                 # age at the bell while still stamped with yesterday's trade.
@@ -430,6 +434,21 @@ async def _run(user_id: str, session, st: SimState, ce_bars, pe_bars, speed: flo
         st.running = False
 
 
+def _market_open_at(clock_ms: int) -> bool:
+    """Is the exchange open at this instant on the virtual clock?
+
+    Falls back to a plain 09:15-15:30 window if the calendar cannot answer for
+    the date: refusing to replay because a holiday table is short of a year
+    would be worse than a slightly less precise boundary.
+    """
+    try:
+        from app.services.navigator.calendar import is_market_open_at
+        return bool(is_market_open_at(int(clock_ms)))
+    except Exception:  # noqa: BLE001
+        at = datetime.fromtimestamp(int(clock_ms) / 1000, tz=IST)
+        return (at.hour, at.minute) >= (9, 15) and (at.hour, at.minute) <= (15, 30)
+
+
 def _phase_note(session) -> str:
     """A one-line "what is it doing" for the banner."""
     strat = session.strategy
@@ -450,13 +469,20 @@ async def _emit(session, broker: SimBroker, legs, *, traded_ms: int,
                 official_open: Optional[float]) -> None:
     """Feed one tick per leg through the strategy and service its intents."""
     from app.services import atm_premium_imbalance_runner as R
+    # Ask the calendar about the *virtual* clock. A live session never reaches
+    # the strategy before 09:15 -- the runner's market-hours check returns
+    # "market_closed" first -- so passing session_open=True unconditionally made
+    # the replay evaluate at a time live never would, and the pre-open refusal it
+    # showed was of the strategy's stale-quote gate rather than of the closed
+    # market. Same question, same answer, same route.
+    open_now = _market_open_at(session.clock_ms)
     for instrument_id, price in legs:
         if price is None or float(price) <= 0:
             continue
         quote = _quote(instrument_id, float(price), session.clock_ms,
                        traded_ms=traded_ms, official_open=official_open)
         intent = session.strategy.on_option_tick(
-            quote, session.clock_ms, session_open=True, risk_authorized=True,
+            quote, session.clock_ms, session_open=open_now, risk_authorized=True,
         )
         await R.drive(session, intent, broker)
         if session.finished:

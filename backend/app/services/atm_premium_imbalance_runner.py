@@ -321,11 +321,15 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
         # The fill becomes known on a poll, not on the submit, so this is checked
         # once per pass rather than in the submit branch where it is always None.
         if s.trade is not None and s.trade.entry_price:
+            # Deliberately excludes the live stop. It moves, so including it made
+            # this line re-fire on every ratchet -- and the re-fire landed after
+            # the exit, reading as a second fill. The stop has its own line.
+            tgt = s.trade.target_price
             _note_once(session, "fill", "api_filled",
                        f"filled {s.trade.quantity} {s.trade.option_type} @ "
-                       f"{s.trade.entry_price:.2f} — target "
-                       f"{(s.trade.target_price or 0):.2f}"
-                       + (f", stop {s.live_stop:.2f}" if s.live_stop else ""))
+                       f"{s.trade.entry_price:.2f} — "
+                       + (f"target {tgt:.2f}" if tgt else "no fixed target, "
+                          "the stop decides"))
     if intent.kind == "halt":
         log.error("ATM PI halted for %s: %s", session.user_id, intent.reason)
         note(session.user_id, "api_halt", f"halted — {intent.reason}")
@@ -374,7 +378,8 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
     if s.trade is not None and s.live_stop is not None and s.trade.exit is None:
         _note_once(session, "stop", "api_stop",
                    f"stop {s.live_stop:.2f} (peak {s._high_water:.2f}, "
-                   f"entry {s.trade.entry_price:.2f})")
+                   f"entry {s.trade.entry_price:.2f})",
+                   token=f"{s.live_stop:.2f}")
     return "idle"
 
 
@@ -390,6 +395,7 @@ _REFUSAL_TEXT = {
     "below_minimum_difference": "the CE/PE gap is below the minimum",
     "below_minimum_difference_percent": "the CE/PE gap is below the minimum percent",
     "stale_quote": "the feed has gone quiet",
+    "session_closed": "the exchange is not open",
     "no_quote_pair": "one leg has not quoted yet",
     "invalid_quote": "a leg quoted zero",
 }
@@ -551,16 +557,22 @@ def note(user_id: str, kind: str, message: str) -> None:
         pass          # a log line is never worth breaking a trade over
 
 
-def _note_once(session: "Session", key: str, kind: str, message: str) -> None:
-    """Log only when the message for ``key`` has changed.
+def _note_once(session: "Session", key: str, kind: str, message: str,
+               *, token: Optional[str] = None) -> None:
+    """Log only when what matters about ``key`` has changed.
 
     A refusal reason is true on every tick until it stops being true. Printed
     each time it would drown out everything else; printed never, the operator
     cannot see why nothing is happening.
+
+    ``token`` separates "has this changed" from "what do we say about it". The
+    stop line carries the peak as context, but the peak moving while the stop
+    holds is not news -- keying on the whole message would report it anyway.
     """
-    if session.logged.get(key) == message:
+    probe = message if token is None else token
+    if session.logged.get(key) == probe:
         return
-    session.logged[key] = message
+    session.logged[key] = probe
     note(session.user_id, kind, message)
 
 

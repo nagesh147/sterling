@@ -171,3 +171,35 @@ def test_a_hundred_percent_stop_is_refused():
 def test_no_target_is_only_allowed_where_it_means_something():
     with pytest.raises(ValueError, match="target_points must be > 0"):
         ATMPremiumImbalanceConfig(enabled=True, target_points=0.0).validate()
+
+
+# ------------------------------------------------- reporting what there is not
+
+def test_a_policy_with_no_ceiling_reports_no_target():
+    """entry + 0 is the entry, and calling that a target reads as zero profit."""
+    from app.engines.atm_premium_imbalance.exit import optional_target_price
+    assert optional_target_price(268.65, trailing()) is None
+
+
+def test_the_observed_policy_still_reports_its_target():
+    from app.engines.atm_premium_imbalance.exit import optional_target_price
+    cfg = ATMPremiumImbalanceConfig(enabled=True, target_points=15.0).validate()
+    assert optional_target_price(133.40, cfg) == 148.40
+
+
+def test_a_trailing_trade_carries_no_target_on_the_record():
+    """The board must not draw a target line where there is no target."""
+    from .test_golden_trades import ScriptedBroker, drive, make_pair
+    from app.engines.atm_premium_imbalance import ATMPremiumImbalanceStrategy
+    cfg = trailing(stop_percent=15.0, trail_percent=8.0, trail_start_percent=5.0,
+                   breakeven_percent=3.0)
+    s = ATMPremiumImbalanceStrategy(
+        cfg=cfg, pair=make_pair(77700.0, "ACE", "APE", "2026-08-27", upper=3000.0),
+        quantity=20, trade_id="t")
+    drive(s, ScriptedBroker(entry_fill=268.65, exit_fill=290.80), [
+        ("CE", 584.90, 584.0, 585.0), ("PE", 267.60, 267.1, 268.1),
+    ])
+    assert s.trade is not None and s.trade.entry_price == 268.65
+    assert s.trade.target_price is None
+    assert s.live_stop == 228.35            # 268.65 x 0.85
+
