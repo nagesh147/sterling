@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   useAtmPremiumImbalanceConfig,
+  useAtmPremiumImbalanceSnapshot,
   useSetAtmPremiumImbalanceConfig,
   type AtmPremiumImbalanceConfig,
   type EntryPricePolicy,
@@ -9,6 +10,7 @@ import {
   type FirstTickSource,
   type ProtectionMode,
   type QuoteMode,
+  type SizingMode,
 } from '../hooks/useAtmPremiumImbalance';
 import {
   ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT, DIM,
@@ -36,6 +38,11 @@ const QUOTE_MODE_OPTIONS: Array<{ value: QuoteMode; label: string; hint: string 
   { value: 'COMPATIBILITY', label: 'Compatibility', hint: 'Independently cached last-traded price per leg. Reproduces the observed bot exactly. Paper only.' },
   { value: 'SYNCHRONIZED', label: 'Synchronized', hint: 'CE and PE aligned by exchange timestamp. Research view: tests whether the asynchronous cache is itself doing the work.' },
   { value: 'EXECUTABLE', label: 'Executable', hint: 'Compares the two asks — what could actually be bought. Required for live.' },
+];
+
+const SIZING_MODE_OPTIONS: Array<{ value: SizingMode; label: string; hint: string }> = [
+  { value: 'LOTS', label: 'Lots', hint: 'Say how many lots. The lot size comes from the contract, so the order is always a whole number of lots.' },
+  { value: 'QUANTITY', label: 'Quantity', hint: 'Say the exact number of contracts. Must be a whole multiple of the lot size — the broker rejects anything else.' },
 ];
 
 const ENTRY_POLICY_OPTIONS: Array<{ value: EntryPricePolicy; label: string; hint: string }> = [
@@ -79,6 +86,12 @@ const ADVANCED_SETTING_COUNT = 10;
 export function AtmPremiumImbalanceSettings() {
   const { data, isLoading } = useAtmPremiumImbalanceConfig();
   const setCfg = useSetAtmPremiumImbalanceConfig();
+
+  // The lot size is a property of the resolved contract, not of the config, so
+  // the hints can only be exact once the pair is known. Shares the board's query
+  // key, so this costs no extra request.
+  const snapshot = useAtmPremiumImbalanceSnapshot();
+  const lotSize = snapshot.data?.resolved?.ce.lot_size ?? 0;
 
   const server = data?.config;
   const defaults = data?.defaults;
@@ -231,16 +244,44 @@ export function AtmPremiumImbalanceSettings() {
             onChange={(quote_mode) => patch({ quote_mode })}
           />
         </Field>
-        <NumberField
-          label="Quantity"
-          hint="Total contracts, not lots. The observed sessions used 20 (one SENSEX lot) and 100."
-          value={cfg.quantity}
-          defaultValue={defaults.quantity}
-          onChange={(quantity) => patch({ quantity })}
-          min={0}
-          max={cfg.max_quantity}
-          step={1}
-        />
+        <Field
+          label="Size"
+          hint="How you want to state the trade size. Lots is safer — the exchange only accepts whole lots."
+          wide
+        >
+          <ChoiceRow
+            value={cfg.sizing_mode}
+            options={SIZING_MODE_OPTIONS}
+            onChange={(sizing_mode) => patch({ sizing_mode })}
+          />
+        </Field>
+        {cfg.sizing_mode === 'LOTS' ? (
+          <NumberField
+            label="Lots"
+            hint={lotSize
+              ? `One lot is ${lotSize} contracts, so this orders ${(cfg.lots || 0) * lotSize}.`
+              : 'One lot per the contract. SENSEX is 20 contracts per lot.'}
+            value={cfg.lots}
+            defaultValue={defaults.lots}
+            onChange={(lots) => patch({ lots })}
+            min={0}
+            max={lotSize ? Math.floor(cfg.max_quantity / lotSize) : undefined}
+            step={1}
+          />
+        ) : (
+          <NumberField
+            label="Quantity"
+            hint={lotSize
+              ? `Total contracts. Must be a multiple of ${lotSize}. The observed sessions used 20 (one lot) and 100.`
+              : 'Total contracts, not lots. The observed sessions used 20 (one SENSEX lot) and 100.'}
+            value={cfg.quantity}
+            defaultValue={defaults.quantity}
+            onChange={(quantity) => patch({ quantity })}
+            min={0}
+            max={cfg.max_quantity}
+            step={lotSize || 1}
+          />
+        )}
         <NumberField
           label="Max trades per session"
           hint="The observed bot stopped after one round trip."

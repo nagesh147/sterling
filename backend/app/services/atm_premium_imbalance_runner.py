@@ -465,7 +465,7 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     cfg = cfg or get_config()
     if not cfg.enabled:
         return {"status": "disabled"}
-    if cfg.quantity <= 0:
+    if not cfg.size_is_set:
         return {"status": "no_quantity"}
     if not _is_market_open():
         return {"status": "market_closed"}
@@ -481,16 +481,17 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     except (TypeError, ValueError):
         return {"status": "error", "message": "instrument ids are not Kite tokens"}
 
-    # Refuse a fraction of a lot now rather than at the open. The lot size is
-    # only known once the pair resolves, which is why this is not a config rule.
+    # Settle the size now rather than at the open. The lot size is only known
+    # once the pair resolves, which is why this is not a plain config rule, and
+    # the rule itself lives on the config so the board cannot disagree with it.
     lot = int(pair.ce.lot_size or 0)
-    if lot > 1 and cfg.quantity % lot:
-        return {"status": "quantity_not_whole_lots",
-                "message": f"quantity {cfg.quantity} is not a whole multiple "
-                           f"of the lot size {lot}"}
+    blocker = cfg.sizing_blocker(lot)
+    if blocker:
+        return {"status": "invalid_size", "message": blocker}
+    quantity = cfg.effective_quantity(lot)
 
     strategy = ATMPremiumImbalanceStrategy(
-        cfg=cfg, pair=pair, quantity=cfg.quantity,
+        cfg=cfg, pair=pair, quantity=quantity,
         trade_id=f"api-{user_id}-{today.isoformat()}",
     )
     from app.services.exchanges.kite import ticker_manager
@@ -518,6 +519,6 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     log.info("ATM PI armed for %s: %s %s strike=%s", user_id, pair.underlying, pair.expiry, pair.strike)
     return {
         "status": "armed", "underlying": pair.underlying, "expiry": pair.expiry,
-        "strike": pair.strike, "quantity": cfg.quantity,
+        "strike": pair.strike, "quantity": quantity, "lots": quantity // max(1, lot),
         "protection_mode": cfg.protection_mode, "execution_mode": cfg.execution_mode,
     }

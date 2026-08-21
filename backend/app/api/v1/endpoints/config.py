@@ -429,7 +429,7 @@ async def get_atm_premium_imbalance_config() -> dict:
     """
     from app.engines.atm_premium_imbalance.config import (
         ENTRY_PRICE_POLICIES, EXIT_POLICIES, EXPIRY_POLICIES, FIRST_TICK_SOURCES,
-        PROTECTION_MODES, QUOTE_MODES, RESEARCH_ONLY_ENTRY_POLICIES,
+        PROTECTION_MODES, QUOTE_MODES, RESEARCH_ONLY_ENTRY_POLICIES, SIZING_MODES,
         RESEARCH_ONLY_EXIT_POLICIES, STRIKE_POLICIES, ATMPremiumImbalanceConfig,
     )
     from app.services.atm_premium_imbalance import descriptor, get_config
@@ -445,6 +445,7 @@ async def get_atm_premium_imbalance_config() -> dict:
             "entry_price_policy": sorted(ENTRY_PRICE_POLICIES),
             "exit_policy": sorted(EXIT_POLICIES),
             "protection_mode": sorted(PROTECTION_MODES),
+            "sizing_mode": sorted(SIZING_MODES),
             "first_tick_source": sorted(FIRST_TICK_SOURCES),
             "data_source": ["kite", "truedata"],
             "execution_mode": ["paper", "live"],

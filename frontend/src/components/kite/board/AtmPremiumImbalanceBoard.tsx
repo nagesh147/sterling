@@ -39,6 +39,7 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
   const arm = useArmAtmPremiumImbalance();
 
   const session = snapshot.data?.session ?? null;
+  const sizing = snapshot.data?.sizing ?? null;
   React.useEffect(() => {
     if (session && !session.finished) setArmedOnce(true);
   }, [session]);
@@ -92,7 +93,19 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
           </span>
         )}
         {!session && !arm.isPending && (
-          <span style={{ fontSize: 11, color: k.dim }}>Not armed.</span>
+          <span style={{ fontSize: 11, color: k.dim }}>
+            Not armed.
+            {sizing && sizing.quantity > 0 && (
+              // Say what arming would actually buy. "2 lots" is not a number of
+              // contracts, and the risk is in the contracts.
+              <>
+                {' '}Will buy <strong style={{ color: k.text }}>{sizing.quantity}</strong>
+                {sizing.mode === 'LOTS' && sizing.lot_size > 0
+                  ? ` (${sizing.quantity / sizing.lot_size} × ${sizing.lot_size})`
+                  : ''}.
+              </>
+            )}
+          </span>
         )}
       </div>
 

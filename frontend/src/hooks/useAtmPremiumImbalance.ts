@@ -12,6 +12,7 @@ export type ExitPolicy = 'FIXED_POINT_TARGET' | 'PREMIUM_CONVERGENCE';
 export type ProtectionMode = 'NONE' | 'RESTING_TARGET_LIMIT' | 'GTT';
 export type FirstTickSource = 'SESSION_TICK' | 'OFFICIAL_OPEN';
 export type ExpiryPolicy = 'SAME_DAY' | 'NEAREST' | 'NEXT' | 'EXPLICIT';
+export type SizingMode = 'LOTS' | 'QUANTITY';
 
 export interface AtmPremiumImbalanceConfig {
   enabled: boolean;
@@ -22,6 +23,8 @@ export interface AtmPremiumImbalanceConfig {
   session_start: string;
   session_end: string;
   quote_mode: QuoteMode;
+  sizing_mode: SizingMode;
+  lots: number;
   max_quote_age_ms: number;
   max_ce_pe_skew_ms: number;
   signal_mode: string;
@@ -144,11 +147,13 @@ export interface AtmSessionStatus {
 }
 
 export interface AtmArmResult {
-  status: 'armed' | 'already_armed' | 'disabled' | 'no_quantity' | 'market_closed' | 'error';
+  status: 'armed' | 'already_armed' | 'disabled' | 'no_quantity' | 'invalid_size'
+        | 'market_closed' | 'error';
   underlying?: string;
   expiry?: string;
   strike?: number;
   quantity?: number;
+  lots?: number;
   protection_mode?: string;
   execution_mode?: string;
   message?: string;
@@ -164,6 +169,8 @@ export interface AtmPremiumImbalanceSnapshot {
     ce: { instrument_id: string; tradingsymbol: string; lot_size: number };
     pe: { instrument_id: string; tradingsymbol: string; lot_size: number };
   } | null;
+  /** What will actually be ordered, once the lot size is known. */
+  sizing?: { mode: SizingMode; lot_size: number; quantity: number };
   /** Every reason the strategy is not armed. Never empty when `resolved` is null. */
   blockers: string[];
   /** Live session state, or null when nothing is armed. */

@@ -206,8 +206,9 @@ async def snapshot(uid: str) -> dict:
     }
     if not cfg.enabled:
         out["blockers"].append("strategy disabled")
-    if cfg.quantity <= 0:
-        out["blockers"].append("quantity not set")
+    if not cfg.size_is_set:
+        out["blockers"].append("lots not set" if cfg.sizing_mode == "LOTS"
+                               else "quantity not set")
     try:
         pair = await resolve_option_pair(uid, cfg)
         out["resolved"] = {
@@ -219,14 +220,19 @@ async def snapshot(uid: str) -> dict:
             "pe": {"instrument_id": pair.pe.instrument_id, "tradingsymbol": pair.pe.tradingsymbol,
                    "lot_size": pair.pe.lot_size},
         }
-        # An order for a fraction of a lot is rejected by the broker, and it
-        # would be rejected at the open -- the one moment this strategy trades,
-        # with a three-attempt budget and one trade per session. Report it here
-        # so the board shows it before arming, not after the entry fails.
+        # A size the broker will refuse would be refused at the open -- the one
+        # moment this strategy trades, with a three-attempt budget and one trade
+        # per session. Report it here so the board shows it before arming, not
+        # after the entry fails. Same function arm() uses, so they cannot differ.
         lot = int(pair.ce.lot_size or 0)
-        if lot > 1 and cfg.quantity > 0 and cfg.quantity % lot:
-            out["blockers"].append(
-                f"quantity {cfg.quantity} is not a whole multiple of the lot size {lot}")
+        out["sizing"] = {
+            "mode": cfg.sizing_mode,
+            "lot_size": lot,
+            "quantity": cfg.effective_quantity(lot) if cfg.size_is_set else 0,
+        }
+        blocker = cfg.sizing_blocker(lot) if cfg.size_is_set else None
+        if blocker:
+            out["blockers"].append(blocker)
     except Exception as exc:
         out["blockers"].append(f"instrument resolution failed: {exc}")
     return out

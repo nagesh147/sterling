@@ -20,7 +20,7 @@ config that the engine rejects mid-session.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Literal
+from typing import Literal, Optional
 
 EXPIRY_POLICIES: frozenset[str] = frozenset({"SAME_DAY", "NEAREST", "NEXT", "EXPLICIT"})
 STRIKE_POLICIES: frozenset[str] = frozenset({"ATM_NEAREST"})
@@ -64,6 +64,12 @@ EXIT_POLICIES: frozenset[str] = frozenset({"FIXED_POINT_TARGET", "PREMIUM_CONVER
 
 #: Where the protective exit lives. NONE = nowhere, i.e. only this process.
 PROTECTION_MODES: frozenset[str] = frozenset({"NONE", "RESTING_TARGET_LIMIT", "GTT"})
+
+# How the operator states the trade size. LOTS is the safer way to say it -- the
+# exchange only accepts whole lots, and the lot size is a property of the
+# contract, not something the operator should have to remember. QUANTITY stays
+# available because that is what the broker and the fill reports speak in.
+SIZING_MODES: frozenset[str] = frozenset({"LOTS", "QUANTITY"})
 RESEARCH_ONLY_EXIT_POLICIES: frozenset[str] = frozenset({"PREMIUM_CONVERGENCE"})
 
 
@@ -140,6 +146,11 @@ class ATMPremiumImbalanceConfig:
     max_trades_per_session: int = 1
 
     # --- sizing & risk ------------------------------------------------------
+    # QUANTITY is the default only for compatibility: a config saved before this
+    # existed states a quantity, and defaulting to LOTS would silently ignore it.
+    # LOTS is the safer way to say it -- see SIZING_MODES.
+    sizing_mode: str = "QUANTITY"
+    lots: int = 0
     quantity: int = 0
     max_quantity: int = 500
     max_premium_at_risk_inr: float = 25000.0
@@ -211,6 +222,10 @@ class ATMPremiumImbalanceConfig:
         if self.max_hold_seconds < 0:
             raise ValueError("max_hold_seconds cannot be negative")
 
+        if self.sizing_mode not in SIZING_MODES:
+            raise ValueError(f"sizing_mode must be one of {sorted(SIZING_MODES)}")
+        if self.lots < 0:
+            raise ValueError("lots cannot be negative")
         if self.quantity < 0:
             raise ValueError("quantity cannot be negative")
         if self.max_quantity <= 0:
@@ -240,8 +255,8 @@ class ATMPremiumImbalanceConfig:
                     "live mode requires quote_mode=EXECUTABLE: pricing a real order off a "
                     "cached LTP is what COMPATIBILITY mode exists to reproduce, not to trade"
                 )
-            if self.quantity <= 0:
-                raise ValueError("live mode requires an explicit positive quantity")
+            if not self.size_is_set:
+                raise ValueError("live mode requires an explicit positive size")
             if not self.require_session_origin_tick:
                 raise ValueError(
                     "live mode requires require_session_origin_tick: pricing a real order "
@@ -255,6 +270,50 @@ class ATMPremiumImbalanceConfig:
                     "watching it"
                 )
         return self
+
+    @property
+    def size_is_set(self) -> bool:
+        """Whether a size has been stated at all, without needing the lot size."""
+        return (self.lots > 0) if self.sizing_mode == "LOTS" else (self.quantity > 0)
+
+    def effective_quantity(self, lot_size: int) -> int:
+        """The quantity to actually order for a contract of this lot size.
+
+        In LOTS mode the lot size does the arithmetic, so the result is a whole
+        number of lots by construction. In QUANTITY mode the operator's number is
+        taken as given and checked separately -- the lot size is not known until
+        the pair resolves, so it cannot be a plain config rule.
+        """
+        lot = max(1, int(lot_size or 1))
+        if self.sizing_mode == "LOTS":
+            return int(self.lots) * lot
+        return int(self.quantity)
+
+    def sizing_blocker(self, lot_size: int) -> Optional[str]:
+        """Why this size cannot be traded, in words, or None if it can.
+
+        Both the board and arm() ask this one function. Two places computing the
+        same rule is what let the board offer a quantity the broker would refuse.
+        """
+        lot = max(1, int(lot_size or 1))
+        if self.sizing_mode == "LOTS":
+            if self.lots <= 0:
+                return "lots not set"
+        else:
+            if self.quantity <= 0:
+                return "quantity not set"
+            if lot > 1 and self.quantity % lot:
+                # Name the two nearest sizes that would work. Never suggest zero:
+                # "use 0" is not advice, and below one lot the only way up is up.
+                below = self.quantity // lot * lot
+                above = below + lot
+                nearest = f"{below} or {above}" if below else str(above)
+                return (f"quantity {self.quantity} is not a whole multiple of the "
+                        f"lot size {lot} — use {nearest}")
+        qty = self.effective_quantity(lot)
+        if qty > self.max_quantity:
+            return f"quantity {qty} exceeds the cap of {self.max_quantity}"
+        return None
 
     def as_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self)}

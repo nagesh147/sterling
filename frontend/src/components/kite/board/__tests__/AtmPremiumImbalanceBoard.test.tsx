@@ -49,7 +49,8 @@ function session(over: any = {}) {
 
 beforeEach(() => {
   cfg = { config: { enabled: true } };
-  snap = { data: { strategy: {}, config: {}, resolved: null, blockers: [], session: null },
+  snap = { data: { strategy: {}, config: {}, resolved: null, blockers: [], session: null,
+                   sizing: undefined },
            isLoading: false, error: null };
   armState = { mutate: vi.fn(), isPending: false, error: null, data: undefined };
 });
@@ -142,3 +143,31 @@ describe('AtmPremiumImbalanceBoard', () => {
     expect(screen.getByText('SENSEX26AUG77700PE')).toBeTruthy();
   });
 });
+
+describe('what arming would buy', () => {
+  it('says the contract count, not just the lot count', () => {
+    // "2 lots" is not a number of contracts, and the risk is in the contracts.
+    snap = { ...snap, data: { ...snap.data,
+      sizing: { mode: 'LOTS', lot_size: 20, quantity: 40 } } };
+    view();
+    expect(screen.getByText(/Will buy/)).toBeTruthy();
+    expect(screen.getByText('40')).toBeTruthy();
+    expect(screen.getByText(/\(2 × 20\)/)).toBeTruthy();
+  });
+
+  it('does not show the lot arithmetic in quantity mode', () => {
+    snap = { ...snap, data: { ...snap.data,
+      sizing: { mode: 'QUANTITY', lot_size: 20, quantity: 40 } } };
+    view();
+    expect(screen.getByText('40')).toBeTruthy();
+    expect(screen.queryByText(/× 20/)).toBeNull();
+  });
+
+  it('stays quiet when no size is set', () => {
+    snap = { ...snap, data: { ...snap.data,
+      sizing: { mode: 'LOTS', lot_size: 20, quantity: 0 } } };
+    view();
+    expect(screen.queryByText(/Will buy/)).toBeNull();
+  });
+});
+

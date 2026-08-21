@@ -505,8 +505,9 @@ async def test_a_fraction_of_a_lot_is_refused_before_the_open(fake_tm, arming, m
     monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
 
     out = await R.arm("u1")
-    assert out["status"] == "quantity_not_whole_lots"
+    assert out["status"] == "invalid_size"
     assert "lot size 20" in out["message"]
+    assert "use 20" in out["message"]          # and it names a size that works
     assert fake_tm.subscribed == []          # a refusal claims nothing
     assert R.active_session("u1") is None
 
@@ -517,3 +518,36 @@ async def test_whole_lots_are_accepted(fake_tm, arming, monkeypatch):
     cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=40).validate()
     monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
     assert (await R.arm("u1"))["status"] == "armed"
+
+
+@pytest.mark.asyncio
+async def test_lots_mode_multiplies_by_the_contract_lot_size(fake_tm, arming, monkeypatch):
+    """Saying "2 lots" must order 40 -- the operator should not have to know 20."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=2).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+
+    out = await R.arm("u1")
+    assert out["status"] == "armed"
+    assert out["quantity"] == 40 and out["lots"] == 2
+    assert R.active_session("u1").strategy.quantity == 40
+
+
+@pytest.mark.asyncio
+async def test_lots_mode_still_refuses_an_unset_size(fake_tm, arming, monkeypatch):
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=0).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    assert (await R.arm("u1"))["status"] == "no_quantity"
+
+
+@pytest.mark.asyncio
+async def test_lots_mode_respects_the_quantity_cap(fake_tm, arming, monkeypatch):
+    """The cap is in quantity, so lots have to be converted before comparing."""
+    import app.services.atm_premium_imbalance as svc
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=100,
+                                    max_quantity=500).validate()
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg, raising=False)
+    out = await R.arm("u1")
+    assert out["status"] == "invalid_size"
+    assert "exceeds the cap of 500" in out["message"]

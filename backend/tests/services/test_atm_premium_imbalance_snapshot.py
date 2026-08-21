@@ -34,7 +34,12 @@ def resolving(monkeypatch):
 
 
 def _with_quantity(monkeypatch, quantity):
-    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=quantity)
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="QUANTITY", quantity=quantity)
+    monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg)
+
+
+def _with_lots(monkeypatch, lots, **kw):
+    cfg = ATMPremiumImbalanceConfig(enabled=True, sizing_mode="LOTS", lots=lots, **kw)
     monkeypatch.setattr(svc, "get_config", lambda *a, **k: cfg)
 
 
@@ -67,3 +72,47 @@ async def test_a_lot_size_of_one_never_blocks(monkeypatch, resolving):
     _with_quantity(monkeypatch, 7)
     out = await svc.snapshot("u1")
     assert out["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_lots_are_reported_as_the_quantity_they_become(monkeypatch, resolving):
+    """The board should show what will actually be ordered, not just "2 lots"."""
+    _with_lots(monkeypatch, 2)
+    out = await svc.snapshot("u1")
+    assert out["sizing"] == {"mode": "LOTS", "lot_size": 20, "quantity": 40}
+    assert out["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_lots_cannot_be_a_fraction_of_a_lot_by_construction(monkeypatch, resolving):
+    """Whatever the lot count, the result is whole lots -- that is the point."""
+    for n in (1, 3, 7):
+        _with_lots(monkeypatch, n)
+        out = await svc.snapshot("u1")
+        assert out["sizing"]["quantity"] % 20 == 0
+        assert out["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_unset_lots_say_lots_not_quantity(monkeypatch, resolving):
+    """The message has to match the box the operator is looking at."""
+    _with_lots(monkeypatch, 0)
+    out = await svc.snapshot("u1")
+    assert out["blockers"] == ["lots not set"]
+
+
+@pytest.mark.asyncio
+async def test_too_many_lots_is_reported_in_quantity(monkeypatch, resolving):
+    _with_lots(monkeypatch, 100, max_quantity=500)
+    out = await svc.snapshot("u1")
+    assert any("exceeds the cap of 500" in b for b in out["blockers"])
+
+
+@pytest.mark.asyncio
+async def test_the_suggested_quantity_actually_works(monkeypatch, resolving):
+    """The advice must be usable: feed it back and the blocker goes away."""
+    _with_quantity(monkeypatch, 25)
+    out = await svc.snapshot("u1")
+    assert "use 20 or 40" in out["blockers"][0]
+    _with_quantity(monkeypatch, 40)
+    assert (await svc.snapshot("u1"))["blockers"] == []

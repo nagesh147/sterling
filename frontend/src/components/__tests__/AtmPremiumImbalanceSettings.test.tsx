@@ -47,6 +47,8 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   stop_points: 0,
   max_hold_seconds: 0,
   max_trades_per_session: 1,
+  sizing_mode: 'QUANTITY',
+  lots: 0,
   quantity: 0,
   max_quantity: 500,
   max_premium_at_risk_inr: 25000,
@@ -80,6 +82,7 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
         defaults: DEFAULTS,
         vocabularies: {
           quote_mode: ['COMPATIBILITY', 'EXECUTABLE', 'SYNCHRONIZED'],
+          sizing_mode: ['LOTS', 'QUANTITY'],
           data_source: ['kite', 'truedata'],
         },
         research_only: {
@@ -89,6 +92,10 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
       },
       isLoading: false,
       error: null,
+    }),
+    useAtmPremiumImbalanceSnapshot: () => ({
+      data: { resolved: { ce: { lot_size: 20 }, pe: { lot_size: 20 } } },
+      isLoading: false, error: null,
     }),
     useSetAtmPremiumImbalanceConfig: () => ({
       mutate: setConfig, isPending: false, isError: false, error: null,
@@ -161,5 +168,48 @@ describe('AtmPremiumImbalanceSettings', () => {
     serverConfig = { ...DEFAULTS, expiry_policy: 'EXPLICIT' };
     render(<AtmPremiumImbalanceSettings />);
     expect(screen.getByPlaceholderText('YYYY-MM-DD')).toBeInTheDocument();
+  });
+});
+
+describe('stating the trade size', () => {
+  // "Lots" and "Quantity" are each both a mode button and a field label, so
+  // these assert on the hints — the only text unique to one box.
+  const LOTS_HINT = /One lot is 20 contracts/;
+  const QTY_HINT = /Must be a multiple of 20/;
+
+  it('offers lots or quantity', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getAllByTitle(/Say how many lots/).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(/Say the exact number of contracts/).length).toBeGreaterThan(0);
+  });
+
+  it('shows one size box at a time, matching the chosen mode', () => {
+    serverConfig = { ...DEFAULTS, sizing_mode: 'QUANTITY', quantity: 20 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(QTY_HINT)).toBeInTheDocument();
+    expect(screen.queryByText(LOTS_HINT)).not.toBeInTheDocument();
+  });
+
+  it('spells out what a lot count actually orders', () => {
+    // The hint has to do the arithmetic; "2" on its own tells the operator
+    // nothing about how much they are buying.
+    serverConfig = { ...DEFAULTS, sizing_mode: 'LOTS', lots: 2 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(/One lot is 20 contracts, so this orders 40/)).toBeInTheDocument();
+    expect(screen.queryByText(QTY_HINT)).not.toBeInTheDocument();
+  });
+
+  it('reads the lot size from the resolved contract, not a hardcoded 20', () => {
+    serverConfig = { ...DEFAULTS, sizing_mode: 'LOTS', lots: 3 };
+    render(<AtmPremiumImbalanceSettings />);
+    expect(screen.getByText(/so this orders 60/)).toBeInTheDocument();
+  });
+
+  it('switching mode is a draft, like every other change here', () => {
+    serverConfig = { ...DEFAULTS, sizing_mode: 'QUANTITY', quantity: 20 };
+    render(<AtmPremiumImbalanceSettings />);
+    fireEvent.click(screen.getAllByTitle(/Say how many lots/)[0]);
+    expect(screen.getByText(LOTS_HINT)).toBeInTheDocument();   // the box swaps at once
+    expect(setConfig).not.toHaveBeenCalled();                  // but nothing is sent
   });
 });
