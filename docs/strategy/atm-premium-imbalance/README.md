@@ -1,12 +1,20 @@
 # ATM Premium Imbalance
 
-**What it does.** At the index option market open, compares the at-the-money
-call and put premiums, buys whichever is cheaper, and exits at the entry fill
-plus a fixed +15 points. One trade per session. Both directions are observed:
-the call is bought when it is cheaper, the put when it is.
+**What the recordings showed.** At the index option market open, compare the
+at-the-money call and put premiums, buy whichever is cheaper, exit at the entry
+fill plus a fixed +15 points. One trade per session. No indicators, no stop, no
+time stop. Both directions are observed: the call when it is cheaper, the put
+when it is.
 
-**What it does not do.** No indicators. No stop loss. No time stop. No
-convergence exit. No auto-sizing. It is one comparison and one target.
+**What this build does.** All of the above, plus protections the source bot did
+not have — a trailing stop, enforced risk limits, crash recovery, a bounded
+trading window. Everything added here is labelled as ours, in the config, in the
+panel and in [A280_END_TO_END.md](A280_END_TO_END.md). The observed policy
+remains the default so the conformance evidence still stands.
+
+> **Read [A280_END_TO_END.md](A280_END_TO_END.md) first** — it is the complete
+> artifact-by-artifact reference and it separates what was proved from what was
+> built.
 
 ## Documents
 
@@ -17,6 +25,8 @@ convergence exit. No auto-sizing. It is one comparison and one target.
 | [A232_PARAMETER_PROVENANCE.md](A232_PARAMETER_PROVENANCE.md) | Where each default came from, and what was rejected |
 | [A265_ARCHITECTURE.md](A265_ARCHITECTURE.md) | Modules, data flow, state machines, failure paths |
 | [A266_RUNBOOK.md](A266_RUNBOOK.md) | Operating it, and the live-readiness gate |
+| [A280_END_TO_END.md](A280_END_TO_END.md) | **Complete reference** — every artifact, module, setting, route and test |
+| [VALIDATION_REPORT.md](VALIDATION_REPORT.md) | What was checked against real data, and what is still unproven |
 
 ## Provenance, stated plainly
 
