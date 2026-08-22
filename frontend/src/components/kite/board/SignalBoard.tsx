@@ -14,7 +14,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, groupByDay, sessionDayLabel,
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, groupByDay, sessionDayLabel,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -55,6 +55,102 @@ export const COLUMNS: readonly ColumnDef[] = [
   { id: 'score', label: 'Score', width: '56px', align: 'right', hint: 'Engine conviction. Not comparable across engines' },
   { id: 'time', label: 'Time', width: '92px', align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
 ];
+
+export interface SortState {
+  column: ColumnId;
+  direction: 'asc' | 'desc';
+}
+
+/** The board's default: most recent first, which is what a scan produces. */
+export const DEFAULT_SORT: SortState = { column: 'time', direction: 'desc' };
+
+/**
+ * What each column sorts on.
+ *
+ * Returning a string sorts alphabetically, a number numerically, and null
+ * always sinks to the bottom regardless of direction — a row with no stop is
+ * not "the smallest stop", it is a row that has nothing to compare.
+ */
+function sortKey(signal: BoardSignal, column: ColumnId): string | number | null {
+  switch (column) {
+    case 'instrument': return signal.underlying;
+    case 'engine': return signal.engine;
+    case 'status': return STATUS_RANK[signal.status];
+    case 'exchange': return signal.instrument.exchange;
+    case 'leg': return signal.instrument.symbol;
+    case 'ltp': return signal.levels.ltp;
+    case 'entry': return signal.levels.entry;
+    case 'stop': return signal.levels.stop;
+    case 'trail': return signal.levels.trail;
+    case 'target': return signal.levels.target;
+    case 'exit': return signal.levels.exit;
+    case 'qty': return signal.sizing.quantity;
+    case 'risk': return signal.sizing.atRiskInr;
+    case 'score': return signal.score;
+    case 'time': return signal.atMs;
+    default: return null;
+  }
+}
+
+/**
+ * Orders rows within one day.
+ *
+ * Sorting deliberately does NOT cross day boundaries: the day grouping is the
+ * board's primary organisation, and a sort that reshuffled rows out of their
+ * session would answer a question nobody asked. Sort by risk and you get the
+ * largest risk of today, then the largest of yesterday.
+ */
+export function sortSignals(signals: readonly BoardSignal[], sort: SortState): BoardSignal[] {
+  const factor = sort.direction === 'asc' ? 1 : -1;
+  return [...signals].sort((a, b) => {
+    const ka = sortKey(a, sort.column);
+    const kb = sortKey(b, sort.column);
+    // Missing values sink, both ways, so flipping direction never promotes a
+    // row that has nothing to say to the top of the board.
+    if (ka == null && kb == null) return 0;
+    if (ka == null) return 1;
+    if (kb == null) return -1;
+    if (typeof ka === 'string' || typeof kb === 'string') {
+      return String(ka).localeCompare(String(kb)) * factor;
+    }
+    return (ka - kb) * factor;
+  });
+}
+
+/**
+ * Clicking a column sorts it; clicking the same one again flips it.
+ *
+ * A new column starts descending for numbers and ascending for names, because
+ * "biggest first" and "A first" are what each is usually reached for.
+ */
+export function nextSort(current: SortState, column: ColumnId): SortState {
+  if (current.column === column) {
+    return { column, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+  }
+  const alphabetical = column === 'instrument' || column === 'leg' || column === 'exchange' || column === 'engine';
+  return { column, direction: alphabetical ? 'asc' : 'desc' };
+}
+
+function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: 'inline-flex', flexDirection: 'column', gap: 1, marginLeft: 3,
+        verticalAlign: 'middle', opacity: direction ? 1 : 0, transition: 'opacity .12s ease',
+      }}
+    >
+      <span style={{
+        width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent',
+        borderBottom: `3px solid ${direction === 'asc' ? k.text : 'transparent'}`,
+      }} />
+      <span style={{
+        width: 0, height: 0, borderLeft: '3px solid transparent', borderRight: '3px solid transparent',
+        borderTop: `3px solid ${direction === 'desc' ? k.text : 'transparent'}`,
+      }} />
+    </span>
+  );
+}
 
 const STATUS_TONE: Record<BoardStatus, string> = {
   armed: k.blue,
@@ -297,6 +393,7 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
+  sort = DEFAULT_SORT, onSortChange,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -306,6 +403,10 @@ export function SignalBoard({
   renderDetail?: (signal: BoardSignal) => React.ReactNode;
   /** Opens the full detail page. Makes the instrument label a control. */
   onOpenDetail?: (signal: BoardSignal) => void;
+  /** Column ordering, applied within each day. */
+  sort?: SortState;
+  /** Omit to make the header static — the board is then unsortable. */
+  onSortChange?: (next: SortState) => void;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -338,23 +439,40 @@ export function SignalBoard({
         }}
       >
         <span />
-        {cols.map((col) => (
-          <Tip key={col.id} text={col.hint ? `${col.label} — ${col.hint}` : undefined}>
-            <span
-              // Focusable so the explanation is reachable without a mouse; the
-              // header is where the board says what each number means.
-              tabIndex={col.hint ? 0 : undefined}
-              style={{
-                fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim,
-                textTransform: 'uppercase', textAlign: col.align, whiteSpace: 'nowrap',
-                overflow: 'hidden', textOverflow: 'ellipsis', cursor: col.hint ? 'help' : undefined,
-                outlineOffset: 2,
-              }}
+        {cols.map((col) => {
+          const active = sort.column === col.id;
+          const direction = active ? sort.direction : null;
+          return (
+            <Tip
+              key={col.id}
+              text={col.hint ? `${col.label} — ${col.hint}. Click to sort within each day.` : `${col.label} — click to sort within each day.`}
             >
-              {col.label}
-            </span>
-          </Tip>
-        ))}
+              <button
+                type="button"
+                className="sb-head"
+                // aria-sort belongs on the header cell, and it is how a screen
+                // reader announces which column the board is ordered by.
+                aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onClick={() => onSortChange?.(nextSort(sort, col.id))}
+                disabled={!onSortChange}
+                style={{
+                  border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+                  fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em',
+                  color: active ? k.text : k.dim,
+                  textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  cursor: onSortChange ? 'pointer' : 'default',
+                  outlineOffset: 2, minWidth: 0,
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: col.align === 'right' ? 'flex-end' : 'flex-start',
+                }}
+              >
+                {col.label}
+                <SortMark direction={direction} />
+              </button>
+            </Tip>
+          );
+        })}
       </div>
 
       {days.map(({ key, signals: rows }) => (
@@ -374,7 +492,7 @@ export function SignalBoard({
               })()}
             </span>
           </h3>
-          {rows.map((signal) => (
+          {sortSignals(rows, sort).map((signal) => (
             <Row
               key={signal.id}
               signal={signal}

@@ -7,7 +7,7 @@ import { openSettingsSection } from './config/registry';
 import { EngineOffNotice } from './EngineOffNotice';
 import { DepthLadder, QuoteStats } from './MarketDepthPanel';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
-import { SignalBoard } from './board/SignalBoard';
+import { DEFAULT_SORT, SignalBoard } from './board/SignalBoard';
 import { StatCard } from './board/StatCard';
 import { orbToBoard } from './board/orbAdapter';
 import { ACTIONABLE, type BoardSignal } from './board/boardTypes';
@@ -95,6 +95,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
   const enabled = config.data?.config?.enabled;
   const { signals, isLoading, error } = useOrbSignals(enabled !== false);
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [sort, setSort] = React.useState(DEFAULT_SORT);
   const [showQuiet, setShowQuiet] = React.useState(false);
   // Read once per render rather than per row, so every day label in one paint
   // agrees about when "today" is.
@@ -156,6 +157,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
         onToggle={(id) => setOpenId((prev) => (prev === id ? null : id))}
         renderDetail={(s) => <OrbTicket signal={s} />}
         onOpenDetail={onOpenDetail}
+        sort={sort}
+        onSortChange={setSort}
         nowMs={nowMs}
         emptyLabel="No tradable ORB setup right now. The universe is being scanned — the list below says what each underlying is waiting on."
       />

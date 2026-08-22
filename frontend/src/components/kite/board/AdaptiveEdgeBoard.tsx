@@ -9,7 +9,7 @@ import React from 'react';
 import { useAdaptiveEdgeSnapshot } from '../../../hooks/useAdaptiveEdge';
 import { rowsFromSnapshot } from '../AdaptiveEdgePanel';
 import { adaptiveEdgeToBoard } from './adaptiveEdgeAdapter';
-import { SignalBoard } from './SignalBoard';
+import { DEFAULT_SORT, SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
@@ -26,6 +26,7 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
   );
   const view = useBoardView(signals);
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [sort, setSort] = React.useState(DEFAULT_SORT);
 
   if (snapshot.isLoading && !snapshot.data) {
     return <p style={{ padding: 12, margin: 0, fontSize: 11, color: k.dim }}>Loading Adaptive Edge…</p>;
@@ -43,6 +44,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
         onOpenDetail={onOpenDetail}
+        sort={sort}
+        onSortChange={setSort}
         nowMs={nowMs}
         emptyLabel={
           view.counts.total

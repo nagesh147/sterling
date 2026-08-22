@@ -507,3 +507,13 @@ button, a, input, select, textarea,
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* Sortable column headers. The sort arrows are hidden until the column is
+   active or hovered, so a twelve-column board is not a wall of chevrons. */
+.sb-head:hover:not(:disabled) { color: var(--k-text) !important; }
+.sb-head:hover:not(:disabled) > span[aria-hidden] { opacity: .45 !important; }
+.sb-head:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

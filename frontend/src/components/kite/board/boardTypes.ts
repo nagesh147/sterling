@@ -142,6 +142,17 @@ export interface BoardSignal {
   sections: BoardSection[];
 }
 
+/**
+ * Sort order for the status column.
+ *
+ * Alphabetical would be meaningless here. This is the order a trade passes
+ * through, which puts what needs acting on at the top and the historical
+ * record at the bottom — the same reason ACTIONABLE exists.
+ */
+export const STATUS_RANK: Record<BoardStatus, number> = {
+  armed: 0, running: 1, weakening: 2, watching: 3, ended: 4, error: 5,
+};
+
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
 export function sessionDayKey(atMs: number | null): string {
   if (atMs == null) return 'unknown';
