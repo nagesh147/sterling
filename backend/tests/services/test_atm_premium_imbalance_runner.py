@@ -53,13 +53,38 @@ def _pair():
                          ce=leg("CE", "111"), pe=leg("PE", "222"))
 
 
-def _session(protection_mode="NONE", quantity=20):
+#: Seconds after the open that an unpinned fixture pretends it is.
+#:
+#: Without this these tests only pass if you happen to run them between 09:15
+#: and 09:20 IST. `entry_window_seconds` defaults to 300, so at any other hour
+#: the strategy correctly refuses with `entry_window_closed` and every
+#: assertion about signals, orders and log lines fails -- looking like sixteen
+#: broken behaviours rather than one wall-clock-dependent fixture.
+_DEFAULT_CLOCK_OFFSET_S = 30
+
+
+def _open_ms(day=None) -> int:
+    """Epoch ms of 09:15 IST on `day`, defaulting to today."""
+    d = day or datetime.now(IST).date()
+    return int(datetime(d.year, d.month, d.day, 9, 15, tzinfo=IST).timestamp() * 1000)
+
+
+def _session(protection_mode="NONE", quantity=20, clock_ms=-1):
+    """A registered-ready session whose clock sits just inside the entry window.
+
+    `clock_ms` defaults to 09:15:30 IST today. Pass `None` to use the wall clock
+    instead -- which is what `_session_on` does, because it pins `R._now_ms`
+    itself and a session-level clock would override that pin.
+    """
     pair = _pair()
     cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=quantity,
                                     protection_mode=protection_mode).validate()
     strat = ATMPremiumImbalanceStrategy(cfg=cfg, pair=pair, quantity=quantity, trade_id="t")
+    if clock_ms == -1:
+        clock_ms = _open_ms() + _DEFAULT_CLOCK_OFFSET_S * 1000
     return R.Session(user_id="u1", cfg=cfg, pair=pair, strategy=strat,
-                     session_date=datetime.now(IST).date(), ce_token=111, pe_token=222)
+                     session_date=datetime.now(IST).date(), ce_token=111, pe_token=222,
+                     clock_ms=clock_ms)
 
 
 def tick(token, ltp, bid, ask):
@@ -282,7 +307,7 @@ def _session_on(monkeypatch, at_ms, **kw):
     over — which is a broken fixture, not a finding.
     """
     _pin_clock(monkeypatch, at_ms)
-    s = _session(**kw)
+    s = _session(clock_ms=None, **kw)
     s.session_date = datetime.fromtimestamp(at_ms / 1000, tz=IST).date()
     R.register(s)
     return s
@@ -565,3 +590,37 @@ async def test_lots_mode_respects_the_quantity_cap(fake_tm, arming, monkeypatch)
     out = await R.arm("u1")
     assert out["status"] == "invalid_size"
     assert "exceeds the cap of 500" in out["message"]
+
+
+def test_the_session_fixture_is_not_wall_clock_dependent():
+    """Guards the fixture itself, so this cannot rot back into 16 mystery failures.
+
+    `_session()` used to take the wall clock, which meant every test asserting a
+    signal, an order or a log line only passed between 09:15 and 09:20 IST. At
+    any other hour the strategy correctly refused with `entry_window_closed`, and
+    sixteen tests failed in a way that looked like sixteen broken behaviours
+    instead of one broken fixture.
+
+    If someone removes the clock pin, this fails and says why.
+    """
+    s = _session()
+    assert s.clock_ms is not None, "the fixture must pin its own clock"
+    elapsed_s = (s.now_ms() - _open_ms()) / 1000.0
+    window = s.cfg.entry_window_seconds
+    assert 0 <= elapsed_s < window, (
+        f"the fixture clock sits {elapsed_s:.0f}s after the open but the entry "
+        f"window is {window}s — every entry assertion would refuse on "
+        "entry_window_closed"
+    )
+
+
+def test_the_pinned_variant_defers_to_its_own_clock():
+    """`_session_on` pins `R._now_ms`, so it must not carry a session clock too.
+
+    A session-level clock overrides the module pin, which would silently ignore
+    the timestamp the test asked for.
+    """
+    import types
+    mp = types.SimpleNamespace(setattr=lambda *a: None)
+    s = _session(clock_ms=None)
+    assert s.clock_ms is None
