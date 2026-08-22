@@ -60,7 +60,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
 
   const tabs: EngineTabState[] = useMemo(() => {
     const st = supertrendToBoard(engineSignals.data?.rows ?? []);
-    const ae = snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : [];
+    const ae = snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : [];
     const ob = orb.signals.map(orbToBoard);
     const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;

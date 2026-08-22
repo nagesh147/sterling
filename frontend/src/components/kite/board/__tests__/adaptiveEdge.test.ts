@@ -2,7 +2,7 @@
  * The Adaptive Edge adapter and the board's view filters.
  */
 import { describe, it, expect } from 'vitest';
-import { adaptiveEdgeToBoard } from '../adaptiveEdgeAdapter';
+import { adaptiveEdgeLegToBoard, adaptiveEdgeToBoard } from '../adaptiveEdgeAdapter';
 import type { AdaptiveEdgeRow } from '../../AdaptiveEdgePanel';
 
 const row = (over: Partial<AdaptiveEdgeRow> = {}): AdaptiveEdgeRow => ({
@@ -23,14 +23,14 @@ describe('Adaptive Edge sizing', () => {
     // Putting lot size under "Qty" would assert a position this app never
     // sized — the bug class that once showed 2,400 units of an 18-rupee
     // option labelled "risk Rs 3,000".
-    const s = adaptiveEdgeToBoard(row());
+    const s = adaptiveEdgeLegToBoard(row());
     expect(s.sizing.quantity).toBeNull();
     expect(s.sizing.atRiskInr).toBeNull();
     expect(s.sizing.deployedInr).toBeNull();
   });
 
   it('states the per-lot economics instead, labelled as per-lot', () => {
-    const lot = adaptiveEdgeToBoard(row()).sections.find((x) => x.title === 'Per lot')!;
+    const lot = adaptiveEdgeLegToBoard(row()).sections.find((x) => x.title === 'Per lot')!;
     expect(lot.summary).toBe('400 per lot');
     // (13 - 6.7) x 400 = 2,520.
     expect(lot.stats.find((x) => x.label === 'Risk on one lot')!.value).toBe('₹2,520');
@@ -38,26 +38,26 @@ describe('Adaptive Edge sizing', () => {
   });
 
   it('omits the per-lot block when there is no lot size', () => {
-    expect(adaptiveEdgeToBoard(row({ lotSize: null })).sections.map((x) => x.title)).not.toContain('Per lot');
+    expect(adaptiveEdgeLegToBoard(row({ lotSize: null })).sections.map((x) => x.title)).not.toContain('Per lot');
   });
 
   it('still carries the lot size on the instrument, for the order ticket', () => {
-    expect(adaptiveEdgeToBoard(row()).instrument.lotSize).toBe(400);
+    expect(adaptiveEdgeLegToBoard(row()).instrument.lotSize).toBe(400);
   });
 });
 
 describe('Adaptive Edge status', () => {
   it('separates a position being withdrawn from one that is running', () => {
-    expect(adaptiveEdgeToBoard(row({ decision: 'HOLD' })).status).toBe('running');
-    expect(adaptiveEdgeToBoard(row({ decision: 'EXIT' })).status).toBe('weakening');
+    expect(adaptiveEdgeLegToBoard(row({ decision: 'HOLD' })).status).toBe('running');
+    expect(adaptiveEdgeLegToBoard(row({ decision: 'EXIT' })).status).toBe('weakening');
   });
 
   it('ends a closed row whatever the model last decided', () => {
-    expect(adaptiveEdgeToBoard(row({ open: false, decision: 'HOLD' })).status).toBe('ended');
+    expect(adaptiveEdgeLegToBoard(row({ open: false, decision: 'HOLD' })).status).toBe('ended');
   });
 
   it('arms a row that has no entry time yet', () => {
-    expect(adaptiveEdgeToBoard(row({ entryTime: null })).status).toBe('armed');
+    expect(adaptiveEdgeLegToBoard(row({ entryTime: null })).status).toBe('armed');
   });
 });
 
@@ -66,18 +66,18 @@ describe('prices that are not levels', () => {
     // Feeds emit 0 for "no stop set". Rendered as "0.00" that is
     // indistinguishable from a real stop, and on a bought option it is the
     // difference between a protected position and an unprotected one.
-    expect(adaptiveEdgeToBoard(row({ sl: 0 })).levels.stop).toBeNull();
-    expect(adaptiveEdgeToBoard(row({ tsl: 0 })).levels.trail).toBeNull();
-    expect(adaptiveEdgeToBoard(row({ ltp: 0 })).levels.ltp).toBeNull();
+    expect(adaptiveEdgeLegToBoard(row({ sl: 0 })).levels.stop).toBeNull();
+    expect(adaptiveEdgeLegToBoard(row({ tsl: 0 })).levels.trail).toBeNull();
+    expect(adaptiveEdgeLegToBoard(row({ ltp: 0 })).levels.ltp).toBeNull();
   });
 
   it('does not price a lot off a zero stop', () => {
-    const lot = adaptiveEdgeToBoard(row({ sl: 0 })).sections.find((x) => x.title === 'Per lot')!;
+    const lot = adaptiveEdgeLegToBoard(row({ sl: 0 })).sections.find((x) => x.title === 'Per lot')!;
     expect(lot.stats.find((x) => x.label === 'Risk on one lot')!.value).toBeUndefined();
   });
 
   it('keeps a real stop', () => {
-    expect(adaptiveEdgeToBoard(row({ sl: 6.7 })).levels.stop).toBe(6.7);
+    expect(adaptiveEdgeLegToBoard(row({ sl: 6.7 })).levels.stop).toBe(6.7);
   });
 });
 
@@ -85,16 +85,16 @@ describe('venue', () => {
   it('routes an option to the derivatives exchange', () => {
     // Rows carry the underlying's exchange, so an NFO contract arrives tagged
     // NSE. You cannot buy KOTAKBANK26AUG385CE on NSE.
-    expect(adaptiveEdgeToBoard(row({ exchange: 'NSE' })).instrument.exchange).toBe('NFO');
-    expect(adaptiveEdgeToBoard(row({ exchange: 'BSE' })).instrument.exchange).toBe('BFO');
+    expect(adaptiveEdgeLegToBoard(row({ exchange: 'NSE' })).instrument.exchange).toBe('NFO');
+    expect(adaptiveEdgeLegToBoard(row({ exchange: 'BSE' })).instrument.exchange).toBe('BFO');
   });
 
   it('leaves a spot row on its cash exchange', () => {
-    expect(adaptiveEdgeToBoard(row({ kind: 'spot', exchange: 'NSE' })).instrument.exchange).toBe('NSE');
+    expect(adaptiveEdgeLegToBoard(row({ kind: 'spot', exchange: 'NSE' })).instrument.exchange).toBe('NSE');
   });
 
   it('passes an already-derivative venue through', () => {
-    expect(adaptiveEdgeToBoard(row({ exchange: 'NFO' })).instrument.exchange).toBe('NFO');
+    expect(adaptiveEdgeLegToBoard(row({ exchange: 'NFO' })).instrument.exchange).toBe('NFO');
   });
 });
 
@@ -102,7 +102,7 @@ describe('Adaptive Edge levels', () => {
   it('keeps the two price frames apart', () => {
     // The columns are the option's prices — those are what an order uses.
     // Spot levels belong to a different instrument and get their own block.
-    const s = adaptiveEdgeToBoard(row());
+    const s = adaptiveEdgeLegToBoard(row());
     expect(s.levels.entry).toBe(13);
     expect(s.levels.stop).toBe(6.7);
     const spot = s.sections.find((x) => x.title === 'Spot microstructure & order flow')!;
@@ -111,16 +111,65 @@ describe('Adaptive Edge levels', () => {
   });
 
   it('reads one exit level as planned while open and realised once closed', () => {
-    const open = adaptiveEdgeToBoard(row({ open: true, exit: 20 }));
+    const open = adaptiveEdgeLegToBoard(row({ open: true, exit: 20 }));
     expect(open.levels.target).toBe(20);
     expect(open.levels.exit).toBeNull();
-    const closed = adaptiveEdgeToBoard(row({ open: false, exit: 20 }));
+    const closed = adaptiveEdgeLegToBoard(row({ open: false, exit: 20 }));
     expect(closed.levels.target).toBeNull();
     expect(closed.levels.exit).toBe(20);
   });
 
   it('treats a SELL side as short even on a call', () => {
-    expect(adaptiveEdgeToBoard(row({ side: 'SELL' })).direction).toBe('short');
-    expect(adaptiveEdgeToBoard(row({ side: 'BUY' })).direction).toBe('long');
+    expect(adaptiveEdgeLegToBoard(row({ side: 'SELL' })).direction).toBe('short');
+    expect(adaptiveEdgeLegToBoard(row({ side: 'BUY' })).direction).toBe('long');
+  });
+});
+
+describe('Adaptive Edge grouping', () => {
+  const leg = (id: string, parentId: string, over: Partial<AdaptiveEdgeRow> = {}) =>
+    row({ id, parentId, ...over });
+
+  it('gathers the legs of one signal under it', () => {
+    // The board was showing five consecutive KOTAKBANK rows differing only by
+    // strike. parentId already says which legs belong together.
+    const board = adaptiveEdgeToBoard([
+      leg('a', 'p1', { strike: 380 }),
+      leg('b', 'p1', { strike: 385 }),
+      leg('c', 'p2', { underlying: 'FINNIFTY' }),
+      leg('d', 'p2', { underlying: 'FINNIFTY' }),
+    ]);
+    expect(board).toHaveLength(2);
+    expect(board[0].children).toHaveLength(2);
+    expect(board[0].instrument.symbol).toBe('KOTAKBANK');
+  });
+
+  it('leaves a single-leg signal as a single row', () => {
+    // Wrapping one leg in a parent hides one thing behind one click.
+    const board = adaptiveEdgeToBoard([leg('a', 'p1')]);
+    expect(board).toHaveLength(1);
+    expect(board[0].children).toBeUndefined();
+    expect(board[0].instrument.symbol).toBe('KOTAKBANK26AUG385CE');
+  });
+
+  it('empties the parent’s price columns', () => {
+    const [parent] = adaptiveEdgeToBoard([leg('a', 'p1'), leg('b', 'p1')]);
+    expect(parent.levels.entry).toBeNull();
+    expect(parent.children![0].levels.entry).toBe(13);
+  });
+
+  it('keeps spot microstructure on the idea and per-lot on the contract', () => {
+    const [parent] = adaptiveEdgeToBoard([leg('a', 'p1'), leg('b', 'p1')]);
+    const titles = parent.sections.map((s) => s.title);
+    expect(titles).toContain('Spot microstructure & order flow');
+    expect(titles).not.toContain('Per lot');
+    expect(parent.children![0].sections.map((s) => s.title)).toContain('Per lot');
+  });
+
+  it('takes the liveliest leg’s status', () => {
+    const [parent] = adaptiveEdgeToBoard([
+      leg('a', 'p1', { open: false }),
+      leg('b', 'p1', { open: true, decision: 'HOLD' }),
+    ]);
+    expect(parent.status).toBe('running');
   });
 });

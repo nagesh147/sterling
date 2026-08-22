@@ -131,7 +131,7 @@ function lotSection(row: AdaptiveEdgeRow): BoardSection | null {
   };
 }
 
-export function adaptiveEdgeToBoard(row: AdaptiveEdgeRow): BoardSignal {
+export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
   const sections = [spotSection(row), lotSection(row), modeSection(row)].filter(Boolean) as BoardSection[];
   // A SELL side is a short even when the contract is a call, so the option type
   // alone cannot tell you which way the position leans.
@@ -175,4 +175,59 @@ export function adaptiveEdgeToBoard(row: AdaptiveEdgeRow): BoardSignal {
     reason: row.whyClosed ?? row.resolutionReason ?? null,
     sections,
   };
+}
+
+/** Most-actionable first, so a group takes its liveliest leg's status. */
+const STATUS_ORDER: readonly BoardStatus[] = ['armed', 'running', 'weakening', 'watching', 'ended', 'error'];
+
+/**
+ * Group the legs of one signal under the idea they express.
+ *
+ * The board was showing five consecutive KOTAKBANK rows, then five FINNIFTY,
+ * differing only by strike — the same unreadability that would follow
+ * SuperTrend across if its signals were flattened. `parentId` already records
+ * which legs belong together; this just honours it.
+ *
+ * A signal that produced a single leg stays a single row. Wrapping one leg in
+ * a parent adds a disclosure that hides one thing behind one click.
+ */
+export function adaptiveEdgeToBoard(rows: readonly AdaptiveEdgeRow[]): BoardSignal[] {
+  const groups = new Map<string, AdaptiveEdgeRow[]>();
+  for (const row of rows) {
+    const list = groups.get(row.parentId);
+    if (list) list.push(row);
+    else groups.set(row.parentId, [row]);
+  }
+
+  return [...groups.values()].map((members) => {
+    const legs = members.map(adaptiveEdgeLegToBoard);
+    if (legs.length === 1) return legs[0];
+
+    const head = members[0];
+    const status = legs.reduce<BoardStatus>(
+      (best, leg) => (STATUS_ORDER.indexOf(leg.status) < STATUS_ORDER.indexOf(best) ? leg.status : best),
+      legs[0].status,
+    );
+    return {
+      ...legs[0],
+      id: `ae-group-${head.parentId}`,
+      instrument: {
+        symbol: head.underlying,
+        exchange: head.exchange,
+        kind: 'index' as const,
+        strike: null,
+        expiry: null,
+        lotSize: null,
+        quoteKey: null,
+      },
+      status,
+      // The thesis has no premium of its own; the legs carry those.
+      levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
+      sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
+      // Spot microstructure belongs to the idea, so it stays on the parent.
+      // Per-lot economics belong to a contract, so they go with the legs.
+      sections: legs[0].sections.filter((x) => x.title !== 'Per lot'),
+      children: legs,
+    };
+  });
 }

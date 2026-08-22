@@ -62,14 +62,25 @@ function saveHidden(storageKey: string | undefined, hidden: Set<ColumnId>): void
 }
 
 /** Matches an underlying, a contract symbol, or an exchange. */
-function matches(signal: BoardSignal, needle: string): boolean {
-  if (!needle) return true;
-  const q = needle.toLowerCase();
+function matchesSelf(signal: BoardSignal, q: string): boolean {
   return (
     signal.underlying.toLowerCase().includes(q)
     || signal.instrument.symbol.toLowerCase().includes(q)
     || signal.instrument.exchange.toLowerCase().includes(q)
   );
+}
+
+/**
+ * A grouped signal matches when it matches, or when any of its contracts do.
+ *
+ * Searching for a strike has to find the signal holding it — the parent row
+ * carries the underlying's name, not the contract's, so matching parents alone
+ * would hide the very leg you typed.
+ */
+function matches(signal: BoardSignal, needle: string): boolean {
+  if (!needle) return true;
+  const q = needle.toLowerCase();
+  return matchesSelf(signal, q) || (signal.children ?? []).some((c) => matchesSelf(c, q));
 }
 
 /**

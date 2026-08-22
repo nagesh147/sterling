@@ -14,7 +14,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, groupByDay, sessionDayLabel,
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, sessionDayLabel,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -197,6 +197,24 @@ function Pill({ tone, children, title }: { tone: string; children: React.ReactNo
   );
 }
 
+/**
+ * What kind of contract the row is, for the pill beside the symbol.
+ *
+ * A parent row has no contract of its own, so it borrows its legs' type when
+ * they agree and says nothing when they do not. It must not fall back to the
+ * security kind: the parent of an LT signal was reading "LTINDEX · LONG",
+ * and LT is a stock.
+ */
+function contractLabel(signal: BoardSignal): string | null {
+  if (signal.instrument.optionType) return signal.instrument.optionType;
+  const legs = signal.children ?? [];
+  if (legs.length) {
+    const types = new Set(legs.map((l) => l.instrument.optionType).filter(Boolean));
+    return types.size === 1 ? [...types][0]! : null;
+  }
+  return signal.instrument.kind === 'option' ? null : signal.instrument.kind.toUpperCase();
+}
+
 /** The value of one column for one signal, plus how to colour it. */
 function cellContent(
   signal: BoardSignal,
@@ -232,8 +250,8 @@ function cellContent(
                 {signal.underlying}
               </span>
             )}
-            <Pill tone={dirTone} title={`${signal.direction} ${signal.instrument.optionType ?? signal.instrument.kind}`}>
-              {signal.instrument.optionType ?? signal.instrument.kind.toUpperCase()} · {signal.direction.toUpperCase()}
+            <Pill tone={dirTone} title={`${signal.direction} ${contractLabel(signal) ?? 'position'}`}>
+              {[contractLabel(signal), signal.direction.toUpperCase()].filter(Boolean).join(' · ')}
             </Pill>
           </span>
         ),
@@ -301,7 +319,10 @@ function cellContent(
 export function visibleColumns(signals: readonly BoardSignal[], requested: readonly ColumnId[]): ColumnDef[] {
   const always = new Set<ColumnId>(['instrument', 'status', 'time']);
   const filled = new Set<ColumnId>();
-  for (const s of signals) {
+  // Legs count. A grouped board's parents deliberately carry no premiums, so
+  // asking only the parents would drop every price column on exactly the
+  // board that needs them most.
+  for (const s of flattenSignals(signals)) {
     if (s.instrument.exchange) filled.add('exchange');
     if (s.instrument.strike != null || s.instrument.expiry) filled.add('leg');
     if (s.levels.ltp != null) filled.add('ltp');
@@ -320,9 +341,12 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
 
 /** True when more than one engine is on the board, so the Engine tag earns its width. */
 export const isMixedEngine = (signals: readonly BoardSignal[]) =>
-  new Set(signals.map((s) => s.engine)).size > 1;
+  new Set(flattenSignals(signals).map((s) => s.engine)).size > 1;
 
-function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped }: {
+function Row({
+  signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped,
+  depth = 0, legCount,
+}: {
   signal: BoardSignal;
   columns: ColumnDef[];
   template: string;
@@ -332,14 +356,24 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
   onOpenDetail?: (signal: BoardSignal) => void;
   /** Alternating row shade, which is how rows separate without hard borders. */
   striped: boolean;
+  /** 1 for a leg sitting under its signal. Indents and quietens the row. */
+  depth?: number;
+  /** Set on a parent: how many legs it holds, for the label and the summary. */
+  legCount?: number;
 }) {
+  const isLeg = depth > 0;
+  const isParent = legCount != null;
   return (
     <>
       <div
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        aria-label={`${signal.underlying} ${signal.instrument.optionType ?? ''} ${STATUS_LABEL[signal.status]}`}
+        aria-label={
+          isParent
+            ? `${signal.underlying} ${signal.direction}, ${legCount} contract${legCount === 1 ? '' : 's'}, ${STATUS_LABEL[signal.status]}`
+            : `${signal.underlying} ${signal.instrument.optionType ?? ''} ${STATUS_LABEL[signal.status]}`
+        }
         onClick={onToggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="sb-row"
@@ -348,22 +382,37 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
           gridTemplateColumns: `18px ${template}`,
           alignItems: 'center',
           gap: 10,
-          padding: '0 12px',
-          minHeight: 38,
+          // A leg is indented under the idea it belongs to; the indent is the
+          // only thing saying "this is part of that", so it has to survive
+          // scrolling past the parent.
+          padding: isLeg ? '0 12px 0 28px' : '0 12px',
+          minHeight: isLeg ? 34 : 38,
           cursor: 'pointer',
           outlineOffset: -2,
-          borderBottom: `1px solid ${k.border}`,
+          borderBottom: `1px solid ${isLeg ? 'transparent' : k.border}`,
           // The left accent marks the OPEN row only. It used to carry the
           // direction on every row, which put a saturated band down the whole
           // board and left nothing to mark the row you had actually opened —
           // direction is already stated by the pill beside the symbol.
           borderLeft: `3px solid ${open ? k.blue : 'transparent'}`,
           // Alternating shade separates rows the way the old Adaptive Edge
-          // table did, without a coloured edge on each one.
-          background: open ? k.surfaceHover : striped ? 'var(--k-surface-2)' : k.bg,
+          // table did, without a coloured edge on each one. Legs share one
+          // shade so a group reads as a block rather than a stripe pattern.
+          background: open ? k.surfaceHover : isLeg ? 'var(--k-surface-2)' : striped ? 'var(--k-surface-2)' : k.bg,
+          fontWeight: isParent ? 600 : 400,
         }}
       >
-        <span style={{ color: k.dim, display: 'inline-flex' }}><Chevron open={open} /></span>
+        <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <Chevron open={open} />
+          {isParent && (
+            <span
+              title={`${legCount} contract${legCount === 1 ? '' : 's'}`}
+              style={{ fontSize: 8.5, fontWeight: 700, color: k.dim, fontVariantNumeric: 'tabular-nums' }}
+            >
+              {legCount}
+            </span>
+          )}
+        </span>
         {columns.map((col) => {
           const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined);
           return (
@@ -413,7 +462,7 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden,
+  sort = DEFAULT_SORT, onSortChange, hidden, openGroups, onToggleGroup,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -429,6 +478,9 @@ export function SignalBoard({
   onSortChange?: (next: SortState) => void;
   /** Columns the user switched off. */
   hidden?: ReadonlySet<ColumnId>;
+  /** Signals whose contracts are showing. Separate from `openId`, which is detail. */
+  openGroups?: ReadonlySet<string>;
+  onToggleGroup?: (id: string) => void;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -518,19 +570,56 @@ export function SignalBoard({
               })()}
             </span>
           </h3>
-          {sortSignals(rows, sort).map((signal, i) => (
-            <Row
-              key={signal.id}
-              signal={signal}
-              columns={cols}
-              template={template}
-              open={openId === signal.id}
-              onToggle={() => onToggle(signal.id)}
-              renderDetail={renderDetail}
-              onOpenDetail={onOpenDetail}
-              striped={i % 2 === 1}
-            />
-          ))}
+          {sortSignals(rows, sort).map((signal, i) => {
+            const legs = signal.children ?? [];
+            if (!legs.length) {
+              return (
+                <Row
+                  key={signal.id}
+                  signal={signal}
+                  columns={cols}
+                  template={template}
+                  open={openId === signal.id}
+                  onToggle={() => onToggle(signal.id)}
+                  renderDetail={renderDetail}
+                  onOpenDetail={onOpenDetail}
+                  striped={i % 2 === 1}
+                />
+              );
+            }
+            // A parent's chevron shows its contracts, not its own detail —
+            // the thing behind a signal with eighteen strikes is the strikes.
+            // Its full record is still one click away on the symbol.
+            const expanded = openGroups?.has(signal.id) ?? false;
+            return (
+              <React.Fragment key={signal.id}>
+                <Row
+                  signal={signal}
+                  columns={cols}
+                  template={template}
+                  open={expanded}
+                  onToggle={() => onToggleGroup?.(signal.id)}
+                  onOpenDetail={onOpenDetail}
+                  striped={i % 2 === 1}
+                  legCount={legs.length}
+                />
+                {expanded && sortSignals(legs, sort).map((leg) => (
+                  <Row
+                    key={leg.id}
+                    signal={leg}
+                    columns={cols}
+                    template={template}
+                    open={openId === leg.id}
+                    onToggle={() => onToggle(leg.id)}
+                    renderDetail={renderDetail}
+                    onOpenDetail={onOpenDetail}
+                    striped={false}
+                    depth={1}
+                  />
+                ))}
+              </React.Fragment>
+            );
+          })}
         </section>
       ))}
     </div>

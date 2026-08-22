@@ -21,13 +21,24 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
 }) {
   const snapshot = useAdaptiveEdgeSnapshot();
   const signals = React.useMemo(
-    () => (snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : []),
+    () => (snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : []),
     [snapshot.data],
   );
   const columns = React.useMemo(() => (['instrument', 'status', 'exchange', 'leg', 'entry', 'stop', 'trail', 'target', 'exit', 'ltp', 'score', 'time'] as const), []);
   const view = useBoardView(signals, { storageKey: 'adaptive_edge' });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
+  // Which signals are showing their contracts. Separate from openId, which is
+  // a row's own detail — a parent opens its legs, a leg opens its detail.
+  const [openGroups, setOpenGroups] = React.useState<ReadonlySet<string>>(new Set());
+  const toggleGroup = React.useCallback((id: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   if (snapshot.isLoading && !snapshot.data) {
     return <p style={{ padding: 12, margin: 0, fontSize: 11, color: k.dim }}>Loading Adaptive Edge…</p>;
@@ -48,6 +59,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
         onOpenDetail={onOpenDetail}
         sort={sort}
         onSortChange={setSort}
+        openGroups={openGroups}
+        onToggleGroup={toggleGroup}
         nowMs={nowMs}
         emptyLabel={
           view.counts.total

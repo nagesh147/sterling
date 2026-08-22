@@ -140,7 +140,34 @@ export interface BoardSignal {
   quoteAgeS?: number | null;
   /** Everything this engine knows that the others do not. */
   sections: BoardSection[];
+  /**
+   * The contracts this signal is expressed through.
+   *
+   * A SuperTrend signal is one idea — "NIFTY, long, off the spot chart" —
+   * carried by up to eighteen strikes. Flattening it into eighteen rows makes a
+   * board you cannot read: NIFTY alone would occupy 37 consecutive lines that
+   * differ only by strike.
+   *
+   * The parent holds what belongs to the idea (the underlying, where the signal
+   * came from, when it fired); each child holds what belongs to one contract
+   * (its premium, its stop, its size). The parent deliberately leaves the price
+   * columns empty rather than borrowing a representative leg's numbers — a
+   * thesis has no premium, and picking one leg to speak for the rest is a lie
+   * about which one you would trade.
+   *
+   * Absent or empty means a leaf row, which is what most engines produce.
+   */
+  children?: BoardSignal[];
 }
+
+/** Every signal in a list, parents and their legs, in render order. */
+export function flattenSignals(signals: readonly BoardSignal[]): BoardSignal[] {
+  return signals.flatMap((s) => [s, ...(s.children ?? [])]);
+}
+
+/** True when any signal in the list carries legs. */
+export const hasGroups = (signals: readonly BoardSignal[]) =>
+  signals.some((s) => (s.children?.length ?? 0) > 0);
 
 /**
  * Sort order for the status column.

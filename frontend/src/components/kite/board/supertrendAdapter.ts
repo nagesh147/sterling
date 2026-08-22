@@ -182,7 +182,63 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
   };
 }
 
-/** Every leg of every row, flattened — a leg is the tradable unit. */
+/**
+ * The signal itself: the idea, before it is expressed through any contract.
+ *
+ * Its price columns stay empty on purpose. The thesis has no premium, and
+ * lifting one leg's numbers up to stand for the rest would be a lie about
+ * which strike you would actually trade. What the parent does carry is what
+ * belongs to the idea and to no single leg — the underlying, the scan that
+ * found it, the trend evidence.
+ */
+function supertrendSignalToBoard(row: EngineSignalRow, legs: BoardSignal[], index: number): BoardSignal {
+  const engine = engineOf(row);
+  // The group is as live as its liveliest leg: a signal with one running
+  // contract is running, even if four others have closed.
+  const status = legs.reduce<BoardStatus>(
+    (best, leg) => (STATUS_ORDER.indexOf(leg.status) < STATUS_ORDER.indexOf(best) ? leg.status : best),
+    legs[0]?.status ?? 'watching',
+  );
+
+  return {
+    id: `${engine}-${row.underlying}-${row.timestamp_ms}-${index}`,
+    engine,
+    underlying: row.underlying,
+    instrument: {
+      // The underlying, not a contract — that is what the row is about.
+      symbol: row.underlying,
+      exchange: row.exchange,
+      kind: 'index',
+      strike: null,
+      expiry: null,
+      lotSize: null,
+      quoteKey: null,
+    },
+    direction: row.direction,
+    status,
+    atMs: row.timestamp_ms ?? null,
+    levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
+    score: row.score ?? null,
+    reason: row.exit_reason ?? row.resolution_reason ?? null,
+    sections: [evidenceSection(row), navigatorSection(row)].filter(Boolean) as BoardSection[],
+    children: legs,
+  };
+}
+
+/** Most-actionable first, so a group takes its liveliest leg's status. */
+const STATUS_ORDER: readonly BoardStatus[] = ['armed', 'running', 'weakening', 'watching', 'ended', 'error'];
+
+/**
+ * One board row per signal, with its contracts nested underneath.
+ *
+ * SuperTrend produces around fifty signals carrying nearly three hundred legs
+ * — NIFTY alone can be thirty-seven strikes. Flattened, that is a board nobody
+ * can read; grouped, it is fifty ideas you can open.
+ */
 export function supertrendToBoard(rows: readonly EngineSignalRow[]): BoardSignal[] {
-  return rows.flatMap((row) => (row.legs ?? []).map((leg, i) => supertrendLegToBoard(row, leg, i)));
+  return rows.map((row, i) => {
+    const legs = (row.legs ?? []).map((leg, j) => supertrendLegToBoard(row, leg, j));
+    return supertrendSignalToBoard(row, legs, i);
+  });
 }
