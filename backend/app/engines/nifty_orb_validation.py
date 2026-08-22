@@ -8,19 +8,53 @@ from math import isfinite
 from statistics import mean
 from typing import Callable, Iterable, Sequence
 
+#: Every rate below carries its basis and the date it was last checked, because
+#: all three defects found in the previous values were *staleness* and none of
+#: them announced itself. ``test_cost_rates_are_not_stale`` fails when this date
+#: ages out, which is the only mechanism that makes a stale rate visible.
+RATES_VERIFIED_ON = "2026-08-22"
+RATES_SOURCE = "NEEDS CONTRACT NOTE — derived from published rate schedules, not yet reconciled against a real F&O contract note"
+
+
 @dataclass(frozen=True)
 class TradingCosts:
-    brokerage: float = 20.0
-    stt_rate: float = 0.000625
-    exchange_rate: float = 0.0000297
-    sebi_rate: float = 0.000001
-    gst_rate: float = 0.18
-    stamp_rate: float = 0.00003
-    slippage_per_share: float = 0.0
+    """Round-trip cost of one bought-option trade.
 
-    def round_trip(self, buy_value: float, sell_value: float, quantity: int) -> float:
+    Three of the previous defaults were wrong in the direction that flatters a
+    strategy, which is the dangerous direction:
+
+    * ``stt_rate`` was 0.000625. STT on the *sale* of an option is charged on
+      premium and was raised to 0.1%.
+    * ``exchange_rate`` was 0.0000297 — a futures-notional rate applied to
+      premium. The NSE/BSE options transaction charge is on premium and is
+      roughly 0.05%, about seventeen times larger.
+    * ``slippage_per_share`` defaulted to **zero**, in a model whose only job is
+      to price scalps. At the open, half-spread is the single largest term.
+
+    ``slippage_per_share`` therefore has **no default**: a caller must state it,
+    because silently costing a scalp at zero slippage is how a losing strategy
+    gets approved on numbers it never earned. Pass the measured median
+    half-spread for that underlying and slot.
+    """
+
+    slippage_per_share: float          # required: measured half-spread, per unit, per side
+    brokerage: float = 20.0            # per order, capped at 0.03% of turnover
+    stt_rate: float = 0.001            # 0.10% on SELL premium
+    exchange_rate: float = 0.0005      # ~0.05% of premium, both sides
+    sebi_rate: float = 0.000001        # 0.0001% of turnover
+    gst_rate: float = 0.18             # on brokerage + exchange + sebi
+    stamp_rate: float = 0.00003        # 0.003% on BUY value only
+
+    def round_trip(self, buy_value: float, sell_value: float, quantity: int,
+                   *, orders: int = 2) -> float:
+        """Total charges for one round trip.
+
+        ``orders`` is the number of *orders*, not legs: a laddered exit that
+        closes in two tranches is three orders, and brokerage is per order. It
+        defaults to 2 so every existing caller keeps its previous answer.
+        """
         turnover = max(0.0, buy_value) + max(0.0, sell_value)
-        brokerage = min(self.brokerage, 0.0003 * turnover) * 2 if turnover else 0.0
+        brokerage = min(self.brokerage, 0.0003 * turnover) * max(1, orders) if turnover else 0.0
         stt = max(0.0, sell_value) * self.stt_rate
         exchange = turnover * self.exchange_rate
         sebi = turnover * self.sebi_rate
@@ -50,7 +84,24 @@ def _profit_factor(profit: float, loss: float) -> float:
     return profit/loss if loss else (float("inf") if profit else 0.0)
 
 
-def validate_option_trades(trades: Sequence[OptionTrade], costs: TradingCosts = TradingCosts()) -> ValidationResult:
+def _require(costs: "TradingCosts | None") -> "TradingCosts":
+    """Refuse to cost a trade without a stated slippage.
+
+    These three entry points used to default to ``TradingCosts()``, which meant
+    zero slippage -- the exact silent flattery this module exists to prevent. The
+    default is gone, so its absence is now a caller error with a name.
+    """
+    if costs is None:
+        raise ValueError(
+            "costs is required: pass TradingCosts(slippage_per_share=<measured half-spread>). "
+            "There is no zero-slippage default -- that is what made every previous "
+            "net number optimistic."
+        )
+    return costs
+
+
+def validate_option_trades(trades: Sequence[OptionTrade], costs: TradingCosts | None = None) -> ValidationResult:
+    costs = _require(costs)
     """Score realised option-buy trades, keeping gross and net strictly apart.
 
     ``gross_*`` is pre-cost and exists only for reference. Every decision metric
@@ -86,13 +137,15 @@ def validate_option_trades(trades: Sequence[OptionTrade], costs: TradingCosts = 
         "cost_model":costs.__dict__},len(net_pnls),("fewer than 30 trades: metrics are statistically weak",) if len(net_pnls)<30 else ())
 
 
-def regime_metrics(trades: Sequence[OptionTrade], costs: TradingCosts = TradingCosts()) -> dict[str,dict]:
+def regime_metrics(trades: Sequence[OptionTrade], costs: TradingCosts | None = None) -> dict[str,dict]:
+    costs = _require(costs)
     groups={}
     for t in trades: groups.setdefault(t.regime.upper(),[]).append(t)
     return {k:validate_option_trades(v,costs).metrics for k,v in sorted(groups.items())}
 
 
-def expiry_metrics(trades: Sequence[OptionTrade], costs: TradingCosts = TradingCosts()) -> dict[str,dict]:
+def expiry_metrics(trades: Sequence[OptionTrade], costs: TradingCosts | None = None) -> dict[str,dict]:
+    costs = _require(costs)
     groups={"expiry_day":[],"non_expiry":[]}
     for t in trades: groups["expiry_day" if t.expiry_dte==0 else "non_expiry"].append(t)
     return {k:validate_option_trades(v,costs).metrics for k,v in groups.items() if v}

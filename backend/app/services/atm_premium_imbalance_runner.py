@@ -29,6 +29,7 @@ from app.engines.atm_premium_imbalance import (
     ATMPremiumImbalanceConfig, ATMPremiumImbalanceStrategy, LegQuote, OptionPairRef,
     OrderReport, OrderStatus,
 )
+from app.services import atm_trade_journal
 
 log = get_logger(__name__)
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -346,6 +347,17 @@ async def drive(session: Session, intent, broker: BrokerPort, *, max_steps: int 
         # `trade` is cleared by a re-arm, so fall back to the trade that just
         # closed -- otherwise the result of every trade but the last is lost.
         t = s.trade if s.trade is not None else s.last_closed_trade
+        # Persist before logging. The terminal line is for the operator watching
+        # now; the journal row is the only thing that survives a restart, and it
+        # is what the win rate -- the number this strategy lives or dies by -- is
+        # eventually computed from. A sim trade is recorded but flagged, never
+        # counted (see atm_trade_journal.summary).
+        if t is not None and t.exit_price is not None:
+            atm_trade_journal.record(
+                t, underlying=session.cfg.underlying,
+                mode=session.cfg.execution_mode, is_sim=session.sim,
+                closed_at_ms=session.now_ms(),
+            )
         if t is not None and t.exit_price is not None:
             note(session.user_id, "api_done",
                  f"closed {t.option_type} {t.quantity} @ {t.exit_price:.2f} — "
