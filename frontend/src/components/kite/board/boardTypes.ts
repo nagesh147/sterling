@@ -65,6 +65,26 @@ export const ACTIONABLE: readonly BoardStatus[] = ['armed', 'running', 'weakenin
 
 export type Direction = 'long' | 'short';
 
+/**
+ * Where a signal came from, in its own engine's vocabulary.
+ *
+ * SuperTrend distinguishes the scan that found it (spot chart, the option's own
+ * premium chart, both agreeing, or Navigator). Adaptive Edge distinguishes its
+ * microstructure model from a plain spot scan. ORB distinguishes which feed the
+ * numbers came from, because it is configurable and the two do not agree. ATM
+ * distinguishes whether the quote behind the price traded in this session at
+ * all, which is the rule its whole strategy turns on.
+ *
+ * Same slot on the row, four different meanings — which is the point. A shared
+ * badge that said the same thing everywhere would be decoration.
+ */
+export interface BoardOrigin {
+  label: string;
+  hint: string;
+  /** A `k` accent name, so the badge is themed rather than hardcoded. */
+  tone: 'brand' | 'blue' | 'green' | 'purple' | 'amber' | 'dim';
+}
+
 /** The traded thing. An engine may signal on spot and trade an option. */
 export interface BoardInstrument {
   /** What is actually bought or sold, in full. */
@@ -75,6 +95,8 @@ export interface BoardInstrument {
   strike?: number | null;
   expiry?: string | null;
   lotSize?: number | null;
+  /** ATM / ITM1 / OTM2 — where the strike sits against the money. */
+  moneyness?: string | null;
   /** Kite subscription key, `EXCHANGE:SYMBOL`. Null when not quotable. */
   quoteKey: string | null;
 }
@@ -138,6 +160,15 @@ export interface BoardSignal {
   reason: string | null;
   /** Age of the quote behind `ltp`, seconds. Drives the staleness mark. */
   quoteAgeS?: number | null;
+  /** This engine's own answer to "where did this come from". */
+  origin?: BoardOrigin;
+  /**
+   * Option delta, where the engine knows it.
+   *
+   * Shown beside the moneyness and used to mark the most responsive leg of a
+   * signal, which is a comparison only worth making between siblings.
+   */
+  delta?: number | null;
   /** Everything this engine knows that the others do not. */
   sections: BoardSection[];
   /**
@@ -225,4 +256,60 @@ export function groupByDay(signals: readonly BoardSignal[]): Array<{ key: string
       key,
       signals: list.sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0)),
     }));
+}
+
+/**
+ * Which legs of one signal are worth singling out.
+ *
+ * Two comparisons a trader makes across the strikes of a single idea, and
+ * neither means anything between different signals — so they are computed per
+ * group and never board-wide.
+ *
+ *   best reward:risk  the strike that pays most for what it puts at risk
+ *   highest delta     the strike that moves most with the underlying
+ *
+ * A comparison needs something to compare, so a lone leg is marked with
+ * neither: "best of one" is not information.
+ */
+export function markLegs(legs: readonly BoardSignal[]): Map<string, Set<'bestRR' | 'bestDelta'>> {
+  const marks = new Map<string, Set<'bestRR' | 'bestDelta'>>();
+  if (legs.length < 2) return marks;
+
+  const add = (id: string, mark: 'bestRR' | 'bestDelta') => {
+    const set = marks.get(id) ?? new Set<'bestRR' | 'bestDelta'>();
+    set.add(mark);
+    marks.set(id, set);
+  };
+
+  let bestRR: { id: string; value: number } | null = null;
+  let bestDelta: { id: string; value: number } | null = null;
+  for (const leg of legs) {
+    const { entry, stop, target } = leg.levels;
+    if (entry != null && stop != null && target != null) {
+      const risk = Math.abs(entry - stop);
+      if (risk > 0) {
+        const rr = Math.abs(target - entry) / risk;
+        if (!bestRR || rr > bestRR.value) bestRR = { id: leg.id, value: rr };
+      }
+    }
+    if (leg.delta != null) {
+      const d = Math.abs(leg.delta);
+      if (!bestDelta || d > bestDelta.value) bestDelta = { id: leg.id, value: d };
+    }
+  }
+  if (bestRR) add(bestRR.id, 'bestRR');
+  if (bestDelta) add(bestDelta.id, 'bestDelta');
+  return marks;
+}
+
+/**
+ * A live premium that has fallen through its own trailing stop.
+ *
+ * Worth shouting about: on an engine whose exit is a counter rule rather than a
+ * price rule, the leg still counts as running while this is true, and that is
+ * exactly where an open drawdown builds.
+ */
+export function trailBreached(signal: BoardSignal): boolean {
+  const { ltp, trail } = signal.levels;
+  return signal.status !== 'ended' && ltp != null && trail != null && ltp <= trail;
 }

@@ -175,3 +175,36 @@ describe('expanded-row parity across engines', () => {
     }
   });
 });
+
+describe('each engine states its own provenance', () => {
+  // The one slot on the row that is deliberately NOT shared. Four engines,
+  // four different answers to "where did this come from" — a badge that said
+  // the same thing everywhere would be decoration.
+  it('gives every engine a badge in its own vocabulary', () => {
+    const labels = Object.entries(boards).map(([name, signals]) => [name, signals[0].origin?.label] as const);
+    for (const [name, label] of labels) expect(label, `${name} has no origin`).toBeTruthy();
+    const distinct = new Set(labels.map(([, l]) => l));
+    expect(distinct.size, 'engines share a badge label').toBe(labels.length);
+  });
+
+  it('explains each one in more than a restatement of its label', () => {
+    for (const [name, signals] of Object.entries(boards)) {
+      const origin = signals[0].origin!;
+      expect(origin.hint.length, `${name} hint too short`).toBeGreaterThan(30);
+      expect(origin.hint.toLowerCase()).not.toBe(origin.label.toLowerCase());
+    }
+  });
+
+  it('reads SuperTrend’s as the scan that found it', () => {
+    expect(boards.supertrend[0].origin!.label).toBe('SPOT');
+  });
+
+  it('reads ORB’s as the feed behind the numbers', () => {
+    // ORB is configurable between Kite and TrueData, and the two disagree.
+    expect(boards.orb[0].origin!.label).toBe('KITE');
+  });
+
+  it('reads Adaptive Edge’s as which model produced it', () => {
+    expect(boards.adaptive_edge[0].origin!.label).toBe('SPOT SCAN');
+  });
+});

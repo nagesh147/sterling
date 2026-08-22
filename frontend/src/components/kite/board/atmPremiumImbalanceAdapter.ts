@@ -15,9 +15,7 @@
  *    diagnostic. A board that shows a quiet engine without saying "refusing a
  *    carried-over price" cannot be acted on.
  */
-import type {
-  BoardInstrument, BoardSection, BoardSignal, BoardStatus,
-} from './boardTypes';
+import type { BoardInstrument, BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
 import type { AtmPremiumImbalanceSnapshot, AtmSessionStatus, AtmLegState } from '../../../hooks/useAtmPremiumImbalance';
 
 /** A tradable price, or nothing. Zero is not a level. */
@@ -80,6 +78,26 @@ function reason(session: AtmSessionStatus, blockers: readonly string[]): string 
   if (r) return r;
   if (blockers.length) return blockers[0];
   return session.armed ? 'Armed, waiting for the open' : null;
+}
+
+/**
+ * Whether the prices behind this signal traded in the current session.
+ *
+ * This engine's whole rule is that a price which last traded before the open
+ * cannot open a position — the imbalance it measures would be against a stale
+ * quote. So "which session did this trade in" is the provenance that matters
+ * here, the way the originating scan matters on SuperTrend.
+ */
+function originOf(session: AtmSessionStatus): BoardOrigin | undefined {
+  const legs = [session.legs?.CE, session.legs?.PE].filter(Boolean);
+  if (!legs.length) return undefined;
+  if (legs.some((l) => l!.session_origin === false)) {
+    return { label: 'STALE QUOTE', tone: 'amber', hint: 'At least one leg last traded in an EARLIER session. A price that traded before the open cannot open a position.' };
+  }
+  if (legs.every((l) => l!.session_origin === true)) {
+    return { label: 'THIS SESSION', tone: 'green', hint: 'Both legs last traded in the current session, so the imbalance is measured against live prices.' };
+  }
+  return { label: 'UNVERIFIED', tone: 'dim', hint: 'The exchange did not say when one of these legs last traded, so its freshness cannot be confirmed.' };
 }
 
 function originLabel(v: boolean | null | undefined): string {
@@ -219,6 +237,7 @@ export function atmPremiumImbalanceToBoard(
       deployedInr: entry != null && qty != null ? entry * qty : null,
     },
     score: null,                             // the engine publishes none
+    origin: originOf(session),
     reason: reason(session, snapshot?.blockers ?? []),
     quoteAgeS: leg?.age_ms == null ? null : leg.age_ms / 1000,
     sections,

@@ -14,7 +14,8 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, sessionDayLabel,
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  sessionDayLabel, trailBreached,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -155,6 +156,12 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
 /** Statuses that earn a coloured pill. The rest are the board's normal state. */
 const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
 
+/** Engine-accent names resolved to the theme's tokens. */
+const ORIGIN_TONE: Record<NonNullable<BoardSignal['origin']>['tone'], string> = {
+  brand: 'var(--k-brand)', blue: k.blue, green: k.green,
+  purple: k.purple, amber: k.amber, dim: k.dim,
+};
+
 const STATUS_TONE: Record<BoardStatus, string> = {
   armed: k.blue,
   running: k.green,
@@ -220,6 +227,7 @@ function cellContent(
   signal: BoardSignal,
   id: ColumnId,
   onOpenDetail?: (signal: BoardSignal) => void,
+  marks?: ReadonlySet<'bestRR' | 'bestDelta'>,
 ): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
@@ -253,6 +261,37 @@ function cellContent(
             <Pill tone={dirTone} title={`${signal.direction} ${contractLabel(signal) ?? 'position'}`}>
               {[contractLabel(signal), signal.direction.toUpperCase()].filter(Boolean).join(' · ')}
             </Pill>
+            {signal.origin && (
+              <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
+                <span tabIndex={0} style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
+                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+                }}>
+                  {signal.origin.label}
+                </span>
+              </Tip>
+            )}
+            {marks?.has('bestRR') && (
+              <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
+                <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help' }}>✝</span>
+              </Tip>
+            )}
+            {marks?.has('bestDelta') && (
+              <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
+                <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help' }}>▲</span>
+              </Tip>
+            )}
+            {trailBreached(signal) && (
+              <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
+                <span tabIndex={0} style={{
+                  fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
+                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', outlineOffset: 2,
+                }}>
+                  TSL HIT
+                </span>
+              </Tip>
+            )}
           </span>
         ),
       };
@@ -274,9 +313,18 @@ function cellContent(
       // for, reads back to a broker, and matches against a fill. Strike and
       // expiry are the same information pre-parsed, so they go in the tooltip
       // rather than competing for the width.
-      const { symbol, strike, expiry } = signal.instrument;
+      const { symbol, strike, expiry, moneyness } = signal.instrument;
       const parts = [strike ?? null, expiry ?? null].filter(Boolean).join(' · ');
-      return { node: <span title={parts || undefined}>{symbol}</span>, color: k.dim };
+      return {
+        node: (
+          <span title={parts || undefined}>
+            {symbol}
+            {moneyness && <span style={{ opacity: .8 }}> {moneyness}</span>}
+            {signal.delta != null && <span style={{ opacity: .65 }}> (Δ{Math.abs(signal.delta).toFixed(2)})</span>}
+          </span>
+        ),
+        color: k.dim,
+      };
     }
     // The levels are plain ink. Colouring every stop red and every target green
     // was decoration, not information — the value was the same colour whatever
@@ -284,7 +332,25 @@ function cellContent(
     // nothing left to say when something is actually wrong. The column heading
     // already names which level it is.
     case 'ltp': return { node: num(signal.levels.ltp) };
-    case 'entry': return { node: num(signal.levels.entry) };
+    case 'entry': {
+      // The bracket is the whole point of showing entry next to LTP: what the
+      // position has actually done since it was taken.
+      const { entry, ltp } = signal.levels;
+      if (entry == null) return { node: '—' };
+      const move = ltp == null ? null : ltp - entry;
+      return {
+        node: (
+          <>
+            {entry.toFixed(2)}
+            {move != null && Math.abs(move) > 0.001 && (
+              <span style={{ fontSize: 9.5, marginLeft: 3, fontWeight: 600, color: move >= 0 ? k.green : k.red }}>
+                ({move >= 0 ? '+' : ''}{move.toFixed(2)})
+              </span>
+            )}
+          </>
+        ),
+      };
+    }
     case 'stop': return { node: num(signal.levels.stop) };
     case 'trail': return { node: num(signal.levels.trail) };
     case 'target': return { node: num(signal.levels.target) };
@@ -364,7 +430,7 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
 
 function Row({
   signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped,
-  depth = 0, legCount,
+  depth = 0, legCount, marks,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -379,6 +445,8 @@ function Row({
   depth?: number;
   /** Set on a parent: how many legs it holds, for the label and the summary. */
   legCount?: number;
+  /** Which of its siblings' comparisons this leg wins. */
+  marks?: ReadonlySet<'bestRR' | 'bestDelta'>;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
@@ -419,6 +487,10 @@ function Row({
           // shade so a group reads as a block rather than a stripe pattern.
           background: open ? k.surfaceHover : isLeg ? 'var(--k-surface-2)' : striped ? 'var(--k-surface-2)' : k.bg,
           fontWeight: isParent ? 600 : 400,
+          // An ended row is a record, not a live position. Dimming and striking
+          // it keeps it readable without letting it read as actionable.
+          opacity: signal.status === 'ended' ? 0.62 : 1,
+          textDecoration: signal.status === 'ended' ? 'line-through' : 'none',
         }}
       >
         <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -433,7 +505,7 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks);
           return (
             <span
               key={col.id}
@@ -606,6 +678,9 @@ export function SignalBoard({
             // the thing behind a signal with eighteen strikes is the strikes.
             // Its full record is still one click away on the symbol.
             const expanded = openGroups?.has(signal.id) ?? false;
+            // Best-of comparisons are only meaningful between the strikes of
+            // one idea, so they are computed per group, never board-wide.
+            const legMarks = markLegs(legs);
             return (
               <React.Fragment key={signal.id}>
                 <Row
@@ -621,6 +696,7 @@ export function SignalBoard({
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
                     key={leg.id}
+                    marks={legMarks.get(leg.id)}
                     signal={leg}
                     columns={cols}
                     template={template}

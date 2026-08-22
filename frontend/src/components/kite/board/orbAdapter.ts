@@ -11,11 +11,28 @@
  * engine never produced.
  */
 import type { OrbFeedEntry } from '../../../utils/niftyOrbSignalAdapter';
-import type { BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
 
 /** A tradable price, or nothing. A zero premium is not a level. */
 const price = (v: number | null | undefined): number | null =>
   v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
+/**
+ * Which feed the numbers came from.
+ *
+ * ORB is configurable between Kite and TrueData, and the two do not agree —
+ * they fetch different bar counts, so identical prices can produce different
+ * ATR and therefore different signals. Which one spoke is worth stating.
+ */
+function originOf(entry: OrbFeedEntry): BoardOrigin | undefined {
+  if (entry.dataSource === 'kite') {
+    return { label: 'KITE', tone: 'brand', hint: 'Bars and quotes from the broker feed — the same source that executes.' };
+  }
+  if (entry.dataSource === 'truedata') {
+    return { label: 'TRUEDATA', tone: 'blue', hint: 'Bars and quotes from TrueData. Execution still goes through Kite.' };
+  }
+  return undefined;
+}
 
 function status(entry: OrbFeedEntry): BoardStatus {
   if (entry.state === 'ERROR') return 'error';
@@ -121,6 +138,8 @@ export function orbToBoard(entry: OrbFeedEntry): BoardSignal {
       deployedInr: entry.maxLossInr ?? null,
     },
     score: null,
+    origin: originOf(entry),
+    delta: entry.delta,
     reason: entry.reason ?? null,
     quoteAgeS: entry.quoteAgeS ?? null,
     sections,

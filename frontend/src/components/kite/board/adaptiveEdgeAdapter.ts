@@ -13,7 +13,7 @@
  * under one heading.
  */
 import type { AdaptiveEdgeRow } from '../AdaptiveEdgePanel';
-import type { BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
 
 /**
  * A tradable price, or nothing.
@@ -36,6 +36,13 @@ const price = (v: number | null | undefined): number | null =>
 const DERIVATIVE_VENUE: Record<string, string> = { NSE: 'NFO', BSE: 'BFO' };
 const venueFor = (exchange: string, kind: string) =>
   kind === 'option' ? (DERIVATIVE_VENUE[exchange] ?? exchange) : exchange;
+
+/** Whether the microstructure model found this, or a plain directional scan did. */
+function originOf(row: AdaptiveEdgeRow): BoardOrigin {
+  return row.origin === 'spot_scan'
+    ? { label: 'SPOT SCAN', tone: 'blue', hint: 'Direction came from a SuperTrend spot scan; Adaptive Edge chose the contract and manages the exit.' }
+    : { label: 'AE MODEL', tone: 'brand', hint: "Found by Adaptive Edge's own microstructure and order-flow model." };
+}
 
 const ms = (iso: string | null | undefined): number | null => {
   if (!iso) return null;
@@ -149,6 +156,7 @@ export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
       strike: row.strike ?? null,
       expiry: row.expiry ?? null,
       lotSize: row.lotSize ?? null,
+      moneyness: row.moneyness ?? null,
       quoteKey: row.instrument ? `${row.exchange}:${row.instrument}` : null,
     },
     direction,
@@ -172,6 +180,7 @@ export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
     // figures go in the detail, where they are labelled for what they are.
     sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score,
+    origin: originOf(row),
     reason: row.whyClosed ?? row.resolutionReason ?? null,
     sections,
   };

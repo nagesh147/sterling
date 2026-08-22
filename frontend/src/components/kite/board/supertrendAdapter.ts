@@ -20,7 +20,7 @@
  */
 import type { AlignmentChip, EngineSignalRow, OptionLeg } from '../../../types/kiteEngine';
 import { k } from '../../../styles/kiteUI';
-import type { BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
+import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 
 /**
  * A tradable price, or nothing.
@@ -31,6 +31,28 @@ import type { BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTy
  */
 const price = (v: number | null | undefined): number | null =>
   v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
+/**
+ * Which scan surfaced this signal.
+ *
+ * "Both agree" is the one worth distinguishing: in derivatives mode a single
+ * contract can produce a spot row AND a premium row with different entries,
+ * and without this they read as a duplicate.
+ */
+function originOf(row: EngineSignalRow): BoardOrigin | undefined {
+  switch (row.source) {
+    case 'spot':
+      return { label: 'SPOT', tone: 'brand', hint: "Read from the underlying's own chart. The option legs are candidates to buy." };
+    case 'derivatives':
+      return { label: 'PREMIUM', tone: 'blue', hint: "Read from this option's own premium chart." };
+    case 'confluence':
+      return { label: 'BOTH AGREE', tone: 'green', hint: "The underlying fired and this option's own premium confirmed it." };
+    case 'navigator':
+      return { label: 'NAVIGATOR', tone: 'purple', hint: "Found by the Value-Flow Navigator from its own AVWAP and flow evidence — no SuperTrend trigger at all." };
+    default:
+      return undefined;
+  }
+}
 
 const engineOf = (row: EngineSignalRow): EngineId =>
   row.source === 'navigator' ? 'navigator' : 'supertrend';
@@ -152,6 +174,7 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
       strike: leg.strike ?? null,
       expiry: leg.expiry ?? null,
       lotSize: leg.lot_size ?? null,
+      moneyness: leg.moneyness ?? null,
       quoteKey: leg.option_symbol ? `${row.exchange}:${leg.option_symbol}` : null,
     },
     direction: row.direction,
@@ -177,6 +200,7 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
       deployedInr: price(leg.premium_spot) != null && leg.lot_size ? price(leg.premium_spot)! * leg.lot_size : null,
     },
     score: row.score ?? null,
+    origin: originOf(row),
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections,
   };
@@ -220,6 +244,7 @@ function supertrendSignalToBoard(row: EngineSignalRow, legs: BoardSignal[], inde
     levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
     sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score ?? null,
+    origin: originOf(row),
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections: [evidenceSection(row), navigatorSection(row)].filter(Boolean) as BoardSection[],
     children: legs,
