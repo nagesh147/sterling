@@ -63,9 +63,13 @@ def test_live_mode_refuses_to_run_unprotected():
     with pytest.raises(ValueError, match="requires broker-side protection"):
         ATMPremiumImbalanceConfig(execution_mode="live", quote_mode="EXECUTABLE",
                                   quantity=20, protection_mode="NONE").validate()
-    # ...and accepts a protected live config
+    # ...and accepts a protected live config. The stop is required by live mode
+    # independently of protection, so it is supplied here rather than letting
+    # this assertion pass or fail on an unrelated rule.
     ATMPremiumImbalanceConfig(execution_mode="live", quote_mode="EXECUTABLE", quantity=20,
-                              protection_mode="RESTING_TARGET_LIMIT").validate()
+                              protection_mode="RESTING_TARGET_LIMIT",
+                              stop_enabled=True, stop_basis="PERCENT",
+                              stop_percent=20.0).validate()
 
 
 # ------------------------------------------------------------ reconcile

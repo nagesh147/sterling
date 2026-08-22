@@ -194,6 +194,19 @@ def descriptor() -> dict:
     }
 
 
+def _trade_record() -> dict:
+    """The realised trade record, or an empty one if the journal is unreadable.
+
+    A snapshot must never fail because a statistic could not be computed -- the
+    operator still needs to see the config and the session.
+    """
+    try:
+        from app.services import atm_trade_journal
+        return atm_trade_journal.summary()
+    except Exception:  # noqa: BLE001
+        return {"trades": 0, "verdict": "trade record unavailable"}
+
+
 async def snapshot(uid: str) -> dict:
     """Operator view: config, resolved pair, and why it is or is not armed."""
     cfg = get_config()
@@ -207,6 +220,12 @@ async def snapshot(uid: str) -> dict:
         # Present only while a simulation is running or has just finished. The
         # board must never render replayed numbers as live ones.
         "simulation": _sim_state(uid),
+        # The realised record, which is the only thing that can say whether this
+        # strategy works. It carries its own break-even threshold, because a win
+        # rate without one is not an answer -- 85% is excellent against a small
+        # average loss and ruinous against a large one. Simulated trades are
+        # excluded; see atm_trade_journal.
+        "record": _trade_record(),
         "blockers": [],
     }
     if not cfg.enabled:

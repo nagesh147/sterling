@@ -136,3 +136,51 @@ def test_a_closed_trade_books_its_pnl_so_the_limit_can_see_it():
     assert s.trades_taken == 1
     assert s.realised_pnl == pytest.approx(s.trade.pnl)
     assert s.summary()["realised_pnl"] == pytest.approx(s.trade.pnl)
+
+
+# --- the live gate now requires a stop --------------------------------------
+
+def _live(**kw):
+    """A config that clears every other live requirement, so only the stop varies."""
+    base = dict(enabled=True, execution_mode="live", quote_mode="EXECUTABLE",
+                quantity=80, protection_mode="GTT")
+    base.update(kw)
+    return ATMPremiumImbalanceConfig(**base)
+
+
+def test_live_refuses_the_recorded_policy_because_it_has_no_stop():
+    """The arithmetic, not taste.
+
+    The observed policy wins about +3% net and its downside is the whole
+    premium, so at a 40%-of-premium average loss the break-even win rate is
+    roughly 93%. No recording establishes any win rate: three decodable
+    sessions, all winners, and a strategy that merely breaks even shows three
+    straight winners four times out of five.
+    """
+    with pytest.raises(ValueError, match="requires a stop"):
+        _live().validate()
+
+
+def test_live_refuses_a_points_stop():
+    """These premiums run ~50 to ~500, so points mean different risk at each end."""
+    with pytest.raises(ValueError, match="stop_basis=PERCENT"):
+        _live(stop_enabled=True, stop_basis="POINTS", stop_points=15.0).validate()
+
+
+def test_live_accepts_a_percent_stop():
+    cfg = _live(stop_enabled=True, stop_basis="PERCENT", stop_percent=20.0).validate()
+    assert cfg.execution_mode == "live" and cfg.stop_distance == 20.0
+
+
+def test_the_observed_default_is_untouched_so_conformance_still_holds():
+    """The gate makes the recorded policy untradable, not unreproducible.
+
+    FIXED_POINT_TARGET stays the default and stops stay off by default,
+    precisely so the conformance replay still reproduces the recordings. If this
+    fails, the evidence the whole artifact set rests on has been invalidated.
+    """
+    cfg = ATMPremiumImbalanceConfig().validate()
+    assert cfg.exit_policy == "FIXED_POINT_TARGET"
+    assert cfg.stop_enabled is False
+    assert cfg.target_points == 15.0
+    assert cfg.execution_mode == "paper"

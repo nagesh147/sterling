@@ -99,10 +99,14 @@ def test_manual_table_rejects_malformed_lines():
 
 
 def test_first_tick_percent_is_the_observed_path_and_is_live_allowed():
+    # A stop is passed because live mode requires one -- unrelated to the entry
+    # policy, which is what this test is about. Without it the config would be
+    # refused for the wrong reason and this would stop testing anything.
     ATMPremiumImbalanceConfig(
         entry_price_policy="FIRST_TICK_PERCENT", entry_through_pct=0.10,
         execution_mode="live", quote_mode="EXECUTABLE", quantity=100,
         protection_mode="RESTING_TARGET_LIMIT",
+        stop_enabled=True, stop_basis="PERCENT", stop_percent=20.0,
     ).validate()
 
 

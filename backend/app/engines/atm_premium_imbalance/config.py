@@ -324,6 +324,32 @@ class ATMPremiumImbalanceConfig:
                     "a crash or a dropped socket leaves the open position with nothing "
                     "watching it"
                 )
+            # A stop is not optional with real money, and the arithmetic is the
+            # reason rather than taste. The observed policy wins about +3% net
+            # and the downside is uncapped, so with an average loss of 40% of
+            # premium the break-even win rate is about 93%. No recording
+            # establishes any win rate at all -- three decodable sessions, all
+            # winners, and a strategy that merely breaks even shows three
+            # straight winners four times out of five.
+            #
+            # This does NOT change the default exit policy. FIXED_POINT_TARGET
+            # stays the default precisely so the conformance replay still
+            # reproduces the recordings; what changes is that the recorded
+            # policy is no longer *tradable* on its own.
+            if not self.stop_enabled or self.stop_distance <= 0:
+                raise ValueError(
+                    "live mode requires a stop: set stop_enabled with a positive "
+                    f"{'stop_percent' if self.stop_basis == 'PERCENT' else 'stop_points'}. "
+                    "The observed policy has no stop and the maximum loss is the whole "
+                    "premium, which needs roughly a 93% win rate to break even — and no "
+                    "recording establishes any win rate"
+                )
+            if self.stop_basis != "PERCENT":
+                raise ValueError(
+                    "live mode requires stop_basis=PERCENT: these premiums run from "
+                    "roughly 50 to 500, so a points stop is a 30% risk at one end and "
+                    "3% at the other — the same number meaning two different trades"
+                )
         return self
 
     # --- stop / trail distances --------------------------------------------
