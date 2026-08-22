@@ -164,7 +164,9 @@ def test_callback_missing_token_renders_error(client):
     _add_account(client, paper=True)
     r = client.get("/api/v1/kite/callback?status=success")
     assert r.status_code == 400
-    assert "Missing request_token" in r.text
+    assert "Incomplete redirect" in r.text
+    # The error page must NOT dismiss itself — the reason has to stay readable.
+    assert "setInterval" not in r.text
 
 
 def test_callback_no_active_account(client):
@@ -177,7 +179,8 @@ def test_callback_status_not_success(client):
     _add_account(client, paper=True)
     r = client.get("/api/v1/kite/callback?status=cancelled")
     assert r.status_code == 400
-    assert "Login failed" in r.text
+    assert "Login was not completed" in r.text
+    assert "setInterval" not in r.text
 
 
 def test_watchlist_sync_aggregates_account_instruments(client, monkeypatch):

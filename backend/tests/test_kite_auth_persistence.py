@@ -314,3 +314,134 @@ def test_status_reports_the_validity_window(client, monkeypatch):
         kite_accounts.get("alice", acc["id"]).last_login_at_ms)
     assert body["expires_in_s"] > 0
     assert body["validated"] is False        # trusted the window, no round-trip
+
+
+# ─── The callback page ────────────────────────────────────────────────────────
+def test_the_success_page_auto_closes_but_a_failure_never_does():
+    """The whole point of the redesign. A success tab has done its job in three
+    seconds and should get out of the way; a failure carries a reason worth
+    reading, and the old page took it away after 2.5 seconds."""
+    from app.api.v1.endpoints import kite as kite_ep
+
+    ok = kite_ep._callback_page("Connected", ok=True,
+                                rows=[("Account", "Madaram Nagesh")], note="Sterling has it")
+    bad = kite_ep._callback_page("Login link expired", ok=False,
+                                 rows=[("What to do", "Try again.")], note="Nothing was changed")
+
+    ok_html, bad_html = ok.body.decode(), bad.body.decode()
+    assert ok.status_code == 200 and bad.status_code == 400
+    # Success: counts down, closes, and shows the draining bar.
+    assert "setInterval" in ok_html and "window.close" in ok_html
+    assert '<div class="drain">' in ok_html
+    # Failure: none of that, and an explicit way back instead.
+    assert "setInterval" not in bad_html and "window.close" not in bad_html
+    assert '<div class="drain">' not in bad_html
+    assert "Back to Sterling" in bad_html
+
+
+def test_only_the_success_page_hands_the_session_to_the_app_tab():
+    from app.api.v1.endpoints import kite as kite_ep
+    ok = kite_ep._callback_page("Connected", ok=True, rows=[], note="").body.decode()
+    bad = kite_ep._callback_page("Nope", ok=False, rows=[], note="").body.decode()
+    assert "sterling-kite-auth" in ok and "kite-connected" in ok
+    assert "sterling-kite-auth" not in bad     # nothing to announce
+
+
+def test_the_page_escapes_what_it_did_not_author():
+    """Row values come from Kite's payload and from exception text, so the page is
+    HTML assembled out of data we do not control."""
+    from app.api.v1.endpoints import kite as kite_ep
+    body = kite_ep._callback_page(
+        "Could not connect", ok=False,
+        rows=[("Kite said", "<script>alert(1)</script>")], note="",
+    ).body.decode()
+    assert "<script>alert(1)</script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+def test_the_page_follows_the_viewers_theme():
+    """It used to be hardcoded dark, which flashed a dark tab inside a
+    light-themed app. All three theme states must be covered."""
+    from app.api.v1.endpoints import kite as kite_ep
+    body = kite_ep._callback_page("Connected", ok=True, rows=[], note="").body.decode()
+    assert "prefers-color-scheme:dark" in body            # un-stamped "system" viewers
+    assert ':root:not([data-theme="light"])' in body      # explicit light beats a dark OS
+    assert ':root[data-theme="dark"]' in body             # explicit dark beats a light OS
+
+
+def test_a_successful_login_states_the_account_and_its_window(client, monkeypatch):
+    acc = _add(client, headers={"X-User-Id": "alice"})
+    state = client.get("/api/v1/kite/login-url",
+                       headers={"X-User-Id": "alice"}).json()["state"]
+    fake = MagicMock()
+    fake.generate_session = AsyncMock(return_value={
+        "access_token": "AT", "user_id": "AA0595", "user_name": "Madaram Nagesh"})
+    fake.close = AsyncMock()
+    monkeypatch.setattr(kite_accounts, "build_client", lambda a: fake)
+
+    r = client.get(f"/api/v1/kite/callback?request_token=rt&status=success&state={state}")
+    assert r.status_code == 200
+    # Scannable rows rather than one paragraph, with the account named in the
+    # header (avatar + name, as an account card does it) rather than as a row.
+    for probe in ("Connected", "Madaram Nagesh", ">MN<",
+                  "Kite ID", "AA0595", "Expires", "Good for", "IST"):
+        assert probe in r.text, probe
+    expires = kite_accounts.get("alice", acc["id"]).token_expires_at
+    assert datetime.fromtimestamp(expires / 1000, tz=kite_session.IST).strftime("%H:%M") in r.text
+
+
+def test_the_callback_page_uses_sterlings_own_tokens():
+    """This page is served by the backend, so it cannot import the app's
+    stylesheet — the token values are duplicated from frontend/src/styles/theme.ts.
+    Pin them against that file so the copy cannot drift unnoticed."""
+    import re
+    from pathlib import Path
+    from app.api.v1.endpoints import kite as kite_ep
+
+    theme = Path(__file__).resolve().parents[2] / "frontend/src/styles/theme.ts"
+    if not theme.exists():                      # backend-only checkout
+        pytest.skip("frontend/src/styles/theme.ts not present")
+    src = theme.read_text()
+
+    def norm(hex_str: str) -> str:
+        """#333 and #333333 are the same colour — theme.ts uses the shorthand."""
+        h = hex_str.strip().lower().lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return h
+
+    for name, light, dark in kite_ep._TOKENS:
+        # theme.ts rows look like: ['brand', '#f06428', '#ff7a45'],
+        row = re.search(rf"\['{re.escape(name)}',\s*'([^']+)',\s*'([^']+)'\]", src)
+        # Strict: an unmatched name means the copy invented a token, which is how
+        # you end up shipping red-strong's value under the name "red".
+        assert row is not None, f"{name!r} is not a token in theme.ts"
+        assert norm(light) == norm(row.group(1)), f"{name} light drifted from theme.ts"
+        assert norm(dark) == norm(row.group(2)), f"{name} dark drifted from theme.ts"
+
+
+def test_the_callback_page_follows_the_connect_pane_conventions():
+    """Alignment with the Connect pane is the point — same radii, the same whisper
+    of a shadow, 34px controls, and Sterling's brand orange for the one primary
+    action (its accent is not Kite's blue)."""
+    import re
+    from app.api.v1.endpoints import kite as kite_ep
+    css = re.search(r"<style>(.*?)</style>",
+                    kite_ep._callback_page("Connected", ok=True, rows=[], note="").body.decode(),
+                    re.S).group(1)
+    assert css.count("{") == css.count("}")          # the f-string braces survived
+    for probe in ("border-radius:7px",               # controls, as S.btn
+                  "min-height:34px",                 # S.btn
+                  "font-weight:750", "font-weight:650",   # S.title / S.label weights
+                  "letter-spacing:.7px",
+                  "tabular-nums",
+                  "width:36px;height:36px;border-radius:50%",  # the account avatar
+                  "var(--k-brand)",                  # the one primary action
+                  "var(--k-tint-green)"):            # the status band
+        assert probe in css, probe
+    # Deliberate departure from S.card: a lone card on an empty viewport needs real
+    # elevation, where an in-panel card wants only a whisper. Assert it has *some*
+    # elevation rather than pinning S.card's exact value, which no longer applies.
+    assert "box-shadow:0 1px 2px" in css and "36px" in css
+    # Kite blue was the wrong accent for Sterling; it must not have crept back in.
+    assert "387ed1" not in css and "5b9ee8" not in css
