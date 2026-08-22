@@ -152,6 +152,9 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
   );
 }
 
+/** Statuses that earn a coloured pill. The rest are the board's normal state. */
+const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
+
 const STATUS_TONE: Record<BoardStatus, string> = {
   armed: k.blue,
   running: k.green,
@@ -237,8 +240,15 @@ function cellContent(
       };
     case 'engine':
       return { node: <Pill tone={k.dim}>{ENGINE_TAG[signal.engine]}</Pill> };
-    case 'status':
+    case 'status': {
+      // Armed, weakening and error are exceptions and get a pill. Running,
+      // watching and ended are the normal state of a board and read as quiet
+      // text — if every row is badged, the badge stops meaning anything.
+      if (!NOTABLE_STATUS.has(signal.status)) {
+        return { node: STATUS_LABEL[signal.status], color: k.dim };
+      }
       return { node: <Pill tone={STATUS_TONE[signal.status]}>{STATUS_LABEL[signal.status]}</Pill> };
+    }
     case 'exchange':
       return { node: signal.instrument.exchange || '—', color: k.dim };
     case 'leg': {
@@ -250,11 +260,16 @@ function cellContent(
       const parts = [strike ?? null, expiry ?? null].filter(Boolean).join(' · ');
       return { node: <span title={parts || undefined}>{symbol}</span>, color: k.dim };
     }
+    // The levels are plain ink. Colouring every stop red and every target green
+    // was decoration, not information — the value was the same colour whatever
+    // it said, and a board where a third of the numbers are permanently red has
+    // nothing left to say when something is actually wrong. The column heading
+    // already names which level it is.
     case 'ltp': return { node: num(signal.levels.ltp) };
     case 'entry': return { node: num(signal.levels.entry) };
-    case 'stop': return { node: num(signal.levels.stop), color: signal.levels.stop == null ? undefined : k.red };
-    case 'trail': return { node: num(signal.levels.trail), color: signal.levels.trail == null ? undefined : k.amber };
-    case 'target': return { node: num(signal.levels.target), color: signal.levels.target == null ? undefined : k.green };
+    case 'stop': return { node: num(signal.levels.stop) };
+    case 'trail': return { node: num(signal.levels.trail) };
+    case 'target': return { node: num(signal.levels.target) };
     case 'exit': return { node: num(signal.levels.exit) };
     case 'qty': return { node: signal.sizing.quantity ?? '—' };
     case 'risk': return { node: inr(signal.sizing.atRiskInr) };
@@ -307,7 +322,7 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
 export const isMixedEngine = (signals: readonly BoardSignal[]) =>
   new Set(signals.map((s) => s.engine)).size > 1;
 
-function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDetail }: {
+function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped }: {
   signal: BoardSignal;
   columns: ColumnDef[];
   template: string;
@@ -315,8 +330,9 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
   onToggle: () => void;
   renderDetail?: (signal: BoardSignal) => React.ReactNode;
   onOpenDetail?: (signal: BoardSignal) => void;
+  /** Alternating row shade, which is how rows separate without hard borders. */
+  striped: boolean;
 }) {
-  const dirTone = signal.direction === 'long' ? k.green : k.red;
   return (
     <>
       <div
@@ -337,10 +353,14 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
           cursor: 'pointer',
           outlineOffset: -2,
           borderBottom: `1px solid ${k.border}`,
-          // The accent is the direction while a row is closed and the open
-          // marker while it is open, so an expanded row is findable after a scroll.
-          borderLeft: `3px solid ${open ? k.blue : tint(dirTone, 55)}`,
-          background: open ? k.surfaceHover : 'transparent',
+          // The left accent marks the OPEN row only. It used to carry the
+          // direction on every row, which put a saturated band down the whole
+          // board and left nothing to mark the row you had actually opened —
+          // direction is already stated by the pill beside the symbol.
+          borderLeft: `3px solid ${open ? k.blue : 'transparent'}`,
+          // Alternating shade separates rows the way the old Adaptive Edge
+          // table did, without a coloured edge on each one.
+          background: open ? k.surfaceHover : striped ? 'var(--k-surface-2)' : k.bg,
         }}
       >
         <span style={{ color: k.dim, display: 'inline-flex' }}><Chevron open={open} /></span>
@@ -498,7 +518,7 @@ export function SignalBoard({
               })()}
             </span>
           </h3>
-          {sortSignals(rows, sort).map((signal) => (
+          {sortSignals(rows, sort).map((signal, i) => (
             <Row
               key={signal.id}
               signal={signal}
@@ -508,6 +528,7 @@ export function SignalBoard({
               onToggle={() => onToggle(signal.id)}
               renderDetail={renderDetail}
               onOpenDetail={onOpenDetail}
+              striped={i % 2 === 1}
             />
           ))}
         </section>

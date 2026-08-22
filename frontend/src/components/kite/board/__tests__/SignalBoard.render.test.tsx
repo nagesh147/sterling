@@ -11,7 +11,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard } from '../SignalBoard';
-import type { BoardSignal } from '../boardTypes';
+import { STATUS_LABEL, type BoardSignal } from '../boardTypes';
 
 const IST = (5 * 60 + 30) * 60_000;
 const NOW = Date.UTC(2026, 7, 21, 10, 30) - IST;
@@ -95,6 +95,58 @@ describe('SignalBoard rendering', () => {
     const noStop = rows[rows.length - 1] as HTMLElement;
     expect(within(noStop).getAllByText('—').length).toBeGreaterThan(0);
     expect(within(noStop).queryByText('0.00')).not.toBeInTheDocument();
+  });
+});
+
+describe('how much colour a row spends', () => {
+  // The first version of this board put a direction-coloured band on every
+  // row, two tinted pills, and three permanently-coloured number columns. On a
+  // full board that is a wall of colour, and a screen where a third of the
+  // numbers are always red has nothing left to say when something is wrong.
+  const cell = (row: HTMLElement, label: string) => {
+    const heads = [...document.querySelectorAll('.sb-head')].map((h) => h.textContent!.trim());
+    return row.children[heads.indexOf(label) + 1] as HTMLElement;
+  };
+
+  it('leaves the level columns in plain ink', () => {
+    const { container } = show([sig({ levels: { ltp: 18, entry: 18, stop: 14, trail: 16, target: 26, exit: null } })]);
+    const row = container.querySelector('.sb-row') as HTMLElement;
+    for (const label of ['SL', 'TSL', 'Exit']) {
+      // Not red / amber / green just for being that column.
+      expect(cell(row, label).style.color, label).not.toMatch(/--k-(red|amber|green)\)/);
+    }
+  });
+
+  it('accents only the row that is open, not every row', () => {
+    const { container } = show([sig()], { openId: null });
+    expect((container.querySelector('.sb-row') as HTMLElement).style.borderLeft).toContain('transparent');
+    const opened = show([sig()], { openId: 'a' });
+    expect((opened.container.querySelector('.sb-row') as HTMLElement).style.borderLeft).toContain('--k-blue');
+  });
+
+  it('separates rows by alternating shade instead', () => {
+    const { container } = show([sig({ id: 'a' }), sig({ id: 'b' })]);
+    const [first, second] = [...container.querySelectorAll('.sb-row')] as HTMLElement[];
+    expect(first.style.background).not.toBe(second.style.background);
+  });
+
+  it('badges a status only when it is an exception', () => {
+    // Running / watching / ended are the normal state of a board. If every row
+    // carries a badge the badge stops meaning anything.
+    for (const status of ['running', 'watching', 'ended'] as const) {
+      const { container } = show([sig({ status })]);
+      const row = container.querySelector('.sb-row') as HTMLElement;
+      expect(within(row).getByText(STATUS_LABEL[status]).tagName, status).toBe('SPAN');
+      expect(cell(row, 'Status').querySelector('span[style*="background"]'), status).toBeNull();
+    }
+  });
+
+  it('still badges the statuses that need acting on', () => {
+    for (const status of ['armed', 'weakening', 'error'] as const) {
+      const { container } = show([sig({ status })]);
+      const row = container.querySelector('.sb-row') as HTMLElement;
+      expect(cell(row, 'Status').querySelector('span[style*="background"]'), status).not.toBeNull();
+    }
   });
 });
 
