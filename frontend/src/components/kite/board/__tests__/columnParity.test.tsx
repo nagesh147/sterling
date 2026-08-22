@@ -10,11 +10,15 @@
  * Asserted against the real adapters with real-shaped data, so it fails if an
  * engine quietly starts asking for its own set again.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// BoardTicket pulls a live quote; the parity being tested is structural.
+vi.mock('../../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
 import { render } from '@testing-library/react';
 import React from 'react';
 import { SignalBoard, BOARD_COLUMNS, DEFAULT_HIDDEN_COLUMNS, visibleColumns, COLUMNS, type ColumnId } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
+import { BoardTicket } from '../BoardTicket';
 import { supertrendToBoard } from '../supertrendAdapter';
 import { orbToBoard } from '../orbAdapter';
 import { adaptiveEdgeToBoard } from '../adaptiveEdgeAdapter';
@@ -128,5 +132,46 @@ describe('column parity across engines', () => {
     const mixed = [...boards.orb, ...boards.adaptive_edge];
     expect(visibleColumns(boards.orb, BOARD_COLUMNS).map((c) => c.id)).not.toContain('engine');
     expect(visibleColumns(mixed, BOARD_COLUMNS).map((c) => c.id)).toContain('engine');
+  });
+});
+
+describe('expanded-row parity across engines', () => {
+  // The expanded row is where the boards diverged most: SuperTrend's leg
+  // opened onto a calculator and a QuoteDetail with Buy and Sell, while the
+  // others showed two read-only cards and no way to act. They now mount the
+  // same BoardTicket.
+  const expand = (signals: BoardSignal[]) => {
+    // A grouped signal hides its legs until the parent is open, so the leg
+    // whose ticket we want is only mounted once the group is expanded too.
+    const parent = signals[0];
+    const target = parent.children?.[0] ?? parent;
+    const { container } = render(
+      <SignalBoard
+        signals={signals}
+        requested={BOARD_COLUMNS}
+        hidden={DEFAULTS}
+        openId={target.id}
+        openGroups={new Set([parent.id])}
+        onToggle={() => {}}
+        onToggleGroup={() => {}}
+        renderDetail={(sig) => <BoardTicket signal={sig} />}
+        nowMs={NOW}
+      />,
+    );
+    return container;
+  };
+
+  it.each(Object.keys(boards))('%s expands onto the shared ticket', (name) => {
+    const container = expand(boards[name]);
+    const labels = [...container.querySelectorAll('button')].map((b) => b.textContent!.trim());
+    expect(labels, `${name} has no BUY`).toContain('BUY');
+    expect(labels, `${name} has no SELL`).toContain('SELL');
+  });
+
+  it('offers sizing on every board', () => {
+    for (const [name, signals] of Object.entries(boards)) {
+      const container = expand(signals);
+      expect(container.textContent, `${name} has no sizing`).toMatch(/position|qty|lot/i);
+    }
   });
 });

@@ -11,6 +11,7 @@ import { rowsFromSnapshot } from '../AdaptiveEdgePanel';
 import { adaptiveEdgeToBoard } from './adaptiveEdgeAdapter';
 import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
+import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
 import { k } from '../../../styles/kiteUI';
@@ -56,6 +57,7 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
+        renderDetail={(sig) => <BoardTicket signal={sig} tag="ADAPTIVE_EDGE" />}
         onOpenDetail={onOpenDetail}
         sort={sort}
         onSortChange={setSort}

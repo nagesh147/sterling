@@ -153,18 +153,21 @@ describe('ORB feed — expanded setup', () => {
     expect(screen.getByTestId('sizing')).toHaveTextContent('sizing NIFTY26AUG24000CE @ 18 sl 14 on NFO');
   });
 
-  it('shows the book and the underlying setup', () => {
+  it('shows the same order ticket SuperTrend shows', () => {
+    // The expanded row mounts the shared BoardTicket, which is the same
+    // calculator and the same QuoteDetail SuperTrend's legs use — Buy and
+    // Sell included. The boards used to differ here most of all.
     show({ rows: [entry()] });
     fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
-    expect(screen.getByText(/market depth/i)).toBeInTheDocument();
-    expect(screen.getByText(/opening range & vwap/i)).toBeInTheDocument();
-    expect(screen.getByText('ORB high')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'BUY' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SELL' })).toBeInTheDocument();
   });
 
-  it('says when depth is unavailable rather than rendering an empty ladder', () => {
+  it('keeps ORB’s own evidence alongside the shared ticket', () => {
     show({ rows: [entry()] });
     fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
-    expect(screen.getByText(/Depth unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/opening range & vwap/i)).toBeInTheDocument();
+    expect(screen.getByText('ORB high')).toBeInTheDocument();
   });
 
   it('opens one setup at a time', () => {

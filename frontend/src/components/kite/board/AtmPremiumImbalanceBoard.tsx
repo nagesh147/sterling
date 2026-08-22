@@ -22,6 +22,7 @@ import {
 import { atmPremiumImbalanceToBoard } from './atmPremiumImbalanceAdapter';
 import { BOARD_COLUMNS, SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
+import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
 import { k } from '../../../styles/kiteUI';
@@ -267,6 +268,7 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
+        renderDetail={(sig) => <BoardTicket signal={sig} tag="ATM_PREMIUM_IMBALANCE" />}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
         emptyLabel={session

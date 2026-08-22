@@ -1,16 +1,13 @@
 import React from 'react';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useOrbConfig, useSetOrbEnabled } from '../../hooks/useOrbConfig';
-import { useKiteQuote } from '../../hooks/useKite';
 import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';
 import { openSettingsSection } from './config/registry';
 import { EngineOffNotice } from './EngineOffNotice';
-import { DepthLadder, QuoteStats } from './MarketDepthPanel';
-import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './board/SignalBoard';
+import { BoardTicket } from './board/BoardTicket';
 import { BoardFilters } from './board/BoardFilters';
 import { useBoardView } from './board/useBoardView';
-import { StatCard } from './board/StatCard';
 import { orbToBoard } from './board/orbAdapter';
 import { ACTIONABLE, type BoardSignal } from './board/boardTypes';
 import { k, tint } from '../../styles/kiteUI';
@@ -28,43 +25,6 @@ import { k, tint } from '../../styles/kiteUI';
  * information — a scan that refuses to trade must say why — but they are not a
  * call to action, and putting them in the main list buries the ones that are.
  */
-function OrbTicket({ signal }: { signal: BoardSignal }) {
-  const key = signal.instrument.quoteKey;
-  // 'full' carries the 5-level book; fetched per contract on expand, never for
-  // the whole universe, so opening a row does not subscribe 18 instruments.
-  const { data } = useKiteQuote(key ? [key] : [], !!key, 5_000, 'full');
-  const quote = key ? (data as Record<string, any> | undefined)?.[key] : undefined;
-
-  return (
-    <>
-      <StatCard title="Position sizing & trade plan" dense>
-        <AdaptiveEdgePositionCalculator
-          key={signal.id}
-          symbol={signal.underlying}
-          tradingsymbol={signal.instrument.symbol}
-          exchange={signal.instrument.exchange}
-          expiry={signal.instrument.expiry ?? undefined}
-          lotSize={signal.instrument.lotSize ?? undefined}
-          defaultEntryPrice={signal.levels.entry ?? undefined}
-          defaultSl={signal.levels.stop ?? undefined}
-          defaultExit={signal.levels.target ?? undefined}
-          currentLtp={quote?.last_price ?? signal.levels.ltp ?? undefined}
-          optionType={(signal.instrument.optionType ?? 'CE') as 'CE' | 'PE'}
-          exitState="HOLD"
-        />
-      </StatCard>
-
-      <StatCard title="Market depth" summary={signal.instrument.symbol} dense>
-        <DepthLadder quote={quote} />
-        <QuoteStats
-          quote={quote}
-          extra={[{ label: 'Expiry', value: signal.instrument.expiry ?? '—' }]}
-        />
-      </StatCard>
-    </>
-  );
-}
-
 function QuietRow({ entry }: { entry: OrbFeedEntry }) {
   const color = entry.state === 'ERROR' ? k.red : k.dim;
   return (
@@ -167,7 +127,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((prev) => (prev === id ? null : id))}
-        renderDetail={(s) => <OrbTicket signal={s} />}
+        renderDetail={(s) => <BoardTicket signal={s} tag="ORB" />}
         onOpenDetail={onOpenDetail}
         sort={sort}
         onSortChange={setSort}
