@@ -126,3 +126,8 @@ backend/.env
 # tooling / scratch output
 .playwright-mcp/
 youtube-transcript/
+# Scratch HTML written into the served public/ directory during verification
+# runs. Not ignoring it means a `git add -A` from any session commits a couple
+# of hundred KB of throwaway markup — and ships it as a public asset, since
+# anything under public/ is served verbatim.
+frontend/public/_verify/
