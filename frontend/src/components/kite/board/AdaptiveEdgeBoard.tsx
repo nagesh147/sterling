@@ -9,7 +9,7 @@ import React from 'react';
 import { useAdaptiveEdgeSnapshot } from '../../../hooks/useAdaptiveEdge';
 import { rowsFromSnapshot } from '../AdaptiveEdgePanel';
 import { adaptiveEdgeToBoard } from './adaptiveEdgeAdapter';
-import { DEFAULT_SORT, SignalBoard } from './SignalBoard';
+import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
@@ -24,7 +24,7 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
     () => (snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : []),
     [snapshot.data],
   );
-  const columns = React.useMemo(() => (['instrument', 'status', 'exchange', 'leg', 'entry', 'stop', 'trail', 'target', 'exit', 'ltp', 'score', 'time'] as const), []);
+
   const view = useBoardView(signals, { storageKey: 'adaptive_edge' });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
@@ -49,10 +49,10 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
 
   return (
     <div>
-      <BoardFilters view={view} columns={columns} />
+      <BoardFilters view={view} columns={BOARD_COLUMNS} />
       <SignalBoard
         signals={view.visible}
-        requested={columns}
+        requested={BOARD_COLUMNS}
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}

@@ -20,7 +20,7 @@ import {
   useStopAtmPremiumImbalanceSimulation,
 } from '../../../hooks/useAtmPremiumImbalance';
 import { atmPremiumImbalanceToBoard } from './atmPremiumImbalanceAdapter';
-import { SignalBoard } from './SignalBoard';
+import { BOARD_COLUMNS, SignalBoard } from './SignalBoard';
 import { BoardFilters } from './BoardFilters';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
@@ -124,7 +124,7 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
   );
   // One session, one row: hiding it once it ends would leave the board blank at
   // exactly the moment there is a result to read.
-  const view = useBoardView(signals, { endedByDefault: true });
+  const view = useBoardView(signals, { endedByDefault: true, storageKey: 'atm_premium_imbalance' });
   const [openId, setOpenId] = React.useState<string | null>(null);
 
   if (snapshot.isLoading && !snapshot.data) {
@@ -260,10 +260,11 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
 
       <TradeRecord record={snapshot.data?.record} />
 
-      {signals.length > 0 && <BoardFilters view={view} />}
+      {signals.length > 0 && <BoardFilters view={view} columns={BOARD_COLUMNS} />}
       <SignalBoard
         signals={view.visible}
-        requested={['instrument', 'status', 'leg', 'entry', 'target', 'exit', 'ltp', 'time']}
+        requested={BOARD_COLUMNS}
+        hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
         onOpenDetail={onOpenDetail}

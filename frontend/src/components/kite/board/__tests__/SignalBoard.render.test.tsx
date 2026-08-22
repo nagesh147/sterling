@@ -58,10 +58,12 @@ describe('SignalBoard rendering', () => {
     expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
   });
 
-  it('drops a column no signal fills, from the header as well as the rows', () => {
+  it('shows a requested column even when nothing fills it', () => {
+    // Nothing here trails, and the TSL column stays: an empty cell says this
+    // engine does not trail, and every board keeps the same columns so moving
+    // between them never means re-finding the stop.
     show([sig()]);
-    // Nothing here trails, so TSL would be a column of dashes.
-    expect(screen.queryByText('TSL')).not.toBeInTheDocument();
+    expect(screen.getByText('TSL')).toBeInTheDocument();
   });
 
   it('groups rows under their trading day', () => {
@@ -83,18 +85,12 @@ describe('SignalBoard rendering', () => {
   });
 
   it('renders a missing level as a dash, never as zero', () => {
-    // With one signal the empty columns are dropped, so the case that matters
-    // is a mixed board: another row earns the SL column, and this one has no
-    // stop. A fabricated 0 there is a trade-destroying lie.
-    show([
-      sig({ id: 'stopped' }),
-      sig({ id: 'nostop', levels: { ltp: 20, entry: 20, stop: null, trail: null, target: null, exit: null } }),
-    ]);
+    // A fabricated 0 in a stop column is a trade-destroying lie.
+    show([sig({ levels: { ltp: 20, entry: 20, stop: null, trail: null, target: null, exit: null } })]);
     expect(screen.getByText('SL')).toBeInTheDocument();
-    const rows = document.querySelectorAll('.sb-row');
-    const noStop = rows[rows.length - 1] as HTMLElement;
-    expect(within(noStop).getAllByText('—').length).toBeGreaterThan(0);
-    expect(within(noStop).queryByText('0.00')).not.toBeInTheDocument();
+    const row = document.querySelector('.sb-row') as HTMLElement;
+    expect(within(row).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(row).queryByText('0.00')).not.toBeInTheDocument();
   });
 });
 

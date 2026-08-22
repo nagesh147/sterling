@@ -7,7 +7,7 @@ import { openSettingsSection } from './config/registry';
 import { EngineOffNotice } from './EngineOffNotice';
 import { DepthLadder, QuoteStats } from './MarketDepthPanel';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
-import { DEFAULT_SORT, SignalBoard, type ColumnId } from './board/SignalBoard';
+import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './board/SignalBoard';
 import { BoardFilters } from './board/BoardFilters';
 import { useBoardView } from './board/useBoardView';
 import { StatCard } from './board/StatCard';
@@ -28,11 +28,6 @@ import { k, tint } from '../../styles/kiteUI';
  * information — a scan that refuses to trade must say why — but they are not a
  * call to action, and putting them in the main list buries the ones that are.
  */
-/** ORB quotes no trailing stop and no realised exit, so it never asks for them. */
-const ORB_COLUMNS: readonly ColumnId[] = [
-  'instrument', 'status', 'exchange', 'leg', 'ltp', 'entry', 'stop', 'target', 'qty', 'risk', 'time',
-];
-
 function OrbTicket({ signal }: { signal: BoardSignal }) {
   const key = signal.instrument.quoteKey;
   // 'full' carries the 5-level book; fetched per contract on expand, never for
@@ -164,11 +159,11 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
         </span>
       </div>
 
-      <BoardFilters view={view} columns={ORB_COLUMNS} />
+      <BoardFilters view={view} columns={BOARD_COLUMNS} />
 
       <SignalBoard
         signals={view.visible}
-        requested={ORB_COLUMNS}
+        requested={BOARD_COLUMNS}
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((prev) => (prev === id ? null : id))}

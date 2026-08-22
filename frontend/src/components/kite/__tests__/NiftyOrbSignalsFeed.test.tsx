@@ -102,11 +102,13 @@ describe('ORB feed — tradable setups', () => {
     expect(screen.getByText('NIFTY26AUG24000CE', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('CE · LONG')).toBeInTheDocument();
     expect(screen.getByText('NFO')).toBeInTheDocument();
-    ['LTP', 'Entry', 'SL', 'Exit', 'Qty', 'At risk'].forEach((label) => {
-      expect(screen.getByText(label)).toBeInTheDocument();
+    // The eleven core columns every board opens with. Qty and At risk are
+    // real for ORB but start hidden, one click away in the column picker, so
+    // that all four boards open identical.
+    ['LTP', 'Entry', 'SL', 'TSL', 'Exit', 'Exc', 'Leg', 'Time', 'Status'].forEach((label) => {
+      expect(screen.getByText(label), label).toBeInTheDocument();
     });
-    expect(screen.getByText('₹2,700')).toBeInTheDocument();
-    expect(screen.getByText('150')).toBeInTheDocument();
+    expect(screen.queryByText('At risk')).not.toBeInTheDocument();
   });
 
   it('shows the signal time and marks a stale quote', () => {

@@ -65,17 +65,19 @@ describe('trading-day grouping', () => {
 describe('column selection', () => {
   const all = COLUMNS.map((c) => c.id);
 
-  it('drops a column no signal can fill', () => {
+  it('keeps a requested column even when nothing fills it', () => {
+    // Emptiness used to remove a column, which meant every board showed a
+    // different set and moving between them meant re-finding the stop. An
+    // empty cell says "this engine does not produce that", which is true.
     const ids = visibleColumns([signal()], all).map((c) => c.id);
-    // Nothing set a target, so a Target column would be a row of dashes
-    // implying the engine forgot to fill it in.
-    expect(ids).not.toContain('target');
-    expect(ids).not.toContain('trail');
+    expect(ids).toContain('target');
+    expect(ids).toContain('trail');
   });
 
-  it('keeps a column as soon as one signal fills it', () => {
-    const withTarget = signal({ levels: { ltp: null, entry: null, stop: null, trail: null, target: 120, exit: null } });
-    expect(visibleColumns([signal(), withTarget], all).map((c) => c.id)).toContain('target');
+  it('gives two boards with different data the same columns', () => {
+    const rich = signal({ levels: { ltp: 1, entry: 2, stop: 3, trail: 4, target: 5, exit: 6 } });
+    expect(visibleColumns([signal()], all).map((c) => c.id))
+      .toEqual(visibleColumns([rich], all).map((c) => c.id));
   });
 
   it('always keeps the row identity columns', () => {

@@ -14,7 +14,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import type { BoardSignal } from './boardTypes';
-import type { ColumnId } from './SignalBoard';
+import { DEFAULT_HIDDEN_COLUMNS, type ColumnId } from './SignalBoard';
 
 export interface BoardView {
   query: string;
@@ -33,6 +33,7 @@ export interface BoardView {
   hidden: ReadonlySet<ColumnId>;
   toggleColumn: (id: ColumnId) => void;
   showAllColumns: () => void;
+  resetColumns: () => void;
 }
 
 /**
@@ -43,19 +44,24 @@ export interface BoardView {
  * on one board silently changed another.
  */
 function loadHidden(storageKey: string | undefined): Set<ColumnId> {
-  if (!storageKey || typeof localStorage === 'undefined') return new Set();
+  // No stored choice yet means the defaults, not "everything visible" — every
+  // board opens on the same eleven core columns.
+  const fallback = () => new Set<ColumnId>(DEFAULT_HIDDEN_COLUMNS);
+  if (!storageKey || typeof localStorage === 'undefined') return fallback();
   try {
-    const raw = JSON.parse(localStorage.getItem(`sterling.board.hidden.${storageKey}`) || '[]');
+    const stored = localStorage.getItem(`sterling.board.hidden.v2.${storageKey}`);
+    if (stored == null) return fallback();
+    const raw = JSON.parse(stored);
     return new Set(Array.isArray(raw) ? (raw as ColumnId[]) : []);
   } catch {
-    return new Set();
+    return fallback();
   }
 }
 
 function saveHidden(storageKey: string | undefined, hidden: Set<ColumnId>): void {
   if (!storageKey || typeof localStorage === 'undefined') return;
   try {
-    localStorage.setItem(`sterling.board.hidden.${storageKey}`, JSON.stringify([...hidden]));
+    localStorage.setItem(`sterling.board.hidden.v2.${storageKey}`, JSON.stringify([...hidden]));
   } catch {
     // A blocked localStorage costs the preference, not the board.
   }
@@ -140,6 +146,15 @@ export function useBoardView(
     });
   }, [storageKey]);
 
+  /** Back to the eleven core columns every board opens with. */
+  const resetColumns = useCallback(() => {
+    setHidden(() => {
+      const next = new Set<ColumnId>(DEFAULT_HIDDEN_COLUMNS);
+      saveHidden(storageKey, next);
+      return next;
+    });
+  }, [storageKey]);
+
   return useMemo(() => {
     const all = [...signals];
     const ended = all.filter((s) => s.status === 'ended').length;
@@ -161,7 +176,7 @@ export function useBoardView(
       query, setQuery, showEnded, setShowEnded, bestOnly, setBestOnly,
       visible, offers,
       counts: { total: all.length, shown: visible.length, ended },
-      hidden, toggleColumn, showAllColumns,
+      hidden, toggleColumn, showAllColumns, resetColumns,
     };
-  }, [signals, query, showEnded, bestOnly, hidden, toggleColumn, showAllColumns]);
+  }, [signals, query, showEnded, bestOnly, hidden, toggleColumn, showAllColumns, resetColumns]);
 }

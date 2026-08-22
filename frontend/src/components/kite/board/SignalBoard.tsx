@@ -316,32 +316,51 @@ function cellContent(
  * should not imply it forgot to. `always` columns are the row's identity and
  * stay even when sparse.
  */
-export function visibleColumns(signals: readonly BoardSignal[], requested: readonly ColumnId[]): ColumnDef[] {
-  const always = new Set<ColumnId>(['instrument', 'status', 'time']);
-  const filled = new Set<ColumnId>();
-  // Legs count. A grouped board's parents deliberately carry no premiums, so
-  // asking only the parents would drop every price column on exactly the
-  // board that needs them most.
-  for (const s of flattenSignals(signals)) {
-    if (s.instrument.exchange) filled.add('exchange');
-    if (s.instrument.strike != null || s.instrument.expiry) filled.add('leg');
-    if (s.levels.ltp != null) filled.add('ltp');
-    if (s.levels.entry != null) filled.add('entry');
-    if (s.levels.stop != null) filled.add('stop');
-    if (s.levels.trail != null) filled.add('trail');
-    if (s.levels.target != null) filled.add('target');
-    if (s.levels.exit != null) filled.add('exit');
-    if (s.sizing.quantity != null) filled.add('qty');
-    if (s.sizing.atRiskInr != null) filled.add('risk');
-    if (s.score != null) filled.add('score');
-    filled.add('engine');
-  }
-  return COLUMNS.filter((c) => requested.includes(c.id) && (always.has(c.id) || filled.has(c.id)));
-}
-
 /** True when more than one engine is on the board, so the Engine tag earns its width. */
 export const isMixedEngine = (signals: readonly BoardSignal[]) =>
   new Set(flattenSignals(signals).map((s) => s.engine)).size > 1;
+
+/**
+ * The column set every board shows, in one place.
+ *
+ * All four engines request this same list, so switching tabs never moves a
+ * column or renames one. What differs between engines is what they can fill,
+ * and an empty cell says "this engine does not produce that" — ORB has no
+ * trailing stop, so its TSL column reads as dashes, which is true and useful.
+ *
+ * That is a deliberate reversal. The board used to drop any column no row
+ * could fill, which meant every board showed a different set and moving
+ * between them meant re-finding the stop.
+ */
+export const BOARD_COLUMNS: readonly ColumnId[] = [
+  'instrument', 'engine', 'status', 'exchange', 'leg',
+  'ltp', 'entry', 'stop', 'trail', 'target', 'exit',
+  'qty', 'risk', 'score', 'time',
+];
+
+/**
+ * Off unless asked for, on every board.
+ *
+ * Leaves the eleven a trader named as the core of a row — symbol, type,
+ * exchange, leg, LTP, entry, SL, TSL, exit, time, status — and keeps the rest
+ * one click away in the column picker rather than making the sidebar scroll.
+ */
+export const DEFAULT_HIDDEN_COLUMNS: readonly ColumnId[] = ['engine', 'qty', 'risk', 'score'];
+
+/**
+ * Which columns to render.
+ *
+ * Only two things remove a column: the caller did not ask for it, or the user
+ * switched it off. Emptiness no longer does — see BOARD_COLUMNS.
+ *
+ * The engine tag is the one exception, because on a single-engine board it
+ * would repeat the same three letters down every row.
+ */
+export function visibleColumns(signals: readonly BoardSignal[], requested: readonly ColumnId[]): ColumnDef[] {
+  const wanted = new Set(requested);
+  if (!isMixedEngine(signals)) wanted.delete('engine');
+  return COLUMNS.filter((c) => wanted.has(c.id));
+}
 
 function Row({
   signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped,
@@ -485,12 +504,8 @@ export function SignalBoard({
   nowMs: number;
   emptyLabel?: string;
 }) {
-  const wanted = requested ?? COLUMNS.map((c) => c.id);
-  const withoutEngine = isMixedEngine(signals) ? wanted : wanted.filter((c) => c !== 'engine');
-  // Two separate reasons a column is absent, applied in order: the user
-  // switched it off, or no row can fill it. Keeping them separate means
-  // un-hiding a column still respects the second rule.
-  const chosen = hidden ? withoutEngine.filter((c) => !hidden.has(c)) : withoutEngine;
+  const wanted = requested ?? BOARD_COLUMNS;
+  const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
   const cols = visibleColumns(signals, chosen);
   const template = cols.map((c) => c.width).join(' ');
   const days = groupByDay(signals);

@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useBoardView } from '../useBoardView';
+import { DEFAULT_HIDDEN_COLUMNS } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
 
 const NOW = Date.UTC(2026, 7, 21, 5, 0);
@@ -47,50 +48,53 @@ describe('which filters are offered', () => {
 describe('hidden columns', () => {
   beforeEach(() => localStorage.clear());
 
-  it('hides nothing until asked', () => {
+  it('opens on the eleven core columns, extras tucked away', () => {
+    // Every board starts identical: symbol, type, exchange, leg, LTP, entry,
+    // SL, TSL, exit, time, status. Qty, risk, score and the engine tag are a
+    // click away rather than making the sidebar scroll.
     const { result } = renderHook(() => useBoardView([sig()]));
-    expect([...result.current.hidden]).toEqual([]);
+    expect([...result.current.hidden].sort()).toEqual([...DEFAULT_HIDDEN_COLUMNS].sort());
   });
 
   it('toggles a column off and back on', () => {
     const { result } = renderHook(() => useBoardView([sig()]));
+    // 'risk' starts hidden, so the first toggle reveals it.
     act(() => result.current.toggleColumn('risk'));
-    expect([...result.current.hidden]).toEqual(['risk']);
+    expect(result.current.hidden.has('risk')).toBe(false);
     act(() => result.current.toggleColumn('risk'));
-    expect([...result.current.hidden]).toEqual([]);
+    expect(result.current.hidden.has('risk')).toBe(true);
   });
 
   it('restores every column at once', () => {
     const { result } = renderHook(() => useBoardView([sig()]));
-    act(() => { result.current.toggleColumn('risk'); });
-    act(() => { result.current.toggleColumn('qty'); });
-    expect(result.current.hidden.size).toBe(2);
     act(() => result.current.showAllColumns());
     expect(result.current.hidden.size).toBe(0);
+    act(() => result.current.resetColumns());
+    expect([...result.current.hidden].sort()).toEqual([...DEFAULT_HIDDEN_COLUMNS].sort());
   });
 
   it('remembers the choice per board, not globally', () => {
     // ORB shows an at-risk figure Adaptive Edge cannot fill. One shared list
     // would mean hiding a column on one board silently changed another.
     const orb = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
-    act(() => orb.result.current.toggleColumn('risk'));
+    act(() => orb.result.current.toggleColumn('stop'));
 
     const other = renderHook(() => useBoardView([sig()], { storageKey: 'adaptive_edge' }));
-    expect([...other.result.current.hidden]).toEqual([]);
+    expect(other.result.current.hidden.has('stop')).toBe(false);
 
     const orbAgain = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
-    expect([...orbAgain.result.current.hidden]).toEqual(['risk']);
+    expect(orbAgain.result.current.hidden.has('stop')).toBe(true);
   });
 
   it('forgets nothing and crashes on nothing when storage holds junk', () => {
-    localStorage.setItem('sterling.board.hidden.orb', 'not json');
+    localStorage.setItem('sterling.board.hidden.v2.orb', 'not json');
     const { result } = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
-    expect([...result.current.hidden]).toEqual([]);
+    expect([...result.current.hidden].sort()).toEqual([...DEFAULT_HIDDEN_COLUMNS].sort());
   });
 
   it('keeps the choice out of storage when no board is named', () => {
     const { result } = renderHook(() => useBoardView([sig()]));
-    act(() => result.current.toggleColumn('risk'));
+    act(() => result.current.toggleColumn('stop'));
     expect(localStorage.length).toBe(0);
   });
 });
