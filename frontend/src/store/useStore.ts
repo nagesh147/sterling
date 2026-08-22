@@ -87,12 +87,22 @@ function loadDensity(): Density {
   } catch { return DEFAULT_DENSITY; }
 }
 /**
- * Defaults on. The whole point is that a fresh install looks the same on
- * every monitor without anyone having to find a setting first.
+ * Defaults OFF, so the app renders 1:1 like every other site.
+ *
+ * There are two incompatible readings of "the same on every monitor". Holding
+ * the layout constant makes every screen show the same content, but text size
+ * then follows the panel's pixel density. Holding text size constant is what
+ * YouTube and essentially everything else does — render 1:1 and trust the
+ * platform's scale factor, which exists to keep a CSS pixel about 1/96 inch —
+ * and let the amount of content vary with the room.
+ *
+ * Text size wins the default. It is the convention users already have from
+ * every other application, and the board adapts by dropping columns rather
+ * than clipping (see board/columnFit.ts), which is what made 1:1 viable here.
  */
 function loadAutoFit(): boolean {
-  try { return localStorage.getItem(AUTOFIT_KEY) !== 'false'; }
-  catch { return true; }
+  try { return localStorage.getItem(AUTOFIT_KEY) === 'true'; }
+  catch { return false; }
 }
 
 const TAB_ORDER_KEY = 'sterling_tab_order';
@@ -231,12 +241,12 @@ export const useStore = create<StoreState>((set) => ({
     try {
       localStorage.setItem(ZOOM_KEY, '1');
       localStorage.setItem(DENSITY_KEY, DEFAULT_DENSITY);
-      localStorage.setItem(AUTOFIT_KEY, 'true');
+      localStorage.setItem(AUTOFIT_KEY, 'false');
       localStorage.setItem(THEME_KEY, DEFAULT_THEME);
       localStorage.setItem(THEME_DEFAULT_MIGRATION_KEY, 'true');
     } catch { /* ignore */ }
     applyThemeToDocument(DEFAULT_THEME);
-    set({ zoomLevel: 1, density: DEFAULT_DENSITY, autoFitDensity: true, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
+    set({ zoomLevel: 1, density: DEFAULT_DENSITY, autoFitDensity: false, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
   },
 }));
 

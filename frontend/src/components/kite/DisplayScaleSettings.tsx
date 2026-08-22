@@ -78,13 +78,13 @@ export function DisplayScaleSettings() {
       persistKey="display-scale"
     >
       <Field
-        label="Match across monitors"
-        hint="Lays the app out against a fixed design width and scales it to fit. Off renders 1:1 with the browser, so the amount on screen changes with the display."
+        label="What stays the same across monitors"
+        hint="You can hold one of these constant, not both. Off (the default) renders 1:1 like every other site, so text is the same physical size everywhere and the board drops columns when a screen is short of room. On holds the layout instead, so every screen shows identical content and text size follows the display."
         wide
       >
         <Switch
           checked={autoFit}
-          label={autoFit ? 'On — same layout everywhere' : 'Off — follow the browser'}
+          label={autoFit ? 'Layout — same content, text size varies' : 'Text size — same type, content varies'}
           onChange={() => setAutoFit(!autoFit)}
         />
       </Field>
@@ -174,7 +174,8 @@ export function DisplayScaleSettings() {
         )}
         {mode === 'off' && (
           <div style={{ marginTop: 4 }}>
-            Matching is off, so this figure changes from monitor to monitor.
+            Rendering 1:1, so text is the same physical size as on any other
+            screen and the board fits its columns to the room it has.
           </div>
         )}
       </div>

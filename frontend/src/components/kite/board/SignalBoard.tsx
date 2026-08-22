@@ -20,6 +20,7 @@ import {
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import { ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
 
@@ -42,6 +43,13 @@ interface ColumnDef {
  * Every column the board can show, in reading order: what it is, then what it
  * is worth now, then where it gets out, then how big, then when.
  */
+/**
+ * Width a row spends on things that are not columns — the inline action
+ * buttons. Counted so the fit does not hand every pixel to columns and push
+ * the buttons off the edge.
+ */
+const ACTION_RESERVE = 96;
+
 export const COLUMNS: readonly ColumnDef[] = [
   // Widths, labels and alignment come from SuperTrend's table (see
   // signalRowSpec) so a cell sits in the same place on every board. The extras
@@ -758,7 +766,29 @@ export function SignalBoard({
 }) {
   const wanted = requested ?? BOARD_COLUMNS;
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
-  const cols = visibleColumns(signals, chosen);
+  const all = visibleColumns(signals, chosen);
+
+  // Measured, not derived from the window: this board is one dock among
+  // several and its width has little to do with the viewport's. offsetWidth
+  // rather than getBoundingClientRect because column widths are layout pixels
+  // and a rect reports device pixels — the two diverge under a viewport scale.
+  const boardRef = React.useRef<HTMLDivElement>(null);
+  const [boardWidth, setBoardWidth] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const el = boardRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setBoardWidth(el.offsetWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { columns: cols } = fitColumns(all, boardWidth, {
+    minInstrument: ROW_METRICS.instrumentMinWidth,
+    gap: ROW_METRICS.gap,
+    reserve: ACTION_RESERVE,
+  });
   const days = groupByDay(signals, { liveFirst });
 
   if (!signals.length) {
@@ -766,7 +796,7 @@ export function SignalBoard({
   }
 
   return (
-    <div>
+    <div ref={boardRef}>
       <div
         role="row"
         style={{
