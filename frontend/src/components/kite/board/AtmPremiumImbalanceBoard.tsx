@@ -11,6 +11,7 @@
  * and a short interval is what makes it readable.
  */
 import React from 'react';
+import type { AtmTradeRecord } from '../../../hooks/useAtmPremiumImbalance';
 import {
   useArmAtmPremiumImbalance,
   useAtmPremiumImbalanceConfig,
@@ -28,6 +29,67 @@ import { k } from '../../../styles/kiteUI';
 const note: React.CSSProperties = {
   padding: '10px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6,
 };
+
+/**
+ * What actually happened, across every closed trade.
+ *
+ * This is deliberately shown whether or not a session is armed, because the
+ * moment you most want it is *before* arming. The board's rows only exist while
+ * armed; the record is the accumulated history and outlives every session.
+ *
+ * The break-even rate sits next to the win rate on purpose. A win rate alone is
+ * not an answer -- this strategy nets about +3% when it wins against an
+ * uncapped downside, so 85% can be either excellent or ruinous depending on how
+ * big the losses are. Showing one number without the other is how a losing
+ * system looks fine on a dashboard.
+ */
+function TradeRecord({ record }: { record?: AtmTradeRecord }) {
+  if (!record || record.trades === 0) {
+    return (
+      <p style={note}>
+        No closed trades recorded yet. Every trade is journalled from now on —
+        the win rate is what decides this strategy, and it cannot be read off the
+        recordings.
+      </p>
+    );
+  }
+  const be = record.break_even_win_rate_pct;
+  const enough = record.trades >= record.min_sample;
+  // Colour only once the sample supports a conclusion. Colouring four trades
+  // green would be the dashboard telling a story the data cannot support.
+  const tone = !enough || be == null ? k.dim
+    : record.win_rate_pct > be ? k.green : k.red;
+  return (
+    <div style={{ padding: '10px 12px', borderTop: `1px solid ${k.border}` }}>
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: '4px 18px',
+        fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums',
+      }}>
+        <span>Trades <b style={{ color: k.text }}>{record.trades}</b></span>
+        <span>Win rate <b style={{ color: tone }}>{record.win_rate_pct.toFixed(1)}%</b></span>
+        <span>
+          Break-even{' '}
+          <b style={{ color: k.text }}>{be == null ? '—' : `${be.toFixed(1)}%`}</b>
+        </span>
+        <span>Avg win <b style={{ color: k.text }}>+{record.avg_win_pct.toFixed(1)}%</b></span>
+        <span>Avg loss <b style={{ color: k.text }}>-{record.avg_loss_pct.toFixed(1)}%</b></span>
+        <span>
+          Expectancy{' '}
+          <b style={{ color: record.expectancy_pct >= 0 ? k.green : k.red }}>
+            {record.expectancy_pct >= 0 ? '+' : ''}{record.expectancy_pct.toFixed(2)}%
+          </b>
+        </span>
+        <span>
+          P&amp;L{' '}
+          <b style={{ color: record.total_pnl >= 0 ? k.green : k.red }}>
+            ₹{record.total_pnl.toFixed(0)}
+          </b>
+        </span>
+      </div>
+      <p style={{ ...note, padding: '6px 0 0', color: tone }}>{record.verdict}</p>
+    </div>
+  );
+}
 
 export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
   nowMs: number;
@@ -195,6 +257,8 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
           {blockers.map((b) => <li key={b}>{b}</li>)}
         </ul>
       )}
+
+      <TradeRecord record={snapshot.data?.record} />
 
       {signals.length > 0 && <BoardFilters view={view} />}
       <SignalBoard

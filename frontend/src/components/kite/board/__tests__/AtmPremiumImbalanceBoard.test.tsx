@@ -291,3 +291,75 @@ it('keeps the finished trade on screen instead of filtering it away', () => {
   expect(screen.getByText('SENSEX26AUG77700PE')).toBeTruthy();
 });
 
+
+/**
+ * The trade record.
+ *
+ * This is the only thing on the board that can say whether the strategy works,
+ * so what it refuses to claim matters more than what it shows.
+ */
+describe('the trade record', () => {
+  function record(over: any = {}) {
+    return {
+      trades: 40, wins: 34, losses: 6,
+      win_rate_pct: 85.0, avg_win_pct: 3.1, avg_loss_pct: 20.0,
+      break_even_win_rate_pct: 86.6, expectancy_pct: -0.36,
+      worst_pct: -24.0, best_pct: 4.4, total_pnl: -1200,
+      exit_reasons: { target_hit: 34, stop_hit: 6 }, min_sample: 30,
+      verdict: 'BELOW WATER: winning 85.0% but needs 86.6% to break even',
+      ...over,
+    };
+  }
+
+  it('says nothing has been recorded rather than showing a zero win rate', () => {
+    snap = { data: { session: null, blockers: [], record: record({ trades: 0 }) },
+             isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    expect(screen.getByText(/No closed trades recorded yet/i)).toBeTruthy();
+    expect(screen.queryByText(/0\.0%/)).toBeNull();
+  });
+
+  it('shows the break-even rate beside the win rate, never alone', () => {
+    snap = { data: { session: null, blockers: [], record: record() },
+             isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    expect(screen.getByText('85.0%')).toBeTruthy();
+    expect(screen.getByText('86.6%')).toBeTruthy();
+  });
+
+  it('an 85% win rate below its break-even reads as losing, not winning', () => {
+    snap = { data: { session: null, blockers: [], record: record() },
+             isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    // The whole point: 85% looks excellent and is not, because the average loss
+    // is 20% against a 3.1% average win.
+    expect(screen.getByText(/BELOW WATER/)).toBeTruthy();
+  });
+
+  it('does not colour a verdict the sample cannot support', () => {
+    snap = { data: { session: null, blockers: [],
+                     record: record({ trades: 4, wins: 4, losses: 0,
+                                      win_rate_pct: 100, break_even_win_rate_pct: null,
+                                      verdict: 'not enough trades yet — 4 of 30' }) },
+             isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    const rate = screen.getByText('100.0%');
+    // Four straight wins must not render green. A strategy that merely breaks
+    // even shows three straight winners four times out of five.
+    expect(rate.getAttribute('style')).toContain('--k-dim');
+    expect(screen.getByText(/not enough trades yet/)).toBeTruthy();
+  });
+
+  it('is shown when nothing is armed, which is when it matters most', () => {
+    snap = { data: { session: null, blockers: ['strategy disabled'], record: record() },
+             isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    expect(screen.getByText('85.0%')).toBeTruthy();
+  });
+
+  it('survives a snapshot with no record at all', () => {
+    snap = { data: { session: null, blockers: [] }, isLoading: false, error: null };
+    render(<AtmPremiumImbalanceBoard nowMs={OPEN} />);
+    expect(screen.getByText(/No closed trades recorded yet/i)).toBeTruthy();
+  });
+});

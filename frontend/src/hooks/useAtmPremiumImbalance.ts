@@ -193,6 +193,36 @@ export interface AtmPremiumImbalanceSnapshot {
   blockers: string[];
   /** Live session state, or null when nothing is armed. */
   session: AtmSessionStatus | null;
+  /** The realised record. Simulated trades are excluded. */
+  record?: AtmTradeRecord;
+}
+
+/**
+ * What actually happened, across every closed trade.
+ *
+ * `breakEvenWinRate` is the number to read first. A win rate on its own says
+ * nothing — 85% is excellent against a small average loss and ruinous against a
+ * large one — so the threshold travels with the measurement. `verdict` refuses to
+ * answer below `minSample`, because a win rate computed from four trades is not a
+ * win rate.
+ */
+export interface AtmTradeRecord {
+  trades: number;
+  wins: number;
+  losses: number;
+  /** Percent of premium, not points: +15 is 15% of a 100 premium and 4.4% of a 338 one. */
+  win_rate_pct: number;
+  avg_win_pct: number;
+  avg_loss_pct: number;
+  /** `avg_loss / (avg_win + avg_loss)`. Null until there is at least one loss. */
+  break_even_win_rate_pct: number | null;
+  expectancy_pct: number;
+  worst_pct: number;
+  best_pct: number;
+  total_pnl: number;
+  exit_reasons: Record<string, number>;
+  min_sample: number;
+  verdict: string;
 }
 
 /**
