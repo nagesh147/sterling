@@ -15,6 +15,7 @@ import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
 import { OptionContractsPicker } from './config/OptionContractsPicker';
 import { TickerStripSettings } from './ticker/TickerStripSettings';
+import { DisplayScaleSettings } from './DisplayScaleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
@@ -1136,6 +1137,7 @@ export function ConnectPane() {
 
             {section === 'experience' && (
               <>
+                <DisplayScaleSettings />
                 <MotionStyleSettings />
                 <TickerStripSettings />
                 <section style={{ marginBottom: 16, padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>

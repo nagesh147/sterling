@@ -282,6 +282,28 @@
 
 html, body { margin: 0; padding: 0; }
 
+/* ─── Viewport normalisation ───────────────────────────────────────────────
+   The app lays out against a fixed design width and scales to fit, so the
+   same page is the same page on every monitor regardless of how many CSS
+   pixels that monitor's scale factor hands us. Written by
+   styles/applyViewportScale.ts.
+
+   Both rules are gated on [data-app-scaled], which the applier only sets when
+   the scale is not exactly 1 — an app at 1:1 is left completely untouched.
+
+   The pin is required, not cosmetic: scaling above 1 makes the document
+   taller than the viewport, and the scrollbar that raises steals width back
+   out of the layout. The terminal is fixed/inset:0 and never scrolls the
+   document anyway. */
+html[data-app-scaled] {
+  zoom: var(--app-zoom, 1);
+}
+html[data-app-scaled],
+html[data-app-scaled] body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { DENSITY_ORDER, DEFAULT_DENSITY, MIN_USER_SCALE, MAX_USER_SCALE, type Density } from '../utils/viewportScale';
 
 const STORAGE_KEY = 'sterling_underlying';
 const THEME_KEY = 'sterling_theme';
@@ -77,6 +78,23 @@ function loadZoom(): number {
   catch { return 1; }
 }
 
+const DENSITY_KEY = 'sterling_density';
+const AUTOFIT_KEY = 'sterling_autofit';
+function loadDensity(): Density {
+  try {
+    const v = localStorage.getItem(DENSITY_KEY);
+    return DENSITY_ORDER.includes(v as Density) ? (v as Density) : DEFAULT_DENSITY;
+  } catch { return DEFAULT_DENSITY; }
+}
+/**
+ * Defaults on. The whole point is that a fresh install looks the same on
+ * every monitor without anyone having to find a setting first.
+ */
+function loadAutoFit(): boolean {
+  try { return localStorage.getItem(AUTOFIT_KEY) !== 'false'; }
+  catch { return true; }
+}
+
 const TAB_ORDER_KEY = 'sterling_tab_order';
 const DEFAULT_TAB_ORDER: TabId[] = ['sterlingEngine', 'grok', 'sterling_v2', 'positions', 'backtest', 'paper', 'kite'];
 export type TabId = 'sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper' | 'kite';
@@ -121,8 +139,15 @@ interface StoreState {
   setEngineMode: (m: 'sterling' | 'grok') => void;
   sterlingV2: boolean;
   setSterlingV2: (on: boolean) => void;
+  /** The user's manual multiplier, applied on top of the monitor fit. */
   zoomLevel: number;
   setZoomLevel: (z: number) => void;
+  /** How much of the app to fit on screen at once. */
+  density: Density;
+  setDensity: (d: Density) => void;
+  /** Off renders 1:1 with the browser, as the app did before normalisation. */
+  autoFitDensity: boolean;
+  setAutoFitDensity: (on: boolean) => void;
   tabOrder: TabId[];
   setTabOrder: (order: TabId[]) => void;
   resetUI: () => void;
@@ -183,10 +208,19 @@ export const useStore = create<StoreState>((set) => ({
   },
   zoomLevel: loadZoom(),
   setZoomLevel: (z) => {
-    const clamped = Math.max(0.6, Math.min(2.0, z)); // Min 60%, Max 200%
+    const clamped = Math.max(MIN_USER_SCALE, Math.min(MAX_USER_SCALE, z));
     try { localStorage.setItem(ZOOM_KEY, clamped.toString()); } catch { /* ignore */ }
-    document.documentElement.style.setProperty('--app-zoom', clamped.toString());
     set({ zoomLevel: clamped });
+  },
+  density: loadDensity(),
+  setDensity: (d) => {
+    try { localStorage.setItem(DENSITY_KEY, d); } catch { /* ignore */ }
+    set({ density: d });
+  },
+  autoFitDensity: loadAutoFit(),
+  setAutoFitDensity: (on) => {
+    try { localStorage.setItem(AUTOFIT_KEY, String(on)); } catch { /* ignore */ }
+    set({ autoFitDensity: on });
   },
   tabOrder: loadTabOrder(),
   setTabOrder: (order) => {
@@ -196,12 +230,13 @@ export const useStore = create<StoreState>((set) => ({
   resetUI: () => {
     try {
       localStorage.setItem(ZOOM_KEY, '1');
+      localStorage.setItem(DENSITY_KEY, DEFAULT_DENSITY);
+      localStorage.setItem(AUTOFIT_KEY, 'true');
       localStorage.setItem(THEME_KEY, DEFAULT_THEME);
       localStorage.setItem(THEME_DEFAULT_MIGRATION_KEY, 'true');
     } catch { /* ignore */ }
     applyThemeToDocument(DEFAULT_THEME);
-    document.documentElement.style.setProperty('--app-zoom', '1');
-    set({ zoomLevel: 1, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
+    set({ zoomLevel: 1, density: DEFAULT_DENSITY, autoFitDensity: true, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
   },
 }));
 
@@ -233,6 +268,10 @@ export const useAppMode = () => useStore((s) => s.appMode);
 export const useSetAppMode = () => useStore((s) => s.setAppMode);
 
 export const useZoomLevel = () => useStore((s) => s.zoomLevel);
+export const useDensity = () => useStore((s) => s.density);
+export const useSetDensity = () => useStore((s) => s.setDensity);
+export const useAutoFitDensity = () => useStore((s) => s.autoFitDensity);
+export const useSetAutoFitDensity = () => useStore((s) => s.setAutoFitDensity);
 export const useSetZoomLevel = () => useStore((s) => s.setZoomLevel);
 export const useResetUI = () => useStore((s) => s.resetUI);
 

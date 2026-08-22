@@ -13,6 +13,7 @@ import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { getOrderNudge } from './orderNudge';
+import { layoutViewport, toLayoutPx } from '../../styles/applyViewportScale';
 import {
   Side, OrderType, Product, Validity,
   productsForExchange, defaultProduct, marginSegment, isDerivative,
@@ -173,15 +174,27 @@ export function OrderWindow({ options, onClose }: Props) {
   };
 
   // ── dragging (clamped to viewport) ───────────────────────────────────────────
-  const clamp = (x: number, y: number) => ({
-    x: Math.min(Math.max(x, -(cardW - 130)), window.innerWidth - 130),
-    y: Math.min(Math.max(y, 8), window.innerHeight - 72),
+  // All of this is layout space: `pos` is written straight into CSS left/top.
+  // Pointer coordinates arrive device-facing, so deltas are converted before
+  // they are added.
+  const clamp = (x: number, y: number) => {
+    const vp = layoutViewport();
+    return {
+      x: Math.min(Math.max(x, -(cardW - 130)), vp.width - 130),
+      y: Math.min(Math.max(y, 8), vp.height - 72),
+    };
+  };
+  const [pos, setPos] = useState(() => {
+    const vp = layoutViewport();
+    return clamp(Math.round(vp.width / 2 - 220), Math.max(16, Math.round(vp.height / 2 - 300)));
   });
-  const [pos, setPos] = useState(() => clamp(Math.round(window.innerWidth / 2 - 220), Math.max(16, Math.round(window.innerHeight / 2 - 300))));
   const onHeaderDown = (e: React.MouseEvent) => {
     const start = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
     document.body.style.userSelect = 'none'; document.body.style.cursor = 'move';
-    const move = (ev: MouseEvent) => setPos(clamp(start.px + (ev.clientX - start.mx), start.py + (ev.clientY - start.my)));
+    const move = (ev: MouseEvent) => setPos(clamp(
+      start.px + toLayoutPx(ev.clientX - start.mx),
+      start.py + toLayoutPx(ev.clientY - start.my),
+    ));
     const up = () => { document.body.style.userSelect = ''; document.body.style.cursor = ''; window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
   };

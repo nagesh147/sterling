@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { k } from '../../styles/kiteUI';
+import { layoutRect, layoutViewport } from '../../styles/applyViewportScale';
 
 // Splits on this pane's existing "label — detail" tooltip convention so the
 // card gets a bold heading for free, without rewriting any copy.
@@ -34,11 +35,15 @@ export function Tip({ text, children }: { text?: string; children: React.ReactEl
     if (hideTimer.current) { window.clearTimeout(hideTimer.current); hideTimer.current = null; }
     const el = anchorRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
+    // Layout space, because these land on CSS top/left. A raw
+    // getBoundingClientRect() is device-facing and the two diverge under a
+    // viewport scale.
+    const rect = layoutRect(el);
+    const vp = layoutViewport();
     const placement: 'top' | 'bottom' = rect.top > 130 ? 'top' : 'bottom';
     setPos({
       top: placement === 'top' ? rect.top - 9 : rect.bottom + 9,
-      left: Math.min(Math.max(rect.left + rect.width / 2, 150), window.innerWidth - 150),
+      left: Math.min(Math.max(rect.left + rect.width / 2, 150), vp.width - 150),
       placement,
     });
     setOpen(true);
