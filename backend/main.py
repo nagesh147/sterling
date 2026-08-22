@@ -1533,6 +1533,14 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
+    # ATM Premium Imbalance: arm inside the pre-open lead so both legs are
+    # subscribed before the bell. Arming does not trade -- entry is still gated
+    # on verified market hours -- and the loop is a no-op whenever the strategy
+    # is disabled or unsized, which is the default.
+    from app.services.atm_premium_imbalance_runner import auto_arm_loop
+    atm_auto_arm_task = asyncio.create_task(auto_arm_loop(interval=30))
+    log.info("ATM PI auto-arm loop started (every 30s)")
+
     # Arbitrator fake log worker for UI parity — only runs when crypto is on
     if app.state.scalp_mode:
         from app.api.v1.endpoints.stream import _arbitrator_log_worker
@@ -1687,6 +1695,11 @@ async def lifespan(app: FastAPI):
     vcp_feed_task.cancel()
     try:
         await vcp_feed_task
+    except (Exception, BaseException):
+        pass
+    atm_auto_arm_task.cancel()
+    try:
+        await atm_auto_arm_task
     except (Exception, BaseException):
         pass
 

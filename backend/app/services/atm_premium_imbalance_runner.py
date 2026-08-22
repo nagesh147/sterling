@@ -60,6 +60,47 @@ def _is_market_open() -> bool:
         return False
 
 
+#: How long before the bell arming is allowed. Arming resolves the pair and
+#: subscribes both legs; it does not trade.
+ARM_LEAD_MINUTES = 15
+
+
+def can_arm_now(now_ms: Optional[int] = None) -> bool:
+    """Whether arming is allowed: market open, or inside the pre-open lead.
+
+    Arming used to require the market to already be open, which quietly defeated
+    the strategy's whole premise. This thing enters on the *first usable tick
+    after the open* -- the recordings show entry decided a millisecond after the
+    first tick -- but a subscription placed at 09:15:00 does not deliver the
+    09:15:00 tick. So it could never be watching when the only moment it cares
+    about arrived.
+
+    Entry is gated separately, in :func:`on_ticks`, which still refuses outside
+    verified market hours. Nothing here can cause a trade before the bell; it
+    only means the legs are already subscribed when the bell rings.
+    """
+    ts = _now_ms() if now_ms is None else int(now_ms)
+    # Delegates to _is_market_open for the open case rather than calling the
+    # calendar directly, so "is the market open" has exactly one answer in this
+    # module and anything that stubs it keeps working.
+    if now_ms is None and _is_market_open():
+        return True
+    try:
+        from app.services.navigator.calendar import (
+            is_market_open_at, is_trading_day, session_bounds_ist,
+        )
+        if is_market_open_at(ts):
+            return True
+        now = datetime.fromtimestamp(ts / 1000, tz=_IST)
+        if not is_trading_day(now.date()):
+            return False
+        open_dt, _ = session_bounds_ist(now.date())
+        return open_dt - timedelta(minutes=ARM_LEAD_MINUTES) <= now < open_dt
+    except Exception:
+        # Fail closed, same as before: an unavailable calendar must not arm.
+        return False
+
+
 @dataclass
 class Session:
     """One armed trading session for one user."""
@@ -742,7 +783,10 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
         return {"status": "disabled"}
     if not cfg.size_is_set:
         return {"status": "no_quantity"}
-    if not _is_market_open():
+    # Arming is allowed inside the pre-open lead so the legs are subscribed
+    # before the first tick. Entry stays gated on verified market hours in
+    # on_ticks -- see can_arm_now.
+    if not can_arm_now():
         return {"status": "market_closed"}
 
     orphans = await orphan_positions(user_id, cfg)
@@ -812,3 +856,90 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
         "strike": pair.strike, "quantity": quantity, "lots": quantity // max(1, lot),
         "protection_mode": cfg.protection_mode, "execution_mode": cfg.execution_mode,
     }
+
+
+# ---------------------------------------------------------------- auto-arming
+
+def _kite_user_ids() -> list[str]:
+    """Users with a logged-in Kite account, which is who could trade at all."""
+    try:
+        from app.services import db
+        with db.connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT user_id FROM kite_accounts "
+                "WHERE is_active = 1 AND access_token_enc != ''"
+            ).fetchall()
+        return [str(r[0]) for r in rows if r and r[0]]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ATM PI auto-arm could not list Kite users: %s", exc)
+        return []
+
+
+async def auto_arm_once() -> dict[str, str]:
+    """Arm every eligible user once, if this is the moment to do it.
+
+    Returns ``{user_id: status}`` for whatever it attempted, so the caller (and
+    the tests) can see the decision rather than infer it from logs.
+
+    Why this exists: arming was manual, which sounds harmless and is not. Someone
+    has to be at a keyboard at 09:14 every single trading morning, and the
+    mornings they miss are **not random** -- they correlate with being busy, away,
+    or asleep after a bad night. That biases the very sample the journal is
+    collecting, and a biased win rate is worse than no win rate, because it looks
+    like an answer.
+    """
+    if not can_arm_now():
+        return {}
+    try:
+        from app.services.atm_premium_imbalance import get_config
+        cfg = get_config()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ATM PI auto-arm could not read config: %s", exc)
+        return {}
+    if not cfg.enabled or not cfg.size_is_set:
+        return {}
+
+    out: dict[str, str] = {}
+    for uid in _kite_user_ids():
+        existing = _sessions.get(uid)
+        # Cheap idempotence before the expensive path: arm() is idempotent too,
+        # but it resolves the option chain to find that out.
+        if existing is not None and existing.session_date == datetime.now(_IST).date():
+            continue
+        try:
+            async with _lock_for(uid):
+                result = await arm(uid, cfg)
+            status = str(result.get("status") or "unknown")
+        except Exception as exc:  # noqa: BLE001
+            # One user's broken account must not stop the others arming.
+            log.warning("ATM PI auto-arm failed for %s: %s", uid, exc)
+            status = "error"
+        out[uid] = status
+        if status not in ("armed", "already_armed"):
+            # Said once per reason per user, not once per attempt: this loop runs
+            # every 30 seconds and would otherwise write the same refusal 30
+            # times before the bell.
+            log.info("ATM PI auto-arm did not arm %s: %s", uid, status)
+    return out
+
+
+async def auto_arm_loop(interval: int = 30) -> None:
+    """Poll for the arming window forever. Registered from the app lifespan.
+
+    A poll rather than a scheduled one-shot because the process can restart at
+    any time, including at 09:12, and a one-shot scheduled at boot would simply
+    not fire that day.
+    """
+    log.info("ATM PI auto-arm loop started (every %ss, %sm pre-open lead)",
+             interval, ARM_LEAD_MINUTES)
+    while True:
+        try:
+            armed = await auto_arm_once()
+            for uid, status in armed.items():
+                if status == "armed":
+                    log.info("ATM PI auto-armed %s", uid)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ATM PI auto-arm loop error: %s", exc)
+        await asyncio.sleep(max(5, int(interval)))
