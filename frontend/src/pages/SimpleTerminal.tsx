@@ -233,6 +233,20 @@ export function SimpleTerminal() {
 
   return (
     <div className="term-root">
+      <style>{`
+        /* The header used to be one nowrap row with no min-width, so below
+           about 1190px it overflowed and .term-root's overflow:hidden ate the
+           account and overflow buttons — no scrollbar, no way back to them. */
+        .kite-header-actions > * { flex-shrink: 0; }
+        .kite-topnav {
+          display: flex; align-items: center; gap: 6px; height: 100%;
+          min-width: 0; flex-shrink: 1;
+          overflow-x: auto; overflow-y: hidden;
+          scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .kite-topnav::-webkit-scrollbar { display: none; }
+        .kite-topnav > button { flex: 0 0 auto; white-space: nowrap; }
+      `}</style>
       {scalpOn && <DrawdownBreakerBadge />}
 
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -264,10 +278,16 @@ export function SimpleTerminal() {
           )}
 
           <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: '100%' }}>
+          <div className="kite-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 6, height: '100%', minWidth: 0 }}>
             {/* Kite nav items — pushed to the right when KITE tab is active */}
             {activeTopTab === 'kite' && (
               <>
+                {/* The links are the only part of the header allowed to give
+                    way. Everything to their right — theme, alerts, account,
+                    overflow — is how you reach settings and sign-out, and the
+                    terminal root clips rather than scrolls, so anything pushed
+                    past the edge is not merely off-screen, it is unreachable. */}
+                <div className="kite-topnav">
                 {([
                   { id: 'dashboard' as const, label: 'Dashboard' },
                   { id: 'orders' as const, label: 'Orders' },
@@ -294,7 +314,8 @@ export function SimpleTerminal() {
                     {item.label}
                   </button>
                 ))}
-                <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 8px' }} />
+                </div>
+                <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 8px', flexShrink: 0 }} />
               </>
             )}
             <ThemeToggle />
