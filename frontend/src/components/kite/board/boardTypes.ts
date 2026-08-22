@@ -172,6 +172,13 @@ export interface BoardSignal {
    */
   flags?: BoardOrigin[];
   /**
+   * The underlying's own price, for the signal header.
+   *
+   * A parent row names an idea about an instrument, so it shows that
+   * instrument's price — not a premium, which belongs to a contract.
+   */
+  underlyingPrice?: number | null;
+  /**
    * Option delta, where the engine knows it.
    *
    * Shown beside the moneyness and used to mark the most responsive leg of a

@@ -3,6 +3,12 @@ import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
 import { FilterToggle } from './board/BoardFilters';
+// The row's geometry and columns now live beside the shared board, so every
+// engine renders against the same table rather than a copy of it.
+import {
+  ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
+  type SignalColVisibility,
+} from './board/signalRowSpec';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -102,31 +108,6 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
  *  next to the (flex:1) Instrument column; RIGHT is pinned after the action
  *  buttons. `visibleWhen` is a tag both the header and the row resolve against
  *  their own (equivalent, differently-named) boolean for that condition. */
-type SignalColVisibility = 'always' | 'exchange' | 'leg' | 'premium' | 'chg' | 'chgPct' | 'dir';
-interface SignalColumnDef {
-  key: string;
-  label: string;
-  width: number;
-  align: 'left' | 'right';
-  sortKey?: string;
-  tooltip?: string;
-  visibleWhen: SignalColVisibility;
-}
-const SIGNAL_LEFT_COLUMNS: Record<string, SignalColumnDef> = {
-  exc: { key: 'exc', label: 'Exc.', width: 40, align: 'left', sortKey: 'exc', visibleWhen: 'exchange' },
-  leg: { key: 'leg', label: 'Leg (Δ)', width: 78, align: 'right', sortKey: 'leg', visibleWhen: 'leg' },
-  entry: { key: 'entry', label: 'Entry (Δpts)', width: 96, align: 'right', sortKey: 'entry', visibleWhen: 'premium' },
-  sl: { key: 'sl', label: 'SL', width: 56, align: 'right', sortKey: 'sl', visibleWhen: 'premium' },
-  tsl: { key: 'tsl', label: 'TSL', width: 56, align: 'right', sortKey: 'stop', visibleWhen: 'premium' },
-  exit: { key: 'exit', label: 'Exit', width: 58, align: 'right', visibleWhen: 'always', tooltip: 'Red-counter progress toward the auto-exit rule (exit_mode)' },
-  target: { key: 'target', label: 'Target', width: 44, align: 'right', visibleWhen: 'premium', tooltip: 'Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)' },
-};
-const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
-  chg: { key: 'chg', label: 'Chg.', width: 50, align: 'right', sortKey: 'chg', visibleWhen: 'chg' },
-  chgPct: { key: 'chgPct', label: 'Chg. %', width: 60, align: 'right', sortKey: 'chgPct', visibleWhen: 'chgPct' },
-  dir: { key: 'dir', label: '', width: 14, align: 'right', visibleWhen: 'dir' },
-  ltp: { key: 'ltp', label: 'LTP', width: 70, align: 'right', sortKey: 'ltp', visibleWhen: 'always' },
-};
 /** Drag-to-reorder header cell wrapper. Uses raw pointer events (not native
  *  HTML5 draggable/dragstart) because native drag-and-drop's gesture
  *  recognition is unreliable for plain `<div>`s across browsers/trackpads —

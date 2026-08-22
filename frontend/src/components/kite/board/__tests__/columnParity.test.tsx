@@ -96,9 +96,11 @@ describe('column parity across engines', () => {
     }
   });
 
-  it('opens on the eleven a trader named, in reading order', () => {
+  it('opens on SuperTrend’s own column names, in its order', () => {
+    // Labels and widths come from signalRowSpec, the table SuperTrend's rows
+    // use, so a cell sits in the same place whichever board you are on.
     expect(headersOf(boards.orb, DEFAULTS)).toEqual([
-      'Instrument', 'Status', 'Exc', 'Leg', 'LTP', 'Entry', 'SL', 'TSL', 'Exit', 'Exited', 'Time',
+      'Instrument', 'Status', 'Exc.', 'Leg (Δ)', 'Entry (Δpts)', 'SL', 'TSL', 'Target', 'Exited', 'LTP', 'Time',
     ]);
   });
 

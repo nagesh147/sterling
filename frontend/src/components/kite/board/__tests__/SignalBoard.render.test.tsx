@@ -44,7 +44,7 @@ const show = (signals: BoardSignal[], props: Partial<React.ComponentProps<typeof
 describe('SignalBoard rendering', () => {
   it('names the columns a trader asked for', () => {
     show([sig()]);
-    for (const label of ['Instrument', 'Status', 'Exc', 'Leg', 'LTP', 'Entry', 'SL', 'Exit', 'Qty', 'At risk', 'Time']) {
+    for (const label of ['Instrument', 'Status', 'Exc.', 'Leg (Δ)', 'LTP', 'Entry (Δpts)', 'SL', 'Target', 'Qty', 'At risk', 'Time']) {
       expect(screen.getByText(label), label).toBeInTheDocument();
     }
   });

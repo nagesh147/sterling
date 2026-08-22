@@ -239,7 +239,12 @@ export function supertrendLegToBoard(
  * belongs to the idea and to no single leg — the underlying, the scan that
  * found it, the trend evidence.
  */
-function supertrendSignalToBoard(row: EngineSignalRow, legs: BoardSignal[], index: number): BoardSignal {
+function supertrendSignalToBoard(
+  row: EngineSignalRow,
+  legs: BoardSignal[],
+  index: number,
+  opts: SuperTrendAdapterOptions = {},
+): BoardSignal {
   const engine = engineOf(row);
   // The group is as live as its liveliest leg: a signal with one running
   // contract is running, even if four others have closed.
@@ -265,6 +270,8 @@ function supertrendSignalToBoard(row: EngineSignalRow, legs: BoardSignal[], inde
     direction: row.direction,
     status,
     atMs: row.timestamp_ms ?? null,
+    // The live underlying where we have it; the scan's spot otherwise.
+    underlyingPrice: opts.spotOf?.(row.underlying) ?? (row.spot > 0 ? row.spot : null),
     levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
     sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score ?? null,
@@ -337,6 +344,6 @@ export function supertrendToBoard(
 ): BoardSignal[] {
   return rows.map((row, i) => {
     const legs = (row.legs ?? []).map((leg, j) => supertrendLegToBoard(row, leg, j, opts));
-    return supertrendSignalToBoard(row, legs, i);
+    return supertrendSignalToBoard(row, legs, i, opts);
   });
 }

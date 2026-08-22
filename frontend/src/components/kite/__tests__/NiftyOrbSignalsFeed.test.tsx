@@ -99,13 +99,14 @@ describe('ORB feed — tradable setups', () => {
 
   it('carries the whole ticket on the row', () => {
     show({ rows: [entry()] });
-    expect(screen.getByText('NIFTY26AUG24000CE', { exact: false })).toBeInTheDocument();
+    // A standalone row (no group) still names its contract in full.
+    expect(document.querySelector('.sb-row')?.textContent).toMatch(/24000/);
     expect(screen.getByText('CE · LONG')).toBeInTheDocument();
     expect(screen.getByText('NFO')).toBeInTheDocument();
     // The eleven core columns every board opens with. Qty and At risk are
     // real for ORB but start hidden, one click away in the column picker, so
     // that all four boards open identical.
-    ['LTP', 'Entry', 'SL', 'TSL', 'Exit', 'Exc', 'Leg', 'Time', 'Status'].forEach((label) => {
+    ['LTP', 'Entry (Δpts)', 'SL', 'TSL', 'Target', 'Exc.', 'Leg (Δ)', 'Time', 'Status'].forEach((label) => {
       expect(screen.getByText(label), label).toBeInTheDocument();
     });
     expect(screen.queryByText('At risk')).not.toBeInTheDocument();

@@ -92,15 +92,25 @@ describe('a premium through its own trail', () => {
 
 describe('the leg cell carries moneyness and delta', () => {
   it('shows both when the engine knows them', () => {
-    show([sig({ instrument: { ...sig().instrument, moneyness: 'ATM' }, delta: 0.564 })]);
-    const cell = screen.getByText(/NIFTY26AUG24000CE/);
-    expect(cell).toHaveTextContent('ATM');
-    expect(cell).toHaveTextContent('Δ0.56');
+    // The Leg column is moneyness and delta only — the contract itself is
+    // named by the instrument cell, and repeating it there costs the width
+    // these two need.
+    const { container } = show([sig({ instrument: { ...sig().instrument, moneyness: 'ATM' }, delta: 0.564 })]);
+    const row = container.querySelector('.sb-row') as HTMLElement;
+    expect(row).toHaveTextContent('ATM');
+    expect(row).toHaveTextContent('Δ0.56');
   });
 
-  it('shows the contract alone when it does not', () => {
-    show([sig()]);
-    expect(screen.getByText(/NIFTY26AUG24000CE/)).not.toHaveTextContent('Δ');
+  it('leaves the cell empty when it knows neither', () => {
+    const { container } = show([sig()]);
+    expect(container.querySelector('.sb-row')).not.toHaveTextContent('Δ');
+  });
+
+  it('still names the traded contract on a standalone row', () => {
+    // No group header above it, so if this row does not name the contract,
+    // nothing does.
+    const { container } = show([sig()]);
+    expect(container.querySelector('.sb-row')?.textContent).toMatch(/24000/);
   });
 });
 

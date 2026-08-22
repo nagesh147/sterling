@@ -82,26 +82,43 @@ describe('rendering a grouped board', () => {
     // A board exists to show tradable contracts; making each one cost a click
     // on the board whose job is to show them is worse than the repetition
     // grouping was introduced to fix.
-    show();
+    const { container } = show();
     expect(screen.getByRole('button', { name: /NIFTY 50 long, 2 contracts/ })).toBeInTheDocument();
-    expect(screen.getByText('NIFTY26AUG24000CE')).toBeInTheDocument();
+    // InstrumentLabel splits the contract into readable parts, so match the
+    // rendered row rather than the raw symbol.
+    expect(container.querySelectorAll('.sb-row:not(.sb-parent)')).toHaveLength(2);
   });
 
   it('folds a signal away when it is collapsed', () => {
-    show({ collapsedGroups: new Set([board[0].id]) });
-    expect(screen.queryByText('NIFTY26AUG24000CE')).not.toBeInTheDocument();
+    const { container } = show({ collapsedGroups: new Set([board[0].id]) });
+    expect(container.querySelectorAll('.sb-row:not(.sb-parent)')).toHaveLength(0);
   });
 
   it('states how many contracts the signal holds', () => {
     const { container } = show();
-    const parent = container.querySelector('.sb-row') as HTMLElement;
-    expect(within(parent).getByTitle('2 contracts')).toHaveTextContent('2');
+    const parent = container.querySelector('.sb-parent') as HTMLElement;
+    expect(parent).toHaveTextContent('2 contracts');
+  });
+
+  it('renders the signal as a header, not a line of empty cells', () => {
+    // A signal has no premium, strike or stop of its own. Drawing it in the
+    // legs' columns produced blanks pretending to be data.
+    const { container } = show();
+    const parent = container.querySelector('.sb-parent') as HTMLElement;
+    expect(parent.textContent).not.toMatch(/—/);
+    expect(parent).toHaveTextContent('NIFTY 50');
+  });
+
+  it('shows the underlying’s own price on the header', () => {
+    const { container } = show();
+    expect(container.querySelector('.sb-parent')).toHaveTextContent('24,100.00');
   });
 
   it('lists every contract of the signal', () => {
-    show();
-    expect(screen.getByText('NIFTY26AUG24000CE')).toBeInTheDocument();
-    expect(screen.getByText('NIFTY26AUG24100CE')).toBeInTheDocument();
+    const { container } = show();
+    const legs = [...container.querySelectorAll('.sb-row:not(.sb-parent)')].map((l) => l.textContent ?? '');
+    expect(legs[0]).toMatch(/24000/);
+    expect(legs[1]).toMatch(/24100/);
   });
 
   it('asks the caller to open a group rather than owning it', () => {
@@ -128,21 +145,32 @@ describe('rendering a grouped board', () => {
     expect(ids).toContain('stop');
   });
 
-  it('labels a parent by its contracts, never by the security kind', () => {
-    // The parent of an LT signal read "LTINDEX · LONG". LT is a stock.
-    // Legs carry the same pill, so scope to the parent row.
-    const { container } = show();
-    const parent = container.querySelector('.sb-row') as HTMLElement;
-    expect(within(parent).getByText('CE · LONG')).toBeInTheDocument();
+  it('never labels a signal by the security kind', () => {
+    // The parent of an LT signal used to read "LTINDEX · LONG". LT is a stock.
+    show();
     expect(screen.queryByText(/INDEX · LONG/)).not.toBeInTheDocument();
+  });
+
+  it('lets each contract carry its own type, the way SuperTrend does', () => {
+    // A leg leads with the contract, and the contract name already says CE or
+    // PE — so it needs no separate pill, and the header needs no type at all.
+    const { container } = show();
+    const leg = container.querySelectorAll('.sb-row:not(.sb-parent)')[0] as HTMLElement;
+    expect(leg.textContent).toMatch(/CE/);
+    const parent = container.querySelector('.sb-parent') as HTMLElement;
+    expect(parent.textContent).not.toMatch(/·\s*LONG/);
   });
 
   it('says only the direction when the legs disagree on type', () => {
     const mixed = supertrendToBoard([row({
       legs: [leg(), leg({ option_symbol: 'NIFTY26AUG24000PE', option_type: 'PE' })],
     })]);
-    render(<SignalBoard signals={mixed} openId={null} onToggle={() => {}} nowMs={NOW} />);
-    expect(screen.getByText('LONG')).toBeInTheDocument();
+    const { container } = render(<SignalBoard signals={mixed} openId={null} onToggle={() => {}} nowMs={NOW} />);
+    const legs = [...container.querySelectorAll('.sb-row:not(.sb-parent)')] as HTMLElement[];
+    // Each contract states its own type; they disagree, so nothing on the
+    // header speaks for both.
+    expect(legs[0].textContent).toMatch(/CE/);
+    expect(legs[1].textContent).toMatch(/PE/);
   });
 
   it('lets the symbol still reach the full detail page', () => {

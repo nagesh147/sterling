@@ -1,11 +1,11 @@
 /**
  * The signal board every engine renders through.
  *
- * Layout is a CSS grid whose column template is computed once from the visible
- * column set, so every row aligns with the header without any of the horizontal
- * scroll-syncing the old table needed. Columns an engine cannot fill are not
- * rendered as empty cells — they are dropped from the template entirely, so a
- * board never shows a run of dashes where another engine happens to have data.
+ * Rows are flex, with every column but the instrument name at a fixed pixel
+ * width taken from signalRowSpec — the same table SuperTrend's own rows use, so
+ * a cell lands in the same place whichever engine you are looking at. Fixed
+ * widths are the point: a column of tabular numbers only reads as a column if
+ * every row agrees where it starts.
  *
  * Rows are grouped by trading day. Sections stick to the top while their day is
  * on screen, which is the only part of a long scroll that tells you where you
@@ -19,7 +19,9 @@ import {
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
+import { ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
 import { Tip } from '../InfoTooltip';
+import { InstrumentLabel } from '../InstrumentLabel';
 
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
@@ -29,8 +31,9 @@ export type ColumnId =
 interface ColumnDef {
   id: ColumnId;
   label: string;
-  /** Grid track. Instrument flexes; the rest are fixed so numbers line up. */
-  width: string;
+  /** Fixed pixels, so a decimal point lands in the same place on every row.
+   *  Zero means the instrument cell, which is the only one that flexes. */
+  width: number;
   align: 'left' | 'right';
   hint?: string;
 }
@@ -40,21 +43,24 @@ interface ColumnDef {
  * is worth now, then where it gets out, then how big, then when.
  */
 export const COLUMNS: readonly ColumnDef[] = [
-  { id: 'instrument', label: 'Instrument', width: 'minmax(150px, 1.6fr)', align: 'left' },
-  { id: 'engine', label: 'Engine', width: '48px', align: 'left', hint: 'Which engine produced this signal' },
-  { id: 'status', label: 'Status', width: '78px', align: 'left', hint: 'Armed = valid setup, not yet entered' },
-  { id: 'exchange', label: 'Exc', width: '44px', align: 'left', hint: 'Exchange the contract trades on' },
-  { id: 'leg', label: 'Leg', width: 'minmax(96px, 1fr)', align: 'left', hint: 'Strike and expiry of the traded contract' },
-  { id: 'ltp', label: 'LTP', width: '74px', align: 'right', hint: 'Last traded price of the instrument' },
-  { id: 'entry', label: 'Entry', width: '74px', align: 'right', hint: 'Price the position is taken at' },
-  { id: 'stop', label: 'SL', width: '74px', align: 'right', hint: 'Hard stop set at entry — the original risk' },
-  { id: 'trail', label: 'TSL', width: '74px', align: 'right', hint: 'Where the trailing stop has ratcheted to' },
-  { id: 'target', label: 'Exit', width: '74px', align: 'right', hint: 'Where the plan gets out — the profit objective, where the engine quotes one' },
-  { id: 'exit', label: 'Exited', width: '74px', align: 'right', hint: 'Where it actually got out, once it has' },
-  { id: 'qty', label: 'Qty', width: '64px', align: 'right', hint: 'Units, not lots' },
-  { id: 'risk', label: 'At risk', width: '82px', align: 'right', hint: 'Rupees lost if the stop is honoured' },
-  { id: 'score', label: 'Score', width: '56px', align: 'right', hint: 'Engine conviction. Not comparable across engines' },
-  { id: 'time', label: 'Time', width: '92px', align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+  // Widths, labels and alignment come from SuperTrend's table (see
+  // signalRowSpec) so a cell sits in the same place on every board. The extras
+  // it does not have are sized to the same rhythm.
+  { id: 'instrument', label: 'Instrument', width: 0, align: 'left' },
+  { id: 'engine', label: 'Engine', width: 42, align: 'left', hint: 'Which engine produced this signal' },
+  { id: 'status', label: 'Status', width: 66, align: 'left', hint: 'Armed = valid setup, not yet entered' },
+  { id: 'exchange', label: SIGNAL_LEFT_COLUMNS.exc.label, width: SIGNAL_LEFT_COLUMNS.exc.width, align: 'left', hint: 'Exchange the contract trades on' },
+  { id: 'leg', label: SIGNAL_LEFT_COLUMNS.leg.label, width: SIGNAL_LEFT_COLUMNS.leg.width, align: 'right', hint: 'The contract, its moneyness and its delta' },
+  { id: 'entry', label: SIGNAL_LEFT_COLUMNS.entry.label, width: SIGNAL_LEFT_COLUMNS.entry.width, align: 'right', hint: 'Price the position was taken at, and how far it has moved since' },
+  { id: 'stop', label: SIGNAL_LEFT_COLUMNS.sl.label, width: SIGNAL_LEFT_COLUMNS.sl.width, align: 'right', hint: 'Hard stop set at entry — the original risk' },
+  { id: 'trail', label: SIGNAL_LEFT_COLUMNS.tsl.label, width: SIGNAL_LEFT_COLUMNS.tsl.width, align: 'right', hint: 'Where the trailing stop has ratcheted to' },
+  { id: 'target', label: SIGNAL_LEFT_COLUMNS.target.label, width: 58, align: 'right', hint: 'Where the plan gets out, for an engine that quotes one' },
+  { id: 'exit', label: 'Exited', width: 58, align: 'right', hint: 'Where it actually got out, once it has' },
+  { id: 'qty', label: 'Qty', width: 52, align: 'right', hint: 'Units, not lots' },
+  { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
+  { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
+  { id: 'ltp', label: SIGNAL_RIGHT_COLUMNS.ltp.label, width: SIGNAL_RIGHT_COLUMNS.ltp.width, align: 'right', hint: 'Last traded price of the instrument' },
+  { id: 'time', label: 'Time', width: 78, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
 ];
 
 export interface SortState {
@@ -154,6 +160,9 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
 }
 
 /** Statuses that earn a coloured pill. The rest are the board's normal state. */
+/** How far a leg sits in from the signal that owns it. */
+const INDENT = 14;
+
 const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
 
 /** Engine-accent names resolved to the theme's tokens. */
@@ -228,10 +237,51 @@ function cellContent(
   id: ColumnId,
   onOpenDetail?: (signal: BoardSignal) => void,
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>,
+  isLeg = false,
 ): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
-    case 'instrument':
+    case 'instrument': {
+      // Inside a group the header already names the instrument, states where
+      // the signal came from and how it is doing. A leg repeating all three
+      // buries the one thing only it can say: which contract this is.
+      if (isLeg) {
+        return {
+          node: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: k.text }}>
+                <InstrumentLabel symbol={signal.instrument.symbol} />
+              </span>
+              {marks?.has('bestRR') && (
+                <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
+                  <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help', flexShrink: 0 }}>✝</span>
+                </Tip>
+              )}
+              {marks?.has('bestDelta') && (
+                <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
+                  <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help', flexShrink: 0 }}>▲</span>
+                </Tip>
+              )}
+              {trailBreached(signal) && (
+                <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
+                  <span tabIndex={0} style={{
+                    fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
+                    borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', flexShrink: 0,
+                  }}>
+                    TSL HIT
+                  </span>
+                </Tip>
+              )}
+            </span>
+          ),
+        };
+      }
+      // A standalone row has no header above it, so it carries everything: the
+      // contract it trades, which way, where it came from. Naming the
+      // underlying instead would leave the traded contract unnamed anywhere.
+      const standaloneName = signal.instrument.kind === 'option'
+        ? <InstrumentLabel symbol={signal.instrument.symbol} />
+        : signal.underlying;
       return {
         node: (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -251,11 +301,11 @@ function cellContent(
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                 }}
               >
-                {signal.underlying}
+                {standaloneName}
               </button>
             ) : (
               <span style={{ fontWeight: 700, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {signal.underlying}
+                {standaloneName}
               </span>
             )}
             <Pill tone={dirTone} title={`${signal.direction} ${contractLabel(signal) ?? 'position'}`}>
@@ -307,9 +357,13 @@ function cellContent(
           </span>
         ),
       };
+    }
     case 'engine':
       return { node: <Pill tone={k.dim}>{ENGINE_TAG[signal.engine]}</Pill> };
     case 'status': {
+      // The group header carries the signal's status; repeating it on every
+      // contract says the same thing five times.
+      if (isLeg) return { node: '', color: k.dim };
       // Armed, weakening and error are exceptions and get a pill. Running,
       // watching and ended are the normal state of a board and read as quiet
       // text — if every row is badged, the badge stops meaning anything.
@@ -325,18 +379,16 @@ function cellContent(
       // for, reads back to a broker, and matches against a fill. Strike and
       // expiry are the same information pre-parsed, so they go in the tooltip
       // rather than competing for the width.
-      const { symbol, strike, expiry, moneyness } = signal.instrument;
+      // Where the strike sits and how hard it moves. Not the contract name —
+      // the instrument cell to the left already carries that, and repeating it
+      // costs the width the moneyness and delta need.
+      // Never the contract name: the instrument cell carries that on a leg and
+      // on a standalone row alike, and repeating it here printed it twice.
+      const { strike, expiry, moneyness } = signal.instrument;
       const parts = [strike ?? null, expiry ?? null].filter(Boolean).join(' · ');
-      return {
-        node: (
-          <span title={parts || undefined}>
-            {symbol}
-            {moneyness && <span style={{ opacity: .8 }}> {moneyness}</span>}
-            {signal.delta != null && <span style={{ opacity: .65 }}> (Δ{Math.abs(signal.delta).toFixed(2)})</span>}
-          </span>
-        ),
-        color: k.dim,
-      };
+      const delta = signal.delta == null ? null : `(Δ${Math.abs(signal.delta).toFixed(2)})`;
+      const text = [moneyness, delta].filter(Boolean).join(' ');
+      return { node: <span title={parts || undefined}>{text || '—'}</span>, color: k.dim };
     }
     // The levels are plain ink. Colouring every stop red and every target green
     // was decoration, not information — the value was the same colour whatever
@@ -440,13 +492,114 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
   return COLUMNS.filter((c) => wanted.has(c.id));
 }
 
+/**
+ * A signal, as SuperTrend draws one.
+ *
+ * Deliberately NOT a columned row. A signal is an idea about an instrument —
+ * it has no premium, no strike, no stop of its own — so rendering it in the
+ * legs' columns produced a line of empty cells pretending to be data. What it
+ * does have goes on two sides: what it is on the left, what you should know
+ * about it on the right.
+ */
+function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
+  signal: BoardSignal;
+  legCount: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenDetail?: (signal: BoardSignal) => void;
+}) {
+  const dirTone = signal.direction === 'long' ? k.green : k.red;
+  const statusTone = STATUS_TONE[signal.status];
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      aria-label={`${signal.underlying} ${signal.direction}, ${legCount} contract${legCount === 1 ? '' : 's'}, ${STATUS_LABEL[signal.status]}`}
+      onClick={onToggle}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      className="sb-row sb-parent"
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        padding: ROW_METRICS.parentPadding,
+        borderBottom: `1px solid ${k.border}`,
+        borderLeft: '3px solid transparent',
+        background: k.bg, cursor: 'pointer', outlineOffset: -2,
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ color: k.dim, display: 'inline-flex', flexShrink: 0 }}><Chevron open={expanded} /></span>
+        {signal.origin && (
+          <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
+            <span tabIndex={0} style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
+              color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
+              borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+            }}>
+              {signal.origin.label}
+            </span>
+          </Tip>
+        )}
+        {onOpenDetail ? (
+          <button
+            type="button"
+            className="sb-name"
+            aria-label={`Open ${signal.underlying} detail`}
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
+            style={{
+              border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+              fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone,
+              cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+            }}
+          >
+            {signal.underlying}
+          </button>
+        ) : (
+          <span style={{ fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone, whiteSpace: 'nowrap' }}>
+            {signal.underlying}
+          </span>
+        )}
+        {signal.underlyingPrice != null && (
+          <span style={{ fontSize: 11, color: dirTone, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+            {signal.underlyingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        )}
+        <span style={{ fontSize: 10, color: k.dim, flexShrink: 0 }}>
+          {legCount} contract{legCount === 1 ? '' : 's'}
+        </span>
+      </span>
+
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {signal.flags?.map((flag) => (
+          <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
+            <span tabIndex={0} style={{
+              fontSize: 9, fontWeight: 700, cursor: 'help', color: ORIGIN_TONE[flag.tone],
+              background: tint(ORIGIN_TONE[flag.tone], 10), border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
+              borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap', outlineOffset: 2,
+            }}>
+              {flag.label}
+            </span>
+          </Tip>
+        ))}
+        {NOTABLE_STATUS.has(signal.status) && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: statusTone, background: tint(statusTone, 12),
+            border: `1px solid ${tint(statusTone, 35)}`, borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap',
+          }}>
+            {STATUS_LABEL[signal.status]}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function Row({
-  signal, columns, template, open, onToggle, renderDetail, onOpenDetail, striped,
+  signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
   depth = 0, legCount, marks,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
-  template: string;
   open: boolean;
   onToggle: () => void;
   renderDetail?: (signal: BoardSignal) => React.ReactNode;
@@ -477,15 +630,14 @@ function Row({
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
         className="sb-row"
         style={{
-          display: 'grid',
-          gridTemplateColumns: `18px ${template}`,
+          display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: ROW_METRICS.gap,
           // A leg is indented under the idea it belongs to; the indent is the
           // only thing saying "this is part of that", so it has to survive
           // scrolling past the parent.
-          padding: isLeg ? '0 12px 0 28px' : '0 12px',
-          minHeight: isLeg ? 34 : 38,
+          padding: isLeg ? `0 16px 0 ${16 + INDENT}px` : ROW_METRICS.legPadding,
+          minHeight: ROW_METRICS.legHeight,
           cursor: 'pointer',
           outlineOffset: -2,
           borderBottom: `1px solid ${isLeg ? 'transparent' : k.border}`,
@@ -505,7 +657,7 @@ function Row({
           textDecoration: signal.status === 'ended' ? 'line-through' : 'none',
         }}
       >
-        <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
           <Chevron open={open} />
           {isParent && (
             <span
@@ -517,19 +669,24 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg);
+          const isName = col.id === 'instrument';
           return (
             <span
               key={col.id}
               style={{
-                fontSize: 11,
+                // The name is the only cell that flexes; every other column is
+                // a fixed width so the decimal points line up down the board.
+                flex: isName ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
+                minWidth: isName ? ROW_METRICS.instrumentMinWidth - (isLeg ? INDENT : 0) : 0,
+                width: isName ? undefined : col.width,
+                fontSize: isName ? ROW_METRICS.instrumentFontSize : ROW_METRICS.cellFontSize,
                 color: color ?? k.text,
                 textAlign: col.align,
                 fontVariantNumeric: 'tabular-nums',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                minWidth: 0,
               }}
             >
               {node}
@@ -602,7 +759,6 @@ export function SignalBoard({
   const wanted = requested ?? BOARD_COLUMNS;
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
   const cols = visibleColumns(signals, chosen);
-  const template = cols.map((c) => c.width).join(' ');
   const days = groupByDay(signals, { liveFirst });
 
   if (!signals.length) {
@@ -614,10 +770,10 @@ export function SignalBoard({
       <div
         role="row"
         style={{
-          display: 'grid',
-          gridTemplateColumns: `18px ${template}`,
-          gap: 10,
-          padding: '7px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: ROW_METRICS.gap,
+          padding: '7px 16px',
           borderBottom: `1px solid ${k.border}`,
           borderLeft: '3px solid transparent',
           position: 'sticky',
@@ -645,12 +801,17 @@ export function SignalBoard({
                 disabled={!onSortChange}
                 style={{
                   border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+                  // Same track as the row's cell, or the heading drifts off the
+                  // numbers it names.
+                  flex: col.id === 'instrument' ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
+                  width: col.id === 'instrument' ? undefined : col.width,
+                  minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
                   fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em',
                   color: active ? k.text : k.dim,
                   textTransform: 'uppercase', whiteSpace: 'nowrap',
                   overflow: 'hidden', textOverflow: 'ellipsis',
                   cursor: onSortChange ? 'pointer' : 'default',
-                  outlineOffset: 2, minWidth: 0,
+                  outlineOffset: 2,
                   display: 'flex', alignItems: 'center',
                   justifyContent: col.align === 'right' ? 'flex-end' : 'flex-start',
                 }}
@@ -691,7 +852,6 @@ export function SignalBoard({
                   key={signal.id}
                   signal={signal}
                   columns={cols}
-                  template={template}
                   open={openId === signal.id}
                   onToggle={() => onToggle(signal.id)}
                   renderDetail={renderDetail}
@@ -709,15 +869,12 @@ export function SignalBoard({
             const legMarks = markLegs(legs);
             return (
               <React.Fragment key={signal.id}>
-                <Row
+                <GroupHeader
                   signal={signal}
-                  columns={cols}
-                  template={template}
-                  open={expanded}
+                  legCount={legs.length}
+                  expanded={expanded}
                   onToggle={() => onToggleGroup?.(signal.id)}
                   onOpenDetail={onOpenDetail}
-                  striped={i % 2 === 1}
-                  legCount={legs.length}
                 />
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
@@ -725,7 +882,6 @@ export function SignalBoard({
                     marks={legMarks.get(leg.id)}
                     signal={leg}
                     columns={cols}
-                    template={template}
                     open={openId === leg.id}
                     onToggle={() => onToggle(leg.id)}
                     renderDetail={renderDetail}

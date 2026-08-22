@@ -146,7 +146,7 @@ describe('AtmPremiumImbalanceBoard', () => {
   it('renders the row for a live pair', () => {
     snap = { ...snap, data: { ...snap.data, session: session() } };
     view();
-    expect(screen.getByText('SENSEX26AUG77700PE')).toBeTruthy();
+    expect(document.querySelector('.sb-row')?.textContent).toMatch(/77700.*PE/);
   });
 });
 
@@ -288,7 +288,7 @@ it('keeps the finished trade on screen instead of filtering it away', () => {
     },
   }) } };
   view();
-  expect(screen.getByText('SENSEX26AUG77700PE')).toBeTruthy();
+  expect(document.querySelector('.sb-row')?.textContent).toMatch(/77700.*PE/);
 });
 
 

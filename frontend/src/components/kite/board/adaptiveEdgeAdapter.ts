@@ -230,6 +230,8 @@ export function adaptiveEdgeToBoard(rows: readonly AdaptiveEdgeRow[]): BoardSign
         quoteKey: null,
       },
       status,
+      // The idea is about the underlying, so the header shows its price.
+      underlyingPrice: head.spotEntry ?? null,
       // The thesis has no premium of its own; the legs carry those.
       levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
       sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
