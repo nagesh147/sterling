@@ -5,7 +5,7 @@
  * offered: a control is shown only when it has something to act on, so a board
  * never advertises a toggle that would do nothing.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useBoardView } from '../useBoardView';
 import type { BoardSignal } from '../boardTypes';
@@ -41,6 +41,57 @@ describe('which filters are offered', () => {
     expect(renderHook(() => useBoardView(two)).result.current.offers.best).toBe(true);
     const different = [sig({ id: 'a' }), sig({ id: 'b', underlying: 'BANKNIFTY' })];
     expect(renderHook(() => useBoardView(different)).result.current.offers.best).toBe(false);
+  });
+});
+
+describe('hidden columns', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('hides nothing until asked', () => {
+    const { result } = renderHook(() => useBoardView([sig()]));
+    expect([...result.current.hidden]).toEqual([]);
+  });
+
+  it('toggles a column off and back on', () => {
+    const { result } = renderHook(() => useBoardView([sig()]));
+    act(() => result.current.toggleColumn('risk'));
+    expect([...result.current.hidden]).toEqual(['risk']);
+    act(() => result.current.toggleColumn('risk'));
+    expect([...result.current.hidden]).toEqual([]);
+  });
+
+  it('restores every column at once', () => {
+    const { result } = renderHook(() => useBoardView([sig()]));
+    act(() => { result.current.toggleColumn('risk'); });
+    act(() => { result.current.toggleColumn('qty'); });
+    expect(result.current.hidden.size).toBe(2);
+    act(() => result.current.showAllColumns());
+    expect(result.current.hidden.size).toBe(0);
+  });
+
+  it('remembers the choice per board, not globally', () => {
+    // ORB shows an at-risk figure Adaptive Edge cannot fill. One shared list
+    // would mean hiding a column on one board silently changed another.
+    const orb = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
+    act(() => orb.result.current.toggleColumn('risk'));
+
+    const other = renderHook(() => useBoardView([sig()], { storageKey: 'adaptive_edge' }));
+    expect([...other.result.current.hidden]).toEqual([]);
+
+    const orbAgain = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
+    expect([...orbAgain.result.current.hidden]).toEqual(['risk']);
+  });
+
+  it('forgets nothing and crashes on nothing when storage holds junk', () => {
+    localStorage.setItem('sterling.board.hidden.orb', 'not json');
+    const { result } = renderHook(() => useBoardView([sig()], { storageKey: 'orb' }));
+    expect([...result.current.hidden]).toEqual([]);
+  });
+
+  it('keeps the choice out of storage when no board is named', () => {
+    const { result } = renderHook(() => useBoardView([sig()]));
+    act(() => result.current.toggleColumn('risk'));
+    expect(localStorage.length).toBe(0);
   });
 });
 

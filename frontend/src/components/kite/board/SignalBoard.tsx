@@ -393,7 +393,7 @@ function Row({ signal, columns, template, open, onToggle, renderDetail, onOpenDe
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange,
+  sort = DEFAULT_SORT, onSortChange, hidden,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -407,13 +407,19 @@ export function SignalBoard({
   sort?: SortState;
   /** Omit to make the header static — the board is then unsortable. */
   onSortChange?: (next: SortState) => void;
+  /** Columns the user switched off. */
+  hidden?: ReadonlySet<ColumnId>;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
 }) {
   const wanted = requested ?? COLUMNS.map((c) => c.id);
   const withoutEngine = isMixedEngine(signals) ? wanted : wanted.filter((c) => c !== 'engine');
-  const cols = visibleColumns(signals, withoutEngine);
+  // Two separate reasons a column is absent, applied in order: the user
+  // switched it off, or no row can fill it. Keeping them separate means
+  // un-hiding a column still respects the second rule.
+  const chosen = hidden ? withoutEngine.filter((c) => !hidden.has(c)) : withoutEngine;
+  const cols = visibleColumns(signals, chosen);
   const template = cols.map((c) => c.width).join(' ');
   const days = groupByDay(signals);
 

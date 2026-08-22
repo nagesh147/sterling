@@ -24,7 +24,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
     () => (snapshot.data ? rowsFromSnapshot(snapshot.data).map(adaptiveEdgeToBoard) : []),
     [snapshot.data],
   );
-  const view = useBoardView(signals);
+  const columns = React.useMemo(() => (['instrument', 'status', 'exchange', 'leg', 'entry', 'stop', 'trail', 'target', 'exit', 'ltp', 'score', 'time'] as const), []);
+  const view = useBoardView(signals, { storageKey: 'adaptive_edge' });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
 
@@ -37,10 +38,11 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
 
   return (
     <div>
-      <BoardFilters view={view} />
+      <BoardFilters view={view} columns={columns} />
       <SignalBoard
         signals={view.visible}
-        requested={['instrument', 'status', 'exchange', 'leg', 'entry', 'stop', 'trail', 'target', 'exit', 'ltp', 'score', 'time']}
+        requested={columns}
+        hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
         onOpenDetail={onOpenDetail}

@@ -12,8 +12,9 @@
  * that grows a capability gets the control for free, and one that loses it
  * stops advertising a filter that would do nothing.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { BoardSignal } from './boardTypes';
+import type { ColumnId } from './SignalBoard';
 
 export interface BoardView {
   query: string;
@@ -28,6 +29,36 @@ export interface BoardView {
   offers: { ended: boolean; best: boolean };
   /** Counts for the summary line. */
   counts: { total: number; shown: number; ended: number };
+  /** Columns the user has switched off. Distinct from columns no row can fill. */
+  hidden: ReadonlySet<ColumnId>;
+  toggleColumn: (id: ColumnId) => void;
+  showAllColumns: () => void;
+}
+
+/**
+ * Hidden columns survive a reload, per board.
+ *
+ * Per board and not globally: ORB shows an at-risk figure that Adaptive Edge
+ * cannot fill, so one shared list of hidden columns would mean hiding a column
+ * on one board silently changed another.
+ */
+function loadHidden(storageKey: string | undefined): Set<ColumnId> {
+  if (!storageKey || typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = JSON.parse(localStorage.getItem(`sterling.board.hidden.${storageKey}`) || '[]');
+    return new Set(Array.isArray(raw) ? (raw as ColumnId[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveHidden(storageKey: string | undefined, hidden: Set<ColumnId>): void {
+  if (!storageKey || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(`sterling.board.hidden.${storageKey}`, JSON.stringify([...hidden]));
+  } catch {
+    // A blocked localStorage costs the preference, not the board.
+  }
 }
 
 /** Matches an underlying, a contract symbol, or an exchange. */
@@ -73,11 +104,30 @@ function bestLegPerUnderlying(signals: BoardSignal[]): BoardSignal[] {
  */
 export function useBoardView(
   signals: readonly BoardSignal[],
-  { endedByDefault = false }: { endedByDefault?: boolean } = {},
+  { endedByDefault = false, storageKey }: { endedByDefault?: boolean; storageKey?: string } = {},
 ): BoardView {
   const [query, setQuery] = useState('');
   const [showEnded, setShowEnded] = useState(endedByDefault);
   const [bestOnly, setBestOnly] = useState(false);
+  const [hidden, setHidden] = useState<Set<ColumnId>>(() => loadHidden(storageKey));
+
+  const toggleColumn = useCallback((id: ColumnId) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveHidden(storageKey, next);
+      return next;
+    });
+  }, [storageKey]);
+
+  const showAllColumns = useCallback(() => {
+    setHidden(() => {
+      const next = new Set<ColumnId>();
+      saveHidden(storageKey, next);
+      return next;
+    });
+  }, [storageKey]);
 
   return useMemo(() => {
     const all = [...signals];
@@ -100,6 +150,7 @@ export function useBoardView(
       query, setQuery, showEnded, setShowEnded, bestOnly, setBestOnly,
       visible, offers,
       counts: { total: all.length, shown: visible.length, ended },
+      hidden, toggleColumn, showAllColumns,
     };
-  }, [signals, query, showEnded, bestOnly]);
+  }, [signals, query, showEnded, bestOnly, hidden, toggleColumn, showAllColumns]);
 }
