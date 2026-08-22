@@ -67,14 +67,35 @@ describe('SignalBoard rendering', () => {
   });
 
   it('groups rows under their trading day', () => {
-    show([sig({ id: 'today' }), sig({ id: 'old', atMs: NOW - 86_400_000 })]);
+    // liveFirst off, because this is about the date buckets; with it on these
+    // open rows would both float into "Live now".
+    show([sig({ id: 'today' }), sig({ id: 'old', atMs: NOW - 86_400_000 })], { liveFirst: false });
     expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('Yesterday')).toBeInTheDocument();
   });
 
+  it('floats open positions above the dated history', () => {
+    // A trade entered days ago and still running would otherwise sit below
+    // three days of closed history, and the top of the board would read as
+    // though nothing were on.
+    show([
+      sig({ id: 'old-but-running', status: 'running', atMs: NOW - 3 * 86_400_000 }),
+      sig({ id: 'closed-today', status: 'ended' }),
+    ]);
+    const text = document.body.textContent ?? '';
+    expect(text.indexOf('Live now')).toBeGreaterThan(-1);
+    expect(text.indexOf('Live now')).toBeLessThan(text.indexOf('Today'));
+  });
+
   it('counts the live rows in each day heading', () => {
-    show([sig({ id: '1' }), sig({ id: '2', status: 'ended' })]);
+    show([sig({ id: '1' }), sig({ id: '2', status: 'ended' })], { liveFirst: false });
     expect(screen.getByText(/2 signals · 1 live/)).toBeInTheDocument();
+  });
+
+  it('does not say "all live" in the live bucket', () => {
+    show([sig({ id: '1' }), sig({ id: '2' })]);
+    expect(screen.getByText('2 signals')).toBeInTheDocument();
+    expect(screen.queryByText(/2 signals · 2 live/)).not.toBeInTheDocument();
   });
 
   it('shows the engine tag only when engines are mixed', () => {

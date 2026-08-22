@@ -31,9 +31,9 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
   const [sort, setSort] = React.useState(DEFAULT_SORT);
   // Which signals are showing their contracts. Separate from openId, which is
   // a row's own detail — a parent opens its legs, a leg opens its detail.
-  const [openGroups, setOpenGroups] = React.useState<ReadonlySet<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = React.useState<ReadonlySet<string>>(new Set());
   const toggleGroup = React.useCallback((id: string) => {
-    setOpenGroups((prev) => {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -61,7 +61,7 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
         onOpenDetail={onOpenDetail}
         sort={sort}
         onSortChange={setSort}
-        openGroups={openGroups}
+        collapsedGroups={collapsedGroups}
         onToggleGroup={toggleGroup}
         nowMs={nowMs}
         emptyLabel={

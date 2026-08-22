@@ -163,6 +163,15 @@ export interface BoardSignal {
   /** This engine's own answer to "where did this come from". */
   origin?: BoardOrigin;
   /**
+   * Short engine-specific marks on the row, after the origin badge.
+   *
+   * Where `origin` answers "where did this come from", these answer "what
+   * else should I know before I act" — why a trade ended, how far an exit
+   * counter has got, whether this is a re-entry on an instrument already
+   * running. Each engine supplies its own; none is shared.
+   */
+  flags?: BoardOrigin[];
+  /**
    * Option delta, where the engine knows it.
    *
    * Shown beside the moneyness and used to mark the most responsive leg of a
@@ -218,6 +227,9 @@ export function sessionDayKey(atMs: number | null): string {
   return ist.toISOString().slice(0, 10);
 }
 
+/** The bucket live positions float into, ahead of every dated one. */
+export const LIVE_BUCKET = 'live';
+
 /**
  * "Today" / "Yesterday" / "Thu 14 Aug" — relative to the IST trading day.
  *
@@ -225,6 +237,7 @@ export function sessionDayKey(atMs: number | null): string {
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
 export function sessionDayLabel(key: string, nowMs: number): string {
+  if (key === LIVE_BUCKET) return 'Live now';
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
   if (key === today) return 'Today';
@@ -241,17 +254,29 @@ export function sessionDayLabel(key: string, nowMs: number): string {
  *
  * Undated rows sort last rather than being dropped — an engine that failed to
  * stamp a signal still has something to say.
+ *
+ * With `liveFirst`, anything still open floats into one bucket ahead of every
+ * dated one. Without it a position entered last Tuesday and still running sits
+ * under "Tue 12 Aug", below three days of closed history, and the top of the
+ * board reads as though nothing is on. The date buckets are then what they
+ * should be: the log of entries whose trade has ended.
  */
-export function groupByDay(signals: readonly BoardSignal[]): Array<{ key: string; signals: BoardSignal[] }> {
+export function groupByDay(
+  signals: readonly BoardSignal[],
+  { liveFirst = false }: { liveFirst?: boolean } = {},
+): Array<{ key: string; signals: BoardSignal[] }> {
   const buckets = new Map<string, BoardSignal[]>();
-  for (const s of signals) {
-    const key = sessionDayKey(s.atMs);
+  const push = (key: string, s: BoardSignal) => {
     const list = buckets.get(key);
     if (list) list.push(s);
     else buckets.set(key, [s]);
+  };
+  for (const s of signals) {
+    push(liveFirst && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : sessionDayKey(s.atMs), s);
   }
+  const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
   return [...buckets.entries()]
-    .sort((a, b) => (a[0] === 'unknown' ? 1 : b[0] === 'unknown' ? -1 : b[0].localeCompare(a[0])))
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || b[0].localeCompare(a[0]))
     .map(([key, list]) => ({
       key,
       signals: list.sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0)),

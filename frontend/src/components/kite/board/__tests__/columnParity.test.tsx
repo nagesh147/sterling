@@ -141,8 +141,6 @@ describe('expanded-row parity across engines', () => {
   // others showed two read-only cards and no way to act. They now mount the
   // same BoardTicket.
   const expand = (signals: BoardSignal[]) => {
-    // A grouped signal hides its legs until the parent is open, so the leg
-    // whose ticket we want is only mounted once the group is expanded too.
     const parent = signals[0];
     const target = parent.children?.[0] ?? parent;
     const { container } = render(
@@ -151,7 +149,6 @@ describe('expanded-row parity across engines', () => {
         requested={BOARD_COLUMNS}
         hidden={DEFAULTS}
         openId={target.id}
-        openGroups={new Set([parent.id])}
         onToggle={() => {}}
         onToggleGroup={() => {}}
         renderDetail={(sig) => <BoardTicket signal={sig} />}

@@ -14,7 +14,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   sessionDayLabel, trailBreached,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
@@ -272,6 +272,18 @@ function cellContent(
                 </span>
               </Tip>
             )}
+            {signal.flags?.map((flag) => (
+              <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
+                <span tabIndex={0} style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  color: ORIGIN_TONE[flag.tone], background: tint(ORIGIN_TONE[flag.tone], 10),
+                  border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
+                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+                }}>
+                  {flag.label}
+                </span>
+              </Tip>
+            ))}
             {marks?.has('bestRR') && (
               <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
                 <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help' }}>✝</span>
@@ -553,7 +565,7 @@ function Row({
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden, openGroups, onToggleGroup,
+  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -569,9 +581,20 @@ export function SignalBoard({
   onSortChange?: (next: SortState) => void;
   /** Columns the user switched off. */
   hidden?: ReadonlySet<ColumnId>;
-  /** Signals whose contracts are showing. Separate from `openId`, which is detail. */
-  openGroups?: ReadonlySet<string>;
+  /**
+   * Signals whose contracts are FOLDED AWAY. Separate from `openId`, which is
+   * a row's own detail.
+   *
+   * Expressed as collapsed rather than open so the default is legs visible.
+   * A board exists to show tradable contracts; making every one of them cost a
+   * click, on the board whose job is to show them, is worse than the repetition
+   * grouping was introduced to fix — the parent row and the indent already give
+   * the structure.
+   */
+  collapsedGroups?: ReadonlySet<string>;
   onToggleGroup?: (id: string) => void;
+  /** Float open positions above the dated history. On by default. */
+  liveFirst?: boolean;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -580,7 +603,7 @@ export function SignalBoard({
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
   const cols = visibleColumns(signals, chosen);
   const template = cols.map((c) => c.width).join(' ');
-  const days = groupByDay(signals);
+  const days = groupByDay(signals, { liveFirst });
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -652,6 +675,9 @@ export function SignalBoard({
             <span style={{ fontWeight: 500 }}>
               {rows.length} signal{rows.length === 1 ? '' : 's'}
               {(() => {
+                // The live bucket is already all-live; repeating it there
+                // would read as "8 signals · 8 live".
+                if (key === LIVE_BUCKET) return '';
                 const live = rows.filter((r) => ACTIONABLE.includes(r.status)).length;
                 return live ? ` · ${live} live` : '';
               })()}
@@ -677,7 +703,7 @@ export function SignalBoard({
             // A parent's chevron shows its contracts, not its own detail —
             // the thing behind a signal with eighteen strikes is the strikes.
             // Its full record is still one click away on the symbol.
-            const expanded = openGroups?.has(signal.id) ?? false;
+            const expanded = !(collapsedGroups?.has(signal.id) ?? false);
             // Best-of comparisons are only meaningful between the strikes of
             // one idea, so they are computed per group, never board-wide.
             const legMarks = markLegs(legs);

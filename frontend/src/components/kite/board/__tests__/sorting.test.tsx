@@ -123,6 +123,7 @@ describe('sorting on the rendered board', () => {
         nowMs={NOW}
         sort={{ column: 'ltp', direction: 'desc' }}
         onSortChange={vi.fn()}
+        liveFirst={false}
       />,
     );
     const text = document.body.textContent ?? '';

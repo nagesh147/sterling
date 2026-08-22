@@ -78,9 +78,17 @@ describe('rendering a grouped board', () => {
   const show = (props: Partial<React.ComponentProps<typeof SignalBoard>> = {}) =>
     render(<SignalBoard signals={board} openId={null} onToggle={() => {}} nowMs={NOW} {...props} />);
 
-  it('shows the signal and hides its contracts until asked', () => {
+  it('shows the signal with its contracts already under it', () => {
+    // A board exists to show tradable contracts; making each one cost a click
+    // on the board whose job is to show them is worse than the repetition
+    // grouping was introduced to fix.
     show();
     expect(screen.getByRole('button', { name: /NIFTY 50 long, 2 contracts/ })).toBeInTheDocument();
+    expect(screen.getByText('NIFTY26AUG24000CE')).toBeInTheDocument();
+  });
+
+  it('folds a signal away when it is collapsed', () => {
+    show({ collapsedGroups: new Set([board[0].id]) });
     expect(screen.queryByText('NIFTY26AUG24000CE')).not.toBeInTheDocument();
   });
 
@@ -90,8 +98,8 @@ describe('rendering a grouped board', () => {
     expect(within(parent).getByTitle('2 contracts')).toHaveTextContent('2');
   });
 
-  it('opens the contracts when the parent is expanded', () => {
-    show({ openGroups: new Set([board[0].id]) });
+  it('lists every contract of the signal', () => {
+    show();
     expect(screen.getByText('NIFTY26AUG24000CE')).toBeInTheDocument();
     expect(screen.getByText('NIFTY26AUG24100CE')).toBeInTheDocument();
   });
@@ -101,13 +109,13 @@ describe('rendering a grouped board', () => {
     const onToggle = vi.fn();
     show({ onToggleGroup, onToggle });
     fireEvent.click(screen.getByRole('button', { name: /NIFTY 50 long, 2 contracts/ }));
-    // A parent's chevron shows its contracts; it does not open its own detail.
+    // A parent's chevron folds its contracts; it does not open its own detail.
     expect(onToggleGroup).toHaveBeenCalledWith(board[0].id);
     expect(onToggle).not.toHaveBeenCalled();
   });
 
   it('indents a leg so it still reads as part of the signal after a scroll', () => {
-    const { container } = show({ openGroups: new Set([board[0].id]) });
+    const { container } = show();
     const [parent, first] = [...container.querySelectorAll('.sb-row')] as HTMLElement[];
     expect(parseFloat(first.style.paddingLeft)).toBeGreaterThan(parseFloat(parent.style.paddingLeft || '0'));
   });
@@ -122,8 +130,10 @@ describe('rendering a grouped board', () => {
 
   it('labels a parent by its contracts, never by the security kind', () => {
     // The parent of an LT signal read "LTINDEX · LONG". LT is a stock.
-    show();
-    expect(screen.getByText('CE · LONG')).toBeInTheDocument();
+    // Legs carry the same pill, so scope to the parent row.
+    const { container } = show();
+    const parent = container.querySelector('.sb-row') as HTMLElement;
+    expect(within(parent).getByText('CE · LONG')).toBeInTheDocument();
     expect(screen.queryByText(/INDEX · LONG/)).not.toBeInTheDocument();
   });
 
@@ -137,8 +147,9 @@ describe('rendering a grouped board', () => {
 
   it('lets the symbol still reach the full detail page', () => {
     const onOpenDetail = vi.fn();
-    show({ onOpenDetail });
-    fireEvent.click(screen.getByRole('button', { name: /Open NIFTY 50 detail/ }));
+    const { container } = show({ onOpenDetail });
+    const parent = container.querySelector('.sb-row') as HTMLElement;
+    fireEvent.click(within(parent).getByRole('button', { name: /Open NIFTY 50 detail/ }));
     expect(onOpenDetail).toHaveBeenCalled();
   });
 });

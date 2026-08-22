@@ -19,6 +19,7 @@
  * an order.
  */
 import type { AlignmentChip, EngineSignalRow, OptionLeg } from '../../../types/kiteEngine';
+import { computeGreeksFromLeg } from '../../../utils/computeGreeks';
 import { k } from '../../../styles/kiteUI';
 import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 
@@ -155,7 +156,12 @@ function navigatorSection(row: EngineSignalRow): BoardSection | null {
   };
 }
 
-export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index: number): BoardSignal {
+export function supertrendLegToBoard(
+  row: EngineSignalRow,
+  leg: OptionLeg,
+  index: number,
+  opts: SuperTrendAdapterOptions = {},
+): BoardSignal {
   const engine = engineOf(row);
   const atMs = leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms ?? null;
   const sections = [evidenceSection(row), exitSection(row, leg), navigatorSection(row)]
@@ -181,7 +187,14 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
     status: status(row, leg),
     atMs,
     levels: {
-      ltp: price(leg.premium_spot),
+      // The LIVE premium, not the entry. Using the entry for both made them
+      // identical by construction, so the entry bracket always read (+0.00)
+      // and TSL HIT could never fire — the very check that says an open
+      // drawdown is building.
+      ltp: price(
+        (opts.quotes?.[`${row.exchange}:${leg.option_symbol}`]?.last_price as number | undefined)
+        ?? leg.premium_spot,
+      ),
       entry: price(leg.premium_spot),
       // The hard stop set at entry and the ratchet are different numbers, and
       // the board shows both: one says what was risked, the other what is left.
@@ -201,6 +214,17 @@ export function supertrendLegToBoard(row: EngineSignalRow, leg: OptionLeg, index
     },
     score: row.score ?? null,
     origin: originOf(row),
+    flags: flagsFor(row, leg, opts),
+    // Solved from the live quote, not replayed from the scan. Omitted rather
+    // than guessed when the implied volatility has no solution — a delta the
+    // model could not find is not a delta.
+    delta: (() => {
+      const spot = opts.spotOf?.(row.underlying);
+      if (!spot || leg.strike == null || !leg.expiry) return null;
+      const q = opts.quotes?.[`${row.exchange}:${leg.option_symbol}`];
+      const g = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, spot, q, leg.lot_size ?? null);
+      return g && Number.isFinite(g.iv) && g.iv > 0 ? g.delta : null;
+    })(),
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections,
   };
@@ -251,6 +275,52 @@ function supertrendSignalToBoard(row: EngineSignalRow, legs: BoardSignal[], inde
   };
 }
 
+/**
+ * Why a trade ended, and how close it is to ending.
+ *
+ * The trailing stop and the red counter are independent rules and either can
+ * close a position, so the badge names which one did — "counter exit" and
+ * "TSL exit" are different failures and reading one as the other sends you
+ * looking at the wrong rule.
+ */
+function flagsFor(row: EngineSignalRow, leg: OptionLeg, opts: SuperTrendAdapterOptions): BoardOrigin[] {
+  const flags: BoardOrigin[] = [];
+
+  const reason = row.exit_reason;
+  if (reason?.startsWith('trail breach')) {
+    flags.push({ label: 'TSL exit', tone: 'amber', hint: `Closed by the trailing stop — ${reason}. The red counter had not fired; whichever rule triggers first ends the trade.` });
+  } else if (reason?.startsWith('time decay')) {
+    flags.push({ label: 'Theta exit', tone: 'amber', hint: `Closed on the time-decay limit — ${reason}. Price consolidated without expanding, so the trade closed rather than bleed theta.` });
+  } else if (reason) {
+    flags.push({ label: 'counter exit', tone: 'dim', hint: `Closed by the red counter — ${reason}.` });
+  }
+
+  const counter = leg.exit_state ?? row.exit_state;
+  if (counter && !reason) {
+    flags.push({ label: counter, tone: 'dim', hint: 'SuperTrend lines currently turned against this position, out of the number needed to close it.' });
+  }
+
+  // A second entry on an instrument whose earlier trade is still running is a
+  // re-entry, not a fresh setup — worth saying, because sizing it as new
+  // doubles the exposure on one idea.
+  const firstEntry = opts.originalEntryMs?.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`);
+  if (firstEntry != null && row.timestamp_ms > firstEntry) {
+    flags.push({ label: 're-entry', tone: 'purple', hint: 'An earlier entry on this instrument is still running. This adds to that idea rather than starting a new one.' });
+  }
+
+  return flags;
+}
+
+/** What the adapter needs beyond the rows themselves. */
+export interface SuperTrendAdapterOptions {
+  /** Live quotes by `EXCHANGE:SYMBOL`, for the per-leg delta. */
+  quotes?: Record<string, Record<string, unknown> | undefined>;
+  /** First still-running entry per `underlying|direction|source`. */
+  originalEntryMs?: Map<string, number>;
+  /** The underlying's live price, which the Greeks need. */
+  spotOf?: (underlying: string) => number | null;
+}
+
 /** Most-actionable first, so a group takes its liveliest leg's status. */
 const STATUS_ORDER: readonly BoardStatus[] = ['armed', 'running', 'weakening', 'watching', 'ended', 'error'];
 
@@ -261,9 +331,12 @@ const STATUS_ORDER: readonly BoardStatus[] = ['armed', 'running', 'weakening', '
  * — NIFTY alone can be thirty-seven strikes. Flattened, that is a board nobody
  * can read; grouped, it is fifty ideas you can open.
  */
-export function supertrendToBoard(rows: readonly EngineSignalRow[]): BoardSignal[] {
+export function supertrendToBoard(
+  rows: readonly EngineSignalRow[],
+  opts: SuperTrendAdapterOptions = {},
+): BoardSignal[] {
   return rows.map((row, i) => {
-    const legs = (row.legs ?? []).map((leg, j) => supertrendLegToBoard(row, leg, j));
+    const legs = (row.legs ?? []).map((leg, j) => supertrendLegToBoard(row, leg, j, opts));
     return supertrendSignalToBoard(row, legs, i);
   });
 }
