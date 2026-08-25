@@ -23,6 +23,7 @@ import { DataLakeSettingsPanel } from '../datalake/DataLakeSettingsPanel';
 import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
 import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
+import { SmartMoneyOptionsSettingsPanel } from './SmartMoneyOptionsSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -840,6 +841,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   adaptiveEdge: <Icons.Chart />,
   orbOptions: <Icons.Chart />,
   atmPremiumImbalance: <Icons.Chart />,
+  smartMoneyOptions: <Icons.Chart />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -869,6 +871,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Opening-range breakout with VWAP confirmation. Buys calls on LONG and puts on SHORT; never sells options. Paper/live and manual/auto stay with Trading Mode.' },
   { id: 'atmPremiumImbalance', label: 'ATM Premium Imbalance', eyebrow: 'Cheaper ATM leg at the open, +15 points', group: 'Signal engines',
     pageDescription: 'Buys whichever at-the-money leg is cheaper at the session open and exits at the entry fill plus a fixed target. Reverse-engineered from recordings and not yet validated, so it stays paper-only until the readiness gate passes.' },
+  { id: 'smartMoneyOptions', label: 'Smart Money Multi-X Options', eyebrow: 'Base breakout, RVOL surge, 2X/3X/5X targets', group: 'Signal engines',
+    pageDescription: 'Institutional base consolidation and liquidity breakout with Smart Money footprint volume confirmation. Buys OTM1/OTM2 options targeting 2X, 3X, and 5X multi-bagger moves with 5-day swing horizon.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -1107,6 +1111,12 @@ export function ConnectPane() {
             {section === 'atmPremiumImbalance' && (
               <>
                 <AtmPremiumImbalanceSettingsPanel />
+              </>
+            )}
+
+            {section === 'smartMoneyOptions' && (
+              <>
+                <SmartMoneyOptionsSettingsPanel />
               </>
             )}
 

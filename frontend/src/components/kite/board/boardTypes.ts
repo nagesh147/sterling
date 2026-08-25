@@ -17,7 +17,7 @@
  */
 import type { Stat } from './StatCard';
 
-export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb' | 'atm_premium_imbalance';
+export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb' | 'atm_premium_imbalance' | 'smart_money_options';
 
 export const ENGINE_LABEL: Record<EngineId, string> = {
   supertrend: 'SuperTrend',
@@ -25,6 +25,7 @@ export const ENGINE_LABEL: Record<EngineId, string> = {
   adaptive_edge: 'Adaptive Edge',
   orb: 'ORB + VWAP',
   atm_premium_imbalance: 'ATM Premium Imbalance',
+  smart_money_options: 'Smart Money Multi-X',
 };
 
 /** Short form for a badge, where the full name will not fit. */
@@ -34,6 +35,7 @@ export const ENGINE_TAG: Record<EngineId, string> = {
   adaptive_edge: 'AE',
   orb: 'ORB',
   atm_premium_imbalance: 'API',
+  smart_money_options: 'SMX',
 };
 
 /**

@@ -564,3 +564,52 @@ async def atm_premium_imbalance_simulate_stop(
     if not uid:
         raise HTTPException(status_code=401, detail="authenticated user is required")
     return await stop(uid)
+
+
+# -------------------------------------------------- Smart Money Multi-X Options
+
+@router.get("/smart-money-options")
+async def get_smart_money_options_config() -> dict:
+    """Identity, configuration, defaults, and vocabularies for Smart Money Options."""
+    from app.services.smart_money_options import descriptor
+    return descriptor()
+
+
+@router.put("/smart-money-options")
+async def update_smart_money_options_config(body: dict = Body(...)) -> dict:
+    """Apply config change for Smart Money Options."""
+    from app.services.smart_money_options import set_config
+    values = {k: v for k, v in dict(body).items() if v is not None}
+    if not values:
+        raise HTTPException(status_code=422, detail="no settings to change")
+    try:
+        cfg = set_config(values)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"config": cfg.as_dict()}
+
+
+@router.get("/smart-money-options/snapshot")
+async def get_smart_money_options_snapshot() -> dict:
+    """Live snapshot of signals and evaluated setups for Smart Money Options."""
+    from app.services.smart_money_options import snapshot
+    try:
+        return await snapshot()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Smart Money Options snapshot failed: {exc}"
+        ) from exc
+
+
+@router.post("/smart-money-options/scan")
+async def trigger_smart_money_options_scan() -> dict:
+    """Trigger an on-demand scan over the configured universe."""
+    from app.services.smart_money_options_runner import run_scan
+    try:
+        signals = await run_scan()
+        return {"scanned": len(signals), "signals": [s.as_dict() for s in signals]}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Smart Money Options scan failed: {exc}"
+        ) from exc
+
