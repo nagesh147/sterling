@@ -3,6 +3,9 @@ import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
+
+from app.core import auth as _auth
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
@@ -1747,6 +1750,31 @@ async def lifespan(app: FastAPI):
     log.info("Sterling shutdown complete")
 
 
+# ── Auth-gate exemptions ──────────────────────────────────────────────────────
+# Paths reachable without a Bearer token. Kept deliberately small (fail-closed:
+# anything not listed here requires auth). Rationale per entry:
+#   /health, /            — liveness / root, no data
+#   /docs /redoc /openapi — API docs (safe: no live data, no mutations)
+#   /api/v1/auth/login    — must be reachable to obtain a token
+#   /api/v1/auth/refresh  — token refresh (carries its own refresh token)
+#   /api/v1/kite/postback — server-to-server webhook authenticated by its own
+#                           HMAC checksum, not a user token (see kite.order_postback)
+#   /api/v1/stream        — SSE: EventSource cannot send an Authorization header;
+#                           tracked as a follow-up (short-lived signed stream token)
+_AUTH_EXEMPT_EXACT = frozenset({
+    "/", "/health",
+    "/api/v1/auth/login", "/api/v1/auth/refresh",
+    "/api/v1/kite/postback",
+})
+_AUTH_EXEMPT_PREFIXES = ("/docs", "/redoc", "/openapi", "/api/v1/stream")
+
+
+def _auth_exempt(path: str) -> bool:
+    if path in _AUTH_EXEMPT_EXACT:
+        return True
+    return path.startswith(_AUTH_EXEMPT_PREFIXES)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Sterling",
@@ -1755,13 +1783,29 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # ── Middleware ordering ───────────────────────────────────────────────────
+    # add_middleware / @app.middleware PREPEND, so the LAST one added is the
+    # OUTERMOST wrapper. We register inner→outer to get, on the way in:
+    #     CORS  →  security-headers  →  auth-gate  →  router
+    # CORS stays OUTERMOST so that 401s and preflight (OPTIONS) responses still
+    # carry the Access-Control-* headers a browser needs to read them.
+
+    @app.middleware("http")
+    async def _auth_gate(request, call_next):
+        # Single fail-closed enforcement point: every route needs a valid Bearer
+        # access token unless explicitly exempt. OPTIONS passes through for CORS
+        # preflight (CORSMiddleware, being outermost, answers it before this runs).
+        if request.method == "OPTIONS" or _auth_exempt(request.url.path):
+            return await call_next(request)
+        ctx = await _auth.authenticate_request(request)
+        if ctx is None:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Not authenticated"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        request.state.user_ctx = ctx
+        return await call_next(request)
 
     @app.middleware("http")
     async def _security_headers(request, call_next):
@@ -1783,7 +1827,20 @@ def create_app() -> FastAPI:
         )
         return response
 
+    # Added last → outermost wrapper (see ordering note above).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(health_router)
+    # Authentication (OAuth2 password flow → JWT). Login/refresh are exempt from
+    # the auth gate; /me and /logout require a token.
+    from app.api.v1.endpoints.auth import router as auth_router
+    app.include_router(auth_router, prefix="/api/v1")
     # More-specific stream prefix before generic /api/v1 routers (registration order).
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
