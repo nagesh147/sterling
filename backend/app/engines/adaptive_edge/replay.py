@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from datetime import datetime
+from typing import Callable, Iterable, Sequence, TypeVar
 
 from .e2e import AuditRecord, E2ETrace
 from .event_boundary import CanonicalMarketEvent
@@ -146,3 +147,170 @@ def replay_canonical_sequence(
             )
         )
     return tuple(snapshots)
+
+
+_State = TypeVar("_State")
+
+
+class ReplayError(RuntimeError):
+    """A replay could not be reproduced exactly as its manifest describes.
+
+    Always fatal. A replay that silently skipped a missing event, or folded a
+    duplicate in twice, would still produce a number — and that number would be
+    reported with the same confidence as a correct one. Refusing is the only
+    honest outcome.
+    """
+
+
+@dataclass(frozen=True)
+class ReplayEvent:
+    """One event, identified well enough to be reproduced bit-for-bit.
+
+    `payload_fingerprint` stands in for the payload itself: replay proves the
+    same inputs were seen, and comparing fingerprints does that without the
+    replay log having to carry every payload.
+    """
+
+    event_id: str
+    observed_at: datetime
+    sequence_number: int
+    event_type: str
+    payload_fingerprint: str
+    source_version: str
+
+
+@dataclass(frozen=True)
+class ReplayManifest:
+    """The authoritative list of what a replay must consume.
+
+    The manifest is fixed before the replay runs, so the set of events is not a
+    function of what happened to be available at replay time. `event_ids` is
+    exhaustive in both directions: an id that is missing and an event that was
+    not asked for are both errors.
+    """
+
+    manifest_id: str
+    specification_versions: tuple[str, ...]
+    feature_snapshot_ids: tuple[str, ...]
+    model_state_id: str
+    event_ids: tuple[str, ...]
+    cutoff: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ReplayRun:
+    """The outcome of one replay, with the fingerprints that make it checkable."""
+
+    manifest_id: str
+    event_ids: tuple[str, ...]
+    state: object
+    state_fingerprint: str
+    replay_fingerprint: str
+
+
+def _fingerprint(*parts: str) -> str:
+    hasher = hashlib.sha256()
+    for part in parts:
+        # Length-prefixed so that concatenation cannot be ambiguous: without
+        # this, ("ab", "c") and ("a", "bc") would hash identically.
+        hasher.update(f"{len(part)}:{part}".encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def replay(
+    manifest: ReplayManifest,
+    events: Iterable[ReplayEvent],
+    initial_state: _State,
+    reducer: Callable[[_State, ReplayEvent], _State],
+) -> ReplayRun:
+    """Fold `events` into a state in a total, manifest-checked order.
+
+    Ordering is (observed_at, sequence_number, event_id). Observation time comes
+    first because that is the causal order; the sequence number breaks ties
+    within a timestamp; the id breaks any remaining tie so the order is total
+    and never depends on the order events were handed in.
+
+    Every failure below is a case where a replay could still produce a plausible
+    number from the wrong inputs, which is why each one raises instead of being
+    repaired.
+    """
+    materialized = tuple(events)
+
+    seen: set[str] = set()
+    for event in materialized:
+        if event.event_id in seen:
+            raise ReplayError(
+                f"duplicate event identity in replay input: {event.event_id!r}"
+            )
+        seen.add(event.event_id)
+
+    by_sequence: dict[int, str] = {}
+    for event in materialized:
+        clash = by_sequence.get(event.sequence_number)
+        if clash is not None:
+            raise ReplayError(
+                f"duplicate sequence number {event.sequence_number} "
+                f"shared by {clash!r} and {event.event_id!r}"
+            )
+        by_sequence[event.sequence_number] = event.event_id
+
+    expected = set(manifest.event_ids)
+    missing = sorted(expected - seen)
+    if missing:
+        raise ReplayError(
+            f"missing manifest events for {manifest.manifest_id}: {', '.join(missing)}"
+        )
+    unexpected = sorted(seen - expected)
+    if unexpected:
+        raise ReplayError(
+            f"events not listed in manifest {manifest.manifest_id}: {', '.join(unexpected)}"
+        )
+
+    if manifest.cutoff is not None:
+        # Inclusive: an event observed exactly at the cutoff was available at
+        # the cutoff. Only strictly later events are from the future.
+        late = sorted(
+            event.event_id for event in materialized if event.observed_at > manifest.cutoff
+        )
+        if late:
+            raise ReplayError(
+                f"events observed after replay cutoff {manifest.cutoff.isoformat()}: "
+                f"{', '.join(late)}"
+            )
+
+    ordered = tuple(
+        sorted(materialized, key=lambda e: (e.observed_at, e.sequence_number, e.event_id))
+    )
+
+    state = initial_state
+    for event in ordered:
+        state = reducer(state, event)
+
+    state_fingerprint = _fingerprint(json.dumps(state, sort_keys=True, default=repr))
+    replay_fingerprint = _fingerprint(
+        manifest.manifest_id,
+        *manifest.specification_versions,
+        *manifest.feature_snapshot_ids,
+        manifest.model_state_id,
+        *(
+            part
+            for event in ordered
+            for part in (
+                event.event_id,
+                event.observed_at.isoformat(),
+                str(event.sequence_number),
+                event.event_type,
+                event.payload_fingerprint,
+                event.source_version,
+            )
+        ),
+        state_fingerprint,
+    )
+
+    return ReplayRun(
+        manifest_id=manifest.manifest_id,
+        event_ids=tuple(event.event_id for event in ordered),
+        state=state,
+        state_fingerprint=state_fingerprint,
+        replay_fingerprint=replay_fingerprint,
+    )

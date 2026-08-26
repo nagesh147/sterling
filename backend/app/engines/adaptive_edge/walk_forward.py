@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, TypeVar
 
 
 class EvaluationContractError(ValueError):
@@ -303,3 +303,79 @@ def final_test_is_claim_eligible(
     """Return whether the test boundary remains eligible as final evidence."""
 
     return holdout.status is HoldoutStatus.FROZEN and not registry.test_contaminated
+
+
+_Row = TypeVar("_Row")
+
+
+@dataclass(frozen=True)
+class Fold:
+    """One walk-forward fold: train, then validate, then hold out.
+
+    The purged and embargoed rows are kept rather than discarded so a fold can
+    account for every row in its window — you can see what was dropped and why,
+    instead of inferring it from a gap in the indices.
+    """
+
+    train: tuple[_Row, ...]
+    validation: tuple[_Row, ...]
+    holdout: tuple[_Row, ...]
+    purged: tuple[_Row, ...] = ()
+    embargoed: tuple[_Row, ...] = ()
+
+
+def build_folds(
+    rows: Sequence[_Row],
+    *,
+    train_size: int,
+    validation_size: int,
+    holdout_size: int,
+    purge_rows: int = 0,
+    embargo_rows: int = 0,
+) -> tuple[Fold, ...]:
+    """Cut `rows` into non-overlapping train/validation/holdout folds.
+
+    Rows must already be in chronological order — `validate_dataset` is what
+    establishes that, and this function trusts it rather than re-sorting, so a
+    caller cannot quietly launder an out-of-order dataset through here.
+
+    Each window is laid out strictly forward in time:
+
+        [ train ][ purge ][ validation ][ embargo ][ holdout ]
+
+    The purge drops the rows straddling the train/validation boundary and the
+    embargo drops those straddling validation/holdout. Both exist because a
+    label is measured over a window that extends past its own decision time: a
+    row decided just before a boundary is still resolving after it, so training
+    on it leaks the outcome the next segment is supposed to be judged on. The
+    gaps are the width of that overlap.
+
+    Windows do not overlap. A row appears in at most one fold, so scores across
+    folds are not correlated through shared rows, and a trailing remainder too
+    short for a full window is left out rather than yielding a short fold whose
+    segments would not mean the same thing.
+    """
+    if train_size < 1 or validation_size < 1 or holdout_size < 1:
+        raise ValueError("train, validation and holdout sizes must each be at least 1")
+    if purge_rows < 0 or embargo_rows < 0:
+        raise ValueError("purge and embargo sizes cannot be negative")
+
+    window = train_size + purge_rows + validation_size + embargo_rows + holdout_size
+    folds: list[Fold] = []
+
+    for start in range(0, len(rows) - window + 1, window):
+        cut = start + train_size
+        purge_end = cut + purge_rows
+        validation_end = purge_end + validation_size
+        embargo_end = validation_end + embargo_rows
+        folds.append(
+            Fold(
+                train=tuple(rows[start:cut]),
+                purged=tuple(rows[cut:purge_end]),
+                validation=tuple(rows[purge_end:validation_end]),
+                embargoed=tuple(rows[validation_end:embargo_end]),
+                holdout=tuple(rows[embargo_end:embargo_end + holdout_size]),
+            )
+        )
+
+    return tuple(folds)

@@ -11,6 +11,24 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from .canonical_math import ExecutionCost, position_size, risk_per_unit
+from .model import MarketFeatures
+
+
+@dataclass(frozen=True)
+class ReplayBar:
+    """A causally prepared bar: market state at index i, and nothing after it.
+
+    Carries data only. Turning `features` into a direction is the strategy's
+    job, and the F-101..F-114 formulas that once did it were removed as
+    invented (see `model.py`) — so nothing here decides anything. This type
+    exists because `kite_adapter.build_replay_bars` produces it as the boundary
+    between Kite candles and the engine.
+    """
+
+    close: float
+    spread_bps: float
+    atr: float
+    features: MarketFeatures
 
 
 @dataclass(frozen=True)
