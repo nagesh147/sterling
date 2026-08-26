@@ -1,7 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { ConnectPane } from '../ConnectPane';
+import gammaPayload from '../../__tests__/fixtures/gamma-move.json';
+import atmPayload from '../../__tests__/fixtures/atm-premium-imbalance.json';
+import orbPayload from '../../__tests__/fixtures/nifty-orb-options.json';
 
 const setConfig = vi.fn();
 
@@ -31,6 +35,14 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useSetEngineConfig: () => ({ mutate: setConfig, isPending: false }),
   usePatchEngineConfig: () => ({ mutate: setConfig, isPending: false }),
   useEngineSignals: () => ({ data: { rows: [] } }),
+  // SuperTrend's contract picker moved onto this page, and it reads the live
+  // Kite expiry calendar.
+  useExpiryCalendar: () => ({ data: undefined, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+  useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
+  // The shared InstrumentsGroup reads the curated stock registry. Omitted, the
+  // mock throws inside the component and the whole panel renders as an empty
+  // div — which reads exactly like "the settings are missing".
+  useStockRegistry: () => ({ data: [{ liquidity: 'Very High', names: ['RELIANCE', 'HDFCBANK'] }] }),
 }));
 
 // The rail summarises which engines are running, so ConnectPane itself reads the
@@ -52,6 +64,9 @@ vi.mock('../KiteTelegramPanel', () => ({
 }));
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
+vi.mock('../AdaptiveEdgeSettingsPanel', () => ({ AdaptiveEdgeSettingsPanel: () => <div>Adaptive Edge settings panel</div> }));
+vi.mock('../OrbMomentumOptionsSettingsPanel', () => ({ OrbMomentumOptionsSettingsPanel: () => <div>ORB options settings panel</div> }));
+vi.mock('../../datalake/DataLakeSettingsPanel', () => ({ DataLakeSettingsPanel: () => <div>Offline data settings</div> }));
 
 describe('ConnectPane settings hub', () => {
   beforeEach(() => {
@@ -89,6 +104,33 @@ describe('ConnectPane settings hub', () => {
     render(<ConnectPane />);
     ['Connection', 'Trading', 'Signal engines', 'Platform']
       .forEach((group) => expect(screen.getByText(group)).toBeInTheDocument());
+  });
+
+  it('places Adaptive Edge next to Value-Flow Navigator', () => {
+    render(<ConnectPane />);
+    const navigator = screen.getByRole('button', { name: /Value-Flow Navigator AVWAP, volatility & options flow/i });
+    const adaptive = screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i });
+    expect(navigator.compareDocumentPosition(adaptive) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(adaptive);
+    expect(screen.getByRole('heading', { name: 'Adaptive Edge' })).toBeInTheDocument();
+    expect(screen.getByText('Adaptive Edge settings panel')).toBeInTheDocument();
+  });
+
+  it('gives ORB + VWAP Options a home in the rail', () => {
+    // The panel existed but was mounted nowhere, so the whole ORB UI was
+    // unreachable from the app. This is the assertion that would have caught it.
+    render(<ConnectPane />);
+    const orb = screen.getByRole('button', { name: /ORB \+ VWAP Options Opening range breakout, buy-only/i });
+    fireEvent.click(orb);
+    expect(screen.getByRole('heading', { name: 'ORB + VWAP Options' })).toBeInTheDocument();
+    expect(screen.getByText('ORB options settings panel')).toBeInTheDocument();
+  });
+
+  it('groups ORB with the other signal engines', () => {
+    render(<ConnectPane />);
+    const adaptive = screen.getByRole('button', { name: /Adaptive Edge Score, modes, TBT structure/i });
+    const orb = screen.getByRole('button', { name: /ORB \+ VWAP Options/i });
+    expect(adaptive.compareDocumentPosition(orb) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('gives manual and automatic rules separate homes, not one filtered page', () => {
@@ -141,5 +183,77 @@ describe('ConnectPane settings hub', () => {
     localStorage.setItem('kite_connect_section', 'rules');
     render(<ConnectPane />);
     expect(screen.getByRole('heading', { name: 'Manual Trade' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * ATM Premium Imbalance and Gamma Move, reachable and carrying their contract
+ * settings.
+ *
+ * ORB has had this assertion since its panel turned out to be mounted nowhere —
+ * "the whole ORB UI was unreachable from the app" — and neither of these two had
+ * the equivalent. Their panels are deliberately NOT mocked here: a stub that
+ * renders a placeholder proves the rail wiring and nothing about whether the
+ * page a person lands on actually has the controls on it.
+ */
+describe('ConnectPane — every option engine is reachable and complete', () => {
+  // These panels are real, so they need a QueryClient and the config payloads
+  // the app serves them. Anything less and the test proves the rail wiring only.
+  const PAYLOADS: Record<string, unknown> = {
+    '/api/v1/config/gamma-move': gammaPayload,
+    '/api/v1/config/atm-premium-imbalance': atmPayload,
+    '/api/v1/config/nifty-orb-options': orbPayload,
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const key = Object.keys(PAYLOADS).find((k) => url.endsWith(k));
+      return {
+        ok: true, status: 200,
+        json: async () => (key ? PAYLOADS[key] : {}),
+        text: async () => JSON.stringify(key ? PAYLOADS[key] : {}),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as Response;
+    }));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const show = (ui: React.ReactElement) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  };
+
+  const ENGINES: Array<[string, RegExp, string]> = [
+    ['ATM Premium Imbalance', /ATM Premium Imbalance\s*Cheaper ATM leg at the open/i,
+      'ATM Premium Imbalance'],
+    ['Gamma Move', /Gamma Move\s*OI unwind at a level/i, 'Gamma Move'],
+  ];
+
+  it.each(ENGINES)('gives %s a home in the rail', (_label, railName, heading) => {
+    show(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: railName }));
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+  });
+
+  it.each(ENGINES)('%s carries the shared expiry controls', async (label, railName) => {
+    show(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: railName }));
+    await waitFor(() => expect(document.querySelectorAll('summary').length).toBeGreaterThan(0));
+    const text = document.body.textContent ?? '';
+    expect(text, `${label} is missing the DTE window`).toContain('Minimum days to expiry');
+    expect(text, `${label} is missing the DTE window`).toContain('Maximum days to expiry');
+    expect(text, `${label} is missing the expiry-day control`).toContain('Expiry day');
+  });
+
+  it.each(ENGINES)('%s opens its Contracts section', async (label, railName) => {
+    show(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: railName }));
+    await waitFor(() => expect(document.querySelectorAll('summary').length).toBeGreaterThan(0));
+    const summary = [...document.querySelectorAll('summary')]
+      .find((el) => /Contracts/.test(el.textContent ?? ''));
+    expect(summary, `${label} has no Contracts section`).toBeTruthy();
+    expect((summary!.closest('details') as HTMLDetailsElement).open,
+           `${label}'s Contracts section is collapsed`).toBe(true);
   });
 });

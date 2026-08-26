@@ -8,7 +8,12 @@ import { installKiteDefaultPreferences } from './utils/kiteDefaultPreferences';
 import { installScrollAutohide } from './utils/scrollAutohide';
 import { installKiteChartTimezone } from './utils/kiteChartTimezone';
 import { installTradingViewPalette } from './utils/tradingViewPalette';
+import { installThemeStylesheet } from './styles/installThemeStylesheet';
 
+// Before anything renders: this defines the tokens every component reads.
+// The theme itself is chosen by store/useStore, which already owns the
+// document's data-theme attribute.
+installThemeStylesheet();
 installKiteDefaultPreferences();
 installTradingViewPalette();
 installScrollAutohide();   // macOS-style: reveal scrollbars while scrolling, fade when idle

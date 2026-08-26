@@ -1327,6 +1327,14 @@ async def lifespan(app: FastAPI):
     exchange_account_store.bootstrap()
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
+    # Adopt KITE_API_KEY / KITE_API_SECRET (and optionally KITE_ACCESS_TOKEN) from
+    # the environment so a fresh DB or a new machine boots already provisioned —
+    # no retyping credentials into the UI before anything works.
+    try:
+        from app.services.exchanges.kite import auth as _kite_auth
+        _kite_auth.seed_from_env()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Kite env seeding skipped: %s", exc)
     _webhook_store_svc.bootstrap()
     _alert_store_svc.bootstrap()
     _pnl_history_svc.bootstrap()
@@ -1525,6 +1533,21 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
+    # ATM Premium Imbalance: arm inside the pre-open lead so both legs are
+    # subscribed before the bell. Arming does not trade -- entry is still gated
+    # on verified market hours -- and the loop is a no-op whenever the strategy
+    # is disabled or unsized, which is the default.
+    from app.services.atm_premium_imbalance_runner import auto_arm_loop
+    atm_auto_arm_task = asyncio.create_task(auto_arm_loop(interval=30))
+
+    # Gamma Move: levels -> strikes -> trigger, on the strategy's own cadence.
+    # The loop is a no-op while the strategy is disabled, which is its default.
+    # The loop reconciles against the broker before its first scan, so a restart
+    # cannot open a second position in a contract it already holds.
+    from app.services.gamma_move_runner import auto_scan_loop as _gamma_move_scan
+    gamma_move_task = asyncio.create_task(_gamma_move_scan(interval=300))
+    log.info("ATM PI auto-arm loop started (every 30s)")
+
     # Arbitrator fake log worker for UI parity — only runs when crypto is on
     if app.state.scalp_mode:
         from app.api.v1.endpoints.stream import _arbitrator_log_worker
@@ -1563,6 +1586,14 @@ async def lifespan(app: FastAPI):
         log.warning("Kite auto-open startup reconcile failed: %s", exc)
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
     log.info("Kite Sterling Kite Engine auto-scan loop started (every 5 min)")
+
+    # Kite session keeper — renews access tokens shortly before the 06:00 IST reset
+    # for accounts Zerodha issued a refresh_token to. The strategy engines run
+    # headless, so without this a token that lapses overnight leaves the 09:15
+    # scans sessionless until someone opens the UI.
+    from app.services.exchanges.kite.auth import session_keeper_loop as _kite_session_keeper
+    kite_session_task = asyncio.create_task(_kite_session_keeper())
+    log.info("Kite session keeper started (every 10 min)")
 
     # Sterling Value-Flow Navigator — independent strategy scanner. It reuses
     # the Kite account/client/instrument caches, but does not depend on the
@@ -1658,6 +1689,11 @@ async def lifespan(app: FastAPI):
         await kite_engine_task
     except (Exception, BaseException):
         pass
+    kite_session_task.cancel()
+    try:
+        await kite_session_task
+    except (Exception, BaseException):
+        pass
     navigator_task.cancel()
     try:
         await navigator_task
@@ -1666,6 +1702,16 @@ async def lifespan(app: FastAPI):
     vcp_feed_task.cancel()
     try:
         await vcp_feed_task
+    except (Exception, BaseException):
+        pass
+    atm_auto_arm_task.cancel()
+    try:
+        await atm_auto_arm_task
+    except (Exception, BaseException):
+        pass
+    gamma_move_task.cancel()
+    try:
+        await gamma_move_task
     except (Exception, BaseException):
         pass
 
@@ -1791,6 +1837,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")
 
+    # TrueData market data provider endpoints
+    from app.api.v1.endpoints.truedata import router as truedata_router
+    app.include_router(truedata_router, prefix="/api/v1")
+
     # Kite-exclusive Sterling Kite Engine options engine (scanner + advisory/auto-exec)
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")
@@ -1802,6 +1852,9 @@ def create_app() -> FastAPI:
     # Sterling Value-Flow Navigator (Kite-only, off by default)
     from app.api.v1.endpoints.navigator import router as navigator_router
     app.include_router(navigator_router, prefix="/api/v1")
+
+    from app.api.v1.endpoints.adaptive_edge import router as adaptive_edge_router
+    app.include_router(adaptive_edge_router, prefix="/api/v1")
 
     # Offline market-data lake (kitelake). Storage is relocatable — typically a removable
     # drive — so these endpoints report an absent volume as data, never as an error.

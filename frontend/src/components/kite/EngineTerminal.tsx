@@ -6,8 +6,8 @@ import type { ActivityEvent } from '../../types/kiteEngine';
 type Theme = 'dark' | 'light';
 
 const THEME = {
-  dark: { bg: '#0b0b0b', headerBg: '#111', border: '#1f1f1f', text: '#d8d8d8', dim: '#777', headTxt: '#eee', headDim: '#bdbdbd' },
-  light: { bg: '#ffffff', headerBg: '#f9f9f9', border: '#e0e0e0', text: '#333', dim: '#9b9b9b', headTxt: '#222', headDim: '#666' },
+  dark: { bg: '#0b0b0b', headerBg: '#111', border: '#1f1f1f', text: '#d8d8d8', dim: 'var(--k-ink-5)', headTxt: 'var(--k-hairline-3)', headDim: 'var(--k-faint-3)' },
+  light: { bg: 'var(--k-bg)', headerBg: 'var(--k-surface)', border: 'var(--k-border)', text: 'var(--k-ink-1)', dim: 'var(--k-dim)', headTxt: '#222', headDim: 'var(--k-ink-4)' },
 };
 
 // One monospace stack for the whole terminal so log lines read like real logs.
@@ -36,6 +36,24 @@ const KIND_META: Record<string, { level: Level; emoji: string; label: string; ba
   order_failed:  { level: 'ERROR',   emoji: '❌', label: 'ORDER FAILED' },
   error:         { level: 'ERROR',   emoji: '💥', label: 'ERROR' },
   info:          { level: 'INFO',    emoji: '',  label: 'INFO' },
+  // ATM Premium Imbalance. This strategy makes one decision a day in the first
+  // seconds of the session, so its lines are transitions rather than a stream:
+  // the premium comparison, the two orders, and where the stop has moved to.
+  api_armed:       { level: 'INFO',    emoji: '🎯', label: 'ATM ARMED', banner: true },
+  api_replay:      { level: 'INFO',    emoji: '⏪', label: 'ATM REPLAY', banner: true },
+  api_replay_done: { level: 'INFO',    emoji: '⏹', label: 'REPLAY END', banner: true },
+  api_signal:      { level: 'INFO',    emoji: '⚖️', label: 'ATM SIGNAL' },
+  api_waiting:     { level: 'INFO',    emoji: '⏸', label: 'ATM WAITING' },
+  api_entry:       { level: 'SUCCESS', emoji: '🟢', label: 'ATM ENTRY' },
+  api_filled:      { level: 'SUCCESS', emoji: '✅', label: 'ATM FILLED' },
+  api_stop:        { level: 'INFO',    emoji: '🪜', label: 'ATM STOP' },
+  api_exit:        { level: 'SUCCESS', emoji: '🔴', label: 'ATM EXIT' },
+  api_done:        { level: 'SUCCESS', emoji: '🏁', label: 'ATM DONE', banner: true },
+  api_halt:        { level: 'ERROR',   emoji: '🛑', label: 'ATM HALT', banner: true },
+  api_blocked:     { level: 'WARN',    emoji: '🚧', label: 'ATM BLOCKED' },
+  api_adopted:     { level: 'WARN',    emoji: '🤝', label: 'ATM ADOPTED', banner: true },
+  api_order_failed: { level: 'ERROR',  emoji: '❌', label: 'ATM ORDER FAILED' },
+
   // Real backend server logs, one kind per severity so the level token + colour
   // stay accurate while the 🖧 glyph marks them apart from engine activity.
   srv_debug:     { level: 'DEBUG',   emoji: '🖧', label: 'SERVER' },
@@ -116,7 +134,10 @@ function Banner({ ev, t }: { ev: ActivityEvent; t: typeof THEME.dark }) {
 function Line({ ev, t }: { ev: ActivityEvent; t: typeof THEME.dark }) {
   const meta = KIND_META[ev.kind] ?? { level: 'INFO' as Level, emoji: '', label: ev.kind.toUpperCase() };
   const color = LEVEL_META[meta.level].color;
-  const isImportant = meta.level === 'ERROR' || meta.level === 'WARN' || ev.kind === 'order_placed';
+  // Highlighted lines are the ones an operator must not scroll past: anything
+  // wrong, and the moments real orders went out.
+  const isImportant = meta.level === 'ERROR' || meta.level === 'WARN'
+    || ev.kind === 'order_placed' || ev.kind === 'api_entry' || ev.kind === 'api_exit';
   return (
     <div style={{
       display: 'flex', gap: 10, padding: '1px 0 1px 8px', alignItems: 'baseline',
@@ -126,7 +147,15 @@ function Line({ ev, t }: { ev: ActivityEvent; t: typeof THEME.dark }) {
     }}>
       <span style={{ color: t.dim, flexShrink: 0 }}>{hhmmss(ev.ts_ms)}</span>
       <span style={{ flexShrink: 0, color, fontWeight: 700 }}>
-        {meta.emoji ? `${meta.emoji} ` : ''}{meta.level}
+        {/* Ordinary lines show the level, which is all a scan line needs. The
+            ATM strategy shares this terminal with hundreds of scan INFO lines,
+            so its own kinds show their label instead — severity is still
+            carried by the colour. Scoped to api_* so existing lines are
+            unchanged. */}
+        {/* One text node, not two: the glyph and the token belong together and
+            splitting them makes the token unmatchable as a string. */}
+        {`${meta.emoji ? meta.emoji + ' ' : ''}${
+          ev.kind.startsWith('api_') ? meta.label : meta.level}`}
       </span>
       <span style={{ color: t.text, whiteSpace: 'pre-wrap', minWidth: 0 }}>{ev.message}</span>
     </div>

@@ -26,7 +26,8 @@ from app.services.kite_engine.greeks import (
 from app.services.kite_engine import market_hours
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
-from app.services.kite_engine.strikes import chain_rows_for, pick_by_delta, pick_strikes
+from app.services.kite_engine.strikes import (chain_rows_for, expiry_window_of,
+                                              pick_by_delta, pick_strikes)
 from app.services.kite_engine.universe import build_universe, select_scan_universe
 
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -476,7 +477,8 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     else:
         picks = pick_strikes(chain, spot=row.spot, direction=direction,
                              moneynesses=[cfg.itm_depth or "ITM10"],
-                             expiry_types=expiry_types, today=today)
+                             expiry_types=expiry_types, today=today,
+                             **expiry_window_of(cfg))
         pick = picks[0][1] if picks else None
     if pick is None or not pick.option_symbol:
         return None
@@ -845,8 +847,16 @@ def _make_place_cb(client, uid: str):
                 # it is what the protective GTT and the tick monitor below use, and for
                 # a spot/navigator row it is the only one resolved into the premium
                 # domain at all.
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                if is_stock and entry_px > 0:
+                    limit_px = round(entry_px * 1.003, 2)
+                    order_type = "limit_order"
+                else:
+                    limit_px = None
+                    order_type = "market_order"
                 result = await client.place_order_option(
-                    trade_symbol, "buy", qty, exchange=trade_exchange,
+                    trade_symbol, "buy", qty, order_type=order_type, limit_price=limit_px,
+                    exchange=trade_exchange,
                     stop_loss=(stop_px if stop_px > 0 else None), tag=idem)
         except Exception as exc:  # noqa: BLE001
             state.log(uid, "order_failed", f"{row.underlying} {trade_symbol}: {exc}")

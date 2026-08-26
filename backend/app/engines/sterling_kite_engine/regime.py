@@ -12,6 +12,7 @@ from typing import Tuple
 import numpy as np
 from numpy.typing import NDArray
 
+from app.engines.indicators.atr import compute_atr
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.indicators.supertrend import compute_supertrend
 from app.engines.sterling_kite_engine.config import TrailTarget, SterlingKiteEngineConfig
@@ -34,6 +35,8 @@ class RegimeSeries:
     # through the trail?" must use these, or it compares two different price series.
     basis_high: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
     basis_low: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    basis_close: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    atr: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
 
     def line(self, target: TrailTarget) -> NDArray[np.float64]:
         return {"fast": self.l_fast, "mid": self.l_mid, "slow": self.l_slow}[target]
@@ -108,6 +111,8 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
     bull = valid & (t_fast == 1) & (t_mid == 1) & (t_slow == 1)
     bear = valid & (t_fast == -1) & (t_mid == -1) & (t_slow == -1)
 
+    atr_series = compute_atr(np.asarray(basis_h, dtype=float), np.asarray(basis_l, dtype=float), np.asarray(basis_c, dtype=float), cfg.fast[0])
+
     return RegimeSeries(
         bull=bull, bear=bear,
         t_fast=t_fast, t_mid=t_mid, t_slow=t_slow,
@@ -115,6 +120,8 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
         warmup=cfg.warmup,
         basis_high=np.asarray(basis_h, dtype=float),
         basis_low=np.asarray(basis_l, dtype=float),
+        basis_close=np.asarray(basis_c, dtype=float),
+        atr=atr_series,
     )
 
 

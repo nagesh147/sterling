@@ -14,9 +14,9 @@ export const KITE_DEFAULT_PREFERENCES_MIGRATION_KEY = 'kite_default_preferences_
 export const KITE_DEFAULT_PREFERENCES_VERSION = 'list-layout-light-terminal-v1';
 export const KITE_CHART_WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
 export const KITE_CHART_TEMPLATES_KEY = 'sterling:kite-chart-templates:v1';
-export const TRADINGVIEW_DOWN_RED = '#f23645';
+export const TRADINGVIEW_DOWN_RED = 'var(--k-red-chart)';
 
-const LEGACY_CHART_DOWN_REDS = new Set(['#e05260', '#df514c']);
+const LEGACY_CHART_DOWN_REDS = new Set(['var(--k-red-rose)', 'var(--k-red)']);
 
 type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
 type JsonRecord = Record<string, any>;

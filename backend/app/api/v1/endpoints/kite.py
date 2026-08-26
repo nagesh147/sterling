@@ -13,7 +13,9 @@ live KiteTicker tick stream (over the shared /stream/ws socket).
 from __future__ import annotations
 
 import hashlib
-from typing import List, Optional
+import html
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -22,6 +24,7 @@ from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
 from app.services import live_safety
 from app.services.exchanges.kite import accounts as kite_accounts
+from app.services.exchanges.kite import auth as kite_auth
 from app.services.exchanges.kite import constants as K
 from app.services.exchanges.kite import session as kite_session
 from app.services.exchanges.kite import ticker_manager
@@ -48,8 +51,16 @@ def _require_active(user: UserContext):
 
 
 async def _run(user: UserContext, fn):
-    """Build a client from the user's active account, run ``fn(client)``, close it,
-    and map Kite errors to HTTP statuses."""
+    """Build a client from the user's active account, run ``fn(client)``, and map
+    Kite errors to HTTP statuses.
+
+    A rejected token is retried once behind a silent renewal: Kite invalidates
+    every access_token at 06:00 IST, so a long-lived tab or a headless strategy
+    would otherwise see an unexplained 401 on its first call of the day. When the
+    account has a refresh_token the gap is closed here and the caller never learns
+    a re-login happened; when it does not, the 401 stands and the UI asks for the
+    daily login.
+    """
     acct = _require_active(user)
     client = await kite_accounts.acquire_client(acct)   # warm, cached per account
     try:
@@ -57,6 +68,16 @@ async def _run(user: UserContext, fn):
     except HTTPException:
         raise
     except KiteTokenError as exc:
+        if await kite_auth.renew(user.user_id, acct):
+            retry_client = await kite_accounts.acquire_client(acct)  # rebuilt: token rotated
+            try:
+                return await fn(retry_client)
+            except HTTPException:
+                raise
+            except KiteError as retry_exc:
+                raise HTTPException(502, str(retry_exc)) from retry_exc
+            except Exception as retry_exc:  # noqa: BLE001
+                raise HTTPException(502, str(retry_exc)) from retry_exc
         raise HTTPException(401, str(exc)) from exc
     except KiteError as exc:
         raise HTTPException(502, str(exc)) from exc
@@ -128,10 +149,22 @@ async def test_account(account_id: str, user: UserContext = Depends(get_current_
 # ─── Session / login ──────────────────────────────────────────────────────────
 @router.get("/login-url")
 async def login_url(user: UserContext = Depends(get_current_user)) -> LoginUrlResponse:
+    """The Kite login URL, carrying a signed state that identifies this user.
+
+    Kite appends ``redirect_params`` verbatim to the redirect, so ``/callback``
+    recovers ``(user_id, account_id)`` from the signature rather than from a
+    caller-supplied ``?uid=``. The registered Redirect URL therefore stays a single
+    static value that works for every tenant.
+    """
     acct = _require_active(user)
     if not acct.api_key:
         raise HTTPException(400, "Set the Kite API key on this account first.")
-    return LoginUrlResponse(login_url=kite_session.login_url(acct.api_key))
+    state = kite_session.make_state(user.user_id, acct.id)
+    return LoginUrlResponse(
+        login_url=kite_session.login_url(acct.api_key, state=state),
+        state=state,
+        redirect_uri=CALLBACK_PATH,
+    )
 
 
 @router.post("/session")
@@ -158,6 +191,7 @@ async def create_session(body: GenerateSessionRequest,
         refresh_token=data.get("refresh_token", ""),
         public_token=data.get("public_token", ""),
         kite_user_id=data.get("user_id", ""),
+        user_name=data.get("user_name", ""),
     )
     return KiteSessionResult(
         connected=True, kite_user_id=data.get("user_id"),
@@ -194,6 +228,7 @@ async def refresh_session(body: RefreshSessionRequest,
         refresh_token=data.get("refresh_token", ""),  # Kite may rotate it
         public_token=data.get("public_token", ""),
         kite_user_id=data.get("user_id", ""),
+        user_name=data.get("user_name", ""),
     )
     return KiteSessionResult(
         connected=True, kite_user_id=data.get("user_id"),
@@ -202,96 +237,327 @@ async def refresh_session(body: RefreshSessionRequest,
     )
 
 
-def _callback_page(title: str, message: str, ok: bool) -> HTMLResponse:
-    color = "#1DB981" if ok else "#F0455A"
-    icon = "✓" if ok else "✗"
-    html = f"""<!doctype html><html><head><meta charset="utf-8"/>
-<title>Sterling · Kite</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>
-  body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
-       background:#131314;color:#E3E3E3;font-family:'Plus Jakarta Sans',system-ui,sans-serif}}
-  .card{{max-width:440px;padding:32px;border:1px solid #2D2F31;border-radius:16px;background:#1e1f20;text-align:center}}
-  .icon{{font-size:40px;color:{color}}}
-  h1{{font-size:18px;margin:12px 0 6px}}
-  p{{color:#8E918F;font-size:13px;line-height:1.6;margin:0}}
-</style></head><body><div class="card">
-  <div class="icon">{icon}</div><h1>{title}</h1><p>{message}</p>
-</div><script>setTimeout(function(){{try{{window.close();}}catch(e){{}}}}, 2500);</script></body></html>"""
-    return HTMLResponse(content=html, status_code=200 if ok else 400)
+CALLBACK_PATH = "/api/v1/kite/callback"
+
+# The success tab dismisses itself; failures never do. A login that went wrong has
+# a reason worth reading, and the old page took it away after 2.5 seconds.
+_CLOSE_DELAY_S = 4
+
+# Sterling's own tokens, copied from frontend/src/styles/theme.ts as `[light, dark]`.
+# Duplicated rather than imported because this page is served by the backend and has
+# no access to the app's stylesheet — it is the one surface outside the React tree.
+# Keep in step with theme.ts if those values move.
+_TOKENS = (
+    ("bg",            "#ffffff", "#0f1115"),
+    ("surface-sunken-2", "#f7f7f8", "#13161c"),
+    ("border",        "#e0e0e0", "#262b36"),
+    ("border-strong-2", "#dcdcdc", "#323947"),
+    ("text",          "#444444", "#e6e8ee"),
+    ("ink-1",         "#333333", "#f4f6fa"),
+    ("ink-5",         "#777777", "#aeb6c3"),
+    ("ink-6",         "#888888", "#a8b0be"),
+    ("brand",         "#f06428", "#ff7a45"),
+    ("on-accent",     "#ffffff", "#0f1115"),
+    ("tint-green",     "#e8f5e9", "#15291b"),
+    ("tint-red",       "#ffebee", "#2c1719"),
+    ("green",          "#4caf50", "#4ec96a"),
+    ("red-strong",     "#e53935", "#f0605c"),
+)
 
 
-@router.get("/callback", response_class=HTMLResponse)
-async def kite_callback(
-    request_token: str = "", status: str = "", action: str = "", uid: str = "default",
+def _token_block(index: int) -> str:
+    """The `--k-*` custom properties for one theme (1 = light, 2 = dark)."""
+    return " ".join(f"--k-{tok[0]}:{tok[index]};" for tok in _TOKENS)
+
+
+def _initials(name: str) -> str:
+    """Two initials, the way the Connect pane builds its account avatars."""
+    parts = [w for w in name.strip().split() if w]
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[-1][0]).upper()
+    return (name.strip()[:2] or "?").upper()
+
+
+def _callback_page(
+    title: str,
+    *,
+    ok: bool,
+    rows: Optional[List[Tuple[str, str]]] = None,
+    note: str = "",
+    who: str = "",
 ) -> HTMLResponse:
-    """OAuth-style redirect target. Set this as the app's Redirect URL:
-    http://localhost:8000/api/v1/kite/callback  (append ?uid=<user> for multi-user).
+    """The page Kite's redirect lands on — a receipt for the handoff.
 
-    Kite appends ?request_token=...&action=login&status=success after Authorize.
-    We exchange the token, persist the session for the user's active account, and
-    render a self-closing success page.
+    Structured as labelled rows rather than prose: this tab is read once, in about
+    three seconds, so the facts have to be scannable rather than parsed out of a
+    sentence. ``rows`` carries whatever there is to state — the validity window on
+    success, a single "what to do" line on failure.
+
+    Built from the Connect pane's vocabulary — the same avatar-plus-name header as
+    an account card, 7px controls 34px tall, field labels in letter-spaced sans at
+    weight 650, values in tabular numerals, ``--k-tint-green`` / ``--k-tint-red``
+    for the status band, and ``--k-brand`` (Sterling's burnt orange, not Kite's
+    blue) for the one primary action.
+
+    Sized for a full tab rather than a panel, which is the one place it departs
+    from ``S.card``: a lone 330px card with a whisper of a shadow reads as an
+    unstyled default in the middle of an empty viewport, so the type steps up, the
+    card is wider, and the elevation is real. Everything else stays token-faithful.
+
+    Three behaviours worth keeping intact:
+
+    * **Only success auto-closes.** The countdown, the drain bar and the handoff
+      broadcast render only when ``ok``, so a failure stays put until dismissed.
+    * **It follows the viewer's theme** across all three states (explicit light,
+      explicit dark, and the unstamped "system" default), instead of forcing dark
+      and flashing a dark tab inside a light-themed app.
+    * **There is always a way out.** Browsers may refuse ``window.close()`` on a
+      tab they did not open, so the button is real markup and the countdown
+      degrades to a plain instruction when the close is blocked.
+
+    Values reach here from Kite (an account name) and from exception text, so every
+    one is escaped — this is HTML assembled from data we do not control.
     """
-    if status and status != "success":
-        return _callback_page("Login failed", f"Kite returned status='{status}'. Reopen the Kite login and retry.", ok=False)
-    if not request_token:
-        return _callback_page("Missing request_token", "No request_token in the callback URL — reopen the Kite login.", ok=False)
-    acct = kite_accounts.get_active(uid)
-    if not acct:
-        return _callback_page("No active Kite account", "Add your Kite API key & secret in the KITE tab first.", ok=False)
+    tone = "green" if ok else "red"
+    badge = html.escape(_initials(who)) if (ok and who) else ("\u2713" if ok else "!")
+    row_html = "".join(
+        f'<div class="row"><dt>{html.escape(label)}</dt>'
+        f'<dd{" class=\"fix\"" if not ok else ""}>{html.escape(value)}</dd></div>'
+        for label, value in (rows or [])
+    )
+    sub = f'<p class="sub">{html.escape(who)}</p>' if who else ""
+    if ok:
+        foot = (f'<span class="hint" id="note">{html.escape(note)}</span>'
+                f'<button class="btn" id="close" type="button">Close</button>')
+        drain = '<div class="drain"><i></i></div>'
+        script = f"""
+  // Hand the session to the already-open Sterling tab. Both channels are
+  // origin-scoped, which is why the redirect URL belongs on the frontend's
+  // origin — see the /callback docstring.
+  try {{ new BroadcastChannel('sterling-kite-auth').postMessage({{type:'kite-connected'}}); }} catch (e) {{}}
+  try {{ if (window.opener) window.opener.postMessage({{type:'kite-connected'}}, '*'); }} catch (e) {{}}
+  var left = {_CLOSE_DELAY_S}, note = document.getElementById('note'), base = note.textContent;
+  document.getElementById('close').addEventListener('click', bye);
+  function bye() {{
+    window.close();
+    // Still here? The browser refused to close the tab, so stop counting down to
+    // a number already reached and say what to do instead.
+    note.textContent = 'You can close this tab.';
+  }}
+  function paint() {{ note.textContent = base + ' \u00b7 closing in ' + left; }}
+  var tick = setInterval(function () {{
+    if (--left <= 0) {{ clearInterval(tick); bye(); return; }}
+    paint();
+  }}, 1000);
+  paint();
+"""
+    else:
+        foot = (f'<span class="hint">{html.escape(note)}</span>'
+                f'<a class="btn primary" href="/">Back to Sterling</a>')
+        drain = ""
+        script = ""
+
+    html_doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<title>Sterling \u00b7 Kite</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root {{ {_token_block(1)} }}
+@media (prefers-color-scheme:dark) {{ :root:not([data-theme="light"]) {{ {_token_block(2)} }} }}
+:root[data-theme="dark"] {{ {_token_block(2)} }}
+*{{box-sizing:border-box}}
+body{{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;padding:32px 24px;
+  background:var(--k-surface-sunken-2);color:var(--k-text);line-height:1.5;
+  font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:12px;-webkit-font-smoothing:antialiased}}
+.mark{{font-size:11px;font-weight:750;letter-spacing:2.2px;color:var(--k-ink-5)}}
+.card{{width:100%;max-width:400px;background:var(--k-bg);
+  border:1px solid var(--k-border);border-radius:10px;overflow:hidden;
+  box-shadow:0 1px 2px rgba(0,0,0,.04),0 14px 36px rgba(0,0,0,.10)}}
+.head{{display:flex;align-items:center;gap:12px;padding:18px 20px;
+  background:var(--k-tint-{tone});border-bottom:1px solid var(--k-border)}}
+.badge{{width:36px;height:36px;border-radius:50%;flex:none;display:flex;
+  align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  letter-spacing:.3px;background:var(--k-bg);color:var(--k-{tone});
+  border:1px solid var(--k-border)}}
+.head h1{{margin:0;font-size:17px;font-weight:700;letter-spacing:-.2px;
+  color:var(--k-ink-1);line-height:1.25}}
+.sub{{margin:1px 0 0;font-size:12px;color:var(--k-ink-6)}}
+dl{{margin:0}}
+.row{{display:flex;align-items:baseline;gap:14px;padding:11px 20px;
+  border-bottom:1px solid var(--k-border)}}
+.row:last-child{{border-bottom:0}}
+dt{{font-size:10px;font-weight:650;letter-spacing:.7px;color:var(--k-ink-5);
+  text-transform:uppercase;width:82px;flex:none}}
+dd{{margin:0;font-size:13px;font-weight:700;color:var(--k-text);min-width:0;
+  font-variant-numeric:tabular-nums;overflow-wrap:break-word}}
+dd.fix{{font-weight:400;font-size:12.5px;color:var(--k-ink-6);line-height:1.6}}
+.foot{{display:flex;align-items:center;gap:12px;padding:12px 20px 13px;
+  border-top:1px solid var(--k-border);background:var(--k-surface-sunken-2)}}
+.hint{{font-size:11.5px;color:var(--k-ink-6);font-variant-numeric:tabular-nums}}
+.btn{{margin-left:auto;min-height:34px;display:inline-flex;align-items:center;
+  padding:0 13px;border-radius:7px;cursor:pointer;text-decoration:none;
+  white-space:nowrap;font:inherit;font-size:11px;font-weight:600;
+  border:1px solid var(--k-border-strong-2);background:var(--k-bg);color:var(--k-text)}}
+.btn.primary{{background:var(--k-brand);border-color:var(--k-brand);
+  color:var(--k-on-accent);font-weight:700}}
+.btn:focus-visible{{outline:2px solid var(--k-brand);outline-offset:2px}}
+.drain{{height:2px;background:var(--k-border)}}
+.drain i{{display:block;height:100%;width:100%;background:var(--k-green);
+  transform-origin:left;animation:drain {_CLOSE_DELAY_S}s linear forwards}}
+@keyframes drain{{from{{transform:scaleX(1)}}to{{transform:scaleX(0)}}}}
+@media (prefers-reduced-motion:reduce){{.drain i{{animation:none}}}}
+</style></head><body>
+<span class="mark">STERLING</span>
+<main class="card">
+  <div class="head">
+    <span class="badge" aria-hidden="true">{badge}</span>
+    <div><h1>{html.escape(title)}</h1>{sub}</div>
+  </div>
+  <dl>{row_html}</dl>
+  <div class="foot">{foot}</div>
+  {drain}
+</main>
+<script>{script}</script></body></html>"""
+    return HTMLResponse(content=html_doc, status_code=200 if ok else 400)
+
+
+async def _complete_login(user_id: str, acct, request_token: str) -> HTMLResponse:
+    """Exchange a request_token and persist the session for ``acct``."""
     if not acct.api_key or not acct.api_secret:
-        return _callback_page("Credentials incomplete", "This account is missing its API key or secret.", ok=False)
+        return _callback_page(
+            "Credentials incomplete", ok=False,
+            rows=[("What to do", "This account is missing its API key or secret. "
+                                 "Add them under Connect in Sterling.")],
+            note="Nothing was changed",
+        )
     client = kite_accounts.build_client(acct)
     try:
         data = await client.generate_session(request_token)
-    except Exception as exc:  # noqa: BLE001 — render any failure as a friendly page
-        return _callback_page("Could not connect", str(exc), ok=False)
+    except Exception as exc:  # noqa: BLE001 — render any failure as a readable page
+        return _callback_page(
+            "Could not connect", ok=False,
+            rows=[("Kite said", str(exc)),
+                  ("What to do", "Open Kite Login again from Sterling. request_tokens are "
+                                 "single-use and expire within minutes.")],
+            note="Nothing was changed",
+        )
     finally:
         await client.close()
     kite_accounts.save_session(
-        uid, acct.id,
+        user_id, acct.id,
         access_token=data.get("access_token", ""),
         refresh_token=data.get("refresh_token", ""),
         public_token=data.get("public_token", ""),
         kite_user_id=data.get("user_id", ""),
+        user_name=data.get("user_name", ""),
     )
-    name = data.get("user_name") or data.get("user_id") or ""
-    return _callback_page(
-        "Connected ✓",
-        f"Kite session active{(' for ' + name) if name else ''}. You can close this tab and return to Sterling.",
-        ok=True,
-    )
+    # The cached client still carries the previous (or empty) token.
+    await kite_accounts.release_client(acct.id)
+
+    rows: List[Tuple[str, str]] = []
+    if data.get("user_id"):
+        rows.append(("Kite ID", str(data["user_id"])))
+    expires_at = acct.token_expires_at
+    if expires_at:
+        when = datetime.fromtimestamp(expires_at / 1000, tz=kite_session.IST)
+        rows.append(("Expires", when.strftime("%H:%M IST \u00b7 %a %d %b")))
+        left_min = max(0, (expires_at - kite_session.now_ms()) // 60_000)
+        rows.append(("Good for", f"{left_min // 60}h {left_min % 60}m"))
+    return _callback_page("Connected", ok=True, rows=rows, note="Sterling has it",
+                          who=str(data.get("user_name") or ""))
+
+
+@router.get("/callback", response_class=HTMLResponse)
+async def kite_callback(
+    request_token: str = "", status: str = "", action: str = "",
+    state: str = "", uid: str = "default",
+) -> HTMLResponse:
+    """OAuth-style redirect target. Register this as the app's Kite Redirect URL —
+    one static value for every user.
+
+    Register it on the *frontend's* origin (``http://localhost:5173/api/v1/kite/callback``
+    in dev, where Vite proxies ``/api`` here). Serving the callback same-origin as the
+    app is what lets its success page hand the session straight to the open Sterling
+    tab; pointing Kite at the backend's own origin still works, but the app then waits
+    for its next status poll instead of flipping immediately.
+
+    Kite appends ``?request_token=...&action=login&status=success``, plus whatever
+    ``redirect_params`` the login URL carried. ``/login-url`` puts a signed ``state``
+    there, which identifies the app user *and* the exact account being connected —
+    so the session lands on the right tenant and cannot be redirected to another
+    one by editing the URL. ``uid`` remains as a fallback for logins started before
+    this endpoint learned about ``state`` (and for hand-built redirect URLs).
+    """
+    if status and status != "success":
+        return _callback_page(
+            "Login was not completed", ok=False,
+            rows=[("Kite said", f"status={status}"),
+                  ("What to do", "Open Kite Login again from Sterling and finish authorising.")],
+            note="Nothing was changed")
+    if not request_token:
+        return _callback_page(
+            "Incomplete redirect", ok=False,
+            rows=[("What to do", "Kite sent no request_token. Open Kite Login again from "
+                                 "Sterling rather than reloading this page.")],
+            note="Nothing was changed")
+
+    bound = kite_session.parse_state(state) if state else None
+    if state and not bound:
+        return _callback_page(
+            "Login link expired", ok=False,
+            rows=[("What to do", "Login links are good for 15 minutes. Open Kite Login "
+                                 "again from Sterling to get a fresh one.")],
+            note="Nothing was changed")
+    if bound:
+        user_id, account_id = bound
+        acct = kite_accounts.get(user_id, account_id)
+        if not acct:
+            return _callback_page(
+                "Account not found", ok=False,
+                rows=[("What to do", "The account this login was started for no longer "
+                                     "exists. Pick an account under Connect and retry.")],
+                note="Nothing was changed")
+    else:
+        user_id = uid
+        acct = kite_accounts.get_active(user_id)
+        if not acct:
+            return _callback_page(
+                "No active Kite account", ok=False,
+                rows=[("What to do", "Add your Kite API key and secret under Connect in "
+                                     "Sterling, then start the login from there.")],
+                note="Nothing was changed")
+    return await _complete_login(user_id, acct, request_token)
 
 
 @router.get("/status")
 async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
+    """Whether the active account has a usable Kite session.
+
+    Polled every 30s by the UI, so it must be cheap: :func:`kite_auth.ensure_session`
+    answers from the stored validity window when Kite confirmed the token recently,
+    and only reaches the network once per :data:`kite_auth.VALIDATION_TTL_MS`. It
+    also renews silently where a refresh_token allows it, so an expiry that happens
+    while the tab is open heals itself instead of showing a disconnect.
+    """
     acct = kite_accounts.get_active(user.user_id)
     if not acct:
         return KiteStatus(connected=False, is_paper=True, message="No active Kite account")
-    if not acct.connected:
-        return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
-                          has_refresh_token=acct.has_refresh_token,
-                          message="Not logged in — complete the Kite login flow")
-    # Validate the token against Kite (paper too — paper only simulates trades, so a
-    # connected paper account still has a real session that can expire daily).
-    client = kite_accounts.build_client(acct)
-    try:
-        profile = await client.get_profile()
-        return KiteStatus(connected=True, is_paper=acct.is_paper, account_id=acct.id,
-                          has_refresh_token=acct.has_refresh_token,
-                          kite_user_id=profile.get("user_id"), user_name=profile.get("user_name"),
-                          message="Paper mode · live data" if acct.is_paper else "Connected")
-    except KiteTokenError:
-        # Auto-expire the stale token: clear it so `connected` (stored-token presence)
-        # flips false everywhere and the UI offers re-login instead of "Log out".
-        kite_accounts.clear_session(user.user_id, acct.id)
-        return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
-                          has_refresh_token=acct.has_refresh_token,
-                          message="Session expired — reconnect via Kite login (tokens reset ~6 AM IST daily)")
-    except Exception as exc:  # noqa: BLE001
-        return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
-                          has_refresh_token=acct.has_refresh_token, message=str(exc))
-    finally:
-        await client.close()
+    health = await kite_auth.ensure_session(user.user_id, acct)
+    expires_at = health.expires_at_ms
+    return KiteStatus(
+        connected=health.connected,
+        is_paper=acct.is_paper,
+        account_id=acct.id,
+        has_refresh_token=acct.has_refresh_token,
+        kite_user_id=health.kite_user_id or acct.kite_user_id or None,
+        user_name=health.user_name or None,
+        message=health.message,
+        token_expires_at_ms=expires_at,
+        expires_in_s=(max(0, (expires_at - kite_session.now_ms()) // 1000)
+                      if expires_at and health.connected else None),
+        validated=health.validated,
+        auto_renewed=health.auto_renewed,
+    )
 
 
 @router.post("/logout")
@@ -896,7 +1162,8 @@ async def ticker_subscribe(body: TickerSubscribeRequest, user: UserContext = Dep
 
 @router.post("/ticker/unsubscribe")
 async def ticker_unsubscribe(body: TickerSubscribeRequest, user: UserContext = Depends(get_current_user)):
-    return await ticker_manager.unsubscribe(user.user_id, body.instrument_tokens)
+    return await ticker_manager.unsubscribe(user.user_id, body.instrument_tokens,
+                                            force=body.force)
 
 
 @router.get("/ticker/status")
@@ -962,3 +1229,69 @@ async def save_chart_state(
     }
     app_db.set_config(key, json.dumps(data))
     return {"ok": True}
+
+
+# ─── Diagnostics & System Health Checklist ────────────────────────────────────
+@router.post("/diagnostics/run")
+async def run_kite_diagnostics_endpoint(
+    category_id: Optional[str] = Query(None, description="Optional specific category ID to test"),
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Executes live diagnostic health checks against Zerodha Kite API and network endpoints."""
+    from app.services.providers.kite.diagnostics import run_kite_diagnostics
+    suite = await run_kite_diagnostics(user.user_id, category_id=category_id)
+    return {
+        "timestamp": suite.timestamp,
+        "overall_status": suite.overall_status,
+        "total_tests": suite.total_tests,
+        "passed_count": suite.passed_count,
+        "warning_count": suite.warning_count,
+        "failed_count": suite.failed_count,
+        "total_duration_ms": suite.total_duration_ms,
+        "authenticated": suite.authenticated,
+        "account_label": suite.account_label,
+        "kite_user_id": suite.kite_user_id,
+        "is_paper": suite.is_paper,
+        "categories": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "icon": c.icon,
+                "status": c.status,
+                "latency_ms": c.latency_ms,
+                "source_origin": c.source_origin,
+                "symbol_tested": c.symbol_tested,
+                "summary": c.summary,
+                "metrics": c.metrics,
+                "field_checks": [
+                    {
+                        "name": fc.name,
+                        "status": fc.status,
+                        "value": fc.value,
+                        "description": fc.description,
+                    }
+                    for fc in c.field_checks
+                ],
+                "raw_sample": c.raw_sample,
+                "error_message": c.error_message,
+                "troubleshooting_tip": c.troubleshooting_tip,
+            }
+            for c in suite.categories
+        ],
+    }
+
+
+@router.get("/diagnostics/summary")
+async def get_kite_diagnostics_summary(
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Quick summary of active Kite account connection state for checklist overview."""
+    acct = kite_accounts.get_active(user.user_id)
+    return {
+        "authenticated": bool(acct and acct.connected),
+        "account_label": acct.label if acct else None,
+        "kite_user_id": acct.kite_user_id if acct else None,
+        "is_paper": bool(acct.is_paper) if acct else True,
+        "has_credentials": bool(acct and acct.has_credentials),
+    }
+

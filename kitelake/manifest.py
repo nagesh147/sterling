@@ -285,6 +285,100 @@ class Manifest:
             cur = self._conn.execute(sql, params)
         return cur.rowcount or 0
 
+    #: Columns the symbols page may be ordered by. Whitelisted because the value is
+    #: interpolated into SQL — never accept a caller's string directly.
+    _SYMBOL_SORTS = {"rows", "bytes", "tradingsymbol", "first_ts", "last_ts"}
+
+    def symbols_page(
+        self,
+        interval: str,
+        *,
+        search: str = "",
+        sort: str = "rows",
+        limit: int = 200,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """One page of stored instruments, plus the total matching count.
+
+        Paginating in SQL rather than loading every row and slicing in Python: the UI polls
+        this, and reading all 7,400+ rows off a USB drive per request was enough to make the
+        API sluggish under a handful of concurrent callers.
+        """
+        if sort not in self._SYMBOL_SORTS:
+            sort = "rows"
+        descending = sort in {"rows", "bytes", "first_ts", "last_ts"}
+        where = ["interval = ?", "rows > 0"]
+        params: list[Any] = [interval]
+        if search:
+            where.append("(tradingsymbol LIKE ? COLLATE NOCASE OR CAST(instrument_token AS TEXT) = ?)")
+            params.extend([f"%{search}%", search])
+        clause = " AND ".join(where)
+
+        total = int(
+            self._conn.execute(
+                f"SELECT COUNT(*) FROM symbols WHERE {clause}", params
+            ).fetchone()[0]
+            or 0
+        )
+        rows = self._conn.execute(
+            f"""SELECT instrument_token, tradingsymbol, exchange, segment, interval,
+                       rows, bytes, first_ts, last_ts
+                  FROM symbols WHERE {clause}
+                 ORDER BY {sort} {'DESC' if descending else 'ASC'}
+                 LIMIT ? OFFSET ?""",
+            (*params, int(limit), int(offset)),
+        ).fetchall()
+        return [dict(r) for r in rows], total
+
+    def shortfall(self, interval: str, *, min_missing: int = 1) -> list[dict[str, Any]]:
+        """Instruments holding fewer rows than their chunks reported fetching.
+
+        This is the fingerprint of a lost write: the ledger says a chunk completed with N
+        rows, but the file does not contain them. It caught a real read-modify-write race
+        in the writer that silently discarded 21 million candles across 1,394 instruments
+        — the chunks were marked ``done``, so an ordinary resume would never have refetched
+        them and the lake would have looked finished.
+
+        A small positive difference is normal: ``candles_to_table`` drops malformed rows
+        and de-duplicates timestamps, so ``min_missing`` lets callers ignore noise.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT s.instrument_token AS instrument_token,
+                   s.tradingsymbol    AS tradingsymbol,
+                   s.rows             AS stored_rows,
+                   COALESCE(f.fetched, 0) AS fetched_rows,
+                   COALESCE(f.fetched, 0) - s.rows AS missing
+              FROM symbols s
+              LEFT JOIN (SELECT instrument_token, SUM(rows) AS fetched
+                           FROM chunks WHERE interval = ? GROUP BY instrument_token) f
+                ON f.instrument_token = s.instrument_token
+             WHERE s.interval = ? AND s.rows > 0
+               AND COALESCE(f.fetched, 0) - s.rows >= ?
+             ORDER BY missing DESC
+            """,
+            (interval, interval, int(min_missing)),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def reset_instruments(self, interval: str, tokens: Sequence[int]) -> int:
+        """Return every chunk of these instruments to ``pending`` so it is refetched.
+
+        The parquet files are left in place on purpose: merge mode de-duplicates on
+        timestamp, so refetching converges on the complete series rather than duplicating
+        what survived.
+        """
+        if not tokens:
+            return 0
+        placeholders = ",".join("?" * len(tokens))
+        with self._tx():
+            cur = self._conn.execute(
+                f"""UPDATE chunks SET status='pending', error='', rows=0
+                     WHERE interval=? AND instrument_token IN ({placeholders})""",
+                (interval, *(int(t) for t in tokens)),
+            )
+        return cur.rowcount or 0
+
     def gaps(self, interval: str, token: int) -> list[tuple[str, str]]:
         """Ranges for this instrument that are not settled."""
         rows = self._conn.execute(

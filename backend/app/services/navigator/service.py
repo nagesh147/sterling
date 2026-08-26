@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import time
+
+import numpy as np
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
@@ -438,10 +440,34 @@ async def _run_structure_and_origination(
                 and prior.status in _CONFIRMED_STATUSES
             )
             state = "active" if prior_is_live_origin else "fresh"
+            # A live origination keeps the bar it ORIGINATED on (audit lead 12). The
+            # evidence is re-evaluated every scan — that is the point of a radar — but
+            # the row is a position, and re-stamping its trigger time and entry spot to
+            # the latest bar every five minutes meant its Entry could never show an open
+            # P&L (entry and price moved together) and its age reset continuously. The
+            # same rule the SuperTrend side follows: the numbers on a running row
+            # describe the moment it was taken.
+            trigger_ms = int(candles.timestamp_ms[-1])
+            trigger_spot = float(candles.close[-1])
+            if prior_is_live_origin and prior is not None and prior.bar_close_ms:
+                trigger_ms = int(prior.bar_close_ms)
+                where = np.nonzero(candles.timestamp_ms == trigger_ms)[0]
+                if where.size:
+                    trigger_spot = float(candles.close[int(where[0])])
+                else:
+                    # The prior's bar is not in this series at all — it has aged out of
+                    # the lookback window, or the cached decision predates a change of
+                    # timeframe. Stamping a timestamp with no bar behind it would put a
+                    # date on the board that the data cannot support, so fall back to
+                    # the latest bar and say so.
+                    log.debug("origination: %s/%s prior bar %s is outside the candle "
+                              "window — re-stamping at the latest bar",
+                              uid, underlying, trigger_ms)
+                    trigger_ms = int(candles.timestamp_ms[-1])
             try:
                 base = synthetic_origination_base(
                     underlying=underlying, token=fetch_token, direction=direction,
-                    bar_close_ms=int(candles.timestamp_ms[-1]), user_id=uid, observed_at_ms=_now_ms(),
+                    bar_close_ms=trigger_ms, user_id=uid, observed_at_ms=_now_ms(),
                     config_revision=config_revision, state=state,
                     exchange=_option_exchange_for(underlying, universe),
                 )
@@ -450,8 +476,8 @@ async def _run_structure_and_origination(
                     regime="BULL" if direction == "long" else "BEAR",
                     alignment=AlignmentChip(fast=0, mid=0, slow=0),
                     direction=direction, option_type="CE" if direction == "long" else "PE",
-                    spot=float(candles.close[-1]), stop_loss=float(candles.close[-1]),
-                    score=50.0, timestamp_ms=int(candles.timestamp_ms[-1]),
+                    spot=trigger_spot, stop_loss=trigger_spot,
+                    score=50.0, timestamp_ms=trigger_ms,
                     # A live origination is ACTIVE whether or not this is its first
                     # bar; `state` only says whether it is also FRESH. Making the
                     # two mutually exclusive meant a brand-new Navigator signal

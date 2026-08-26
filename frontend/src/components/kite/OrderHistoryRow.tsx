@@ -9,25 +9,25 @@ export function OrderHistoryRow({ orderId, colSpan }: { orderId: string; colSpan
 
   return (
     <tr>
-      <td colSpan={colSpan} style={{ padding: '10px 24px', background: '#fafafa', borderBottom: '1px solid #f1f1f1' }}>
+      <td colSpan={colSpan} style={{ padding: '10px 24px', background: 'var(--k-surface-2)', borderBottom: '1px solid var(--k-surface-hover)' }}>
         <div style={{ display: 'flex', gap: 32, fontSize: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#9b9b9b', marginBottom: 6, fontSize: 11 }}>Status history</div>
-            {(!history || history.length === 0) && <div style={{ color: '#9b9b9b' }}>No history yet.</div>}
+            <div style={{ color: 'var(--k-dim)', marginBottom: 6, fontSize: 11 }}>Status history</div>
+            {(!history || history.length === 0) && <div style={{ color: 'var(--k-dim)' }}>No history yet.</div>}
             {history?.map((h: any, i: number) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#444' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: 'var(--k-text)' }}>
                 <span>{h.status}</span>
-                <span style={{ color: '#9b9b9b' }}>{h.order_timestamp}</span>
+                <span style={{ color: 'var(--k-dim)' }}>{h.order_timestamp}</span>
               </div>
             ))}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#9b9b9b', marginBottom: 6, fontSize: 11 }}>Fills</div>
-            {(!trades || trades.length === 0) && <div style={{ color: '#9b9b9b' }}>No fills yet.</div>}
+            <div style={{ color: 'var(--k-dim)', marginBottom: 6, fontSize: 11 }}>Fills</div>
+            {(!trades || trades.length === 0) && <div style={{ color: 'var(--k-dim)' }}>No fills yet.</div>}
             {trades?.map((t: any, i: number) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#444' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: 'var(--k-text)' }}>
                 <span>{num(t.quantity)} @ {num(t.average_price).toFixed(2)}</span>
-                <span style={{ color: '#9b9b9b' }}>{t.fill_timestamp}</span>
+                <span style={{ color: 'var(--k-dim)' }}>{t.fill_timestamp}</span>
               </div>
             ))}
           </div>

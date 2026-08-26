@@ -55,7 +55,8 @@ def _oco_legs(trigger_premium: float, target_premium: float, direction: str) -> 
     profitable side of the stop the pair is nonsense — return None and let the caller
     place a plain stop, rather than arming a target that would fire instantly.
     """
-    stop, target = float(trigger_premium), float(target_premium)
+    stop = round(round(float(trigger_premium) / 0.05) * 0.05, 2)
+    target = round(round(float(target_premium) / 0.05) * 0.05, 2)
     if stop <= 0 or target <= 0:
         return None
     if direction == "long" and target <= stop:
@@ -88,7 +89,7 @@ async def place_stop(client, *, tradingsymbol: str, exchange: str, qty: int,
         # the exchange cancels whichever did not fire.
         orders = [dict(exit_leg), dict(exit_leg)]
     else:
-        trigger_values = [float(trigger_premium)]
+        trigger_values = [round(round(float(trigger_premium) / 0.05) * 0.05, 2)]
         trigger_type = K.GTT_TYPE_SINGLE
         orders = [exit_leg]
     try:
@@ -96,7 +97,7 @@ async def place_stop(client, *, tradingsymbol: str, exchange: str, qty: int,
             trigger_type=trigger_type,
             tradingsymbol=tradingsymbol,
             exchange=exchange,
-            last_price=float(last_price or trigger_premium),
+            last_price=round(round(float(last_price or trigger_premium) / 0.05) * 0.05, 2),
             trigger_values=trigger_values,
             orders=orders,
         )

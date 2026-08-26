@@ -34,11 +34,12 @@ from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.services.kite_engine.greeks import (
-    black_scholes_greeks, implied_vol, premium_stop_from_move,
+    black_scholes_greeks, bs_price, implied_vol, premium_stop_from_move,
 )
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
-    ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
+    expiry_window_of,
+    ExpiryType, OptionPick, chain_rows_for, filter_liquid_contracts, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
 from app.services.kite_engine import state
@@ -228,7 +229,8 @@ def evaluate_item(
         # price trades through the trailing stop — whichever comes first. Once it fires
         # the trade is dead even if conditions reverse later (that's a new entry).
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         # Freeze the readouts at the exit bar: a dead trade whose trail kept ratcheting
         # for days afterwards shows a stop it was never protected by.
@@ -430,7 +432,8 @@ def evaluate_derivative_contract(
         # "running" until the red counter fires (per exit_mode) or the premium trades
         # through its trail. For derivatives all entries are long (BUY), so red = -1.
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         end_idx = last_idx if exit_j is None else int(exit_j)
         stop_loss = exits.reported_trail_level(r, "long", int(i), exit_j, last_idx, cfg)
@@ -481,9 +484,12 @@ def attach_strikes(
     """
     today = today or datetime.now(_IST).date()
     chain = chain_rows_for(option_rows, option_name, today)
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+    chain = filter_liquid_contracts(chain, is_stock=is_stock)
     ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
-                         moneynesses=ordered, expiry_types=expiry_types, today=today)
+                         moneynesses=ordered, expiry_types=expiry_types, today=today,
+                         **expiry_window_of(cfg))
     row.resolution_reason = None
     if not picks:
         if not chain:
@@ -761,8 +767,21 @@ class KiteEngineScanner:
                     ]
                     if candidates:
                         entry_px = float(max(candidates, key=lambda c: int(c.timestamp_ms)).close)
+                    elif candles and not row.is_fresh:
+                        entry_px = float(candles[0].open or candles[0].close)
                 except Exception as exc:  # noqa: BLE001
                     log.debug("kite-engine spot premium history fail %s: %s", leg.option_symbol, exc)
+            if entry_px <= 0 and not row.is_fresh and (row.spot or 0) > 0 and leg.strike:
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                iv_est = 0.32 if is_stock else 0.18
+                dte = _dte_from_expiry(leg.expiry, row.timestamp_ms)
+                entry_px = bs_price(
+                    spot=float(row.spot),
+                    strike=float(leg.strike),
+                    dte_days=max(dte, 1.0),
+                    iv=iv_est,
+                    option_type=leg.option_type,
+                )
             if entry_px > 0:
                 leg.premium_spot = entry_px
                 _stamp_leg_premium_stops(row, leg)

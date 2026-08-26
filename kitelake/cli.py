@@ -70,10 +70,15 @@ def _show_unavailable(status: Any) -> int:
 def _guarded(fn, *args: Any, **kwargs: Any) -> int:
     """Run a command, converting expected failures into readable messages."""
     from .config import CredentialsMissing
+    from .download import DownloadInProgress
     from .volume import LakeUnavailable, lake_status
 
     try:
         return fn(*args, **kwargs)
+    except DownloadInProgress as exc:
+        # Refusing a second writer is correct behaviour, not a crash — print the guidance.
+        print(str(exc), file=sys.stderr)
+        return _ERR
     except LakeUnavailable:
         return _show_unavailable(lake_status())
     except CredentialsMissing as exc:
@@ -561,6 +566,120 @@ def cmd_ticks(args: argparse.Namespace) -> int:
     return _OK
 
 
+def cmd_repair(args: argparse.Namespace) -> int:
+    """Find instruments whose stored rows fall short of what was fetched, and requeue them."""
+    from .manifest import Manifest
+
+    with Manifest() as man:
+        short = man.shortfall(args.interval, min_missing=args.min_missing)
+        if not short:
+            print(f"No shortfall detected for interval={args.interval}. "
+                  "Stored rows match what the ledger says was fetched.")
+            return _OK
+
+        missing = sum(r["missing"] for r in short)
+        print(f"{len(short):,} instruments are missing {missing:,} candles that the ledger "
+              f"records as fetched.")
+        print("This is the signature of a lost write: the chunks are marked done, so a plain")
+        print("resume would skip them and the lake would look complete.\n")
+        rows = [
+            [r["tradingsymbol"] or r["instrument_token"], f"{r['fetched_rows']:,}",
+             f"{r['stored_rows']:,}", f"{r['missing']:,}"]
+            for r in short[: args.limit]
+        ]
+        print(_table(rows, ["symbol", "fetched", "on disk", "missing"]))
+        if len(short) > args.limit:
+            print(f"… and {len(short) - args.limit:,} more")
+
+        if args.dry_run:
+            print("\n--dry-run: nothing changed. Re-run without it to requeue these chunks.")
+            return _OK
+
+        tokens = [int(r["instrument_token"]) for r in short]
+        reset = man.reset_instruments(args.interval, tokens)
+        stats = man.stats(args.interval)
+
+    print(f"\nrequeued {reset:,} chunks across {len(tokens):,} instruments")
+    print(f"ledger now {stats['pct_complete']}% complete "
+          f"({stats['chunks_remaining']:,} chunks to fetch)")
+    print("\nThe parquet files are left in place — merge de-duplicates on timestamp, so the")
+    print("refetch fills the holes instead of duplicating what survived. Now run:")
+    print(f"  kitelake download --tiers --interval {args.interval} --from … --to …")
+    return _OK
+
+
+def cmd_pipe(args: argparse.Namespace) -> int:
+    """Run the live tick pipeline: ingest -> IV/greeks -> hot store -> parquet."""
+    import json as _json
+
+    from .greeks_bridge import greeks_available
+    from .pipeline import build_refs, run_pipe
+    from .universe import resolve_universe
+
+    instruments = resolve_universe(args.spec)
+    tokens = [i.token for i in instruments]
+    if len(tokens) > args.max_instruments:
+        return _die(
+            f"{len(tokens):,} instruments exceeds --max-instruments={args.max_instruments:,}",
+            hint="Kite caps a WebSocket subscription (3,000 per connection in FULL mode).\n"
+                 "Narrow the universe, or raise the cap if you know the connection can take it.",
+        )
+
+    refs = build_refs(tokens)
+    options = sum(1 for r in refs.values() if r.is_option)
+    wired = sum(1 for r in refs.values() if r.is_option and r.spot_token)
+    print(f"{len(refs):,} instruments · {options:,} options ({wired:,} wired to a spot)")
+    if not greeks_available():
+        print("warning: option pricing unavailable — ticks will be stored without IV/greeks")
+    elif options and not wired:
+        print("warning: no option is wired to an underlying, so nothing can be priced")
+    print(f"persist={not args.no_persist}  pricing={greeks_available() and not args.no_greeks}")
+    print("\nCtrl-C stops it, draining what is queued first.\n")
+
+    last = [0.0]
+
+    def show(event: dict[str, Any]) -> None:
+        kind = event.get("event")
+        if kind in {"connected", "disconnected", "stopped", "flush_failed", "backpressure_drop"}:
+            print(f"[{kind}] " + _json.dumps({k: v for k, v in event.items() if k != "event"})[:220])
+
+    pipe = run_pipe(
+        tokens, persist=not args.no_persist, price_options=not args.no_greeks,
+        on_event=show, mode_full=not args.quote_mode,
+    )
+    print(_json.dumps(pipe.status(), indent=2, default=str))
+    return _OK
+
+
+def cmd_hot(args: argparse.Namespace) -> int:
+    """Read the hot store of a pipeline running in THIS process (see --help)."""
+    import json as _json
+
+    from .pipeline import get_pipeline
+
+    pipe = get_pipeline()
+    if pipe is None:
+        return _die(
+            "no pipeline is running in this process",
+            hint="The hot store lives in memory, so only the process running the pipe can read\n"
+                 "it directly. Start one with `kitelake pipe`, or read it over HTTP from the\n"
+                 "backend at /api/v1/datalake/hot when the pipe runs inside it.",
+        )
+    rows = pipe.snapshot(limit=args.limit, with_greeks_only=args.greeks)
+    if args.json:
+        print(_json.dumps(rows, indent=2, default=str))
+        return _OK
+    table = [
+        [r["tradingsymbol"] or r["instrument_token"], f"{r['last_price']:.2f}",
+         f"{r['mid']:.2f}", "" if r["iv"] is None else f"{r['iv']*100:.1f}%",
+         "" if r["delta"] is None else f"{r['delta']:+.3f}",
+         "" if r["theta"] is None else f"{r['theta']:+.1f}", r["ticks"]]
+        for r in rows
+    ]
+    print(_table(table, ["symbol", "last", "mid", "iv", "delta", "theta", "ticks"]))
+    return _OK
+
+
 def cmd_clean(args: argparse.Namespace) -> int:
     from .writer import clean_staging
 
@@ -700,6 +819,32 @@ def build_parser() -> argparse.ArgumentParser:
     ta.add_argument("--date")
     ta.add_argument("--exchange", default="NSE")
     ta.set_defaults(func=cmd_ticks)
+
+    p = sub.add_parser(
+        "repair", help="requeue instruments whose stored rows fall short of what was fetched"
+    )
+    p.add_argument("--interval", default="minute")
+    p.add_argument("--min-missing", type=int, default=1,
+                   help="ignore shortfalls smaller than this (dedup noise)")
+    p.add_argument("--limit", type=int, default=20)
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_repair)
+
+    p = sub.add_parser("pipe", help="live tick pipeline: IV/greeks, hot reads, durable parquet")
+    p.add_argument("spec", help="universe to subscribe to (e.g. nifty50, or NFO:NIFTY26AUG24500CE)")
+    p.add_argument("--no-persist", action="store_true", help="hot store only, write nothing")
+    p.add_argument("--no-greeks", action="store_true", help="skip IV/greeks enrichment")
+    p.add_argument("--quote-mode", action="store_true",
+                   help="QUOTE instead of FULL; no bid/ask, so IV falls back to last-traded")
+    p.add_argument("--max-instruments", type=int, default=3000,
+                   help="guard against exceeding Kite's per-connection subscription cap")
+    p.set_defaults(func=cmd_pipe)
+
+    p = sub.add_parser("hot", help="read the in-process hot store")
+    p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--greeks", action="store_true", help="only instruments with IV solved")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_hot)
 
     p = sub.add_parser("clean", help="remove stale staging files")
     p.add_argument("--older-than", type=float, default=3600)

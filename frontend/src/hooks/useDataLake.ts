@@ -121,6 +121,52 @@ export interface TierPlan {
   requests_saved_by_dedup: number;
 }
 
+/** One instrument stored in the lake. */
+export interface LakeSymbol {
+  instrument_token: number;
+  tradingsymbol: string;
+  exchange: string;
+  segment: string;
+  interval: string;
+  rows: number;
+  bytes: number;
+  first_ts: string;
+  last_ts: string;
+}
+
+export interface LakeSymbolPage {
+  available: boolean;
+  interval: string;
+  total: number;
+  symbols: LakeSymbol[];
+  reason?: string;
+  guidance?: string[];
+}
+
+export interface LakeBar {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface LakeBars {
+  symbol: string;
+  instrument_token: number;
+  exchange: string;
+  interval: string;
+  rows_total: number;
+  rows_returned: number;
+  /** >1 when the range was thinned for display; the full span is still covered. */
+  downsampled_every: number;
+  bars: LakeBar[];
+}
+
+/** The api helper prepends only the host, so paths carry the full prefix. */
+const D = '/api/v1/datalake';
+
 const POLL_MS = 8000;
 
 export function useDataLake(interval = 'minute') {
@@ -132,7 +178,7 @@ export function useDataLake(interval = 'minute') {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.get<LakeSummary>(`/datalake/summary?interval=${interval}`);
+      const data = await api.get<LakeSummary>(`${D}/summary?interval=${interval}`);
       if (!alive.current) return;
       setSummary(data);
       setError('');
@@ -157,14 +203,37 @@ export function useDataLake(interval = 'minute') {
   }, [refresh]);
 
   const listVolumes = useCallback(
-    () => api.get<{ volumes: LakeVolume[]; error: string }>('/datalake/volumes'),
+    () => api.get<{ volumes: LakeVolume[]; error: string }>(`${D}/volumes`),
     [],
+  );
+
+  const listSymbols = useCallback(
+    (opts: { search?: string; limit?: number; offset?: number; sort?: string } = {}) => {
+      const params = new URLSearchParams({ interval });
+      if (opts.search) params.set('search', opts.search);
+      params.set('limit', String(opts.limit ?? 200));
+      params.set('offset', String(opts.offset ?? 0));
+      params.set('sort', opts.sort ?? 'rows');
+      return api.get<LakeSymbolPage>(`${D}/symbols?${params}`);
+    },
+    [interval],
+  );
+
+  const fetchBars = useCallback(
+    (symbol: string, opts: { frm?: string; to?: string; limit?: number } = {}) => {
+      const params = new URLSearchParams({ symbol, interval });
+      if (opts.frm) params.set('frm', opts.frm);
+      if (opts.to) params.set('to', opts.to);
+      params.set('limit', String(opts.limit ?? 1500));
+      return api.get<LakeBars>(`${D}/bars?${params}`);
+    },
+    [interval],
   );
 
   const tierPlan = useCallback(
     (frm: string, to: string, planInterval = interval, rate = 2.5) =>
       api.get<TierPlan>(
-        `/datalake/tiers?interval=${planInterval}&frm=${frm}&to=${to}&rate=${rate}`,
+        `${D}/tiers?interval=${planInterval}&frm=${frm}&to=${to}&rate=${rate}`,
       ),
     [interval],
   );
@@ -175,14 +244,14 @@ export function useDataLake(interval = 'minute') {
       if (path) params.set('path', path);
       if (showHidden) params.set('show_hidden', 'true');
       const qs = params.toString();
-      return api.get<BrowseResult>(`/datalake/browse${qs ? `?${qs}` : ''}`);
+      return api.get<BrowseResult>(`${D}/browse${qs ? `?${qs}` : ''}`);
     },
     [],
   );
 
   const setRoot = useCallback(
     async (path: string, label = '') => {
-      const next = await api.post<LakeStatus>('/datalake/root', { path, label, create: true });
+      const next = await api.post<LakeStatus>(`${D}/root`, { path, label, create: true });
       await refresh();
       return next;
     },
@@ -191,7 +260,7 @@ export function useDataLake(interval = 'minute') {
 
   const activateRoot = useCallback(
     async (lakeId: string) => {
-      const next = await api.post<LakeStatus>('/datalake/root/activate', { lake_id: lakeId });
+      const next = await api.post<LakeStatus>(`${D}/root/activate`, { lake_id: lakeId });
       await refresh();
       return next;
     },
@@ -200,7 +269,7 @@ export function useDataLake(interval = 'minute') {
 
   const forgetRoot = useCallback(
     async (lakeId: string) => {
-      const next = await api.delete<LakeStatus>(`/datalake/root/${lakeId}`);
+      const next = await api.delete<LakeStatus>(`${D}/root/${lakeId}`);
       await refresh();
       return next;
     },
@@ -218,5 +287,7 @@ export function useDataLake(interval = 'minute') {
     activateRoot,
     forgetRoot,
     tierPlan,
+    listSymbols,
+    fetchBars,
   };
 }
