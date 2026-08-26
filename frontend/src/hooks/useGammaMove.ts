@@ -119,8 +119,15 @@ export interface GammaMoveStrategyInfo {
   calibration: Record<string, string>;
   /** Fields whose defaults came from measurement rather than judgement. */
   calibrated_fields: string[];
-  /** The result that matters, in one sentence. Shown before any setting. */
+  /** What the calibration means for the next trade, in one sentence. */
   headline_finding: string;
+  /** The action it implies. Kept apart from the claim so the board can lead
+   *  with what to do rather than with a statistic. */
+  what_to_do?: string;
+  /** The measurement behind the claim — intervals, sample, where to check it.
+   *  Deliberately not the first thing shown: it belongs on a hover, not across
+   *  the top of a trading screen. */
+  evidence?: string;
 }
 
 export interface GammaMoveResponse {
