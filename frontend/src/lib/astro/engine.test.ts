@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { forecastDay, forecastMonth } from "./engine";
+import { lastCompletedSessionIso } from "./holidays";
 import { utcFromIstParts } from "./time";
 
 describe("financial astrology engine", () => {
@@ -115,5 +116,12 @@ describe("financial astrology engine", () => {
     const grid = new Set([555, 585, 615, 645, 675, 705, 735, 765, 795, 825, 855, 885, 915]);
     const offGrid = book.netResults.filter((s) => !grid.has(s.fromMin));
     expect(offGrid.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("grades last cash session before the bell, not the empty next day", () => {
+    expect(lastCompletedSessionIso(utcFromIstParts(2026, 8, 27, 0, 18, 0))).toBe("2026-08-26");
+    expect(lastCompletedSessionIso(utcFromIstParts(2026, 8, 26, 10, 0, 0))).toBe("2026-08-26");
+    expect(lastCompletedSessionIso(utcFromIstParts(2026, 8, 26, 16, 0, 0))).toBe("2026-08-26");
+    expect(lastCompletedSessionIso(utcFromIstParts(2026, 8, 23, 11, 0, 0))).toBe("2026-08-21");
   });
 });
