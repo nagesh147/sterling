@@ -5,19 +5,19 @@ import {
 } from '../../hooks/useKite';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
-  th: { textAlign: 'left' as const, color: '#9b9b9b', fontSize: 10, fontWeight: 600, padding: '4px 8px', borderBottom: `1px solid #f1f1f1` },
-  td: { padding: '6px 8px', fontSize: 12, color: '#444', borderBottom: `1px solid #f1f1f1` },
-  hint: { color: '#9b9b9b', fontSize: 11 },
-  input: { background: '#fff', color: '#444', border: `1px solid #f1f1f1`, borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, boxSizing: 'border-box' as const },
-  label: { color: '#9b9b9b', fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
-  btn: { background: '#387ed1', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 },
+  card: { background: 'var(--k-bg)', border: `1px solid var(--k-surface-hover)`, borderRadius: 10, padding: 14, marginBottom: 14 },
+  title: { color: 'var(--k-dim)', fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
+  th: { textAlign: 'left' as const, color: 'var(--k-dim)', fontSize: 10, fontWeight: 600, padding: '4px 8px', borderBottom: `1px solid var(--k-surface-hover)` },
+  td: { padding: '6px 8px', fontSize: 12, color: 'var(--k-text)', borderBottom: `1px solid var(--k-surface-hover)` },
+  hint: { color: 'var(--k-dim)', fontSize: 11 },
+  input: { background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid var(--k-surface-hover)`, borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, boxSizing: 'border-box' as const },
+  label: { color: 'var(--k-dim)', fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
+  btn: { background: 'var(--k-blue-kite)', color: 'var(--k-on-accent)', border: 'none', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 },
 };
 
 const num = (v: any) => Number(v ?? 0);
-const pnlCol = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#e53935' : '#9b9b9b');
+const pnlCol = (v: number) => (v > 0 ? 'var(--k-green)' : v < 0 ? 'var(--k-red-strong)' : 'var(--k-dim)');
 
 // Mutual-fund scheme autocomplete (search the MF master by name/AMC/symbol).
 function MfFundPicker({ value, onPick }: { value: string; onPick: (sym: string, name: string) => void }) {
@@ -34,15 +34,15 @@ function MfFundPicker({ value, onPick }: { value: string; onPick: (sym: string, 
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
       />
       {open && (data?.instruments?.length ?? 0) > 0 && (
-        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, maxHeight: 220, overflow: 'auto', background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 6, marginTop: 2 }}>
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, maxHeight: 220, overflow: 'auto', background: 'var(--k-bg)', border: `1px solid var(--k-surface-hover)`, borderRadius: 6, marginTop: 2 }}>
           {data!.instruments.slice(0, 15).map((f) => (
             <div
               key={f.tradingsymbol}
-              style={{ padding: '6px 9px', fontSize: 12, cursor: 'pointer', color: '#444', borderBottom: `1px solid #f1f1f1` }}
+              style={{ padding: '6px 9px', fontSize: 12, cursor: 'pointer', color: 'var(--k-text)', borderBottom: `1px solid var(--k-surface-hover)` }}
               onMouseDown={() => { onPick(f.tradingsymbol, f.name || f.tradingsymbol); setOpen(false); }}
             >
               <span style={{ fontWeight: 600 }}>{f.name || f.tradingsymbol}</span>
-              <span style={{ color: '#9b9b9b', marginLeft: 6, fontSize: 10 }}>{f.amc} · {f.plan}</span>
+              <span style={{ color: 'var(--k-dim)', marginLeft: 6, fontSize: 10 }}>{f.amc} · {f.plan}</span>
             </div>
           ))}
         </div>
@@ -87,8 +87,8 @@ export function MutualFundsPane() {
               ...(mf.amount.trim() ? { amount: Number(mf.amount) } : { quantity: Number(mf.quantity) || 1 }),
             })}
           >PlACE ORDER</button>
-          {placeMf.isSuccess && <span style={{ color: '#4caf50', fontSize: 11 }}>✓ Order placed</span>}
-          {placeMf.error && <span style={{ color: '#e53935', fontSize: 11 }}>✗ {placeMf.error.message}</span>}
+          {placeMf.isSuccess && <span style={{ color: 'var(--k-green)', fontSize: 11 }}>✓ Order placed</span>}
+          {placeMf.error && <span style={{ color: 'var(--k-red-strong)', fontSize: 11 }}>✗ {placeMf.error.message}</span>}
         </div>
         <div style={{ ...S.hint, marginTop: 8 }}>Orders execute at next NAV. Use either amount (₹) or quantity (units), not both.</div>
       </div>
@@ -134,12 +134,12 @@ export function MutualFundsPane() {
               {orders.map((o: any, i: number) => (
                 <tr key={o.order_id || i}>
                   <td style={S.td}>{o.fund || o.tradingsymbol}</td>
-                  <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? '#4caf50' : '#e53935' }}>{o.transaction_type}</td>
+                  <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? 'var(--k-green)' : 'var(--k-red-strong)' }}>{o.transaction_type}</td>
                   <td style={{ ...S.td, textAlign: 'right' }}>{num(o.amount).toFixed(2)}</td>
-                  <td style={{ ...S.td, color: '#9b9b9b' }}>{o.status}</td>
+                  <td style={{ ...S.td, color: 'var(--k-dim)' }}>{o.status}</td>
                   <td style={{ ...S.td, textAlign: 'right' }}>
                     {o.status === 'OPEN' && (
-                      <span style={{ cursor: 'pointer', color: '#e53935' }} onClick={() => cancelMf.mutate(o.order_id)}>
+                      <span style={{ cursor: 'pointer', color: 'var(--k-red-strong)' }} onClick={() => cancelMf.mutate(o.order_id)}>
                         {cancelMf.isPending ? '…' : 'cancel'}
                       </span>
                     )}
@@ -177,8 +177,8 @@ export function MutualFundsPane() {
               instalments: sip.instalments.trim() ? Number(sip.instalments) : -1,
             }, { onSuccess: () => setSip({ tradingsymbol: '', fundName: '', amount: '', frequency: 'monthly', instalments: '' }) })}
           >{placeSip.isPending ? 'STARTING…' : 'START SIP'}</button>
-          {placeSip.isSuccess && <span style={{ color: '#4caf50', fontSize: 11 }}>✓ SIP started</span>}
-          {placeSip.error && <span style={{ color: '#e53935', fontSize: 11 }}>✗ {placeSip.error.message}</span>}
+          {placeSip.isSuccess && <span style={{ color: 'var(--k-green)', fontSize: 11 }}>✓ SIP started</span>}
+          {placeSip.error && <span style={{ color: 'var(--k-red-strong)', fontSize: 11 }}>✗ {placeSip.error.message}</span>}
         </div>
         <div style={{ ...S.hint, marginTop: 8 }}>Blank instalments = run until cancelled. SIP debits execute at the next cycle's NAV.</div>
       </div>
@@ -200,13 +200,13 @@ export function MutualFundsPane() {
                     <td style={S.td}>{s.fund || s.tradingsymbol}</td>
                     <td style={{ ...S.td, textAlign: 'right' }}>{num(s.instalment_amount || s.amount).toFixed(2)}</td>
                     <td style={S.td}>{s.frequency}</td>
-                    <td style={{ ...S.td, color: paused ? '#ff9800' : '#9b9b9b' }}>{s.status}</td>
+                    <td style={{ ...S.td, color: paused ? 'var(--k-amber-2)' : 'var(--k-dim)' }}>{s.status}</td>
                     <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <span style={{ cursor: 'pointer', color: '#ff9800', fontSize: 11, marginRight: 12 }}
+                      <span style={{ cursor: 'pointer', color: 'var(--k-amber-2)', fontSize: 11, marginRight: 12 }}
                         onClick={() => modifySip.mutate({ id: s.sip_id, status: paused ? 'active' : 'paused' })}>
                         {paused ? 'resume' : 'pause'}
                       </span>
-                      <span style={{ cursor: 'pointer', color: '#e53935', fontSize: 11 }}
+                      <span style={{ cursor: 'pointer', color: 'var(--k-red-strong)', fontSize: 11 }}
                         onClick={() => cancelSip.mutate(s.sip_id)}>
                         {cancelSip.isPending ? '…' : 'cancel'}
                       </span>

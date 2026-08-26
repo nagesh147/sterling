@@ -86,6 +86,8 @@ class SterlingKiteEngineConfig:
     #: underlying's and still be AUTO-EXECUTED. 0 = it must be current. See the field
     #: of the same name on ``EngineConfigModel`` for why "fresh" is not "current".
     max_contract_staleness_bars: int = 0
+    #: Enforce a 3-day (18 hourly bars) time-decay exit on stock options if momentum stalls
+    theta_time_stop: bool = True
 
     @property
     def warmup(self) -> int:

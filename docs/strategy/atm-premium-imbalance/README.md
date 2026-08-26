@@ -1,0 +1,104 @@
+# ATM Premium Imbalance
+
+**What the recordings showed.** At the index option market open, compare the
+at-the-money call and put premiums, buy whichever is cheaper, exit at the entry
+fill plus a fixed +15 points. One trade per session. No indicators, no stop, no
+time stop. Both directions are observed: the call when it is cheaper, the put
+when it is.
+
+**What this build does.** All of the above, plus protections the source bot did
+not have — a trailing stop, enforced risk limits, crash recovery, a bounded
+trading window. Everything added here is labelled as ours, in the config, in the
+panel and in [A280_END_TO_END.md](A280_END_TO_END.md). The observed policy
+remains the default so the conformance evidence still stands.
+
+> **Read [A280_END_TO_END.md](A280_END_TO_END.md) first** — it is the complete
+> artifact-by-artifact reference and it separates what was proved from what was
+> built.
+
+## Documents
+
+| File | Contents |
+|---|---|
+| [A230_STRATEGY_CONTRACT.md](A230_STRATEGY_CONTRACT.md) | The rules the code must honour |
+| [A231_FORENSIC_EVIDENCE_MATRIX.md](A231_FORENSIC_EVIDENCE_MATRIX.md) | Every rule traced to the frame it came from |
+| [A232_PARAMETER_PROVENANCE.md](A232_PARAMETER_PROVENANCE.md) | Where each default came from, and what was rejected |
+| [A265_ARCHITECTURE.md](A265_ARCHITECTURE.md) | Modules, data flow, state machines, failure paths |
+| [A266_RUNBOOK.md](A266_RUNBOOK.md) | Operating it, and the live-readiness gate |
+| [A280_END_TO_END.md](A280_END_TO_END.md) | **Complete reference** — every artifact, module, setting, route and test |
+| [VALIDATION_REPORT.md](VALIDATION_REPORT.md) | What was checked against real data, and what is still unproven |
+
+## Provenance, stated plainly
+
+This strategy was reverse-engineered from four screen recordings of a
+third-party bot. It was not designed here and it has not been validated.
+
+Two constants are directly evidenced and identical across two builds of the
+source bot:
+
+- **target = entry fill + 15.0 points**
+- **exit limit = best bid − 0.50**
+
+Everything about the *entry price* was operator-supplied per session (the source
+bot read a hand-maintained `strike_prices.txt`), so it is a configurable policy
+here rather than a discovered rule. The default, `best_ask + buffer`, expresses
+the *mechanism* that was observed — a limit deliberately through the market so it
+fills like a market order — without hard-coding one morning's numbers.
+
+The written specification's `entry_buffer_points = 10.25` is **close but not the
+rule**. The bot prints `Buffer : 10.0%` and multiplies: `102.85 × 1.10 = 113.1`
+on 2026-08-20 and `379.0 × 1.10 = 416.9` on 2026-08-21. At the lower premium a
+`+10.25` points offset lands within 0.04 of the same answer, which is why the
+points reading survived until a session at four times the premium separated them.
+See A232 — this parameter was recorded three different ways before settling.
+
+## Parameters
+
+Defaults reproduce the observed baseline. `enabled` is false.
+
+| Setting | Default | Provenance |
+|---|---|---|
+| Underlying | SENSEX | observed |
+| Expiry | NEAREST | observed (monthly traded on a non-expiry day) |
+| Strike | nearest listed, ties to lower | observed |
+| Quote mode | COMPATIBILITY | observed behaviour |
+| Entry price | `first_tick × 1.10` to 1 dp, capped at upper circuit (or an operator price file) | observed |
+| Max entry attempts | 3 | observed |
+| Target | +15.0 points off the fill | observed |
+| Exit | best bid − 0.50 | observed |
+| Stop / time stop | off | none observed |
+| Trades per session | 1 | observed |
+
+## Risk
+
+Buying a same-day-expiry at-the-money option at the open is one of the most
+volatile trades available. The premium can halve in seconds; in the observed
+V17 session the bought leg fell from 133 to 86 before reaching its target. The
+maximum loss is the whole premium.
+
+The source bot had no stop, no daily-loss limit, no position reconciliation and
+no quote-freshness gate. Those absences are not evidence that we may omit them —
+`max_quote_age_ms` and `daily_loss_limit_inr` are ours, and the missing
+broker-side protection for an open position is one reason live is blocked.
+
+## Data requirements
+
+Per-leg option ticks with LTP **and** L1 depth (bid/ask), plus the index LTP.
+Timestamps must be preserved per leg: the asynchronous CE/PE cache is the
+behaviour being reproduced, and a synchronised snapshot would erase it.
+
+Tick data is authoritative for replay. One-minute bars can support broad
+validation but cannot evidence asynchronous tick behaviour.
+
+## Limitations
+
+- **Three sessions with a decodable outcome, all winners**, selected by whoever
+  chose what to record. That is selection bias, not a result.
+- The latest recording's entry block was not legible; its strike and entry order
+  price remain `UNRESOLVED` (A231).
+- Both observed sessions used a 10% buffer; whether that value is configurable
+  in the source system is unknown.
+- Three rules in the contract were corrected by later recordings after earlier
+  ones had agreed. Small samples mislead about mechanics, not just profit.
+- The source bot ran on Upstox. Sterling executes through Kite, which does serve
+  BSE F&O. Order-id and instrument-key formats in the evidence are Upstox's.

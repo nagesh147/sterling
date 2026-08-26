@@ -29,6 +29,44 @@ def _candles(close_path, start_ms=0):
     return out
 
 
+def test_exit_aligned_trail_never_rests_on_the_wrong_side_of_price():
+    """Audit lead 28. `trail_value_for_threshold` returns the threshold line whether or
+    not it is still aligned. Once a SuperTrend flips it sits on the OTHER side of price,
+    so the stop landed above a long and the next bar "breached" it — at the wrong count:
+    under three_red the threshold line is SLOW, and slow can flip while fast and mid are
+    still green (one red, not three), so the trade exited immediately under the very
+    setting whose purpose is to wait for three.
+    """
+    from app.engines.sterling_kite_engine import exits
+
+    class _Regime:
+        """Slow has flipped; fast and mid are still green — one red under three_red."""
+
+        l_fast = np.array([100.0, 101.0])
+        l_mid = np.array([98.0, 99.0])
+        l_slow = np.array([95.0, 130.0])   # flipped: now ABOVE a long's price
+
+        def green_lines(self, direction, i):
+            return ["fast", "mid"]          # slow is not aligned
+
+        def trail_value_for_threshold(self, i, threshold):
+            return float({1: self.l_fast, 2: self.l_mid, 3: self.l_slow}[threshold][i])
+
+        def best_trail_line_value(self, direction, i):
+            return float(self.l_mid[i])     # tightest still-aligned
+
+        def line(self, name):
+            return {"fast": self.l_fast, "mid": self.l_mid, "slow": self.l_slow}[name]
+
+    cfg = SterlingKiteEngineConfig(exit_mode="three_red", exit_aligned_trail=True)
+    level = exits.trail_level(_Regime(), "long", 0, 1, cfg)
+
+    assert level == pytest.approx(99.0), (
+        f"trail sat at {level} — the flipped slow line, above the position it is meant "
+        f"to protect"
+    )
+
+
 def test_exit_aligned_trail_moves_stop_to_mode_line():
     """D2 wiring: with exit_aligned_trail ON + two_red, a row's stop rides the MID ST
     line (breach ≈ 2nd red); OFF it rides the tightest still-green (fast) line. The

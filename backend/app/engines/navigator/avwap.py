@@ -557,8 +557,12 @@ def propose_stop_target(
                 risk_points=risk_points, nearest_range_edge=nearest_range_edge,
             )
 
+    stop_rounded = round(round(stop / tick_size) * tick_size, 2)
+    target_rounded = round(round(target / tick_size) * tick_size, 2)
+    risk_points_rounded = round(round(abs(entry_reference - stop_rounded) / tick_size) * tick_size, 2)
+
     return StopTargetProposal(
-        accepted=True, stop=stop, target=target, risk_points=risk_points,
+        accepted=True, stop=stop_rounded, target=target_rounded, risk_points=risk_points_rounded,
         nearest_range_edge=nearest_range_edge,
     )
 

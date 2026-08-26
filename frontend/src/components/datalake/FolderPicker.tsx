@@ -57,10 +57,11 @@ export default function FolderPicker({
   const [problem, setProblem] = useState('');
   const [showHidden, setShowHidden] = useState(false);
 
-  // Whether the chosen path is a volume root. Writing bars/ and manifest/ straight into a
-  // drive root is messy, so we offer a named subfolder instead.
+  // True only when the user picked a bare drive root that does NOT already hold a lake;
+  // in that case we offer a named subfolder so bars/ and manifest/ don't litter the root.
+  // An existing lake path is already the final folder and must be used verbatim.
   const isVolumeRoot = useMemo(
-    () => volumes.some((v) => v.path === selected),
+    () => volumes.some((v) => v.path === selected && !v.lake_at),
     [volumes, selected],
   );
   const finalPath = useMemo(() => {
@@ -210,21 +211,38 @@ export default function FolderPicker({
                 <div style={{ color: c.dim, fontSize: 12 }}>No mounted volumes detected.</div>
               )}
               {volumes.map((v) => {
-                const chosen = selected === v.path;
+                // A drive that already HOLDS a lake is selectable even when its own root
+                // is not writable — and that is the common case, not an edge case. A
+                // freshly formatted USB drive has a root-owned root, so `sudo install -d`
+                // grants ownership of the lake subfolder only. Picking that existing lake
+                // never writes to the drive root, so gating on root writability disabled
+                // exactly the drive the user was trying to choose.
+                const target = v.lake_at || v.path;
+                const usable = v.writable || !!v.lake_at;
+                const chosen = selected === target;
                 return (
                   <button
                     key={v.path}
-                    onClick={() => setSelected(v.path)}
-                    disabled={!v.writable}
-                    title={v.writable ? v.path : `${v.path} — not writable by your user`}
+                    onClick={() => setSelected(target)}
+                    disabled={!usable}
+                    title={
+                      v.lake_at
+                        ? `${v.lake_at} — existing data found here, click to use it`
+                        : v.writable
+                          ? v.path
+                          : `${v.path} is owned by root, so a new folder cannot be created ` +
+                            `here. Grant yourself one:\n\n` +
+                            `sudo install -d -o "$USER" -g "$USER" -m 755 ` +
+                            `"${v.path.replace(/\/$/, '')}/${defaultFolderName}"`
+                    }
                     style={{
                       textAlign: 'left',
                       background: chosen ? tint(c.green, 14) : c.raised,
                       border: `1px solid ${chosen ? c.green : c.border}`,
                       borderRadius: 12,
                       padding: '10px 12px',
-                      cursor: v.writable ? 'pointer' : 'not-allowed',
-                      opacity: v.writable ? 1 : 0.5,
+                      cursor: usable ? 'pointer' : 'not-allowed',
+                      opacity: usable ? 1 : 0.5,
                       fontFamily: c.fontFamily,
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -254,9 +272,11 @@ export default function FolderPicker({
                             DATA FOUND{v.lake_label ? ` · ${v.lake_label}` : ''}
                           </span>
                         )}
-                        {!v.writable && (
+                        {/* Only flag write permission when it actually blocks the user:
+                            a drive holding an existing lake is usable regardless. */}
+                        {!v.writable && !v.lake_at && (
                           <span style={{ color: c.amber, fontSize: 10, marginLeft: 8 }}>
-                            NOT WRITABLE
+                            NEEDS PERMISSION
                           </span>
                         )}
                       </div>
@@ -273,10 +293,12 @@ export default function FolderPicker({
                   </button>
                 );
               })}
-              {volumes.some((v) => !v.writable) && (
-                <div style={{ color: c.dim, fontSize: 11, marginTop: 2 }}>
-                  A freshly-formatted drive is often owned by root. Selecting it will show
-                  the exact one-line command to grant your user access.
+              {volumes.some((v) => !v.writable && !v.lake_at) && (
+                <div style={{ color: c.dim, fontSize: 11, marginTop: 2, lineHeight: 1.6 }}>
+                  A freshly-formatted drive keeps a root-owned root, so a new folder cannot
+                  be created on it until you grant yourself one. Hover a greyed-out drive for
+                  the exact one-line command. Drives that already hold data stay selectable —
+                  using an existing folder needs no permission on the drive root.
                 </div>
               )}
             </div>

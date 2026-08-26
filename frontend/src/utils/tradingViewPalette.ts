@@ -1,5 +1,5 @@
 const CHART_WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
-export const TRADINGVIEW_DOWN_RED = '#f23645';
+export const TRADINGVIEW_DOWN_RED = 'var(--k-red-chart)';
 
 /**
  * Keep the chart palette consistent for both new and existing browsers.

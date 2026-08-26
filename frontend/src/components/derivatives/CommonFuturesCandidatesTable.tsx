@@ -303,7 +303,7 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
                               display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
                               fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
                               background: row.direction === 'long' ? c.green : c.red,
-                              color: '#fff', border: 'none',
+                              color: 'var(--k-bg)', border: 'none',
                               cursor: execute.isPending ? 'wait' : 'pointer',
                               whiteSpace: 'nowrap'
                             }}>

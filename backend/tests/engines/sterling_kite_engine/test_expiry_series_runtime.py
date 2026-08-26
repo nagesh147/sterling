@@ -81,7 +81,12 @@ def test_resolve_option_legs_uses_selected_listed_series_and_latest_spot():
             token += 1
             rows.append(_instrument(expiry, strike, token))
 
-    legs, reason = resolve_option_legs(
+    # The UNWRAPPED resolver: `latest_spot` is part of its contract because it also
+    # prices a LIVE chain, where today's spot is exactly right. What changed in lead 7
+    # is that the board's wrapper stops passing it — covered by the next test.
+    from app.services.kite_engine import expiry_series_compat as compat
+
+    legs, reason = compat._original_resolve_option_legs(
         _signal(spot=100.0),
         rows,
         option_name="NIFTY",
@@ -101,9 +106,37 @@ def test_resolve_option_legs_uses_selected_listed_series_and_latest_spot():
         "2026-08-18",
         "2026-08-25",
     }
-    # The retained row's trigger spot was 100, but current spot is 118; ATM must
-    # therefore resolve to the listed 120 strike, not the historical 100 strike.
     assert {leg.strike for leg in legs} == {120.0}
+
+
+def test_the_board_wrapper_resolves_a_retained_row_at_its_trigger_spot():
+    """The wrapper the engine actually installs ignores today's spot, so a retained
+    row's ladder matches the bar its entry premium came from."""
+    from app.services.kite_engine import expiry_series_compat as compat
+
+    rows = [_instrument(expiry, strike, 2000 + i)
+            for i, (expiry, strike) in enumerate(
+                [("2026-08-25", s) for s in (90, 100, 110, 120)])]
+    seen = {}
+
+    def _spy(row, option_rows, **kwargs):
+        seen.update(kwargs)
+        return ([], None)
+
+    original = compat._original_resolve_option_legs
+    compat._original_resolve_option_legs = _spy
+    try:
+        compat._resolve_with_fresh_trigger_spot(
+            _signal(spot=100.0), rows, option_name="NIFTY", moneynesses=["ATM"],
+            today=date(2026, 7, 1), expiry_types=["monthly"],
+            expiry_ranks_by_type={"monthly": [0]}, latest_spot=118.0)
+    finally:
+        compat._original_resolve_option_legs = original
+
+    assert seen["latest_spot"] is None, (
+        "a retained row resolved its ladder at today's spot while its entry premium "
+        "came from the signal bar — two different trades on one row"
+    )
 
 
 def test_resolution_reason_is_precise_not_a_liquidity_claim():

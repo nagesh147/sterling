@@ -28,9 +28,24 @@ def trail_level(r, direction: str, entry_i: int, at_i: int,
     ``exit_aligned_trail`` on: the line whose flip is the ``exit_mode``-th red, so the
     stop breach coincides with the red count instead of the tightest line pre-empting
     it. Falls back to the entry bar's ``trail_target`` line when no aligned line remains.
+
+    The threshold line is used ONLY while it is still aligned (audit lead 28). Once a
+    SuperTrend flips it jumps to the other side of price, so an unguarded
+    ``trail_value_for_threshold`` put the stop above a long's price and the very next
+    bar "breached" it. That fires at the WRONG count: under ``three_red`` the threshold
+    line is the slow one, and slow can flip while fast and mid are still green — one
+    red, not three — so the trade exited immediately under the setting whose entire
+    purpose is to wait for three. Falling back to the tightest still-aligned line keeps
+    the intent (do not let the fast line pre-empt the counter) without ever resting the
+    stop on the wrong side of price; when NO line is aligned the count has reached three
+    and the red-count rule is what ends the trade anyway.
     """
     if getattr(cfg, "exit_aligned_trail", False):
-        value = r.trail_value_for_threshold(at_i, get_exit_threshold(cfg.exit_mode))
+        threshold = get_exit_threshold(cfg.exit_mode)
+        name = {1: "fast", 2: "mid", 3: "slow"}.get(int(threshold), "fast")
+        aligned = r.green_lines(direction, at_i)
+        value = (r.trail_value_for_threshold(at_i, threshold) if name in aligned
+                 else r.best_trail_line_value(direction, at_i))
     else:
         value = r.best_trail_line_value(direction, at_i)
     if value > 0:
@@ -102,22 +117,58 @@ def red_count_exit_index(r, direction: str, entry_i: int, last_idx: int,
     return None
 
 
-def resolve_exit(r, direction: str, entry_i: int, last_idx: int,
-                 cfg: SterlingKiteEngineConfig, longs, shorts) -> Tuple[Optional[int], str]:
+def resolve_time_decay_exit_index(
+    r, direction: str, entry_i: int, last_idx: int,
+    cfg: SterlingKiteEngineConfig, *, is_stock: bool = False,
+    max_consolidation_bars: int = 18, min_expansion_atr_mult: float = 0.5,
+) -> Optional[int]:
+    """Emit time-decay exit if momentum on a stock option stalls for >3 trading days (18 1H bars)."""
+    if not is_stock or not getattr(cfg, "theta_time_stop", True):
+        return None
+    if (last_idx - entry_i) < max_consolidation_bars:
+        return None
+
+    atr = float(r.atr[entry_i]) if hasattr(r, "atr") and r.atr.size > entry_i and r.atr[entry_i] > 0 else 0.0
+    if atr <= 0:
+        return None
+
+    check_idx = entry_i + max_consolidation_bars
+    entry_px = float(r.basis_close[entry_i]) if hasattr(r, "basis_close") and r.basis_close.size > entry_i else 0.0
+    check_px = float(r.basis_close[check_idx]) if hasattr(r, "basis_close") and r.basis_close.size > check_idx else 0.0
+    if entry_px <= 0 or check_px <= 0:
+        return None
+
+    expansion = (check_px - entry_px) if direction == "long" else (entry_px - check_px)
+    if expansion < (min_expansion_atr_mult * atr):
+        return check_idx
+    return None
+
+
+def resolve_exit(
+    r, direction: str, entry_i: int, last_idx: int,
+    cfg: SterlingKiteEngineConfig, longs, shorts,
+    *, is_stock: bool = False,
+) -> Tuple[Optional[int], str]:
     """``(exit_bar_index, reason)`` for an entry at ``entry_i``, or ``(None, "")`` if it
     is still running at ``last_idx``.
-
-    Before the trail was enforced, a position under ``two_red``/``three_red`` could sit
-    indefinitely below its own stop while the board reported it running at "0/3 red",
-    because the trail was a display value that nothing acted on.
     """
     red_j = red_count_exit_index(r, direction, entry_i, last_idx, cfg, longs, shorts)
     trail_j = trail_exit_index(r, direction, entry_i, last_idx, cfg)
-    if red_j is None and trail_j is None:
-        return None, ""
-    if trail_j is not None and (red_j is None or trail_j <= red_j):
+    time_j = resolve_time_decay_exit_index(r, direction, entry_i, last_idx, cfg, is_stock=is_stock)
+
+    candidates: list[Tuple[int, str]] = []
+    if red_j is not None:
+        threshold = get_exit_threshold(cfg.exit_mode)
+        candidates.append((red_j, f"red count exit {threshold}/{threshold} ({cfg.exit_mode})"))
+    if trail_j is not None:
         level = trail_level(r, direction, entry_i, trail_j - 1, cfg)
         side = "≤" if direction == "long" else "≥"
-        return trail_j, f"trail breach ({side} {level:.2f})"
-    threshold = get_exit_threshold(cfg.exit_mode)
-    return red_j, f"red count exit {threshold}/{threshold} ({cfg.exit_mode})"
+        candidates.append((trail_j, f"trail breach ({side} {level:.2f})"))
+    if time_j is not None:
+        candidates.append((time_j, "time decay exit (momentum stalled > 18 bars)"))
+
+    if not candidates:
+        return None, ""
+
+    earliest_j, reason = min(candidates, key=lambda c: c[0])
+    return earliest_j, reason

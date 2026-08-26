@@ -31,7 +31,10 @@ import pyarrow.parquet as pq
 from .config import IST, PRICE_SCALE, SECOND_INTERVAL, Credentials
 from .schema import BAR_SCHEMA, encode_price
 
-__all__ = ["TICK_SCHEMA", "TickRecorder", "aggregate_ticks_to_seconds"]
+__all__ = [
+    "TICK_SCHEMA", "ENRICHED_TICK_SCHEMA", "TickRecorder",
+    "aggregate_ticks_to_seconds", "enriched_tick_path",
+]
 
 #: One row per tick. Prices scaled like bars so the two are directly comparable.
 TICK_SCHEMA = pa.schema(
@@ -48,6 +51,50 @@ TICK_SCHEMA = pa.schema(
         pa.field("ask_qty", pa.int64()),
     ]
 )
+
+
+#: What :class:`~kitelake.pipeline.TickPipeline` persists: a tick plus the analytics derived
+#: from it. Kept separate from TICK_SCHEMA because the two answer different questions — this
+#: one is the audit trail for "what did we believe, and what did we believe it against".
+#:
+#: All the real-valued fields are scaled int64 like bar prices (x10_000). That includes iv
+#: and the greeks: delta 0.5231 stores as 5231. Floats would make exact replay of a sizing
+#: decision impossible to reproduce byte-for-byte.
+#:
+#: ``spot_used`` is the load-bearing column. Greeks are only meaningful relative to the spot
+#: they were computed against, and recording it means a stale underlying shows up in the data
+#: instead of being silently baked into a delta.
+ENRICHED_TICK_SCHEMA = pa.schema(
+    [
+        pa.field("ts", pa.timestamp("us", tz="UTC"), nullable=False),
+        pa.field("instrument_token", pa.int64(), nullable=False),
+        pa.field("last_price", pa.int64(), nullable=False),
+        pa.field("last_traded_quantity", pa.int64()),
+        pa.field("volume_traded", pa.int64()),
+        pa.field("oi", pa.int64()),
+        pa.field("bid_price", pa.int64()),
+        pa.field("bid_qty", pa.int64()),
+        pa.field("ask_price", pa.int64()),
+        pa.field("ask_qty", pa.int64()),
+        # Null rather than zero when unsolved: an option we could not price must not be
+        # indistinguishable from one whose delta really is zero.
+        pa.field("iv", pa.int64(), nullable=True),
+        pa.field("delta", pa.int64(), nullable=True),
+        pa.field("gamma", pa.int64(), nullable=True),
+        pa.field("theta", pa.int64(), nullable=True),
+        pa.field("vega", pa.int64(), nullable=True),
+        pa.field("spot_used", pa.int64(), nullable=True),
+    ]
+)
+
+
+def enriched_tick_path(day: date, *, root: Any = None) -> Path:
+    """One file per day for the enriched stream, beside the raw ticks."""
+    from .volume import ticks_dir
+
+    path = ticks_dir(root) / f"date={day.isoformat()}" / "enriched.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _tick_path(day: date, exchange: str, *, root: Any = None) -> Path:

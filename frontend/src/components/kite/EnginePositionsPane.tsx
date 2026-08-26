@@ -6,13 +6,13 @@ import type { EngineOpenPosition, EngineVehicle, ExitMode, AlignmentChip } from 
 // ─── Vehicle badge ────────────────────────────────────────────────────────────
 
 const VEHICLE_META: Record<EngineVehicle, { label: string; color: string; bg: string }> = {
-  otm_options:     { label: 'OTM',       color: '#1565c0', bg: '#e3f2fd' },
-  deep_itm_options:{ label: 'Deep-ITM',  color: '#e65100', bg: '#fff3e0' },
-  futures:         { label: 'Futures',   color: '#2e7d32', bg: '#e8f5e9' },
+  otm_options:     { label: 'OTM',       color: 'var(--k-blue-deep)', bg: 'var(--k-tint-blue)' },
+  deep_itm_options:{ label: 'Deep-ITM',  color: 'var(--k-warn-deep)', bg: 'var(--k-tint-amber)' },
+  futures:         { label: 'Futures',   color: 'var(--k-green-deep)', bg: 'var(--k-tint-green)' },
 };
 
 function VehicleBadge({ vehicle }: { vehicle: EngineVehicle }) {
-  const m = VEHICLE_META[vehicle] ?? { label: vehicle, color: '#666', bg: '#f5f5f5' };
+  const m = VEHICLE_META[vehicle] ?? { label: vehicle, color: 'var(--k-ink-4)', bg: 'var(--k-surface-4)' };
   return (
     <span style={{
       display: 'inline-block', padding: '1px 7px', borderRadius: 10,
@@ -31,7 +31,7 @@ function DirectionBadge({ direction }: { direction: 'long' | 'short' }) {
       display: 'inline-block', padding: '1px 7px', borderRadius: 10,
       fontSize: 10, fontWeight: 600, letterSpacing: 0.4,
       color: isLong ? k.green : k.red,
-      background: isLong ? '#e8f5e9' : '#ffebee',
+      background: isLong ? 'var(--k-tint-green)' : 'var(--k-tint-red)',
       border: `1px solid ${isLong ? k.green : k.red}30`,
     }}>
       {isLong ? '▲ Long' : '▼ Short'}
@@ -47,7 +47,7 @@ function ExitRuleBadge({ exitMode }: { exitMode?: string }) {
     three_red: { label: '3R', color: '#854d0e', bg: '#fef9c3' },
     three_red_signal: { label: '3R+Sig', color: '#166534', bg: '#dcfce7' },
   };
-  const m = map[exitMode] || { label: exitMode, color: '#334155', bg: '#f1f5f9' };
+  const m = map[exitMode] || { label: exitMode, color: 'var(--k-ink-slate-2)', bg: 'var(--k-surface-slate)' };
   return (
     <span style={{
       display: 'inline-block', padding: '1px 5px', borderRadius: 8,
@@ -71,7 +71,7 @@ function getAlignmentForUnderlying(underlying: string, signalsData?: { rows?: an
 function LiveAlignment({ underlying, signalsData, exitMode }: { underlying?: string; signalsData?: any; exitMode?: string }) {
   const al = getAlignmentForUnderlying(underlying || '', signalsData);
   if (!al) return null;
-  const col = (v: number) => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#64748b';
+  const col = (v: number) => v > 0 ? 'var(--k-green-500)' : v < 0 ? 'var(--k-red-500)' : 'var(--k-ink-slate-3)';
   const reds = [al.fast, al.mid, al.slow].filter(v => v < 0).length;
   const threshold = exitMode === 'one_red' ? 1 : exitMode === 'two_red' ? 2 : 3;
   const nearExit = reds >= threshold;
@@ -89,7 +89,7 @@ function LiveAlignment({ underlying, signalsData, exitMode }: { underlying?: str
 }
 
 function StatusDot({ status }: { status: string }) {
-  const color = status === 'open' ? k.green : status === 'pending' ? k.orange : '#aaa';
+  const color = status === 'open' ? k.green : status === 'pending' ? k.orange : 'var(--k-faint)';
   return (
     <span style={{
       display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
@@ -114,7 +114,7 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
         <StatusDot status={p.status} />
         <span style={{ fontWeight: 500, fontSize: 12 }}>{p.symbol}</span>
         {p.underlying && (
-          <span style={{ color: '#888', fontSize: 11, marginLeft: 6 }}>{p.underlying}</span>
+          <span style={{ color: 'var(--k-ink-6)', fontSize: 11, marginLeft: 6 }}>{p.underlying}</span>
         )}
         <ExitRuleBadge exitMode={p.exit_mode} />
         <LiveAlignment underlying={p.underlying} signalsData={signalsData} exitMode={p.exit_mode} />
@@ -128,7 +128,7 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
       <td style={{ padding: '8px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
         {p.qty}
         {p.lot_size > 0 && (
-          <span style={{ color: '#888', fontSize: 11 }}> ({p.qty / p.lot_size}L)</span>
+          <span style={{ color: 'var(--k-ink-6)', fontSize: 11 }}> ({p.qty / p.lot_size}L)</span>
         )}
       </td>
       <td style={{ padding: '8px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
@@ -150,7 +150,7 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
           </div>
         )}
       </td>
-      <td style={{ padding: '8px 10px', color: '#888', fontSize: 11 }}>
+      <td style={{ padding: '8px 10px', color: 'var(--k-ink-6)', fontSize: 11 }}>
         {age !== null ? (age < 60 ? `${age}m` : `${Math.floor(age / 60)}h${age % 60}m`) : '—'}
       </td>
       <td style={{ padding: '8px 10px' }}>
@@ -158,13 +158,13 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
           <span>
             <button
               onClick={() => { onClose(p.symbol); setConfirm(false); }}
-              style={{ fontSize: 11, padding: '2px 8px', marginRight: 4, background: k.red, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+              style={{ fontSize: 11, padding: '2px 8px', marginRight: 4, background: k.red, color: 'var(--k-bg)', border: 'none', borderRadius: 4, cursor: 'pointer' }}
             >
               Confirm
             </button>
             <button
               onClick={() => setConfirm(false)}
-              style={{ fontSize: 11, padding: '2px 8px', background: '#eee', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+              style={{ fontSize: 11, padding: '2px 8px', background: 'var(--k-hairline-3)', border: 'none', borderRadius: 4, cursor: 'pointer' }}
             >
               Cancel
             </button>
@@ -172,7 +172,7 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
         ) : (
           <button
             onClick={() => setConfirm(true)}
-            style={{ fontSize: 11, padding: '2px 8px', background: 'transparent', border: `1px solid ${k.border}`, borderRadius: 4, cursor: 'pointer', color: '#666' }}
+            style={{ fontSize: 11, padding: '2px 8px', background: 'transparent', border: `1px solid ${k.border}`, borderRadius: 4, cursor: 'pointer', color: 'var(--k-ink-4)' }}
           >
             Remove
           </button>
@@ -197,7 +197,7 @@ export function EnginePositionsPane() {
         <span style={{ fontWeight: 600, fontSize: 14, color: k.text }}>Engine Positions</span>
         {positions.length > 0 && (
           <span style={{
-            background: '#1565c0', color: '#fff', borderRadius: 12,
+            background: 'var(--k-blue-deep)', color: 'var(--k-on-accent)', borderRadius: 12,
             padding: '1px 8px', fontSize: 11, fontWeight: 600,
           }}>
             {positions.length}
@@ -206,13 +206,13 @@ export function EnginePositionsPane() {
       </div>
 
       {isLoading && (
-        <div style={{ color: '#888', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+        <div style={{ color: 'var(--k-ink-6)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
           Loading…
         </div>
       )}
 
       {!isLoading && positions.length === 0 && (
-        <div style={{ color: '#aaa', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+        <div style={{ color: 'var(--k-faint)', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
           No engine positions tracked
         </div>
       )}
@@ -221,7 +221,7 @@ export function EnginePositionsPane() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ borderBottom: `2px solid ${k.border}`, color: '#888', fontSize: 11 }}>
+              <tr style={{ borderBottom: `2px solid ${k.border}`, color: 'var(--k-ink-6)', fontSize: 11 }}>
                 <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 500 }}>Symbol</th>
                 <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 500 }}>Vehicle</th>
                 <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 500 }}>Direction</th>
@@ -253,7 +253,7 @@ export function EnginePositionsPane() {
         </div>
       )}
 
-      <div style={{ fontSize: 9, color: '#888', padding: '6px 10px', borderTop: `1px solid ${k.border}`, marginTop: 4 }}>
+      <div style={{ fontSize: 9, color: 'var(--k-ink-6)', padding: '6px 10px', borderTop: `1px solid ${k.border}`, marginTop: 4 }}>
         Entry = 3 green lines + fresh arrow. Exit = your chosen red counter (1/2/3 or 3+signal). Live bars + X/Y = current reds vs your entry-time threshold. Trail ratchets tighter on the innermost still-green ST.
       </div>
     </div>

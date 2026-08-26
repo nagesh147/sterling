@@ -69,7 +69,7 @@ export function Terminal() {
             marginTop: 6,
             background: 'var(--t-blue)',
             border: '1px solid var(--t-blue)',
-            color: '#fff',
+            color: 'var(--k-bg)',
             cursor: 'pointer',
             padding: '8px 18px',
             borderRadius: 4,

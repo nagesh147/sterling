@@ -71,6 +71,17 @@ _SESSIONS: dict[str, tuple[time, time]] = {
     "BCD": (time(9, 0), time(17, 0)),
     "MCX": (time(9, 0), time(23, 30)),
     "NCO": (time(9, 0), time(23, 30)),
+    # NSE International Exchange (GIFT City). GIFT NIFTY runs two sessions totalling ~21
+    # hours — roughly 06:30-15:40 and 16:35-02:45 IST — so the window CROSSES MIDNIGHT,
+    # which a same-day (open, close) pair cannot express. Treat it as the whole day:
+    # verify_file only uses this to reject impossible timestamps, and a narrow guess made
+    # it flag 96,483 perfectly good GIFT NIFTY bars as out-of-session.
+    "NSEIX": (time(0, 0), time(23, 59)),
+    # Foreign indices Kite mirrors (US500, HANGSENG, JAPAN225, AUS200, US10YRYIELD …).
+    # They keep their own market's hours, which in IST land anywhere across the clock —
+    # AUS200 opens around 05:00 IST, US500 runs past midnight. Any Indian-hours window is
+    # simply wrong here, so accept the whole day.
+    "GLOBAL": (time(0, 0), time(23, 59)),
 }
 _DEFAULT_SESSION = (time(9, 0), time(23, 30))
 

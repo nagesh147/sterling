@@ -26,6 +26,19 @@ from .calendar_ import expected_bars, interval_minutes, session_bounds, session_
 from .config import IST
 from .schema import BAR_SCHEMA, parse_bar_filename
 
+#: IST is a fixed UTC+5:30 offset and never observes DST, so converting a UTC
+#: instant to Indian wall-clock is exact integer arithmetic on epoch seconds.
+_IST_OFFSET_SECONDS = 5 * 3600 + 30 * 60
+
+
+def _mod(values: Any, divisor: int) -> Any:
+    """Vectorised integer modulo. pyarrow.compute has no `mod`, so derive it.
+
+    Safe here because every input is a positive epoch-second count (pc.divide truncates
+    toward zero, which only differs from floor division for negatives).
+    """
+    return pc.subtract(values, pc.multiply(pc.divide(values, divisor), divisor))
+
 __all__ = ["CHECKS", "verify_file", "verify_symbol", "verify_lake", "coverage_report", "format_report"]
 
 CHECKS = (
@@ -105,14 +118,22 @@ def verify_file(path: str | Path) -> dict[str, Any]:
         result["error"] = "file contains zero rows"
         return result
 
-    ts = table.column("ts").to_pylist()
-    result["first_ts"] = ts[0].isoformat()
-    result["last_ts"] = ts[-1].isoformat()
+    # Work on int64 epoch microseconds rather than materialising Python datetimes.
+    # `to_pylist()` on a 96k-row column plus a Python set() of datetimes was the bulk of
+    # the remaining cost; the equivalent Arrow kernels are ~10x cheaper and exact.
+    ts_col = table.column("ts")
+    ts_us = pc.cast(ts_col, pa.int64())
+    result["first_ts"] = ts_col[0].as_py().isoformat()
+    result["last_ts"] = ts_col[-1].as_py().isoformat()
 
-    if any(ts[i] > ts[i + 1] for i in range(len(ts) - 1)):
-        failures.append("ts_sorted")
-    if len(set(ts)) != len(ts):
-        failures.append("ts_unique")
+    if table.num_rows > 1:
+        flat = ts_us.combine_chunks() if isinstance(ts_us, pa.ChunkedArray) else ts_us
+        deltas = pc.subtract(flat.slice(1), flat.slice(0, len(flat) - 1))
+        if pc.min(deltas).as_py() is not None and pc.min(deltas).as_py() < 0:
+            failures.append("ts_sorted")
+        # Strictly increasing means every delta is > 0; a zero delta is a duplicate.
+        if pc.count_distinct(flat).as_py() != table.num_rows:
+            failures.append("ts_unique")
 
     o = table.column("open")
     h = table.column("high")
@@ -134,39 +155,43 @@ def verify_file(path: str | Path) -> dict[str, Any]:
     exchange = result["exchange"]
     interval = result["interval"]
 
-    # Session window: compare each bar's IST wall-clock against that day's bounds.
-    out_of_session = 0
-    for stamp in ts:
-        local = stamp.astimezone(IST)
-        opened, closed = session_bounds(local.date(), exchange)
-        if not (opened <= local <= closed):
-            out_of_session += 1
-            if out_of_session > 3:
-                break
+    # Session window and grid alignment, VECTORISED.
+    #
+    # These were per-row Python loops with an .astimezone() call each, which made verify
+    # CPU-bound rather than IO-bound: 236 ms for a single 96k-row file, ~29 minutes for the
+    # lake, and the thread pool bought almost nothing because the work holds the GIL.
+    #
+    # IST is a fixed UTC+5:30 offset with no DST, so the conversion is exact arithmetic on
+    # epoch seconds — no calendar maths needed.
+    epoch = pc.divide(
+        pc.cast(table.column("ts"), pa.int64()), 1_000_000
+    )  # microseconds -> seconds
+    local = pc.add(epoch, _IST_OFFSET_SECONDS)
+    into_day = _mod(local, 86_400)
+
+    opened, closed = session_bounds(ts_col[0].as_py().astimezone(IST).date(), exchange)
+    open_s = opened.hour * 3600 + opened.minute * 60
+    close_s = closed.hour * 3600 + closed.minute * 60
+    outside = pc.or_(pc.less(into_day, open_s), pc.greater(into_day, close_s))
+    out_of_session = pc.sum(pc.cast(outside, pa.int64())).as_py() or 0
     if out_of_session:
         failures.append("in_session")
-        result["out_of_session"] = out_of_session
+        result["out_of_session"] = int(out_of_session)
 
-    # Interval alignment: minute bars must sit on minute boundaries, 5-minute bars on
-    # 5-minute offsets from the session open, and so on.
     if interval != "day":
         step = interval_minutes(interval)
         if step >= 1:
-            misaligned = 0
-            for stamp in ts:
-                local = stamp.astimezone(IST)
-                if local.second or local.microsecond:
-                    misaligned += 1
-                    continue
-                opened, _ = session_bounds(local.date(), exchange)
-                offset = (local - opened).total_seconds() / 60.0
-                if abs(offset % step) > 1e-6:
-                    misaligned += 1
-                if misaligned > 3:
-                    break
+            # Bars must land on whole minutes, and on the interval grid measured from the
+            # session open.
+            off_minute = _mod(local, 60)
+            misaligned_mask = pc.not_equal(off_minute, 0)
+            if step > 1:
+                grid = _mod(pc.divide(pc.subtract(into_day, open_s), 60), int(step))
+                misaligned_mask = pc.or_(misaligned_mask, pc.not_equal(grid, 0))
+            misaligned = pc.sum(pc.cast(misaligned_mask, pa.int64())).as_py() or 0
             if misaligned:
                 failures.append("interval_aligned")
-                result["misaligned"] = misaligned
+                result["misaligned"] = int(misaligned)
 
     result["failures"] = failures
     result["ok"] = not failures

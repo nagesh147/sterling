@@ -35,7 +35,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -65,6 +67,28 @@ ROW_GROUP_SIZE = 131_072
 
 def _sorting_columns() -> list[pq.SortingColumn]:
     return [pq.SortingColumn(BAR_SCHEMA.get_field_index("ts"), descending=False, nulls_first=False)]
+
+
+#: One lock per target file. ``merge`` mode is a read-modify-write, and the downloader runs
+#: it from several worker threads at once — via ``asyncio.to_thread`` — on chunks that
+#: belong to the SAME instrument, because the pending queue is ordered by
+#: (instrument_token, chunk_from) and consecutive items are that instrument's chunks.
+#:
+#: Unsynchronised, the workers each read the file, merge their own chunk, and write; the
+#: last one wins and silently discards every other chunk. This is not theoretical: a live
+#: run lost **21,062,425 candles across 1,394 instruments** to it, with a perfect
+#: signature — 0% loss for single-chunk instruments, 21.6% for four-chunk ones, and
+#: victims like PSUBNKBEES left holding 750 of 45,750 rows.
+#:
+#: Locking per path rather than globally keeps unrelated instruments writing in parallel.
+#: The lock lives in the writer, not the orchestrator, so every caller is protected.
+_PATH_LOCKS: dict[str, threading.Lock] = defaultdict(threading.Lock)
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _PATH_LOCKS[str(path)]
 
 
 def _sha256(path: Path) -> str:
@@ -152,7 +176,14 @@ class BarWriter:
         if mode not in {"merge", "replace"}:
             raise ValueError(f"unknown mode {mode!r}")
         target, staging = self._paths(instrument, interval)
+        # Serialise the whole read-modify-write for THIS file. Without it, concurrent
+        # chunks of the same instrument clobber one another (see _PATH_LOCKS).
+        with _lock_for(target):
+            return self._write_locked(target, staging, interval, table, mode)
 
+    def _write_locked(
+        self, target: Path, staging: Path, interval: str, table: pa.Table, mode: str
+    ) -> dict[str, Any]:
         incoming = table.cast(BAR_SCHEMA) if table.schema != BAR_SCHEMA else table
         metadata = incoming.schema.metadata
         if mode == "merge":

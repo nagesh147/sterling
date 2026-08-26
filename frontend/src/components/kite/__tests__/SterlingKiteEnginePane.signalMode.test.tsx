@@ -44,11 +44,13 @@ function makeNavigatorRow(underlying: string, token: number, navigatorStatus: st
   };
 }
 
-function mockRows(rows: ReturnType<typeof makeRow>[]) {
+const patchSpy = vi.fn();
+
+function mockRows(rows: ReturnType<typeof makeRow>[], overrides: Record<string, unknown> = {}) {
   vi.doMock('../../../hooks/useSterlingKiteEngine', () => ({
-    useEngineConfig: () => ({ data: cfg }),
+    useEngineConfig: () => ({ data: { ...cfg, ...overrides } }),
     useSetEngineConfig: () => ({ mutate: vi.fn() }),
-    usePatchEngineConfig: () => ({ mutate: vi.fn() }),
+    usePatchEngineConfig: () => ({ mutate: patchSpy, isPending: false, isError: false, error: null }),
     useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
     useEngineSignals: () => ({
       data: { generated_ms: 1, scanning: false, scanning_label: '', rows, next_scan_ms: 0, auto_scan: false, market_open: true },
@@ -238,5 +240,69 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
       fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
       expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('when the SuperTrend engine is switched off', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+    patchSpy.mockClear();
+  });
+
+  const off = { engine_enabled: false };
+
+  it('says the engine is off under the SuperTrend lens, not "no setups"', async () => {
+    // No SuperTrend rows exist by construction, so blaming the market is wrong.
+    mockRows([makeNavigatorRow('SENSEX', 2, 'CONFIRMED')], off);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^SuperTrend only/ }));
+    expect(screen.getByText('SuperTrend is off')).toBeInTheDocument();
+    expect(screen.getByText(/only SuperTrend setups, and the engine is not scanning/i)).toBeInTheDocument();
+  });
+
+  it('offers the switch, and turning it on patches the engine config', async () => {
+    mockRows([makeNavigatorRow('SENSEX', 2, 'CONFIRMED')], off);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^SuperTrend only/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Turn on SuperTrend/i }));
+    expect(patchSpy).toHaveBeenCalledWith({ engine_enabled: true });
+  });
+
+  it('explains that "where both agree" cannot fill with one engine off', async () => {
+    mockRows([makeNavigatorRow('SENSEX', 2, 'CONFIRMED')], off);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^Where both agree/ }));
+    expect(screen.getByText('SuperTrend is off')).toBeInTheDocument();
+    expect(screen.getByText(/needs a SuperTrend setup for Navigator to agree/i)).toBeInTheDocument();
+  });
+
+  it('still shows Navigator-originated rows under Combined rather than the off-state', async () => {
+    // Combined is not blocked while the other engine is producing.
+    mockRows([makeNavigatorRow('SENSEX', 2, 'CONFIRMED')], off);
+    await renderPane();
+    expect(screen.queryByText('SuperTrend is off')).not.toBeInTheDocument();
+    expect(screen.getAllByText('SENSEX').length).toBeGreaterThan(0);
+  });
+
+  it('never blocks the Navigator lens, which is meant to work with SuperTrend off', async () => {
+    mockRows([makeNavigatorRow('SENSEX', 2, 'CONFIRMED')], off);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
+    expect(screen.queryByText('SuperTrend is off')).not.toBeInTheDocument();
+    expect(screen.getAllByText('SENSEX').length).toBeGreaterThan(0);
+  });
+
+  it('leaves the board alone when the engine is on', async () => {
+    mockRows([makeRow('NIFTY 50', 1, null)]);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^SuperTrend only/ }));
+    expect(screen.queryByText('SuperTrend is off')).not.toBeInTheDocument();
+    expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
   });
 });

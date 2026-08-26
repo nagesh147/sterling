@@ -95,7 +95,11 @@ def premium_stop_from_move(
     """
     if entry_premium <= 0:
         return 0.0
-    return max(0.0, float(entry_premium) + float(delta) * (float(trail_level) - float(spot)))
+    raw_stop = max(0.0, float(entry_premium) + float(delta) * (float(trail_level) - float(spot)))
+    if raw_stop <= 0:
+        return 0.0
+    # Round to nearest 0.05 tick size (multiple of 5 paise, 2 decimals max)
+    return round(round(raw_stop / 0.05) * 0.05, 2)
 
 
 def bs_price(*, spot: float, strike: float, dte_days: float, iv: float,

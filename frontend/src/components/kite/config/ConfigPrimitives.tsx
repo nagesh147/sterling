@@ -5,7 +5,7 @@ import {
 import type { Applies, SectionId } from './registry';
 import { openSettingsSection } from './registry';
 
-const BLUE = '#387ed1';
+const BLUE = 'var(--k-blue-kite)';
 const AMBER = '#b06a13';
 
 const APPLIES_STYLE: Record<Applies, { label: string; color: string; background: string; border: string }> = {
@@ -61,7 +61,7 @@ export function ScopeFilter({ value, onChange }: { value: Scope; onChange: (next
             onClick={() => onChange(option.value)}
             style={{
               border: 'none', minHeight: 28, borderRadius: 6,
-              background: selected ? '#fff' : 'transparent',
+              background: selected ? 'var(--k-bg)' : 'transparent',
               color: selected ? TEXT : MUTED,
               padding: '0 11px', fontSize: 12, fontWeight: 600,
               boxShadow: selected ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
@@ -133,7 +133,7 @@ export function PanelHeader({ saving }: { saving?: boolean }) {
         padding: '5px 10px',
         borderRadius: 4,
         border: `1px solid ${BORDER}`,
-        background: '#fff',
+        background: 'var(--k-bg)',
         color: MUTED,
         fontSize: 11,
         fontWeight: 600,
@@ -202,7 +202,7 @@ export function SettingsDraftBar({
   applyDisabled?: boolean;
   applyTitle?: string;
 }) {
-  const RED = '#c9433e';
+  const RED = 'var(--k-red-brick)';
   const AMBER = '#b06a13';
 
   return (
@@ -214,7 +214,7 @@ export function SettingsDraftBar({
         flexWrap: 'wrap',
         padding: dirty ? '12px 16px' : '8px 16px',
         marginBottom: 16,
-        background: '#fff',
+        background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
         borderRadius: 9,
         boxShadow: '0 1px 2px rgba(0,0,0,.025)',
@@ -253,7 +253,7 @@ export function SettingsDraftBar({
             style={{
               border: 'none',
               background: ORANGE,
-              color: '#fff',
+              color: 'var(--k-bg)',
               borderRadius: 7,
               padding: '8px 16px',
               fontSize: 11.5,
@@ -271,7 +271,7 @@ export function SettingsDraftBar({
             disabled={saving}
             style={{
               border: `1px solid ${BORDER}`,
-              background: '#fff',
+              background: 'var(--k-bg)',
               color: MUTED,
               borderRadius: 7,
               padding: '7px 12px',
@@ -292,7 +292,7 @@ export function SettingsDraftBar({
         disabled={saving}
         style={{
           border: `1px solid ${BORDER}`,
-          background: '#fff',
+          background: 'var(--k-bg)',
           color: resetConfirm ? RED : MUTED,
           borderRadius: 7,
           padding: '7px 12px',

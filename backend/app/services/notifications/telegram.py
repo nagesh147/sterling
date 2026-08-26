@@ -39,3 +39,43 @@ async def send(text: str, parse_mode: str = "HTML",
     except Exception as exc:
         log.warning("Telegram send error: %s", exc)
         return False
+
+
+async def send_lifecycle_transition(
+    symbol: str,
+    option_symbol: str,
+    from_mode: str,
+    to_mode: str,
+    direction: str,
+    ltp: float,
+    pnl_pts: float | None = None,
+    tsl: float | None = None,
+    is_upgrade: bool = True,
+) -> bool:
+    """Send formatted Telegram alert on Adaptive Edge horizon promotion or demotion."""
+    header = "⚡ <b>[ADAPTIVE EDGE] HORIZON PROMOTION</b>" if is_upgrade else "🛡️ <b>[ADAPTIVE EDGE] HORIZON DEMOTION</b>"
+    arrow = "↗" if is_upgrade else "↘"
+    pnl_str = f"+{pnl_pts:.2f} pts" if (pnl_pts is not None and pnl_pts >= 0) else f"{pnl_pts:.2f} pts" if pnl_pts is not None else "N/A"
+    tsl_str = f"₹{tsl:.2f}" if tsl is not None else "Trailing"
+    sub_note = "<i>Stop protection tightened for runner mode.</i>" if is_upgrade else "<i>Giveback protection engaged. Capital preserved.</i>"
+
+    msg = (
+        f"{header}\n"
+        f"<b>Instrument:</b> {symbol} (<code>{option_symbol}</code>)\n"
+        f"<b>Side:</b> {direction.upper()}\n"
+        f"<b>Lifecycle:</b> <code>{from_mode} {arrow} {to_mode}</code>\n"
+        f"<b>LTP:</b> ₹{ltp:.2f} | <b>Gain:</b> {pnl_str}\n"
+        f"<b>Active TSL:</b> {tsl_str}\n"
+        f"{sub_note}"
+    )
+    return await send(msg)
+
+
+async def send_session_cutoff_alert(count_flattened: int = 0) -> bool:
+    """Send 14:45 IST session cutoff flattening alert."""
+    msg = (
+        "⏰ <b>[ADAPTIVE EDGE] 14:45 IST SESSION CUTOFF</b>\n"
+        f"Normal trading cutoff reached. Auto-flattening {count_flattened} active intraday positions.\n"
+        "<i>New entries & promotions locked until tomorrow's session.</i>"
+    )
+    return await send(msg)

@@ -33,5 +33,6 @@ def test_unknown_provider_status_fails_closed_to_unknown():
 
 def test_unknown_status_with_fill_data_is_still_validated():
     mapper = BrokerEventMapper({})
-    with pytest.raises(ValueError, match="fill events require"):
-        mapper.map(event("UNDOCUMENTED_STATUS", filled_quantity=50, fill_price=120.5))
+    result = mapper.map(event("UNDOCUMENTED_STATUS", filled_quantity=50, fill_price=120.5))
+    with pytest.raises(ValueError, match="non-fill events cannot carry fill data"):
+        result.validate()

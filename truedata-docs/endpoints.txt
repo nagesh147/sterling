@@ -1,0 +1,256 @@
+Websocket and REST API
+Endpoints List
+
+v1.0
+
+This document is covered under a Non-Disclosure agreement with the recipient. No Part
+of this document must be reproduced or forwarded to any person other than the
+Intended Recipient. In case you received this document by mistake, please destroy the
+same immediately.
+
+1
+
+Overview
+This document outlines the Market Data APIs and their respective functionalities. These APIs
+provide data on Historical data, Index, futures and options contracts, open interest (OI)
+movements, option chain details, and market movers. They help identify OI gainers/losers,
+most active securities, and top performing or underperforming indices and industries. The
+following tables provides a summary of the available APIs along with a brief description of
+their purpose.
+
+1. Historical REST APIs
+Sr
+1
+
+API Name
+getTickData
+
+2
+3
+
+getLastNTicks
+getBarData
+
+4
+
+getAllBars**
+
+5
+
+getAllTickForSecond **
+
+6
+
+getTradedSymbols
+
+7
+8
+
+getBhavCopyStatus
+getLTP
+
+9
+10
+
+getLTPBulk **
+getIndexComponents
+
+11
+
+getTopGainers
+
+12
+13
+
+getTopLosers
+getTopVolumeGainers
+
+14
+
+getSymbolNameChange
+
+15
+
+getSymbolOptionChain
+
+Description
+Provides historical tick-level market data of a
+given symbol for a specified period.
+Retrieves the last N ticks for a given symbol
+Returns historical bars for a given symbol and
+timeframe.
+Provides all traded bars of a segment for a
+particular minute
+Provides all traded ticks of a segment for a
+particular second
+Returns the list of all active traded symbols for
+the date
+Provides the status of Bhav Copy.
+Fetches the latest traded price (LTP) of a given
+symbol.
+Fetches LTP for multiple symbols in bulk.
+Provides the list of components (stocks) within
+a given index.
+Returns the list of top gaining stocks for the
+day.
+Returns the list of top losing stocks for the day.
+Provides the list of securities with the highest
+trading volumes.
+Provides the history of name change for a
+symbol
+Provides the list of option chain symbols for a
+stock or index
+
+** - add on
+
+2
+
+2. Analytics APIs **
+Sr
+1
+
+API Name
+getOptionChainLive
+
+2
+
+getFuturesWithHighestOI
+
+3
+
+getOptionsWithHighestOI
+
+4
+
+getOIGainers
+
+5
+
+getOIGainersPriceGainers
+
+6
+
+getOIGainersPriceLosers
+
+7
+
+getOILosersPriceGainers
+
+8
+
+getOILosersPriceLosers
+
+9
+
+getOILosers
+
+10
+11
+12
+
+getIndexGainers
+getIndexLosers
+getMostActiveByVolume
+
+13
+
+getMostActiveByTurnover
+
+14
+15
+
+getIndustryGainers
+getIndustryLosers
+
+Description
+Fetches complete live option chain of a particular
+expiry for that second.
+Returns a list of futures contracts with the highest
+open interest (OI).
+Returns a list of option contracts with the highest
+open interest (OI).
+Fetches securities with the highest increase in open
+interest.
+Provides securities where both open interest and
+price have increased.
+Provides securities where open interest increased
+but price decreased.
+Provides securities where open interest decreased
+but price increased.
+Provides securities where both open interest and
+price decreased.
+Fetches securities with the highest decrease in open
+interest.
+Returns the list of top gaining indices.
+Returns the list of top losing indices.
+Provides a list of the most actively traded securities
+by volume.
+Provides a list of the most actively traded securities
+by turnover (value).
+Returns the top gaining industries for the day
+Returns the top losing industries for the day
+
+3. Greeks APIs **
+Sr
+1
+
+API Name
+getOptionChainwithGreeks
+
+2
+3
+
+getLTPwithGreeks
+getTickHistorywithGreeks
+
+Description
+Fetches complete live option chain of a particular expiry
+with Greek values for that second.
+Provides LTP values with Greeks for an option symbol.
+Provides historical data for an option symbol with
+greeks.
+
+3
+
+4. Symbol Master APIs
+Sr
+1
+
+API Name
+getAllSymbols
+
+2
+3
+
+getoptionchain
+getIndexComponents
+
+4
+5
+6
+7
+
+getSymbolExpiryList
+getIndustryList
+getIndices
+getETFlist
+
+8
+
+getunderlyinglist
+
+Description
+Fetches complete live option chain of a particular expiry
+with Greek values for that second.
+Provides LTP values with Greeks for an option symbol.
+Provides historical data for an option symbol with
+greeks.
+Provides upcoming list of expiries for a symbol
+Returns a list of all the Industries
+Returns a list of all indices
+API to fetch the list of Exchange traded funds for a
+particular date.
+
+4
+
+

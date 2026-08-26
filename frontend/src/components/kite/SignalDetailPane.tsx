@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useSterlingKiteEngine';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
-import { parseTradingsymbol } from '../../utils/fmt';
+import { parseTradingsymbol, roundToTick, fmtTick } from '../../utils/fmt';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './SterlingWatchList';
@@ -11,6 +11,7 @@ import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
 import { NavigatorEvidencePanel } from './NavigatorEvidencePanel';
 import { selectBestLegs, stopDistance } from './impactMath';
+import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -86,12 +87,13 @@ function PlanCell({ label, value, title, color }: { label: string; value: string
   );
 }
 
-function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
+function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta, isActive }: {
   leg: OptionDetail; exchange: string;
   underlying: string;
   spotPx?: number;
   isBest?: boolean;
   isBestDelta?: boolean;
+  isActive?: boolean;
 }) {
   const [showDepth, setShowDepth] = useState(false);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -122,12 +124,26 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
 
   const handleAction = (e: React.MouseEvent, type: 'BUY' | 'SELL') => {
     e.stopPropagation();
+    const entryPx = lastPx || leg.entry_premium || leg.last_price || 0;
+    const activeSl = leg.initial_stop_premium ?? leg.trail_stop_premium;
+    const slPercentage =
+      type === 'BUY' && entryPx > 0 && activeSl && activeSl > 0
+        ? -Math.abs(Number((((entryPx - activeSl) / entryPx) * 100).toFixed(1)))
+        : undefined;
+    const tgtPercentage =
+      type === 'BUY' && entryPx > 0 && leg.target_premium && leg.target_premium > 0
+        ? Math.abs(Number((((leg.target_premium - entryPx) / entryPx) * 100).toFixed(1)))
+        : undefined;
+
     openOrderWindow({
       symbol: leg.option_symbol,
       exchange: exchange,
       initialSide: type,
       lotSize: leg.lot_size || 1,
       lastPrice: lastPx || 0,
+      initialSlPct: slPercentage,
+      initialTgtPct: tgtPercentage,
+      tag: 'DIRECTIONAL_SIGNAL',
     });
   };
 
@@ -177,7 +193,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
             <KiteActionButtons
               className="sd-actions"
               variant="long"
-              onBuy={(e) => handleAction(e, 'BUY')}
+              onBuy={isActive === false ? undefined : (e) => handleAction(e, 'BUY')}
               onSell={(e) => handleAction(e, 'SELL')}
               onChart={(e) => { e.stopPropagation(); }}
               onMore={(e) => { e.stopPropagation(); }}
@@ -198,7 +214,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
         if (entry == null && sl == null && tsl == null && tgt == null) return null;
         const breached = lastPx != null && tsl != null && tsl > 0 && lastPx <= tsl;
         const open = lastPx != null && entry != null && entry > 0 ? lastPx - entry : null;
-        const fmt = (v: number | null) => (v != null && v > 0 ? v.toFixed(2) : '—');
+        const fmt = (v: number | null) => (v != null && v > 0 ? fmtTick(v) : '—');
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', borderTop: `1px solid ${k.border}`, background: k.bg }}>
             <PlanCell label="Entry" value={fmt(entry)} title="Premium this signal is measured from." />
@@ -208,7 +224,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
             <PlanCell label="Target" value={fmt(tgt)} color={tgt != null && tgt > 0 ? undefined : k.dim}
               title={tgt != null && tgt > 0 ? "Navigator's AVWAP target for this leg." : 'No fixed target — SuperTrend exits on the trail plus the red counter.'} />
             {open != null && (
-              <PlanCell label="Open P&L" value={`${open >= 0 ? '+' : ''}${open.toFixed(2)}`} color={open >= 0 ? k.green : k.red}
+              <PlanCell label="Open P&L" value={`${open >= 0 ? '+' : ''}${fmtTick(open)}`} color={open >= 0 ? k.green : k.red}
                 title="Live premium minus this signal's entry premium, per unit." />
             )}
             {breached && (
@@ -222,7 +238,19 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
       })()}
 
       {showDepth && (
-        <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.bg }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderTop: `1px solid ${k.border}`, background: k.surface }}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <AdaptiveEdgePositionCalculator
+              symbol={leg.option_symbol || underlying}
+              defaultEntryPrice={roundToTick(leg.entry_premium)}
+              defaultSl={roundToTick(leg.initial_stop_premium)}
+              defaultTsl={roundToTick(leg.trail_stop_premium)}
+              defaultExit={roundToTick(leg.target_premium)}
+              currentLtp={roundToTick(lastPx)}
+              optionType={leg.option_symbol.toUpperCase().endsWith('PE') ? 'PE' : 'CE'}
+              exitState={isActive === false ? 'Closed' : 'HOLD'}
+            />
+          </div>
           <div style={{ display: 'flex' }}>
             <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               <QuoteDetail 
@@ -602,7 +630,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, source, onCl
                     headless
                     data={data}
                     updatedAt={dataUpdatedAt}
-                    onBuy={(leg) => openOrderWindow({
+                    onBuy={data.is_active === false ? undefined : (leg) => openOrderWindow({
                       symbol: leg.option_symbol,
                       exchange: data.exchange,
                       initialSide: 'BUY',
@@ -639,7 +667,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, source, onCl
                       })), sd,
                     );
                     return data.options.map((leg) => (
-                      <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
+                      <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} isActive={data.is_active !== false} />
                     ));
                   })()
                 )}
