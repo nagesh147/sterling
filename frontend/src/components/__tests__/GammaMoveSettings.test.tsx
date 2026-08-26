@@ -157,6 +157,14 @@ describe('GammaMoveSettings — structure and terminology', () => {
     expect(text).not.toContain('Universe');
   });
 
+  it('opens the Contracts section rather than hiding it behind a disclosure', () => {
+    render(<GammaMoveSettings />);
+    const heading = [...document.querySelectorAll('summary')]
+      .find((el) => /Contracts/.test(el.textContent ?? ''));
+    expect(heading).toBeTruthy();
+    expect((heading!.closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
+
   it('uses the shared contract vocabulary, not a private one', () => {
     render(<GammaMoveSettings />);
     const text = document.body.textContent ?? '';
