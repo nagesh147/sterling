@@ -72,3 +72,28 @@ export function nextSessionIso(now = new Date()): string {
   }
   return today;
 }
+
+/** Previous or next NSE cash session, skipping weekends and holidays. */
+export function shiftSessionIso(iso: string, dir: 1 | -1): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  let cursor = utcFromIstParts(y, m, d, 12, 0, 0);
+  for (let i = 0; i < 14; i++) {
+    cursor = new Date(cursor.getTime() + dir * 24 * 60 * 60 * 1000);
+    const next = formatIstIsoDate(cursor);
+    if (!isNseClosed(next)) return next;
+  }
+  return iso;
+}
+
+/** If the picker lands on a weekend/holiday, walk back to the last open session. */
+export function nearestOpenIso(iso: string): string {
+  if (!isNseClosed(iso)) return iso;
+  const [y, m, d] = iso.split("-").map(Number);
+  let cursor = utcFromIstParts(y, m, d, 12, 0, 0);
+  for (let i = 0; i < 14; i++) {
+    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+    const next = formatIstIsoDate(cursor);
+    if (!isNseClosed(next)) return next;
+  }
+  return iso;
+}

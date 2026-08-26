@@ -120,7 +120,7 @@ export function SessionStrip({
         </defs>
         <rect x="0" y={TAPE_TOP} width={W} height={TAPE_H} className="ko-strip-tapebg" />
         {spark ? (
-          <path d={spark.d} fill="none" stroke={spark.up ? "#4caf50" : "#df514c"} strokeWidth="1.4" />
+          <path d={spark.d} fill="none" className={spark.up ? "ko-strip-upline" : "ko-strip-downline"} strokeWidth="1.4" />
         ) : (
           <text x="8" y={TAPE_TOP + 20} className="ko-strip-empty">
             {tape && tape.bars.length ? "Tape outside this session" : "Tape —"}
