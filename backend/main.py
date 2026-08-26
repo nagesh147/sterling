@@ -1539,6 +1539,11 @@ async def lifespan(app: FastAPI):
     # is disabled or unsized, which is the default.
     from app.services.atm_premium_imbalance_runner import auto_arm_loop
     atm_auto_arm_task = asyncio.create_task(auto_arm_loop(interval=30))
+
+    # Gamma Move: levels -> strikes -> trigger, on the strategy's own cadence.
+    # The loop is a no-op while the strategy is disabled, which is its default.
+    from app.services.gamma_move_runner import auto_scan_loop as _gamma_move_scan
+    gamma_move_task = asyncio.create_task(_gamma_move_scan(interval=300))
     log.info("ATM PI auto-arm loop started (every 30s)")
 
     # Arbitrator fake log worker for UI parity — only runs when crypto is on
@@ -1700,6 +1705,11 @@ async def lifespan(app: FastAPI):
     atm_auto_arm_task.cancel()
     try:
         await atm_auto_arm_task
+    except (Exception, BaseException):
+        pass
+    gamma_move_task.cancel()
+    try:
+        await gamma_move_task
     except (Exception, BaseException):
         pass
 
