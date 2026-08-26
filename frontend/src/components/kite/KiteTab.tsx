@@ -44,6 +44,7 @@ import type { SignalChartData } from '../../types/kiteEngine';
 import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 import { AdaptiveEdgePane } from './AdaptiveEdgePane';
 import { UnifiedBacktestPane } from '../backtest/UnifiedBacktestPane';
+import { AstroPane } from './AstroPane';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -167,6 +168,7 @@ export function KiteTab() {
     );
   } else {
     if (nav === 'dashboard') content = <KiteDashboard />;
+    else if (nav === 'astro') content = <AstroPane />;
     else if (nav === 'orders') content = <OrdersPane onOpenBasket={() => setBasketOpen(true)} />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
