@@ -13,18 +13,15 @@ from .models import TradeRecord
 
 
 def risk_multiplier(record: TradeRecord, cfg: GammaMoveConfig) -> float:
-    """1.0 normally, ``descale_factor`` while a losing streak is live.
+    """1.0 normally, ``descale_factor`` while size is cut.
 
-    Restoration is driven by consecutive *wins*, so a single winner inside a bad
-    run does not put full size back on. The streak counters live on the record,
-    which is also what the board shows -- one source, so the number an operator
-    reads is the number the sizer used.
+    Reads the record's latched ``descaled`` flag rather than re-deriving from
+    the live streak. Deriving is wrong and subtly so: a single winner resets
+    ``consecutive_losses``, so a run of three losses followed by one small win
+    would restore full size immediately -- the opposite of the rule, and exactly
+    when the account can least afford it.
     """
-    if record.consecutive_losses >= cfg.descale_after_losses:
-        if record.consecutive_wins >= cfg.rescale_after_wins:
-            return 1.0
-        return cfg.descale_factor
-    return 1.0
+    return cfg.descale_factor if record.descaled else 1.0
 
 
 def lots_for(entry: float, stop: float, lot_size: int, cfg: GammaMoveConfig,

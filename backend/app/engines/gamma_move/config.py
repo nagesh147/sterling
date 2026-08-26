@@ -13,8 +13,11 @@ it rather than the story:
   30% favourable excursion within two sessions 24.7% of the time [20.9, 28.9]
   against an unconditional 21.7% [21.5, 21.9]. The intervals overlap.
 * **The level filter is what carries it.** Restricting the same triple to bars
-  where spot sat within 1% of a confirmed level lifted that to 45.0%
-  [30.7, 60.2] -- a lower bound above the baseline's upper bound.
+  where spot sat within 1% of a confirmed level lifted that to 46.2%
+  [31.6, 61.4] -- a lower bound above the baseline's upper bound. (Re-measured
+  through the shipped :func:`levels.find_levels` after a plateau bug in the
+  pivot rule was fixed; the earlier figure through the study's own copy was
+  45.0% [30.7, 60.2].)
 * **The regime multiplier was actively harmful at the obvious default.**
   SuperTrend at multiplier 3.0 made agreeing trades *worse* than disagreeing
   ones (-3.3pp at period 10). At multiplier 2.0 the sign flips and holds
@@ -56,7 +59,7 @@ BARS_PER_SESSION: dict[str, int] = {"5minute": 75, "15minute": 25, "30minute": 1
 #: beside each number instead of asking the reader to trust it.
 CALIBRATION = {
     "sample": "598 contracts / 104 underlyings / 193,135 15m OI bars, 2026-08-26",
-    "level_proximity_pct": "1.0 — MFE>=30% 45.0% [30.7,60.2] vs 21.7% [21.5,21.9] baseline",
+    "level_proximity_pct": "1.0 — MFE>=30% 46.2% [31.6,61.4] vs 21.7% [21.5,21.9] baseline (n=39)",
     "min_oi_drop_pct": "3.0 — the 98.6th percentile of observed bar-on-bar OI drops",
     "volume_spike_mult": "2.5 — the 87th percentile of volume against a 20-bar mean",
     "min_price_gain_pct": "2.0 — the 93rd percentile of bar-on-bar premium change",

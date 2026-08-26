@@ -226,12 +226,18 @@ class TradeRecord:
     losses: int = 0
     consecutive_losses: int = 0
     consecutive_wins: int = 0
+    #: Whether size is currently cut. Latched, not derived from the live streak:
+    #: a single winner resets consecutive_losses, and deriving from that would
+    #: put full size back on after one good trade in the middle of a bad run --
+    #: which is the opposite of what the rule is for.
+    descaled: bool = False
     realised_inr: float = 0.0
     day_realised_inr: float = 0.0
     day: str = ""
     history: list = field(default_factory=list)
 
-    def record(self, pnl_inr: float, day: str) -> None:
+    def record(self, pnl_inr: float, day: str, *, descale_after: int = 3,
+               rescale_after: int = 2) -> None:
         if day != self.day:
             self.day, self.day_realised_inr = day, 0.0
         self.trades += 1
@@ -245,6 +251,10 @@ class TradeRecord:
             self.losses += 1
             self.consecutive_losses += 1
             self.consecutive_wins = 0
+        if self.consecutive_losses >= descale_after:
+            self.descaled = True
+        elif self.descaled and self.consecutive_wins >= rescale_after:
+            self.descaled = False
         self.history.append({"pnl_inr": q2(pnl_inr), "day": day})
 
     def as_dict(self) -> dict:
@@ -252,6 +262,7 @@ class TradeRecord:
                 "win_rate": q2(100.0 * self.wins / self.trades) if self.trades else None,
                 "consecutive_losses": self.consecutive_losses,
                 "consecutive_wins": self.consecutive_wins,
+                "descaled": self.descaled,
                 "realised_inr": q2(self.realised_inr),
                 "day_realised_inr": q2(self.day_realised_inr), "day": self.day,
                 "verdict": ("no realised trades yet" if not self.trades

@@ -4,19 +4,19 @@ import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
 import { AdaptiveEdgeBoard } from './board/AdaptiveEdgeBoard';
 import { AtmPremiumImbalanceBoard } from './board/AtmPremiumImbalanceBoard';
-import { SmartMoneyOptionsBoard } from './board/SmartMoneyOptionsBoard';
+import { GammaMoveBoard } from './board/GammaMoveBoard';
 import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
 import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
 import { orbToBoard } from './board/orbAdapter';
 import { atmPremiumImbalanceToBoard } from './board/atmPremiumImbalanceAdapter';
-import { smartMoneyOptionsToBoard } from './board/smartMoneyOptionsAdapter';
+import { gammaMoveToBoard } from './board/gammaMoveAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
-import { useSmartMoneyOptionsSnapshot, useSmartMoneyOptionsConfig } from '../../hooks/useSmartMoneyOptions';
+import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { k } from '../../styles/kiteUI';
 
@@ -46,7 +46,7 @@ const NAV_TARGET: Record<string, EngineId> = {
   adaptiveEdge: 'adaptive_edge',
   orbOptions: 'orb',
   atmPremiumImbalance: 'atm_premium_imbalance',
-  smartMoneyOptions: 'smart_money_options',
+  gammaMove: 'gamma_move',
 };
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
@@ -61,15 +61,14 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   const orbEnabled = orbConfig.data?.config?.enabled;
   const orb = useOrbSignals(orbEnabled !== false);
   const apiSnapshot = useAtmPremiumImbalanceSnapshot();
-  const smoSnapshot = useSmartMoneyOptionsSnapshot();
-  const smoConfig = useSmartMoneyOptionsConfig();
+  const gmSnapshot = useGammaMoveSnapshot();
 
   const tabs: EngineTabState[] = useMemo(() => {
     const st = supertrendToBoard(engineSignals.data?.rows ?? []);
     const ae = snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : [];
     const ob = orb.signals.map(orbToBoard);
     const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
-    const smo = smartMoneyOptionsToBoard(smoSnapshot.data);
+    const gm = gammaMoveToBoard(gmSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
     return [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
@@ -81,11 +80,14 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
       { id: 'atm_premium_imbalance',
         running: !!apiSnapshot.data?.session && !apiSnapshot.data.session.finished,
         live: live(api), scanned: api.length },
-      { id: 'smart_money_options',
-        running: smoConfig.data?.config?.enabled !== false,
-        live: live(smo), scanned: smo.length },
+      // Scanning, not armed: this engine is running whenever it is enabled and
+      // inside its session, so the tab follows the config rather than a session.
+      { id: 'gamma_move',
+        running: gmSnapshot.data?.config?.enabled === true,
+        live: live(gm), scanned: gm.length },
     ];
-  }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled, apiSnapshot.data, smoSnapshot.data, smoConfig.data]);
+  }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled,
+      apiSnapshot.data, gmSnapshot.data]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
@@ -111,8 +113,8 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         {engine === 'atm_premium_imbalance' && (
           <AtmPremiumImbalanceBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
-        {engine === 'smart_money_options' && (
-          <SmartMoneyOptionsBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
+        {engine === 'gamma_move' && (
+          <GammaMoveBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
       </div>
     </div>

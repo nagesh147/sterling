@@ -28,10 +28,18 @@ def swing_pivots(candles: Sequence[Candle], lookback: int) -> tuple[list, list]:
     highs, lows = [], []
     n = len(candles)
     for i in range(lookback, n - lookback):
-        window = candles[i - lookback:i + lookback + 1]
-        if candles[i].high >= max(c.high for c in window):
+        left = candles[i - lookback:i]
+        right = candles[i + 1:i + lookback + 1]
+        # Strictly greater on the right, greater-or-equal on the left. A plain
+        # `>=` on both sides makes every bar of a flat stretch a pivot, which
+        # manufactures a level with dozens of "touches" out of a quiet range --
+        # conviction invented from noise. This picks the last bar of a plateau
+        # and no others.
+        if (candles[i].high >= max(c.high for c in left)
+                and candles[i].high > max(c.high for c in right)):
             highs.append((candles[i].high, candles[i].ts_ms))
-        if candles[i].low <= min(c.low for c in window):
+        if (candles[i].low <= min(c.low for c in left)
+                and candles[i].low < min(c.low for c in right)):
             lows.append((candles[i].low, candles[i].ts_ms))
     return highs, lows
 

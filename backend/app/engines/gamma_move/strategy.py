@@ -208,7 +208,9 @@ class GammaMoveStrategy:
 
     def on_exit(self, pos: PositionState, price: float, today: str) -> float:
         pnl = exits.realised_inr(pos, price)
-        self.state.record.record(pnl, today)
+        self.state.record.record(pnl, today,
+                                 descale_after=self.cfg.descale_after_losses,
+                                 rescale_after=self.cfg.rescale_after_wins)
         self.state.positions.pop(pos.instrument.tradingsymbol, None)
         if not self.state.positions:
             self.state.phase = Phase.WATCHING

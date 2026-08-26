@@ -153,7 +153,7 @@ def descriptor() -> dict:
         "headline_finding": (
             "The entry triple alone did not separate from baseline (24.7% [20.9,28.9] vs "
             "21.7% [21.5,21.9] reaching +30% within two sessions). The measured edge is "
-            "the level filter: 45.0% [30.7,60.2] when spot sits within 1% of a level."
+            "the level filter: 46.2% [31.6,61.4] when spot sits within 1% of a level."
         ),
     }
 

@@ -1,0 +1,131 @@
+/**
+ * The settings panel.
+ *
+ * What matters here is provenance. Seven of this engine's defaults were
+ * measured, and one of them is set to an unconventional value because the
+ * conventional one inverted the gate. A number whose reason lives only in a
+ * document gets changed by the next person to open the page, so the panel has
+ * to carry the measurement next to the control.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
+import { GammaMoveSettings } from '../GammaMoveSettings';
+
+let cfgQuery: any;
+let updateState: any;
+
+vi.mock('../../hooks/useGammaMove', () => ({
+  useGammaMoveConfig: () => cfgQuery,
+  useUpdateGammaMove: () => updateState,
+}));
+
+const DEFAULTS = {
+  enabled: false, include_indices: false, max_universe: 150, explicit_symbols: [],
+  min_option_oi: 50000, min_option_volume: 1000, min_option_premium: 10,
+  max_spread_pct: 3, level_timeframe: 'day', level_lookback_days: 120,
+  pivot_lookback: 5, level_cluster_pct: 0.75, min_level_touches: 2,
+  level_proximity_pct: 1.0, strike_window_pct: 2, max_candidates: 25,
+  min_days_to_expiry: 1, max_days_to_expiry: 14, trigger_timeframe: '15minute',
+  volume_lookback: 20, min_oi_drop_pct: 3, volume_spike_mult: 2.5,
+  min_price_gain_pct: 2, confirm_bars: 1, regime_enabled: true,
+  regime_timeframe: 'day', regime_period: 10, regime_multiplier: 2,
+  stop_basis: 'PERCENT', swing_lookback: 6, stop_percent: 30, stop_points: 0,
+  exit_policy: 'TIME_STOP', max_hold_days: 2, target_pct: 0, trail_pct: 0,
+  trail_start_pct: 0, close_at_session_end: false, protection_mode: 'NONE',
+  session_start: '09:30', session_end: '15:15', scan_interval_seconds: 300,
+  sizing_mode: 'RISK_PCT', risk_per_trade_pct: 1, capital_inr: 500000, lots: 0,
+  max_concurrent_positions: 3, max_new_trades_per_day: 2,
+  max_premium_at_risk_inr: 60000, daily_loss_limit_inr: 10000,
+  descale_after_losses: 3, descale_factor: 0.5, rescale_after_wins: 2,
+  data_source: 'kite', execution_mode: 'paper',
+};
+
+const STRATEGY = {
+  id: 'gamma_move', name: 'Gamma Move', contract_version: 'A310.2',
+  tagline: 'Buys the option that writers are covering at a level.',
+  how_it_works: 'Finds F&O stocks at a level…',
+  provenance: 'Transcribed from a public podcast walkthrough.',
+  live_ready: false, enabled: false,
+  calibrated_fields: ['level_proximity_pct', 'min_oi_drop_pct', 'volume_spike_mult',
+                      'min_price_gain_pct', 'regime_multiplier', 'stop_percent',
+                      'min_option_premium'],
+  calibration: {
+    sample: '598 contracts / 104 underlyings / 193,135 15m OI bars',
+    level_proximity_pct: '1.0 — MFE>=30% 46.2% [31.6,61.4] vs 21.7% baseline',
+    regime_multiplier: '2.0 — +5.1pp; multiplier 3.0 measured -3.3pp, i.e. inverted',
+    min_oi_drop_pct: '3.0 — the 98.6th percentile',
+    volume_spike_mult: '2.5 — the 87th percentile',
+    min_price_gain_pct: '2.0 — the 93rd percentile',
+    stop_percent: '30.0 — hit by 16% of calibrated signals',
+    min_option_premium: '10.0 — below this the tick is a >0.5% quantum',
+  },
+  headline_finding: 'The entry triple alone did not separate from baseline.',
+};
+
+beforeEach(() => {
+  cfgQuery = {
+    isLoading: false,
+    data: {
+      strategy: STRATEGY,
+      config: { ...DEFAULTS },
+      defaults: { ...DEFAULTS },
+      vocabularies: {},
+      research_only: { exit_policy: ['PERCENT_TARGET', 'TRAILING_STOP'] },
+      live_requires: {},
+    },
+  };
+  updateState = { mutate: vi.fn(), isPending: false };
+});
+
+describe('GammaMoveSettings', () => {
+  it('states the finding before any control', () => {
+    render(<GammaMoveSettings />);
+    expect(screen.getByText(/Not validated/)).toBeTruthy();
+    expect(screen.getByText(/did not separate from baseline/)).toBeTruthy();
+  });
+
+  it('carries the measurement next to each calibrated control', () => {
+    render(<GammaMoveSettings />);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('46.2%');
+    // The trap, spelled out where someone would change it.
+    expect(text).toContain('inverted');
+  });
+
+  it('warns that widening the proximity band trades away the edge', () => {
+    render(<GammaMoveSettings />);
+    expect(document.body.textContent).toContain('load-bearing');
+  });
+
+  it('marks the unsupported exit policies as unable to run live', () => {
+    render(<GammaMoveSettings />);
+    // ChoiceRow puts an option's hint in its title, not in the visible text.
+    const titles = [...document.querySelectorAll('[title]')]
+      .map((el) => el.getAttribute('title') ?? '');
+    expect(titles.filter((t) => t.includes('Cannot run live.'))).toHaveLength(2);
+  });
+
+  it('does not send anything until the draft is applied', () => {
+    render(<GammaMoveSettings />);
+    fireEvent.click(screen.getByRole('switch', { name: /gamma move engine/i }));
+    expect(updateState.mutate).not.toHaveBeenCalled();
+  });
+
+  it('applies the whole draft when asked', () => {
+    render(<GammaMoveSettings />);
+    fireEvent.click(screen.getByRole('switch', { name: /gamma move engine/i }));
+    const apply = screen.getAllByRole('button')
+      .find((b) => /apply/i.test(b.textContent ?? ''));
+    expect(apply).toBeTruthy();
+    fireEvent.click(apply!);
+    expect(updateState.mutate).toHaveBeenCalledTimes(1);
+    expect(updateState.mutate.mock.calls[0][0].enabled).toBe(true);
+  });
+
+  it('shows a loading state rather than an empty form', () => {
+    cfgQuery = { isLoading: true, data: undefined };
+    render(<GammaMoveSettings />);
+    expect(screen.getByText(/Loading strategy settings/)).toBeTruthy();
+  });
+});
