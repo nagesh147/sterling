@@ -189,7 +189,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
                     fontSize: 11, padding: '6px 14px', cursor: 'pointer', fontWeight: 600,
                     border: 'none', borderLeft: i === 0 ? 'none' : `1px solid ${k.border}`,
                     background: active ? k.orange : 'transparent',
-                    color: active ? '#fff' : k.dim, transition: 'background .15s, color .15s',
+                    color: active ? 'var(--k-bg)' : k.dim, transition: 'background .15s, color .15s',
                   }}>{q.label}</button>
               );
             })}
@@ -297,7 +297,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
                   <td style={td('left')}>
                     {onBuy && (
                       <button onClick={() => onBuy(r.leg)} title="Buy this strike"
-                        style={{ fontSize: 11, padding: '5px 12px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
+                        style={{ fontSize: 11, padding: '5px 12px', background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
                         B
                       </button>
                     )}

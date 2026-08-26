@@ -301,7 +301,7 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
       const pts = [...drawingPoints, pt];
       setDrawingPoints(pts);
       if (pts.length === 3) {
-        const newDrawing: Drawing = { id: Date.now(), type: 'pitchfork', points: pts, color: '#ff9800' };
+        const newDrawing: Drawing = { id: Date.now(), type: 'pitchfork', points: pts, color: 'var(--k-amber-2)' };
         setDrawings(prev => [...prev, newDrawing]);
         setDrawingPoints([]);
       }

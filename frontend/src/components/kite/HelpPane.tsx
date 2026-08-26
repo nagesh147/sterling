@@ -6,8 +6,8 @@ import { AdaptiveEdgeHelpVisualizer } from './AdaptiveEdgeHelpVisualizer';
 function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <h2 style={{ margin: 0, color: '#333', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
-      <p style={{ margin: '6px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
+      <h2 style={{ margin: 0, color: 'var(--k-ink-1)', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
+      <p style={{ margin: '6px 0 0', color: 'var(--k-ink-5)', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
     </div>
   );
 }
@@ -34,7 +34,7 @@ export function HelpPane() {
   const [activeTab, setActiveTab] = useState<'adaptive_edge' | 'navigator'>('adaptive_edge');
 
   return (
-    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '28px 30px 48px', background: '#f7f7f8', minHeight: '100%', fontFamily: k.fontFamily }}>
+    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '28px 30px 48px', background: 'var(--k-surface-sunken-2)', minHeight: '100%', fontFamily: k.fontFamily }}>
       <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
         
         {/* Header with Tab Navigation */}
@@ -95,7 +95,7 @@ export function HelpPane() {
 
         {/* Tab 2: Navigator & Signals Guide (Also rendered in DOM for testing & complete reference) */}
         <div style={{ display: activeTab === 'navigator' ? 'block' : 'none' }}>
-          <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+          <section style={{ background: 'var(--k-bg)', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
             <Section
               title="What the Value-Flow Navigator is"
               description="One paragraph, plain English."

@@ -35,7 +35,8 @@ expiry/leverage selection) and its smaller sibling `derivatives_native`, `edge`
 `analytics` (walk-forward, sensitivity, correlation, CPCV, Monte Carlo — pure
 functions, no I/O), `risk` (drawdown circuit breaker, greeks budget, slippage,
 microstructure veto — stateful singletons via DI), `indicators`, `ml`,
-`backtest`, `arbitration`, `common`. Each is self-contained. `scalping/` and
+`backtest`, `arbitration`, `common`, and `atm_premium_imbalance`
+(reverse-engineered — see below). Each is self-contained. `scalping/` and
 `triple_supertrend/` are legacy dirs, now empty — their logic was consolidated
 into `sterling_engine`/`directional`; do not add new code there.
 
@@ -56,6 +57,29 @@ architecture supports statistical-arbitrage and others as new engines.
 3. Route generated signals through the `OrderRouter` (paper first) — the same
    path for backtest, paper, shadow, and live ([EXECUTION.md](EXECUTION.md)).
 4. Keep the strategy broker/market-agnostic: no adapter imports, no order calls.
+
+## Reverse-engineered strategies
+
+One strategy in this repo was not designed here. `atm_premium_imbalance`
+(`app/engines/atm_premium_imbalance/`) was reconstructed from screen recordings
+of a third-party bot, so it carries a documentation obligation the others do
+not: every rule traces to the frame it came from, and every default records its
+provenance. See `docs/strategy/atm-premium-imbalance/` — the contract (A230),
+the evidence matrix (A231), what was rejected (A232) and the conformance report.
+
+If you add another of these, keep the three-way separation that made this one
+reviewable:
+
+- **compatibility** behaviour — reproduces the source system, even where that
+  is not what you would build;
+- **validated** behaviour — what a replay actually proves;
+- **research** behaviour — hypotheses, reachable but never a default, and
+  refused outright in live mode by `config.validate()`.
+
+A parameter reconstructed from a recording is not a discovered rule. Encode the
+provenance and do not call it canonical until a replay proves it — the spec for
+this strategy proposed an `entry_buffer_points = 10.25` that a second recording
+falsified outright, because the number was measured slippage, not a setting.
 
 ## Why isolation matters
 

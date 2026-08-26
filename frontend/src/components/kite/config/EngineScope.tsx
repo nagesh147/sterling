@@ -17,7 +17,7 @@ export function ScopeLink({ groupLabel, linked, onChange, sharedLabel = 'Like Su
       onClick={() => onChange(next)}
       style={{
         border: 'none', minHeight: 28, borderRadius: 6, padding: '0 11px',
-        background: active ? '#fff' : 'transparent', color: active ? TEXT : MUTED,
+        background: active ? 'var(--k-bg)' : 'transparent', color: active ? TEXT : MUTED,
         fontSize: 11, fontWeight: active ? 700 : 550, fontFamily: 'inherit',
         cursor: 'pointer', whiteSpace: 'nowrap',
         boxShadow: active ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',

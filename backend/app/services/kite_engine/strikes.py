@@ -161,9 +161,50 @@ def _select_row(rows: Sequence[dict], *, spot: float, want_call: bool, moneyness
     return valid[min(requested_depth, len(valid)) - 1]
 
 
+
+def in_expiry_window(row: dict, *, min_dte: int = 0, max_dte: Optional[int] = None,
+                     avoid_expiry_day: bool = False) -> bool:
+    """Whether a chain row's days-to-expiry falls inside the configured window.
+
+    One predicate for every engine, so "minimum days to expiry" cannot come to
+    mean one thing on the SuperTrend page and another on Gamma Move's.
+
+    Defaults are permissive on purpose: every existing caller passes nothing and
+    must keep resolving exactly the contracts it resolved before.
+    """
+    dte = int(row.get("dte", 0))
+    if avoid_expiry_day and dte == 0:
+        return False
+    if dte < int(min_dte):
+        return False
+    return max_dte is None or dte <= int(max_dte)
+
+
+def expiry_window_of(cfg, fallback=None) -> dict:
+    """The expiry-window kwargs for a config, ready to splat into the pickers.
+
+    Takes any object carrying the three shared field names, so one call site
+    works for every engine. ``fallback`` covers Navigator, whose fields are
+    Optional and mean "follow the Kite engine's" when unset — resolved here so
+    that rule lives in one place rather than at each call site.
+    """
+    def pick(name, default):
+        value = getattr(cfg, name, None)
+        if value is None and fallback is not None:
+            value = getattr(fallback, name, None)
+        return default if value is None else value
+
+    return {
+        "min_dte": int(pick("expiry_dte_min", 0)),
+        "max_dte": pick("expiry_dte_max", None),
+        "avoid_expiry_day": bool(pick("avoid_expiry_day", False)),
+    }
+
+
 def pick_strike(
     chain: Sequence[dict], *, spot: float, direction: str,
     moneyness: Moneyness = "ATM", min_dte: int = 0,
+    max_dte: Optional[int] = None, avoid_expiry_day: bool = False,
     expiry_types: Sequence[ExpiryType] = (), expiry_type: Optional[ExpiryType] = None,
     expiry_rank: int = 0, today: Optional[date] = None,
 ) -> Optional[OptionPick]:
@@ -177,7 +218,8 @@ def pick_strike(
     rows = [
         row for row in chain
         if str(row.get("option_type", "")).lower() == wanted_type
-        and int(row.get("dte", 0)) >= min_dte
+        and in_expiry_window(row, min_dte=min_dte, max_dte=max_dte,
+                             avoid_expiry_day=avoid_expiry_day)
     ]
     current = today or date.today()
     if expiry_type is not None:
@@ -248,6 +290,7 @@ def _default_series(expiry_types: Sequence[ExpiryType]) -> dict[ExpiryType, Sequ
 def pick_strikes(
     chain: Sequence[dict], *, spot: float, direction: str,
     moneynesses: Sequence[Moneyness], min_dte: int = 0,
+    max_dte: Optional[int] = None, avoid_expiry_day: bool = False,
     expiry_types: Sequence[ExpiryType] = (),
     expiry_ranks_by_type: Optional[dict[ExpiryType, Sequence[int]]] = None,
     today: Optional[date] = None,
@@ -263,7 +306,8 @@ def pick_strikes(
             for moneyness in moneynesses:
                 pick = pick_strike(
                     chain, spot=spot, direction=direction, moneyness=moneyness,
-                    min_dte=min_dte, expiry_types=expiry_types,
+                    min_dte=min_dte, max_dte=max_dte,
+                    avoid_expiry_day=avoid_expiry_day, expiry_types=expiry_types,
                     expiry_type=kind, expiry_rank=int(rank), today=today,
                 )
                 if pick and pick.option_symbol not in seen:
@@ -275,6 +319,7 @@ def pick_strikes(
 def pick_contracts(
     chain: Sequence[dict], *, spot: float,
     moneynesses: Sequence[Moneyness], min_dte: int = 0,
+    max_dte: Optional[int] = None, avoid_expiry_day: bool = False,
     expiry_types: Sequence[ExpiryType] = (),
     expiry_ranks_by_type: Optional[dict[ExpiryType, Sequence[int]]] = None,
     today: Optional[date] = None,
@@ -303,7 +348,8 @@ def pick_contracts(
 def pick_by_delta(
     chain: Sequence[dict], *, spot: float, direction: str,
     target_delta: float = 0.90, iv: float = 0.18,
-    min_dte: int = 0, expiry_types: Sequence[ExpiryType] = (),
+    min_dte: int = 0, max_dte: Optional[int] = None, avoid_expiry_day: bool = False,
+    expiry_types: Sequence[ExpiryType] = (),
     expiry_type: Optional[ExpiryType] = None, expiry_rank: int = 0,
     today: Optional[date] = None,
 ) -> Optional[OptionPick]:
@@ -314,7 +360,8 @@ def pick_by_delta(
     rows = [
         row for row in chain
         if str(row.get("option_type", "")).lower() == wanted_type
-        and int(row.get("dte", 0)) >= min_dte
+        and in_expiry_window(row, min_dte=min_dte, max_dte=max_dte,
+                             avoid_expiry_day=avoid_expiry_day)
     ]
     current = today or date.today()
     if expiry_type is not None:

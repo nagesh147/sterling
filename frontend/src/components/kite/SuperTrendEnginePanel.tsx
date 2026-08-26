@@ -131,7 +131,6 @@ export function SuperTrendEnginePanel() {
           description="Which price series SuperTrend reads a setup from."
           summary={scanSourceLabel(cfg.scan_source)}
           defaultOpen
-        
           persistKey="st-chart">
           <SignalSourceGroup
             name="supertrend-signal-source"
@@ -145,7 +144,6 @@ export function SuperTrendEnginePanel() {
           description="The indices and F&O stocks this engine watches."
           summary={instrumentsSummary}
           defaultOpen
-        
           persistKey="st-instruments">
           <InstrumentsGroup
             idPrefix="SuperTrend"
@@ -162,11 +160,21 @@ export function SuperTrendEnginePanel() {
           description="Which strikes and expiry cycles SuperTrend resolves."
           summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
           defaultOpen
-        
           persistKey="st-contracts">
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
+            dteMin={cfg.expiry_dte_min ?? 0}
+            dteMax={cfg.expiry_dte_max ?? 400}
+            avoidExpiryDay={cfg.avoid_expiry_day ?? false}
+            dteDefaults={{ min: 0, max: 400 }}
+            dteNote={
+              <>
+                Separate from the expiry square-off below: this decides which
+                contracts may be <em>entered</em>, that one closes a position
+                already held as its contract runs out.
+              </>
+            }
             onChange={(next) => patch(next)}
           />
         </Section>
@@ -176,7 +184,6 @@ export function SuperTrendEnginePanel() {
           description="Which line the stop follows once a trade is running."
           summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`}
           defaultOpen
-        
           persistKey="st-trail">
           <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}>
             <ChoiceRow
@@ -202,7 +209,6 @@ export function SuperTrendEnginePanel() {
           description="What closes a SuperTrend trade."
           summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`}
           defaultOpen
-        
           persistKey="st-exit">
           <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}>
             <ChoiceRow

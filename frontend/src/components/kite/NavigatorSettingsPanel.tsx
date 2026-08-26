@@ -21,10 +21,10 @@ import {
   AVWAP_DEFAULTS, FLOW_DEFAULTS, FUSION_DEFAULTS, GAMMA_DEFAULTS, RANGES_DEFAULTS, ROOT_DEFAULTS, VOLATILITY_DEFAULTS,
 } from './navigatorDefaults';
 
-const GREEN = '#4caf50';
-const RED = '#df514c';
-const AMBER = '#f5a623';
-const MANUAL_BLUE = '#1565c0';
+const GREEN = 'var(--k-green)';
+const RED = 'var(--k-red)';
+const AMBER = 'var(--k-amber)';
+const MANUAL_BLUE = 'var(--k-blue-deep)';
 
 const NUM_INPUT_CSS = `
 .nav-settings-input::-webkit-outer-spin-button,
@@ -86,11 +86,11 @@ function StrategyDefinitionGroup({ badgeText, children }: { badgeText: string; c
             Kept nested so they are not changed by accident while tuning other knobs.
           </div>
         </div>
-        <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#fff3e0', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: 'var(--k-tint-amber)', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {badgeText}
         </span>
       </summary>
-      <div style={{ background: '#fff' }}>{children}</div>
+      <div style={{ background: 'var(--k-bg)' }}>{children}</div>
     </details>
   );
 }
@@ -186,7 +186,7 @@ function ManualControl({ spec, config, onReset, children }: {
         </div>
         <span
           aria-label="From the source manual"
-          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: '#fff', background: MANUAL_BLUE, borderRadius: '50%' }}
+          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: 'var(--k-bg)', background: MANUAL_BLUE, borderRadius: '50%' }}
         >
           M
         </span>
@@ -339,7 +339,7 @@ export function NavigatorSettingsPanel() {
         offNote="Not scanning. SuperTrend can still run on its own."
       >
         {conflict && (
-          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: `1px solid #e2b6a4`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: 'var(--k-surface-warm)', border: `1px solid var(--k-border-brand)`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
             <Icons.Warning />
             <span style={{ flex: 1, color: TEXT }}>This config changed elsewhere. Reload or Apply to overwrite.</span>
             <button type="button" onClick={handleReload} style={{ ...pillButtonStyle }}>Reload latest</button>
@@ -424,7 +424,7 @@ export function NavigatorSettingsPanel() {
             })}
           />
           {customScopeEmpty && (
-            <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ padding: '9px 11px', borderRadius: 7, background: 'var(--k-surface-warm)', border: '1px solid var(--k-border-brand)', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
               <Icons.Warning />
               Pick at least one index or stock — an empty list means Navigator scans nothing at all.
             </div>
@@ -478,10 +478,22 @@ export function NavigatorSettingsPanel() {
           <ContractsGroup
             strikes={draft.strike_moneyness ?? engineCfg?.strike_moneyness ?? ['ATM']}
             indexExpiries={draft.scan_expiries_indices ?? ['weekly', 'monthly']}
+            /* Unset means "follow SuperTrend", the same rule the strike ladder
+               and expiry cycles above already use — so the box shows what
+               Navigator will actually do, not a blank. */
+            dteMin={draft.expiry_dte_min ?? engineCfg?.expiry_dte_min ?? 0}
+            dteMax={draft.expiry_dte_max ?? engineCfg?.expiry_dte_max ?? 400}
+            avoidExpiryDay={draft.avoid_expiry_day ?? engineCfg?.avoid_expiry_day ?? false}
+            dteDefaults={{ min: engineCfg?.expiry_dte_min ?? 0,
+                           max: engineCfg?.expiry_dte_max ?? 400 }}
+            dteNote="Left at SuperTrend's values these follow it; change one and Navigator keeps its own."
             onChange={(next) => patch({
               ...draft,
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.expiry_dte_min !== undefined ? { expiry_dte_min: next.expiry_dte_min } : {}),
+              ...(next.expiry_dte_max !== undefined ? { expiry_dte_max: next.expiry_dte_max } : {}),
+              ...(next.avoid_expiry_day !== undefined ? { avoid_expiry_day: next.avoid_expiry_day } : {}),
             })}
           />
         </ScopedGroup>
@@ -772,12 +784,12 @@ export function NavigatorSettingsPanel() {
 
 
 const pillButtonStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: '#fff',
+  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: 'var(--k-bg)',
   color: MUTED, borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const applyButtonStyle: React.CSSProperties = {
-  border: 'none', background: ORANGE, color: '#fff', borderRadius: 7, padding: '8px 16px',
+  border: 'none', background: ORANGE, color: 'var(--k-bg)', borderRadius: 7, padding: '8px 16px',
   fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 

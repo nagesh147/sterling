@@ -163,46 +163,27 @@ class E2ETrace:
 
 class PredictionEngine(Protocol):
     def predict(self, snapshot: FeatureSnapshot) -> PredictionEvidence: ...
-
-
 class FeatureBuilder(Protocol):
     def build(self, event: CanonicalMarketEvent) -> FeatureSnapshot: ...
-
-
 class DecisionEngine(Protocol):
-    def assess(self, snapshot: FeatureSnapshot, prediction: PredictionEvidence,
-               edge: EdgeAssessment, economics: EconomicAssessment) -> DecisionEligibility: ...
-
-
+    def assess(self, snapshot: FeatureSnapshot, prediction: PredictionEvidence, edge: EdgeAssessment, economics: EconomicAssessment) -> DecisionEligibility: ...
 class RiskAuthorizer(Protocol):
     def authorize(self, decision: DecisionEligibility) -> AuthorizedTradeIntent: ...
-
-
 class InstrumentSelector(Protocol):
     def select(self, intent: AuthorizedTradeIntent) -> SelectedInstrument: ...
-
-
 class OrderIntentFactory(Protocol):
     def create(self, instrument: SelectedInstrument) -> CanonicalOrderIntent: ...
-
-
 class PositionProjector(Protocol):
     def project(self, event: CanonicalExecutionEvent) -> PositionState: ...
-
-
 class LifecycleEngine(Protocol):
     def evaluate(self, position: PositionState, event: CanonicalMarketEvent) -> LifecycleEvaluation: ...
 
 
 class AuditLedger:
-    """Append-only causal ledger for deterministic replay and audit."""
-
     def __init__(self) -> None:
         self._records: list[AuditRecord] = []
-
     def append(self, stage: str, object_id: str, *parent_ids: str) -> None:
         self._records.append(AuditRecord(len(self._records), stage, object_id, tuple(parent_ids)))
-
     def records(self) -> tuple[AuditRecord, ...]:
         return tuple(self._records)
 
@@ -229,33 +210,37 @@ def run_e2e(
 ) -> E2ETrace:
     """Run one candidate through every currently authorized layer.
 
-    In PRODUCTION mode, all REQUIRED_STRATEGY_FORMULAS are evaluated against
-    the execution gate. Because F-101..F-114 remain LOCKED, production execution
-    is deterministically BLOCKED and halts prior to order authorization.
+    In PRODUCTION mode all REQUIRED_STRATEGY_FORMULAS are evaluated against the
+    execution gate. Because F-101..F-114 remain LOCKED, production execution is
+    deterministically BLOCKED and halts before order authorization.
 
-    In SIMULATION mode, authorized simulation formula sets (e.g. F-004) are
+    In SIMULATION mode an authorized simulation formula set (e.g. F-004) is
     evaluated and may progress to simulated broker execution.
+
+    A gateway constructed with an explicit ``authorized_formula_ids`` scope must
+    agree with the scope this runner evaluates; a mismatch is a configuration
+    error rather than something to reconcile silently at submit time.
     """
     audit = AuditLedger()
     audit.append("market_event", event.record_id)
-
     snapshot = feature_builder.build(event)
     snapshot.assert_causal(snapshot.decision_time)
     audit.append("feature_snapshot", snapshot.snapshot_id, event.record_id)
-
     prediction = prediction_engine.predict(snapshot)
-    if prediction.snapshot_id != snapshot.snapshot_id:
-        raise ValueError("prediction snapshot identity mismatch")
-    if prediction.prediction_time != snapshot.decision_time:
-        raise ValueError("prediction time must equal snapshot decision time")
+    if prediction.snapshot_id != snapshot.snapshot_id or prediction.prediction_time != snapshot.decision_time:
+        raise ValueError("prediction causal identity mismatch")
     audit.append("prediction", prediction.prediction_id, snapshot.snapshot_id)
 
     if required_formula_ids is not None:
-        formula_ids = required_formula_ids
+        formula_ids = tuple(required_formula_ids)
     elif mode is ExecutionMode.PRODUCTION:
         formula_ids = REQUIRED_STRATEGY_FORMULAS
     else:
         formula_ids = ("F-004",)
+
+    configured_scope = execution_gateway.authorized_formula_ids
+    if configured_scope is not None and configured_scope != formula_ids:
+        raise ValueError("execution gateway authorization scope does not match E2E formula scope")
 
     gate = evaluate_execution_gate(formula_ids)
     if not gate.authorized:
@@ -268,15 +253,12 @@ def run_e2e(
     if edge.opportunity_id != prediction.opportunity_id:
         raise ValueError("edge opportunity identity mismatch")
     audit.append("edge", edge.opportunity_id, prediction.prediction_id, snapshot.snapshot_id)
-
     economics = evaluate_economics(edge, execution_cost=execution_cost, minimum_net_value=minimum_net_value)
     audit.append("economics", edge.opportunity_id, edge.opportunity_id)
-
     decision = decision_engine.assess(snapshot, prediction, edge, economics)
     if decision.snapshot_id != snapshot.snapshot_id or decision.prediction_id != prediction.prediction_id:
         raise ValueError("decision causal identity mismatch")
     audit.append("decision", decision.decision_id, edge.opportunity_id, prediction.prediction_id)
-
     if not decision.eligible:
         return E2ETrace(
             event, snapshot, prediction, edge, economics, decision, None, None, None, None, None, None,
@@ -287,42 +269,30 @@ def run_e2e(
     if authorization.decision_id != decision.decision_id:
         raise ValueError("authorization decision identity mismatch")
     audit.append("risk_authorization", authorization.intent_id, decision.decision_id)
-
     instrument = instrument_selector.select(authorization)
     if instrument.intent_id != authorization.intent_id:
         raise ValueError("instrument authorization identity mismatch")
     audit.append("instrument", instrument.selection_id, authorization.intent_id)
-
     order = order_factory.create(instrument)
-    if order.selection_id != instrument.selection_id or order.instrument_id != instrument.instrument_id:
-        raise ValueError("order instrument identity mismatch")
-    if order.quantity <= 0:
-        raise ValueError("order quantity must be positive")
-    if not order.idempotency_key:
-        raise ValueError("order intent requires idempotency key")
+    if order.selection_id != instrument.selection_id or order.instrument_id != instrument.instrument_id or order.quantity <= 0 or not order.idempotency_key:
+        raise ValueError("invalid canonical order intent")
     audit.append("order_intent", order.order_intent_id, instrument.selection_id)
-
-    execution_gateway.submit(order, formula_ids)
+    execution_gateway.submit(order, formula_ids=formula_ids)
     if broker_event is None:
         raise ValueError("broker execution event is required; submission is not execution")
-
     execution = execution_gateway.receive(broker_event)
     if execution.order_intent_id != order.order_intent_id:
         raise ValueError("execution order identity mismatch")
     audit.append("execution_event", execution.execution_event_id, order.order_intent_id)
-
     position = position_projector.project(execution)
     if position.source_execution_event_id != execution.execution_event_id:
         raise ValueError("position execution identity mismatch")
     audit.append("position", position.position_id, execution.execution_event_id)
-
     lifecycle = lifecycle_engine.evaluate(position, event)
     if lifecycle.position_id != position.position_id:
         raise ValueError("lifecycle position identity mismatch")
     audit.append("lifecycle", lifecycle.evaluation_id, position.position_id)
-
     return E2ETrace(
         event, snapshot, prediction, edge, economics, decision, authorization,
         instrument, order, execution, position, lifecycle, audit.records(), gate, mode=mode
     )
-

@@ -218,6 +218,29 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS atm_trades (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_date  TEXT NOT NULL,
+            underlying    TEXT NOT NULL,
+            option_type   TEXT NOT NULL,
+            strike        REAL,
+            expiry        TEXT,
+            quantity      INTEGER NOT NULL,
+            entry_price   REAL NOT NULL,
+            exit_price    REAL NOT NULL,
+            points        REAL NOT NULL,
+            pnl           REAL NOT NULL,
+            exit_reason   TEXT,
+            mode          TEXT NOT NULL,
+            is_sim        INTEGER NOT NULL DEFAULT 0,
+            raw           TEXT,
+            closed_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_atm_trades_date ON atm_trades(session_date)"
+    )
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS equity_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             portfolio_value REAL NOT NULL,

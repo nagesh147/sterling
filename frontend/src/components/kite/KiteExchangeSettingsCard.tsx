@@ -8,7 +8,7 @@ import {
   type KiteExchange,
 } from '../../utils/kiteExchanges';
 
-const ORANGE = '#f06428';
+const ORANGE = 'var(--k-brand)';
 
 export function KiteExchangeSettingsCard() {
   const queryClient = useQueryClient();
@@ -38,8 +38,8 @@ export function KiteExchangeSettingsCard() {
     minHeight: 32,
     border: 'none',
     borderRadius: 6,
-    background: active ? '#fff' : 'transparent',
-    color: active ? '#444' : '#777',
+    background: active ? 'var(--k-bg)' : 'transparent',
+    color: active ? 'var(--k-text)' : 'var(--k-ink-5)',
     boxShadow: active ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
     padding: '0 13px',
     fontSize: 11,
@@ -49,15 +49,15 @@ export function KiteExchangeSettingsCard() {
   });
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-      <div style={{ color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
+    <div style={{ background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
         EXCHANGE FILTERS
       </div>
-      <div style={{ color: '#777', fontSize: 11.5, lineHeight: 1.5, marginBottom: 12 }}>
+      <div style={{ color: 'var(--k-ink-5)', fontSize: 11.5, lineHeight: 1.5, marginBottom: 12 }}>
         Controls instruments shown in search, synced watchlists, ticker tiles and Sterling signals.
       </div>
 
-      <div style={{ display: 'inline-flex', maxWidth: '100%', gap: 2, padding: 3, marginBottom: 14, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7', flexWrap: 'wrap' }}>
+      <div style={{ display: 'inline-flex', maxWidth: '100%', gap: 2, padding: 3, marginBottom: 14, border: '1px solid var(--k-border)', borderRadius: 8, background: '#f6f6f7', flexWrap: 'wrap' }}>
         <button
           type="button"
           onClick={() => apply(DEFAULT_KITE_EXCHANGES)}
@@ -84,9 +84,9 @@ export function KiteExchangeSettingsCard() {
               key={exchange}
               style={{
                 minHeight: 42, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
-                border: `1px solid ${active ? '#e2b6a4' : '#e0e0e0'}`,
-                background: active ? '#fff5f0' : '#fff',
-                borderRadius: 7, cursor: 'pointer', color: '#444',
+                border: `1px solid ${active ? 'var(--k-border-brand)' : 'var(--k-border)'}`,
+                background: active ? 'var(--k-surface-warm)' : 'var(--k-bg)',
+                borderRadius: 7, cursor: 'pointer', color: 'var(--k-text)',
                 fontSize: 12, fontWeight: active ? 700 : 500,
               }}
             >
@@ -102,7 +102,7 @@ export function KiteExchangeSettingsCard() {
         })}
       </div>
 
-      <div style={{ color: '#9b9b9b', fontSize: 10.5, lineHeight: 1.5, marginTop: 10 }}>
+      <div style={{ color: 'var(--k-dim)', fontSize: 10.5, lineHeight: 1.5, marginTop: 10 }}>
         Default is NSE + NFO. BSE/BFO, currency exchanges and MCX commodities are opt-in.
       </div>
     </div>

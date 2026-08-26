@@ -181,9 +181,9 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       {/* Top Volume Metrics Ribbon */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: 'var(--k-surface-sunken)', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
             {symbol} Volume Profile (VP & Nodes)
           </span>
           <span
@@ -193,25 +193,25 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
               padding: '2px 7px',
               borderRadius: 4,
               background: netDelta >= 0 ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)',
-              color: netDelta >= 0 ? '#059669' : '#dc2626',
+              color: netDelta >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)',
             }}
           >
             {netDelta >= 0 ? `+${netDelta.toLocaleString('en-IN')}` : netDelta.toLocaleString('en-IN')} Net Delta ({buyPct}% Buyers)
           </span>
-          <span style={{ fontSize: 10.5, color: '#64748b' }}>
+          <span style={{ fontSize: 10.5, color: 'var(--k-ink-slate-3)' }}>
             Session Vol: <strong>{totalVolume.toLocaleString('en-IN')}</strong>
           </span>
         </div>
 
         {/* Display Mode Toggle */}
-        <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+        <div style={{ display: 'flex', gap: 2, background: 'var(--k-bg)', padding: 2, borderRadius: 4, border: '1px solid var(--k-border-slate-strong)' }}>
           <button
             type="button"
             onClick={() => setDisplayMode('delta')}
             style={{
               border: 0,
-              background: displayMode === 'delta' ? '#7c3aed' : 'transparent',
-              color: displayMode === 'delta' ? '#ffffff' : '#64748b',
+              background: displayMode === 'delta' ? 'var(--k-violet)' : 'transparent',
+              color: displayMode === 'delta' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
               fontSize: 10,
               fontWeight: 700,
               padding: '3px 7px',
@@ -226,8 +226,8 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
             onClick={() => setDisplayMode('total')}
             style={{
               border: 0,
-              background: displayMode === 'total' ? '#7c3aed' : 'transparent',
-              color: displayMode === 'total' ? '#ffffff' : '#64748b',
+              background: displayMode === 'total' ? 'var(--k-violet)' : 'transparent',
+              color: displayMode === 'total' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
               fontSize: 10,
               fontWeight: 700,
               padding: '3px 7px',
@@ -242,33 +242,33 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
 
       {/* Profile Key Levels Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Value Area High (VAH)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#7c3aed' }}>₹{vah.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Value Area High (VAH)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-violet)' }}>₹{vah.toLocaleString('en-IN')}</div>
         </div>
         <div style={{ padding: '6px 10px', background: 'rgba(217,119,6,.08)', border: '1px solid rgba(217,119,6,.25)', borderRadius: 6 }}>
           <div style={{ fontSize: 10, color: '#b45309', fontWeight: 700 }}>Volume POC (VPOC)</div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#d97706' }}>₹{vpocPrice.toLocaleString('en-IN')}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--k-warn)' }}>₹{vpocPrice.toLocaleString('en-IN')}</div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Value Area Low (VAL)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#7c3aed' }}>₹{val.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Value Area Low (VAL)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-violet)' }}>₹{val.toLocaleString('en-IN')}</div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Total Buy (Ask)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#059669' }}>{totalBuy.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Total Buy (Ask)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-emerald)' }}>{totalBuy.toLocaleString('en-IN')}</div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Total Sell (Bid)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#dc2626' }}>{totalSell.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Total Sell (Bid)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-red-deep)' }}>{totalSell.toLocaleString('en-IN')}</div>
         </div>
       </div>
 
       {/* Main Volume Profile Horizontal Histogram */}
-      <div style={{ flex: 1, minHeight: 320, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 320, background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 8, padding: '10px 14px', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+            <tr style={{ borderBottom: '1px solid var(--k-border-slate)', color: 'var(--k-ink-slate-3)', textAlign: 'left' }}>
               <th style={{ width: 85, padding: '4px 6px' }}>Price</th>
               <th style={{ width: 65, padding: '4px 6px' }}>Volume</th>
               <th style={{ padding: '4px 6px' }}>Horizontal Volume-at-Price Distribution</th>
@@ -296,33 +296,33 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                     background: isVpoc
                       ? 'rgba(217,119,6,.15)'
                       : isHovered
-                      ? '#f1f5f9'
+                      ? 'var(--k-surface-slate)'
                       : b.inVa
                       ? 'rgba(124,58,237,.04)'
                       : 'transparent',
-                    borderBottom: '1px solid #f8fafc',
+                    borderBottom: '1px solid var(--k-surface-sunken)',
                     borderLeft: isVpoc
-                      ? '3px solid #d97706'
+                      ? '3px solid var(--k-warn)'
                       : isVah || isVal
-                      ? '3px solid #7c3aed'
+                      ? '3px solid var(--k-violet)'
                       : isNearSpot
-                      ? '3px solid #2563eb'
+                      ? '3px solid var(--k-blue-strong)'
                       : '3px solid transparent',
                   }}
                 >
                   {/* Price */}
-                  <td style={{ padding: '3px 6px', fontWeight: isVpoc || isVah || isVal ? 750 : 500, color: isVpoc ? '#d97706' : isVah || isVal ? '#7c3aed' : '#1e293b' }}>
+                  <td style={{ padding: '3px 6px', fontWeight: isVpoc || isVah || isVal ? 750 : 500, color: isVpoc ? 'var(--k-warn)' : isVah || isVal ? 'var(--k-violet)' : 'var(--k-ink-slate-1)' }}>
                     ₹{b.price.toLocaleString('en-IN')}
                   </td>
 
                   {/* Volume Number */}
-                  <td style={{ padding: '3px 6px', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                  <td style={{ padding: '3px 6px', color: 'var(--k-ink-slate-3)', fontVariantNumeric: 'tabular-nums' }}>
                     {b.totalVol > 0 ? b.totalVol.toLocaleString('en-IN') : '—'}
                   </td>
 
                   {/* Horizontal Bar */}
                   <td style={{ padding: '3px 6px' }}>
-                    <div style={{ height: 14, background: '#f1f5f9', borderRadius: 2, display: 'flex', overflow: 'hidden', maxWidth: 450 }}>
+                    <div style={{ height: 14, background: 'var(--k-surface-slate)', borderRadius: 2, display: 'flex', overflow: 'hidden', maxWidth: 450 }}>
                       {displayMode === 'delta' ? (
                         <>
                           {/* Buy Volume in Emerald */}
@@ -330,7 +330,7 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                             style={{
                               width: `${buyWidthPct}%`,
                               height: '100%',
-                              background: isVpoc ? '#d97706' : '#10b981',
+                              background: isVpoc ? 'var(--k-warn)' : 'var(--k-emerald-2)',
                               transition: 'width 0.15s ease',
                             }}
                             title={`Buy Vol: ${b.buyVol.toLocaleString('en-IN')}`}
@@ -340,7 +340,7 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                             style={{
                               width: `${sellWidthPct}%`,
                               height: '100%',
-                              background: isVpoc ? '#b45309' : '#ef4444',
+                              background: isVpoc ? '#b45309' : 'var(--k-red-500)',
                               transition: 'width 0.15s ease',
                             }}
                             title={`Sell Vol: ${b.sellVol.toLocaleString('en-IN')}`}
@@ -351,7 +351,7 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                           style={{
                             width: `${totalWidthPct}%`,
                             height: '100%',
-                            background: isVpoc ? '#d97706' : '#7c3aed',
+                            background: isVpoc ? 'var(--k-warn)' : 'var(--k-violet)',
                             transition: 'width 0.15s ease',
                           }}
                         />
@@ -362,27 +362,27 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                   {/* Node Label */}
                   <td style={{ padding: '3px 6px', textAlign: 'right' }}>
                     {isVpoc && (
-                      <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: '#d97706', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: 'var(--k-warn)', color: 'var(--k-on-accent)' }}>
                         VPOC
                       </span>
                     )}
                     {isVah && (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#7c3aed', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--k-violet)', color: 'var(--k-on-accent)' }}>
                         VAH (70%)
                       </span>
                     )}
                     {isVal && (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#7c3aed', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--k-violet)', color: 'var(--k-on-accent)' }}>
                         VAL (70%)
                       </span>
                     )}
                     {b.isHvn && !isVpoc && (
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(5,150,105,.12)', color: '#059669' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(5,150,105,.12)', color: 'var(--k-emerald)' }}>
                         HVN (Fair)
                       </span>
                     )}
                     {b.isLvn && !isVpoc && (
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(245,158,11,.12)', color: '#d97706' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(245,158,11,.12)', color: 'var(--k-warn)' }}>
                         LVN (Void)
                       </span>
                     )}
@@ -395,19 +395,19 @@ export function VolumeProfileChart({ symbol, candles, currentSpot, poc: propPoc,
       </div>
 
       {/* Bottom Profile Key */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 11, color: '#64748b', background: '#f8fafc', padding: '8px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 11, color: 'var(--k-ink-slate-3)', background: 'var(--k-surface-sunken)', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, background: '#10b981', borderRadius: 2 }} /> <strong>Buyer Volume</strong> (Aggressive Ask)
+            <span style={{ width: 10, height: 10, background: 'var(--k-emerald-2)', borderRadius: 2 }} /> <strong>Buyer Volume</strong> (Aggressive Ask)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, background: '#ef4444', borderRadius: 2 }} /> <strong>Seller Volume</strong> (Aggressive Bid)
+            <span style={{ width: 10, height: 10, background: 'var(--k-red-500)', borderRadius: 2 }} /> <strong>Seller Volume</strong> (Aggressive Bid)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, background: '#d97706', borderRadius: 2 }} /> <strong>VPOC</strong>
+            <span style={{ width: 10, height: 10, background: 'var(--k-warn)', borderRadius: 2 }} /> <strong>VPOC</strong>
           </span>
         </div>
-        <span style={{ color: '#059669', fontWeight: 650 }}>
+        <span style={{ color: 'var(--k-emerald)', fontWeight: 650 }}>
           Breakout Rule: Move above LVN void targets next HVN fair-value
         </span>
       </div>

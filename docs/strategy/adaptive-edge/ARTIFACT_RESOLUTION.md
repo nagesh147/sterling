@@ -2,9 +2,7 @@
 
 ## Purpose
 
-This document governs resolution of every strategy-specific Adaptive Edge artifact before implementation.
-
-It does not define strategy mathematics. It defines the evidence and resolution procedure required to authorize strategy mathematics.
+This document governs resolution of every strategy-specific Adaptive Edge artifact before implementation. It does not define strategy mathematics; it defines the evidence and resolution procedure required to authorize strategy mathematics.
 
 ## Source hierarchy
 
@@ -22,22 +20,32 @@ A lower-level source cannot silently override a higher-level strategy definition
 ## Resolution states
 
 ### UNKNOWN
+Artifact has not been investigated sufficiently.
 
-The artifact has not yet been investigated sufficiently.
+### SOURCE-RECOVERED
+An authoritative strategy source has been located, but the formula still requires complete input semantics, units, causal boundaries, parameter status, tests, and provenance before promotion.
 
 ### RESOLVED-BLOCKED
-
-The currently available evidence has been exhausted and no authoritative complete definition has been recovered. No substitute is permitted and implementation is forbidden.
+The authoritative source has been inspected but a required semantic or mathematical element remains unresolved. No substitute is permitted.
 
 ### RESOLVED
-
 The artifact has an authoritative definition with complete required-input semantics, causal availability, units, boundaries, parameter status, version, provenance, and testability.
 
+## Current state
+
+The original V1.0 master strategy specification was recovered at immutable commit `38f44f092fc4cd67291468ef5dbd5a3d8cfff0d1` and is recorded by A208/A224.
+
+Therefore F-101..F-114 are no longer correctly described as having **no authoritative source**. They are `SOURCE-RECOVERED` and remain production-locked pending canonicalization/promotion.
+
+```text
+SOURCE-RECOVERED
+      |
+      +--> complete contract + tests + calibration --> RESOLVED
+      |
+      +--> unresolved semantic/math element -------> RESOLVED-BLOCKED
+```
+
 ## Required evidence
-
-An artifact cannot become RESOLVED from a mathematically valid equation alone.
-
-The following must be established where applicable:
 
 ```text
 Artifact ID
@@ -58,69 +66,23 @@ Provenance
 Tests
 ```
 
-## Attack procedure
-
-Before RESOLVED status, inspect for:
-
-- look-ahead bias
-- information leakage
-- circular dependency
-- duplicated variables
-- undefined inputs
-- ambiguous units
-- ambiguous timestamps
-- impossible states
-- accounting inconsistency
-- execution impossibility
-- unavailable data
-- parameter fragility
-- selection bias
-- survivorship bias
-- multiple-testing risk
-
-Use synthetic or adversarial cases where the artifact is sufficiently defined to test them.
-
-## Unlock conditions
-
-A RESOLVED-BLOCKED artifact may become RESOLVED only through one of:
-
-1. Recovery of an authoritative original strategy artifact; or
-2. Creation and explicit approval of a new versioned Adaptive Edge strategy definition.
-
-A plausible implementation, another Sterling strategy, a generic trading convention, or an inferred equivalence is not an unlock condition.
-
 ## Implementation gate
 
 ```text
-RESOLVED       -> implementation may proceed
-RESOLVED-BLOCKED -> implementation forbidden
-UNKNOWN        -> investigation required
+RESOLVED                  -> implementation may proceed
+SOURCE-RECOVERED          -> research implementation may proceed; production remains locked
+RESOLVED-BLOCKED          -> implementation forbidden
+UNKNOWN                   -> investigation required
 ```
 
-If a required upstream strategy artifact is RESOLVED-BLOCKED, Adaptive Edge remains non-executable.
-
-## Current blocked set
-
-F-101 through F-114 are RESOLVED-BLOCKED under the current repository evidence. See `STATUS.md`, `RECOVERY.md`, and `FORMULAS.md`.
-
-The blocked set includes, without substituting semantics:
+## Formula disposition
 
 ```text
-F-101  Feature normalization / feature score
-F-102  Edge / prediction score
-F-103  Opportunity eligibility
-F-104  Dynamic-mode transition
-F-105  Predictive-profit protection
-F-106  Dynamic-risk schedule
-F-107  Risk-per-unit
-F-108  Position sizing
-F-109  Instrument / option selection
-F-110  Entry trigger
-F-111  Exit trigger
-F-112  Trailing / profit-protection parameterization
-F-113  Re-entry
-F-114  Multi-position interaction
+F-101..F-113 = SOURCE-RECOVERED / REGISTRY-LOCKED
+F-114        = SOURCE-RECOVERED / PORTFOLIO AGGREGATION UNRESOLVED
 ```
+
+F-114 is not blocked because the master source is missing. The source defines the canonical decision function using MarketState, ProbabilityState, CapitalState, ExecutionState, and PositionState, but does not provide a uniquely specified multi-position portfolio-risk aggregation equation.
 
 ## Risk semantic prohibition
 
@@ -133,7 +95,7 @@ RiskPerUnit
 GrossRisk
 ```
 
-unless an authoritative strategy artifact explicitly defines that relationship.
+unless the authoritative strategy artifact explicitly defines that relationship.
 
 ## Required promotion sequence
 
@@ -144,6 +106,7 @@ source artifact
   -> contracts/tests
   -> implementation
   -> traceability
+  -> calibration
   -> backtest/parity validation
   -> execution authorization
 ```
