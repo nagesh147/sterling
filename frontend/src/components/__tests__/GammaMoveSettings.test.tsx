@@ -74,7 +74,9 @@ const STRATEGY = {
     stop_percent: '30.0 — hit by 16% of calibrated signals',
     min_option_premium: '10.0 — below this the tick is a >0.5% quantum',
   },
-  headline_finding: 'The entry triple alone did not separate from baseline.',
+  headline_finding: 'Only the level filter is proven.',
+  what_to_do: 'Trust the distance badge on the row.',
+  evidence: 'Share of bars reaching +30% within two sessions: 46.2% [31.6, 61.4].',
 };
 
 beforeEach(() => {
@@ -97,7 +99,7 @@ describe('GammaMoveSettings', () => {
   it('states the finding before any control', () => {
     render(<GammaMoveSettings />);
     expect(screen.getByText(/Not validated/)).toBeTruthy();
-    expect(screen.getByText(/did not separate from baseline/)).toBeTruthy();
+    expect(screen.getByText(/Only the level filter is proven/)).toBeTruthy();
   });
 
   it('carries the measurement next to each calibrated control', () => {
@@ -230,5 +232,25 @@ describe('GammaMoveSettings — a renamed section is a different section', () =>
     const summary = [...document.querySelectorAll('summary')]
       .find((el) => /Contracts/.test(el.textContent ?? ''));
     expect((summary!.closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
+});
+
+
+describe('GammaMoveSettings — the finding reads as guidance, not a paper', () => {
+  it('states the claim and what it implies, and shows the evidence in full', () => {
+    render(<GammaMoveSettings />);
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Only the level filter is proven');
+    expect(text).toContain('Trust the distance badge');
+    // A settings page is read carefully, so the numbers are shown rather than
+    // hidden on a hover as they are on the board.
+    expect(text).toContain('46.2%');
+  });
+
+  it('no longer claims a paper-only lock that was removed', () => {
+    /* Paper/live is the account's setting. A page promising a safeguard the code
+       no longer has is worse than one promising none. */
+    render(<GammaMoveSettings />);
+    expect(document.body.textContent).not.toContain('paper-only');
   });
 });
