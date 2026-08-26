@@ -45,8 +45,12 @@ from .fetcher import (
     chunk_range,
 )
 from .ratelimit import AdaptiveLimiter
+from .runlock import DownloadInProgress, download_lock
 
-__all__ = ["run_download", "download", "run_tiered_download", "download_tiers"]
+__all__ = [
+    "run_download", "download", "run_tiered_download", "download_tiers",
+    "DownloadInProgress",
+]
 
 ProgressFn = Callable[[dict[str, Any]], None]
 
@@ -143,6 +147,48 @@ async def run_download(
     if creds is None and transport is None:
         creds = load_credentials()  # raises CredentialsMissing with remediation text
     creds = creds or Credentials("test", "test")
+
+    # One writer per lake, enforced by the OS. BarWriter's per-file lock only covers this
+    # process's threads; a second download process shares nothing with it and would clobber
+    # the same parquet files. See kitelake.runlock.
+    with download_lock(root, note=f"{universe} {interval} {frm}..{to}"):
+        return await _run_download_locked(
+            universe, interval, frm, to, oi=oi, continuous=continuous,
+            concurrency=concurrency, rate=rate, resume=resume,
+            retry_failed=retry_failed, creds=creds, transport=transport,
+            progress=progress, root=root, plan=plan,
+            instruments=instruments, by_token=by_token,
+        )
+
+
+async def _run_download_locked(
+    universe: str,
+    interval: str,
+    frm: date,
+    to: date,
+    *,
+    oi: str,
+    continuous: bool,
+    concurrency: int,
+    rate: float,
+    resume: bool,
+    retry_failed: bool,
+    creds: Credentials,
+    transport: Any,
+    progress: ProgressFn | None,
+    root: Any,
+    plan: dict[str, Any],
+    instruments: list[Any],
+    by_token: dict[int, Any],
+) -> dict[str, Any]:
+    """The body of :func:`run_download`, executed while holding the single-writer lock."""
+    from .manifest import Manifest
+    from .volume import logs_dir
+    from .writer import append_candles
+
+    def emit(**payload: Any) -> None:
+        if progress:
+            progress(payload)
 
     man = Manifest(root=root)
     log: _EventLog | None = None

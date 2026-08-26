@@ -11,6 +11,13 @@ needs to be told about. Every endpoint here therefore answers with
 
 Genuine 4xx/5xx are reserved for real faults: a malformed request, or a path the user chose
 that cannot be written.
+
+**Every handler here is a plain ``def``, not ``async def``, and must stay that way.** They
+all do blocking work — SQLite on the manifest, parquet reads, directory scans — and none of
+them await anything. FastAPI runs ``async def`` handlers *on the event loop*, so a slow read
+from the removable drive blocks the whole process: during one such stall even ``/health``
+timed out, taking the live trading routes down with it. Declared as ``def``, FastAPI runs
+them in its threadpool, where blocking is exactly what you want.
 """
 from __future__ import annotations
 
@@ -88,7 +95,7 @@ class PlanRequest(BaseModel):
 
 # ─── status / volumes / browse ───────────────────────────────────────────────
 @router.get("/status")
-async def get_status(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
+def get_status(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
     """Where the data lives and whether it is reachable. Never fails."""
     try:
         kl = _kitelake()
@@ -117,7 +124,7 @@ async def get_status(_user: UserContext = Depends(get_current_user)) -> dict[str
 
 
 @router.get("/volumes")
-async def list_volumes(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
+def list_volumes(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
     """Mounted volumes the data could live on, with free space and lake detection."""
     try:
         kl = _kitelake()
@@ -131,7 +138,7 @@ async def list_volumes(_user: UserContext = Depends(get_current_user)) -> dict[s
 
 
 @router.get("/browse")
-async def browse(
+def browse(
     path: Optional[str] = Query(None, description="Folder to list; defaults to home"),
     show_hidden: bool = Query(False),
     _user: UserContext = Depends(get_current_user),
@@ -157,7 +164,7 @@ async def browse(
 
 # ─── mutate the root ─────────────────────────────────────────────────────────
 @router.post("/root")
-async def adopt_root(
+def adopt_root(
     payload: AdoptRootRequest, _user: UserContext = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Point the lake at a folder, stamping and registering it."""
@@ -178,7 +185,7 @@ async def adopt_root(
 
 
 @router.post("/root/activate")
-async def activate_root(
+def activate_root(
     payload: ActivateRootRequest, _user: UserContext = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Switch to a previously-registered folder."""
@@ -192,7 +199,7 @@ async def activate_root(
 
 
 @router.delete("/root/{lake_id}")
-async def forget_root(
+def forget_root(
     lake_id: str, _user: UserContext = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Unregister a folder. The stored data is never touched."""
@@ -204,7 +211,7 @@ async def forget_root(
 
 # ─── lake contents ───────────────────────────────────────────────────────────
 @router.get("/summary")
-async def summary(
+def summary(
     interval: str = Query("minute"), _user: UserContext = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Ledger progress plus what is stored. Degrades to ``available: false``."""
@@ -234,7 +241,7 @@ async def summary(
 
 
 @router.get("/presets")
-async def presets(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
+def presets(_user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
     """Universe presets with live instrument counts where the master is available."""
     try:
         _kitelake()
@@ -265,7 +272,7 @@ async def presets(_user: UserContext = Depends(get_current_user)) -> dict[str, A
 
 
 @router.get("/tiers")
-async def tiers(
+def tiers(
     interval: str = Query("minute"),
     frm: str = Query(..., description="YYYY-MM-DD"),
     to: str = Query(..., description="YYYY-MM-DD"),
@@ -296,7 +303,7 @@ async def tiers(
 
 
 @router.post("/plan")
-async def plan(
+def plan(
     payload: PlanRequest, _user: UserContext = Depends(get_current_user)
 ) -> dict[str, Any]:
     """Estimate requests, wall-clock and disk for a download. Makes no network calls."""
@@ -320,6 +327,202 @@ async def plan(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/symbols")
+def symbols(
+    interval: str = Query("minute"),
+    search: str = Query("", max_length=64),
+    limit: int = Query(200, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+    sort: str = Query("rows", pattern="^(rows|tradingsymbol|first_ts|last_ts|bytes)$"),
+    _user: UserContext = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Instruments actually stored in the lake, for the data browser.
+
+    Pagination, search and sort all happen in SQL. Loading every stored row and slicing in
+    Python made this endpoint slow enough — reading 7,400+ rows off the removable drive per
+    call — to noticeably degrade the API when the UI polled it.
+    """
+    try:
+        kl = _kitelake()
+    except RuntimeError as exc:
+        return {**_unavailable(str(exc).splitlines()[0]), "symbols": [], "total": 0}
+    from kitelake.volume import LakeUnavailable  # noqa: PLC0415
+
+    try:
+        status = kl.lake_status()
+        if not status.available:
+            return {**status.to_dict(), "symbols": [], "total": 0}
+        from kitelake.manifest import Manifest  # noqa: PLC0415
+
+        with Manifest() as man:
+            page, total = man.symbols_page(
+                interval, search=search.strip(), sort=sort, limit=limit, offset=offset
+            )
+    except LakeUnavailable as exc:
+        return {**_unavailable(str(exc).splitlines()[0]), "symbols": [], "total": 0}
+    except Exception as exc:
+        logger.warning("datalake symbols failed: %s", exc)
+        return {
+            **_unavailable(f"Could not list stored instruments: {exc}"),
+            "symbols": [], "total": 0,
+        }
+
+    return {"available": True, "interval": interval, "total": total, "symbols": page}
+
+
+@router.get("/bars")
+def bars(
+    symbol: str = Query(..., min_length=1, max_length=64),
+    interval: str = Query("minute"),
+    frm: Optional[str] = Query(None),
+    to: Optional[str] = Query(None),
+    limit: int = Query(1500, ge=10, le=20000),
+    _user: UserContext = Depends(get_current_user),
+) -> dict[str, Any]:
+    """OHLCV for one instrument, for charting.
+
+    Reads the parquet with **pyarrow only** — deliberately not via ``kitelake.reader``,
+    which needs polars. The Sterling backend interpreter has pyarrow but not polars, and
+    keeping this endpoint dependency-light is what lets the UI work without changing the
+    backend's environment.
+
+    When the range holds more bars than ``limit``, it downsamples by striding rather than
+    truncating, so a chart still shows the whole period instead of just its first slice.
+    """
+    _import_or_400()
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    import pyarrow.compute as pc  # noqa: PLC0415
+    import pyarrow.parquet as pq  # noqa: PLC0415
+
+    from kitelake.config import IST, PRICE_SCALE  # noqa: PLC0415
+    from kitelake.manifest import Manifest  # noqa: PLC0415
+    from kitelake.schema import sanitize_symbol  # noqa: PLC0415
+    from kitelake.volume import LakeUnavailable, bars_dir  # noqa: PLC0415
+
+    try:
+        base = bars_dir(create=False)
+    except LakeUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc).splitlines()[0]) from exc
+
+    # Resolve the symbol (or token) to its single parquet file.
+    token: int | None = None
+    row: dict[str, Any] | None = None
+    with Manifest() as man:
+        if symbol.isdigit():
+            token = int(symbol)
+            row = man.instrument(token)
+        else:
+            matches = man.find_instruments(symbol)
+            if matches:
+                row = matches[0]
+                token = int(row["instrument_token"])
+    if token is None:
+        raise HTTPException(status_code=404, detail=f"Unknown instrument {symbol!r}.")
+
+    matches = sorted(base.glob(f"interval={interval}/**/{token}__*.parquet"))
+    if not matches:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {interval} bars stored for {symbol!r} yet — it may not have been "
+                   "downloaded, or Kite returned no trades for it.",
+        )
+
+    try:
+        table = pq.ParquetFile(matches[0]).read()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read the bar file: {exc}") from exc
+
+    def _bound(text: str | None, end: bool) -> int | None:
+        if not text:
+            return None
+        try:
+            day = datetime.fromisoformat(text)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"bad date {text!r}") from None
+        if day.tzinfo is None:
+            day = day.replace(tzinfo=IST)
+        if end and day.hour == 0 and day.minute == 0:
+            day = day.replace(hour=23, minute=59, second=59)
+        return int(day.astimezone(timezone.utc).timestamp() * 1_000_000)
+
+    lo, hi = _bound(frm, False), _bound(to, True)
+    if lo is not None or hi is not None:
+        ts_us = pc.cast(table.column("ts"), "int64")
+        mask = None
+        if lo is not None:
+            mask = pc.greater_equal(ts_us, lo)
+        if hi is not None:
+            upper = pc.less_equal(ts_us, hi)
+            mask = upper if mask is None else pc.and_(mask, upper)
+        table = table.filter(mask)
+
+    total = table.num_rows
+    stride = max(1, -(-total // limit))  # ceil division: keep the full span, thin it out
+    if stride > 1:
+        table = table.take(list(range(0, total, stride)))
+
+    ts = table.column("ts").to_pylist()
+    o, h, l, c, v = (table.column(k).to_pylist() for k in ("open", "high", "low", "close", "volume"))
+    scale = float(PRICE_SCALE)
+    return {
+        "symbol": (row or {}).get("tradingsymbol") or symbol,
+        "instrument_token": token,
+        "exchange": (row or {}).get("exchange") or "",
+        "interval": interval,
+        "rows_total": total,
+        "rows_returned": table.num_rows,
+        "downsampled_every": stride,
+        "bars": [
+            {
+                "t": ts[i].astimezone(IST).isoformat(),
+                "o": o[i] / scale, "h": h[i] / scale, "l": l[i] / scale, "c": c[i] / scale,
+                "v": v[i],
+            }
+            for i in range(table.num_rows)
+        ],
+    }
+
+
+@router.get("/hot")
+def hot(
+    limit: int = Query(60, ge=1, le=2000),
+    greeks_only: bool = Query(False),
+    _user: UserContext = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Live enriched quotes from a tick pipeline running *in this process*.
+
+    The hot store is in-process memory, so this only returns data when the pipeline was
+    started inside the backend. A pipeline run from the CLI has its own store that this
+    process cannot see — that is a real limitation of choosing memory over Redis, and
+    ``running: false`` says so plainly rather than looking like an empty market.
+    """
+    try:
+        _kitelake()
+        from kitelake.pipeline import get_pipeline  # noqa: PLC0415
+    except Exception as exc:
+        return {"running": False, "reason": str(exc).splitlines()[0], "quotes": []}
+
+    pipe = get_pipeline()
+    if pipe is None:
+        return {
+            "running": False,
+            "reason": "No tick pipeline is running in the backend process.",
+            "hint": "Ticks are only hot for the process that ingests them. Start one in-process, "
+                    "or run `kitelake pipe` and read it there with `kitelake hot`.",
+            "quotes": [],
+        }
+    try:
+        return {
+            "running": True,
+            "status": pipe.status(),
+            "quotes": pipe.snapshot(limit=limit, with_greeks_only=greeks_only),
+        }
+    except Exception as exc:
+        logger.warning("datalake hot failed: %s", exc)
+        return {"running": False, "reason": f"Could not read the hot store: {exc}", "quotes": []}
 
 
 def _import_or_400() -> Any:

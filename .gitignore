@@ -64,6 +64,13 @@ backend/data/ohlcv_full/
 # Equity-index history (regenerate via study.equity_pipeline)
 backend/data/equity/
 
+# TrueData tick-quote cache (regenerate via acquire_truedata_li_ticks.py)
+backend/data/truedata_ticks.sqlite
+backend/data/truedata_ticks.sqlite-*
+backend/data/truedata_bars.sqlite
+backend/data/truedata_bars.sqlite-*
+backend/data/adaptive_edge/
+
 # Kite 1H candle cache (regenerate via study.kite_st_exit_sweep; binary .npz OHLCV)
 backend/study/kite_cache/
 antigravity-claude-proxy/
@@ -104,3 +111,23 @@ kite-data
 .venv-kitelake/
 kitelake/**/__pycache__/
 kitelake/.pytest_cache/
+
+# ── never commit these ───────────────────────────────────────────────────────
+# This remote is PUBLIC. sterling_paper.db carries exchange_configs.api_key and
+# exchange_configs.api_secret (plaintext — note the column is NOT *_enc), plus
+# kite_accounts and truedata_credentials. Committing it publishes live credentials.
+# Untracked below with `git rm --cached`, which leaves the local file untouched.
+sterling_paper.db
+sterling_paper.db-*
+backend/sterling_paper.db
+# .env holds real credentials once filled in; .env.example documents the key list.
+backend/.env
+.env
+# tooling / scratch output
+.playwright-mcp/
+youtube-transcript/
+# Scratch HTML written into the served public/ directory during verification
+# runs. Not ignoring it means a `git add -A` from any session commits a couple
+# of hundred KB of throwaway markup — and ships it as a public asset, since
+# anything under public/ is served verbatim.
+frontend/public/_verify/

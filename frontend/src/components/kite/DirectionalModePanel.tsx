@@ -34,7 +34,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'Out of the Money',
     delta: 0.28, deltaLabel: 'δ 0.20 – 0.35',
     thetaPctPerDay: 3.5,
-    color: '#1565c0',
+    color: 'var(--k-blue-deep)',
     desc: 'Cheapest entry per lot. High leverage if a big move comes fast — but theta decay is brutal. The option loses ~3–4% of its premium every single day the market does nothing. You need the move to happen quickly.',
     risk: 'Max loss is exactly what you paid — nothing more. But time decay is your biggest enemy.',
     isExperimental: false, premiumMult: 0.4,
@@ -46,7 +46,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'At the Money',
     delta: 0.50, deltaLabel: 'δ 0.45 – 0.55',
     thetaPctPerDay: 2.0,
-    color: '#2e7d32',
+    color: 'var(--k-green-deep)',
     desc: 'The default. Best liquidity and tightest bid-ask spreads. You capture roughly half of every point the underlying moves. Theta is still present (~2%/day) but more manageable than OTM.',
     risk: 'Max loss is the premium paid. Standard risk-reward. Most traders start here.',
     isExperimental: false, premiumMult: 1.0,
@@ -58,7 +58,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'In the Money',
     delta: 0.65, deltaLabel: 'δ 0.60 – 0.70',
     thetaPctPerDay: 1.0,
-    color: '#e65100',
+    color: 'var(--k-warn-deep)',
     desc: 'More intrinsic value, less time value. Theta slows down significantly. You pay more upfront, but a larger chunk of your premium is "real" value that doesn\'t melt away with time.',
     risk: 'Max loss is the premium paid. Higher cost per lot means fewer lots for the same capital.',
     isExperimental: true, premiumMult: 1.8,
@@ -157,17 +157,17 @@ function DefaultNote({ changed, defaultText }: { changed: boolean; defaultText: 
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  card:        { background: '#fff', padding: '16px 2px 2px' },
-  section:     { fontSize: 10, fontWeight: 750, letterSpacing: .75, color: '#777', textTransform: 'uppercase' as const, marginBottom: 10 },
-  hint:        { fontSize: 11.5, color: '#888', lineHeight: 1.5 },
-  divider:     { height: 1, background: '#f0f0f0', margin: '14px 0' },
+  card:        { background: 'var(--k-bg)', padding: '16px 2px 2px' },
+  section:     { fontSize: 10, fontWeight: 750, letterSpacing: .75, color: 'var(--k-ink-5)', textTransform: 'uppercase' as const, marginBottom: 10 },
+  hint:        { fontSize: 11.5, color: 'var(--k-ink-6)', lineHeight: 1.5 },
+  divider:     { height: 1, background: 'var(--k-surface-hover-2)', margin: '14px 0' },
   row:         { display: 'flex', alignItems: 'center', gap: 8 },
   filterRow:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
-  filterLabel: { fontSize: 11, color: '#444', lineHeight: 1.5 },
-  numInput:    { width: 72, height: 36, boxSizing: 'border-box' as const, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, textAlign: 'right' as const, fontFamily: 'inherit' },
-  select:      { minHeight: 36, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, background: '#fff', fontFamily: 'inherit' },
+  filterLabel: { fontSize: 11, color: 'var(--k-text)', lineHeight: 1.5 },
+  numInput:    { width: 72, height: 36, boxSizing: 'border-box' as const, fontSize: 11.5, padding: '0 9px', border: '1px solid var(--k-border-strong-3)', borderRadius: 7, textAlign: 'right' as const, fontFamily: 'inherit' },
+  select:      { minHeight: 36, fontSize: 11.5, padding: '0 9px', border: '1px solid var(--k-border-strong-3)', borderRadius: 7, background: 'var(--k-bg)', fontFamily: 'inherit' },
   toggle:      { width: 40, height: 22, borderRadius: 11, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0 },
-  toggleDot:   { width: 18, height: 18, borderRadius: 9, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
+  toggleDot:   { width: 18, height: 18, borderRadius: 9, background: 'var(--k-bg)', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -233,12 +233,12 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
       <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: '#444', fontSize: 12, fontWeight: 700 }}>What the algo buys</span>
+        <span style={{ color: 'var(--k-text)', fontSize: 12, fontWeight: 700 }}>What the algo buys</span>
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
       <div style={{
         display: 'flex', width: '100%', gap: 0, marginBottom: 10,
-        border: '1px solid #e0e0e0', borderRadius: 2, background: '#fff', overflow: 'hidden',
+        border: '1px solid var(--k-border)', borderRadius: 2, background: 'var(--k-bg)', overflow: 'hidden',
       }}>
         {PROFILES.map((p, i) => {
           const active = p.id === activeId;
@@ -250,15 +250,15 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
                 flex: 1, minWidth: 0, minHeight: 40, padding: '6px 4px', border: 'none',
-                borderLeft: i > 0 ? '1px solid #e0e0e0' : 'none',
-                background: active ? '#f9f9f9' : '#fff',
-                boxShadow: active ? 'inset 0 -2px 0 #ff5722' : 'none',
+                borderLeft: i > 0 ? '1px solid var(--k-border)' : 'none',
+                background: active ? 'var(--k-surface)' : 'var(--k-bg)',
+                boxShadow: active ? 'inset 0 -2px 0 var(--k-orange)' : 'none',
                 cursor: busy ? 'default' : 'pointer',
                 textAlign: 'center' as const, fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? '#444' : '#9b9b9b' }}>{p.label}</div>
-              <div style={{ fontSize: 9.5, color: '#9b9b9b', marginTop: 1 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? 'var(--k-text)' : 'var(--k-dim)' }}>{p.label}</div>
+              <div style={{ fontSize: 9.5, color: 'var(--k-dim)', marginTop: 1 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
@@ -273,7 +273,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: showProfileHelp ? '#f06428' : '#888',
+            color: showProfileHelp ? 'var(--k-brand)' : 'var(--k-ink-6)',
             fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit', padding: '4px 0',
           }}
         >
@@ -281,10 +281,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             aria-hidden
             style={{
               width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-              border: `1.5px solid ${showProfileHelp ? '#f06428' : '#c8c8c8'}`,
+              border: `1.5px solid ${showProfileHelp ? 'var(--k-brand)' : '#c8c8c8'}`,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 10, fontWeight: 700, lineHeight: 1,
-              color: showProfileHelp ? '#f06428' : '#888',
+              color: showProfileHelp ? 'var(--k-brand)' : 'var(--k-ink-6)',
             }}
           >
             ?
@@ -298,22 +298,22 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             padding: '10px 12px',
             borderRadius: 8,
             marginBottom: 12,
-            background: '#fff',
-            border: '1px solid #e8e8e8',
+            background: 'var(--k-bg)',
+            border: '1px solid var(--k-border-2)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#333' }}>{activeProfile.sublabel}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--k-ink-1)' }}>{activeProfile.sublabel}</span>
             {activeProfile.isExperimental && (
               <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>EXPERIMENTAL</span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.5, marginBottom: 6 }}>{activeProfile.desc}</div>
-          <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45, marginBottom: isFutures ? 0 : 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--k-ink-3)', lineHeight: 1.5, marginBottom: 6 }}>{activeProfile.desc}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--k-ink-4)', lineHeight: 1.45, marginBottom: isFutures ? 0 : 4 }}>
             {activeProfile.risk}
           </div>
           {!isFutures && (
-            <div style={{ fontSize: 11.5, color: '#666', lineHeight: 1.45 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-ink-4)', lineHeight: 1.45 }}>
               δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing ITM at expiry.
               {probItm < 40 && ' Most OTM buys expire worthless.'}
               {probItm >= 40 && probItm < 60 && ' Roughly coin-flip at expiry — you only need a quick move.'}
@@ -332,7 +332,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               type="number"
               style={{
                 ...S.numInput, width: 72,
-                ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
+                ...(customDelta ? { borderColor: 'var(--k-warn-deep)', background: '#fff8f2', fontWeight: 700 } : {}),
               }}
               value={customDelta}
               placeholder={activeProfile.delta.toFixed(2)}
@@ -351,7 +351,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             {customDelta && (
               <button
                 type="button"
-                style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                style={{ fontSize: 10, color: 'var(--k-dim-2)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
                 onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
               >✕ clear</button>
             )}
@@ -422,7 +422,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: showImpact ? '#f06428' : '#777',
+            color: showImpact ? 'var(--k-brand)' : 'var(--k-ink-5)',
             fontSize: 11.5, fontWeight: 650, fontFamily: 'inherit',
             padding: '8px 0',
           }}
@@ -431,9 +431,9 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             aria-hidden
             style={{
               width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-              border: `1.5px solid ${showImpact ? '#f06428' : '#c9c9c9'}`,
+              border: `1.5px solid ${showImpact ? 'var(--k-brand)' : '#c9c9c9'}`,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 700, color: showImpact ? '#f06428' : '#888',
+              fontSize: 11, fontWeight: 700, color: showImpact ? 'var(--k-brand)' : 'var(--k-ink-6)',
               lineHeight: 1,
             }}
           >
@@ -446,9 +446,9 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {showImpact && (
       <div style={{
         marginBottom: 4, padding: '12px 14px 14px',
-        borderRadius: 8, border: '1px solid #e8e8e8', background: '#fafafa',
+        borderRadius: 8, border: '1px solid var(--k-border-2)', background: 'var(--k-surface-2)',
       }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#333', marginBottom: 4 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--k-ink-1)', marginBottom: 4 }}>
         Impact estimate
       </div>
       <div style={{ ...S.hint, marginBottom: 12, lineHeight: 1.5 }}>
@@ -460,7 +460,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {/* Simulator inputs */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' as const }}>
         <div style={{ flex: '1 1 120px' }}>
-          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>UNDERLYING MOVES</div>
+          <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>UNDERLYING MOVES</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="number" style={{ ...S.numInput, flex: 1 }}
               value={simMove} min={10} max={2000} step={25}
@@ -470,7 +470,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         </div>
         {!isFutures && (
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>YOUR ENTRY PREMIUM</div>
+            <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>YOUR ENTRY PREMIUM</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={S.hint}>₹</span>
               <input type="number" style={{ ...S.numInput, flex: 1 }}
@@ -480,7 +480,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           </div>
         )}
         <div style={{ flex: '1 1 100px' }}>
-          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>LOT SIZE</div>
+          <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>LOT SIZE</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="number" style={{ ...S.numInput, flex: 1 }}
               value={lotSize} min={1} max={10000} step={5}
@@ -493,7 +493,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {/* Impact rows */}
       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 7 }}>
 
-        <ImpactRow icon="📈" color="#2e7d32"
+        <ImpactRow icon="📈" color="var(--k-green-deep)"
           label={`Underlying moves ${simMove} pts in your direction`}
           value={`+₹${perLotGain.toLocaleString('en-IN')} / lot`}
           sub={isFutures
@@ -501,7 +501,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             : `δ ${effectiveDelta.toFixed(2)} × ${simMove} pts = +₹${optionMove}/share × ${lotSize} qty. The rest of the move doesn't reach you.`}
         />
 
-        <ImpactRow icon="📉" color="#c62828"
+        <ImpactRow icon="📉" color="var(--k-red-crimson)"
           label={`Underlying moves ${simMove} pts against you`}
           value={isFutures ? `−₹${perLotGain.toLocaleString('en-IN')} / lot (until stop)` : `−₹${perLotGain.toLocaleString('en-IN')} / lot premium loss`}
           sub={isFutures
@@ -510,7 +510,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         />
 
         {!isFutures && (
-          <ImpactRow icon="⏳" color="#e65100"
+          <ImpactRow icon="⏳" color="var(--k-warn-deep)"
             label="Daily theta — what you lose if the market does nothing"
             value={`−₹${perLotThetaDay.toLocaleString('en-IN')} / lot / day`}
             sub={`≈ ${activeProfile.thetaPctPerDay}% of your ₹${simPremium} premium (₹${thetaDaily}/share) disappears each calendar day. Weekends included.`}
@@ -518,7 +518,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
 
         {isFutures && (
-          <ImpactRow icon="⏳" color="#2e7d32"
+          <ImpactRow icon="⏳" color="var(--k-green-deep)"
             label="Daily theta — what you lose if the market does nothing"
             value="₹0 — zero time decay"
             sub="Futures carry no premium, so there is no theta. You hold with margin instead of paying for time."
@@ -526,7 +526,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
 
         {!isFutures && (
-          <ImpactRow icon="⚖️" color="#1565c0"
+          <ImpactRow icon="⚖️" color="var(--k-blue-deep)"
             label="Break-even — underlying must move at least"
             value={`${breakEvenPts} pts in your direction`}
             sub={`₹${simPremium} premium ÷ δ ${effectiveDelta.toFixed(2)} = ${breakEvenPts} pts just to recover your entry cost at expiry.`}
@@ -541,7 +541,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           />
         )}
 
-        <ImpactRow icon="🛡️" color={isFutures ? '#c62828' : '#555'}
+        <ImpactRow icon="🛡️" color={isFutures ? 'var(--k-red-crimson)' : 'var(--k-ink-3)'}
           label="Maximum possible loss"
           value={isFutures ? 'Trail stop distance × lot — no fixed cap' : `₹${perLotCost?.toLocaleString('en-IN')} / lot — what you paid`}
           sub={isFutures
@@ -555,21 +555,21 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {!isFutures && (
         <>
           <div style={{ ...S.divider, marginTop: 12 }} />
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#9b9b9b', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--k-dim)', marginBottom: 8 }}>
             PREMIUM BREAKDOWN (APPROXIMATE) — ₹{simPremium} total
           </div>
           <div style={{ height: 14, borderRadius: 7, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-            <div style={{ width: `${intrinsicFrac * 100}%`, background: '#2e7d32', transition: 'width 0.35s', minWidth: intrinsicFrac > 0 ? 4 : 0 }} />
-            <div style={{ flex: 1, background: '#e65100', opacity: 0.75 }} />
+            <div style={{ width: `${intrinsicFrac * 100}%`, background: 'var(--k-green-deep)', transition: 'width 0.35s', minWidth: intrinsicFrac > 0 ? 4 : 0 }} />
+            <div style={{ flex: 1, background: 'var(--k-warn-deep)', opacity: 0.75 }} />
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const }}>
-            <span style={{ fontSize: 10, color: '#2e7d32' }}>
+            <span style={{ fontSize: 10, color: 'var(--k-green-deep)' }}>
               ■ Intrinsic value ≈ ₹{intrinsicAmt}
-              <span style={{ color: '#9b9b9b' }}> — real value, doesn't decay</span>
+              <span style={{ color: 'var(--k-dim)' }}> — real value, doesn't decay</span>
             </span>
-            <span style={{ fontSize: 10, color: '#e65100' }}>
+            <span style={{ fontSize: 10, color: 'var(--k-warn-deep)' }}>
               ■ Time value ≈ ₹{timeValueAmt}
-              <span style={{ color: '#9b9b9b' }}> — theta eats this daily</span>
+              <span style={{ color: 'var(--k-dim)' }}> — theta eats this daily</span>
             </span>
           </div>
           {intrinsicFrac === 0 && (
@@ -607,20 +607,20 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               style={{
                 display: 'grid', gridTemplateColumns: '74px 1fr 1fr 1fr', gap: 6, alignItems: 'center',
                 padding: '7px 9px', borderRadius: 5, cursor: busy ? 'default' : 'pointer',
-                background: isActiveP ? p.color + '14' : '#fafafa',
-                border: `1px solid ${isActiveP ? p.color + '55' : '#f0f0f0'}`,
+                background: isActiveP ? p.color + '14' : 'var(--k-surface-2)',
+                border: `1px solid ${isActiveP ? p.color + '55' : 'var(--k-surface-hover-2)'}`,
               }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: p.color }}>{p.label}</span>
-              <span style={{ fontSize: 10, color: '#444' }}>
-                <span style={{ color: '#999' }}>gain</span> +₹{gainSh}/sh
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
+                <span style={{ color: 'var(--k-dim-2)' }}>gain</span> +₹{gainSh}/sh
               </span>
-              <span style={{ fontSize: 10, color: '#444' }}>
-                <span style={{ color: '#999' }}>cost</span> {estPrem === null ? 'margin' : `₹${estPrem}/sh`}
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
+                <span style={{ color: 'var(--k-dim-2)' }}>cost</span> {estPrem === null ? 'margin' : `₹${estPrem}/sh`}
               </span>
-              <span style={{ fontSize: 10, color: '#444' }}>
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
                 {p.id === 'futures'
-                  ? <><span style={{ color: '#999' }}>decay</span> none</>
-                  : <><span style={{ color: '#999' }}>×eff</span> {effic}%</>}
+                  ? <><span style={{ color: 'var(--k-dim-2)' }}>decay</span> none</>
+                  : <><span style={{ color: 'var(--k-dim-2)' }}>×eff</span> {effic}%</>}
               </span>
             </div>
           );
@@ -647,13 +647,13 @@ function ImpactRow({ icon, label, value, sub, color }: {
   return (
     <div style={{
       display: 'flex', gap: 10, padding: '9px 11px',
-      background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0',
+      background: 'var(--k-surface-2)', borderRadius: 6, border: '1px solid var(--k-surface-hover-2)',
     }}>
       <span style={{ fontSize: 15, flexShrink: 0, lineHeight: '1.5', paddingTop: 1 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 10, color: 'var(--k-ink-6)', marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 3 }}>{value}</div>
-        <div style={{ fontSize: 10, color: '#999', lineHeight: 1.45 }}>{sub}</div>
+        <div style={{ fontSize: 10, color: 'var(--k-dim-2)', lineHeight: 1.45 }}>{sub}</div>
       </div>
     </div>
   );

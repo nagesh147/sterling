@@ -164,7 +164,9 @@ def test_callback_missing_token_renders_error(client):
     _add_account(client, paper=True)
     r = client.get("/api/v1/kite/callback?status=success")
     assert r.status_code == 400
-    assert "Missing request_token" in r.text
+    assert "Incomplete redirect" in r.text
+    # The error page must NOT dismiss itself — the reason has to stay readable.
+    assert "setInterval" not in r.text
 
 
 def test_callback_no_active_account(client):
@@ -177,7 +179,8 @@ def test_callback_status_not_success(client):
     _add_account(client, paper=True)
     r = client.get("/api/v1/kite/callback?status=cancelled")
     assert r.status_code == 400
-    assert "Login failed" in r.text
+    assert "Login was not completed" in r.text
+    assert "setInterval" not in r.text
 
 
 def test_watchlist_sync_aggregates_account_instruments(client, monkeypatch):
@@ -224,6 +227,11 @@ def test_status_session_expired_when_token_invalid(client, monkeypatch):
     from app.services.exchanges.kite import accounts as ka
     acc = ka.get_active("default")
     ka.save_session("default", acc.id, access_token="DEADTOKEN")
+    # save_session records the token as just-issued-by-Kite, and /status trusts
+    # that for auth.VALIDATION_TTL_MS instead of re-asking on every poll. Drop the
+    # proof to reach the state the network check actually runs in: TTL elapsed, or
+    # a restarted process that has proven nothing yet.
+    ka.forget_validation(acc.id)
 
     from app.services.exchanges.kite.errors import KiteTokenError
 
@@ -233,7 +241,10 @@ def test_status_session_expired_when_token_invalid(client, monkeypatch):
 
     s = client.get("/api/v1/kite/status").json()
     assert s["connected"] is False
-    assert "expired" in s["message"].lower()
+    # Two distinct causes now get distinct wording: a closed 06:00 IST window vs.
+    # Kite refusing a token that is still inside it (logged out elsewhere / revoked).
+    # This is the latter; both must tell the user to reconnect.
+    assert "reconnect" in s["message"].lower()
 
 def test_obsolete_engine_scan_report_route_is_not_registered(client):
     response = client.get("/api/v1/kite/engine/scan-report")

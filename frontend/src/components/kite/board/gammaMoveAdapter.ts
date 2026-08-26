@@ -1,0 +1,281 @@
+/**
+ * Gamma Move snapshot -> BoardSignal.
+ *
+ * One row per watched contract, plus one per open position. What this engine
+ * puts on the board that the others have no equivalent for is the **trigger
+ * arithmetic**: three conditions, each with its measured value against its
+ * configured threshold. A trader has to be able to see which leg of the triple
+ * is short, because "no signal" on this engine can mean three quite different
+ * things and only one of them is worth waiting on.
+ *
+ * The origin badge answers "where did this come from" with the condition that
+ * is carrying the signal, and the flags carry the two facts that decide whether
+ * the setup is even the kind the calibration measured: how far spot is from the
+ * level, and how many days are left on the contract.
+ */
+import type {
+  BoardInstrument, BoardOrigin, BoardSection, BoardSignal, BoardStatus,
+} from './boardTypes';
+import type {
+  GammaMoveSnapshot, GammaPositionRow, GammaSignalRow,
+} from '../../../hooks/useGammaMove';
+
+/** A tradable price, or nothing. Zero is not a level. */
+const price = (v: number | null | undefined): number | null =>
+  v == null || !Number.isFinite(v) || v <= 0 ? null : v;
+
+const n = (v: number | null | undefined, dp = 2): string =>
+  v == null || !Number.isFinite(v) ? '—' : v.toFixed(dp);
+
+const STATE_TO_STATUS: Record<string, BoardStatus> = {
+  watching: 'watching', armed: 'armed', running: 'running',
+  weakening: 'weakening', ended: 'ended', error: 'error',
+};
+
+function instrument(row: GammaSignalRow): BoardInstrument {
+  const i = row.instrument;
+  return {
+    symbol: i.tradingsymbol,
+    exchange: i.exchange || 'NFO',
+    kind: 'option',
+    optionType: i.option_type,
+    strike: i.strike,
+    expiry: i.expiry,
+    lotSize: i.lot_size,
+    moneyness: null,
+    quoteKey: i.tradingsymbol ? `${i.exchange || 'NFO'}:${i.tradingsymbol}` : null,
+  };
+}
+
+/**
+ * Which of the three conditions is carrying this row.
+ *
+ * Not decoration: the calibration found the open-interest condition is the one
+ * that distinguishes this strategy from momentum, so a row showing volume and
+ * price without it is a different setup wearing the same name.
+ */
+function originOf(row: GammaSignalRow): BoardOrigin | undefined {
+  const m = row.metrics;
+  if (!m) {
+    return { label: 'NO DATA', tone: 'dim',
+             hint: 'Not enough of today’s bars to judge the trigger yet.' };
+  }
+  const detail = `Open interest ${m.oi_drop_pct >= 0 ? 'fell' : 'rose'} `
+    + `${Math.abs(m.oi_drop_pct).toFixed(2)}% on the last bar, volume ran `
+    + `${m.volume_ratio.toFixed(1)}× its recent average and the premium moved `
+    + `${m.price_gain_pct >= 0 ? '+' : ''}${m.price_gain_pct.toFixed(2)}%.`;
+  if (m.triggered) {
+    return { label: 'OI UNWIND', tone: 'green',
+             hint: `${detail} All three conditions hold — writers covering.` };
+  }
+  if (m.unwinding) {
+    return { label: 'OI FALLING', tone: 'amber',
+             hint: `${detail} Open interest is unwinding but the other conditions are not met.` };
+  }
+  return { label: 'QUIET', tone: 'dim',
+           hint: `${detail} Open interest is not unwinding, so this is not the setup.` };
+}
+
+/**
+ * The two facts that decide whether this is the kind of setup the calibration
+ * measured. Distance to the level first, because that is where the edge was.
+ */
+function flagsOf(row: GammaSignalRow, proximityPct: number): BoardOrigin[] {
+  const out: BoardOrigin[] = [];
+  const d = row.level.distance_pct;
+  const inside = d <= proximityPct;
+  out.push({
+    label: `${d.toFixed(2)}% FROM ${row.level.kind === 'resistance' ? 'RES' : 'SUP'}`,
+    tone: inside ? 'green' : 'dim',
+    hint: inside
+      ? `Spot ${n(row.spot)} is within ${proximityPct}% of a ${row.level.kind} at `
+        + `${n(row.level.price)} touched ${row.level.touches} times. This is the only `
+        + 'filter that measurably separated from baseline.'
+      : `Spot ${n(row.spot)} is ${d.toFixed(2)}% from the nearest ${row.level.kind}, `
+        + `outside the ${proximityPct}% band where the edge was measured.`,
+  });
+  out.push({
+    label: `${row.days_to_expiry}D TO EXPIRY`,
+    tone: 'dim',
+    hint: 'The strategy is only defined for the last week or two of a contract; '
+      + 'earlier in the cycle open interest does not behave this way.',
+  });
+  if (row.regime !== 'unknown') {
+    out.push({
+      label: `TREND ${row.regime.toUpperCase()}`,
+      tone: row.regime === 'up' ? 'green' : 'amber',
+      hint: 'SuperTrend on the underlying. Calls need an uptrend, puts a downtrend. '
+        + 'Measured at multiplier 2.0 — at the conventional 3.0 the gate inverted.',
+    });
+  }
+  return out;
+}
+
+/**
+ * What the broker knows about a held position.
+ *
+ * Two states a board must never blur. "We sent an order" is not "we hold this",
+ * and "protected" is not "protected only while this process is alive" — the
+ * second of each is the one that costs money at 3am.
+ */
+function positionFlags(p: GammaPositionRow): BoardOrigin[] {
+  const out: BoardOrigin[] = [];
+  if (p.status === 'pending') {
+    out.push({ label: 'UNCONFIRMED', tone: 'amber',
+               hint: `Order ${p.order_id || '—'} was sent but the broker has not `
+                 + 'confirmed a fill. The position may or may not exist.' });
+  }
+  if (p.gtt_id > 0) {
+    out.push({ label: 'GTT ARMED', tone: 'green',
+               hint: `A broker-side stop (#${p.gtt_id}) is protecting this position. `
+                 + 'It survives this process dying.' });
+  } else if (p.stop_mode !== 'monitor') {
+    out.push({ label: 'NO BROKER STOP', tone: 'amber',
+               hint: 'This process is the only thing watching the position — the '
+                 + 'broker-side stop is not in place. If it dies, nothing exits.' });
+  }
+  return out;
+}
+
+function triggerSection(row: GammaSignalRow, cfg: GammaMoveSnapshot['config']): BoardSection {
+  const m = row.metrics;
+  const mark = (ok: boolean) => (ok ? '✓' : '✗');
+  if (!m) {
+    return { title: 'Trigger', layout: 'rows',
+             summary: 'Not enough of today’s bars to evaluate.', stats: [] };
+  }
+  return {
+    title: 'Trigger',
+    layout: 'rows',
+    summary: m.triggered
+      ? `All three conditions hold, confirmed on ${m.bars_confirmed} of ${m.bars_required} bars.`
+      : `Incomplete — ${row.reason ?? 'conditions not met'}.`,
+    stats: [
+      { label: `${mark(m.unwinding)} OI unwinding`,
+        value: `${m.oi_drop_pct.toFixed(2)}%`,
+        hint: `needs ≥ ${cfg.min_oi_drop_pct}%` },
+      { label: `${mark(m.abnormal)} Volume`,
+        value: `${m.volume_ratio.toFixed(2)}×`,
+        hint: `needs ≥ ${cfg.volume_spike_mult}× the ${cfg.volume_lookback}-bar mean` },
+      { label: `${mark(m.rising)} Premium`,
+        value: `${m.price_gain_pct >= 0 ? '+' : ''}${m.price_gain_pct.toFixed(2)}%`,
+        hint: `needs ≥ ${cfg.min_price_gain_pct}%` },
+      { label: 'Bars confirmed', value: `${m.bars_confirmed}/${m.bars_required}` },
+    ],
+  };
+}
+
+function levelSection(row: GammaSignalRow, cfg: GammaMoveSnapshot['config']): BoardSection {
+  return {
+    title: 'Level',
+    layout: 'tiles',
+    summary: `${row.underlying} spot ${n(row.spot)} against a ${row.level.kind} at `
+      + `${n(row.level.price)}.`,
+    stats: [
+      { label: 'Level', value: n(row.level.price) },
+      { label: 'Kind', value: row.level.kind },
+      { label: 'Touches', value: String(row.level.touches) },
+      { label: 'Distance', value: `${row.level.distance_pct.toFixed(2)}%`,
+        hint: `the measured edge is inside ${cfg.level_proximity_pct}%` },
+      { label: 'Timeframe', value: cfg.level_timeframe },
+    ],
+  };
+}
+
+function contractSection(row: GammaSignalRow): BoardSection {
+  return {
+    title: 'Contract',
+    layout: 'tiles',
+    stats: [
+      { label: 'Strike', value: n(row.instrument.strike, 0) },
+      { label: 'Type', value: row.instrument.option_type },
+      { label: 'Expiry', value: row.instrument.expiry || '—' },
+      { label: 'Days left', value: String(row.days_to_expiry) },
+      { label: 'Open interest', value: row.oi ? row.oi.toLocaleString('en-IN') : '—' },
+      { label: 'Lot size', value: String(row.instrument.lot_size) },
+    ],
+  };
+}
+
+function toSignal(row: GammaSignalRow, cfg: GammaMoveSnapshot['config'],
+                  position?: GammaPositionRow): BoardSignal {
+  const lv = row.levels;
+  return {
+    id: row.id,
+    engine: 'gamma_move',
+    underlying: row.underlying,
+    instrument: instrument(row),
+    // This strategy only ever BUYS options — it never writes one. The constant
+    // is correct here rather than a placeholder, and saying so matters: a
+    // counter that inferred sell intent from a direction field once sold every
+    // put in the book at entry.
+    direction: 'long',
+    status: STATE_TO_STATUS[row.state] ?? 'watching',
+    atMs: row.at_ms || null,
+    levels: {
+      ltp: price(lv.ltp),
+      // The REAL fill once there is one. Showing the intended entry beside a
+      // live P&L computed from the actual fill is two numbers that disagree.
+      entry: price(position?.effective_entry ?? position?.entry ?? lv.entry),
+      stop: price(position?.stop ?? lv.stop),
+      trail: price(position?.trail ?? lv.trail),
+      target: price(position?.target ?? lv.target),
+      exit: price(lv.exit),
+    },
+    sizing: {
+      lots: position?.lots ?? row.sizing.lots ?? null,
+      quantity: position?.quantity ?? row.sizing.quantity ?? null,
+      atRiskInr: row.sizing.at_risk_inr ?? null,
+      deployedInr: row.sizing.deployed_inr ?? null,
+    },
+    // This engine publishes no score, and inventing one would be a number a
+    // trader could compare against engines that mean something by it.
+    score: null,
+    reason: row.reason ?? row.exit_reason ?? null,
+    origin: originOf(row),
+    flags: [...flagsOf(row, cfg.level_proximity_pct),
+            ...(position ? positionFlags(position) : [])],
+    underlyingPrice: price(row.spot),
+    sections: [triggerSection(row, cfg), levelSection(row, cfg), contractSection(row)],
+  };
+}
+
+export function gammaMoveToBoard(snapshot?: GammaMoveSnapshot | null): BoardSignal[] {
+  if (!snapshot) return [];
+  const cfg = snapshot.config;
+  const positions = new Map((snapshot.positions ?? []).map((p) => [p.signal_id, p]));
+  const rows = snapshot.candidates ?? [];
+  const seen = new Set<string>();
+  const out: BoardSignal[] = [];
+
+  for (const row of rows) {
+    seen.add(row.id);
+    const pos = positions.get(row.id);
+    const sig = toSignal(row, cfg, pos);
+    out.push(pos ? { ...sig, status: sig.status === 'ended' ? 'ended' : 'running' } : sig);
+  }
+  // A held position whose candidate has dropped out of the scan must not vanish
+  // from the board — that is exactly the row an operator needs most.
+  for (const p of snapshot.positions ?? []) {
+    if (seen.has(p.signal_id)) continue;
+    out.push({
+      id: p.signal_id,
+      engine: 'gamma_move',
+      underlying: p.symbol,
+      instrument: { symbol: p.symbol, exchange: 'NFO', kind: 'option', quoteKey: `NFO:${p.symbol}` },
+      direction: 'long',
+      status: 'running',
+      atMs: p.entered_ms || null,
+      levels: { ltp: null, entry: price(p.effective_entry ?? p.entry), stop: price(p.stop),
+                trail: price(p.trail), target: price(p.target), exit: null },
+      sizing: { lots: p.lots, quantity: p.quantity, atRiskInr: null, deployedInr: null },
+      score: null,
+      reason: `held since ${p.entry_day}, ${p.sessions_held} session(s)`,
+      origin: { label: 'HELD', tone: 'blue',
+                hint: 'Open position; its candidate is no longer in the current scan.' },
+      flags: positionFlags(p),
+      sections: [],
+    });
+  }
+  return out;
+}

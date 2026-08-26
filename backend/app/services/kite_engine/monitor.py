@@ -414,6 +414,22 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                   f"{p.symbol}: broker holds {held} of {was} — exiting {held} "
                   f"(the rest was closed outside the engine)")
 
+    # ── did this position close while we were awaiting? ───────────────────────
+    # Everything above awaits: the GTT cancel, the status probe, the holdings read. An
+    # exit fill can land at any of them, and `on_order_update` — which does NOT take
+    # the `_exiting` claim — would then have closed this position and booked its
+    # realized PnL already. The `p` we were handed is a snapshot from before those
+    # awaits, so re-read the registry rather than trusting it: continuing would place a
+    # second SELL and book the same loss twice, which trips the INR daily-loss breaker
+    # at half the configured limit.
+    live = pos.get(uid, p.symbol)
+    if live is None or live.status not in (pos.OPEN, pos.PENDING):
+        _exiting.discard(key)
+        state.log(uid, "info",
+                  f"{p.symbol}: closed by a fill that landed while this exit was being "
+                  f"prepared — not placing a second SELL")
+        return False
+
     try:
         if is_futures:
             await client.place_order_future(

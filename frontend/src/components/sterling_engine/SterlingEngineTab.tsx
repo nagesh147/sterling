@@ -1321,7 +1321,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             <button disabled={executing} onClick={(e) => { e.stopPropagation(); onExecute(); }} style={{
               fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', padding: '6px 16px', borderRadius: 6,
               fontFamily: 'inherit', cursor: executing ? 'default' : 'pointer',
-              color: '#fff', background: tried ? 'var(--t-amber)' : dirColor, border: 'none', lineHeight: 1,
+              color: 'var(--k-bg)', background: tried ? 'var(--t-amber)' : dirColor, border: 'none', lineHeight: 1,
               opacity: executing ? 0.6 : 1, minWidth: 80, textAlign: 'center',
             }}>
               {executing ? '…' : tried ? 'RETRY' : 'EXECUTE'}

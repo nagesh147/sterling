@@ -2464,3 +2464,42 @@ class TestTheExitChecksWhatItIsSelling:
         assert monitor._holdings_probe.get("h6") is None, (
             "a cached portfolio that predates our own SELL would misreport the next check"
         )
+
+
+# ── leads closed out from the 2026-08-04 audit ────────────────────────────────
+
+class TestAFillLandingMidExitIsNotBookedTwice:
+    """Audit lead 10. Every step before the SELL awaits — the GTT cancel, the status
+    probe, the holdings read — and `on_order_update` does not take the `_exiting`
+    claim. So an exit fill can land mid-flight, close the position and book its PnL,
+    while this coroutine carries on with a `p` snapshot from before the await: a second
+    SELL, and the same loss booked twice, which trips the INR daily-loss breaker at
+    half the configured limit."""
+
+    @pytest.mark.asyncio
+    async def test_a_close_during_the_awaits_stops_the_sell(self, monkeypatch):
+        booked: list = []
+        from app.services.kite_engine import state as kstate
+        monkeypatch.setattr(kstate, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        p = _held("mid1", gtt_id=555, stop=80.0)
+
+        class _RacingClient(_FakeClient):
+            """The broker's own exit fill arrives while we are cancelling its trigger."""
+
+            async def delete_gtt(self, tid):
+                await monitor.on_order_update(
+                    "mid1", {"tradingsymbol": p.symbol, "status": "COMPLETE",
+                             "transaction_type": "SELL", "order_id": "GTT-FILL",
+                             "average_price": 79.0}, client=self)
+                return await super().delete_gtt(tid)
+
+        client = _RacingClient()
+
+        out = await monitor.on_tick("mid1", 777, 79.0, client=client)
+
+        assert out is None
+        assert client.sells == [], "second SELL placed after the position had closed"
+        assert len(booked) == 1, f"realized PnL booked {len(booked)} times, expected once"
+        assert pos.get("mid1", p.symbol).status == pos.CLOSED

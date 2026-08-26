@@ -20,14 +20,14 @@ import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
 import { KiteSettingsPopover } from './KiteSettingsPopover';
 
 const COLORS = {
-  text: '#444',
-  muted: '#9b9b9b',
+  text: 'var(--k-text)',
+  muted: 'var(--k-dim)',
   border: '#ededed',
-  rowHover: '#fafafa',
-  pnlBg: '#fbfbfb',
-  blue: '#387ed1',
-  green: '#4caf50',
-  red: '#df514c',
+  rowHover: 'var(--k-surface-2)',
+  pnlBg: 'var(--k-surface-5)',
+  blue: 'var(--k-blue-kite)',
+  green: 'var(--k-green)',
+  red: 'var(--k-red)',
 };
 
 const S: Record<string, React.CSSProperties> = {
@@ -43,12 +43,12 @@ const S: Record<string, React.CSSProperties> = {
   },
   hint: { color: COLORS.muted, fontSize: 13, padding: '14px 0' },
   inSm: {
-    background: '#fff', color: COLORS.text, border: `1px solid #dedede`, borderRadius: 3,
+    background: 'var(--k-bg)', color: COLORS.text, border: `1px solid var(--k-border-strong-4)`, borderRadius: 3,
     padding: '4px 6px', fontFamily: 'inherit', fontSize: 11, outline: 'none',
   },
   pill: {
     padding: '2px 7px', borderRadius: 2, fontSize: 10, fontWeight: 500,
-    background: '#f1f1f1', color: COLORS.muted, letterSpacing: 0.2,
+    background: 'var(--k-surface-hover)', color: COLORS.muted, letterSpacing: 0.2,
   },
 };
 
@@ -126,7 +126,7 @@ export function ConvertControl({ p }: { p: any }) {
             new_product: target,
           });
         }}
-        style={{ border: 0, background: 'transparent', padding: 0, font: 'inherit', fontSize: 11, color: invalidQty ? '#bdbdbd' : convert.isError ? COLORS.red : COLORS.blue, cursor: invalidQty ? 'not-allowed' : 'pointer' }}
+        style={{ border: 0, background: 'transparent', padding: 0, font: 'inherit', fontSize: 11, color: invalidQty ? 'var(--k-faint-3)' : convert.isError ? COLORS.red : COLORS.blue, cursor: invalidQty ? 'not-allowed' : 'pointer' }}
       >
         {convert.isPending ? '…' : convert.isSuccess ? '✓' : 'convert'}
       </button>
@@ -142,7 +142,7 @@ function AuthoriseHoldingsButton() {
       disabled={authorise.isPending}
       onClick={() => authorise.mutate({}, { onSuccess: (result) => { if (result.authorise_url) window.open(result.authorise_url, '_blank', 'noopener'); } })}
       title="Authorise holdings via CDSL TPIN (eDIS)"
-      style={{ background: COLORS.blue, color: '#fff', border: `1px solid ${COLORS.blue}`, borderRadius: 3, padding: '5px 11px', fontSize: 11, fontWeight: 500, cursor: authorise.isPending ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+      style={{ background: COLORS.blue, color: 'var(--k-bg)', border: `1px solid ${COLORS.blue}`, borderRadius: 3, padding: '5px 11px', fontSize: 11, fontWeight: 500, cursor: authorise.isPending ? 'wait' : 'pointer', fontFamily: 'inherit' }}
     >
       {authorise.isPending ? 'Authorising…' : 'Authorise holdings'}
     </button>
@@ -423,8 +423,8 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
         .portfolio-tools { display:flex; align-items:center; justify-content:flex-end; gap:13px; flex-wrap:wrap; }
         .portfolio-search { position:relative; }
         .portfolio-search svg { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:${COLORS.muted}; pointer-events:none; }
-        .portfolio-search input { width:128px; height:27px; padding:5px 8px 5px 27px; border:1px solid #dedede; border-radius:3px; color:${COLORS.text}; background:#fff; outline:none; font:inherit; font-size:11px; }
-        .portfolio-search input:focus { border-color:#bdbdbd; }
+        .portfolio-search input { width:128px; height:27px; padding:5px 8px 5px 27px; border:1px solid var(--k-border-strong-4); border-radius:3px; color:${COLORS.text}; background:var(--k-bg); outline:none; font:inherit; font-size:11px; }
+        .portfolio-search input:focus { border-color:var(--k-faint-3); }
         .portfolio-table-scroll { width:100%; overflow-x:auto; scrollbar-gutter:stable; }
         .portfolio-table { width:100%; border-collapse:collapse; text-align:left; table-layout:fixed; }
         .portfolio-table tbody tr:hover { background:${COLORS.rowHover}; }
@@ -434,7 +434,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
         .sort-header:hover { color:${COLORS.text} !important; }
         .sort-icon { opacity:0; color:${COLORS.muted}; font-size:9px; width:10px; text-align:center; }
         .sort-header:hover .sort-icon, .sort-icon.active { opacity:1; }
-        .exchange-tag { margin-left:6px; font-size:9px; color:${COLORS.muted}; background:#f1f1f1; padding:1px 4px; border-radius:2px; }
+        .exchange-tag { margin-left:6px; font-size:9px; color:${COLORS.muted}; background:var(--k-surface-hover); padding:1px 4px; border-radius:2px; }
         .portfolio-total-row td { border-bottom:0 !important; border-top:1px solid ${COLORS.border}; padding-top:11px !important; padding-bottom:11px !important; }
         .day-history { border-top:1px solid ${COLORS.border}; margin-top:18px; }
         .day-history button { width:100%; border:0; background:transparent; padding:14px 0; color:${COLORS.text}; font:inherit; font-size:13px; text-align:left; cursor:pointer; display:flex; align-items:center; gap:6px; }
@@ -443,7 +443,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
         .breakdown-section h3 { margin:0 0 22px; font-size:13px; font-weight:400; color:${COLORS.text}; }
         .breakdown-list { display:flex; flex-direction:column; gap:10px; }
         .breakdown-row { display:grid; grid-template-columns:minmax(150px,230px) minmax(260px,1fr); align-items:center; min-height:12px; }
-        .breakdown-label { padding-right:14px; text-align:right; color:#777; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .breakdown-label { padding-right:14px; text-align:right; color:var(--k-ink-5); font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .breakdown-axis { position:relative; display:grid; grid-template-columns:1fr 1fr; height:8px; }
         .breakdown-zero { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:#d8d8d8; transform:translateX(-.5px); }
         .breakdown-half { display:flex; align-items:center; }
@@ -476,7 +476,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
             <h2 className="portfolio-title">Positions <span>({positions.length})</span></h2>
             <div className="portfolio-tools">
               {selectedPos.size > 0 && (
-                <button type="button" onClick={exitSelected} disabled={exitingSelected} style={{ background: COLORS.red, color: '#fff', border: 0, borderRadius: 3, padding: '5px 11px', fontSize: 11, cursor: exitingSelected ? 'wait' : 'pointer', opacity: exitingSelected ? .65 : 1 }}>
+                <button type="button" onClick={exitSelected} disabled={exitingSelected} style={{ background: COLORS.red, color: 'var(--k-bg)', border: 0, borderRadius: 3, padding: '5px 11px', fontSize: 11, cursor: exitingSelected ? 'wait' : 'pointer', opacity: exitingSelected ? .65 : 1 }}>
                   {exitingSelected ? 'Exiting…' : `Exit Selected (${selectedPos.size})`}
                 </button>
               )}

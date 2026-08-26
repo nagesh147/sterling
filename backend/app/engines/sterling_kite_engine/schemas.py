@@ -408,6 +408,17 @@ class EngineConfigModel(BaseModel):
     #: near the premium on screen. Raising this trades that protection for entries on
     #: thinner strikes. Display is never affected; only the automatic order is held.
     max_contract_staleness_bars: int = 0
+    # ── Expiry window ──────────────────────────────────────────────────────────
+    # The same three settings every other engine's Contracts section carries,
+    # under the same names, so one vocabulary covers every strategy page.
+    # `expiry_dte_min`/`expiry_dte_max` bound eligibility; `avoid_expiry_day`
+    # excludes the contract expiring today.
+    #
+    # Defaults are permissive so an existing config resolves exactly the
+    # contracts it resolved before — this adds a control, not a policy.
+    expiry_dte_min: int = 0
+    expiry_dte_max: int = 400
+    avoid_expiry_day: bool = False
     # ── Expiry square-off guard ────────────────────────────────────────────────
     # Market-exit an auto-exec option position when its contract comes within this
     # many calendar days of expiry, so a weekly can't ride into expiry unmanaged

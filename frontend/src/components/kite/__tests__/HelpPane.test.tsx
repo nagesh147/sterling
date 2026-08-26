@@ -31,4 +31,17 @@ describe('HelpPane', () => {
     expect(screen.getByText(/Ignore Navigator entirely/)).toBeInTheDocument();
     expect(screen.getByText(/Let it trade on its own/)).toBeInTheDocument();
   });
+
+  it('renders the Adaptive Edge pictorial visualizer, architecture pipeline, and interactive simulation', () => {
+    render(<HelpPane />);
+    expect(screen.getByText(/Adaptive Edge — Hybrid Microstructure & Scalp Engine/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Tape & Order Flow Ingestion/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Microstructure & POC Anchors/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Dynamic Scalp Escalation & Risk Matrix/)).toBeInTheDocument();
+    expect(screen.getByText(/Interactive Sandbox Simulation & Real-Time P&L Engine/)).toBeInTheDocument();
+    expect(screen.getByText(/Editable Trade & Execution Parameters/)).toBeInTheDocument();
+    expect(screen.getByText(/Unrealized MTM P&L/)).toBeInTheDocument();
+    expect(screen.getByText(/How Trailing Stop Loss \(TSL\) Protects You Step-by-Step/)).toBeInTheDocument();
+    expect(screen.getByText(/Real-Time Premium Trajectory & Bounds Visualizer/)).toBeInTheDocument();
+  });
 });

@@ -38,6 +38,13 @@ def test_future_feature_is_rejected():
 
 
 def test_timestamp_comparison_is_semantic_not_lexical():
+    # Override the helper's UTC decision time with +05:30 so the test exercises
+    # semantic instant comparison rather than string ordering.
+    kwargs = {
+        **_snapshot_kwargs(),
+        "observation_cutoff_time": "2026-08-11T10:00:00+05:30",
+        "decision_time": "2026-08-11T10:00:00+05:30",
+    }
     # 09:00 UTC is after 10:00 +05:30 (04:30 UTC), despite lexical ordering.
     kwargs = {**_snapshot_kwargs(), "decision_time": "2026-08-11T10:00:00+05:30"}
     with pytest.raises(ValueError, match="lookahead detected"):
@@ -156,7 +163,7 @@ def _intent():
 
 def test_execution_gateway_separates_submission_and_execution():
     gateway, transport = _gateway()
-    broker_id = gateway.submit(_intent())
+    broker_id = gateway.submit(_intent(), formula_ids=("F-004",))
     assert broker_id == "broker-oi-1"
     assert len(transport.submissions) == 1
 
