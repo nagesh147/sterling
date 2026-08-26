@@ -133,3 +133,49 @@ class TestModeIsReadNotStored:
         monkeypatch.setattr("app.services.exchanges.kite.accounts.get_active",
                             lambda uid: Acct())
         assert runner.is_paper("u1") is False
+
+
+class TestDefaultsDoNotOverrideIntent:
+    """Changing a default must not flip a config someone deliberately set.
+
+    `enabled` moved from off to on. An operator who had turned this engine off
+    must find it still off after that change — a default is what applies when
+    nobody has said otherwise, not a way to overrule them on upgrade.
+    """
+
+    def test_a_stored_off_state_survives_the_new_default(self):
+        import json
+        from app.services import db
+        from app.services.gamma_move import get_config
+        db.set_config("gamma_move_config", json.dumps({"enabled": False}))
+        assert get_config().enabled is False
+
+    def test_fields_never_stored_still_take_the_current_default(self):
+        import json
+        from app.services import db
+        from app.services.gamma_move import get_config
+        db.set_config("gamma_move_config", json.dumps({"enabled": False}))
+        cfg = get_config()
+        assert cfg.stop_mode == "both"
+        assert cfg.scan_all_stocks is True
+
+    def test_an_unset_config_is_on(self):
+        from app.services import db
+        from app.services.gamma_move import get_config
+        db.set_config("gamma_move_config", "")
+        assert get_config().enabled is True
+
+    def test_an_unreadable_config_falls_back_OFF(self):
+        """The one case where a fallback should overrule the default: a config
+        that will not validate must not become a trading config."""
+        from app.services import db
+        from app.services.gamma_move import get_config
+        db.set_config("gamma_move_config", "{not json at all")
+        assert get_config().enabled is False
+
+    def test_an_invalid_stored_config_falls_back_OFF(self):
+        import json
+        from app.services import db
+        from app.services.gamma_move import get_config
+        db.set_config("gamma_move_config", json.dumps({"min_oi_drop_pct": 0}))
+        assert get_config().enabled is False

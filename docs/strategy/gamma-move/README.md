@@ -46,8 +46,14 @@ baseline quality. One more trap worth knowing before you touch anything: the
 SuperTrend gate at the conventional multiplier of 3.0 measured **inverted**.
 It ships at 2.0.
 
-`enabled` defaults to `False`. There is deliberately **no per-strategy paper/live
-switch**: that is `account.is_paper` from the Trading Mode panel, shared with
-every Kite strategy, and `KiteClient` already acts on it. The engineering guards
-— a stop on every entry, a broker-side GTT under the default `stop_mode` — are
-unconditional rather than attached to a mode.
+The engine ships **on**, and there is deliberately **no per-strategy paper/live
+switch**. What stands between it and real money is the same set that guards every
+Kite strategy: `account.is_paper` from the Trading Mode panel (which `KiteClient`
+already acts on), the engine's `auto_execute`, the kill switch, and this engine's
+own risk caps. `enabled` is a power switch, not one of those guards — an engine
+shipped off just does nothing until somebody finds the toggle.
+
+The combination to think about is **LIVE + AUTO**: an enabled engine trades then,
+which is the correct reading of "enabled". The engineering guards — a stop on
+every entry, a broker-side GTT under the default `stop_mode` — are unconditional
+rather than attached to a mode.

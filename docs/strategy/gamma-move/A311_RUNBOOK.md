@@ -3,7 +3,12 @@
 Operating the engine. For what it does and whether it works, read
 [VALIDATION_REPORT.md](VALIDATION_REPORT.md) first — the short answer is that its
 entry trigger showed **no measurable edge on its own**; the level filter is where
-the edge was. It ships disabled. It is not otherwise locked.
+the edge was.
+
+It ships **enabled** and is not locked. `enabled` is a power switch, not a safety
+device: paper/live, manual/auto, the kill switch and the risk caps all apply
+whatever it is set to, and they are what actually stand between this engine and
+real money. **With the account LIVE and the engine on AUTO, it will trade.**
 
 ---
 
@@ -29,7 +34,8 @@ safety rules below are unconditional instead of being attached to a mode.
 ## 1. Switching it on
 
 **UI** · Connect → Signal engines → **Gamma Move**. The power toggle at the top
-enables scanning; nothing places an order in paper mode.
+is on by default; turning it off stops this engine scanning without touching any
+other. Nothing places an order while the account is in paper mode.
 
 **API**
 

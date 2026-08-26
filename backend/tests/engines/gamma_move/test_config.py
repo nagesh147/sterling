@@ -8,8 +8,17 @@ from app.engines.gamma_move import CALIBRATED_FIELDS, GammaMoveConfig
 
 def test_defaults_validate():
     cfg = GammaMoveConfig().validate()
-    assert cfg.enabled is False
     assert cfg.stop_mode == "both"
+
+
+def test_the_engine_ships_on():
+    """`enabled` is a power switch, not a safety device.
+
+    Paper/live, manual/auto, the kill switch and the risk caps are what stand
+    between this engine and real money, and every one of them applies whatever
+    this flag says. Shipping off would only hide the strategy from its operator.
+    """
+    assert GammaMoveConfig().enabled is True
 
 
 def test_there_is_no_execution_mode():

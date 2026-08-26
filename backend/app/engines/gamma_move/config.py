@@ -93,7 +93,19 @@ def _hhmm(value: str, label: str) -> str:
 class GammaMoveConfig:
     """Immutable strategy configuration. Construct, then :meth:`validate`."""
 
-    enabled: bool = False
+    #: Whether this engine scans and may trade. Defaults ON.
+    #:
+    #: It is not a safety device and does not pretend to be one. What stands
+    #: between this engine and real money is the account's paper/live setting,
+    #: the engine's manual/auto setting, the kill switch, and the risk caps
+    #: below -- all of which apply whatever this is set to. An engine shipped
+    #: off just does nothing until somebody finds the toggle, and a switch whose
+    #: only effect is to hide the strategy from its own operator is not caution.
+    #:
+    #: What it DOES mean: with the account LIVE and the engine on AUTO, an
+    #: enabled engine trades. That is the correct reading of "enabled", and it
+    #: is the combination to think about -- not this flag on its own.
+    enabled: bool = True
 
     # --- universe -----------------------------------------------------------
     # Same field names, semantics and liquidity boundary as every other engine

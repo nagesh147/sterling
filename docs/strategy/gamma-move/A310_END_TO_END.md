@@ -1,7 +1,8 @@
 # A310 — Gamma Move, end to end
 
 **Strategy ID** `gamma_move` · **Name** "Gamma Move" · **Contract version** A310.2
-**Status** BUILT and CALIBRATED, 2026-08-26. Disabled, paper-only, behind the live gate.
+**Status** BUILT, CALIBRATED and PRODUCTION-WIRED, 2026-08-26. Ships enabled; paper/live
+and manual/auto are the account's and the engine's, not this strategy's.
 **Sits beside** ATM Premium Imbalance — same engine/service/API/board/settings shape,
 a peer entry in every registry, never a fork of it.
 

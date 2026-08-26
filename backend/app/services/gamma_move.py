@@ -44,32 +44,43 @@ def ist_now_ms() -> int:
 # ------------------------------------------------------------------ config
 
 def get_config() -> GammaMoveConfig:
-    """The persisted config, falling back to safe disabled defaults.
+    """The persisted config, or the defaults when nothing has been stored.
 
-    A stored row that no longer validates must never become a trading config: the
-    failure would otherwise surface deep inside the engine mid-session. Disabled
-    is the safe state, so that is the fallback.
+    Two different fallbacks, kept apart on purpose:
+
+    * **Nothing stored** -> the real defaults, whatever they are. A default is
+      what applies when nobody has said otherwise; hardcoding `enabled=False`
+      here used to make the shipped default a lie, because the dataclass said on
+      and this said off.
+    * **Stored but unreadable or invalid** -> defaults with the engine OFF. A
+      config that will not validate must never become a trading config, and the
+      failure would otherwise surface deep inside the engine mid-session. This
+      one is a safety fallback and stays.
+
+    A stored value always wins over a default. Changing a default must not
+    overrule an operator who deliberately set something.
     """
-    default = GammaMoveConfig(enabled=False)
     try:
         from app.services import db
         raw = db.get_config(_CONFIG_KEY)
     except Exception:                                              # noqa: BLE001
-        return default
+        log.warning("%s: config store unavailable; running with defaults OFF", STRATEGY_ID)
+        return GammaMoveConfig(enabled=False)
     if not raw:
-        return default
+        return GammaMoveConfig()
     try:
         stored = json.loads(raw) if isinstance(raw, str) else raw
         known = GammaMoveConfig.field_names()
-        merged = {**default.as_dict(), **{k: v for k, v in dict(stored).items() if k in known}}
+        merged = {**GammaMoveConfig().as_dict(),
+                  **{k: v for k, v in dict(stored).items() if k in known}}
         for key in ("scan_stocks", "scan_indices"):
             if isinstance(merged.get(key), list):
                 merged[key] = tuple(merged[key])
         return GammaMoveConfig(**merged).validate()
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
-        log.error("Stored %s config is invalid (%s); falling back to disabled defaults",
+        log.error("Stored %s config is invalid (%s); running with defaults OFF",
                   STRATEGY_ID, exc)
-        return default
+        return GammaMoveConfig(enabled=False)
 
 
 def set_config(values: dict[str, Any]) -> GammaMoveConfig:
@@ -219,7 +230,9 @@ async def snapshot(uid: str) -> dict:
                  "engine's — both shared with every Kite strategy, neither stored here."),
     }
     if not cfg.enabled:
-        out["blockers"].append("strategy disabled")
+        out["blockers"].append(
+            "this engine is switched off — turn it on in its own settings; "
+            "paper/live and manual/auto are elsewhere and unaffected")
     # Warnings are configured risks, not failures, so they read as sentences.
     out["warnings"] = list(cfg.warnings())
     out["warnings"].append(

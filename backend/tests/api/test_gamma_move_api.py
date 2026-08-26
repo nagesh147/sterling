@@ -49,7 +49,7 @@ def test_defaults_are_the_calibrated_values(client):
     assert d["volume_spike_mult"] == 2.5
     assert d["min_price_gain_pct"] == 2.0
     assert d["regime_multiplier"] == 2.0      # not the conventional 3.0
-    assert d["enabled"] is False
+    assert d["enabled"] is True
     assert d["stop_mode"] == "both"
     assert "execution_mode" not in d
 
@@ -137,7 +137,6 @@ def test_snapshot_states_that_the_strategy_is_unvalidated(client):
     not only in a document."""
     body = client.get("/config/gamma-move/snapshot").json()
     assert any("not validated" in w for w in body["warnings"])
-    assert any("disabled" in b for b in body["blockers"])
 
 
 def test_snapshot_reports_mode_read_from_its_real_home(client):
