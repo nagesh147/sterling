@@ -19,7 +19,7 @@ because that engine is the template this one copies. Where this strategy needs
 something ATM did not — a multi-symbol scanner, an open-interest time series, a
 regime gate — the difference is called out and justified rather than smuggled in.
 
-**Read `## 1` before anything else.** The single largest risk in this build is
+**Read §1 before anything else.** The single largest risk in this build is
 that the source is a discretionary strategy from a podcast, and three of its
 rules were never stated numerically. Those three are marked **UNSPECIFIED** and
 default to *refuse to trade* rather than to a guessed number.
