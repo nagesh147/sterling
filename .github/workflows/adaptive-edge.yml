@@ -1,0 +1,69 @@
+name: Adaptive Edge Boundary
+
+on:
+  push:
+    branches: [main, dev, feature/adaptive-edge-artifact-resolution]
+    paths:
+      - "backend/app/engines/adaptive_edge/**"
+      - "backend/tests/engines/adaptive_edge/**"
+      - "docs/strategy/adaptive-edge/**"
+      - ".github/workflows/adaptive-edge.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/app/engines/adaptive_edge/**"
+      - "backend/tests/engines/adaptive_edge/**"
+      - "docs/strategy/adaptive-edge/**"
+      - ".github/workflows/adaptive-edge.yml"
+
+jobs:
+  adaptive-edge-tests:
+    name: Adaptive Edge tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run Adaptive Edge tests
+        run: python -m pytest -q backend/tests/engines/adaptive_edge
+        env:
+          ENVIRONMENT: test
+          PAPER_TRADING: "true"
+          REAL_PUBLIC_DATA: "false"
+          LOG_LEVEL: WARNING
+
+      - name: Verify strategy implementation and fail-closed promotion gate
+        run: |
+          python - <<'PY'
+          from backend.app.engines.adaptive_edge.readiness import assess_strategy_readiness
+          from backend.app.engines.adaptive_edge.execution_gate import evaluate_execution_gate
+          from backend.app.engines.adaptive_edge.promotion import PromotionStatus
+
+          readiness = assess_strategy_readiness()
+          gate = evaluate_execution_gate()
+
+          assert readiness.unresolved_formula_ids == (), readiness
+          assert readiness.promotion_status is PromotionStatus.RESEARCH_ONLY
+          assert not readiness.executable, readiness
+          assert not gate.authorized, gate
+          assert gate.blocking_formulas == ()
+          assert gate.reason == "strategy_promotion_required"
+          print("Adaptive Edge formulas are implemented; production execution remains correctly blocked by promotion.")
+          PY
+
+      - name: Check Python syntax
+        run: python -m compileall -q backend/app/engines/adaptive_edge
