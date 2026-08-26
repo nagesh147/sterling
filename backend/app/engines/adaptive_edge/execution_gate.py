@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Iterable
 
 from .formula_registry import FormulaStatus, get_formula
+from .promotion import CURRENT_STRATEGY_PROMOTION, PromotionStatus
 
 
 REQUIRED_STRATEGY_FORMULAS: tuple[str, ...] = tuple(
@@ -91,11 +92,39 @@ class ExecutionBlockedError(RuntimeError):
 
     def __init__(self, decision: ExecutionGateDecision) -> None:
         self.decision = decision
-        super().__init__(
-            "Adaptive Edge execution blocked: "
-            + ", ".join(decision.blocking_formulas)
-            + " require authoritative resolution before execution"
+        message = "Adaptive Edge execution blocked"
+        if decision.reason:
+            message += f" ({decision.reason})"
+        if decision.blocking_formulas:
+            message += (
+                ": "
+                + ", ".join(decision.blocking_formulas)
+                + " require authoritative resolution before execution"
+            )
+        super().__init__(message)
+
+
+def evaluate_strategy_promotion_gate() -> ExecutionGateDecision:
+    """Is the strategy itself cleared to trade, regardless of its formulas?
+
+    Separate from the formula gate on purpose. Implementing every formula says
+    the mathematics exists; it does not say the strategy has been walk-forward
+    validated and approved to risk money. Both must hold, so that completing the
+    implementation can never on its own make the engine live.
+    """
+    if CURRENT_STRATEGY_PROMOTION.status is PromotionStatus.APPROVED:
+        return ExecutionGateDecision(
+            status=ExecutionGateStatus.AUTHORIZED,
+            required_formulas=(),
+            blocking_formulas=(),
+            reason=None,
         )
+    return ExecutionGateDecision(
+        status=ExecutionGateStatus.BLOCKED,
+        required_formulas=(),
+        blocking_formulas=(),
+        reason="strategy_promotion_required",
+    )
 
 
 @dataclass(frozen=True)

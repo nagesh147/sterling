@@ -1,60 +1,96 @@
-# Adaptive Edge — inherited failures
+# Adaptive Edge — what the archive merge inherited, and how it was resolved
 
 `strategy/adaptive-edge` is the six archived adaptive-edge branches merged back
-onto `main`. They were cut as tags (`archive/2026-08-27/adaptive-edge-*`) before
-the 2026-08-27 branch cleanup and merged here on 2026-08-27.
+onto `main` on 2026-08-27. They were cut as tags
+(`archive/2026-08-27/adaptive-edge-*`) before the branch cleanup.
 
-**This branch is red, and it was red before the merge.** The merge added nothing:
-the failing set on this branch is exactly the union of the failing sets of the
-six tags, measured test-id by test-id (42 = 42, zero new). Nothing here is a
-semantic conflict between branches — every item below was pushed broken.
+The merge itself was clean: measured test-id by test-id, the failing set after
+merging was exactly the union of the six tags' own failing sets — 42 = 42, zero
+new. Nothing below was caused by combining the branches. They were pushed
+broken, and six test files could not even be imported.
 
-Do not "fix" these by deleting the tests. They describe work that was specified
-and never finished; the tests are the surviving specification.
+**The suite is now green: 4290 backend passed / 0 failed, 953 frontend, `tsc`
+clean.** This records what the failures actually were, because several were not
+what they looked like.
 
-## 1. Six files that cannot even be collected
+## The engine is still not executable
 
-Each imports a name that exists in **no commit on any of the six tags** — checked
-symbol by symbol, not inferred. The tests were written against an API that was
-never committed.
+That property was never traded away to get a green suite, and it is now
+asserted from both sides:
 
-| Test file | Needs | From |
+```
+formula gate authorized  : False | required_strategy_formula_not_implemented
+promotion gate authorized: False | strategy_promotion_required
+strategy executable      : False | required_strategy_formulas_unresolved
+```
+
+## What the failures were
+
+**One import spelling, two module identities.** Twenty-two tests imported
+`backend.app.engines...` while the other 387 files use `app.engines...`.
+`backend/pytest.ini` sets `testpaths = tests`, so the suite runs from
+`backend/`, where those 22 could not be collected at all. Run from the repo root
+instead, where both spellings resolve, the same module is imported twice and
+every class exists as two unrelated objects — so `pytest.raises` did not catch
+exceptions the code raised correctly, and reported `DID NOT RAISE`. Several
+"failures" were only ever that.
+
+**Five APIs that existed only as tests.** `ReplayBar`, `ReplayError`,
+`build_folds`, module-level `snapshot`/`update_peak_pnl`, and the whole
+`state_machine` module were imported by tests but defined in no commit on any
+branch. `kite_adapter.py` imported `ReplayBar` too, so it was production code
+that could not import. They are implemented now.
+
+**Two generations of the canonical formulas.** `expected_net_value` took
+`(profit, loss, cost)` — EV(s,m) with probabilities applied, which is what
+`target_stop_ev` beside it already computed — while every caller passed a single
+gross value, as F-004 is specified in two separate contract documents. Same for
+`risk_per_unit` and `position_size`, whose callers passed arguments the
+signatures did not have.
+
+**Three generations of the execution-authorization model**, disagreeing about
+the single most safety-critical question in the engine — what makes a strategy
+executable:
+
+| date | model | F-101..F-114 status |
 |---|---|---|
-| `engines/test_adaptive_edge_backtest.py` | `ReplayBar` | `adaptive_edge.backtest` |
-| `engines/adaptive_edge/test_replay.py` | `ReplayError` | `adaptive_edge.replay` |
-| `engines/test_adaptive_edge_research.py` | `build_folds` | `adaptive_edge.walk_forward` |
-| `engines/test_adaptive_edge_accounting.py` | `snapshot` | `adaptive_edge.accounting` |
-| `engines/test_adaptive_edge_state_machine.py` | the whole module | `adaptive_edge.state_machine` |
-| `engines/test_adaptive_edge_kite_adapter.py` | (collect error) | — |
+| 2026-08-11 | deprecated reconstruction | `DEPRECATED` |
+| 2026-08-12 | implemented + promotion gate | `IMPLEMENTED` @ 2.1.0 |
+| 2026-08-17/18 | governance conformance | `LOCKED` |
 
-A collection error aborts the whole pytest run, so until these are resolved the
-backend suite only runs with all six `--ignore`d:
+One registry entry cannot hold three statuses, so these could not all pass. The
+2026-08-17/18 governance model is authoritative here: it is newest, it was the
+one already green, and it blocks on the formulas themselves rather than on a
+promotion record a single constant could flip. The two older files were rewritten
+to assert the same safety property under it.
 
-```
-pytest backend/tests -q \
-  --deselect backend/tests/test_delta_iv_socket.py \
-  --ignore=backend/tests/engines/adaptive_edge/test_replay.py \
-  --ignore=backend/tests/engines/test_adaptive_edge_accounting.py \
-  --ignore=backend/tests/engines/test_adaptive_edge_backtest.py \
-  --ignore=backend/tests/engines/test_adaptive_edge_kite_adapter.py \
-  --ignore=backend/tests/engines/test_adaptive_edge_research.py \
-  --ignore=backend/tests/engines/test_adaptive_edge_state_machine.py
-```
+## Two things deliberately not made green by implementation
 
-## 2. Forty-two failures once those six are ignored
+**The feature-driven backtester.** `test_adaptive_edge_backtest.py` drove a
+`run_replay` that derived a direction from `MarketFeatures` itself. That needs
+the F-101..F-114 formulas, which `model.py` removed as invented and says "must
+not execute". Writing them back to earn a green tick is the one thing that
+removal exists to prevent. The file now tests that the boundary holds: bars
+carry data, callers supply decisions, the deprecated model still refuses to run.
 
-`42 failed, 4217 passed, 11 skipped, 1 xfailed`, in two clusters:
+**Three asserted values were wrong, not stale.** EV(s,m) for the documented
+inputs is `0.6*10 - 0.3*8 - 1.0 = 2.6`, not the asserted 3.2. A valuation
+fixture named "availability before observation" passed `T0.replace(minute=9)`,
+which is nine minutes *after*. A `links or [default]` helper meant an explicitly
+empty list became the default, so the one case that file needed to test never
+occurred. In each case the implementation was right.
 
-- **24 in the adaptive_edge engine** — decision pipeline, probability model,
-  reconstructed edge, economic spec alignment, e2e gate.
-- **18 in TrueData replay provenance** — `backend/tests/services/providers/truedata/`.
-  All 18 fail identically at `archive/2026-08-27/adaptive-edge-truedata-replay-gate`.
+## Defects found and fixed along the way
 
-## Green on this branch
-
-Frontend is clean: 953 tests / 98 files pass and `tsc --noEmit` exits 0. The one
-thing the merge did break was `zzScratchClaim.test.tsx`, a throwaway swept in by
-commit `0f9327c8` ("xx") that never reached main; it is removed here.
-
-The merge touches only `backend/app/engines/adaptive_edge/`, its tests, and docs
-— no other backend code and no frontend.
+- `TrueDataMarketDataAdapter` stamped its own provenance unconditionally, so a
+  record arriving labelled `synthetic` was relabelled `truedata` — laundering
+  fabricated data into a sequence the replay contract then accepts as real.
+- `BarStore`/`TickStore` never persisted or returned `source`/`source_version`.
+- `evaluate_economics` treated `net >= minimum` as eligible, so with the default
+  threshold of zero an opportunity with no expected profit and real risk was
+  eligible. The source rule is `EV_conservative <= 0 -> NO_TRADE`.
+- `evaluate_economics` accepted a negative execution cost, which inflates net
+  value and turns unviable opportunities eligible.
+- `dispatch_order`'s `formula_ids` *replaced* the required formula scope instead
+  of widening it, so naming one already-implemented formula authorized a
+  dispatch and skipped the fourteen that govern whether the strategy may trade.
