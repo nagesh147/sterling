@@ -2,7 +2,7 @@ import React from 'react';
 import { useStockRegistry } from '../../../hooks/useSterlingKiteEngine';
 import type { LiquidityGroup, Moneyness, ScanExpiry, ScanSource } from '../../../types/kiteEngine';
 import {
-  BORDER, CheckOption, ChoiceRow, DIM, Field, ORANGE, ORANGE_SOFT, Switch, TEXT,
+  BORDER, CheckOption, ChoiceRow, DIM, Field, NumberField, ORANGE, ORANGE_SOFT, Switch, TEXT,
 } from '../kiteSettingsPrimitives';
 import { ConfigNote } from './ConfigPrimitives';
 import { FIELDS, INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
@@ -156,8 +156,8 @@ export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The char
               minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)',
               alignItems: 'start', gap: 9, textAlign: 'left', padding: '10px 11px', borderRadius: 7,
               cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box',
-              border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
-              background: selected ? ORANGE_SOFT : '#fff',
+              border: `1px solid ${selected ? 'var(--k-border-brand)' : BORDER}`,
+              background: selected ? ORANGE_SOFT : 'var(--k-bg)',
             }}>
               <input
                 type="radio" name={name} checked={selected}
@@ -177,13 +177,30 @@ export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The char
 }
 
 /** Which strikes and expiry cycles this engine resolves. */
-export function ContractsGroup({ strikes, indexExpiries, onChange }: {
+export function ContractsGroup({
+  strikes, indexExpiries, onChange,
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote,
+}: {
   strikes: Moneyness[];
   indexExpiries: ScanExpiry[];
   onChange: (next: {
     strike_moneyness?: Moneyness[];
     scan_expiries_indices?: ScanExpiry[];
+    expiry_dte_min?: number;
+    expiry_dte_max?: number;
+    avoid_expiry_day?: boolean;
   }) => void;
+  /* The expiry window, shared by every engine under these names. Optional so a
+     caller that has not adopted them yet renders exactly what it did before —
+     but every option engine now passes them, and this is the one place the
+     wording lives, so "minimum days to expiry" cannot come to mean two things
+     on two pages. */
+  dteMin?: number;
+  dteMax?: number;
+  avoidExpiryDay?: boolean;
+  dteDefaults?: { min?: number; max?: number };
+  /** Engine-specific note under the window, e.g. why one of them is off. */
+  dteNote?: React.ReactNode;
 }) {
   const toggleStrikeGroup = (values: Moneyness[]) => {
     const all = values.every((v) => strikes.includes(v));
@@ -254,6 +271,36 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           ))}
         </div>
       </Field>
+
+      {dteMin !== undefined && dteMax !== undefined && (
+        <>
+          <NumberField
+            label="Minimum days to expiry"
+            hint="Contracts closer to expiry than this are not eligible."
+            value={dteMin} defaultValue={dteDefaults?.min}
+            onChange={(v) => onChange({ expiry_dte_min: v })}
+            min={0} max={365} step={1}
+          />
+          <NumberField
+            label="Maximum days to expiry"
+            hint="Contracts further out than this are not eligible."
+            value={dteMax} defaultValue={dteDefaults?.max}
+            onChange={(v) => onChange({ expiry_dte_max: v })}
+            min={0} max={400} step={1}
+          />
+          <Field
+            label="Expiry day"
+            hint="Expiry-day options gain and lose value fastest, and their open interest is settlement mechanics rather than positioning."
+          >
+            <Switch
+              checked={!!avoidExpiryDay}
+              label="Avoid expiry-day entries"
+              onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
+            />
+          </Field>
+          {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
+        </>
+      )}
 
       <ConfigNote>
         Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.

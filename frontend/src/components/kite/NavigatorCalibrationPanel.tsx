@@ -6,9 +6,9 @@ import {
 } from '../../hooks/useNavigator';
 import type { CalibrationCriteria, CalibrationReport } from '../../types/navigator';
 
-const GREEN = '#4caf50';
-const RED = '#df514c';
-const AMBER = '#f5a623';
+const GREEN = 'var(--k-green)';
+const RED = 'var(--k-red)';
+const AMBER = 'var(--k-amber)';
 
 function pct(v: number | null | undefined): string {
   return v == null ? '—' : `${Math.round(v * 100)}%`;
@@ -22,7 +22,7 @@ function CriterionRow({ passed, label, detail }: { passed: boolean; label: strin
         style={{
           flexShrink: 0, marginTop: 1, width: 15, height: 15, borderRadius: '50%',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 800, color: '#fff', background: passed ? GREEN : '#c2c2c2',
+          fontSize: 9, fontWeight: 800, color: 'var(--k-bg)', background: passed ? GREEN : '#c2c2c2',
         }}
       >
         {passed ? '✓' : '·'}
@@ -76,14 +76,14 @@ export function NavigatorCalibrationPanel() {
   return (
     <details
       style={{
-        background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9,
+        background: 'var(--k-bg)', border: `1px solid ${BORDER}`, borderRadius: 9,
         overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
       <summary style={{
         listStyle: 'none', cursor: 'pointer', padding: '12px 16px',
         display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none',
-        background: '#fff',
+        background: 'var(--k-bg)',
       }}>
         <span aria-hidden style={{ width: 14, color: DIM, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>›</span>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -175,7 +175,7 @@ export function NavigatorCalibrationPanel() {
         )}
 
         {!!report?.warnings?.length && (
-          <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4' }}>
+          <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: 'var(--k-surface-warm)', border: '1px solid var(--k-border-brand)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: TEXT, fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
               <Icons.Warning /> This report couldn&apos;t score everything
             </div>
@@ -202,12 +202,12 @@ export function NavigatorCalibrationPanel() {
 }
 
 const pillButton: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: '#fff',
+  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: 'var(--k-bg)',
   color: MUTED, borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const primaryButton: React.CSSProperties = {
-  border: 'none', background: '#f06428', color: '#fff', borderRadius: 7, padding: '8px 16px',
+  border: 'none', background: 'var(--k-brand)', color: 'var(--k-on-accent)', borderRadius: 7, padding: '8px 16px',
   fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 

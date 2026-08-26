@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { DENSITY_ORDER, DEFAULT_DENSITY, MIN_USER_SCALE, MAX_USER_SCALE, type Density } from '../utils/viewportScale';
 
 const STORAGE_KEY = 'sterling_underlying';
 const THEME_KEY = 'sterling_theme';
@@ -77,6 +78,33 @@ function loadZoom(): number {
   catch { return 1; }
 }
 
+const DENSITY_KEY = 'sterling_density';
+const AUTOFIT_KEY = 'sterling_autofit';
+function loadDensity(): Density {
+  try {
+    const v = localStorage.getItem(DENSITY_KEY);
+    return DENSITY_ORDER.includes(v as Density) ? (v as Density) : DEFAULT_DENSITY;
+  } catch { return DEFAULT_DENSITY; }
+}
+/**
+ * Defaults OFF, so the app renders 1:1 like every other site.
+ *
+ * There are two incompatible readings of "the same on every monitor". Holding
+ * the layout constant makes every screen show the same content, but text size
+ * then follows the panel's pixel density. Holding text size constant is what
+ * YouTube and essentially everything else does — render 1:1 and trust the
+ * platform's scale factor, which exists to keep a CSS pixel about 1/96 inch —
+ * and let the amount of content vary with the room.
+ *
+ * Text size wins the default. It is the convention users already have from
+ * every other application, and the board adapts by dropping columns rather
+ * than clipping (see board/columnFit.ts), which is what made 1:1 viable here.
+ */
+function loadAutoFit(): boolean {
+  try { return localStorage.getItem(AUTOFIT_KEY) === 'true'; }
+  catch { return false; }
+}
+
 const TAB_ORDER_KEY = 'sterling_tab_order';
 const DEFAULT_TAB_ORDER: TabId[] = ['sterlingEngine', 'grok', 'sterling_v2', 'positions', 'backtest', 'paper', 'kite'];
 export type TabId = 'sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper' | 'kite';
@@ -107,14 +135,29 @@ interface StoreState {
   theme: Theme;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
+  /**
+   * Flip light <-> dark for the app-level icon.
+   *
+   * Distinct from `toggleTheme`, which cycles all three: an icon that shows a
+   * moon has to produce dark, not "whatever is next in the list". Grey stays
+   * reachable from the status bar.
+   */
+  toggleLightDark: () => void;
   appMode: 'basic' | 'pro';
   setAppMode: (m: 'basic' | 'pro') => void;
   engineMode: 'sterling' | 'grok';
   setEngineMode: (m: 'sterling' | 'grok') => void;
   sterlingV2: boolean;
   setSterlingV2: (on: boolean) => void;
+  /** The user's manual multiplier, applied on top of the monitor fit. */
   zoomLevel: number;
   setZoomLevel: (z: number) => void;
+  /** How much of the app to fit on screen at once. */
+  density: Density;
+  setDensity: (d: Density) => void;
+  /** Off renders 1:1 with the browser, as the app did before normalisation. */
+  autoFitDensity: boolean;
+  setAutoFitDensity: (on: boolean) => void;
   tabOrder: TabId[];
   setTabOrder: (order: TabId[]) => void;
   resetUI: () => void;
@@ -139,6 +182,15 @@ export const useStore = create<StoreState>((set) => ({
     applyThemeToDocument(t);
     set({ theme: t });
   },
+  toggleLightDark: () => set((s) => {
+    const next: Theme = s.theme === 'light' ? 'dark' : 'light';
+    try {
+      localStorage.setItem(THEME_KEY, next);
+      localStorage.setItem(THEME_DEFAULT_MIGRATION_KEY, 'true');
+    } catch { /* ignore */ }
+    applyThemeToDocument(next);
+    return { theme: next };
+  }),
   toggleTheme: () => set((s) => {
     const idx = THEME_CYCLE.indexOf(s.theme);
     const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length] ?? DEFAULT_THEME;
@@ -166,10 +218,19 @@ export const useStore = create<StoreState>((set) => ({
   },
   zoomLevel: loadZoom(),
   setZoomLevel: (z) => {
-    const clamped = Math.max(0.6, Math.min(2.0, z)); // Min 60%, Max 200%
+    const clamped = Math.max(MIN_USER_SCALE, Math.min(MAX_USER_SCALE, z));
     try { localStorage.setItem(ZOOM_KEY, clamped.toString()); } catch { /* ignore */ }
-    document.documentElement.style.setProperty('--app-zoom', clamped.toString());
     set({ zoomLevel: clamped });
+  },
+  density: loadDensity(),
+  setDensity: (d) => {
+    try { localStorage.setItem(DENSITY_KEY, d); } catch { /* ignore */ }
+    set({ density: d });
+  },
+  autoFitDensity: loadAutoFit(),
+  setAutoFitDensity: (on) => {
+    try { localStorage.setItem(AUTOFIT_KEY, String(on)); } catch { /* ignore */ }
+    set({ autoFitDensity: on });
   },
   tabOrder: loadTabOrder(),
   setTabOrder: (order) => {
@@ -179,12 +240,13 @@ export const useStore = create<StoreState>((set) => ({
   resetUI: () => {
     try {
       localStorage.setItem(ZOOM_KEY, '1');
+      localStorage.setItem(DENSITY_KEY, DEFAULT_DENSITY);
+      localStorage.setItem(AUTOFIT_KEY, 'false');
       localStorage.setItem(THEME_KEY, DEFAULT_THEME);
       localStorage.setItem(THEME_DEFAULT_MIGRATION_KEY, 'true');
     } catch { /* ignore */ }
     applyThemeToDocument(DEFAULT_THEME);
-    document.documentElement.style.setProperty('--app-zoom', '1');
-    set({ zoomLevel: 1, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
+    set({ zoomLevel: 1, density: DEFAULT_DENSITY, autoFitDensity: false, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
   },
 }));
 
@@ -210,11 +272,16 @@ export type { Theme };
 export { DEFAULT_THEME, THEME_DEFAULT_MIGRATION_KEY };
 export const useTheme = () => useStore((s) => s.theme);
 export const useSetTheme = () => useStore((s) => s.setTheme);
+export const useToggleLightDark = () => useStore((s) => s.toggleLightDark);
 export const useToggleTheme = () => useStore((s) => s.toggleTheme);
 export const useAppMode = () => useStore((s) => s.appMode);
 export const useSetAppMode = () => useStore((s) => s.setAppMode);
 
 export const useZoomLevel = () => useStore((s) => s.zoomLevel);
+export const useDensity = () => useStore((s) => s.density);
+export const useSetDensity = () => useStore((s) => s.setDensity);
+export const useAutoFitDensity = () => useStore((s) => s.autoFitDensity);
+export const useSetAutoFitDensity = () => useStore((s) => s.setAutoFitDensity);
 export const useSetZoomLevel = () => useStore((s) => s.setZoomLevel);
 export const useResetUI = () => useStore((s) => s.resetUI);
 

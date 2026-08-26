@@ -71,16 +71,6 @@ This is a terminal resolution of the current investigation, not a claim that the
 
 `EffectiveRisk_i` and `EffectiveRiskPerUnit` remain explicitly unresolved as strategy semantics. No equivalence with `GrossRisk`, `RiskPerUnit * Q`, or another Sterling engine's risk formula is authorized.
 
-## Completion program (software slice)
-
-Research-path composition is implemented: OrderIntent → Gateway → BrokerEvent → Position, listed F-109 fail-closed, F-110 conjunction with explicit ConservativeEV, T4/T5 identity prediction (no invented F-102 score), replay identity without mutating the registry.
-
-`software_complete` is True. `production_authorized` is False. ExecutionGate stays BLOCKED. F-101..F-114 stay LOCKED.
-
-**A197 remesure 2026-08-19 (`TD-6037DD0DD3`):** bars **50,244 / 134 days** (counts met). LI ticks **53,884 / 9 days** (all `li_valid`). Bars that fall on LI days: **3,374**. Old/boundary `/getticks` still empty (401 after live control). Verdict **R2**. `meets_a197_contract` is False because LI does not cover the bar window. Ticks were not synthesized.
-
-Remaining blockers are not software: A197 LI corpus (~113 more LI trading days), unique F-101..F-106 / F-113 / F-114 mathematics, walk-forward OOS, then unlock.
-
 ## Next unlock
 
 Only two events may move a blocked artifact to `RESOLVED`:

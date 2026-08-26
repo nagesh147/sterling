@@ -3,27 +3,27 @@
 | ID | Requirement | Code | Tests | Status |
 |---|---|---|---|---|
 | F-001 | Causal availability | `adaptive_edge/feature_engine.py` | `test_adaptive_edge_pipeline.py` | RESOLVED |
-| F-002 | Peak P&L | `adaptive_edge/accounting.py` | `test_adaptive_edge_pnl_reconciliation.py` | RESOLVED |
-| F-003 | Profit giveback | `adaptive_edge/accounting.py` | `test_adaptive_edge_pnl_reconciliation.py` | RESOLVED |
+| F-002 | Peak P&L | Accounting/protection owner | Pending strategy integration test | RESOLVED-ANCHORED |
+| F-003 | Profit giveback | Accounting/protection owner | Pending strategy integration test | RESOLVED-ANCHORED |
 | F-004 | Gross minus execution cost | `adaptive_edge/economic.py` | `test_adaptive_edge_pipeline.py` | RESOLVED |
 | F-005 | Risk authorization immutable | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | RESOLVED |
 | F-006 | Mode/risk independent | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | RESOLVED |
-| F-007 | BUY uses executable ask | `adaptive_edge/research_references.py` | `test_adaptive_edge_research_e2e.py` | RESOLVED |
-| F-008 | SELL uses executable bid | `adaptive_edge/research_references.py` | `test_adaptive_edge_research_e2e.py` | RESOLVED |
-| F-101 | Feature formula | `adaptive_edge/f101.py` research only | `test_adaptive_edge_f101_trial.py` | RESEARCH / REGISTRY-LOCKED |
-| F-102 | Edge/prediction | `edge.py` contract; T4 uses identity binder + explicit gross | No unique score recovered | RESOLVED-BLOCKED |
-| F-103 | Eligibility | Pending unique source | Pending | RESOLVED-BLOCKED |
-| F-104 | Dynamic mode | `adaptive_edge/opportunity_mode.py` research | Pending unique thresholds | RESOLVED-BLOCKED |
-| F-105 | Profit protection | `adaptive_edge/protection.py` policy-driven | Pending unique parameters | RESOLVED-BLOCKED |
-| F-106 | Dynamic risk | Pending unique source | Pending | RESOLVED-BLOCKED |
-| F-107 | Risk per unit | `adaptive_edge/risk_sizing.py` | `test_adaptive_edge_risk_sizing.py` | RESEARCH / REGISTRY-LOCKED |
-| F-108 | Position sizing | `adaptive_edge/risk_sizing.py` | `test_adaptive_edge_risk_sizing.py` | RESEARCH / REGISTRY-LOCKED |
-| F-109 | Instrument selection | `instrument_selection.py` listed-only + `ListedInstrumentSelector` | `test_adaptive_edge_instrument_selection.py`, T4/T5 | RESEARCH / REGISTRY-LOCKED |
-| F-110 | Entry trigger | `entry_decision.py` conjunction; ConservativeEV explicit | `test_adaptive_edge_entry_decision.py` | RESEARCH / REGISTRY-LOCKED |
-| F-111 | Exit trigger | `adaptive_edge/lifecycle_engine.py` | `test_adaptive_edge_lifecycle_engine.py` | RESEARCH / REGISTRY-LOCKED |
-| F-112 | Protection parameterization | `adaptive_edge/protection.py` caller policy | `test_adaptive_edge_protection.py` | RESEARCH / REGISTRY-LOCKED |
-| F-113 | Re-entry | `admission.py` semantic only; no score | `test_adaptive_edge_admission.py` | SEMANTIC / NUMERIC-BLOCKED |
-| F-114 | Multi-position interaction | INV-ENTRY-003 one-position only | `test_adaptive_edge_admission.py` | SEMANTIC / AGGREGATION-BLOCKED |
+| F-007 | BUY uses executable ask | Execution owner | Pending | RESOLVED-ANCHORED |
+| F-008 | SELL uses executable bid | Execution owner | Pending | RESOLVED-ANCHORED |
+| F-101 | Feature formula | `adaptive_edge/feature_engine.py` contract | Pending | RESOLVED-BLOCKED |
+| F-102 | Edge/prediction | `adaptive_edge/edge.py` contract | Pending | RESOLVED-BLOCKED |
+| F-103 | Eligibility | Pending | Pending | RESOLVED-BLOCKED |
+| F-104 | Dynamic mode | `adaptive_edge/contracts.py` state model | Pending exact thresholds | RESOLVED-BLOCKED |
+| F-105 | Profit protection | Pending | Pending | RESOLVED-BLOCKED |
+| F-106 | Dynamic risk | Pending | Pending | RESOLVED-BLOCKED |
+| F-107 | Risk per unit | Pending | Pending | RESOLVED-BLOCKED |
+| F-108 | Position sizing | Pending | Pending | RESOLVED-BLOCKED |
+| F-109 | Instrument selection | Pending | Pending | RESOLVED-BLOCKED |
+| F-110 | Entry trigger | Pending | Pending | RESOLVED-BLOCKED |
+| F-111 | Exit trigger | Pending | Pending | RESOLVED-BLOCKED |
+| F-112 | Protection parameterization | Pending | Pending | RESOLVED-BLOCKED |
+| F-113 | Re-entry | Pending | Pending | RESOLVED-BLOCKED |
+| F-114 | Multi-position interaction | Pending | Pending | RESOLVED-BLOCKED |
 
 ## Resolution semantics
 

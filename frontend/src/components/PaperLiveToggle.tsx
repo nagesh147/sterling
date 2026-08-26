@@ -199,7 +199,7 @@ export function PaperLiveToggle() {
                 </div>
                 {testStatus.hint && (
                   <>
-                    <div style={{ fontSize: 9, color: '#f0c040', lineHeight: 1.5, marginBottom: 4 }}>{testStatus.hint}</div>
+                    <div style={{ fontSize: 9, color: 'var(--k-gold)', lineHeight: 1.5, marginBottom: 4 }}>{testStatus.hint}</div>
                     <a href="https://www.delta.exchange/app/account/manageapikeys" target="_blank" rel="noopener noreferrer"
                       style={{ fontSize: 9, color: 'var(--accent)', textDecoration: 'none', background: '#0f2a1a', border: '1px solid var(--accent)33', borderRadius: 3, padding: '3px 8px' }}>
                       Open delta.exchange API Keys ↗

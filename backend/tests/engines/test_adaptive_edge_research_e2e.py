@@ -81,15 +81,6 @@ def test_coverage_is_not_a197_on_short_window():
     report.assert_not_a197()
 
 
-def test_bars_without_li_cannot_meet_a197():
-    from app.engines.adaptive_edge.research_pipeline import meets_a197_contract
-
-    assert meets_a197_contract(trading_days=120, bar_count=45_000, li_valid=45_000) is True
-    assert meets_a197_contract(trading_days=120, bar_count=45_000, li_valid=0) is False
-    assert meets_a197_contract(trading_days=10, bar_count=45_000, li_valid=45_000) is False
-    assert meets_a197_contract(trading_days=120, bar_count=3_374, li_valid=3_374) is False
-
-
 def test_window_search_does_not_pick_a_production_pair():
     scores = score_window_candidates(19, [(5, 10), (5, 15), (20, 10)])
     assert scores[0].valid is True

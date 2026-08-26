@@ -1,6 +1,14 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
+import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
+import { FilterToggle } from './board/BoardFilters';
+// The row's geometry and columns now live beside the shared board, so every
+// engine renders against the same table rather than a copy of it.
+import {
+  ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
+  type SignalColVisibility,
+} from './board/signalRowSpec';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -84,8 +92,8 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
         {label}
         {sortKey && (
           <span className={`sort-icon ${isActive ? 'active' : ''}`}>
-             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
-             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? 'var(--k-blue-kite)' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? 'var(--k-blue-kite)' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
           </span>
         )}
       </div>
@@ -100,31 +108,6 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
  *  next to the (flex:1) Instrument column; RIGHT is pinned after the action
  *  buttons. `visibleWhen` is a tag both the header and the row resolve against
  *  their own (equivalent, differently-named) boolean for that condition. */
-type SignalColVisibility = 'always' | 'exchange' | 'leg' | 'premium' | 'chg' | 'chgPct' | 'dir';
-interface SignalColumnDef {
-  key: string;
-  label: string;
-  width: number;
-  align: 'left' | 'right';
-  sortKey?: string;
-  tooltip?: string;
-  visibleWhen: SignalColVisibility;
-}
-const SIGNAL_LEFT_COLUMNS: Record<string, SignalColumnDef> = {
-  exc: { key: 'exc', label: 'Exc.', width: 40, align: 'left', sortKey: 'exc', visibleWhen: 'exchange' },
-  leg: { key: 'leg', label: 'Leg (Δ)', width: 78, align: 'right', sortKey: 'leg', visibleWhen: 'leg' },
-  entry: { key: 'entry', label: 'Entry (Δpts)', width: 96, align: 'right', sortKey: 'entry', visibleWhen: 'premium' },
-  sl: { key: 'sl', label: 'SL', width: 56, align: 'right', sortKey: 'sl', visibleWhen: 'premium' },
-  tsl: { key: 'tsl', label: 'TSL', width: 56, align: 'right', sortKey: 'stop', visibleWhen: 'premium' },
-  exit: { key: 'exit', label: 'Exit', width: 58, align: 'right', visibleWhen: 'always', tooltip: 'Red-counter progress toward the auto-exit rule (exit_mode)' },
-  target: { key: 'target', label: 'Target', width: 44, align: 'right', visibleWhen: 'premium', tooltip: 'Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)' },
-};
-const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
-  chg: { key: 'chg', label: 'Chg.', width: 50, align: 'right', sortKey: 'chg', visibleWhen: 'chg' },
-  chgPct: { key: 'chgPct', label: 'Chg. %', width: 60, align: 'right', sortKey: 'chgPct', visibleWhen: 'chgPct' },
-  dir: { key: 'dir', label: '', width: 14, align: 'right', visibleWhen: 'dir' },
-  ltp: { key: 'ltp', label: 'LTP', width: 70, align: 'right', sortKey: 'ltp', visibleWhen: 'always' },
-};
 /** Drag-to-reorder header cell wrapper. Uses raw pointer events (not native
  *  HTML5 draggable/dragstart) because native drag-and-drop's gesture
  *  recognition is unreliable for plain `<div>`s across browsers/trackpads —
@@ -550,7 +533,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     style={{
                       fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
                       color: row.exit_reason.startsWith('trail breach') ? k.red : row.exit_reason.startsWith('time decay') ? k.orange : k.dim,
-                      background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : row.exit_reason.startsWith('time decay') ? '#fff3e0' : undefined,
+                      background: row.exit_reason.startsWith('trail breach') ? 'var(--k-tint-red)' : row.exit_reason.startsWith('time decay') ? 'var(--k-tint-amber)' : undefined,
                     }}>
                 {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : row.exit_reason.startsWith('time decay') ? 'Theta exit' : 'counter exit'}
               </span>
@@ -566,7 +549,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           {row.adx != null && (
             <Tip text={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}>
               <span style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
-                             background: row.adx >= 25 ? '#e8f5e9' : undefined,
+                             background: row.adx >= 25 ? 'var(--k-tint-green)' : undefined,
                              borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
                 ADX {row.adx.toFixed(0)}
               </span>
@@ -575,7 +558,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           {row.atr_pct != null && (
             <Tip text={`ATR percentile ${row.atr_pct.toFixed(0)}% — this bar's ATR ranked against the last 100 hourly bars (~15 sessions), not a % of price. Higher = unusually volatile for this instrument lately.`}>
               <span style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
-                             background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
+                             background: row.atr_pct >= 50 ? 'var(--k-tint-amber)' : undefined,
                              borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
                 ATR {row.atr_pct.toFixed(0)}%
               </span>
@@ -1327,25 +1310,6 @@ function EngineMark() {
   );
 }
 
-function HeaderIconBtn({ title, onClick, active, disabled, children }: {
-  title: string; onClick: () => void; active?: boolean; disabled?: boolean; children: React.ReactNode;
-}) {
-  return (
-    <button title={title} aria-label={title} onClick={onClick} disabled={disabled}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
-        borderRadius: 6, padding: 0, cursor: disabled ? 'default' : 'pointer',
-        border: `1px solid ${active ? k.orange : k.border}`,
-        background: active ? tint(k.orange, 10) : k.bg,
-        color: active ? k.orange : k.dim, opacity: disabled ? 0.55 : 1, transition: 'all .15s ease',
-      }}
-      onMouseEnter={(e) => { if (!disabled && !active) { e.currentTarget.style.background = k.surfaceHover; e.currentTarget.style.color = k.text; } }}
-      onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = k.bg; e.currentTarget.style.color = k.dim; } }}>
-      {children}
-    </button>
-  );
-}
-
 function Switch({ on, onChange, color, label }: { on: boolean; onChange: () => void; color: string; label: string }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} onClick={onChange}
@@ -1355,7 +1319,7 @@ function Switch({ on, onChange, color, label }: { on: boolean; onChange: () => v
       }}>
       <span style={{
         position: 'absolute', top: 2, left: on ? 17 : 2, width: 15, height: 15, borderRadius: '50%',
-        background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+        background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
       }} />
     </button>
   );
@@ -1403,38 +1367,23 @@ function Collapsible({ label, summary, open, onToggle, children }: {
   );
 }
 
-function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <span style={{ fontSize: 10, color: k.dim }}>Ended</span>
-      <button onClick={onChange}
-        style={{
-          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
-          cursor: 'pointer', flexShrink: 0, background: on ? k.amber : k.border, transition: 'background .18s ease',
-        }}>
-        <span style={{
-          position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
-        }} />
-      </button>
-    </div>
-  );
-}
-
+/**
+ * How this board looks.
+ *
+ * Deliberately not what it shows: Best leg and Ended are live filters and live
+ * in the toolbar, where their state is visible without opening a panel. This
+ * used to carry a second copy of both as checkboxes, which is two controls for
+ * one setting and a pair that will eventually drift.
+ *
+ * "Reset board view" therefore resets appearance only. A button in an
+ * appearance panel that silently un-filters your list is a surprise.
+ */
 function SignalTableSettingsPanel({
   viewLayout,
   onLayoutChange,
-  bestOnly,
-  onBestOnlyChange,
-  showEnded,
-  onShowEndedChange,
 }: {
   viewLayout: 'grid' | 'list';
   onLayoutChange: (layout: 'grid' | 'list') => void;
-  bestOnly: boolean;
-  onBestOnlyChange: (next: boolean) => void;
-  showEnded: boolean;
-  onShowEndedChange: (next: boolean) => void;
 }) {
   const settings = useKiteSettings();
   const columns: Array<{ key: 'showExchange' | 'showLeg' | 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection'; label: string; hint: string }> = [
@@ -1448,8 +1397,6 @@ function SignalTableSettingsPanel({
   const reset = () => {
     settings.resetSignalTableSettings();
     onLayoutChange('list');
-    onBestOnlyChange(false);
-    onShowEndedChange(true);
   };
 
   // One navigation helper for the whole app. There used to be two incompatible
@@ -1463,9 +1410,11 @@ function SignalTableSettingsPanel({
     <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 15 }}>
         <div>
-          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Signal table settings</div>
-          <div style={{ color: '#777', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
-            These choices change only how this table looks. Entry, stop, exit and sizing rules live under Connect → Trade Rules.
+          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>SuperTrend board settings</div>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
+            How this board looks — nothing here changes what is scanned or how a trade exits. Best leg and
+            Ended are live filters and sit in the toolbar above. Entry, stop, exit and sizing rules live
+            under Connect → Trade Rules.
           </div>
         </div>
         <button type="button" onClick={openTradeRules} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 7, background: k.bg, color: k.text, padding: '0 11px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
@@ -1473,10 +1422,10 @@ function SignalTableSettingsPanel({
         </button>
       </div>
 
-      <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(190px, 1fr) minmax(250px, 1.25fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(250px, 1.5fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
         <div className="sk-table-settings-group" style={{ padding: 13 }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: '#f6f6f7' }}>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: k.surface }}>
             {([
               { value: 'list' as const, label: 'List', icon: <ListIcon /> },
               { value: 'grid' as const, label: 'Grid', icon: <GridIcon /> },
@@ -1486,7 +1435,7 @@ function SignalTableSettingsPanel({
                 <button key={option.value} type="button" title={`${option.label} layout`} aria-pressed={selected} onClick={() => onLayoutChange(option.value)} style={{
                   minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   border: 'none', borderRadius: 6,
-                  background: selected ? k.bg : 'transparent', color: selected ? k.text : '#777',
+                  background: selected ? k.bg : 'transparent', color: selected ? k.text : 'var(--k-ink-5)',
                   boxShadow: selected ? `inset 0 -2px ${k.orange}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
                   padding: '0 8px', fontSize: 10.5, fontWeight: selected ? 700 : 550, fontFamily: 'inherit', cursor: 'pointer',
                 }}>
@@ -1498,19 +1447,7 @@ function SignalTableSettingsPanel({
         </div>
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Rows</div>
-          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
-            Best signal per instrument
-          </label>
-          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showEnded} onChange={(event) => onShowEndedChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
-            Show ended setups
-          </label>
-        </div>
-
-        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
-          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
           {/* The same five flags are also editable from the sliders button in the
               search bar, which is the only place the watchlist has. Both write one
               store, so they cannot drift — but a user who changes them here should
@@ -1531,8 +1468,8 @@ function SignalTableSettingsPanel({
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
         <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
-        <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: '#666', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-          Reset table view
+        <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: 'var(--k-ink-4)', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+          Reset board view
         </button>
       </div>
       <style>{`
@@ -1543,23 +1480,6 @@ function SignalTableSettingsPanel({
         }
       `}</style>
     </div>
-  );
-}
-
-// Inline dropdown for changing a signal-source-tier setting (scan source, exit rule)
-// right from the table toolbar — same open/close/select interaction as the chart's
-// candle-type and indicator pickers (a button showing the current choice + chevron,
-// which opens a positioned popover list with a checkmark on the active option).
-/** The caps name that sits in front of a header dropdown, so a bare value pill
- *  never has to be guessed at. */
-function HeaderControlLabel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <span
-      title={title}
-      style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, flexShrink: 0 }}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -1648,28 +1568,6 @@ function InlineDropdown<T extends string>({
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-// Chip that collapses every signal to only its ✝ best-R:R and ▲ highest-delta legs,
-// hiding the middle-of-the-ladder strikes. Same pill styling as EndedToggle (blue
-// accent to distinguish it) so the two read as a matched pair in the toolbar.
-function BestOnlyToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-      title="Show only the best strikes per signal: ✝ best carry-adjusted R and ▲ highest delta. Signals with fewer than two rankable strikes are left whole — nothing to choose between.">
-      <span style={{ fontSize: 10, color: on ? k.blue : k.dim }}>Best ✝▲</span>
-      <button onClick={onChange} aria-pressed={on} aria-label="Show best strikes only"
-        style={{
-          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
-          cursor: 'pointer', flexShrink: 0, background: on ? k.blue : k.border, transition: 'background .18s ease',
-        }}>
-        <span style={{
-          position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
-        }} />
-      </button>
     </div>
   );
 }
@@ -1995,7 +1893,17 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // copy, which implies a search/showEnded filter is the cause.
   const navigatorLensEmpty = rows.length > 0 && groupedRows.length === 0
     && (signalMode === 'navigator' || signalMode === 'common');
-  const hiddenRecentCount = !isScanning && !navigatorLensEmpty && rows.length > 0 && groupedRows.length === 0
+
+  // With the engine off there are no SuperTrend rows by construction, so the
+  // lenses that depend on them cannot fill regardless of the market. Saying
+  // "no setups" there blames the market for a switch. The Navigator lens is
+  // deliberately excluded: its whole point is working while SuperTrend is off.
+  const engineEnabled = cfg?.engine_enabled !== false;
+  const supertrendLensBlocked = !engineEnabled
+    && groupedRows.length === 0
+    && (signalMode === 'supertrend' || signalMode === 'common' || (signalMode === 'combined' && rows.length === 0));
+
+  const hiddenRecentCount = !isScanning && !navigatorLensEmpty && !supertrendLensBlocked && rows.length > 0 && groupedRows.length === 0
     ? rows.length
     : 0;
   const revealRecentSignals = () => {
@@ -2051,7 +1959,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled', true)}
             disabled={setCfg.isPending}
             style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                     background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
+                     background: k.green, color: 'var(--k-bg)', fontSize: 13, fontWeight: 700,
                      opacity: setCfg.isPending ? 0.6 : 1, transition: 'opacity 0.15s' }}>
             Enable Engine
           </button>
@@ -2066,113 +1974,107 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
-      {/* ── Compact two-row header ── */}
-      <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
-        {/* Row 1: identity + live count + settings */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
-          <EngineMark />
-          <span title={universeTip(cfg)} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
-            Sterling Kite Engine
-          </span>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
-          {/* Both engine dropdowns are named. They used to be bare pills showing
-              only their current value, so "Derivatives" sitting next to "1 Red"
-              gave no clue which was the signal source and which was the exit
-              rule — the VIEW filter beside them was the only labelled one. */}
-          {/* Hidden under the Navigator lens for the same reason as EXIT below:
-              it governs nothing on screen there. It used to be exempt because
-              the tooltip claimed the source was "shared by both engines unless
-              Navigator is on its own scan scope" — wrong twice over. That page
-              no longer exists, and the source is never shared:
-              navigator/runtime reads `record.config.scan_source`
-              unconditionally, so scan scope has nothing to do with it. */}
-          {cfg && signalMode !== 'navigator' && (
-            <>
-              <HeaderControlLabel title="Which chart SuperTrend reads a signal from. Navigator has its own source setting, under Connect → Value-Flow Navigator.">
-                SOURCE
-              </HeaderControlLabel>
-              <InlineDropdown
-                value={cfg.scan_source}
-                options={SCAN_SOURCE_OPTS}
-                tone={k.orange}
-                title="SuperTrend's signal source — change it here, or from Connect → SuperTrend engine. Navigator keeps its own."
-                onChange={(next) => patch(
-                  { scan_source: next },
-                  `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
-                  needsRescan('scan_source'),
-                )}
-              />
-            </>
-          )}
-          {/* The red-counter exit rule is SuperTrend-only — it counts the
-              three SuperTrend lines flipping against a position. A
-              Navigator-originated row has no SuperTrend lines at all (it
-              exits on its own AVWAP stop/target bracket), so under the
-              Navigator lens this control governs nothing that's on screen.
-              Hide it there rather than leave a live engine setting sitting
-              next to rows it can't affect. */}
-          {cfg && signalMode !== 'navigator' && (
-            <>
-              <HeaderControlLabel title="How many SuperTrend lines must turn red to close a trade — a SuperTrend setting, applied to every SuperTrend row.">
-                EXIT
-              </HeaderControlLabel>
-              <InlineDropdown
-                value={cfg.exit_mode ?? 'one_red'}
-                options={EXIT_MODE_OPTS}
-                tone={k.blue}
-                title="Exit confirmation (the counter to the 3-green entry) — a SuperTrend setting, applies to every SuperTrend row. Change it here, or from Connect → SuperTrend."
-                onChange={(next) => patch(
-                  { exit_mode: next },
-                  `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
-                  needsRescan('exit_mode'),
-                )}
-              />
-            </>
-          )}
-          {/* Divider: everything left is real engine config (server-persisted,
-              changes what's scanned/how trades exit); everything right is a
-              local-only display filter (localStorage, never patched to the
-              server, never changes what's scanned). */}
-          <div title="Left of here: engine settings (server-side). Right: local view filter only." style={{ width: 1, alignSelf: 'stretch', minHeight: 16, background: k.border, flexShrink: 0 }} />
-          <HeaderControlLabel title="A local display filter. It never changes what is scanned or traded.">
-            VIEW
-          </HeaderControlLabel>
-          <InlineDropdown
-            value={signalMode}
-            options={SIGNAL_MODE_OPTS}
-            tone={k.purple}
-            title="Signal lens — a LOCAL view filter only (never changes what's scanned or traded). The two engines scan independently; this just picks which of their rows you're looking at."
-            onChange={changeSignalMode}
-          />
-          {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
-          <div style={{ flex: 1 }} />
-          {/* Actions: rescan / table preferences */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-            {scanning ? (
-              <HeaderIconBtn
-                title="Stop scan"
-                onClick={doCancelScan}
-                disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-              </HeaderIconBtn>
-            ) : (
-              <HeaderIconBtn title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
-                <RefreshIcon spinning={scanPending} />
-              </HeaderIconBtn>
-            )}
-          </div>
-          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
-            <HeaderIconBtn title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </HeaderIconBtn>
-          </span>
-        </div>
+      {/*
+        The engine's own controls, on the shared toolbar grammar.
 
-        {/* Progress bar — scan countdown */}
+        The old header opened with "Sterling Kite Engine", which stopped being
+        true the moment there were four boards — and the engine tabs directly
+        above already name the one you are looking at, so the words were both
+        wrong and redundant. What is left is what only this header can say: the
+        timeframe it reads, the rules it applies, and the actions it offers.
+
+        The divider is load-bearing. Left of it, SOURCE and EXIT are saved on
+        the server and change what is scanned and how live trades exit. Right
+        of it, VIEW is a local lens that changes nothing. They looked identical
+        before, which is a dangerous thing for a control that closes positions.
+      */}
+      <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
+        <EngineToolbar>
+          <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <EngineMark />
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
+          </span>
+
+          {/* SuperTrend rules. Hidden under the Navigator lens because a
+              Navigator row has no SuperTrend lines for them to govern. */}
+          {cfg && signalMode !== 'navigator' && (
+            <>
+              <ToolbarControl
+                label="SOURCE"
+                hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
+                tone={k.orange}
+              >
+                <InlineDropdown
+                  value={cfg.scan_source}
+                  options={SCAN_SOURCE_OPTS}
+                  tone={k.orange}
+                  title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
+                  onChange={(next) => patch(
+                    { scan_source: next },
+                    `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
+                    needsRescan('scan_source'),
+                  )}
+                />
+              </ToolbarControl>
+              <ToolbarControl
+                label="EXIT"
+                hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
+                tone={k.blue}
+              >
+                <InlineDropdown
+                  value={cfg.exit_mode ?? 'one_red'}
+                  options={EXIT_MODE_OPTS}
+                  tone={k.blue}
+                  title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
+                  onChange={(next) => patch(
+                    { exit_mode: next },
+                    `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
+                    needsRescan('exit_mode'),
+                  )}
+                />
+              </ToolbarControl>
+              <ScopeDivider />
+            </>
+          )}
+
+          <ToolbarControl
+            label="VIEW"
+            hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
+            tone={k.purple}
+          >
+            <InlineDropdown
+              value={signalMode}
+              options={SIGNAL_MODE_OPTS}
+              tone={k.purple}
+              title="Signal lens — local only."
+              onChange={changeSignalMode}
+            />
+          </ToolbarControl>
+
+          <span style={{ flex: 1 }} />
+
+          {scanning ? (
+            <ToolbarButton
+              title="Stop scan"
+              onClick={doCancelScan}
+              disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+            </ToolbarButton>
+          ) : (
+            <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
+              <RefreshIcon spinning={scanPending} />
+            </ToolbarButton>
+          )}
+          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+            <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+              <Icons.Settings />
+            </ToolbarButton>
+          </span>
+        </EngineToolbar>
+
         <ScanProgressBar signals={signals} />
       </div>
-
       {rows.length > 0 && !settingsOpen && (
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
@@ -2186,8 +2088,18 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              <BestOnlyToggle on={bestOnly} onChange={() => changeBestOnly(!bestOnly)} />
-              <EndedToggle on={showEnded} onChange={() => changeShowEnded(!showEnded)} />
+              <FilterToggle
+                on={bestOnly}
+                label="BEST LEG"
+                hint="Show only the nearest-the-money leg of each underlying — the one whose premium tracks the thesis most directly. A local filter; it never changes what is scanned."
+                onChange={() => changeBestOnly(!bestOnly)}
+              />
+              <FilterToggle
+                on={showEnded}
+                label="ENDED"
+                hint="Include closed positions. They are kept for the record and are not calls to action."
+                onChange={() => changeShowEnded(!showEnded)}
+              />
             </div>
           </div>
           {viewLayout === 'list' && (
@@ -2278,10 +2190,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-leg-row::-webkit-scrollbar { display: none; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .sort-header-div:hover { color: #444 !important; }
-        .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
+        .sort-header-div:hover { color: var(--k-text) !important; }
+        .sort-icon { opacity: 0; color: var(--k-dim); display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
-        .sort-icon.active { opacity: 1 !important; color: #444; }
+        .sort-icon.active { opacity: 1 !important; color: var(--k-text); }
         .st-actions-persistent {
           display: flex;
           gap: 8px;
@@ -2319,10 +2231,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <SignalTableSettingsPanel
               viewLayout={viewLayout}
               onLayoutChange={setViewLayout}
-              bestOnly={bestOnly}
-              onBestOnlyChange={changeBestOnly}
-              showEnded={showEnded}
-              onShowEndedChange={changeShowEnded}
             />
           )}
         </div>
@@ -2337,10 +2245,47 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <button
               type="button"
               onClick={revealRecentSignals}
-              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.orange, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.orange, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Show recent signals
             </button>
+          </div>
+        ) : supertrendLensBlocked ? (
+          <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
+            <div style={{ fontWeight: 700, color: k.text, fontSize: 12.5 }}>SuperTrend is off</div>
+            <div style={{ marginTop: 6, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+              {signalMode === 'common'
+                ? <>“Where both agree” needs a SuperTrend setup for Navigator to agree <em>with</em>, so this lens cannot fill while the engine is off.</>
+                : signalMode === 'supertrend'
+                ? <>This lens shows only SuperTrend setups, and the engine is not scanning.</>
+                : <>Neither engine has produced a setup, and SuperTrend is not scanning.</>}
+              {navigatorEnabled && signalMode !== 'supertrend' && <> Navigator is on — its own setups appear under the <strong>Navigator only</strong> lens.</>}
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {cfg && (
+                <button
+                  type="button"
+                  onClick={() => setCfg.mutate({ engine_enabled: true })}
+                  disabled={setCfg.isPending}
+                  style={{ minHeight: 32, padding: '0 14px', border: `1px solid ${k.blue}`, borderRadius: 6, background: setCfg.isPending ? 'var(--k-bg)' : k.blue, color: setCfg.isPending ? k.blue : 'var(--k-bg)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: setCfg.isPending ? 'wait' : 'pointer' }}
+                >
+                  {setCfg.isPending ? 'Turning on…' : 'Turn on SuperTrend'}
+                </button>
+              )}
+              {/* The Navigator lens can never reach this branch, so no guard for it. */}
+              {navigatorEnabled && (
+                <button
+                  type="button"
+                  onClick={() => changeSignalMode('navigator')}
+                  style={{ minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Show Navigator setups
+                </button>
+              )}
+            </div>
+            {setCfg.isError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: k.red }}>Could not turn it on: {(setCfg.error as Error).message}</div>
+            )}
           </div>
         ) : navigatorLensEmpty ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
@@ -2366,7 +2311,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             <button
               type="button"
               onClick={() => changeSignalMode('combined')}
-              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: 'var(--k-bg)', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
             >
               Switch to Combined lens
             </button>
@@ -2437,7 +2382,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             style={{
               margin: '12px 16px',
               padding: '10px 16px',
-              background: '#f9f9f9',
+              background: 'var(--k-surface)',
               border: `1px dashed ${k.blue}60`,
               borderRadius: 4,
               display: 'flex',

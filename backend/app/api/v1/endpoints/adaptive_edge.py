@@ -41,6 +41,11 @@ class AdaptiveEdgeSettings(BaseModel):
     strike_moneyness: list[str] = Field(default_factory=lambda: list(AE_DEFAULT_LADDER))
     scan_expiries: list[ScanExpiry] = Field(default_factory=lambda: ["weekly", "monthly"])
     scan_expiries_indices: list[ScanExpiry] = Field(default_factory=lambda: ["weekly", "monthly"])
+    # The expiry window, same three names every other engine's Contracts section
+    # uses. Permissive defaults: this adds a control, not a policy.
+    expiry_dte_min: int = 0
+    expiry_dte_max: int = 400
+    avoid_expiry_day: bool = False
     w_short: int = Field(5, ge=2, le=60)
     w_long: int = Field(15, ge=3, le=120)
     stop_points: float = Field(80.0, gt=0)

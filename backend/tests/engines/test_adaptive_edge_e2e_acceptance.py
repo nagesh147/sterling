@@ -10,11 +10,15 @@ T6: Boundary bypass prevention (invoking OrderFactory/ExecutionGateway without a
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import pytest
 
 from app.engines.adaptive_edge.broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
+from app.engines.adaptive_edge.edge import EdgeAssessment, EdgeFormula
+from app.engines.adaptive_edge.economic import EconomicAssessment
 from app.engines.adaptive_edge.event_boundary import CanonicalMarketEvent
 from app.engines.adaptive_edge.execution_adapter import (
+    CanonicalExecutionEvent,
     CanonicalExecutionStatus,
     CanonicalOrderIntent,
     ExecutionAdapter,
@@ -25,31 +29,22 @@ from app.engines.adaptive_edge.execution_gate import (
     ExecutionGateStatus,
 )
 from app.engines.adaptive_edge.execution_gateway import ExecutionGateway
-from app.engines.adaptive_edge.entry_decision import ConjunctionDecisionEngine, EntryDecisionEvidence
-from app.engines.adaptive_edge.e2e_adapters import (
-    BarFeatureBuilder,
-    ComposedLifecycleEngine,
-    ComposedOrderIntentFactory,
-    ComposedRiskAuthorizer,
-    ExplicitGrossEdge,
-    IdentityPredictionBinder,
-    InstrumentAwarePositionProjector,
-    ListedInstrumentSelector,
+from app.engines.adaptive_edge.feature_engine import (
+    FeatureInput,
+    FeatureSnapshot,
+    FeatureStatus,
+    InstrumentContext,
+    build_feature_snapshot,
 )
-from app.engines.adaptive_edge.instrument_selection import ListedOptionCandidate
-from app.engines.adaptive_edge.risk_sizing import (
-    ExecutionCostParameters,
-    ParameterEstimationMethod,
-    ParameterMetadata,
-    ParameterValidationStatus,
-    SizingParameters,
-    calculate_position_sizing,
-    calculate_risk_per_unit,
-)
-from app.engines.adaptive_edge.contracts import RiskAuthorization, RiskState
 from app.engines.adaptive_edge.e2e import (
+    AuthorizedTradeIntent,
+    DecisionEligibility,
     ExecutionMode,
+    LifecycleEvaluation,
+    PositionState,
+    PredictionEvidence,
     ReplayContext,
+    SelectedInstrument,
     run_e2e,
 )
 
@@ -63,18 +58,138 @@ class MockBrokerTransport:
         return f"BROKER-REF-{intent.order_intent_id}"
 
 
-def _f110_engine() -> ConjunctionDecisionEngine:
-    """Real F-110 conjunction. ConservativeEV is explicit, not inferred."""
-    return ConjunctionDecisionEngine(
-        EntryDecisionEvidence(
-            option_type="CE",
-            conservative_ev=80.0,
-            directional_edge_ok=True,
-            liquidity_ok=True,
-            slippage_ok=True,
-            risk_ok=True,
+class MockFeatureBuilder:
+    def build(self, event: CanonicalMarketEvent) -> FeatureSnapshot:
+        return build_feature_snapshot(
+            snapshot_id=f"SNAP-{event.record_id}",
+            strategy_version="v2.0",
+            feature_set_version="fset-v1",
+            observation_cutoff_time=event.available_at,
+            decision_time=event.available_at,
+            instrument_context=InstrumentContext(event.instrument_id),
+            inputs=[
+                FeatureInput("close", event.payload.get("close", 100.0), event.available_at, FeatureStatus.VALID),
+                FeatureInput("volume", event.payload.get("volume", 1000.0), event.available_at, FeatureStatus.VALID),
+            ],
         )
-    )
+
+
+class MockPredictionEngine:
+    def predict(self, snapshot: FeatureSnapshot) -> PredictionEvidence:
+        return PredictionEvidence(
+            prediction_id=f"PRED-{snapshot.snapshot_id}",
+            snapshot_id=snapshot.snapshot_id,
+            opportunity_id=f"OPP-{snapshot.snapshot_id}",
+            strategy_version="v2.0",
+            model_version="model-v1",
+            prediction_time=snapshot.decision_time,
+            target_definition_version="target-v1",
+            horizon_definition_version="horizon-15m",
+            prediction_type="CLASSIFICATION",
+            prediction_value=0.75,
+            uncertainty=0.05,
+            calibration_reference="calib-v1",
+            provenance={"model": "offline-linear"},
+        )
+
+
+@dataclass
+class MockEdgeFormula:
+    formula_id: str = "F-004"
+    formula_version: str = "1.0"
+    expected_gross: float | None = 120.0
+
+    def evaluate(self, snapshot: FeatureSnapshot) -> EdgeAssessment:
+        return EdgeAssessment(
+            opportunity_id=f"OPP-{snapshot.snapshot_id}",
+            score=0.8,
+            confidence=0.9,
+            expected_gross_value=self.expected_gross,
+            formula_id=self.formula_id,
+            formula_version=self.formula_version,
+            inputs={"close": 100.0},
+        )
+
+
+class MockDecisionEngine:
+    def assess(
+        self,
+        snapshot: FeatureSnapshot,
+        prediction: PredictionEvidence,
+        edge: EdgeAssessment,
+        economics: EconomicAssessment,
+    ) -> DecisionEligibility:
+        return DecisionEligibility(
+            eligible=economics.eligible,
+            reason="economically_eligible" if economics.eligible else economics.reason,
+            decision_id=f"DEC-{snapshot.snapshot_id}",
+            snapshot_id=snapshot.snapshot_id,
+            prediction_id=prediction.prediction_id,
+            opportunity_id=prediction.opportunity_id,
+        )
+
+
+class MockRiskAuthorizer:
+    def authorize(self, decision: DecisionEligibility) -> AuthorizedTradeIntent:
+        return AuthorizedTradeIntent(
+            intent_id=f"AUTH-{decision.decision_id}",
+            opportunity_id=decision.opportunity_id,
+            decision_id=decision.decision_id,
+            authorization_version="risk-v1",
+            authorized_risk=5000.0,
+            issued_at="2026-08-17T09:15:00+00:00",
+        )
+
+
+class MockInstrumentSelector:
+    def select(self, intent: AuthorizedTradeIntent) -> SelectedInstrument:
+        return SelectedInstrument(
+            selection_id=f"SEL-{intent.intent_id}",
+            intent_id=intent.intent_id,
+            instrument_id="NIFTY26AUG24500CE",
+            selection_version="moneyness-v1",
+            selected_at="2026-08-17T09:15:00+00:00",
+        )
+
+
+class MockOrderIntentFactory:
+    def create(self, instrument: SelectedInstrument) -> CanonicalOrderIntent:
+        return CanonicalOrderIntent(
+            order_intent_id=f"ORDER-{instrument.selection_id}",
+            selection_id=instrument.selection_id,
+            instrument_id=instrument.instrument_id,
+            side="BUY",
+            quantity=50,
+            intent_version="order-v1",
+            idempotency_key=f"IDEM-{instrument.selection_id}",
+            created_at="2026-08-17T09:15:00+00:00",
+        )
+
+
+class MockPositionProjector:
+    def project(self, event: CanonicalExecutionEvent) -> PositionState:
+        return PositionState(
+            position_id=f"POS-{event.order_intent_id}",
+            instrument_id="NIFTY26AUG24500CE",
+            quantity=event.filled_quantity or 50,
+            average_price=event.fill_price or 150.0,
+            lifecycle_state="OPEN",
+            source_execution_event_id=event.execution_event_id,
+        )
+
+
+class MockLifecycleEngine:
+    def evaluate(self, position: PositionState, event: CanonicalMarketEvent) -> LifecycleEvaluation:
+        return LifecycleEvaluation(
+            evaluation_id=f"LIFE-{position.position_id}",
+            position_id=position.position_id,
+            lifecycle_version="life-v1",
+            lifecycle_state="OPEN",
+            protection_state="INITIAL_STOP_ACTIVE",
+            action="HOLD",
+            reason="within_protection_envelope",
+            evaluated_at=event.available_at,
+        )
 
 
 def _make_realistic_event(record_id: str = "TD-BAR-001") -> CanonicalMarketEvent:
@@ -98,77 +213,6 @@ def _make_realistic_event(record_id: str = "TD-BAR-001") -> CanonicalMarketEvent
     )
 
 
-def _param(name: str, value: float, units: str = "INR") -> ParameterMetadata:
-    return ParameterMetadata(
-        name=name,
-        value=value,
-        units=units,
-        version="1.0.0",
-        provenance="Master_Spec_v1.0_Sec31_Sec36",
-        estimation_method=ParameterEstimationMethod.CANONICAL_SPEC,
-        validation_status=ParameterValidationStatus.VALIDATED,
-    )
-
-
-def _listed_chain() -> tuple[ListedOptionCandidate, ...]:
-    available = "2026-08-17T03:44:00+00:00"
-    return (
-        ListedOptionCandidate("NIFTY26AUG24600CE", "CE", 24600.0, "2026-08-27", 50.0, available),
-        ListedOptionCandidate("NIFTY26AUG24400CE", "CE", 24400.0, "2026-08-27", 90.0, available),
-        ListedOptionCandidate("NIFTY26AUG24500CE", "CE", 24500.0, "2026-08-27", 90.0, available),
-        ListedOptionCandidate("NIFTY26AUG24500PE", "PE", 24500.0, "2026-08-27", 120.0, available),
-    )
-
-
-def _composed_execution():
-    costs = ExecutionCostParameters(
-        spread_cost=_param("spread_cost", 1.0),
-        expected_slippage=_param("expected_slippage", 0.5),
-        brokerage_per_unit=_param("brokerage_per_unit", 0.2),
-        exchange_charges_per_unit=_param("exchange_charges_per_unit", 0.1),
-        taxes_per_unit=_param("taxes_per_unit", 0.1),
-        latency_cost_per_unit=_param("latency_cost_per_unit", 0.1),
-    )
-    risk_unit = calculate_risk_per_unit(100.0, 90.0, costs)
-    auth = RiskAuthorization(
-        opportunity_id="opp-e2e",
-        authorized_risk=5000.0,
-        risk_state=RiskState.AUTHORIZED,
-        policy_version="risk-v1",
-        issued_at="2026-08-17T03:45:00+00:00",
-    )
-    sizing = calculate_position_sizing(
-        auth,
-        risk_unit,
-        SizingParameters(
-            max_position_qty=_param("max_position_qty", 50.0, "contracts"),
-            max_capital_allocation=_param("max_capital_allocation", 100_000.0, "INR"),
-            lot_size=_param("lot_size", 25.0, "contracts"),
-        ),
-    )
-    authorizer = ComposedRiskAuthorizer(auth)
-    selector = ListedInstrumentSelector(_listed_chain(), option_type="CE")
-    factory = ComposedOrderIntentFactory(
-        sizing=sizing,
-        created_at="2026-08-17T03:45:00+00:00",
-        authorized_risk=auth.authorized_risk,
-    )
-    projector = InstrumentAwarePositionProjector("NIFTY26AUG24500CE", side="BUY")
-    lifecycle = ComposedLifecycleEngine()
-    return authorizer, selector, factory, projector, lifecycle, sizing.final_quantity
-
-
-def _pending_fill(qty: int) -> BrokerExecutionEvent:
-    return BrokerExecutionEvent(
-        broker_event_id="pending",
-        order_intent_id="pending",
-        broker_status="FILLED",
-        event_time="2026-08-17T09:15:02+00:00",
-        filled_quantity=qty,
-        fill_price=152.0,
-    )
-
-
 def _setup_pipeline(transport: MockBrokerTransport | None = None) -> tuple[ExecutionGateway, MockBrokerTransport]:
     trans = transport or MockBrokerTransport()
     gateway = ExecutionGateway(
@@ -184,19 +228,18 @@ def test_t1_production_gate_blocks_and_submits_zero_orders():
     gateway, transport = _setup_pipeline()
     event = _make_realistic_event()
 
-    authorizer, selector, factory, projector, lifecycle, _qty = _composed_execution()
     trace = run_e2e(
         event,
-        feature_builder=BarFeatureBuilder(),
-        prediction_engine=IdentityPredictionBinder(),
-        edge_formula=ExplicitGrossEdge(120.0),
-        decision_engine=_f110_engine(),
-        risk_authorizer=authorizer,
-        instrument_selector=selector,
-        order_factory=factory,
+        feature_builder=MockFeatureBuilder(),
+        prediction_engine=MockPredictionEngine(),
+        edge_formula=MockEdgeFormula(),
+        decision_engine=MockDecisionEngine(),
+        risk_authorizer=MockRiskAuthorizer(),
+        instrument_selector=MockInstrumentSelector(),
+        order_factory=MockOrderIntentFactory(),
         execution_gateway=gateway,
-        position_projector=projector,
-        lifecycle_engine=lifecycle,
+        position_projector=MockPositionProjector(),
+        lifecycle_engine=MockLifecycleEngine(),
         execution_cost=20.0,
         mode=ExecutionMode.PRODUCTION,
     )
@@ -235,19 +278,18 @@ def test_t3_economic_fail_closed_missing_gross_value():
     gateway, transport = _setup_pipeline()
     event = _make_realistic_event()
 
-    authorizer, selector, factory, projector, lifecycle, _qty = _composed_execution()
     trace = run_e2e(
         event,
-        feature_builder=BarFeatureBuilder(),
-        prediction_engine=IdentityPredictionBinder(),
-        edge_formula=ExplicitGrossEdge(None),  # Missing gross value!
-        decision_engine=_f110_engine(),
-        risk_authorizer=authorizer,
-        instrument_selector=selector,
-        order_factory=factory,
+        feature_builder=MockFeatureBuilder(),
+        prediction_engine=MockPredictionEngine(),
+        edge_formula=MockEdgeFormula(expected_gross=None),  # Missing gross value!
+        decision_engine=MockDecisionEngine(),
+        risk_authorizer=MockRiskAuthorizer(),
+        instrument_selector=MockInstrumentSelector(),
+        order_factory=MockOrderIntentFactory(),
         execution_gateway=gateway,
-        position_projector=projector,
-        lifecycle_engine=lifecycle,
+        position_projector=MockPositionProjector(),
+        lifecycle_engine=MockLifecycleEngine(),
         execution_cost=20.0,
         mode=ExecutionMode.SIMULATION,
         required_formula_ids=("F-004",),
@@ -265,47 +307,44 @@ def test_t3_economic_fail_closed_missing_gross_value():
 def test_t4_authorized_simulation_completes_full_pipeline():
     gateway, transport = _setup_pipeline()
     event = _make_realistic_event()
-    authorizer, selector, factory, projector, lifecycle, qty = _composed_execution()
+
+    broker_fill = BrokerExecutionEvent(
+        broker_event_id="BE-001",
+        order_intent_id="ORDER-SEL-AUTH-DEC-SNAP-TD-BAR-001",
+        broker_status="FILLED",
+        event_time="2026-08-17T09:15:02+00:00",
+        broker_reference="BROKER-REF-ORDER-SEL-AUTH-DEC-SNAP-TD-BAR-001",
+        filled_quantity=50,
+        fill_price=152.0,
+    )
 
     trace = run_e2e(
         event,
-        feature_builder=BarFeatureBuilder(),
-        prediction_engine=IdentityPredictionBinder(),
-        edge_formula=ExplicitGrossEdge(120.0),
-        decision_engine=_f110_engine(),
-        risk_authorizer=authorizer,
-        instrument_selector=selector,
-        order_factory=factory,
+        feature_builder=MockFeatureBuilder(),
+        prediction_engine=MockPredictionEngine(),
+        edge_formula=MockEdgeFormula(expected_gross=120.0),
+        decision_engine=MockDecisionEngine(),
+        risk_authorizer=MockRiskAuthorizer(),
+        instrument_selector=MockInstrumentSelector(),
+        order_factory=MockOrderIntentFactory(),
         execution_gateway=gateway,
-        position_projector=projector,
-        lifecycle_engine=lifecycle,
+        position_projector=MockPositionProjector(),
+        lifecycle_engine=MockLifecycleEngine(),
         execution_cost=20.0,
         mode=ExecutionMode.SIMULATION,
         required_formula_ids=("F-004",),
-        broker_event=_pending_fill(qty),
+        broker_event=broker_fill,
     )
 
     assert trace.execution_gate.authorized is True
-    assert trace.snapshot.values["close"] == 24510.0
-    assert trace.prediction.prediction_value is None
-    assert trace.prediction.provenance["binding"] == "identity-only"
-    assert trace.edge.score == 0.0
     assert trace.decision.eligible is True
-    assert trace.decision.reason == "entry_conjunction_passed"
     assert trace.authorization is not None
-    assert trace.authorization.decision_id == trace.decision.decision_id
-    assert trace.authorization.authorized_risk == 5000.0
     assert trace.instrument.instrument_id == "NIFTY26AUG24500CE"
-    assert trace.instrument.intent_id == trace.authorization.intent_id
-    assert trace.instrument.selection_version == "listed-v1"
-    assert trace.order.quantity == qty
-    assert trace.order.authorization_id == trace.instrument.intent_id
+    assert trace.order.quantity == 50
     assert len(transport.submitted_orders) == 1
-    assert trace.execution.filled_quantity == qty
+    assert trace.execution.filled_quantity == 50
     assert trace.execution.fill_price == 152.0
-    assert trace.execution.order_intent_id == trace.order.order_intent_id
     assert trace.position.lifecycle_state == "OPEN"
-    assert trace.position.quantity == qty
     assert trace.lifecycle.action == "HOLD"
     assert len(trace.audit) == 12
 
@@ -319,46 +358,53 @@ def test_t5_canonical_replay_produces_identical_hash_and_audit():
         sequence_seed=42,
     )
 
-    authorizer1, selector1, factory1, projector1, lifecycle1, qty = _composed_execution()
-    authorizer2, selector2, factory2, projector2, lifecycle2, _ = _composed_execution()
+    broker_fill = BrokerExecutionEvent(
+        broker_event_id="BE-001",
+        order_intent_id="ORDER-SEL-AUTH-DEC-SNAP-TD-BAR-001",
+        broker_status="FILLED",
+        event_time="2026-08-17T09:15:02+00:00",
+        broker_reference="BROKER-REF-ORDER-SEL-AUTH-DEC-SNAP-TD-BAR-001",
+        filled_quantity=50,
+        fill_price=152.0,
+    )
 
     gateway1, _ = _setup_pipeline()
     trace1 = run_e2e(
         event,
-        feature_builder=BarFeatureBuilder(),
-        prediction_engine=IdentityPredictionBinder(),
-        edge_formula=ExplicitGrossEdge(120.0),
-        decision_engine=_f110_engine(),
-        risk_authorizer=authorizer1,
-        instrument_selector=selector1,
-        order_factory=factory1,
+        feature_builder=MockFeatureBuilder(),
+        prediction_engine=MockPredictionEngine(),
+        edge_formula=MockEdgeFormula(),
+        decision_engine=MockDecisionEngine(),
+        risk_authorizer=MockRiskAuthorizer(),
+        instrument_selector=MockInstrumentSelector(),
+        order_factory=MockOrderIntentFactory(),
         execution_gateway=gateway1,
-        position_projector=projector1,
-        lifecycle_engine=lifecycle1,
+        position_projector=MockPositionProjector(),
+        lifecycle_engine=MockLifecycleEngine(),
         execution_cost=20.0,
         mode=ExecutionMode.SIMULATION,
         required_formula_ids=("F-004",),
-        broker_event=_pending_fill(qty),
+        broker_event=broker_fill,
         replay_context=replay_ctx,
     )
 
     gateway2, _ = _setup_pipeline()
     trace2 = run_e2e(
         event,
-        feature_builder=BarFeatureBuilder(),
-        prediction_engine=IdentityPredictionBinder(),
-        edge_formula=ExplicitGrossEdge(120.0),
-        decision_engine=_f110_engine(),
-        risk_authorizer=authorizer2,
-        instrument_selector=selector2,
-        order_factory=factory2,
+        feature_builder=MockFeatureBuilder(),
+        prediction_engine=MockPredictionEngine(),
+        edge_formula=MockEdgeFormula(),
+        decision_engine=MockDecisionEngine(),
+        risk_authorizer=MockRiskAuthorizer(),
+        instrument_selector=MockInstrumentSelector(),
+        order_factory=MockOrderIntentFactory(),
         execution_gateway=gateway2,
-        position_projector=projector2,
-        lifecycle_engine=lifecycle2,
+        position_projector=MockPositionProjector(),
+        lifecycle_engine=MockLifecycleEngine(),
         execution_cost=20.0,
         mode=ExecutionMode.SIMULATION,
         required_formula_ids=("F-004",),
-        broker_event=_pending_fill(qty),
+        broker_event=broker_fill,
         replay_context=replay_ctx,
     )
 

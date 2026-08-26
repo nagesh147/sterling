@@ -5,26 +5,26 @@ import { k } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
   container: { padding: '24px 32px', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' as const, fontFamily: k.fontFamily },
-  title: { fontSize: 24, fontWeight: 400, color: '#444', margin: '0 0 24px 0' },
-  navContainer: { display: 'flex', gap: 32, borderBottom: `1px solid #f1f1f1`, marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: 400, color: 'var(--k-text)', margin: '0 0 24px 0' },
+  navContainer: { display: 'flex', gap: 32, borderBottom: `1px solid var(--k-surface-hover)`, marginBottom: 24 },
   navItem: { padding: '0 0 12px 0', fontSize: 14, cursor: 'pointer', transition: 'color 0.2s' },
-  content: { color: '#9b9b9b', fontSize: 13, lineHeight: '1.5' },
-  hint: { color: '#9b9b9b', fontSize: 13 },
-  th: { padding: '12px 0', textAlign: 'left', color: '#9b9b9b', fontSize: 12, fontWeight: 400, borderBottom: `1px solid #f1f1f1` },
-  td: { padding: '12px 0', color: '#444', fontSize: 13, borderBottom: `1px solid #f1f1f1` },
-  emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', color: '#9b9b9b' },
-  emptyTitle: { fontSize: 16, color: '#9b9b9b', marginBottom: 8, marginTop: 24 },
+  content: { color: 'var(--k-dim)', fontSize: 13, lineHeight: '1.5' },
+  hint: { color: 'var(--k-dim)', fontSize: 13 },
+  th: { padding: '12px 0', textAlign: 'left', color: 'var(--k-dim)', fontSize: 12, fontWeight: 400, borderBottom: `1px solid var(--k-surface-hover)` },
+  td: { padding: '12px 0', color: 'var(--k-text)', fontSize: 13, borderBottom: `1px solid var(--k-surface-hover)` },
+  emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 0', color: 'var(--k-dim)' },
+  emptyTitle: { fontSize: 16, color: 'var(--k-dim)', marginBottom: 8, marginTop: 24 },
   emptyText: { fontSize: 14, marginBottom: 16 },
-  link: { color: '#387ed1', textDecoration: 'none' }
+  link: { color: 'var(--k-blue-kite)', textDecoration: 'none' }
 };
 
 const EmptySvg = () => (
   <svg width="84" height="84" viewBox="0 0 24 24" fill="none">
-    <rect x="5" y="3" width="14" height="18" rx="1" fill="#f1f1f1" stroke="#dfe1e4" strokeWidth="1" />
-    <path d="M5 6h2M5 10h2M5 14h2M5 18h2" stroke="#dfe1e4" strokeWidth="1" />
-    <rect x="9" y="7" width="6" height="1" fill="#dfe1e4" />
-    <rect x="9" y="11" width="8" height="1" fill="#dfe1e4" />
-    <rect x="9" y="15" width="7" height="1" fill="#dfe1e4" />
+    <rect x="5" y="3" width="14" height="18" rx="1" fill="var(--k-surface-hover)" stroke="var(--k-border-strong)" strokeWidth="1" />
+    <path d="M5 6h2M5 10h2M5 14h2M5 18h2" stroke="var(--k-border-strong)" strokeWidth="1" />
+    <rect x="9" y="7" width="6" height="1" fill="var(--k-border-strong)" />
+    <rect x="9" y="11" width="8" height="1" fill="var(--k-border-strong)" />
+    <rect x="9" y="15" width="7" height="1" fill="var(--k-border-strong)" />
   </svg>
 );
 
@@ -46,9 +46,9 @@ export function BidsPane() {
   const ipos = iposData || [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', color: '#444' }}>
-      <div style={{ padding: '0 32px', borderBottom: '1px solid #f1f1f1', marginTop: 12 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 400, color: '#444', margin: '0 0 24px 0' }}>Bids</h2>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--k-bg)', color: 'var(--k-text)' }}>
+      <div style={{ padding: '0 32px', borderBottom: '1px solid var(--k-surface-hover)', marginTop: 12 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--k-text)', margin: '0 0 24px 0' }}>Bids</h2>
         <div style={{ display: 'flex', gap: 32, marginBottom: -1 }}>
           {tabs.map(tItem => (
             <div
@@ -56,8 +56,8 @@ export function BidsPane() {
               onClick={() => setTab(tItem.id as any)}
               style={{
                 ...S.navItem,
-                color: tab === tItem.id ? '#ff5722' : '#444',
-                borderBottom: tab === tItem.id ? '2px solid #ff5722' : '2px solid transparent',
+                color: tab === tItem.id ? 'var(--k-orange)' : 'var(--k-text)',
+                borderBottom: tab === tItem.id ? '2px solid var(--k-orange)' : '2px solid transparent',
                 fontWeight: 400
               }}
             >
@@ -90,7 +90,7 @@ export function BidsPane() {
                 </thead>
                 <tbody>
                   {auctions.map((a: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: `1px solid #f1f1f1` }}>
+                    <tr key={i} style={{ borderBottom: `1px solid var(--k-surface-hover)` }}>
                       <td style={S.td}><InstrumentLabel symbol={a.tradingsymbol} /></td>
                       <td style={S.td}>{a.quantity}</td>
                       <td style={S.td}>{a.price}</td>
@@ -106,12 +106,12 @@ export function BidsPane() {
         {tab === 'ipo' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <div style={{ color: '#9b9b9b', fontSize: 14 }}>IPOs ({ipos.length})</div>
+              <div style={{ color: 'var(--k-dim)', fontSize: 14 }}>IPOs ({ipos.length})</div>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
+                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--k-dim)', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </span>
-                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #f1f1f1`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
+                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid var(--k-surface-hover)`, borderRadius: 3, background: 'transparent', color: 'var(--k-text)', fontSize: 12, width: 150, outline: 'none' }} />
               </div>
             </div>
             {isLoadingIpos ? <div style={S.hint}>Loading IPOs...</div> : ipos.length === 0 ? <div style={S.hint}>There are no active IPO applications.</div> : (
@@ -127,22 +127,22 @@ export function BidsPane() {
               </thead>
               <tbody>
                 {ipos.map((a, i) => (
-                  <tr key={i} style={{ borderBottom: `1px solid #f1f1f1` }}>
+                  <tr key={i} style={{ borderBottom: `1px solid var(--k-surface-hover)` }}>
                     <td style={{ padding: '16px 0' }}>
-                      <div style={{ color: '#444', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{a.symbol}</div>
-                      <div style={{ color: '#9b9b9b', fontSize: 11 }}>{a.name}</div>
+                      <div style={{ color: 'var(--k-text)', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{a.symbol}</div>
+                      <div style={{ color: 'var(--k-dim)', fontSize: 11 }}>{a.name}</div>
                     </td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>{a.dates}</td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>{a.price}</td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>
-                      <div style={{ color: '#444', fontSize: 13, marginBottom: 4 }}>{a.minAmount}</div>
-                      <div style={{ color: '#9b9b9b', fontSize: 11 }}>{a.qty}</div>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>{a.dates}</td>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>{a.price}</td>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>
+                      <div style={{ color: 'var(--k-text)', fontSize: 13, marginBottom: 4 }}>{a.minAmount}</div>
+                      <div style={{ color: 'var(--k-dim)', fontSize: 11 }}>{a.qty}</div>
                     </td>
                     <td style={{ padding: '16px 0', textAlign: 'right' }}>
                       {a.status === 'Apply' ? (
-                        <button style={{ padding: '6px 16px', background: '#387ed1', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Apply</button>
+                        <button style={{ padding: '6px 16px', background: 'var(--k-blue-kite)', color: 'var(--k-on-accent)', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>Apply</button>
                       ) : (
-                        <span style={{ color: '#9b9b9b', fontSize: 13, padding: '4px 8px' }}>closed</span>
+                        <span style={{ color: 'var(--k-dim)', fontSize: 13, padding: '4px 8px' }}>closed</span>
                       )}
                     </td>
                   </tr>
@@ -150,7 +150,7 @@ export function BidsPane() {
               </tbody>
             </table>
             )}
-            <div style={{ marginTop: 24, textAlign: 'center', fontSize: 13, color: '#9b9b9b' }}>
+            <div style={{ marginTop: 24, textAlign: 'center', fontSize: 13, color: 'var(--k-dim)' }}>
               Don't see an IPO here? <a href="#" style={S.link}>View upcoming →</a>
             </div>
           </div>
@@ -187,7 +187,7 @@ export function BidsPane() {
               </thead>
               <tbody>
                 {corpActions.map((a: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: `1px solid #f1f1f1` }}>
+                  <tr key={i} style={{ borderBottom: `1px solid var(--k-surface-hover)` }}>
                     <td style={{ padding: '16px 0' }}>
                       <span style={{ 
                         display: 'inline-block', 
@@ -197,15 +197,15 @@ export function BidsPane() {
                         fontWeight: 500, 
                         marginBottom: 6,
                         background: a.type === 'BUYBACK' ? 'rgba(229, 115, 115, 0.15)' : 'rgba(56, 126, 209, 0.15)',
-                        color: a.type === 'BUYBACK' ? '#e57373' : '#387ed1',
+                        color: a.type === 'BUYBACK' ? '#e57373' : 'var(--k-blue-kite)',
                       }}>
                         {a.type}
                       </span>
-                      <div style={{ color: '#444', fontSize: 13, fontWeight: 500 }}>{a.symbol}</div>
+                      <div style={{ color: 'var(--k-text)', fontSize: 13, fontWeight: 500 }}>{a.symbol}</div>
                     </td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>{a.startsAt}</td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>{a.endsOn}</td>
-                    <td style={{ padding: '16px 0', color: '#444' }}>₹ {a.offerPrice}</td>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>{a.startsAt}</td>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>{a.endsOn}</td>
+                    <td style={{ padding: '16px 0', color: 'var(--k-text)' }}>₹ {a.offerPrice}</td>
                     <td style={{ padding: '16px 0', textAlign: 'right' }}>
                       <a href="#" style={{ ...S.link, fontSize: 13 }}>Place order</a>
                     </td>

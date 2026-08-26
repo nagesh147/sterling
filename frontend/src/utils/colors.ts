@@ -20,8 +20,8 @@ export const STATE_SHORT: Record<string, string> = {
 /** Mode badge colours — single source of truth for scalping/intraday/swing/positional/all */
 export const MODE_COLOR: Record<string, string> = {
   scalping:   '#ff7f6e',
-  intraday:   '#f0c040',
+  intraday:   'var(--k-gold)',
   swing:      'var(--accent)',
-  positional: '#aa88ff',
+  positional: 'var(--k-violet-3)',
   all:        '#88ccff',
 };

@@ -4,19 +4,15 @@ Formula IDs are immutable identifiers. Changing a formula's meaning requires a n
 
 ## Governing resolution contract
 
-Every strategy-specific formula is resolved artifact-by-artifact under `ARTIFACT_RESOLUTION.md`.
+A strategy-specific formula is `RESOLVED` only when the authoritative definition **and every required input's semantics** are causal, versioned, testable, and complete.
 
-A formula is `RESOLVED` only when the definition **and every required input's semantics** are authoritative, causal, versioned, and testable.
-
-A mathematically valid relationship alone is insufficient.
+The original V1.0 master strategy specification has been recovered. Therefore F-101..F-114 are `SOURCE-RECOVERED`, not source-absent. The machine-readable registry intentionally remains `LOCKED` until promotion conditions are satisfied.
 
 ## F-001 — Causal availability
 
 ```text
 availability_time(x) <= decision_time
 ```
-
-A decision may consume only information that was causally available at decision time.
 
 ## F-002 — Peak P&L
 
@@ -36,17 +32,9 @@ ProfitGiveback(t) = PeakPnL(t) - CurrentPnL(t)
 ExpectedNetValue = ExpectedGrossValue - ExpectedExecutionCost
 ```
 
-Holding other variables constant, increasing execution cost cannot increase expected net value.
-
 ## F-005 — Risk authorization immutability
 
-Risk authorization is state, not a derived function of current P&L.
-
-```text
-AuthorizedRisk(t+1) > AuthorizedRisk(t)
-```
-
-is forbidden unless an explicitly specified risk-policy transition authorizes it.
+Risk authorization is state and cannot increase merely because current P&L or prediction improves.
 
 ## F-006 — Mode/risk independence
 
@@ -68,30 +56,90 @@ BUY reference price = executable ASK
 SELL reference price = executable BID
 ```
 
-## Strategy-specific formulas — RESOLVED-BLOCKED
+## Strategy-specific formulas — SOURCE-RECOVERED / REGISTRY-LOCKED
 
-The following artifacts have been individually attacked for currently available source evidence. No authoritative complete definitions were recovered. They remain non-executable until an original definition is recovered or a new versioned strategy definition is explicitly approved.
+The authoritative V1.0 source establishes the following roles:
 
 ```text
-F-101  Feature normalization / feature score
-F-102  Edge / prediction score
-F-103  Opportunity eligibility
-F-104  Dynamic-mode transition
-F-105  Predictive-profit protection
-F-106  Dynamic-risk schedule
-F-107  Risk-per-unit
+F-101  Feature/state construction and normalization
+F-102  Probability/regime state
+F-103  Candidate eligibility / NO_TRADE boundary
+F-104  Adaptive horizon distribution
+F-105  Target/stop competition and conservative EV
+F-106  Option candidate economics
+F-107  Effective risk semantics
 F-108  Position sizing
-F-109  Instrument / option selection
-F-110  Entry trigger
-F-111  Exit trigger
-F-112  Trailing / profit-protection parameterization
-F-113  Re-entry
-F-114  Multi-position interaction
+F-109  Option selection by validated ExpectedNetEV subject to constraints
+F-110  BUY_CE / BUY_PE mandatory entry gate
+F-111  Position-management exit state machine
+F-112  Monotonic dynamic protection / profit floor
+F-113  Post-exit / re-entry boundary
+F-114  Final decision interaction with PositionState and CapitalState
 ```
 
-## Formula contract
+### F-109 canonical selection
 
-Every formula that becomes `RESOLVED` must be promoted with:
+```text
+O* = argmax ExpectedNetEV_i
+```
+
+subject to:
+
+```text
+Liquidity_i >= required level
+ExpectedSlippage_i <= allowable level
+Risk_i <= risk budget
+DataQuality >= required level
+```
+
+ATM is therefore **not** a canonical selection rule. A moneyness ladder may generate candidates, but economic selection decides the winner.
+
+### F-110 canonical entry gate
+
+```text
+BUY_CE = DataOK
+       ∧ DirectionalEdgeOK
+       ∧ EV_CE > 0
+       ∧ ConservativeEV_CE > 0
+       ∧ LiquidityOK
+       ∧ SlippageOK
+       ∧ RiskOK
+```
+
+`BUY_PE` has the analogous condition. Otherwise `NO_TRADE`.
+
+### F-111 canonical exit semantics
+
+Exit is permitted/required on validated hard protection, non-positive conservative continuation value, emergency reversal conditions, or session termination. The state machine does not permit `NO_TRADE -> OPEN` without signal and execution gates.
+
+### F-112 canonical protection invariant
+
+```text
+Stop_(t+1) >= Stop_t
+MaximumAcceptedRisk_(t+1) <= MaximumAcceptedRisk_t
+```
+
+Learned giveback/continuation parameters remain unfrozen until walk-forward validation.
+
+### F-114 status
+
+The source defines the canonical decision function:
+
+```text
+Decision_t = D(
+    MarketState_t,
+    ProbabilityState_t,
+    CapitalState_t,
+    ExecutionState_t,
+    PositionState_t
+)
+```
+
+It does not uniquely specify a multi-position portfolio-risk aggregation equation. F-114 therefore remains blocked specifically on that mathematical resolution.
+
+## Formula promotion contract
+
+Every formula promoted to `RESOLVED` must have:
 
 ```text
 Formula ID
@@ -103,7 +151,7 @@ Units
 Availability timestamp semantics
 Boundary conditions
 Numerical safeguards
-Parameter-estimation methodology, when applicable
+Parameter-estimation methodology
 Owner module
 Unit tests
 Adversarial tests
@@ -115,7 +163,7 @@ Until that metadata exists, the formula is not production-authorized.
 
 ## Risk semantic prohibition
 
-The repository does not authorize any silent equivalence between:
+No silent equivalence is permitted between:
 
 ```text
 EffectiveRisk_i
@@ -124,13 +172,4 @@ RiskPerUnit
 GrossRisk
 ```
 
-In particular, the following are prohibited unless an authoritative strategy artifact explicitly establishes the equivalence:
-
-```text
-EffectiveRisk_i = GrossRisk
-EffectiveRisk_i = RiskPerUnit * Q
-EffectiveRisk_i = EffectiveRiskPerUnit
-EffectiveRiskPerUnit = EntryPrice - InitialStop
-```
-
-See `ARTIFACT_RESOLUTION.md` for the full attack ledger and resolution procedure.
+unless the authoritative source explicitly establishes the relationship.

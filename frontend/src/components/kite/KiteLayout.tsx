@@ -27,7 +27,7 @@ import {
   type WorkspaceSlotId,
 } from './workspaceLayout';
 
-export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
+export type NavItem = 'dashboard' | 'astro' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
@@ -80,23 +80,23 @@ const WORKSPACE_CSS = `
 @keyframes kl-scan-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @keyframes kw-pane-in { from { opacity: .65; transform: scale(.995); } to { opacity: 1; transform: scale(1); } }
 .kl-scan-dot { animation: kl-scan-pulse 1.1s ease-in-out infinite; }
-.kl-scan-text { background-image: linear-gradient(90deg,#d35400 0%,#d35400 38%,#ffb27a 50%,#d35400 62%,#d35400 100%); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:kl-scan-shimmer 1.6s linear infinite; }
+.kl-scan-text { background-image: linear-gradient(90deg,var(--k-brand-deep) 0%,var(--k-brand-deep) 38%,#ffb27a 50%,var(--k-brand-deep) 62%,var(--k-brand-deep) 100%); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:kl-scan-shimmer 1.6s linear infinite; }
 .kw-pane { animation: kw-pane-in .16s cubic-bezier(.2,.8,.2,1); }
 .kw-pane-control { width:26px; height:24px; padding:0; display:inline-flex; align-items:center; justify-content:center; border:0; border-radius:5px; color:#898989; background:transparent; cursor:pointer; transition:color .15s,background .15s,transform .15s; }
-.kw-pane-control:hover { color:#f06428; background:rgba(240,100,40,.09); }
+.kw-pane-control:hover { color:var(--k-brand); background:rgba(240,100,40,.09); }
 .kw-pane-control:active { transform:scale(.92); }
-.kw-pane-control[aria-pressed="true"] { color:#f06428; background:rgba(240,100,40,.11); }
+.kw-pane-control[aria-pressed="true"] { color:var(--k-brand); background:rgba(240,100,40,.11); }
 .kw-resizer { position:absolute; z-index:40; touch-action:none; background:transparent; transition:background .15s,box-shadow .15s; }
 .kw-resizer:hover,.kw-resizer[data-active="true"] { background:rgba(240,100,40,.22); box-shadow:0 0 0 1px rgba(240,100,40,.08); }
 .kw-drop-zone { border:1px dashed rgba(240,100,40,.48); background:rgba(255,255,255,.72); color:#9a674f; font:600 11px/1 system-ui,sans-serif; letter-spacing:.02em; backdrop-filter:blur(5px); transition:background .14s,border-color .14s,transform .14s; }
-.kw-drop-zone:hover,.kw-drop-zone[data-active="true"] { border-color:#f06428; background:rgba(240,100,40,.12); color:#d35400; transform:scale(.985); }
-.kw-dock-chip { height:26px; display:inline-flex; align-items:center; gap:7px; padding:0 10px; border:1px solid #ddd; border-radius:7px; background:#fff; color:#555; cursor:pointer; font:600 11px/1 system-ui,sans-serif; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:border-color .15s,color .15s,transform .15s; }
-.kw-dock-chip:hover { color:#f06428; border-color:rgba(240,100,40,.55); transform:translateY(-1px); }
-.kw-menu-button { width:100%; min-height:38px; padding:7px 9px; display:flex; align-items:center; gap:10px; text-align:left; border:1px solid transparent; border-radius:7px; background:transparent; color:#444; cursor:pointer; }
-.kw-menu-button:hover { border-color:#e8e8e8; background:#fafafa; }
+.kw-drop-zone:hover,.kw-drop-zone[data-active="true"] { border-color:var(--k-brand); background:rgba(240,100,40,.12); color:var(--k-brand-deep); transform:scale(.985); }
+.kw-dock-chip { height:26px; display:inline-flex; align-items:center; gap:7px; padding:0 10px; border:1px solid var(--k-border-strong-3); border-radius:7px; background:var(--k-bg); color:var(--k-ink-3); cursor:pointer; font:600 11px/1 system-ui,sans-serif; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:border-color .15s,color .15s,transform .15s; }
+.kw-dock-chip:hover { color:var(--k-brand); border-color:rgba(240,100,40,.55); transform:translateY(-1px); }
+.kw-menu-button { width:100%; min-height:38px; padding:7px 9px; display:flex; align-items:center; gap:10px; text-align:left; border:1px solid transparent; border-radius:7px; background:transparent; color:var(--k-text); cursor:pointer; }
+.kw-menu-button:hover { border-color:var(--k-border-2); background:var(--k-surface-2); }
 .kw-pane[data-workspace-pane="terminal"] .kite-terminal-window-header { display:none !important; }
 body.kw-resizing { cursor:inherit; user-select:none; }
-@media (prefers-reduced-motion: reduce) { .kl-scan-dot,.kl-scan-text,.kw-pane { animation:none; } .kl-scan-text { -webkit-text-fill-color:#d35400; color:#d35400; } }
+@media (prefers-reduced-motion: reduce) { .kl-scan-dot,.kl-scan-text,.kw-pane { animation:none; } .kl-scan-text { -webkit-text-fill-color:var(--k-brand-deep); color:var(--k-brand-deep); } }
 `;
 
 function fmtAgo(ms: number): string {
@@ -116,6 +116,7 @@ function fmtNext(ms: number): string {
 function titleCase(value: string): string {
   if (value === 'adaptiveEdge') return 'Adaptive Edge';
   if (value === 'backtest') return 'Backtest';
+  if (value === 'astro') return 'Astrology';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -192,7 +193,7 @@ function PaneWindow({ pane, slot, locked, focus, compact = false, onMinimize, on
       className="kw-pane"
       data-workspace-pane={pane.id}
       aria-label={`${pane.title} pane`}
-      style={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fff', border: '1px solid #e4e4e4', boxShadow: focusedHere ? '0 10px 36px rgba(0,0,0,.09)' : '0 1px 2px rgba(0,0,0,.025)' }}
+      style={{ height: '100%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--k-bg)', border: '1px solid #e4e4e4', boxShadow: focusedHere ? '0 10px 36px rgba(0,0,0,.09)' : '0 1px 2px rgba(0,0,0,.025)' }}
     >
       <div
         draggable={canDrag}
@@ -200,12 +201,12 @@ function PaneWindow({ pane, slot, locked, focus, compact = false, onMinimize, on
         onDragEnd={onDragEnd}
         onDoubleClick={() => focusedHere ? onRestoreFocus() : onFocus(pane.id, 'maximized')}
         title={locked ? 'Layout locked' : focusedHere ? 'Double-click to restore workspace' : focus ? 'Double-click to focus this pane' : 'Drag to reposition · double-click to maximize'}
-        style={{ height: compact ? 28 : 31, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '0 5px 0 9px', borderBottom: '1px solid #e8e8e8', background: '#fbfbfc', cursor: canDrag ? 'grab' : 'default', userSelect: 'none' }}
+        style={{ height: compact ? 28 : 31, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '0 5px 0 9px', borderBottom: '1px solid var(--k-border-2)', background: 'var(--k-surface-3)', cursor: canDrag ? 'grab' : 'default', userSelect: 'none' }}
       >
         {canDrag && <DragDots />}
         <span style={{ color: pane.accent, display: 'inline-flex' }}><PaneGlyph pane={pane.id} size={13} /></span>
-        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 650, color: '#444', letterSpacing: '.01em' }}>{pane.title}</span>
-        {!compact && <span style={{ fontSize: 9, color: '#aaa', whiteSpace: 'nowrap' }}>{SLOT_LABEL[slot]}</span>}
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 650, color: 'var(--k-text)', letterSpacing: '.01em' }}>{pane.title}</span>
+        {!compact && <span style={{ fontSize: 9, color: 'var(--k-faint)', whiteSpace: 'nowrap' }}>{SLOT_LABEL[slot]}</span>}
         <div draggable={false} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
           {focusedHere && (
             <button type="button" className="kw-pane-control" aria-label={`Restore ${pane.title}`} title="Restore workspace" onClick={(event) => { event.stopPropagation(); onRestoreFocus(); }}>
@@ -228,10 +229,10 @@ function PaneWindow({ pane, slot, locked, focus, compact = false, onMinimize, on
 function PresetDiagram({ preset }: { preset: WorkspacePresetId }) {
   if (preset === 'chart') {
     return (
-      <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 24%', gap: 1, padding: 2, border: '1px solid #ddd', borderRadius: 4, background: '#fff', flexShrink: 0 }}>
-        <i style={{ gridColumn: 1, gridRow: 1, background: '#f06428', opacity: .72, borderRadius: 1 }} />
+      <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 24%', gap: 1, padding: 2, border: '1px solid var(--k-border-strong-3)', borderRadius: 4, background: 'var(--k-bg)', flexShrink: 0 }}>
+        <i style={{ gridColumn: 1, gridRow: 1, background: 'var(--k-brand)', opacity: .72, borderRadius: 1 }} />
         <i style={{ gridColumn: 1, gridRow: 2, background: '#d7d7d7', borderRadius: 1 }} />
-        <i style={{ gridColumn: 2, gridRow: '1 / 3', background: '#bdbdbd', borderRadius: 1 }} />
+        <i style={{ gridColumn: 2, gridRow: '1 / 3', background: 'var(--k-faint-3)', borderRadius: 1 }} />
       </span>
     );
   }
@@ -239,10 +240,10 @@ function PresetDiagram({ preset }: { preset: WorkspacePresetId }) {
   const left = '23%';
   const bottom = preset === 'execution' ? '35%' : '27%';
   return (
-    <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: `${left} 1fr ${right}`, gridTemplateRows: `1fr ${bottom}`, gap: 1, padding: 2, border: '1px solid #ddd', borderRadius: 4, background: '#fff', flexShrink: 0 }}>
+    <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: `${left} 1fr ${right}`, gridTemplateRows: `1fr ${bottom}`, gap: 1, padding: 2, border: '1px solid var(--k-border-strong-3)', borderRadius: 4, background: 'var(--k-bg)', flexShrink: 0 }}>
       <i style={{ gridColumn: 1, gridRow: '1 / 3', background: '#d7d7d7', borderRadius: 1 }} />
-      <i style={{ gridColumn: 2, gridRow: 1, background: '#f06428', opacity: .72, borderRadius: 1 }} />
-      <i style={{ gridColumn: 3, gridRow: '1 / 3', background: '#bdbdbd', borderRadius: 1 }} />
+      <i style={{ gridColumn: 2, gridRow: 1, background: 'var(--k-brand)', opacity: .72, borderRadius: 1 }} />
+      <i style={{ gridColumn: 3, gridRow: '1 / 3', background: 'var(--k-faint-3)', borderRadius: 1 }} />
       <i style={{ gridColumn: 2, gridRow: 2, background: '#8f8f8f', borderRadius: 1 }} />
     </span>
   );
@@ -280,7 +281,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   const panes = useMemo<Record<WorkspacePaneId, PaneDefinition>>(() => ({
     watchlist: { id: 'watchlist', title: 'Watchlist', shortTitle: 'Watchlist', accent: '#4f79ce', content: sidebar },
     dashboard: {
-      id: 'dashboard', title: titleCase(activeNav), shortTitle: 'Dashboard', accent: '#f06428',
+      id: 'dashboard', title: titleCase(activeNav), shortTitle: 'Dashboard', accent: 'var(--k-brand)',
       content: (
         <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
@@ -572,7 +573,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         position: 'absolute', inset: 0, display: 'grid', minWidth: 0, minHeight: 0,
         gridTemplateColumns: `${leftVisible ? layout.sizes.left : 0}px minmax(0,1fr) ${rightVisible ? layout.sizes.right : 0}px`,
         gridTemplateRows: `minmax(0,1fr) ${bottomVisible && centerVisible ? layout.sizes.bottom : 0}px`,
-        gap: 0, background: '#ececec',
+        gap: 0, background: 'var(--k-border-3)',
       }}
     >
       {WORKSPACE_SLOTS.map((slot) => {
@@ -586,7 +587,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   const focusedWorkspace = focus && isVisible(focus.pane) ? (() => {
     if (focus.mode === 'maximized') {
       return (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 60, padding: 1, background: '#ececec' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 60, padding: 1, background: 'var(--k-border-3)' }}>
           {renderPane(focus.pane)}
         </div>
       );
@@ -594,7 +595,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     if (focus.mode === 'fullscreen') return null;
     const companions = available.filter((id) => id !== focus.pane && isVisible(id));
     return (
-      <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 3, padding: 3, background: '#e8e8e8' }}>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 3, padding: 3, background: 'var(--k-border-2)' }}>
         <div style={{ minWidth: 0, minHeight: 0, order: focus.side === 'right' ? 2 : 1 }}>{renderPane(focus.pane)}</div>
         <div style={{ minWidth: 0, minHeight: 0, order: focus.side === 'right' ? 1 : 2, display: 'grid', gridTemplateColumns: companions.length > 1 ? 'repeat(2,minmax(0,1fr))' : '1fr', gridAutoRows: 'minmax(0,1fr)', gap: 3 }}>
           {companions.map((id, index) => <div key={id} style={{ minWidth: 0, minHeight: 0, gridColumn: companions.length === 3 && index === 0 ? '1 / -1' : undefined }}>{renderPane(id, true)}</div>)}
@@ -619,7 +620,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   const marketClosed = autoScan && activity?.market_open === false;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', background: '#fff', fontFamily: k.fontFamily }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', background: 'var(--k-bg)', fontFamily: k.fontFamily }}>
       <style>{WORKSPACE_CSS}</style>
       <div ref={workspaceRef} className="mac-canvas" data-testid="kite-workspace" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         {macOn ? (
@@ -658,24 +659,24 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
-      <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid #dedede', background: 'rgba(255,255,255,.98)', zIndex: 150 }}>
+      <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
           {onBasketClick && (
             <button type="button" className="kw-pane-control" onClick={onBasketClick} title="Basket" aria-label="Open basket" style={{ position: 'relative' }}>
               <Icons.Basket />
-              {basketCount > 0 && <span style={{ position: 'absolute', top: -3, right: -4, minWidth: 14, height: 14, padding: '0 2px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#f06428', color: '#fff', fontSize: 8, fontWeight: 750 }}>{basketCount}</span>}
+              {basketCount > 0 && <span style={{ position: 'absolute', top: -3, right: -4, minWidth: 14, height: 14, padding: '0 2px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'var(--k-brand)', color: 'var(--k-on-accent)', fontSize: 8, fontWeight: 750 }}>{basketCount}</span>}
             </button>
           )}
         </div>
 
         <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, maxWidth: '48%', overflow: 'hidden' }}>
           {macOn ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#aaa', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
           ) : minimizedAvailable.length > 0 ? (
             <>
               {minimizedAvailable.length > 1 && (
-                <button type="button" className="kw-dock-chip" onClick={restoreAll} title="Restore all panes" aria-label="Restore all panes" style={{ color: '#555', fontWeight: 700 }}>
+                <button type="button" className="kw-dock-chip" onClick={restoreAll} title="Restore all panes" aria-label="Restore all panes" style={{ color: 'var(--k-ink-3)', fontWeight: 700 }}>
                   <ControlIcon kind="restore" />
                   Restore all
                 </button>
@@ -688,11 +689,11 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
               ))}
             </>
           ) : (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#aaa', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9bc7b2' }} />All panes active</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9bc7b2' }} />All panes active</span>
           )}
         </div>
 
-        <div aria-label="Workspace and engine status" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        <div aria-label="Workspace and engine status" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--k-ink-5)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {!macOn && (
             <div ref={menuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: 2 }}>
               <button type="button" className="kw-dock-chip" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} title="Open workspace layouts">
@@ -702,30 +703,30 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
               </button>
 
               {menuOpen && (
-                <div role="dialog" aria-label="Workspace layout menu" style={{ position: 'absolute', right: 0, bottom: 33, width: 294, padding: 9, border: '1px solid #ddd', borderRadius: 10, background: '#fff', boxShadow: '0 14px 44px rgba(0,0,0,.16)', zIndex: 300 }}>
-                  <div style={{ padding: '3px 5px 7px', fontSize: 10, fontWeight: 750, color: '#999', letterSpacing: '.08em', textTransform: 'uppercase' }}>Workspace presets</div>
+                <div role="dialog" aria-label="Workspace layout menu" style={{ position: 'absolute', right: 0, bottom: 33, width: 294, padding: 9, border: '1px solid var(--k-border-strong-3)', borderRadius: 10, background: 'var(--k-bg)', boxShadow: '0 14px 44px rgba(0,0,0,.16)', zIndex: 300 }}>
+                  <div style={{ padding: '3px 5px 7px', fontSize: 10, fontWeight: 750, color: 'var(--k-dim-2)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Workspace presets</div>
                   {PRESET_META.map((preset) => (
                     <button key={preset.id} type="button" className="kw-menu-button" onClick={() => applyPreset(preset.id)}>
                       <PresetDiagram preset={preset.id} />
-                      <span><strong style={{ display: 'block', fontSize: 11.5 }}>{preset.label}</strong><small style={{ color: '#999', fontSize: 10 }}>{preset.detail}</small></span>
+                      <span><strong style={{ display: 'block', fontSize: 11.5 }}>{preset.label}</strong><small style={{ color: 'var(--k-dim-2)', fontSize: 10 }}>{preset.detail}</small></span>
                     </button>
                   ))}
-                  <div style={{ height: 1, background: '#ececec', margin: '7px 3px' }} />
+                  <div style={{ height: 1, background: 'var(--k-border-3)', margin: '7px 3px' }} />
                   <button type="button" className="kw-menu-button" onClick={resetArrangement}><ControlIcon kind="restore" /><span style={{ fontSize: 11.5 }}>Reset pane positions</span></button>
                   <button type="button" className="kw-menu-button" onClick={restoreAll}><PaneGlyph pane="dashboard" /><span style={{ fontSize: 11.5 }}>Restore all panes</span></button>
                   <button type="button" className="kw-menu-button" aria-pressed={layout.locked} onClick={() => setLayout((current) => ({ ...current, locked: !current.locked }))}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d={layout.locked ? 'M8 10V7a4 4 0 018 0v3' : 'M8 10V7a4 4 0 017.5-2'} /></svg>
                     <span style={{ fontSize: 11.5 }}>{layout.locked ? 'Unlock pane movement' : 'Lock pane movement'}</span>
-                    <span style={{ marginLeft: 'auto', width: 28, height: 16, padding: 2, borderRadius: 10, background: layout.locked ? '#f06428' : '#ddd', display: 'flex', justifyContent: layout.locked ? 'flex-end' : 'flex-start' }}><i style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff' }} /></span>
+                    <span style={{ marginLeft: 'auto', width: 28, height: 16, padding: 2, borderRadius: 10, background: layout.locked ? 'var(--k-brand)' : 'var(--k-border-strong-3)', display: 'flex', justifyContent: layout.locked ? 'flex-end' : 'flex-start' }}><i style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--k-bg)' }} /></span>
                   </button>
-                  <div style={{ padding: '8px 6px 3px', fontSize: 9.5, lineHeight: 1.45, color: '#aaa' }}>Drag any pane title to dock it elsewhere. Double-click a title to maximize. Press Esc to leave focus mode.</div>
+                  <div style={{ padding: '8px 6px 3px', fontSize: 9.5, lineHeight: 1.45, color: 'var(--k-faint)' }}>Drag any pane title to dock it elsewhere. Double-click a title to maximize. Press Esc to leave focus mode.</div>
                 </div>
               )}
             </div>
           )}
-          {liveCount > 0 && <><span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 650, color: k.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green }} />{liveCount} live</span><span style={{ width: 1, height: 14, background: '#e0e0e0' }} /></>}
-          <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: '50%', background: scanning ? k.orange : marketClosed ? '#bbb' : autoScan ? k.orange : '#bbb' }} />
-          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 650 : 400, textTransform: 'capitalize' }}>{scanning ? activity?.scanning_label || 'scanning…' : autoScan ? 'AUTO' : 'MANUAL'}</span>
+          {liveCount > 0 && <><span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 650, color: k.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green }} />{liveCount} live</span><span style={{ width: 1, height: 14, background: 'var(--k-border)' }} /></>}
+          <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: '50%', background: scanning ? k.orange : marketClosed ? 'var(--k-faint-2)' : autoScan ? k.orange : 'var(--k-faint-2)' }} />
+          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : 'var(--k-ink-5)', fontWeight: scanning ? 650 : 400, textTransform: 'capitalize' }}>{scanning ? activity?.scanning_label || 'scanning…' : autoScan ? 'AUTO' : 'MANUAL'}</span>
           {!scanning && (activity?.last_scan_ms ?? 0) > 0 && <span style={{ opacity: .7 }}>· {fmtAgo(activity?.last_scan_ms ?? 0)}</span>}
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
         </div>

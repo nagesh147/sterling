@@ -26,7 +26,8 @@ from app.services.kite_engine.greeks import (
 from app.services.kite_engine import market_hours
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
-from app.services.kite_engine.strikes import chain_rows_for, pick_by_delta, pick_strikes
+from app.services.kite_engine.strikes import (chain_rows_for, expiry_window_of,
+                                              pick_by_delta, pick_strikes)
 from app.services.kite_engine.universe import build_universe, select_scan_universe
 
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -476,7 +477,8 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     else:
         picks = pick_strikes(chain, spot=row.spot, direction=direction,
                              moneynesses=[cfg.itm_depth or "ITM10"],
-                             expiry_types=expiry_types, today=today)
+                             expiry_types=expiry_types, today=today,
+                             **expiry_window_of(cfg))
         pick = picks[0][1] if picks else None
     if pick is None or not pick.option_symbol:
         return None

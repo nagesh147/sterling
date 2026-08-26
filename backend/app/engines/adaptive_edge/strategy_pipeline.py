@@ -22,10 +22,9 @@ import json
 from typing import Mapping, Sequence
 
 from .accounting import mark_accounting
-from .broker_event_mapper import BrokerExecutionEvent
+from .broker_event_mapper import BrokerEventMapper, BrokerExecutionEvent
 from .contracts import DynamicMode, RiskAuthorization, RiskState
-from .e2e import AuditLedger, AuditRecord, ExecutionMode, PositionState, ReplayContext, SelectedInstrument
-from .execution_path import AdaptiveEdgeExecutionPath
+from .e2e import AuditLedger, AuditRecord, ExecutionMode, PositionState, ReplayContext
 from .economic import EconomicAssessment, evaluate_economics
 from .edge import EdgeAssessment, EdgeFormula, evaluate_edge
 from .event_boundary import CanonicalMarketEvent
@@ -33,8 +32,11 @@ from .execution_adapter import (
     CanonicalExecutionEvent,
     CanonicalExecutionStatus,
     CanonicalOrderIntent,
+    ExecutionAdapter,
 )
+from .execution_event_registry import ExecutionEventRegistry
 from .execution_gate import evaluate_execution_gate
+from .execution_gateway import ExecutionGateway
 from .feature_engine import (
     FeatureInput,
     FeatureProvenance,
@@ -52,6 +54,7 @@ from .lifecycle_engine import (
 )
 from .opportunity_mode import OpportunityMode, OpportunityModeEngine, ModePolicy
 from .option_ladder import STRIKE_STEP
+from .position_projector import DeterministicPositionProjector
 from .protection import ProtectionDecision, ProtectionEngine, ProtectionPolicy
 from .research_session import (
     a126_session_cutoff_reached,
@@ -537,41 +540,51 @@ def run_strategy_semantics_pipeline(
     audit.append("instrument", f"SEL-{selected_option}", f"AUTH-{opp_id}")
 
     # [I] Canonical Order Intent & Simulated Execution
-    instrument = SelectedInstrument(
+    order_id = replay_context.deterministic_id("ORDER", f"SEL-{selected_option}") if replay_context else f"ORDER-{trigger_snap.snapshot_id}"
+    idem_key = replay_context.deterministic_id("IDEM", order_id) if replay_context else f"IDEM-{order_id}"
+
+    order = CanonicalOrderIntent(
+        order_intent_id=order_id,
         selection_id=f"SEL-{selected_option}",
-        intent_id=risk_auth.opportunity_id,
         instrument_id=selected_option,
-        selection_version="strategy-semantics-v1",
-        selected_at=trigger_snap.decision_time,
-    )
-    executed = AdaptiveEdgeExecutionPath(
-        transport=SimulatedExecutionTransport(),
-        formula_ids=("F-004",),
-    ).submit_and_project(
-        instrument=instrument,
-        authorization=risk_auth,
-        sizing=sizing,
         side="BUY",
+        quantity=trade_qty,
+        intent_version="v2.0",
+        idempotency_key=idem_key,
         created_at=trigger_snap.decision_time,
-        replay_context=replay_context,
-        broker_event=BrokerExecutionEvent(
-            broker_event_id="pending",
-            order_intent_id="pending",
-            broker_status="FILLED",
-            event_time=trigger_snap.decision_time,
-            filled_quantity=trade_qty,
-            fill_price=150.0,
-        ),
-        risk_boundary=initial_stop_price,
     )
-    order = executed.order
-    exec_event = executed.execution
-    audit.append("order_intent", order.order_intent_id, instrument.selection_id)
+    audit.append("order_intent", order.order_intent_id, f"SEL-{selected_option}")
+
+    transport = SimulatedExecutionTransport()
+    gateway = ExecutionGateway(
+        ExecutionAdapter(transport),
+        BrokerEventMapper({"SIM_FILL": CanonicalExecutionStatus.FILLED}),
+        ExecutionEventRegistry(),
+    )
+    broker_ref = gateway.submit(order, formula_ids=("F-004",))
+
+    # Entry fill price: model option premium ~ 150.0 (or spot based)
+    entry_fill_price = 150.0
+    exec_event = gateway.receive(
+        BrokerExecutionEvent(
+            broker_event_id=f"BE-ENTRY-{order_id}",
+            order_intent_id=order_id,
+            broker_status="SIM_FILL",
+            event_time=trigger_snap.decision_time,
+            broker_reference=broker_ref,
+            filled_quantity=trade_qty,
+            fill_price=entry_fill_price,
+        )
+    )
     audit.append("execution_event", exec_event.execution_event_id, order.order_intent_id)
 
     # [J] Position Protection Envelope
-    initial_pos = executed.position
-    entry_fill_price = exec_event.fill_price if exec_event.fill_price is not None else 150.0
+    projector = DeterministicPositionProjector(
+        position_id=f"POS-{order_id}",
+        instrument_id=selected_option,
+        side="BUY",
+    )
+    initial_pos = projector.project(exec_event)
     audit.append("position", initial_pos.position_id, exec_event.execution_event_id)
 
     protection_policy = ProtectionPolicy(
@@ -634,8 +647,8 @@ def run_strategy_semantics_pipeline(
         exit_fill_price = max(1.0, entry_fill_price + spot_delta * 0.5)
 
     exit_exec_event = CanonicalExecutionEvent(
-        execution_event_id=f"BE-EXIT-{order.order_intent_id}",
-        order_intent_id=order.order_intent_id,
+        execution_event_id=f"BE-EXIT-{order_id}",
+        order_intent_id=order_id,
         event_type=CanonicalExecutionStatus.FILLED,
         event_time=bars[exit_bar_index].available_at,
         filled_quantity=trade_qty,
@@ -649,7 +662,7 @@ def run_strategy_semantics_pipeline(
         lifecycle_state="CLOSED",
         source_execution_event_id=exit_exec_event.execution_event_id,
     )
-    audit.append("lifecycle_exit", f"EXIT-{order.order_intent_id}", initial_pos.position_id)
+    audit.append("lifecycle_exit", f"EXIT-{order_id}", initial_pos.position_id)
 
     gross_pnl = (exit_fill_price - entry_fill_price) * trade_qty
     realized_pnl = gross_pnl - config.execution_cost

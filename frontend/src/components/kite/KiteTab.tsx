@@ -21,6 +21,8 @@ import { KiteSessionGuard } from './KiteSessionGuard';
 import { KiteAuthOverlay } from './KiteLoader';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
+import { BoardDetailPane } from './board/BoardDetailPane';
+import type { BoardSignal } from './board/boardTypes';
 import { EngineTerminal } from './EngineTerminal';
 import { KiteTicker } from './KiteTicker';
 import { useKiteAutoSession, useKiteStatus } from '../../hooks/useKite';
@@ -42,6 +44,7 @@ import type { SignalChartData } from '../../types/kiteEngine';
 import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 import { AdaptiveEdgePane } from './AdaptiveEdgePane';
 import { UnifiedBacktestPane } from '../backtest/UnifiedBacktestPane';
+import { AstroPane } from './AstroPane';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -65,8 +68,8 @@ function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange:
               style={{
                 padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
                 fontSize: 13, fontWeight: active ? 600 : 400,
-                color: active ? '#f06428' : '#666',
-                borderBottom: active ? '2px solid #f06428' : '2px solid transparent',
+                color: active ? 'var(--k-brand)' : 'var(--k-ink-4)',
+                borderBottom: active ? '2px solid var(--k-brand)' : '2px solid transparent',
                 marginBottom: -1, transition: 'color 0.15s',
               }}
             >
@@ -93,6 +96,9 @@ export function KiteTab() {
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number; source?: string } | null>(null);
+  // Engines on the shared board carry their whole record in the signal, so
+  // their detail page needs no second fetch and no per-engine component.
+  const [boardDetail, setBoardDetail] = useState<BoardSignal | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
   const [basketOpen, setBasketOpen] = useState(false);
   const basketCount = useKiteBasketStore((s) => s.entries.length);
@@ -113,6 +119,7 @@ export function KiteTab() {
     setNav(n);
     setSetupView(null);
     setDetailView(null);
+    setBoardDetail(null);
   };
 
   const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => {
@@ -135,6 +142,8 @@ export function KiteTab() {
   let content = null;
   if (setupView) {
     content = <SetupChart token={setupView.token} underlying={setupView.underlying} onClose={() => { closeChartView(); setSetupView(null); }} />;
+  } else if (boardDetail) {
+    content = <BoardDetailPane signal={boardDetail} onClose={() => { closeChartView(); setBoardDetail(null); }} />;
   } else if (detailView) {
     content = (
       <SignalDetailPane
@@ -159,6 +168,7 @@ export function KiteTab() {
     );
   } else {
     if (nav === 'dashboard') content = <KiteDashboard />;
+    else if (nav === 'astro') content = <AstroPane />;
     else if (nav === 'orders') content = <OrdersPane onOpenBasket={() => setBasketOpen(true)} />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
@@ -171,6 +181,9 @@ export function KiteTab() {
   }
 
   const contentKey = setupView ? `setup:${setupView.token}`
+    // Keyed by signal id so switching between two rows remounts the pane
+    // rather than leaving the previous signal's calculator state behind.
+    : boardDetail ? `board:${boardDetail.id}`
     : detailView ? `detail:${detailView.token}`
     : instrumentView ? `inst:${instrumentView.symbol}`
     : nav === 'more' ? `more:${moreTab}`
@@ -192,6 +205,7 @@ export function KiteTab() {
             <EngineStartupBoundary>
               <AdaptiveEdgeRightSidebar
                 onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }}
+                onOpenBoardDetail={(signal) => { setInstrumentView(null); setSetupView(null); setDetailView(null); setBoardDetail(signal); }}
                 onOpenChart={handleOpenInstrument}
               />
             </EngineStartupBoundary>

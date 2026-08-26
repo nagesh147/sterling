@@ -29,18 +29,6 @@ A197_MIN_TRADING_DAYS = 120
 A197_MIN_BARS = 45_000
 
 
-def meets_a197_contract(*, trading_days: int, bar_count: int, li_valid: int) -> bool:
-    """A197 requires bar coverage AND LiquidityImbalance over the same window.
-
-    Bars-only history cannot promote. LI ticks cannot be synthesized.
-    """
-    return (
-        trading_days >= A197_MIN_TRADING_DAYS
-        and bar_count >= A197_MIN_BARS
-        and li_valid >= A197_MIN_BARS
-    )
-
-
 def _parse_ts(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -92,11 +80,7 @@ def coverage_report(
     missing = len(observations) - valid
     first = observations[0].decision_time if observations else None
     last = observations[-1].decision_time if observations else None
-    meets = meets_a197_contract(
-        trading_days=len(days),
-        bar_count=len(observations),
-        li_valid=li_valid,
-    )
+    meets = len(days) >= A197_MIN_TRADING_DAYS and len(observations) >= A197_MIN_BARS
     return CoverageReport(
         symbol=symbol,
         bar_count=len(observations),

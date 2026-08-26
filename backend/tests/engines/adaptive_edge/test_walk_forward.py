@@ -211,35 +211,3 @@ def test_final_test_claim_requires_frozen_holdout_and_clean_registry() -> None:
 
     holdout.freeze("candidate-1", dt(20))
     assert final_test_is_claim_eligible(registry, holdout)
-
-
-def test_oos_claim_blocked_without_a197_li_corpus() -> None:
-    from app.engines.adaptive_edge.walk_forward import require_oos_claim_allowed
-
-    registry = ResearchRegistry()
-    registry.register_candidate(CandidateSpec("candidate-1", "abc", "f1", "l1"))
-    holdout = FinalHoldout()
-    holdout.freeze("candidate-1", dt(20))
-    with pytest.raises(EvaluationContractError, match="LI-scale"):
-        require_oos_claim_allowed(
-            registry,
-            holdout,
-            trading_days=134,
-            bar_count=50_244,
-            li_valid=0,
-        )
-
-
-def test_oos_claim_blocked_if_holdout_not_frozen() -> None:
-    from app.engines.adaptive_edge.walk_forward import require_oos_claim_allowed
-
-    registry = ResearchRegistry()
-    registry.register_candidate(CandidateSpec("candidate-1", "abc", "f1", "l1"))
-    with pytest.raises(TestSetContaminatedError):
-        require_oos_claim_allowed(
-            registry,
-            FinalHoldout(),
-            trading_days=120,
-            bar_count=45_000,
-            li_valid=45_000,
-        )

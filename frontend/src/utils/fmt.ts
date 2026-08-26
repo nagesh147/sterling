@@ -69,11 +69,11 @@ export function fmtUSD(val: number | null | undefined, decimals = 0): string {
 
 /** Null-safe IVR color */
 export function ivrColor(ivr: number | null | undefined): string {
-  if (ivr == null) return '#555';
-  if (ivr < 40) return '#44cc88';
-  if (ivr < 60) return '#f0c040';
+  if (ivr == null) return 'var(--k-ink-3)';
+  if (ivr < 40) return 'var(--k-green-mint)';
+  if (ivr < 60) return 'var(--k-gold)';
   if (ivr < 80) return '#f0a500';
-  return '#cc4444';
+  return 'var(--k-red-muted)';
 }
 
 /** Null-safe IVR bar width percent (0-100) */

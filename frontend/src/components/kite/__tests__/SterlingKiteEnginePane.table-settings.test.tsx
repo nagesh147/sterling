@@ -80,14 +80,13 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     window.addEventListener('kite-nav-click', navListener);
     renderPane();
 
-    expect(screen.queryByText('Signal table settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('SuperTrend board settings')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Scan report' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
 
-    expect(screen.getByText('Signal table settings')).toBeInTheDocument();
-    expect(screen.getByText(/change only how this table looks/i)).toBeInTheDocument();
+    expect(screen.getByText('SuperTrend board settings')).toBeInTheDocument();
+    expect(screen.getByText(/nothing here changes what is scanned/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('checkbox', { name: 'Show ended setups' })).toBeChecked();
 
     // Engine controls must never leak back into the table preferences drawer.
     expect(screen.queryByText('Signal Discovery')).not.toBeInTheDocument();
@@ -97,9 +96,6 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Exchange' }));
     expect(useKiteSettings.getState().showExchange).toBe(false);
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Best signal per instrument' }));
-    expect(localStorage.getItem('kite_st_best_only')).toBe('true');
-
     // The drawer now points at Trade Rules — entry, stop, exit and sizing are
     // engine-independent, so that is where they live.
     fireEvent.click(screen.getByRole('button', { name: /trade rules/i }));
@@ -107,6 +103,27 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     expect(navListener).toHaveBeenCalled();
 
     window.removeEventListener('kite-nav-click', navListener);
+  });
+
+  it('keeps the live filters in the toolbar, not duplicated in the drawer', () => {
+    // Best leg and Ended used to appear as checkboxes here as well as on the
+    // toolbar. Two controls for one setting is a pair that eventually drifts,
+    // and the toolbar copy is the one whose state is visible without opening
+    // anything.
+    signalRows.push({
+      underlying: 'NIFTY 50', token: 256265, exchange: 'NFO', regime: 'BULL',
+      alignment: { fast: 1, mid: 1, slow: 1 }, direction: 'long', option_type: 'CE',
+      legs: [], spot: 25_000, stop_loss: 24_900, score: 85,
+      timestamp_ms: Date.now(), source: 'spot', is_active: true, is_fresh: true,
+    });
+    renderPane();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'BEST LEG' }));
+    expect(localStorage.getItem('kite_st_best_only')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
+    expect(screen.queryByRole('checkbox', { name: 'Best signal per instrument' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Show ended setups' })).not.toBeInTheDocument();
   });
 
   it('reveals retained rows instead of reporting that no signals exist', () => {
