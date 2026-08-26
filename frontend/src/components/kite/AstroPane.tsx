@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import { forecastDay, forecastMonth } from '../../lib/astro/engine';
-import { formatIstDate, formatIstIsoDate, getIstParts, utcFromIstParts } from '../../lib/astro/time';
+import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
+import { formatIstDate, formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { UNDERLYINGS, type GapKind, type Regime, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
+import { useCandles } from '../../hooks/useCandles';
 
 function todayIso(): string {
   return formatIstIsoDate(new Date());
@@ -39,6 +41,30 @@ function actionColor(action: TradeAction, side: TradeSide): string {
   return 'var(--k-amber)';
 }
 
+function gradeColor(kind: SlotGrade['kind']): string {
+  if (kind === 'HIT') return 'var(--k-green)';
+  if (kind === 'MISS') return 'var(--k-red)';
+  if (kind === 'LIVE') return 'var(--k-ink-1)';
+  if (kind === 'SIT') return 'var(--k-ink-4)';
+  return 'var(--k-ink-5)';
+}
+
+function GradeMark({ grade }: { grade: SlotGrade | undefined }) {
+  if (!grade || grade.kind === 'NONE' || grade.kind === 'PENDING') {
+    return <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>—</span>;
+  }
+  return (
+    <div style={{ minWidth: 72 }}>
+      <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, fontWeight: 700, color: gradeColor(grade.kind) }}>{grade.label}</div>
+      {grade.delta !== null && (
+        <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10, color: 'var(--k-ink-5)' }}>
+          {grade.delta >= 0 ? '+' : ''}{grade.delta.toFixed(0)}{grade.dir ? ` ${grade.dir}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const pill: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -69,6 +95,7 @@ export function AstroPane() {
     return () => window.clearInterval(id);
   }, []);
 
+  const candles = useCandles(underlying, '5m', 400);
   const dayDate = useMemo(() => isoToDate(iso), [iso]);
   const book = useMemo(() => forecastDay(dayDate, underlying, now ?? dayDate), [dayDate, underlying, now]);
   const month = useMemo(
@@ -79,6 +106,22 @@ export function AstroPane() {
   const rows = view === 'net' ? book.netResults : book.slots;
   const live = book.slots.find((s) => s.isLive) ?? null;
   const dateLabel = formatIstDate(dayDate);
+  const nowParts = now ? getIstParts(now) : null;
+  const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
+  const sameDay = Boolean(now && nowParts && formatIstIsoDate(now) === iso);
+  const tape = useMemo(
+    () => (candles.data?.length ? barsFromOhlcv(candles.data, iso, underlying) : null),
+    [candles.data, iso, underlying],
+  );
+  const grades = useMemo(() => {
+    const map = new Map<string, SlotGrade>();
+    for (const s of rows) map.set(`${s.from}-${s.to}`, gradeSlot(s, tape, nowMin, sameDay));
+    return map;
+  }, [rows, tape, nowMin, sameDay]);
+  const tally = useMemo(
+    () => summariseTape(book.slots, tape, nowMin, sameDay, book.gap.kind),
+    [book.slots, tape, nowMin, sameDay, book.gap.kind],
+  );
   const selected = rows.find((s) => `${s.from}-${s.to}` === selectedKey) ?? live ?? null;
   const remaining = live && now
     ? Math.max(0, live.toMin * 60 - (getIstParts(now).hour * 3600 + getIstParts(now).minute * 60 + getIstParts(now).second))
@@ -167,6 +210,11 @@ export function AstroPane() {
               <span style={pill}>Lagna {book.panchang.lagnaSign}</span>
               {book.gap.eclipse && <span style={{ ...pill, color: 'var(--k-red)', background: tint('var(--k-red)', 12) }}>Eclipse corridor</span>}
               {book.gap.gandanta && <span style={{ ...pill, color: 'var(--k-amber)', background: tint('var(--k-amber)', 12) }}>Gandanta</span>}
+              {tally.gapActual && (
+                <span style={{ ...pill, color: tally.gapHit ? 'var(--k-green)' : 'var(--k-red)', background: tint(tally.gapHit ? 'var(--k-green)' : 'var(--k-red)', 12) }}>
+                  Tape gap {tally.gapActual}{tally.gapPts !== null ? ` ${tally.gapPts >= 0 ? '+' : ''}${tally.gapPts.toFixed(0)}` : ''}{tally.gapHit ? ' · HIT' : ' · MISS'}
+                </span>
+              )}
             </div>
             <p style={{ margin: '14px 0 0', paddingTop: 14, borderTop: `1px solid ${k.border}`, fontSize: 13, lineHeight: 1.55, color: 'var(--k-ink-5)' }}>
               {book.gap.firstHourNote}
@@ -237,9 +285,17 @@ export function AstroPane() {
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>Intraday timings</h2>
               <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--k-ink-5)' }}>
                 {view === 'net' ? 'Merged net results — consecutive identical horas collapsed.' : 'Raw 30-minute clock, 13 slots from 9:15 to 3:30.'}
+                {' '}Result is live tape vs the play — HIT / MISS / SIT.
               </p>
             </div>
-            <div style={{ display: 'flex', border: `1px solid ${k.border}`, borderRadius: 6, padding: 2 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>
+                {tally.directional
+                  ? `${tally.hits}/${tally.directional} HIT${tally.sits ? ` · ${tally.sits} SIT` : ''} · ${(tally.hitRate! * 100).toFixed(0)}% · ${tally.pnl >= 0 ? '+' : ''}${tally.pnl.toFixed(0)} pts`
+                  : candles.isLoading
+                    ? 'Loading tape…'
+                    : 'No tape'}
+              </div>
               {(['net', 'thirty'] as const).map((id) => (
                 <button
                   key={id}
@@ -273,6 +329,7 @@ export function AstroPane() {
                     <th style={th}>To</th>
                     <th style={th}>Timings net results</th>
                     <th style={th}>Play</th>
+                    <th style={th}>Result</th>
                     <th style={th}>Suggestion</th>
                   </tr>
                 </thead>
@@ -296,6 +353,7 @@ export function AstroPane() {
                           </div>
                         </td>
                         <td style={{ ...tdMono, fontWeight: 700, color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
+                        <td style={td}><GradeMark grade={grades.get(key)} /></td>
                         <td style={{ ...td, fontSize: 12.5, color: 'var(--k-ink-4)', maxWidth: 360 }}>{slot.suggestion}</td>
                       </tr>
                     );
@@ -306,7 +364,13 @@ export function AstroPane() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {rows.map((slot) => (
-                <SlotCard key={`${slot.from}-${slot.to}`} slot={slot} selected={`${slot.from}-${slot.to}` === selectedKey} onSelect={() => setSelectedKey(`${slot.from}-${slot.to}`)} />
+                <SlotCard
+                  key={`${slot.from}-${slot.to}`}
+                  slot={slot}
+                  selected={`${slot.from}-${slot.to}` === selectedKey}
+                  onSelect={() => setSelectedKey(`${slot.from}-${slot.to}`)}
+                  grade={grades.get(`${slot.from}-${slot.to}`)}
+                />
               ))}
             </div>
           )}
@@ -384,7 +448,7 @@ export function AstroPane() {
   );
 }
 
-function SlotCard({ slot, selected, onSelect }: { slot: WindowSlot; selected: boolean; onSelect: () => void }) {
+function SlotCard({ slot, selected, onSelect, grade }: { slot: WindowSlot; selected: boolean; onSelect: () => void; grade?: SlotGrade }) {
   return (
     <button
       type="button"
@@ -411,6 +475,7 @@ function SlotCard({ slot, selected, onSelect }: { slot: WindowSlot; selected: bo
           {slot.isLive && <span style={{ ...pill, background: 'var(--k-brand)', color: '#fff' }}>Live</span>}
           <span style={{ fontSize: 13, fontWeight: 700, color: regimeColor(slot.regime) }}>{slot.regime}</span>
           <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, fontWeight: 700, color: actionColor(slot.action, slot.side) }}>{slot.action}</span>
+          <GradeMark grade={grade} />
         </div>
         <div style={{ marginTop: 6, fontSize: 11, color: 'var(--k-ink-5)' }}>
           Hora {slot.hora} · Lagna {slot.lagna} · {slot.choghadiya} · {slot.product}
