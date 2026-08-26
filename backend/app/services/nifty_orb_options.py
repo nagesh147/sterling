@@ -11,27 +11,37 @@ log=get_logger(__name__)
 _IST=timezone(timedelta(hours=5,minutes=30)); _CONFIG_KEY="nifty_orb_options_config"; _TRADE_STATE_PREFIX="nifty_orb_options_trade_state:"
 
 def get_config()->StrategyConfig:
-    """Load the persisted config, or fall back to safe disabled defaults.
+    """The persisted config, or the defaults when nothing has been stored.
 
-    A stored config is validated on the way in. Rows persisted before validation
-    existed -- or edited directly in the database -- must never become a trading
-    config: an invalid value would otherwise surface as an exception deep inside
-    the engine mid-session. Disabled is the safe state, so that is the fallback.
+    Two different fallbacks, deliberately not the same one:
+
+    * **Nothing stored** -> the real defaults. Hardcoding a disabled config here
+      made the shipped default unreachable -- the dataclass said one thing and
+      this said another, and this one won.
+    * **Stored but unreadable or invalid** -> defaults with the engine OFF. A row
+      persisted before validation existed, or edited straight in the database,
+      must never become a trading config: the invalid value would otherwise
+      surface as an exception deep inside the engine mid-session.
+
+    A stored value always wins over a default, so changing a default cannot
+    overrule an operator who deliberately set something.
     """
-    d=StrategyConfig(enabled=False)
+    off=StrategyConfig(enabled=False)
     try:
         from app.services import db
         raw=db.get_config(_CONFIG_KEY)
-        if raw:
-            x=json.loads(raw) if isinstance(raw,str) else raw
-            loaded=StrategyConfig(**{k:v for k,v in {**d.__dict__,**x}.items() if k in StrategyConfig.__dataclass_fields__})
-            try:
-                return loaded.validate()
-            except ValueError as exc:
-                log.error("Stored NIFTY ORB config is invalid (%s); falling back to disabled defaults",exc)
-                return d
-    except Exception: pass
-    return d
+    except Exception:
+        log.warning("NIFTY ORB config store unavailable; running with defaults OFF")
+        return off
+    if not raw:return StrategyConfig()
+    try:
+        x=json.loads(raw) if isinstance(raw,str) else raw
+        base=StrategyConfig()
+        loaded=StrategyConfig(**{k:v for k,v in {**base.__dict__,**x}.items() if k in StrategyConfig.__dataclass_fields__})
+        return loaded.validate()
+    except (ValueError,TypeError,json.JSONDecodeError) as exc:
+        log.error("Stored NIFTY ORB config is invalid (%s); running with defaults OFF",exc)
+        return off
 
 def set_config(values:dict[str,Any])->StrategyConfig:
     c=get_config().__dict__.copy(); bad=sorted(set(values)-set(c))

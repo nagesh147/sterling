@@ -46,31 +46,39 @@ def ist_today() -> date:
 # ------------------------------------------------------------------ config
 
 def get_config() -> ATMPremiumImbalanceConfig:
-    """Load the persisted config, falling back to safe disabled defaults.
+    """The persisted config, or the defaults when nothing has been stored.
 
-    A stored row that no longer validates must never become a trading config:
-    the failure would otherwise surface deep inside the engine mid-session.
-    Disabled is the safe state, so that is the fallback.
+    Two different fallbacks, kept apart on purpose:
+
+    * **Nothing stored** -> the real defaults, whatever they are. Hardcoding a
+      disabled config here made the shipped default unreachable: the dataclass
+      said one thing and this said another, and this one won.
+    * **Stored but unreadable or invalid** -> defaults with the engine OFF. A
+      row that no longer validates must never become a trading config; the
+      failure would otherwise surface deep inside the engine mid-session.
+
+    A stored value always wins over a default, so changing a default cannot
+    overrule an operator who deliberately set something.
     """
-    default = ATMPremiumImbalanceConfig(enabled=False)
+    off = ATMPremiumImbalanceConfig(enabled=False)
     try:
         from app.services import db
         raw = db.get_config(_CONFIG_KEY)
     except Exception:
-        return default
+        log.warning("%s: config store unavailable; running with defaults OFF", STRATEGY_ID)
+        return off
     if not raw:
-        return default
+        return ATMPremiumImbalanceConfig()
     try:
         stored = json.loads(raw) if isinstance(raw, str) else raw
         known = ATMPremiumImbalanceConfig.field_names()
-        merged = {**default.as_dict(), **{k: v for k, v in dict(stored).items() if k in known}}
+        merged = {**ATMPremiumImbalanceConfig().as_dict(),
+                  **{k: v for k, v in dict(stored).items() if k in known}}
         return ATMPremiumImbalanceConfig(**merged).validate()
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
-        log.error(
-            "Stored %s config is invalid (%s); falling back to disabled defaults",
-            STRATEGY_ID, exc,
-        )
-        return default
+        log.error("Stored %s config is invalid (%s); running with defaults OFF",
+                  STRATEGY_ID, exc)
+        return off
 
 
 def set_config(values: dict[str, Any]) -> ATMPremiumImbalanceConfig:

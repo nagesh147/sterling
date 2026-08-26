@@ -10,8 +10,12 @@ refuse to guess wherever it is not:
   than as the operator-maintained price file it actually read.
   ``FIRST_TICK_PLUS_BUFFER`` exists only so the rejected model stays replayable;
   it is never a default. See A232.
-* ``enabled`` defaults ``False``. Nothing about this strategy has been through a
-  walk-forward, so it must be switched on deliberately.
+* ``enabled`` defaults ``True``, matching the other option engines. It is a
+  power switch rather than a safety device -- ``size_is_set`` is the gate that
+  actually stops this strategy trading before anyone has stated a size, and it
+  defaults to zero. Nothing about this strategy has been through a walk-forward,
+  and that is said where the operator will see it rather than enforced by
+  shipping the engine switched off.
 
 Validation lives here rather than at the API boundary so a config persisted by
 an older build -- or edited straight in the database -- cannot become a trading
@@ -101,7 +105,16 @@ def _hhmm(value: str, label: str) -> str:
 class ATMPremiumImbalanceConfig:
     """Immutable strategy configuration. Construct, then :meth:`validate`."""
 
-    enabled: bool = False
+    #: Whether this engine arms and trades. Defaults ON, matching the other
+    #: option engines.
+    #:
+    #: It is a power switch, not a safety device. What stands between this
+    #: strategy and real money is `account.is_paper`, the kill switch, the live
+    #: guards in `_validate_live`, and — specific to this engine —
+    #: `size_is_set`: `auto_arm_once` refuses unless a lot or quantity has been
+    #: stated, and both default to zero. So enabling alone cannot place an order
+    #: at tomorrow's open; someone has to say how big first.
+    enabled: bool = True
 
     # --- universe -----------------------------------------------------------
     underlying: str = "SENSEX"

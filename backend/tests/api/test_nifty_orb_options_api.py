@@ -10,11 +10,18 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_orb_config_is_disabled_by_default():
+def test_orb_config_is_enabled_by_default():
+    """A power switch, not a safety device.
+
+    For THIS engine that is a stronger statement than for the others: its runner
+    gates on `enabled` and the market clock and then executes, with no
+    `auto_execute` check — so `account.is_paper` is what stands between it and
+    real orders.
+    """
     response = client().get("/api/v1/config/nifty-orb-options")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["config"]["enabled"] is False
+    assert payload["config"]["enabled"] is True
     assert payload["config"]["execution_broker"] == "kite"
     assert payload["supported_data_sources"] == ["kite", "truedata"]
     assert payload["execution_brokers"] == ["kite"]

@@ -33,7 +33,17 @@ class Bar:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    enabled: bool = False
+    #: Whether this engine scans and trades. Defaults ON, matching the other
+    #: option engines.
+    #:
+    #: Read this one carefully, because it is NOT the same switch as the other
+    #: engines'. `nifty_orb_options_runner._run_user` gates on `enabled` and the
+    #: market clock and then calls `execute_scan` directly: there is no
+    #: `auto_execute` check and sizing derives from `max_risk_inr` rather than a
+    #: quantity someone has to state. So for this engine, enabled means it
+    #: TRADES, and the only thing left between it and real orders is
+    #: `account.is_paper`.
+    enabled: bool = True
     underlying: str = "NIFTY"
     scan_indices: tuple[str, ...] = ("NIFTY",)
     scan_stocks: tuple[str, ...] = ()
