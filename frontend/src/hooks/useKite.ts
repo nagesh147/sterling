@@ -103,10 +103,20 @@ export function useKiteStatus() {
   });
 }
 
+export interface KiteLoginUrl {
+  login_url: string;
+  /** Signed proof of who started this login; Kite hands it back to /callback. */
+  state: string;
+  /** What to register as the app's Redirect URL in the Kite developer console. */
+  redirect_uri: string;
+}
+
+// The signed state inside login_url is only valid for 15 minutes, so this must not
+// be cached long enough to hand out a dead link — staleTime is well inside that.
 export function useKiteLoginUrl(enabled: boolean) {
-  return useQuery<{ login_url: string }>({
+  return useQuery<KiteLoginUrl>({
     queryKey: ['kite-login-url'],
-    queryFn: () => api.get<{ login_url: string }>(`${K}/login-url`),
+    queryFn: () => api.get<KiteLoginUrl>(`${K}/login-url`),
     enabled,
     staleTime: 60_000,
   });
@@ -194,6 +204,76 @@ export function useKiteAutoSession(enabled = true) {
 
   return { recovering: refresh.isPending, needsRecovery };
 }
+
+// Opens the Kite login in a new tab with a freshly minted signed state.
+//
+// Two things this handles that a plain <a href={login_url}> cannot. First, the
+// state inside a login URL is only valid for ~15 minutes, so a cached URL from
+// when the tab was opened may already be dead — this always fetches a new one.
+// Second, popup blockers only honour window.open() called synchronously inside the
+// click, so the tab is opened empty on the gesture and navigated once the URL
+// arrives.
+export function useOpenKiteLogin() {
+  const [opening, setOpening] = useState(false);
+
+  const open = async () => {
+    const win = window.open('', '_blank');       // must happen on the user gesture
+    setOpening(true);
+    try {
+      const d = await api.get<KiteLoginUrl>(`${K}/login-url`);
+      if (win) win.location.href = d.login_url;
+      else window.location.href = d.login_url;   // popup blocked → same-tab fallback
+    } catch (err) {
+      if (win) win.close();
+      notifyOrder({
+        kind: 'error', title: 'Could not start Kite login',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return { open, opening };
+}
+
+// Flips the app to "connected" the instant the Kite callback tab finishes.
+//
+// The callback page broadcasts on completion. Without listening for it the app
+// waits for its next 30s status poll, and that silent gap is exactly what reads as
+// "the login didn't work" and sends people back to copy-pasting request_tokens.
+export function useKiteAuthBroadcast() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const onConnected = () => {
+      qc.invalidateQueries({ queryKey: ['kite-status'] });
+      qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      qc.invalidateQueries({ queryKey: ['kite-diagnostics-summary'] });
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('sterling-kite-auth');
+      channel.onmessage = (e) => { if (e.data?.type === 'kite-connected') onConnected(); };
+    } catch {
+      // BroadcastChannel unavailable — the postMessage path below still covers it.
+    }
+
+    // Fallback for the window that opened the login (and for browsers without
+    // BroadcastChannel). Same-origin only: the callback page is served by our API.
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type === 'kite-connected') onConnected();
+    };
+    window.addEventListener('message', onMessage);
+
+    return () => {
+      window.removeEventListener('message', onMessage);
+      try { channel?.close(); } catch { /* already closed */ }
+    };
+  }, [qc]);
+}
+
 
 export function useKiteLogout() {
   const qc = useQueryClient();

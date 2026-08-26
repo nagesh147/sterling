@@ -16,12 +16,12 @@ const S: Record<string, React.CSSProperties> = {
   activeBadge: { background: '#44cc8822', color: t.green, border: `1px solid ${t.green}`, padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
   paperBadge: { background: '#f0a50022', color: t.amber, border: `1px solid ${t.amber}`, padding: '2px 8px', borderRadius: 3, fontSize: 10 },
   credsBadge: { background: '#88aaff22', color: t.blue, border: `1px solid ${t.blue}`, padding: '2px 8px', borderRadius: 3, fontSize: 10 },
-  dataBadge: { background: '#aa88ff22', color: '#aa88ff', border: '1px solid #aa88ff', padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
+  dataBadge: { background: '#aa88ff22', color: 'var(--k-violet-3)', border: '1px solid var(--k-violet-3)', padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 },
   btn: { background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
   btnGreen: { background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
   btnRed: { background: t.raised, color: t.red, border: `1px solid ${t.red}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnPurple: { background: t.raised, color: '#aa88ff', border: '1px solid #aa88ff', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnPurple: { background: t.raised, color: 'var(--k-violet-3)', border: '1px solid var(--k-violet-3)', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
   hint: { color: t.dim, fontSize: 11 },
   form: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 16, marginTop: 12 },
   formTitle: { color: t.dim, fontSize: 11, letterSpacing: 1, marginBottom: 12 },
@@ -281,7 +281,7 @@ export function ExchangeManager() {
         <div>
           <div style={S.title}>EXCHANGE ACCOUNTS</div>
           {dsData && (
-            <div style={{ color: '#aa88ff', fontSize: 11 }}>
+            <div style={{ color: 'var(--k-violet-3)', fontSize: 11 }}>
               Data source: <strong>{dsData.display_name}</strong>
               {' '}
               <span style={{ color: dsData.reachable ? t.green : t.red }}>
@@ -304,7 +304,7 @@ export function ExchangeManager() {
 
       <div style={{ marginTop: 12, color: t.dim, fontSize: 10, lineHeight: 1.8 }}>
         <strong style={{ color: t.dim }}>ACCOUNT</strong> — active exchange for balance/positions/orders<br />
-        <strong style={{ color: '#aa88ff' }}>DATA SOURCE</strong> — exchange providing candles, prices, option chains<br />
+        <strong style={{ color: 'var(--k-violet-3)' }}>DATA SOURCE</strong> — exchange providing candles, prices, option chains<br />
         PAPER MODE: account calls return mock data. KEYS SET: real credentials saved.
       </div>
     </div>

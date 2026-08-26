@@ -1,0 +1,5 @@
+# Raw market pulls: 27MB of Kite history, re-fetchable with step1/step2/step5.
+# CALIBRATION.json and triggers.json are the *results* and are tracked.
+bars.json
+spot_daily.json
+calib_b.json

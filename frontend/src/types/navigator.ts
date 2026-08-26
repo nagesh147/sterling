@@ -156,6 +156,10 @@ export interface NavigatorConfigModel {
    */
   strike_moneyness?: Moneyness[] | null;
   scan_expiries_indices?: Array<'weekly' | 'monthly'> | null;
+  /** Expiry window. Unset = follow the Kite engine's. */
+  expiry_dte_min?: number | null;
+  expiry_dte_max?: number | null;
+  avoid_expiry_day?: boolean | null;
   scan_expiries_stocks?: Array<'monthly'> | null;
   // ── Structure Radar / Signal Origination (additive, all off by default) ──
   // See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.

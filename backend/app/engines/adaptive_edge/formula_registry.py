@@ -38,21 +38,25 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
 }
 
+# Canonical F-101..F-114 roles are taken from docs/strategy/adaptive-edge/FORMULAS.md.
+# SOURCE-RECOVERED means the V1.0 strategy source has been recovered; LOCKED means
+# the formula has not yet satisfied the full promotion contract and is therefore
+# not production-executable.
 _FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
-    "F-101": ("Feature normalization / feature score", "z-score", "f101"),
-    "F-102": ("Edge / prediction score", "probability / score", "edge"),
-    "F-103": ("Opportunity eligibility", "boolean / state", "opportunity_mode"),
-    "F-104": ("Dynamic-mode transition", "mode state", "opportunity_mode"),
-    "F-105": ("Predictive-profit protection", "price points", "protection"),
-    "F-106": ("Dynamic-risk schedule", "multiplier", "risk_sizing"),
-    "F-107": ("Risk-per-unit", "INR / point", "risk_sizing"),
+    "F-101": ("Feature/state construction and normalization", "normalized feature state", "f101_normalization"),
+    "F-102": ("Probability/regime state", "probability vector", "f102_prediction"),
+    "F-103": ("Candidate eligibility / NO_TRADE boundary", "boolean / state", "f103_opportunity"),
+    "F-104": ("Adaptive horizon distribution", "probability vector", "f104_horizon"),
+    "F-105": ("Target/stop competition and conservative EV", "value / state", "f105_economics"),
+    "F-106": ("Option candidate economics", "candidate / instrument", "f106_option_selection"),
+    "F-107": ("Effective risk semantics", "INR / unit", "risk_sizing"),
     "F-108": ("Position sizing", "contracts", "risk_sizing"),
-    "F-109": ("Instrument / option selection", "strike / leg", "option_ladder"),
-    "F-110": ("Entry trigger", "event trigger", "lifecycle_engine"),
-    "F-111": ("Exit trigger", "event trigger", "lifecycle_engine"),
-    "F-112": ("Trailing / protection parameterization", "points", "protection"),
-    "F-113": ("Re-entry", "boolean", "lifecycle_engine"),
-    "F-114": ("Multi-position interaction", "allocation weight", "management"),
+    "F-109": ("Option selection by validated ExpectedNetEV subject to constraints", "candidate / instrument", "f109_option_selection"),
+    "F-110": ("BUY_CE / BUY_PE mandatory entry gate", "entry decision", "f110_entry_gate"),
+    "F-111": ("Position-management exit state machine", "lifecycle state", "f111_exit_gate"),
+    "F-112": ("Monotonic dynamic protection / profit floor", "protection state", "protection"),
+    "F-113": ("Post-exit / re-entry boundary", "re-entry state", "f113_reentry"),
+    "F-114": ("Final decision interaction with PositionState and CapitalState", "portfolio state", "management"),
 }
 
 for _id, (_name, _units, _owner) in _FORMULA_METADATA.items():

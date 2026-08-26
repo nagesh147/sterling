@@ -511,6 +511,13 @@ class NavigatorConfigModel(BaseModel):
     #: Empty list = do not scan single-stock contracts at all (the exchange
     #: lists only a monthly cycle, so "monthly" is the sole thing to include).
     scan_expiries_stocks: Optional[list[Literal["monthly"]]] = None
+    #: Navigator's OWN expiry window, same three settings as every other engine.
+    #: ``None`` means "follow the Kite engine's", matching how the strike ladder
+    #: and expiry cycles above already work — Navigator overrides contract
+    #: coverage only when it is told to.
+    expiry_dte_min: Optional[int] = None
+    expiry_dte_max: Optional[int] = None
+    avoid_expiry_day: Optional[bool] = None
     # ── Structure Radar / Signal Origination (additive, all off by default) ──
     # See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
     # Orthogonal to `operating_mode` — none of these change how Navigator

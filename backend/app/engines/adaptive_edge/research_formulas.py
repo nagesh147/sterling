@@ -1,8 +1,8 @@
-"""Research-status map for F-102..F-114.
+"""Research-status map for Adaptive Edge strategy formulas.
 
-Recovered formulas are implemented only when a closed-form exists in the
-canonical specs. Missing mathematics stay fail-closed SpecGap stubs.
-This module does not mark formula_registry entries IMPLEMENTED.
+The V1.0 master strategy source has been recovered. Entries therefore
+represent source recovery/canonicalization state, not production authority.
+This module never marks formula_registry entries IMPLEMENTED.
 """
 from __future__ import annotations
 
@@ -24,27 +24,33 @@ class SpecGap:
 
     def evaluate(self, *_args: object, **_kwargs: object) -> None:
         raise RuntimeError(
-            f"{self.formula_id} is a spec gap ({self.reason}); no invented equation"
+            f"{self.formula_id} is not production-resolved ({self.reason})"
         )
 
 
 def research_formula_table() -> dict[str, SpecGap]:
     recovered = {
-        "F-101": "A196 robust+tanh on A206 3-vector; trial evaluate only; registry LOCKED",
-        "F-104": "opportunity_mode.py MICRO/SCALP/EXTENDED_SCALP/INTRADAY graph+hysteresis; thresholds are ModePolicy not learned; registry LOCKED",
-        "F-107": "risk_sizing.calculate_risk_per_unit present; production still LOCKED",
-        "F-108": "risk_sizing.calculate_position_sizing present; production still LOCKED",
-        "F-111": "A126 cutoff + A177 policy + thesis/economic exits; H4/P0-P3/overlays; registry LOCKED",
-        "F-113": "re-enter only when flat and before A126 cutoff; registry LOCKED",
-        "F-114": "INV-ENTRY-003 one active position; second entry blocked; registry LOCKED",
+        "F-101": "V1.0 feature/state architecture recovered; canonical inputs and calibration remain under review",
+        "F-102": "V1.0 probability/regime architecture recovered; model/calibration semantics remain under review",
+        "F-103": "V1.0 candidate eligibility and NO_TRADE boundary recovered; complete contract remains under review",
+        "F-104": "V1.0 horizon distribution and management classifications recovered; learned transition parameters remain unfrozen",
+        "F-105": "V1.0 target/stop competition and conservative EV recovered; empirical distributions and parameters require validation",
+        "F-106": "V1.0 option candidate economics recovered; candidate inputs and validation remain under review",
+        "F-107": "V1.0 RiskPerUnit/GrossRisk/effective-risk relationship recovered only partially; semantic reconciliation required",
+        "F-108": "V1.0 quantity equation recovered; implementation exists; promotion and parameter validation remain pending",
+        "F-109": "V1.0 option selection recovered as max ExpectedNetEV subject to liquidity/slippage/risk/data-quality constraints",
+        "F-110": "V1.0 BUY_CE/BUY_PE mandatory gate recovered; implementation exists; promotion remains pending",
+        "F-111": "V1.0 hard/continuation/reversal/session exit semantics recovered; implementation exists; promotion remains pending",
+        "F-112": "V1.0 monotonic protection and learned giveback/continuation parameters recovered; parameters remain unfrozen",
+        "F-113": "V1.0 post-exit learning and re-entry boundary recovered; exact re-entry admission contract remains under review",
+        "F-114": "V1.0 decision includes PositionState/CapitalState, but a unique multi-position risk aggregation equation remains unresolved",
     }
-    # F-102/F-103: entry-gate *structure* is implemented as research_opportunity;
-    # numeric score/thresholds remain unrecovered (RECOVERY.md, STRATEGY_SPEC_ANCHOR).
-    # F-001..F-008 live outside the F-10x strategy lock; F-007/F-008 are used
-    # by the research path as executable references.
     table: dict[str, SpecGap] = {}
     for formula_id in STRATEGY_FORMULA_IDS:
         definition = get_formula(formula_id)
+        # A formula with no recovered closed-form is a SPEC_GAP, not an
+        # implicitly-recovered one: the unguarded `recovered[formula_id]` this
+        # replaced raised KeyError instead of reporting the gap.
         if definition.status is FormulaStatus.IMPLEMENTED:
             reason = "registry IMPLEMENTED"
             status = "IMPLEMENTED"
@@ -64,10 +70,13 @@ def research_formula_table() -> dict[str, SpecGap]:
 
 
 def assert_production_strategy_locked() -> None:
-    locked = [
+    """Enforce that every strategy-specific formula remains LOCKED."""
+    unlocked = [
         formula_id
         for formula_id in STRATEGY_FORMULA_IDS
-        if FORMULAS[formula_id].status is not FormulaStatus.IMPLEMENTED
+        if FORMULAS[formula_id].status is not FormulaStatus.LOCKED
     ]
-    if set(locked) != set(STRATEGY_FORMULA_IDS):
-        raise RuntimeError("unexpected production unlock of a strategy formula")
+    if unlocked:
+        raise RuntimeError(
+            "production strategy formulas must remain LOCKED: " + ", ".join(unlocked)
+        )

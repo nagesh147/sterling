@@ -42,7 +42,9 @@ class KiteAccountResponse(BaseModel):
     connected: bool                       # access_token present
     has_refresh_token: bool = False       # a refresh_token was captured at login
     kite_user_id: Optional[str] = None    # Zerodha user id once logged in
+    user_name: Optional[str] = None       # display name captured at login
     last_login_at_ms: Optional[int] = None
+    token_expires_at_ms: Optional[int] = None  # 06:00 IST boundary this token dies at
     created_at_ms: int
     updated_at_ms: int
 
@@ -56,6 +58,11 @@ class KiteAccountListResponse(BaseModel):
 # ─── Session / status ───────────────────────────────────────────────────────
 class LoginUrlResponse(BaseModel):
     login_url: str
+    # Signed, short-lived proof of *who* started this login. Kite round-trips it
+    # through redirect_params so the unauthenticated /callback can bind the session
+    # to the right tenant instead of trusting a caller-supplied ?uid=.
+    state: str = ""
+    redirect_uri: str = ""   # what to register as the app's Kite Redirect URL
 
 
 class GenerateSessionRequest(BaseModel):
@@ -86,6 +93,12 @@ class KiteStatus(BaseModel):
     kite_user_id: Optional[str] = None
     user_name: Optional[str] = None
     message: str = ""
+    # Session lifetime, so the UI can show "valid until 06:00" and stop nagging.
+    token_expires_at_ms: Optional[int] = None
+    expires_in_s: Optional[int] = None
+    # Provenance of this answer: did we ask Kite, or trust the stored window?
+    validated: bool = False
+    auto_renewed: bool = False
 
 
 # ─── Write request bodies ───────────────────────────────────────────────────
@@ -228,6 +241,9 @@ class MarginOrderLeg(BaseModel):
 class TickerSubscribeRequest(BaseModel):
     instrument_tokens: List[int]
     mode: str = K.MODE_QUOTE               # ltp | quote | full
+    # Unsubscribe only: drop the token even if a strategy still claims it. Off by
+    # default so a client tidying its own view cannot blind a running strategy.
+    force: bool = False
 
 
 # ─── Generic envelope ───────────────────────────────────────────────────────

@@ -206,11 +206,11 @@ export function UnifiedBacktestPane() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: '#f5f5f5', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--k-surface-4)', overflow: 'hidden' }}>
       {/* ── Top Bar: Presets & Real Data Status ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: '#fff', borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: 'var(--k-bg)', borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-ink-4)', textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>
             Presets:
           </span>
           {presets.map((p) => (
@@ -219,18 +219,18 @@ export function UnifiedBacktestPane() {
               onClick={() => handleApplyPreset(p)}
               style={{
                 fontSize: 11.5, fontWeight: 500, padding: '4px 10px', borderRadius: 14,
-                border: '1px solid #ddd', background: '#fafafa', color: '#444', cursor: 'pointer',
+                border: '1px solid var(--k-border-strong-3)', background: 'var(--k-surface-2)', color: 'var(--k-text)', cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#f06428'; e.currentTarget.style.color = '#f06428'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ddd'; e.currentTarget.style.color = '#444'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--k-brand)'; e.currentTarget.style.color = 'var(--k-brand)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--k-border-strong-3)'; e.currentTarget.style.color = 'var(--k-text)'; }}
             >
               {p.name}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: '#2e7d32', background: 'rgba(46,125,50,0.08)', padding: '4px 10px', borderRadius: 4 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2e7d32' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: 'var(--k-green-deep)', background: 'rgba(46,125,50,0.08)', padding: '4px 10px', borderRadius: 4 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--k-green-deep)' }} />
           REAL DATA: {result?.data_source ?? (dataSource === 'kite' ? 'ZERODHA KITE ENGINE' : 'TRUEDATA V2.6 ENGINE')}
         </div>
       </div>
@@ -238,14 +238,14 @@ export function UnifiedBacktestPane() {
       {/* ── Main Content Area ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* ── Left Sidebar: Strategy & Parameters Config ── */}
-        <div style={{ width: 360, background: '#fff', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 360, background: 'var(--k-bg)', borderRight: `1px solid ${k.border}`, padding: '18px 20px', overflowY: 'auto', flexShrink: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--k-ink-1)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
             ⚙️ Strategy & Universe Config
           </div>
 
           {/* Execution Mode: Dynamic vs Manual */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 6 }}>
               Execution & Risk Mode
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 6 }}>
@@ -257,9 +257,9 @@ export function UnifiedBacktestPane() {
                   borderRadius: 4,
                   fontSize: 11.5,
                   fontWeight: 700,
-                  border: dynamicMode ? '2px solid #f06428' : '1px solid #ddd',
-                  background: dynamicMode ? 'rgba(240,100,40,0.08)' : '#fafafa',
-                  color: dynamicMode ? '#f06428' : '#666',
+                  border: dynamicMode ? '2px solid var(--k-brand)' : '1px solid var(--k-border-strong-3)',
+                  background: dynamicMode ? 'rgba(240,100,40,0.08)' : 'var(--k-surface-2)',
+                  color: dynamicMode ? 'var(--k-brand)' : 'var(--k-ink-4)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -277,9 +277,9 @@ export function UnifiedBacktestPane() {
                   borderRadius: 4,
                   fontSize: 11.5,
                   fontWeight: 700,
-                  border: !dynamicMode ? '2px solid #333' : '1px solid #ddd',
-                  background: !dynamicMode ? '#eee' : '#fafafa',
-                  color: !dynamicMode ? '#111' : '#666',
+                  border: !dynamicMode ? '2px solid var(--k-ink-1)' : '1px solid var(--k-border-strong-3)',
+                  background: !dynamicMode ? 'var(--k-hairline-3)' : 'var(--k-surface-2)',
+                  color: !dynamicMode ? '#111' : 'var(--k-ink-4)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -294,7 +294,7 @@ export function UnifiedBacktestPane() {
 
           {/* Data Source Picker */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 6 }}>
               Historical Data Provider
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -306,9 +306,9 @@ export function UnifiedBacktestPane() {
                   borderRadius: 4,
                   fontSize: 12,
                   fontWeight: 700,
-                  border: dataSource === 'kite' ? '2px solid #f06428' : '1px solid #ddd',
-                  background: dataSource === 'kite' ? 'rgba(240,100,40,0.08)' : '#fafafa',
-                  color: dataSource === 'kite' ? '#f06428' : '#666',
+                  border: dataSource === 'kite' ? '2px solid var(--k-brand)' : '1px solid var(--k-border-strong-3)',
+                  background: dataSource === 'kite' ? 'rgba(240,100,40,0.08)' : 'var(--k-surface-2)',
+                  color: dataSource === 'kite' ? 'var(--k-brand)' : 'var(--k-ink-4)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -326,9 +326,9 @@ export function UnifiedBacktestPane() {
                   borderRadius: 4,
                   fontSize: 12,
                   fontWeight: 700,
-                  border: dataSource === 'truedata' ? '2px solid #1976d2' : '1px solid #ddd',
-                  background: dataSource === 'truedata' ? 'rgba(25,118,210,0.08)' : '#fafafa',
-                  color: dataSource === 'truedata' ? '#1976d2' : '#666',
+                  border: dataSource === 'truedata' ? '2px solid #1976d2' : '1px solid var(--k-border-strong-3)',
+                  background: dataSource === 'truedata' ? 'rgba(25,118,210,0.08)' : 'var(--k-surface-2)',
+                  color: dataSource === 'truedata' ? '#1976d2' : 'var(--k-ink-4)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -343,13 +343,13 @@ export function UnifiedBacktestPane() {
 
           {/* Strategy Picker */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 4 }}>
               Strategy
             </label>
             <select
               value={strategy}
               onChange={(e) => setStrategy(e.target.value)}
-              style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+              style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
             >
               {strategies.map((s) => (
                 <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
@@ -359,7 +359,7 @@ export function UnifiedBacktestPane() {
 
           {/* ── Instruments & Universe Scope Section ── */}
           <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-text)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
               🏛️ Instruments & Universe Scope
             </div>
 
@@ -380,9 +380,9 @@ export function UnifiedBacktestPane() {
                     fontSize: 10.5,
                     fontWeight: 700,
                     borderRadius: 3,
-                    border: instrumentScope === tab.id ? '1.5px solid #f06428' : '1px solid #ddd',
-                    background: instrumentScope === tab.id ? 'rgba(240,100,40,0.1)' : '#fafafa',
-                    color: instrumentScope === tab.id ? '#f06428' : '#666',
+                    border: instrumentScope === tab.id ? '1.5px solid var(--k-brand)' : '1px solid var(--k-border-strong-3)',
+                    background: instrumentScope === tab.id ? 'rgba(240,100,40,0.1)' : 'var(--k-surface-2)',
+                    color: instrumentScope === tab.id ? 'var(--k-brand)' : 'var(--k-ink-4)',
                     cursor: 'pointer',
                   }}
                 >
@@ -394,13 +394,13 @@ export function UnifiedBacktestPane() {
             {/* Single Symbol View */}
             {instrumentScope === 'single' && (
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 3 }}>
                   Target Instrument
                 </label>
                 <select
                   value={singleSymbol}
                   onChange={(e) => setSingleSymbol(e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
                 >
                   <option value="NIFTY 50">NIFTY 50 (Lot: 25)</option>
                   <option value="NIFTY BANK">BANKNIFTY (Lot: 15)</option>
@@ -421,7 +421,7 @@ export function UnifiedBacktestPane() {
             {/* Indices Multi-Select */}
             {instrumentScope === 'indices' && (
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 4 }}>
                   Scan Indices ({scanIndices.length} active)
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -432,9 +432,9 @@ export function UnifiedBacktestPane() {
                         key={idx.id}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 6, padding: '5px 7px', borderRadius: 4,
-                          border: `1px solid ${checked ? '#f06428' : '#e0e0e0'}`,
-                          background: checked ? 'rgba(240,100,40,0.06)' : '#fafafa',
-                          fontSize: 11, fontWeight: checked ? 700 : 500, color: checked ? '#f06428' : '#555',
+                          border: `1px solid ${checked ? 'var(--k-brand)' : 'var(--k-border)'}`,
+                          background: checked ? 'rgba(240,100,40,0.06)' : 'var(--k-surface-2)',
+                          fontSize: 11, fontWeight: checked ? 700 : 500, color: checked ? 'var(--k-brand)' : 'var(--k-ink-3)',
                           cursor: 'pointer',
                         }}
                       >
@@ -442,7 +442,7 @@ export function UnifiedBacktestPane() {
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleIndex(idx.id)}
-                          style={{ accentColor: '#f06428', margin: 0 }}
+                          style={{ accentColor: 'var(--k-brand)', margin: 0 }}
                         />
                         {idx.label}
                       </label>
@@ -455,13 +455,13 @@ export function UnifiedBacktestPane() {
             {/* Selected F&O Stocks */}
             {instrumentScope === 'fno_selected' && (
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 4 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 4 }}>
                   Selected F&O Stocks ({scanStocks.length} selected)
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 160, overflowY: 'auto', paddingRight: 4 }}>
                   {CURATED_FNO_STOCKS.map((group) => (
                     <div key={group.group}>
-                      <div style={{ fontSize: 9.5, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 3 }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--k-dim-2)', textTransform: 'uppercase', marginBottom: 3 }}>
                         {group.group}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
@@ -472,9 +472,9 @@ export function UnifiedBacktestPane() {
                               key={stk}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 3,
-                                border: `1px solid ${checked ? '#f06428' : '#e5e5e5'}`,
-                                background: checked ? 'rgba(240,100,40,0.06)' : '#fff',
-                                fontSize: 10.5, fontWeight: checked ? 700 : 500, color: checked ? '#f06428' : '#555',
+                                border: `1px solid ${checked ? 'var(--k-brand)' : '#e5e5e5'}`,
+                                background: checked ? 'rgba(240,100,40,0.06)' : 'var(--k-bg)',
+                                fontSize: 10.5, fontWeight: checked ? 700 : 500, color: checked ? 'var(--k-brand)' : 'var(--k-ink-3)',
                                 cursor: 'pointer',
                               }}
                             >
@@ -482,7 +482,7 @@ export function UnifiedBacktestPane() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={() => toggleStock(stk)}
-                                style={{ accentColor: '#f06428', margin: 0 }}
+                                style={{ accentColor: 'var(--k-brand)', margin: 0 }}
                               />
                               {stk}
                             </label>
@@ -497,7 +497,7 @@ export function UnifiedBacktestPane() {
 
             {/* All F&O Universe */}
             {instrumentScope === 'fno_all' && (
-              <div style={{ background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: '#333', lineHeight: 1.4 }}>
+              <div style={{ background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: 'var(--k-ink-1)', lineHeight: 1.4 }}>
                 <div style={{ fontWeight: 700, color: '#1976d2', marginBottom: 2 }}>🌐 Full NSE F&O Universe (~180+ Stocks)</div>
                 Simulates multi-asset portfolio scanning across all eligible liquid F&O stocks with lot sizes and margin scaling.
               </div>
@@ -506,19 +506,19 @@ export function UnifiedBacktestPane() {
 
           {/* ── Contracts & Product Specification Section ── */}
           <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-text)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
               📜 Contracts & Expiry Specs
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 3 }}>
                   Contract Type
                 </label>
                 <select
                   value={contractType}
                   onChange={(e) => setContractType(e.target.value as any)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
                 >
                   <option value="futures">📈 Futures (Delta 1.0)</option>
                   <option value="options_atm">⚡ Options ATM (Δ 0.50)</option>
@@ -529,13 +529,13 @@ export function UnifiedBacktestPane() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: '#888', marginBottom: 3 }}>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 3 }}>
                   Expiry Cycle
                 </label>
                 <select
                   value={expiryCycle}
                   onChange={(e) => setExpiryCycle(e.target.value as any)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                  style={{ width: '100%', padding: '6px 8px', fontSize: 11.5, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
                 >
                   <option value="weekly">Weekly Cycle</option>
                   <option value="monthly">Monthly Cycle</option>
@@ -543,7 +543,7 @@ export function UnifiedBacktestPane() {
               </div>
             </div>
 
-            <div style={{ fontSize: 10.5, color: '#888', lineHeight: 1.35 }}>
+            <div style={{ fontSize: 10.5, color: 'var(--k-ink-6)', lineHeight: 1.35 }}>
               {contractType.startsWith('options')
                 ? 'Simulates dynamic delta price capture & theta decay per bar held.'
                 : 'Simulates full tick point movement with exchange lot sizes.'}
@@ -553,13 +553,13 @@ export function UnifiedBacktestPane() {
           {/* Timeframe & Lookback */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 4 }}>
                 Timeframe
               </label>
               <select
                 value={timeframe}
                 onChange={(e) => setTimeframe(e.target.value)}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 12.5, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)' }}
               >
                 <option value="5m">5 Minute (Scalp)</option>
                 <option value="15m">15 Minute (Intraday)</option>
@@ -572,7 +572,7 @@ export function UnifiedBacktestPane() {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 4 }}>
                 Lookback (Days)
               </label>
               <input
@@ -581,7 +581,7 @@ export function UnifiedBacktestPane() {
                 max={365}
                 value={lookbackDays}
                 onChange={(e) => setLookbackDays(Number(e.target.value))}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)', boxSizing: 'border-box' }}
               />
             </div>
           </div>
@@ -589,7 +589,7 @@ export function UnifiedBacktestPane() {
           {/* Capital & Lots */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 4 }}>
                 Starting Capital (₹)
               </label>
               <input
@@ -597,11 +597,11 @@ export function UnifiedBacktestPane() {
                 step={10000}
                 value={startingCapital}
                 onChange={(e) => setStartingCapital(Number(e.target.value))}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)', boxSizing: 'border-box' }}
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#777', textTransform: 'uppercase', marginBottom: 4 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--k-ink-5)', textTransform: 'uppercase', marginBottom: 4 }}>
                 Lots
               </label>
               <input
@@ -610,20 +610,20 @@ export function UnifiedBacktestPane() {
                 max={100}
                 value={numLots}
                 onChange={(e) => setNumLots(Number(e.target.value))}
-                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: '#fff', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 4, border: `1px solid ${k.border}`, background: 'var(--k-bg)', boxSizing: 'border-box' }}
               />
             </div>
           </div>
 
           {/* Stop, Target & Trailing */}
           <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-text)', marginBottom: 8 }}>
               🛡️ Risk & Exit Boundaries
             </div>
 
             {dynamicMode ? (
-              <div style={{ background: 'rgba(240,100,40,0.06)', border: '1px solid rgba(240,100,40,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: '#444', lineHeight: 1.45 }}>
-                <div style={{ fontWeight: 700, color: '#f06428', marginBottom: 3 }}>⚡ Dynamic Risk Engine Active</div>
+              <div style={{ background: 'rgba(240,100,40,0.06)', border: '1px solid rgba(240,100,40,0.2)', borderRadius: 4, padding: '8px 10px', fontSize: 11, color: 'var(--k-text)', lineHeight: 1.45 }}>
+                <div style={{ fontWeight: 700, color: 'var(--k-brand)', marginBottom: 3 }}>⚡ Dynamic Risk Engine Active</div>
                 <div>• <strong>Stop Loss (SL)</strong>: Auto-calculated per bar via Dynamic ATR & Swing Pivots.</div>
                 <div>• <strong>Profit Target (TP)</strong>: Auto-expanded to 1:2.2+ R:R.</div>
                 <div>• <strong>Trailing SL (TSL)</strong>: Auto-locks Break-Even at 1.0R and trails at 0.8×ATR for 1:3–1:6+ runners.</div>
@@ -631,7 +631,7 @@ export function UnifiedBacktestPane() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Stop (SL)</label>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 2 }}>Stop (SL)</label>
                   <input
                     type="number"
                     value={stopPoints ?? ''}
@@ -641,7 +641,7 @@ export function UnifiedBacktestPane() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Target (TP)</label>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 2 }}>Target (TP)</label>
                   <input
                     type="number"
                     value={targetPoints ?? ''}
@@ -651,7 +651,7 @@ export function UnifiedBacktestPane() {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Trail (TSL)</label>
+                  <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 2 }}>Trail (TSL)</label>
                   <input
                     type="number"
                     value={trailPoints ?? ''}
@@ -666,12 +666,12 @@ export function UnifiedBacktestPane() {
 
           {/* Friction & Costs */}
           <div style={{ borderTop: `1px solid ${k.border}`, paddingTop: 12, marginBottom: 18 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#444', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-text)', marginBottom: 10 }}>
               💸 Indian F&O Friction Engine
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Slippage (pts)</label>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 2 }}>Slippage (pts)</label>
                 <input
                   type="number"
                   step={0.1}
@@ -681,7 +681,7 @@ export function UnifiedBacktestPane() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', marginBottom: 2 }}>Brokerage (₹/ord)</label>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--k-ink-6)', marginBottom: 2 }}>Brokerage (₹/ord)</label>
                 <input
                   type="number"
                   value={brokerage}
@@ -690,7 +690,7 @@ export function UnifiedBacktestPane() {
                 />
               </div>
             </div>
-            <div style={{ fontSize: 11, color: '#888', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: 'var(--k-ink-6)', lineHeight: 1.4 }}>
               Includes STT (0.125%), Exchange Turnover (0.05%), and 18% GST on brokerage.
             </div>
           </div>
@@ -700,8 +700,8 @@ export function UnifiedBacktestPane() {
             onClick={handleRunBacktest}
             disabled={runMutation.isPending}
             style={{
-              width: '100%', padding: '12px', background: runMutation.isPending ? '#ccc' : '#f06428',
-              color: '#fff', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 700,
+              width: '100%', padding: '12px', background: runMutation.isPending ? 'var(--k-faint-5)' : 'var(--k-brand)',
+              color: 'var(--k-bg)', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 700,
               cursor: runMutation.isPending ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',
             }}
           >
@@ -712,9 +712,9 @@ export function UnifiedBacktestPane() {
         {/* ── Right Main Surface: Metrics, Charts, Trades, Monte Carlo ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 20 }}>
           {!result && !runMutation.isPending && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--k-ink-6)' }}>
               <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#444', marginBottom: 4 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--k-text)', marginBottom: 4 }}>
                 Ready to Run Real-Data Backtest
               </div>
               <div style={{ fontSize: 13, maxWidth: 460, textAlign: 'center', lineHeight: 1.5 }}>
@@ -724,9 +724,9 @@ export function UnifiedBacktestPane() {
           )}
 
           {runMutation.isPending && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--k-ink-6)' }}>
               <div style={{ fontSize: 32, marginBottom: 12, animation: 'spin 1s infinite linear' }}>⏳</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#333', marginBottom: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--k-ink-1)', marginBottom: 4 }}>
                 Fetching Historical Candles & Simulating Executions…
               </div>
               <div style={{ fontSize: 12 }}>Calculating dynamic ATR risk boundaries, options delta scaling, fee ledgers, and MAE/MFE diagnostics</div>
@@ -737,67 +737,67 @@ export function UnifiedBacktestPane() {
             <>
               {/* ── KPI Metric Scorecard ── */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 18 }}>
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Net P&L</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.net_pnl_inr >= 0 ? '#2e7d32' : '#c62828', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Net P&L</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.net_pnl_inr >= 0 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)', marginTop: 2 }}>
                     {fmtCurr(result.metrics.net_pnl_inr)}
                   </div>
-                  <div style={{ fontSize: 11, color: result.metrics.total_return_pct >= 0 ? '#2e7d32' : '#c62828', fontWeight: 600 }}>
+                  <div style={{ fontSize: 11, color: result.metrics.total_return_pct >= 0 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)', fontWeight: 600 }}>
                     {result.metrics.total_return_pct >= 0 ? '+' : ''}{result.metrics.total_return_pct}%
                   </div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Sharpe Ratio</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.sharpe_ratio >= 1.5 ? '#2e7d32' : '#333', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Sharpe Ratio</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.sharpe_ratio >= 1.5 ? 'var(--k-green-deep)' : 'var(--k-ink-1)', marginTop: 2 }}>
                     {fmt(result.metrics.sharpe_ratio)}
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>Sortino: {fmt(result.metrics.sortino_ratio)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>Sortino: {fmt(result.metrics.sortino_ratio)}</div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Win Rate</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.win_rate_pct >= 50 ? '#2e7d32' : '#c62828', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Win Rate</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.win_rate_pct >= 50 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)', marginTop: 2 }}>
                     {result.metrics.win_rate_pct}%
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{result.metrics.winning_trades}W / {result.metrics.losing_trades}L</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>{result.metrics.winning_trades}W / {result.metrics.losing_trades}L</div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Profit Factor</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.profit_factor >= 1.5 ? '#2e7d32' : '#333', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Profit Factor</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.profit_factor >= 1.5 ? 'var(--k-green-deep)' : 'var(--k-ink-1)', marginTop: 2 }}>
                     {fmt(result.metrics.profit_factor)}
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>Payoff: {fmt(result.metrics.payoff_ratio)}x</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>Payoff: {fmt(result.metrics.payoff_ratio)}x</div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Max Drawdown</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.max_drawdown_pct <= 5 ? '#2e7d32' : '#c62828', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Max Drawdown</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: result.metrics.max_drawdown_pct <= 5 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)', marginTop: 2 }}>
                     -{result.metrics.max_drawdown_pct}%
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{fmtCurr(-result.metrics.max_drawdown_inr)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>{fmtCurr(-result.metrics.max_drawdown_inr)}</div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Total Trades</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#333', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Total Trades</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--k-ink-1)', marginTop: 2 }}>
                     {result.metrics.total_trades}
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>Exp: {fmtCurr(result.metrics.expectancy_inr)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>Exp: {fmtCurr(result.metrics.expectancy_inr)}</div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Friction / STT</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#888', marginTop: 2 }}>
+                <div style={{ background: 'var(--k-bg)', padding: '12px 14px', borderRadius: 6, border: `1px solid ${k.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-ink-6)', textTransform: 'uppercase' }}>Friction / STT</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--k-ink-6)', marginTop: 2 }}>
                     ₹{fmt(result.metrics.total_friction_inr, 0)}
                   </div>
-                  <div style={{ fontSize: 11, color: '#888' }}>Drag: {result.metrics.friction_drag_pct}%</div>
+                  <div style={{ fontSize: 11, color: 'var(--k-ink-6)' }}>Drag: {result.metrics.friction_drag_pct}%</div>
                 </div>
               </div>
 
               {/* ── Visualization Navigation Tabs ── */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${k.border}`, background: '#fff', borderRadius: '6px 6px 0 0', padding: '0 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${k.border}`, background: 'var(--k-bg)', borderRadius: '6px 6px 0 0', padding: '0 12px' }}>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {[
                     { id: 'equity' as const, label: '📈 Equity Curve' },
@@ -813,8 +813,8 @@ export function UnifiedBacktestPane() {
                         style={{
                           padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
                           fontSize: 13, fontWeight: active ? 700 : 500,
-                          color: active ? '#f06428' : '#666',
-                          borderBottom: active ? '2px solid #f06428' : '2px solid transparent',
+                          color: active ? 'var(--k-brand)' : 'var(--k-ink-4)',
+                          borderBottom: active ? '2px solid var(--k-brand)' : '2px solid transparent',
                           marginBottom: -1,
                         }}
                       >
@@ -826,15 +826,15 @@ export function UnifiedBacktestPane() {
 
                 {activeTab === 'trades' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ display: 'flex', gap: 4, background: '#eee', padding: 2, borderRadius: 4 }}>
+                    <div style={{ display: 'flex', gap: 4, background: 'var(--k-hairline-3)', padding: 2, borderRadius: 4 }}>
                       {(['ALL', 'WIN', 'LOSS'] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setTradeFilter(mode)}
                           style={{
                             border: 'none', padding: '3px 8px', fontSize: 11, fontWeight: 700, borderRadius: 3,
-                            background: tradeFilter === mode ? '#fff' : 'transparent',
-                            color: tradeFilter === mode ? '#333' : '#777', cursor: 'pointer',
+                            background: tradeFilter === mode ? 'var(--k-bg)' : 'transparent',
+                            color: tradeFilter === mode ? 'var(--k-ink-1)' : 'var(--k-ink-5)', cursor: 'pointer',
                           }}
                         >
                           {mode}
@@ -844,8 +844,8 @@ export function UnifiedBacktestPane() {
                     <button
                       onClick={handleExportCSV}
                       style={{
-                        padding: '5px 12px', background: '#f5f5f5', border: `1px solid ${k.border}`,
-                        borderRadius: 4, fontSize: 12, fontWeight: 600, color: '#333', cursor: 'pointer',
+                        padding: '5px 12px', background: 'var(--k-surface-4)', border: `1px solid ${k.border}`,
+                        borderRadius: 4, fontSize: 12, fontWeight: 600, color: 'var(--k-ink-1)', cursor: 'pointer',
                       }}
                     >
                       📥 Export CSV
@@ -855,20 +855,20 @@ export function UnifiedBacktestPane() {
               </div>
 
               {/* ── Tab Views ── */}
-              <div style={{ background: '#fff', border: `1px solid ${k.border}`, borderTop: 'none', borderRadius: '0 0 6px 6px', padding: 20, flex: 1, minHeight: 380, overflowY: 'auto' }}>
+              <div style={{ background: 'var(--k-bg)', border: `1px solid ${k.border}`, borderTop: 'none', borderRadius: '0 0 6px 6px', padding: 20, flex: 1, minHeight: 380, overflowY: 'auto' }}>
                 {activeTab === 'equity' && (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--k-text)' }}>
                         Portfolio Capital Growth vs. High-Water Mark (INR) • {contractType.toUpperCase()}
                       </span>
-                      <span style={{ fontSize: 12, color: '#888' }}>
+                      <span style={{ fontSize: 12, color: 'var(--k-ink-6)' }}>
                         Evaluated {result.candles_evaluated} real candles ({result.start_date.substring(0, 10)} → {result.end_date.substring(0, 10)})
                       </span>
                     </div>
 
                     {/* SVG Equity Chart */}
-                    <div style={{ width: '100%', height: 320, background: '#fafafa', borderRadius: 4, border: '1px solid #eee', padding: 10, position: 'relative' }}>
+                    <div style={{ width: '100%', height: 320, background: 'var(--k-surface-2)', borderRadius: 4, border: '1px solid var(--k-hairline-3)', padding: 10, position: 'relative' }}>
                       <svg width="100%" height="100%" viewBox="0 0 800 280" preserveAspectRatio="none">
                         {(() => {
                           const pts = result.equity_curve;
@@ -902,7 +902,7 @@ export function UnifiedBacktestPane() {
                                 y1={260 - ((result.starting_capital - min) / span) * 240}
                                 x2="790"
                                 y2={260 - ((result.starting_capital - min) / span) * 240}
-                                stroke="#ccc"
+                                stroke="var(--k-faint-5)"
                                 strokeDasharray="4 4"
                                 strokeWidth="1"
                               />
@@ -911,7 +911,7 @@ export function UnifiedBacktestPane() {
                               {/* HWM Line */}
                               <polyline points={hwmCoords.join(' ')} fill="none" stroke="#90caf9" strokeDasharray="3 3" strokeWidth="1.5" />
                               {/* Equity Line */}
-                              <polyline points={polyline} fill="none" stroke={isUp ? '#2e7d32' : '#c62828'} strokeWidth="2.5" />
+                              <polyline points={polyline} fill="none" stroke={isUp ? 'var(--k-green-deep)' : 'var(--k-red-crimson)'} strokeWidth="2.5" />
                             </>
                           );
                         })()}
@@ -923,15 +923,15 @@ export function UnifiedBacktestPane() {
                 {activeTab === 'drawdown' && (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--k-text)' }}>
                         Underwater Drawdown Profile (%)
                       </span>
-                      <span style={{ fontSize: 12, color: '#c62828', fontWeight: 600 }}>
+                      <span style={{ fontSize: 12, color: 'var(--k-red-crimson)', fontWeight: 600 }}>
                         Maximum Drawdown: -{result.metrics.max_drawdown_pct}%
                       </span>
                     </div>
 
-                    <div style={{ width: '100%', height: 320, background: '#fafafa', borderRadius: 4, border: '1px solid #eee', padding: 10 }}>
+                    <div style={{ width: '100%', height: 320, background: 'var(--k-surface-2)', borderRadius: 4, border: '1px solid var(--k-hairline-3)', padding: 10 }}>
                       <svg width="100%" height="100%" viewBox="0 0 800 280" preserveAspectRatio="none">
                         {(() => {
                           const pts = result.equity_curve;
@@ -947,9 +947,9 @@ export function UnifiedBacktestPane() {
                           const area = `10,20 ${coords.join(' ')} 790,20`;
                           return (
                             <>
-                              <line x1="10" y1="20" x2="790" y2="20" stroke="#aaa" strokeWidth="1.5" />
+                              <line x1="10" y1="20" x2="790" y2="20" stroke="var(--k-faint)" strokeWidth="1.5" />
                               <polygon points={area} fill="rgba(229,57,53,0.2)" />
-                              <polyline points={coords.join(' ')} fill="none" stroke="#e53935" strokeWidth="2" />
+                              <polyline points={coords.join(' ')} fill="none" stroke="var(--k-red-strong)" strokeWidth="2" />
                             </>
                           );
                         })()}
@@ -962,7 +962,7 @@ export function UnifiedBacktestPane() {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
                       <thead>
-                        <tr style={{ background: '#f8f9fa', borderBottom: `2px solid ${k.border}`, color: '#666' }}>
+                        <tr style={{ background: '#f8f9fa', borderBottom: `2px solid ${k.border}`, color: 'var(--k-ink-4)' }}>
                           <th style={{ padding: '8px 10px' }}>#</th>
                           <th style={{ padding: '8px 10px' }}>Entry Time</th>
                           <th style={{ padding: '8px 10px' }}>Exit Time</th>
@@ -981,33 +981,33 @@ export function UnifiedBacktestPane() {
                         {filteredTrades.map((t) => {
                           const isWin = t.net_pnl > 0;
                           return (
-                            <tr key={t.trade_id} style={{ borderBottom: '1px solid #eee' }}>
-                              <td style={{ padding: '8px 10px', color: '#888' }}>{t.trade_id}</td>
+                            <tr key={t.trade_id} style={{ borderBottom: '1px solid var(--k-hairline-3)' }}>
+                              <td style={{ padding: '8px 10px', color: 'var(--k-ink-6)' }}>{t.trade_id}</td>
                               <td style={{ padding: '8px 10px' }}>{t.entry_time.replace('T', ' ').substring(5, 16)}</td>
                               <td style={{ padding: '8px 10px' }}>{t.exit_time.replace('T', ' ').substring(5, 16)}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: 600, color: '#444' }}>{t.symbol || result.symbol}</td>
-                              <td style={{ padding: '8px 10px', fontWeight: 700, color: t.direction === 'LONG' ? '#2e7d32' : '#c62828' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--k-text)' }}>{t.symbol || result.symbol}</td>
+                              <td style={{ padding: '8px 10px', fontWeight: 700, color: t.direction === 'LONG' ? 'var(--k-green-deep)' : 'var(--k-red-crimson)' }}>
                                 {t.direction}
                               </td>
                               <td style={{ padding: '8px 10px' }}>₹{t.entry_price}</td>
                               <td style={{ padding: '8px 10px' }}>₹{t.exit_price}</td>
-                              <td style={{ padding: '8px 10px', fontSize: 11.5, color: '#555' }}>
+                              <td style={{ padding: '8px 10px', fontSize: 11.5, color: 'var(--k-ink-3)' }}>
                                 {t.sl_points ? `${t.sl_points} / ${t.tp_points ?? '-'}` : '-'}
                               </td>
-                              <td style={{ padding: '8px 10px', fontWeight: 700, color: (t.reward_to_risk ?? 0) >= 1.5 ? '#2e7d32' : ((t.reward_to_risk ?? 0) <= 0 ? '#c62828' : '#333') }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 700, color: (t.reward_to_risk ?? 0) >= 1.5 ? 'var(--k-green-deep)' : ((t.reward_to_risk ?? 0) <= 0 ? 'var(--k-red-crimson)' : 'var(--k-ink-1)') }}>
                                 {t.reward_to_risk !== undefined ? `1:${t.reward_to_risk}R` : '-'}
                               </td>
-                              <td style={{ padding: '8px 10px', fontWeight: 700, color: isWin ? '#2e7d32' : '#c62828' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: 700, color: isWin ? 'var(--k-green-deep)' : 'var(--k-red-crimson)' }}>
                                 {fmtCurr(t.net_pnl)} ({t.return_pct}%)
                               </td>
-                              <td style={{ padding: '8px 10px', color: '#666', fontSize: 11 }}>
+                              <td style={{ padding: '8px 10px', color: 'var(--k-ink-4)', fontSize: 11 }}>
                                 -{t.mae_points} / +{t.mfe_points} pts
                               </td>
                               <td style={{ padding: '8px 10px' }}>
                                 <span style={{
                                   fontSize: 10.5, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
-                                  background: t.exit_reason === 'TARGET' ? 'rgba(46,125,50,0.12)' : (t.exit_reason === 'TRAILING_STOP' ? 'rgba(25,118,210,0.12)' : (t.exit_reason === 'STOP_LOSS' ? 'rgba(198,40,40,0.12)' : '#eee')),
-                                  color: t.exit_reason === 'TARGET' ? '#2e7d32' : (t.exit_reason === 'TRAILING_STOP' ? '#1976d2' : (t.exit_reason === 'STOP_LOSS' ? '#c62828' : '#555')),
+                                  background: t.exit_reason === 'TARGET' ? 'rgba(46,125,50,0.12)' : (t.exit_reason === 'TRAILING_STOP' ? 'rgba(25,118,210,0.12)' : (t.exit_reason === 'STOP_LOSS' ? 'rgba(198,40,40,0.12)' : 'var(--k-hairline-3)')),
+                                  color: t.exit_reason === 'TARGET' ? 'var(--k-green-deep)' : (t.exit_reason === 'TRAILING_STOP' ? '#1976d2' : (t.exit_reason === 'STOP_LOSS' ? 'var(--k-red-crimson)' : 'var(--k-ink-3)')),
                                 }}>
                                   {t.exit_reason}
                                 </span>
@@ -1022,52 +1022,52 @@ export function UnifiedBacktestPane() {
 
                 {activeTab === 'monte_carlo' && (
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--k-ink-1)', marginBottom: 6 }}>
                       🎲 500-Path Monte Carlo Resampling Simulation
                     </div>
-                    <div style={{ fontSize: 12, color: '#777', marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: 'var(--k-ink-5)', marginBottom: 16 }}>
                       Randomizes trade sequencing 500 times to compute statistical confidence bounds and evaluate drawdowns under unfavorable streak orderings.
                     </div>
 
                     {result.monte_carlo ? (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-                        <div style={{ background: '#fafafa', padding: 14, borderRadius: 6, border: '1px solid #eee' }}>
-                          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Mean Expected Return</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: result.monte_carlo.mean_return_pct >= 0 ? '#2e7d32' : '#c62828', marginTop: 4 }}>
+                        <div style={{ background: 'var(--k-surface-2)', padding: 14, borderRadius: 6, border: '1px solid var(--k-hairline-3)' }}>
+                          <div style={{ fontSize: 11, color: 'var(--k-ink-6)', textTransform: 'uppercase', fontWeight: 700 }}>Mean Expected Return</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: result.monte_carlo.mean_return_pct >= 0 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)', marginTop: 4 }}>
                             {result.monte_carlo.mean_return_pct}%
                           </div>
                         </div>
 
-                        <div style={{ background: '#fafafa', padding: 14, borderRadius: 6, border: '1px solid #eee' }}>
-                          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>5th Percentile (Worst 5%)</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: '#c62828', marginTop: 4 }}>
+                        <div style={{ background: 'var(--k-surface-2)', padding: 14, borderRadius: 6, border: '1px solid var(--k-hairline-3)' }}>
+                          <div style={{ fontSize: 11, color: 'var(--k-ink-6)', textTransform: 'uppercase', fontWeight: 700 }}>5th Percentile (Worst 5%)</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--k-red-crimson)', marginTop: 4 }}>
                             {result.monte_carlo.p5_return_pct}%
                           </div>
                         </div>
 
-                        <div style={{ background: '#fafafa', padding: 14, borderRadius: 6, border: '1px solid #eee' }}>
-                          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>95th Percentile (Best 5%)</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: '#2e7d32', marginTop: 4 }}>
+                        <div style={{ background: 'var(--k-surface-2)', padding: 14, borderRadius: 6, border: '1px solid var(--k-hairline-3)' }}>
+                          <div style={{ fontSize: 11, color: 'var(--k-ink-6)', textTransform: 'uppercase', fontWeight: 700 }}>95th Percentile (Best 5%)</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--k-green-deep)', marginTop: 4 }}>
                             +{result.monte_carlo.p95_return_pct}%
                           </div>
                         </div>
 
-                        <div style={{ background: '#fafafa', padding: 14, borderRadius: 6, border: '1px solid #eee' }}>
-                          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>95% Max Drawdown Risk</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: '#c62828', marginTop: 4 }}>
+                        <div style={{ background: 'var(--k-surface-2)', padding: 14, borderRadius: 6, border: '1px solid var(--k-hairline-3)' }}>
+                          <div style={{ fontSize: 11, color: 'var(--k-ink-6)', textTransform: 'uppercase', fontWeight: 700 }}>95% Max Drawdown Risk</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--k-red-crimson)', marginTop: 4 }}>
                             -{result.monte_carlo.p95_max_drawdown_pct}%
                           </div>
                         </div>
 
-                        <div style={{ background: '#fafafa', padding: 14, borderRadius: 6, border: '1px solid #eee' }}>
-                          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Probability of Profit</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: result.monte_carlo.prob_profit_pct >= 70 ? '#2e7d32' : '#f06428', marginTop: 4 }}>
+                        <div style={{ background: 'var(--k-surface-2)', padding: 14, borderRadius: 6, border: '1px solid var(--k-hairline-3)' }}>
+                          <div style={{ fontSize: 11, color: 'var(--k-ink-6)', textTransform: 'uppercase', fontWeight: 700 }}>Probability of Profit</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: result.monte_carlo.prob_profit_pct >= 70 ? 'var(--k-green-deep)' : 'var(--k-brand)', marginTop: 4 }}>
                             {result.monte_carlo.prob_profit_pct}%
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div style={{ color: '#888', fontSize: 13 }}>
+                      <div style={{ color: 'var(--k-ink-6)', fontSize: 13 }}>
                         Requires at least 5 completed trades to run Monte Carlo permutation analysis.
                       </div>
                     )}

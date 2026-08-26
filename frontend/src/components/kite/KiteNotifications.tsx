@@ -7,8 +7,8 @@ import { useMacKite } from '../../hooks/useMacKite';
 // Kite's own colour language: cancelled=blue, complete=green, rejected=red,
 // open/pending=amber, placed=blue.
 const COLOR: Record<NotifKind, string> = {
-  placed: '#387ed1', open: '#f5a623', complete: '#4caf50',
-  cancelled: '#387ed1', rejected: '#e53935', error: '#e53935', info: '#387ed1',
+  placed: 'var(--k-blue-kite)', open: 'var(--k-amber)', complete: 'var(--k-green)',
+  cancelled: 'var(--k-blue-kite)', rejected: 'var(--k-red-strong)', error: 'var(--k-red-strong)', info: 'var(--k-blue-kite)',
 };
 
 function statusToKind(status: string): NotifKind {
@@ -48,7 +48,7 @@ function OrderUpdateBridge() {
 
 function Toast({ n, mac }: { n: KiteNotif; mac?: boolean }) {
   const dismiss = useKiteNotifications((s) => s.dismiss);
-  const color = COLOR[n.kind] ?? '#387ed1';
+  const color = COLOR[n.kind] ?? 'var(--k-blue-kite)';
   useEffect(() => {
     const ttl = n.kind === 'rejected' || n.kind === 'error' ? 9000 : 6000;
     const t = window.setTimeout(() => dismiss(n.id), ttl);
@@ -56,8 +56,8 @@ function Toast({ n, mac }: { n: KiteNotif; mac?: boolean }) {
   }, [n.id, n.kind, dismiss]);
   return (
     <div style={{
-      display: 'flex', background: '#fff', borderRadius: 8, overflow: 'hidden',
-      boxShadow: '0 8px 28px rgba(0,0,0,0.16)', border: '1px solid #ececec',
+      display: 'flex', background: 'var(--k-bg)', borderRadius: 8, overflow: 'hidden',
+      boxShadow: '0 8px 28px rgba(0,0,0,0.16)', border: '1px solid var(--k-border-3)',
       // In Mac mode the parent motion.div drives the spring entrance, so the
       // CSS keyframe is disabled to avoid a double-animation.
       minWidth: 300, maxWidth: 380, animation: mac ? 'none' : 'kn-in .18s ease',
@@ -67,10 +67,10 @@ function Toast({ n, mac }: { n: KiteNotif; mac?: boolean }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ color, fontSize: 15, fontWeight: 700 }}>{n.title}</span>
           <button onClick={() => dismiss(n.id)} aria-label="Dismiss"
-            style={{ background: 'none', border: 'none', color: '#9b9b9b', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+            style={{ background: 'none', border: 'none', color: 'var(--k-dim)', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
         </div>
-        <div style={{ fontSize: 13, color: '#444', marginTop: 3, lineHeight: 1.45, wordBreak: 'break-word' }}>{n.message}</div>
-        {n.orderId && <div style={{ fontSize: 11, color: '#9b9b9b', marginTop: 6, fontFamily: 'monospace' }}>#{n.orderId}</div>}
+        <div style={{ fontSize: 13, color: 'var(--k-text)', marginTop: 3, lineHeight: 1.45, wordBreak: 'break-word' }}>{n.message}</div>
+        {n.orderId && <div style={{ fontSize: 11, color: 'var(--k-dim)', marginTop: 6, fontFamily: 'monospace' }}>#{n.orderId}</div>}
       </div>
     </div>
   );

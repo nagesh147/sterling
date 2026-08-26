@@ -17,11 +17,11 @@ export function MotionStyleSettings() {
   const setStyle = useKiteSettings((s) => s.setLoaderStyle);
 
   return (
-    <section style={{ margin: '0 0 16px', padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-      <div style={{ color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
+    <section style={{ margin: '0 0 16px', padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
         INTERACTION & LOADER STYLE
       </div>
-      <div style={{ color: '#777', fontSize: 11.5, lineHeight: 1.5, marginBottom: 14 }}>
+      <div style={{ color: 'var(--k-ink-5)', fontSize: 11.5, lineHeight: 1.5, marginBottom: 14 }}>
         Controls loaders, startup surfaces, menus, dialogs, buttons and transition timing. Table rows remain stationary for accurate scrolling and pointer targeting.
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(176px, 1fr))', gap: 8 }}>
@@ -40,9 +40,9 @@ export function MotionStyleSettings() {
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 borderRadius: 7,
-                border: `1px solid ${selected ? '#e2b6a4' : '#e0e0e0'}`,
-                background: selected ? '#fff5f0' : '#fff',
-                color: '#444',
+                border: `1px solid ${selected ? 'var(--k-border-brand)' : 'var(--k-border)'}`,
+                background: selected ? 'var(--k-surface-warm)' : 'var(--k-bg)',
+                color: 'var(--k-text)',
               }}
             >
               <span style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -50,9 +50,9 @@ export function MotionStyleSettings() {
               </span>
               <span style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 12, fontWeight: selected ? 700 : 600 }}>{option.label}</span>
-                <span style={{ display: 'block', marginTop: 2, fontSize: 9.5, color: '#888', lineHeight: 1.25 }}>{option.desc}</span>
+                <span style={{ display: 'block', marginTop: 2, fontSize: 9.5, color: 'var(--k-ink-6)', lineHeight: 1.25 }}>{option.desc}</span>
               </span>
-              <input type="radio" name="motion-style" checked={selected} onChange={() => setStyle(option.value)} style={{ width: 15, height: 15, margin: 0, accentColor: '#f06428' }} />
+              <input type="radio" name="motion-style" checked={selected} onChange={() => setStyle(option.value)} style={{ width: 15, height: 15, margin: 0, accentColor: 'var(--k-brand)' }} />
             </label>
           );
         })}

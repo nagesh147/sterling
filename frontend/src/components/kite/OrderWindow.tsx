@@ -13,6 +13,7 @@ import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { getOrderNudge } from './orderNudge';
+import { layoutViewport, toLayoutPx } from '../../styles/applyViewportScale';
 import {
   Side, OrderType, Product, Validity,
   productsForExchange, defaultProduct, marginSegment, isDerivative,
@@ -33,7 +34,7 @@ const inr = (n: number) => '₹' + (Number.isFinite(n) ? n : 0).toLocaleString('
 const num = (v: any) => Number(v ?? 0);
 const fmtPx = (v: any) => (v != null && !isNaN(Number(v)) ? Number(v).toFixed(2) : '0.00');
 const fmtExpiry = (e?: string) => { if (!e) return ''; const d = new Date(e); return isNaN(d.getTime()) ? e : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase(); };
-const HATCH = 'repeating-linear-gradient(-45deg,#f4f4f4,#f4f4f4 5px,#fafafa 5px,#fafafa 10px)';
+const HATCH = 'repeating-linear-gradient(-45deg,var(--k-surface-7),var(--k-surface-7) 5px,var(--k-surface-2) 5px,var(--k-surface-2) 10px)';
 
 // ── icons ────────────────────────────────────────────────────────────────────
 const Box = () => (
@@ -173,15 +174,27 @@ export function OrderWindow({ options, onClose }: Props) {
   };
 
   // ── dragging (clamped to viewport) ───────────────────────────────────────────
-  const clamp = (x: number, y: number) => ({
-    x: Math.min(Math.max(x, -(cardW - 130)), window.innerWidth - 130),
-    y: Math.min(Math.max(y, 8), window.innerHeight - 72),
+  // All of this is layout space: `pos` is written straight into CSS left/top.
+  // Pointer coordinates arrive device-facing, so deltas are converted before
+  // they are added.
+  const clamp = (x: number, y: number) => {
+    const vp = layoutViewport();
+    return {
+      x: Math.min(Math.max(x, -(cardW - 130)), vp.width - 130),
+      y: Math.min(Math.max(y, 8), vp.height - 72),
+    };
+  };
+  const [pos, setPos] = useState(() => {
+    const vp = layoutViewport();
+    return clamp(Math.round(vp.width / 2 - 220), Math.max(16, Math.round(vp.height / 2 - 300)));
   });
-  const [pos, setPos] = useState(() => clamp(Math.round(window.innerWidth / 2 - 220), Math.max(16, Math.round(window.innerHeight / 2 - 300))));
   const onHeaderDown = (e: React.MouseEvent) => {
     const start = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
     document.body.style.userSelect = 'none'; document.body.style.cursor = 'move';
-    const move = (ev: MouseEvent) => setPos(clamp(start.px + (ev.clientX - start.mx), start.py + (ev.clientY - start.my)));
+    const move = (ev: MouseEvent) => setPos(clamp(
+      start.px + toLayoutPx(ev.clientX - start.mx),
+      start.py + toLayoutPx(ev.clientY - start.my),
+    ));
     const up = () => { document.body.style.userSelect = ''; document.body.style.cursor = ''; window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
   };
@@ -317,22 +330,22 @@ export function OrderWindow({ options, onClose }: Props) {
   const cardInner = (
     <>
             {/* Header */}
-            <div onMouseDown={onHeaderDown} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 16px', background: accent, color: '#fff', cursor: 'move' }}>
+            <div onMouseDown={onHeaderDown} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 16px', background: accent, color: 'var(--k-bg)', cursor: 'move' }}>
               <div onMouseDown={(e) => e.stopPropagation()} style={{ minWidth: 0, flex: '0 1 auto', maxWidth: '70%', cursor: 'default' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={fullSym} onColor={accent} /></span>
-                  <button onClick={() => setSearchOpen((o) => !o)} title="Search instrument" style={{ background: searchOpen ? 'rgba(255,255,255,0.25)' : 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', padding: 3, borderRadius: 3, flexShrink: 0 }}><Icons.Search /></button>
+                  <button onClick={() => setSearchOpen((o) => !o)} title="Search instrument" style={{ background: searchOpen ? 'rgba(255,255,255,0.25)' : 'none', border: 'none', color: 'var(--k-bg)', cursor: 'pointer', display: 'flex', padding: 3, borderRadius: 3, flexShrink: 0 }}><Icons.Search /></button>
                 </div>
                 <div style={{ fontSize: 11.5, opacity: 0.92, marginTop: 3 }}>{instr.exchange}{instr.lastPrice > 0 ? `  ${inr(instr.lastPrice)}` : ''}</div>
               </div>
               <div onMouseDown={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                 {nudge && (
-                  <button onClick={() => setNudgeOpen((o) => !o)} title={nudge.message} style={{ position: 'relative', background: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, color: accent, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    N<span style={{ position: 'absolute', top: -5, right: -5, background: k.amber, color: '#fff', borderRadius: '50%', width: 13, height: 13, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
+                  <button onClick={() => setNudgeOpen((o) => !o)} title={nudge.message} style={{ position: 'relative', background: 'var(--k-bg)', border: 'none', borderRadius: '50%', width: 22, height: 22, color: accent, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    N<span style={{ position: 'absolute', top: -5, right: -5, background: k.amber, color: 'var(--k-bg)', borderRadius: '50%', width: 13, height: 13, fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
                   </button>
                 )}
                 <div onClick={() => setSide(side === 'BUY' ? 'SELL' : 'BUY')} title={side === 'BUY' ? 'Switch to Sell' : 'Switch to Buy'} style={{ width: 44, height: 23, borderRadius: 12, background: 'rgba(255,255,255,0.35)', cursor: 'pointer', position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: 3, left: side === 'BUY' ? 3 : 24, width: 17, height: 17, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.3)', transition: 'left .15s' }} />
+                  <div style={{ position: 'absolute', top: 3, left: side === 'BUY' ? 3 : 24, width: 17, height: 17, borderRadius: '50%', background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,0.3)', transition: 'left .15s' }} />
                 </div>
               </div>
             </div>
@@ -342,7 +355,7 @@ export function OrderWindow({ options, onClose }: Props) {
               {(['quick', 'regular'] as Tab[]).map((tb) => (
                 <div key={tb} onClick={() => switchTab(tb)} style={{ padding: '11px 18px', fontSize: 13, cursor: 'pointer', textTransform: 'capitalize', color: tab === tb ? accent : k.text, fontWeight: tab === tb ? 600 : 400, borderBottom: tab === tb ? `2px solid ${accent}` : '2px solid transparent', marginBottom: -1 }}>{tb}</div>
               ))}
-              <div title="Iceberg unavailable" style={{ padding: '11px 18px', fontSize: 13, color: '#cfcfcf', cursor: 'not-allowed' }}>Iceberg</div>
+              <div title="Iceberg unavailable" style={{ padding: '11px 18px', fontSize: 13, color: 'var(--k-faint-6)', cursor: 'not-allowed' }}>Iceberg</div>
               <button onClick={() => setDepthOpen((d) => !d)} title={depthOpen ? 'Close market depth' : 'Market depth'} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', padding: '0 14px', color: k.dim, background: depthOpen ? k.surfaceHover : 'transparent', border: 'none', borderLeft: `1px solid ${k.border}`, cursor: 'pointer' }}>{depthOpen ? <XIcon s={15} /> : <Pencil />}</button>
             </div>
 
@@ -448,7 +461,7 @@ export function OrderWindow({ options, onClose }: Props) {
             {error && <div style={{ padding: '8px 16px', background: tint(k.red, 10), color: k.red, fontSize: 12 }}>{error}</div>}
 
             {amoConfirmNeeded && (
-              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: '#8a6100', fontSize: 12 }}>
+              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: 'var(--k-warn-ink)', fontSize: 12 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={amoConfirmed} onChange={(e) => setAmoConfirmed(e.target.checked)} style={{ accentColor: k.amber, width: 14, height: 14, flexShrink: 0 }} />
                   Market is closed — this will be placed as an After Market Order (AMO) for the next session.
@@ -554,7 +567,7 @@ function NudgePopup({ message, onClose }: { message: string; onClose: () => void
   return (
     <div style={{ position: 'absolute', top: -84, right: 6, width: 280, background: k.bg, borderRadius: 5, boxShadow: '0 4px 20px rgba(0,0,0,0.18)', border: `1px solid ${k.border}`, padding: '12px 14px', zIndex: 5 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <span style={{ background: k.blue, color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>N</span>
+        <span style={{ background: k.blue, color: 'var(--k-bg)', borderRadius: '50%', width: 18, height: 18, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>N</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>Nudge</span>
         <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: k.dim, cursor: 'pointer', display: 'flex' }}><XIcon /></button>
       </div>
@@ -567,15 +580,15 @@ function NudgePopup({ message, onClose }: { message: string; onClose: () => void
 // ── outlined field ───────────────────────────────────────────────────────────
 function Field({ label, disabled, children }: { label: string; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ position: 'relative', border: `1px solid ${k.border}`, borderRadius: 4, height: 52, display: 'flex', alignItems: 'center', padding: '0 0 0 12px', background: disabled ? HATCH : '#fff' }}>
-      {label && <span style={{ position: 'absolute', top: -8, left: 9, background: '#fff', padding: '0 5px', fontSize: 11, color: disabled ? '#bdbdbd' : k.dim }}>{label}</span>}
+    <div style={{ position: 'relative', border: `1px solid ${k.border}`, borderRadius: 4, height: 52, display: 'flex', alignItems: 'center', padding: '0 0 0 12px', background: disabled ? HATCH : 'var(--k-bg)' }}>
+      {label && <span style={{ position: 'absolute', top: -8, left: 9, background: 'var(--k-bg)', padding: '0 5px', fontSize: 11, color: disabled ? 'var(--k-faint-3)' : k.dim }}>{label}</span>}
       {children}
     </div>
   );
 }
 function Radio({ accent, checked, onChange, children }: { accent: string; checked: boolean; onChange: () => void; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: checked ? k.text : '#666', fontWeight: checked ? 500 : 400, whiteSpace: 'nowrap' }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: checked ? k.text : 'var(--k-ink-4)', fontWeight: checked ? 500 : 400, whiteSpace: 'nowrap' }}>
       <input type="radio" checked={checked} onChange={onChange} style={{ accentColor: accent, margin: 0 }} />{children}
     </label>
   );
@@ -598,7 +611,7 @@ function PctToggle({ accent, label, on, setOn, pct, setPct, defaultPct }: { acce
         <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} style={{ accentColor: accent, width: 14, height: 14 }} />{label}
       </label>
       <input className="ow-num" type="number" step={0.5} value={on ? (pct || '') : ''} disabled={!on} onChange={(e) => setPct(Number(e.target.value))}
-        style={{ width: 50, padding: '4px 6px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 12, textAlign: 'right', outline: 'none', background: on ? '#fff' : HATCH, color: on ? k.text : '#bbb' }} />
+        style={{ width: 50, padding: '4px 6px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 12, textAlign: 'right', outline: 'none', background: on ? 'var(--k-bg)' : HATCH, color: on ? k.text : 'var(--k-faint-2)' }} />
       <span style={{ fontSize: 12, color: k.dim }}>%</span>
     </div>
   );
@@ -698,5 +711,5 @@ function SearchBox({ query, onQuery, accent, results, loading, error, onPick }: 
 const fieldInput: React.CSSProperties = { border: 'none', outline: 'none', background: 'transparent', flex: 1, minWidth: 0, fontSize: 19, color: k.text, fontVariantNumeric: 'tabular-nums', padding: 0, height: '100%' };
 const spin: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, flex: 1, background: 'transparent', border: 'none', color: k.dim, cursor: 'pointer', padding: 0 };
 const squareBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, alignSelf: 'stretch', background: k.surface, border: 'none', borderLeft: `1px solid ${k.border}`, color: k.dim, cursor: 'pointer', padding: 0 };
-const primaryBtn: React.CSSProperties = { width: '100%', color: '#fff', border: 'none', borderRadius: 3, padding: '11px', fontSize: 15, fontWeight: 600, cursor: 'pointer' };
-const cancelBtnWide: React.CSSProperties = { width: '100%', background: '#fff', color: k.text, border: `1px solid ${k.border}`, borderRadius: 3, padding: '10px', fontSize: 14, cursor: 'pointer' };
+const primaryBtn: React.CSSProperties = { width: '100%', color: 'var(--k-bg)', border: 'none', borderRadius: 3, padding: '11px', fontSize: 15, fontWeight: 600, cursor: 'pointer' };
+const cancelBtnWide: React.CSSProperties = { width: '100%', background: 'var(--k-bg)', color: k.text, border: `1px solid ${k.border}`, borderRadius: 3, padding: '10px', fontSize: 14, cursor: 'pointer' };
