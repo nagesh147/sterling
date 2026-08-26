@@ -80,7 +80,8 @@ export function windowOhlc(
   for (const b of bars) {
     const p = istMinOf(b.t);
     if (p.iso !== iso) continue;
-    if (p.min >= fromMin && (last ? p.min <= toMin : p.min < toMin)) slice.push(b);
+    const overlaps = p.min + 5 > fromMin && (last ? p.min <= toMin : p.min < toMin);
+    if (overlaps) slice.push(b);
   }
   if (!slice.length) return null;
   return {

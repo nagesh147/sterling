@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { forecastDay, forecastMonth } from '../../lib/astro/engine';
+import { lastCompletedSessionIso } from '../../lib/astro/holidays';
 import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
 import { formatIstDate, formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { UNDERLYINGS, type GapKind, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
 import { useCandles } from '../../hooks/useCandles';
 
-function todayIso(): string {
-  return formatIstIsoDate(new Date());
+function sessionIso(): string {
+  return lastCompletedSessionIso(new Date());
 }
 
 function isoToDate(iso: string): Date {
@@ -109,7 +110,7 @@ const CSS = `
 `;
 
 export function AstroPane() {
-  const [iso, setIso] = useState(todayIso);
+  const [iso, setIso] = useState(sessionIso);
   const [underlying, setUnderlying] = useState<Underlying>('NIFTY');
   const [tab, setTab] = useState<'timings' | 'thirty' | 'month'>('timings');
   const [now, setNow] = useState<Date | null>(null);
@@ -143,6 +144,7 @@ export function AstroPane() {
     () => (candles.data?.length ? barsFromOhlcv(candles.data, iso, underlying) : null),
     [candles.data, iso, underlying],
   );
+  const tapeLoading = candles.isLoading && !tape;
   const grades = useMemo(() => {
     const map = new Map<string, SlotGrade>();
     for (const s of rows) map.set(`${s.from}-${s.to}`, gradeSlot(s, tape, nowMin, sameDay));
@@ -155,10 +157,10 @@ export function AstroPane() {
   const instrument = underlyingLabel(underlying);
 
   const goToday = () => {
-    const t = todayIso();
+    const t = sessionIso();
     setIso(t);
-    const p = getIstParts(new Date());
-    setMonthCursor({ year: p.year, month: p.month });
+    const [y, m] = t.split('-').map(Number);
+    setMonthCursor({ year: y, month: m });
   };
 
   return (
@@ -285,8 +287,10 @@ export function AstroPane() {
                           </td>
                           <td style={{ color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
                           <td>
-                            {!grade || grade.kind === 'NONE' || grade.kind === 'PENDING' ? (
-                              <span style={{ color: 'var(--k-dim)' }}>—</span>
+                            {!grade || grade.kind === 'NONE' ? (
+                              <span style={{ color: 'var(--k-dim)' }}>{tapeLoading ? '…' : '—'}</span>
+                            ) : grade.kind === 'PENDING' ? (
+                              <span style={{ color: 'var(--k-dim)' }}>Pending</span>
                             ) : (
                               <span>
                                 <span className={gradeClass(grade.kind)}>{grade.label}</span>
