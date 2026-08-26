@@ -5,7 +5,7 @@ import {
 import type { Applies, SectionId } from './registry';
 import { openSettingsSection } from './registry';
 
-const BLUE = '#387ed1';
+const BLUE = 'var(--k-blue-kite)';
 const AMBER = '#b06a13';
 
 const APPLIES_STYLE: Record<Applies, { label: string; color: string; background: string; border: string }> = {
@@ -61,7 +61,7 @@ export function ScopeFilter({ value, onChange }: { value: Scope; onChange: (next
             onClick={() => onChange(option.value)}
             style={{
               border: 'none', minHeight: 28, borderRadius: 6,
-              background: selected ? '#fff' : 'transparent',
+              background: selected ? 'var(--k-bg)' : 'transparent',
               color: selected ? TEXT : MUTED,
               padding: '0 11px', fontSize: 12, fontWeight: 600,
               boxShadow: selected ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
@@ -106,12 +106,17 @@ export function ConfigNote({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Floating save indicator — never pushes layout. */
-export function PanelHeader({ title, description, saving }: {
-  title?: string;
-  description?: string;
-  saving?: boolean;
-}) {
+/**
+ * Floating save indicator — never pushes layout.
+ *
+ * This used to be a section heading and was repurposed into a save chip, but it
+ * kept accepting `title`/`description` and silently ignored them. TradingModePanel
+ * was still calling it that way, so the "What is running" heading and its
+ * explanation vanished from the page and the two engine rows were left unlabelled.
+ * The props are gone so that misuse is a compile error rather than a blank space.
+ * For a real heading, use `PanelSectionHeading` below.
+ */
+export function PanelHeader({ saving }: { saving?: boolean }) {
   if (saving !== true) return null;
 
   return (
@@ -128,7 +133,7 @@ export function PanelHeader({ title, description, saving }: {
         padding: '5px 10px',
         borderRadius: 4,
         border: `1px solid ${BORDER}`,
-        background: '#fff',
+        background: 'var(--k-bg)',
         color: MUTED,
         fontSize: 11,
         fontWeight: 600,
@@ -144,6 +149,23 @@ export function PanelHeader({ title, description, saving }: {
   );
 }
 
+/** A plain heading + explanation at the top of a panel card. */
+export function PanelSectionHeading({ title, description }: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div style={{ padding: '16px 18px 8px' }}>
+      <h3 style={{ margin: 0, color: TEXT, fontSize: 13, fontWeight: 800 }}>{title}</h3>
+      {description && (
+        <p style={{ margin: '5px 0 0', color: MUTED, fontSize: 11.5, lineHeight: 1.5, maxWidth: 620 }}>
+          {description}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PanelCard({ children }: { children: React.ReactNode }) {
   return (
     <section style={{ background: 'transparent', border: 'none', marginBottom: 0 }}>
@@ -152,7 +174,15 @@ export function PanelCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Apply / Discard / Reset — only renders when dirty. Same bar for SuperTrend + Navigator. */
+/**
+ * Apply / Discard / Reset. Same bar for SuperTrend + Navigator.
+ *
+ * Apply and Discard are about a DRAFT, so they appear only when there is one.
+ * Reset is not — it restores a saved config to defaults, and that is something you
+ * want most when you have changed nothing and want to start over. Gating the whole
+ * bar on `dirty` made it reachable only by first making an edit you did not want,
+ * which is a strange thing to require before undoing everything.
+ */
 export function SettingsDraftBar({
   dirty,
   saving = false,
@@ -172,9 +202,7 @@ export function SettingsDraftBar({
   applyDisabled?: boolean;
   applyTitle?: string;
 }) {
-  if (!dirty) return null;
-
-  const RED = '#c9433e';
+  const RED = 'var(--k-red-brick)';
   const AMBER = '#b06a13';
 
   return (
@@ -184,75 +212,79 @@ export function SettingsDraftBar({
         alignItems: 'center',
         gap: 8,
         flexWrap: 'wrap',
-        padding: '12px 16px',
+        padding: dirty ? '12px 16px' : '8px 16px',
         marginBottom: 16,
-        background: '#fff',
+        background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
         borderRadius: 9,
         boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
-      <span
-        aria-live="polite"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          color: saving ? MUTED : AMBER,
-          fontSize: 10.5,
-          fontWeight: 700,
-          marginRight: 4,
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: saving ? '#c2c2c2' : AMBER,
-          }}
-        />
-        {saving ? 'Saving…' : 'Unsaved changes'}
-      </span>
-      <button
-        type="button"
-        onClick={onApply}
-        disabled={saving || applyDisabled}
-        title={applyTitle}
-        style={{
-          border: 'none',
-          background: ORANGE,
-          color: '#fff',
-          borderRadius: 7,
-          padding: '8px 16px',
-          fontSize: 11.5,
-          fontWeight: 700,
-          cursor: saving || applyDisabled ? 'default' : 'pointer',
-          fontFamily: 'inherit',
-          opacity: saving || applyDisabled ? 0.5 : 1,
-        }}
-      >
-        Apply changes
-      </button>
-      <button
-        type="button"
-        onClick={onDiscard}
-        disabled={saving}
-        style={{
-          border: `1px solid ${BORDER}`,
-          background: '#fff',
-          color: MUTED,
-          borderRadius: 7,
-          padding: '7px 12px',
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        Discard draft
-      </button>
+      {dirty && (
+        <>
+          <span
+            aria-live="polite"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              color: saving ? MUTED : AMBER,
+              fontSize: 10.5,
+              fontWeight: 700,
+              marginRight: 4,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: saving ? '#c2c2c2' : AMBER,
+              }}
+            />
+            {saving ? 'Saving…' : 'Unsaved changes'}
+          </span>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={saving || applyDisabled}
+            title={applyTitle}
+            style={{
+              border: 'none',
+              background: ORANGE,
+              color: 'var(--k-bg)',
+              borderRadius: 7,
+              padding: '8px 16px',
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: saving || applyDisabled ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: saving || applyDisabled ? 0.5 : 1,
+            }}
+          >
+            Apply changes
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            disabled={saving}
+            style={{
+              border: `1px solid ${BORDER}`,
+              background: 'var(--k-bg)',
+              color: MUTED,
+              borderRadius: 7,
+              padding: '7px 12px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Discard draft
+          </button>
+        </>
+      )}
       <div style={{ flex: 1 }} />
       <button
         type="button"
@@ -260,7 +292,7 @@ export function SettingsDraftBar({
         disabled={saving}
         style={{
           border: `1px solid ${BORDER}`,
-          background: '#fff',
+          background: 'var(--k-bg)',
           color: resetConfirm ? RED : MUTED,
           borderRadius: 7,
           padding: '7px 12px',

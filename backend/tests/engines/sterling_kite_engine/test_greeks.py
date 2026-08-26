@@ -171,3 +171,88 @@ class TestEffectiveIV:
 
         assert _effective_iv(price=50.0, spot=25_000, strike=25_200,
                              dte_days=0, option_type="CE") == _IV_ASSUMPTION
+
+
+# ── the number on screen IS the number placed ────────────────────────────────
+
+class TestTheBoardStopAndThePlacedStopAgree:
+    """docs/kite_signal_audit_2026-08-04.md:867 — "the broker stop is not the stop on
+    screen". Auto-exec used a flat 18% IV while the board solved IV out of the entry
+    premium, so the two translated the same SuperTrend level into different premiums
+    and the resting GTT sat somewhere the user had never been shown.
+
+    `_effective_iv` fixed that, and both sides are unit-tested — but nothing tested the
+    thing the finding is actually about: that the two paths AGREE. Each is free to
+    drift from the other while both stay individually green, which is how the gap
+    opened the first time. This pins the equivalence itself.
+    """
+
+    #: The audit's own worked example: an AXISBANK bear row, ~30 DTE, 1260 PE at ₹80.
+    #: It reported the board showing ₹68.80 against a placed ₹66.52.
+    SPOT = 1228.9
+    TRAIL = 1250.0
+    STRIKE = 1260.0
+    ENTRY = 80.0
+    DTE_DAYS = 30
+
+    def _row_and_leg(self):
+        import time
+        from datetime import datetime, timedelta, timezone
+        from app.engines.sterling_kite_engine.schemas import (
+            AlignmentChip, EngineSignalRow, OptionLeg)
+        expiry = (datetime.now(timezone.utc) + timedelta(days=self.DTE_DAYS)).strftime("%Y-%m-%d")
+        leg = OptionLeg(moneyness="OTM1", option_type="PE",
+                        option_symbol="AXISBANK25SEP1260PE", strike=self.STRIKE,
+                        expiry=expiry, lot_size=625, premium_spot=self.ENTRY)
+        row = EngineSignalRow(
+            underlying="AXISBANK", token=1, exchange="NFO", regime="BEAR",
+            alignment=AlignmentChip(fast=-1, mid=-1, slow=-1),
+            direction="short", option_type="PE", legs=[leg],
+            spot=self.SPOT, underlying_spot=self.SPOT, stop_loss=self.TRAIL,
+            score=85.0, timestamp_ms=int(time.time() * 1000))
+        return row, leg
+
+    @pytest.mark.asyncio
+    async def test_the_two_paths_translate_the_trail_identically(self):
+        from app.services.kite_engine.scanner import _stamp_leg_premium_stops
+        from app.services.kite_engine.service import _resolve_premium_stop
+
+        row, leg = self._row_and_leg()
+        _stamp_leg_premium_stops(row, leg)          # what the board shows
+        shown = float(leg.premium_sl)
+
+        class _Quoting:
+            async def get_ltp(self, keys):
+                return {k: {"last_price": self.ENTRY} for k in keys}
+            ENTRY = 80.0
+
+        _entry, placed, _delta = await _resolve_premium_stop(   # what auto-exec arms
+            _Quoting(), exch="NFO", symbol=leg.option_symbol, strike=self.STRIKE,
+            expiry=leg.expiry, option_type="PE", spot=self.SPOT, trail_level=self.TRAIL)
+
+        assert placed == pytest.approx(shown, rel=0.005), (
+            f"the board shows a stop at ₹{shown:.2f} and the broker GTT would be armed "
+            f"at ₹{placed:.2f} — the user reasons off one and is protected at the other")
+
+    @pytest.mark.asyncio
+    async def test_a_flat_assumption_would_break_the_agreement(self):
+        """Guards the guard: with the vol forced back to the flat assumption the two
+        diverge, so the test above is measuring something real rather than passing
+        because both sides happen to be degenerate."""
+        from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
+        from app.services.kite_engine.scanner import _stamp_leg_premium_stops
+        from app.services.kite_engine.service import _IV_ASSUMPTION
+
+        row, leg = self._row_and_leg()
+        _stamp_leg_premium_stops(row, leg)
+        shown = float(leg.premium_sl)
+
+        flat = black_scholes_greeks(spot=self.SPOT, strike=self.STRIKE,
+                                    dte_days=self.DTE_DAYS, iv=_IV_ASSUMPTION,
+                                    option_type="PE")
+        flat_stop = premium_stop_from_move(entry_premium=self.ENTRY, delta=flat.delta,
+                                           spot=self.SPOT, trail_level=self.TRAIL)
+
+        assert flat_stop != pytest.approx(shown, rel=0.005), (
+            "the flat-IV stop and the solved-IV stop are indistinguishable here, so the "
+            "agreement test above proves nothing — pick a fixture where vol matters")

@@ -6,6 +6,7 @@ import {
   BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT,
 } from './kiteSettingsPrimitives';
 import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import {
@@ -27,6 +28,9 @@ export function SuperTrendEnginePanel() {
   const [draft, setDraft] = React.useState<EngineConfigModel | null>(null);
   const [dirty, setDirty] = React.useState(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  // Leaving this section unmounts the panel and the draft with it.
+  useUnsavedDraftGuard('supertrend', dirty);
 
   React.useEffect(() => {
     if (!serverCfg) return;
@@ -52,6 +56,18 @@ export function SuperTrendEnginePanel() {
         setDirty(false);
         notifyOrder({ kind: 'info', title: 'Settings updated', message: 'SuperTrend settings applied.' });
         runScan.mutate();
+      },
+      // Without this a failed save was completely silent: the draft stayed dirty
+      // and nothing anywhere said the write had not landed, so the user reads the
+      // still-showing "Unsaved changes" as their own unfinished edit rather than a
+      // rejected one — and walks away believing the engine took the new settings.
+      onError: (err) => {
+        notifyOrder({
+          kind: 'error',
+          title: 'Settings NOT saved',
+          message: `SuperTrend settings were not applied: ${String(
+            (err as Error)?.message ?? 'the save was rejected')}. Your changes are still here — try Apply again.`,
+        });
       },
     });
   };
@@ -102,6 +118,7 @@ export function SuperTrendEnginePanel() {
         name="SuperTrend"
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
         on={on}
+        liveOn={serverCfg?.engine_enabled ?? on}
         busy={saving}
         onToggle={() => patch({ engine_enabled: !on })}
         runningNote="Scanning, producing signals, and eligible for automatic execution."
@@ -114,7 +131,6 @@ export function SuperTrendEnginePanel() {
           description="Which price series SuperTrend reads a setup from."
           summary={scanSourceLabel(cfg.scan_source)}
           defaultOpen
-        
           persistKey="st-chart">
           <SignalSourceGroup
             name="supertrend-signal-source"
@@ -128,7 +144,6 @@ export function SuperTrendEnginePanel() {
           description="The indices and F&O stocks this engine watches."
           summary={instrumentsSummary}
           defaultOpen
-        
           persistKey="st-instruments">
           <InstrumentsGroup
             idPrefix="SuperTrend"
@@ -145,11 +160,21 @@ export function SuperTrendEnginePanel() {
           description="Which strikes and expiry cycles SuperTrend resolves."
           summary={`${cfg.strike_moneyness.length} strikes · ${indexExpiries.join(' + ')}`}
           defaultOpen
-        
           persistKey="st-contracts">
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
+            dteMin={cfg.expiry_dte_min ?? 0}
+            dteMax={cfg.expiry_dte_max ?? 400}
+            avoidExpiryDay={cfg.avoid_expiry_day ?? false}
+            dteDefaults={{ min: 0, max: 400 }}
+            dteNote={
+              <>
+                Separate from the expiry square-off below: this decides which
+                contracts may be <em>entered</em>, that one closes a position
+                already held as its contract runs out.
+              </>
+            }
             onChange={(next) => patch(next)}
           />
         </Section>
@@ -159,7 +184,6 @@ export function SuperTrendEnginePanel() {
           description="Which line the stop follows once a trade is running."
           summary={`${trailLabel}${cfg.exit_aligned_trail ? ' · anchored to exit counter' : ''}`}
           defaultOpen
-        
           persistKey="st-trail">
           <Field label={FIELDS.trail_target.label} hint={FIELDS.trail_target.help}>
             <ChoiceRow
@@ -185,7 +209,6 @@ export function SuperTrendEnginePanel() {
           description="What closes a SuperTrend trade."
           summary={`${exitModeLabel(cfg.exit_mode)}${(cfg.price_stop_exit ?? true) ? ' · trail enforced' : ' · counter only'}`}
           defaultOpen
-        
           persistKey="st-exit">
           <Field label={FIELDS.exit_mode.label} hint={FIELDS.exit_mode.help}>
             <ChoiceRow

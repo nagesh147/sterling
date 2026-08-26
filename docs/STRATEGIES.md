@@ -73,3 +73,25 @@ By default, strategies are optimized for linear Futures logic. However, the syst
 - **The Options Leg:** Modeled dynamically (e.g., long ATM calls for long-only momentum setups). Downside risk is strictly capped to the initial premium allocation (e.g., 5-10% of portfolio), insulating the account from catastrophic flash-crashes.
 - **Timeframe Convexity (The 4H Edge):** Backtesting over 12,000 permutations reveals that options drastically outperform futures exclusively on **high timeframes (4h+)** within strategies like `ma_crossover`. On smaller intraday frames (15m/30m), options underperform due to severe theta decay and bid-ask spread drag. On the 4h, directional price moves are large enough to break even on premium decay and drive exponential returns.
 - **Config Sweet-Spots:** Extensive vector simulations show that targeting **7 DTE** options with a **10% premium allocation** offers the highest balanced Profit Factor (PF > 1.9) and win rate retention for these trending structures.
+
+---
+
+## 4. Adaptive Edge
+
+**Type:** Standalone adaptive opportunity / edge strategy
+**Engine:** `backend/app/engines/adaptive_edge/`
+
+Adaptive Edge is intentionally independent from the existing SuperTrend and Value Flow Navigator strategy semantics. It uses a dedicated causal pipeline:
+
+```text
+Feature -> Edge / Prediction -> Economic Evaluation -> Dynamic Mode
+        -> Risk Authorization -> Sizing -> Execution -> Position -> Protection
+```
+
+The canonical specification, formula registry, mathematics, execution rules, risk rules, validation methodology, UI design, recovery ledger, and traceability matrix live under:
+
+`docs/strategy/adaptive-edge/`
+
+That directory is the permanent source of truth. Do not reconstruct Adaptive Edge from this document or from the shared signal-table implementation.
+
+Current locked invariants include causal availability, immutable risk authorization, DynamicMode/Risk separation, execution-price semantics, and expected-net-value economics. Strategy-specific formulae F-101..F-114 remain locked until their exact definitions are recovered and versioned.

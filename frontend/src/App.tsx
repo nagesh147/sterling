@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, keepPreviousData } from '@tanstack/re
 import { Dashboard } from './pages/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useTheme } from './store/useStore';
+import { useViewportScale } from './hooks/useViewportScale';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,14 +22,12 @@ const queryClient = new QueryClient({
 
 function ThemedApp() {
   const theme = useTheme();
+  // Keeps the layout on its design width whatever the monitor hands us.
+  useViewportScale();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
-    const savedZoom = localStorage.getItem('sterling-zoom');
-    if (savedZoom) {
-      document.querySelector('.term-root')?.setAttribute('style', `--app-zoom: ${savedZoom}`);
-    }
   }, [theme]);
 
   // Single root view. Dashboard internally toggles between basic/pro layouts

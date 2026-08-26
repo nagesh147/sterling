@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { NavigatorSettingsPanel } from '../NavigatorSettingsPanel';
 import type { NavigatorConfigModel } from '../../../types/navigator';
@@ -17,7 +17,6 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       atr_period: 14, relative_volume_period: 20, touch_tolerance_atr: 0.2, min_body_atr: 0.35, min_relative_volume: 1.2,
       breakout_buffer_atr: 0.1, max_extension_atr: 1.5, cooldown_bars: 5, grade_a_plus_min: 85, grade_a_min: 75,
       grade_b_min: 65, stop_buffer_atr: 0.15, max_stop_distance_atr: 2.0, target_r: 2.0,
-      show_session_vwap: true, show_daily_range: true, show_weekly_range: true,
     },
     ranges: {
       method: 'rolling_empirical_quantile_v1', target_coverage: 0.8, daily_lookback_sessions: 120, daily_min_sessions: 60,
@@ -34,12 +33,12 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       manual_expiry: null, manual_atm: null, strike_step_override: null, max_quote_age_seconds: 20, max_sample_gap_seconds: 150,
       min_chain_completeness: 0.8, max_spread_pct: 0.08, warmup_samples: 30, robust_window_samples: 120,
       price_scale_floor: 0.0001, oi_intensity_weight: 0.25, z_scale: 2.0, zero_hysteresis: 10, strong_zone: 68,
-      extreme_zone: 96, require_for_index_gate: true, allow_na_for_single_stocks: true,
+      extreme_zone: 96, require_for_index_gate: true,
     },
     gamma: {
       enabled: true, rate_source: 'manual', risk_free_rate: null, dividend_yield: null, min_iv: 0.01, max_iv: 5.0,
       robust_window_samples: 120, min_samples: 30, blast_z_min: 3.0, acceleration_z_min: 2.0,
-      expiry_profile_enabled: true, expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
+      expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
     },
     expiry_profile: {
       enabled: true, require_expansion: true, min_avwap_grade: 'A', min_abs_flow: 68, max_extension_atr: 1.0, emit_tighten_note: true,
@@ -80,8 +79,15 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
 }));
 
+// Retrying after a revision conflict has to re-read the revision the server holds
+// now, so the panel calls refetch(). It resolves with whatever `queryData` is at
+// that moment, which is how a test moves the server on underneath the draft.
+const refetchConfig = vi.fn(async () => ({ data: queryData }));
+
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: queryData, isLoading: !queryData, error: null }),
+  useNavigatorConfig: () => ({
+    data: queryData, isLoading: !queryData, error: null, refetch: refetchConfig,
+  }),
   useSetNavigatorConfig: () => ({ mutate: setConfig, isPending: false, isError: false, error: null }),
   useResetNavigatorConfig: () => ({ mutate: resetConfig }),
   useValidateNavigatorConfig: () => ({ mutate: vi.fn() }),
@@ -104,14 +110,18 @@ describe('NavigatorSettingsPanel', () => {
 
   it('loads server config disabled by default and shows the master toggle off', () => {
     render(<NavigatorSettingsPanel />);
-    const toggle = screen.getByRole('switch', { name: 'Enable Navigator' });
+    const toggle = screen.getByRole('switch', { name: 'Value-Flow Navigator engine' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    // A freshly loaded config is not a draft. The bar no longer says "Saved" —
+    // the clean state is the quiet one, and the absence of the unsaved warning
+    // is what carries the meaning. Reset stays reachable either way.
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reset to defaults/i })).toBeInTheDocument();
   });
 
   it('does not autosave — toggling shows Unsaved changes and requires Apply', () => {
     render(<NavigatorSettingsPanel />);
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Navigator' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(setConfig).not.toHaveBeenCalled();
 
@@ -120,6 +130,69 @@ describe('NavigatorSettingsPanel', () => {
     const [body] = setConfig.mock.calls[0];
     expect(body.expected_revision).toBe(1);
     expect(body.config.enabled).toBe(true);
+  });
+
+  it('retrying after a revision conflict actually overwrites', async () => {
+    // The banner says "Reload or Apply to overwrite". `baseRevision` is refreshed
+    // only while !dirty, and a conflict leaves you dirty by definition — so every
+    // retry resent the revision the server had just rejected and 409'd forever.
+    // The user was offered two ways out where only one worked, and the one that
+    // worked (Reload) throws their edits away.
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onError?.(new Error('REVISION_CONFLICT: expected 1, found 2'));
+    });
+    render(<NavigatorSettingsPanel />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    expect(setConfig.mock.calls[0][0].expected_revision).toBe(1);
+    expect(await screen.findByText(/changed elsewhere/i)).toBeInTheDocument();
+
+    // Someone else's write landed; the server is now at revision 2.
+    queryData = makeRecord({}, { revision: 2 });
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onSuccess?.({ record: { ...queryData!.record, revision: 3 } });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    await waitFor(() => expect(setConfig).toHaveBeenCalledTimes(2));
+    expect(refetchConfig).toHaveBeenCalled();
+    expect(setConfig.mock.calls[1][0].expected_revision).toBe(2);
+    expect(setConfig.mock.calls[1][0].config.enabled).toBe(true);
+  });
+
+  it('treats a stocks-only scope with stocks switched off as empty', () => {
+    // The single-stock master switch drops every stock from the universe backend
+    // side, so this scope scans nothing at all. The guard only looked at whether
+    // the stock LIST was populated, so it let Apply through with no warning and
+    // Navigator saved a scope that could never produce a row.
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: false,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.getByText(/scans nothing at all/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
+  });
+
+  it('a stocks-only scope with stocks switched ON is not empty', () => {
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: true,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.queryByText(/scans nothing at all/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).not.toBeDisabled();
   });
 
   it('gate mode is locked until calibration is ready', () => {
@@ -146,23 +219,30 @@ describe('NavigatorSettingsPanel', () => {
     expect(resetConfig).toHaveBeenCalledTimes(1);
   });
 
+  // The one "What Navigator scans" section became three, matching SuperTrend's
+  // order (chart source → instruments → contracts) so the two engines read the
+  // same way. "Instruments" and "Contracts" each appear twice — the scope wrapper
+  // and the group inside it — so these are matched by getAllByText.
+  const SECTION_TITLES = [
+    'Chart source', 'Instruments', 'Contracts',
+    'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+    'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
+    'Fusion and eligibility', 'Data retention',
+  ];
+
   it('renders every settings section', () => {
     render(<NavigatorSettingsPanel />);
-    for (const title of [
-      'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
-      'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
-      'Fusion and eligibility', 'Data retention',
-    ]) {
-      expect(screen.getByText(title)).toBeInTheDocument();
+    for (const title of SECTION_TITLES) {
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0);
     }
   });
 
   describe('Scan scope — shared with SuperTrend, or Navigator\'s own', () => {
     it('defaults to shared and shows what the engine currently covers, read-only', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText(/Following SuperTrend:/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText('Chart source')).toBeInTheDocument();
     });
 
@@ -174,7 +254,7 @@ describe('NavigatorSettingsPanel', () => {
 
     it('switching to its own scope reveals the universe pickers and a contracts choice', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
       expect(screen.getByText('Chart source')).toBeInTheDocument();
       expect(screen.getByText('Indices')).toBeInTheDocument();
       expect(screen.queryByText('Currently covering')).not.toBeInTheDocument();
@@ -182,7 +262,7 @@ describe('NavigatorSettingsPanel', () => {
 
     it('seeds a fresh custom scope from the engine so the first save is never empty', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_scope_mode).toBe('custom');
@@ -209,8 +289,8 @@ describe('NavigatorSettingsPanel', () => {
     it('a configured custom universe survives flipping to shared and back', () => {
       queryData = makeRecord({ scan_scope_mode: 'custom', scan_stocks: ['RELIANCE'] });
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_stocks).toEqual(['RELIANCE']);
@@ -250,7 +330,7 @@ describe('NavigatorSettingsPanel', () => {
       it('seeds from the engine, so an indices-only engine does not silently gain stocks', () => {
         engineCfg = { ...engineCfg, scan_stock_contracts: false };
         render(<NavigatorSettingsPanel />);
-        fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
         fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
         expect(setConfig.mock.calls[0][0].config.scan_stock_contracts).toBe(false);
       });
@@ -330,12 +410,10 @@ describe('NavigatorSettingsPanel', () => {
     it('every ordinary settings section is a sibling, NOT nested inside the Strategy Definition group', () => {
       render(<NavigatorSettingsPanel />);
       const advancedDetails = screen.getByText('Strategy definition (from the source manual)').closest('details') as HTMLDetailsElement;
-      for (const title of [
-        'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
-        'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
-        'Fusion and eligibility', 'Data retention',
-      ]) {
-        expect(advancedDetails.contains(screen.getByText(title))).toBe(false);
+      for (const title of SECTION_TITLES) {
+        for (const node of screen.getAllByText(title)) {
+          expect(advancedDetails.contains(node)).toBe(false);
+        }
       }
     });
 

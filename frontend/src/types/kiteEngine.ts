@@ -222,6 +222,10 @@ export interface EngineConfigModel {
   scan_expiries_stocks?: Array<'monthly'> | null;
   // The API persists zero-based series ranks for compatibility. The UI resolves
   // these private values to exact Kite-listed contract dates before displaying them.
+  /** The expiry window, shared by every engine under these names. */
+  expiry_dte_min?: number;
+  expiry_dte_max?: number;
+  avoid_expiry_day?: boolean;
   scan_weekly_series_indices?: number[];
   scan_monthly_series_indices?: number[];
   scan_monthly_series_stocks?: number[];

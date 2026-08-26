@@ -56,6 +56,19 @@ function renderPanel() {
   );
 }
 
+/**
+ * Commit the draft.
+ *
+ * This panel does not autosave — it edits a draft and writes on Apply, the same
+ * way Navigator does. That is the point of the shared draft bar: these are
+ * real-money settings, and a stray click on a radio should not reach the engine
+ * before you have looked at it. So every assertion about what was SAVED has to
+ * apply first; asserting straight after the click only proves the draft moved.
+ */
+function apply() {
+  fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
+}
+
 describe('SuperTrendEnginePanel — strategy mechanics only', () => {
   beforeEach(() => {
     cfgData = { ...baseCfg };
@@ -63,9 +76,20 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
     runScanMutate.mockClear();
   });
 
+  it('holds an edit in the draft until it is applied', () => {
+    // The guarantee the Apply step below depends on, pinned on its own so a
+    // regression to autosave fails HERE rather than silently passing everywhere.
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Loose' }));
+
+    expect(setCfgMutate).not.toHaveBeenCalled();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
   it('rescans when the exit mode changes, because the board rows are then stale', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: '3R + Signal' }));
+    apply();
 
     expect(setCfgMutate).toHaveBeenCalledWith(
       expect.objectContaining({ exit_mode: 'three_red_signal' }),
@@ -77,6 +101,7 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
   it('rescans when the exit-aligned trail flips, because it moves the computed stop', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('switch', { name: /anchor stop to exit counter/i }));
+    apply();
 
     expect(setCfgMutate).toHaveBeenCalledWith(
       expect.objectContaining({ exit_aligned_trail: true }),
@@ -92,6 +117,7 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
     const toggle = screen.getByRole('switch', { name: /enforce the trailing stop as a real exit/i });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(toggle);
+    apply();
 
     expect(setCfgMutate).toHaveBeenCalledWith(
       expect.objectContaining({ price_stop_exit: false }),
@@ -102,6 +128,7 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
   it('changes the trailing style and rescans', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Loose' }));
+    apply();
 
     expect(setCfgMutate).toHaveBeenCalledWith(
       expect.objectContaining({ trail_target: 'slow' }),
@@ -137,10 +164,32 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
   it('can be switched off from its own page, the same way Navigator can', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('switch', { name: 'SuperTrend engine' }));
+    apply();
     expect(setCfgMutate).toHaveBeenCalledWith(
       expect.objectContaining({ engine_enabled: false }),
       expect.anything(),
     );
+  });
+
+  it('does not claim the engine is OFF while it is still running', () => {
+    // The power switch is a draft edit like everything else on this page, but the
+    // RUNNING/OFF badge was rendered from that same draft. Flipping the switch
+    // repainted the card to "OFF — Not scanning" while nothing had been sent to
+    // the server: leave the page without applying and the engine is still scanning
+    // and still eligible to auto-execute, having told you it was off.
+    renderPanel();
+    fireEvent.click(screen.getByRole('switch', { name: 'SuperTrend engine' }));
+
+    expect(screen.getByText('RUNNING')).toBeInTheDocument();
+    expect(screen.queryByText('OFF')).not.toBeInTheDocument();
+    expect(screen.getByText(/still running until you apply/i)).toBeInTheDocument();
+  });
+
+  it('shows the engine as OFF once the server says so', () => {
+    cfgData = { ...baseCfg, engine_enabled: false };
+    renderPanel();
+    expect(screen.getByText('OFF')).toBeInTheDocument();
+    expect(screen.queryByText(/until you apply/i)).not.toBeInTheDocument();
   });
 
   it('does not own sizing or the order guards either', () => {

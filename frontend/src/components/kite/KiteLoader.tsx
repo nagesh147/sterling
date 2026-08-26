@@ -184,7 +184,7 @@ export function KiteLoader({ size = 28, color, styleOverride }: { size?: number;
   return <><KiteLoaderStyles />{spinner}</>;
 }
 
-export function ButtonLoader({ color = '#fff' }: { color?: string }) {
+export function ButtonLoader({ color = 'var(--k-bg)' }: { color?: string }) {
   const saved = useKiteSettings((state) => state.loaderStyle);
   const style = normalizeStyle(saved);
   if (style === 'minimal') return <span aria-label="Loading">…</span>;
@@ -194,7 +194,7 @@ export function ButtonLoader({ color = '#fff' }: { color?: string }) {
 function SuccessMark({ size = 56, animate }: { size?: number; animate: boolean }) {
   if (!animate) {
     return (
-      <span style={{ width: size, height: size, borderRadius: '50%', background: k.green, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: size * .5, fontWeight: 700 }}>
+      <span style={{ width: size, height: size, borderRadius: '50%', background: k.green, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--k-bg)', fontSize: size * .5, fontWeight: 700 }}>
         ✓
       </span>
     );
@@ -204,7 +204,7 @@ function SuccessMark({ size = 56, animate }: { size?: number; animate: boolean }
     <svg className="kl-animated" width={size} height={size} viewBox="0 0 52 52" aria-hidden="true" style={{ animation: 'kl-check-ring .45s cubic-bezier(.16,1,.3,1)' }}>
       <circle cx="26" cy="26" r="25" fill={k.green} />
       <path
-        fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
+        fill="none" stroke="var(--k-bg)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
         d="M15 27l7 7 15-16"
         style={{ strokeDasharray: 48, strokeDashoffset: 48, animation: 'kl-check-draw .4s .2s ease forwards' }}
       />

@@ -1,8 +1,9 @@
 import React from 'react';
 import { BORDER, ChoiceRow, DIM, Field, MUTED, ORANGE, Section, SOFT, Switch, TEXT, inputStyle } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
-import { NAVIGATOR_SCAN_SOURCE_OPTIONS, SCAN_SOURCE_OPTIONS } from './config/registry';
+import { SCAN_SOURCE_OPTIONS } from './config/registry';
 import { AdvancedSection, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ScopeLink, ScopedGroup } from './config/EngineScope';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
@@ -20,10 +21,10 @@ import {
   AVWAP_DEFAULTS, FLOW_DEFAULTS, FUSION_DEFAULTS, GAMMA_DEFAULTS, RANGES_DEFAULTS, ROOT_DEFAULTS, VOLATILITY_DEFAULTS,
 } from './navigatorDefaults';
 
-const GREEN = '#4caf50';
-const RED = '#df514c';
-const AMBER = '#f5a623';
-const MANUAL_BLUE = '#1565c0';
+const GREEN = 'var(--k-green)';
+const RED = 'var(--k-red)';
+const AMBER = 'var(--k-amber)';
+const MANUAL_BLUE = 'var(--k-blue-deep)';
 
 const NUM_INPUT_CSS = `
 .nav-settings-input::-webkit-outer-spin-button,
@@ -85,11 +86,11 @@ function StrategyDefinitionGroup({ badgeText, children }: { badgeText: string; c
             Kept nested so they are not changed by accident while tuning other knobs.
           </div>
         </div>
-        <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#fff3e0', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: 'var(--k-tint-amber)', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {badgeText}
         </span>
       </summary>
-      <div style={{ background: '#fff' }}>{children}</div>
+      <div style={{ background: 'var(--k-bg)' }}>{children}</div>
     </details>
   );
 }
@@ -185,7 +186,7 @@ function ManualControl({ spec, config, onReset, children }: {
         </div>
         <span
           aria-label="From the source manual"
-          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: '#fff', background: MANUAL_BLUE, borderRadius: '50%' }}
+          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: 'var(--k-bg)', background: MANUAL_BLUE, borderRadius: '50%' }}
         >
           M
         </span>
@@ -206,7 +207,7 @@ function set<K extends keyof NavigatorConfigModel>(
 
 
 export function NavigatorSettingsPanel() {
-  const { data, isLoading, error: loadError } = useNavigatorConfig();
+  const { data, isLoading, error: loadError, refetch } = useNavigatorConfig();
   const setConfig = useSetNavigatorConfig();
   const resetConfig = useResetNavigatorConfig();
   const { data: engineCfg } = useEngineConfig();
@@ -216,6 +217,9 @@ export function NavigatorSettingsPanel() {
   const [dirty, setDirty] = React.useState(false);
   const [conflict, setConflict] = React.useState<boolean>(false);
   const [resetConfirm, setResetConfirm] = React.useState(false);
+
+  // Leaving this section unmounts the panel and the draft with it.
+  useUnsavedDraftGuard('navigator', dirty);
 
   React.useEffect(() => {
     if (!data) return;
@@ -241,10 +245,30 @@ export function NavigatorSettingsPanel() {
     setDirty(true);
   };
 
-  const handleApply = () => {
-    if (baseRevision == null || !draft) return;
-    setConfig.mutate({ config: draft, expected_revision: baseRevision }, {
-      onSuccess: () => setDirty(false),
+  const handleApply = async () => {
+    if (!draft) return;
+    let revision = baseRevision;
+
+    if (conflict) {
+      // The banner offers "Apply to overwrite", and that can only be true if we send
+      // the revision the server holds NOW. `baseRevision` is refreshed only while
+      // !dirty, and a conflict leaves us dirty by definition — so retrying resent the
+      // exact revision the server had just rejected and 409'd forever. The user was
+      // offered a choice (keep my edits, or reload and lose them) where only one side
+      // worked.
+      const fresh = await refetch();
+      const latest = fresh.data?.record?.revision;
+      if (latest == null) return;   // cannot learn it → leave the banner up
+      revision = latest;
+    }
+
+    if (revision == null) return;
+    setConfig.mutate({ config: draft, expected_revision: revision }, {
+      onSuccess: (saved) => {
+        setDirty(false);
+        setConflict(false);
+        setBaseRevision(saved?.record?.revision ?? null);
+      },
       onError: (err) => {
         if (String(err.message).includes('REVISION_CONFLICT')) setConflict(true);
       },
@@ -270,11 +294,20 @@ export function NavigatorSettingsPanel() {
 
   const saveError = setConfig.isError && !conflict ? String(setConfig.error?.message ?? 'save failed') : null;
 
+  // Stocks only count toward a non-empty universe when the single-stock master
+  // switch is on. With it off, `select_scan_universe` drops every stock, so an
+  // indices-empty scope with a full stock list scans NOTHING — and the old check
+  // called that "not empty" because the stock list itself was non-empty, letting
+  // Apply through with no warning.
+  const stocksScanned = (draft.scan_stock_contracts ?? true)
+    && (draft.scan_all_stocks || draft.scan_stocks.length > 0);
   const customScopeEmpty = draft.scan_scope_mode === 'custom'
-    && !draft.scan_indices.length && !draft.scan_stocks.length && !draft.scan_all_stocks;
-  const customScopeCount = draft.scan_all_stocks
-    ? `${draft.scan_indices.length} indices + all stocks`
-    : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
+    && !draft.scan_indices.length && !stocksScanned;
+  const customScopeCount = !stocksScanned
+    ? `${draft.scan_indices.length} indices · no stocks`
+    : draft.scan_all_stocks
+      ? `${draft.scan_indices.length} indices + all stocks`
+      : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
 
   const instrumentsSummary = draft.scan_scope_mode === 'shared'
     ? 'Like SuperTrend'
@@ -299,13 +332,14 @@ export function NavigatorSettingsPanel() {
         name="Value-Flow Navigator"
         tagline="Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity."
         on={draft.enabled}
+        liveOn={data?.record?.config?.enabled ?? draft.enabled}
         busy={setConfig.isPending}
         onToggle={() => patch({ ...draft, enabled: !draft.enabled })}
         runningNote="Reading structure for its instruments. It can confirm SuperTrend setups and find its own."
         offNote="Not scanning. SuperTrend can still run on its own."
       >
         {conflict && (
-          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: `1px solid #e2b6a4`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          <div style={{ margin: '0 18px 12px', padding: '9px 11px', borderRadius: 7, background: 'var(--k-surface-warm)', border: `1px solid var(--k-border-brand)`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
             <Icons.Warning />
             <span style={{ flex: 1, color: TEXT }}>This config changed elsewhere. Reload or Apply to overwrite.</span>
             <button type="button" onClick={handleReload} style={{ ...pillButtonStyle }}>Reload latest</button>
@@ -322,8 +356,8 @@ export function NavigatorSettingsPanel() {
       {/* ═══════════════ CORE (order matches SuperTrend) ═══════════════ */}
       <Section
         title="Chart source"
-        description="Which price series Navigator reads."
-        summary={NAVIGATOR_SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
+        description={"The chart this engine takes its entry signal off.\nAlways its own — SuperTrend's source is never applied here."}
+        summary={SCAN_SOURCE_OPTIONS.find((o) => o.value === draft.scan_source)?.label ?? draft.scan_source}
         defaultOpen
         persistKey="nav-chart"
       >
@@ -331,12 +365,9 @@ export function NavigatorSettingsPanel() {
           <SignalSourceGroup
             name="navigator-signal-source"
             value={draft.scan_source}
-            options={NAVIGATOR_SCAN_SOURCE_OPTIONS}
+            fieldHint={null}
             onChange={(v) => patch({ ...draft, scan_source: v })}
           />
-          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 6, maxWidth: 440 }}>
-            Always its own — SuperTrend's source is never applied here.
-          </div>
         </div>
       </Section>
 
@@ -393,7 +424,7 @@ export function NavigatorSettingsPanel() {
             })}
           />
           {customScopeEmpty && (
-            <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ padding: '9px 11px', borderRadius: 7, background: 'var(--k-surface-warm)', border: '1px solid var(--k-border-brand)', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
               <Icons.Warning />
               Pick at least one index or stock — an empty list means Navigator scans nothing at all.
             </div>
@@ -447,10 +478,22 @@ export function NavigatorSettingsPanel() {
           <ContractsGroup
             strikes={draft.strike_moneyness ?? engineCfg?.strike_moneyness ?? ['ATM']}
             indexExpiries={draft.scan_expiries_indices ?? ['weekly', 'monthly']}
+            /* Unset means "follow SuperTrend", the same rule the strike ladder
+               and expiry cycles above already use — so the box shows what
+               Navigator will actually do, not a blank. */
+            dteMin={draft.expiry_dte_min ?? engineCfg?.expiry_dte_min ?? 0}
+            dteMax={draft.expiry_dte_max ?? engineCfg?.expiry_dte_max ?? 400}
+            avoidExpiryDay={draft.avoid_expiry_day ?? engineCfg?.avoid_expiry_day ?? false}
+            dteDefaults={{ min: engineCfg?.expiry_dte_min ?? 0,
+                           max: engineCfg?.expiry_dte_max ?? 400 }}
+            dteNote="Left at SuperTrend's values these follow it; change one and Navigator keeps its own."
             onChange={(next) => patch({
               ...draft,
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.expiry_dte_min !== undefined ? { expiry_dte_min: next.expiry_dte_min } : {}),
+              ...(next.expiry_dte_max !== undefined ? { expiry_dte_max: next.expiry_dte_max } : {}),
+              ...(next.avoid_expiry_day !== undefined ? { avoid_expiry_day: next.avoid_expiry_day } : {}),
             })}
           />
         </ScopedGroup>
@@ -612,9 +655,6 @@ export function NavigatorSettingsPanel() {
           <NumField label="Stop buffer (ATR)" value={draft.avwap.stop_buffer_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { stop_buffer_atr: v }))} defaultValue={AVWAP_DEFAULTS.stop_buffer_atr} />
           <NumField label="Max stop distance (ATR)" value={draft.avwap.max_stop_distance_atr} step={0.05} min={0.1} max={20} onChange={(v) => patch(set(draft, 'avwap', { max_stop_distance_atr: v }))} defaultValue={AVWAP_DEFAULTS.max_stop_distance_atr} />
           <NumField label="Target R multiple" value={draft.avwap.target_r} step={0.1} min={0.5} max={10} onChange={(v) => patch(set(draft, 'avwap', { target_r: v }))} defaultValue={AVWAP_DEFAULTS.target_r} />
-          <BoolField label="Show session VWAP" value={draft.avwap.show_session_vwap} onChange={(v) => patch(set(draft, 'avwap', { show_session_vwap: v }))} defaultValue={AVWAP_DEFAULTS.show_session_vwap} />
-          <BoolField label="Show daily range" value={draft.avwap.show_daily_range} onChange={(v) => patch(set(draft, 'avwap', { show_daily_range: v }))} defaultValue={AVWAP_DEFAULTS.show_daily_range} />
-          <BoolField label="Show weekly range" value={draft.avwap.show_weekly_range} onChange={(v) => patch(set(draft, 'avwap', { show_weekly_range: v }))} defaultValue={AVWAP_DEFAULTS.show_weekly_range} />
         </Section>
 
         <Section title="Daily and weekly ranges" description="Frozen projected ranges via rolling weighted quantiles." summary={`${Math.round(draft.ranges.target_coverage * 100)}% target coverage`}>
@@ -672,7 +712,6 @@ export function NavigatorSettingsPanel() {
             <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.flow.strong_zone} / {draft.flow.extreme_zone}</div>
           </Field>
           <BoolField label="Require for index gate" hint="Missing index flow blocks gate eligibility." value={draft.flow.require_for_index_gate} onChange={(v) => patch(set(draft, 'flow', { require_for_index_gate: v }))} defaultValue={FLOW_DEFAULTS.require_for_index_gate} />
-          <BoolField label="Allow N/A for single stocks" value={draft.flow.allow_na_for_single_stocks} onChange={(v) => patch(set(draft, 'flow', { allow_na_for_single_stocks: v }))} defaultValue={FLOW_DEFAULTS.allow_na_for_single_stocks} />
         </Section>
 
         <Section title="Gamma activity" description="Confirmation-only. Never determines direction by itself." summary={draft.gamma.enabled ? 'Enabled' : 'Disabled'}>
@@ -699,7 +738,6 @@ export function NavigatorSettingsPanel() {
           <NumField label="Min samples" value={draft.gamma.min_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { min_samples: v }))} defaultValue={GAMMA_DEFAULTS.min_samples} />
           <NumField label="Blast Z min" value={draft.gamma.blast_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { blast_z_min: v }))} defaultValue={GAMMA_DEFAULTS.blast_z_min} />
           <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} defaultValue={GAMMA_DEFAULTS.acceleration_z_min} />
-          <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} defaultValue={GAMMA_DEFAULTS.expiry_profile_enabled} />
           <Field label="Expiry profile start (IST)">
             <input
               className="nav-settings-input"
@@ -746,12 +784,12 @@ export function NavigatorSettingsPanel() {
 
 
 const pillButtonStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: '#fff',
+  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: 'var(--k-bg)',
   color: MUTED, borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const applyButtonStyle: React.CSSProperties = {
-  border: 'none', background: ORANGE, color: '#fff', borderRadius: 7, padding: '8px 16px',
+  border: 'none', background: ORANGE, color: 'var(--k-bg)', borderRadius: 7, padding: '8px 16px',
   fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 

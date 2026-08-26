@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 from app.core.logging import get_logger
 from app.core.security import decrypt, encrypt
 
+from . import session as _session
 from .models import KiteAccountCreate, KiteAccountResponse, KiteAccountUpdate
 
 log = get_logger(__name__)
@@ -47,9 +48,11 @@ class _Account:
     refresh_token_enc: str = ""
     public_token: str = ""
     kite_user_id: str = ""
+    user_name: str = ""
     is_paper: bool = True
     is_active: bool = False
     last_login_at_ms: Optional[int] = None
+    token_expires_at_ms: Optional[int] = None
     created_at_ms: int = field(default_factory=_now_ms)
     updated_at_ms: int = field(default_factory=_now_ms)
 
@@ -78,6 +81,34 @@ class _Account:
     def has_refresh_token(self) -> bool:
         return bool(self.refresh_token_enc)
 
+    @property
+    def token_expires_at(self) -> Optional[int]:
+        """When this access_token dies, in epoch-ms — ``None`` when unknowable.
+
+        Prefers the stamp recorded at login. Rows written before expiry tracking
+        existed carry no stamp, so we derive one from ``last_login_at_ms``: Kite's
+        reset is a wall-clock event, so the boundary is reconstructible from the
+        login time alone. Only a row with neither is genuinely unknown, and those
+        fall through to a network validation rather than being trusted.
+        """
+        if self.token_expires_at_ms:
+            return self.token_expires_at_ms
+        if self.last_login_at_ms:
+            return _session.token_expiry_ms(self.last_login_at_ms)
+        return None
+
+    @property
+    def token_is_live(self) -> bool:
+        """A stored token still inside its validity window. Says nothing about
+        whether Kite would *accept* it (revoked, logged out elsewhere) — proving
+        that is :func:`app.services.exchanges.kite.auth.ensure_session`'s job."""
+        if not self.access_token_enc:
+            return False
+        expires = self.token_expires_at
+        if expires is None:
+            return False                      # unknown ⇒ not provable ⇒ validate
+        return not _session.is_expired(expires)
+
     def api_key_hint(self) -> str:
         if not self.api_key or len(self.api_key) < 4:
             return "****"
@@ -104,22 +135,28 @@ def _init_table() -> None:
                         refresh_token_enc TEXT NOT NULL DEFAULT '',
                         public_token     TEXT NOT NULL DEFAULT '',
                         kite_user_id     TEXT NOT NULL DEFAULT '',
+                        user_name        TEXT NOT NULL DEFAULT '',
                         is_paper         INTEGER NOT NULL DEFAULT 1,
                         is_active        INTEGER NOT NULL DEFAULT 0,
                         last_login_at_ms INTEGER,
+                        token_expires_at_ms INTEGER,
                         created_at_ms    INTEGER NOT NULL,
                         updated_at_ms    INTEGER NOT NULL
                     )
                 """)
                 c.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
-                # Idempotent migration for DBs created before refresh_token persistence.
-                try:
-                    c.execute(
-                        "ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc "
-                        "TEXT NOT NULL DEFAULT ''"
-                    )
-                except Exception as _exc:
-                    log.debug("suppressed: %s", _exc)
+                # Idempotent migrations for DBs created before these columns existed.
+                # Each ALTER is tried independently so one already-applied column
+                # cannot mask a genuinely missing later one.
+                for _ddl in (
+                    "ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE kite_accounts ADD COLUMN token_expires_at_ms INTEGER",
+                    "ALTER TABLE kite_accounts ADD COLUMN user_name TEXT NOT NULL DEFAULT ''",
+                ):
+                    try:
+                        c.execute(_ddl)
+                    except Exception as _exc:
+                        log.debug("suppressed: %s", _exc)
                 c.execute("COMMIT")
             except Exception:
                 c.execute("ROLLBACK")
@@ -137,13 +174,14 @@ def _persist(a: _Account) -> None:
             c.execute("""
                 INSERT OR REPLACE INTO kite_accounts
                     (id, user_id, label, api_key, api_secret_enc, access_token_enc,
-                     refresh_token_enc, public_token, kite_user_id, is_paper, is_active,
-                     last_login_at_ms, created_at_ms, updated_at_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     refresh_token_enc, public_token, kite_user_id, user_name, is_paper,
+                     is_active, last_login_at_ms, token_expires_at_ms, created_at_ms, updated_at_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 a.id, a.user_id, a.label, a.api_key, a.api_secret_enc, a.access_token_enc,
-                a.refresh_token_enc, a.public_token, a.kite_user_id, int(a.is_paper),
-                int(a.is_active), a.last_login_at_ms, a.created_at_ms, a.updated_at_ms,
+                a.refresh_token_enc, a.public_token, a.kite_user_id, a.user_name,
+                int(a.is_paper), int(a.is_active), a.last_login_at_ms, a.token_expires_at_ms,
+                a.created_at_ms, a.updated_at_ms,
             ))
     except Exception as exc:
         log.warning("kite_accounts persist failed for %s: %s", a.id, exc)
@@ -174,8 +212,11 @@ def _load_from_db() -> List[_Account]:
                 api_secret_enc=r["api_secret_enc"], access_token_enc=r["access_token_enc"],
                 refresh_token_enc=(r["refresh_token_enc"] if "refresh_token_enc" in r.keys() else ""),
                 public_token=r["public_token"], kite_user_id=r["kite_user_id"],
+                user_name=(r["user_name"] if "user_name" in r.keys() else ""),
                 is_paper=bool(r["is_paper"]), is_active=bool(r["is_active"]),
                 last_login_at_ms=r["last_login_at_ms"],
+                token_expires_at_ms=(r["token_expires_at_ms"]
+                                     if "token_expires_at_ms" in r.keys() else None),
                 created_at_ms=r["created_at_ms"], updated_at_ms=r["updated_at_ms"],
             ))
         return out
@@ -214,6 +255,12 @@ def get(user_id: str, account_id: str) -> Optional[_Account]:
 
 def list_accounts(user_id: str) -> List[_Account]:
     return [a for a in _accounts.values() if a.user_id == user_id]
+
+
+def all_accounts() -> List[_Account]:
+    """Every stored account across all tenants. For background workers that must
+    tend sessions with no request (and therefore no user) in scope."""
+    return list(_accounts.values())
 
 
 def update(user_id: str, account_id: str, data: KiteAccountUpdate) -> Optional[_Account]:
@@ -279,7 +326,8 @@ def find_by_kite_user_id(kite_user_id: str) -> Optional[_Account]:
 
 def save_session(user_id: str, account_id: str, *, access_token: str,
                  refresh_token: str = "", public_token: str = "",
-                 kite_user_id: str = "") -> Optional[_Account]:
+                 kite_user_id: str = "", user_name: str = "",
+                 expires_at_ms: Optional[int] = None) -> Optional[_Account]:
     a = get(user_id, account_id)
     if not a:
         return None
@@ -290,8 +338,15 @@ def save_session(user_id: str, account_id: str, *, access_token: str,
         a.refresh_token_enc = encrypt(refresh_token)
     a.public_token = public_token
     a.kite_user_id = kite_user_id or a.kite_user_id
+    # Persisted so /status can name the trader without spending a /user/profile
+    # call on every poll.
+    a.user_name = user_name or a.user_name
     a.last_login_at_ms = _now_ms()
+    # Stamp the validity window now, so every later "is this usable?" question is
+    # answerable locally instead of costing a round-trip to Kite.
+    a.token_expires_at_ms = expires_at_ms or _session.token_expiry_ms(a.last_login_at_ms)
     a.updated_at_ms = a.last_login_at_ms
+    mark_validated(a.id)          # freshly issued by Kite ⇒ known good right now
     _persist(a)
     return a
 
@@ -302,9 +357,56 @@ def clear_session(user_id: str, account_id: str) -> Optional[_Account]:
         return None
     a.access_token_enc = ""
     a.public_token = ""
+    a.token_expires_at_ms = None
     a.updated_at_ms = _now_ms()
+    _validated_at.pop(a.id, None)
     _persist(a)
     return a
+
+
+# ─── Validation cache ─────────────────────────────────────────────────────────
+# A stored token being inside its window does not prove Kite still honours it (it
+# could have been revoked, or the user logged out on another device). Proving that
+# costs a /user/profile call, so we remember when we last proved it. In-memory on
+# purpose: a process restart should re-prove once rather than trust a stamp
+# written by a process that may have been down across the 06:00 IST reset.
+_validated_at: Dict[str, int] = {}
+
+
+def mark_validated(account_id: str) -> None:
+    """Record that Kite accepted this account's token just now."""
+    _validated_at[account_id] = _now_ms()
+
+
+def validated_age_ms(account_id: str) -> Optional[int]:
+    """How long ago Kite last accepted this token — ``None`` if never proven."""
+    at = _validated_at.get(account_id)
+    return None if at is None else _now_ms() - at
+
+
+def set_identity(user_id: str, account_id: str, *, user_name: str = "",
+                 kite_user_id: str = "") -> Optional[_Account]:
+    """Record who this session belongs to, outside the login handshake — used to
+    backfill accounts that connected before the identity was persisted."""
+    a = get(user_id, account_id)
+    if not a:
+        return None
+    changed = False
+    if user_name and user_name != a.user_name:
+        a.user_name, changed = user_name, True
+    if kite_user_id and kite_user_id != a.kite_user_id:
+        a.kite_user_id, changed = kite_user_id, True
+    if changed:
+        a.updated_at_ms = _now_ms()
+        _persist(a)
+    return a
+
+
+def forget_validation(account_id: str) -> None:
+    """Drop the proof, forcing the next check to ask Kite. For tokens adopted from
+    outside the login handshake (e.g. seeded from the environment), where we have
+    no evidence Kite ever accepted them."""
+    _validated_at.pop(account_id, None)
 
 
 def to_response(a: _Account) -> KiteAccountResponse:
@@ -312,8 +414,9 @@ def to_response(a: _Account) -> KiteAccountResponse:
         id=a.id, user_id=a.user_id, label=a.label, api_key_hint=a.api_key_hint(),
         has_credentials=a.has_credentials, is_paper=a.is_paper, is_active=a.is_active,
         connected=a.connected, has_refresh_token=a.has_refresh_token,
-        kite_user_id=a.kite_user_id or None,
+        kite_user_id=a.kite_user_id or None, user_name=a.user_name or None,
         last_login_at_ms=a.last_login_at_ms,
+        token_expires_at_ms=a.token_expires_at,
         created_at_ms=a.created_at_ms, updated_at_ms=a.updated_at_ms,
     )
 
@@ -374,4 +477,5 @@ def clear() -> None:
     regardless of whether another test has flipped ``db._available`` on."""
     global _loaded
     _accounts.clear()
+    _validated_at.clear()
     _loaded = True

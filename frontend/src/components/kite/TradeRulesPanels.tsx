@@ -33,7 +33,7 @@ function PerEngineEntryExit({ navigatorOn }: { navigatorOn: boolean }) {
         <span style={{ display: 'block', color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</span>
         <span style={{ display: 'block', color: MUTED, fontSize: 10.5, lineHeight: 1.35, marginTop: 2 }}>{note}</span>
       </span>
-      <span aria-hidden style={{ color: '#f06428', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>→</span>
+      <span aria-hidden style={{ color: 'var(--k-brand)', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>→</span>
     </button>
   );
   return (
@@ -51,22 +51,41 @@ const STOP_LIVE_HELP: Record<'broker' | 'monitor' | 'both', string> = {
   monitor: 'Sterling watches the price and exits. Needs the app online.',
 };
 
-function ProtectionMode({ value, onChange }: {
+/**
+ * These pages are split into "Manual Trade" and "Algo Trade" precisely so a reader
+ * knows which rules apply to them. But a few settings are ONE stored value rendered
+ * on both pages (registry.ts marks them applies:'both'), so setting a stop mode for
+ * your own hand-placed buys also moves it for the algo. Without saying so, the split
+ * itself becomes the lie: the page implies a scope the value does not have.
+ */
+function AlsoAppliesTo({ where }: { where: 'manual' | 'automatic' }) {
+  return (
+    <div style={{ color: DIM, fontSize: 10, lineHeight: 1.45, marginTop: 6 }}>
+      One setting, shared with <b>{where === 'manual' ? 'Manual Trade' : 'Algo Trade'}</b> — changing
+      it here changes it there.
+    </div>
+  );
+}
+
+function ProtectionMode({ value, onChange, alsoOn }: {
   value: 'broker' | 'monitor' | 'both';
   onChange: (v: 'broker' | 'monitor' | 'both') => void;
+  alsoOn: 'manual' | 'automatic';
 }) {
   return (
     <Field label={FIELDS.stop_mode.label} hint={STOP_LIVE_HELP[value]}>
       <ChoiceRow value={value} options={STOP_MODE_OPTIONS} onChange={onChange} />
+      <AlsoAppliesTo where={alsoOn} />
     </Field>
   );
 }
 
-function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop }: {
+function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop, alsoOn }: {
   expiryDays: number;
   timeStop: number;
   onExpiry: (v: number) => void;
   onTimeStop: (v: number) => void;
+  alsoOn: 'manual' | 'automatic';
 }) {
   return (
     <>
@@ -81,6 +100,7 @@ function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop }: {
           type="number" min={0} max={10} step={1} value={expiryDays} style={inputStyle}
           onChange={(e) => onExpiry(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
         />
+        <AlsoAppliesTo where={alsoOn} />
       </Field>
       <Field
         label={FIELDS.time_stop_bars.label}
@@ -93,6 +113,7 @@ function ExitSafeguards({ expiryDays, timeStop, onExpiry, onTimeStop }: {
           type="number" min={0} max={500} step={1} value={timeStop} style={inputStyle}
           onChange={(e) => onTimeStop(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
         />
+        <AlsoAppliesTo where={alsoOn} />
       </Field>
     </>
   );
@@ -132,6 +153,7 @@ export function ManualRulesPanel() {
           <ProtectionMode
             value={cfg.stop_mode}
             onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop set to ${v}`)}
+            alsoOn="automatic"
           />
         ) : (
           <ConfigNote>
@@ -157,6 +179,7 @@ export function ManualRulesPanel() {
               timeStop={timeStop}
               onExpiry={(v) => patch({ expiry_square_off_days: v }, 'expiry_square_off_days')}
               onTimeStop={(v) => patch({ time_stop_bars: v }, 'time_stop_bars')}
+              alsoOn="automatic"
             />
             <ConfigNote>
               Applies to every protected position, including ones you bought by hand.
@@ -229,7 +252,7 @@ export function AutomaticRulesPanel() {
         ...settingsCardStyle,
         display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px',
         background: autoOn ? '#fff7f0' : SOFT,
-        borderLeft: `3px solid ${autoOn ? '#f06428' : '#c9c9c9'}`,
+        borderLeft: `3px solid ${autoOn ? 'var(--k-brand)' : '#c9c9c9'}`,
       }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 800 }}>
@@ -246,7 +269,7 @@ export function AutomaticRulesPanel() {
             onClick={() => openSettingsSection('mode')}
             style={{
               minHeight: 34, flexShrink: 0, border: `1px solid ${BORDER}`, borderRadius: 7,
-              background: '#fff', color: '#f06428', padding: '0 13px',
+              background: 'var(--k-bg)', color: 'var(--k-brand)', padding: '0 13px',
               fontSize: 11, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
             }}
           >
@@ -267,6 +290,7 @@ export function AutomaticRulesPanel() {
           <ProtectionMode
             value={cfg.stop_mode}
             onChange={(v) => patch({ stop_mode: v }, 'stop_mode', `Stop set to ${v}`)}
+            alsoOn="manual"
           />
         </Section>
 
@@ -423,6 +447,7 @@ export function AutomaticRulesPanel() {
               timeStop={cfg.time_stop_bars ?? 0}
               onExpiry={(v) => patch({ expiry_square_off_days: v }, 'expiry_square_off_days')}
               onTimeStop={(v) => patch({ time_stop_bars: v }, 'time_stop_bars')}
+              alsoOn="manual"
             />
           </Section>
 

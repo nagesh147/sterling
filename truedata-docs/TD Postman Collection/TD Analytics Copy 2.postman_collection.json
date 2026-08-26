@@ -1,0 +1,1129 @@
+{
+	"info": {
+		"_postman_id": "e28219d8-fbf3-48de-ba08-2a49e35ac87b",
+		"name": "TD Analytics Copy 2",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595",
+		"_collection_link": "https://truedata-9910.postman.co/workspace/TrueData-Workspace~4956eeef-1d83-4242-8307-281e2d782aa0/collection/31771595-e28219d8-fbf3-48de-ba08-2a49e35ac87b?action=share&source=collection_link&creator=31771595"
+	},
+	"item": [
+		{
+			"name": "getOptionChainLive",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "ii5OnyFFpk7nLmNJcjibxS_6Vt8Cq_YlTmZkcXEyinDsD80_Cj23oXBqgQCrNSRXyl0Otthu3vKQpQQfPenXz68e9RZbbL_TwtfKgMEOdQMfJzLne1FyAtc-g4h_9gw_-X-c9ixDF3gYe0Crq6j6bVToqetFQklYKvH2kNzkwxfOgaX7tS1eTUZq8XsXZdmOmRUnKzHEBvC7UbNcBrnK8TFWuRKLLN1_NjuCpweJOOfKJ_HSjTKLhvB9swUgExHqXdPvFo6Mu1EYREJy_mkurA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getoptionchain?symbol=NIFTY&expiry=28-11-2024",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getoptionchain"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv",
+							"disabled": true
+						},
+						{
+							"key": "symbol",
+							"value": "NIFTY"
+						},
+						{
+							"key": "expiry",
+							"value": "28-11-2024"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLTP",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y3y07wXcKSmJiHOohGQ5vTdgfNy1iAuhViWFSuMN4X4nm0AVf2hPSkF-Yqmsh383YFCUNytNwWAaSL_2epy6yxiMQZsYeh3eIcT60wVgpOCAkdtRQ6tF21nAfoV5NaNLnJGGUEfTRsxoKS8vGtuBIFugrsVLpAPC_0EtusnvACDi_sTMt-N-yMUHKTXy4G1R4qgReJHaFRIwoJi7zdYNPje9qC6IeSiDF6qzg9fEFu_O9DOTu_rXw-9MlMcldhHBhEnOEUQ6aDTSKvucrDPpAQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{url}}/api/getLTP?symbol=NIFTY&strike=25500&series=PE&expiry=28-11-2024",
+					"protocol": "https",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"api",
+						"getLTP"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "NIFTY"
+						},
+						{
+							"key": "strike",
+							"value": "25500"
+						},
+						{
+							"key": "series",
+							"value": "PE"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						},
+						{
+							"key": "expiry",
+							"value": "28-11-2024"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getMarketStatus",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "IzNkR7QkbFk1K2LTgx1HyXdmx-_bhLjgJpoKbrU6Cq70fNRJW9FSRnh5brr2IQZjvb3yV5ppr-VNhsxXoxVWeGpKMXT4uFQqtNnm1zmWKYjDU9rzzCzNrdTcym0oBthgxkiHMbWBUqq5mu7BK4pLc49MQ0gPwbBm0Sfmq-buCA4Xy0u9lKLTHfzM8Bj2kqU6hdaRwxJjmjxE2szq3RMuBXIvwH2MZuEIKT1SsWYBV7P8fRUinPoLPS5a76bgkpuQyJA5HRRTPrnxK5qD_I-nxw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{url}}/api/getLTP?symbol=NIFTY&strike=25500&series=PE&expiry=26-09-2024",
+					"protocol": "https",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"api",
+						"getLTP"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "NIFTY"
+						},
+						{
+							"key": "strike",
+							"value": "25500"
+						},
+						{
+							"key": "series",
+							"value": "PE"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						},
+						{
+							"key": "expiry",
+							"value": "26-09-2024"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getLTPSpot",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "ilp4fmqUhyl5qNhv5VrCyAXfc3kpkAWmvC-CUfO4QmpDFX2xa_4fP8xYjEXwQzDlQlY9wcecKK7F0ELP6-Hzbu533ACdKM4crStRtax0j1QMQ0t-Fb9DB7cEbOo6V_nqiVVyHaIvSNwtB4_5E66zxaPUc-PGEcBTQoDbjT_e2kxVO_lUdJoZ8Yy7PoKWYBpQqiMTrKBQWHmaUbKNs4y7hqOEUhQVqqmDIEOteLlHpsLlARaWuntWjdz5Mi2JrZfDSCegLdHTW_ydox3igRgkdg",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://{{url}}/api/getLTPSpot?series=EQ&symbol=TCS",
+					"protocol": "https",
+					"host": [
+						"{{url}}"
+					],
+					"path": [
+						"api",
+						"getLTPSpot"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						},
+						{
+							"key": "series",
+							"value": "EQ"
+						},
+						{
+							"key": "symbol",
+							"value": "TCS"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getFuturesWithHighestOI",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "DzHoeMpYFjyM6-Go0FnEqy06acrWLfsdJ31a5CjZCobpjM1RtSUF9_s_Rn3SDN98gLBchOtDf4pGfK8m8SctI9cBYEbmT2nJ4LmYiqiWJOIks5AcvYghgF5ADgwmu8lwBjMeXs6zusg3fkjDelfBa4iKpZtEHZNh0EDlLNvKwKN7oeEvDBRvdKMW40F7sjgrXygI9FqT7KN1x6j6Dj5rKHcRnU5B92ogTipRTLWYM8dSyZCw1-klX4jM3oV5qRG3qqli1NCgSDl2pJuaXGG_4w",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getFuturesWithHighestOI?top=20&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getFuturesWithHighestOI"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "20"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOptionsWithHighestOI",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "67FcYZjShgf2kHo4sEorycBVJRpZb-ydYTLra69g671smlI4lqaxWpSJVXHXVj-NnyNkw8Dc95b-1NjceVb2BEHSfftXUk_KQy6AoHH_jklL4UaRRwwx1JEv2yO-eL9n4wfj-N5XHoKRurymZlByYaDKffaYLgBNaf36T0paC8c9Mnp_qaawAV2uCzScsGDOwJlURK9sbsucTZSLzy5RGzGfYf64Gy_dFnggVtwu24rgK6Wdc7nzJIAZyUoWvdYoPbAuPrrP5gH6N7yAquRNUQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getoptionswithhighestoi?top=20&series=pe&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getoptionswithhighestoi"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "20"
+						},
+						{
+							"key": "series",
+							"value": "pe"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOIGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "xQKUCk6Z9_h2QqDM7kJVRaP0ulFf5M966Vev9mAydmqkgqJyRActmTD374blXzLePvKm9_9hbPikhEX6WTf7JaBRSarCAigoGq5GeTpQQYQ3JEm9MbDP21Ruu0puR0AoTP2ud9s_m4O9xSOgHsJZVFvpOvqvY14Wmj3Gxm93p3Nyl8Y8rH2128IkA6q-5_GUsDFZauX3UNz3fJ_ptN1dEcFfWoyCytDia6wwzdzWwS8i1_v9HWO5lwNL56fsQoVpw7QMgZddLc44zqAlQV43NQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOIGainers?top=20&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOIGainers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "20"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOIGainersPriceGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOIGainers?top=200&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOIGainers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "200"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOIGainersPriceLosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOIGainers?top=200&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOIGainers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "200"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOILosersPriceGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOILosersPriceGainers?top=200&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOILosersPriceGainers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "200"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOILosersPriceLosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOILosersPriceLosers?top=200&series=XX&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOILosersPriceLosers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "200"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getOILosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "vgNlI6N83DV3hN3nn8Z_PxKqToaxpEeO2ZFYuUQU4PD31z2k-jeOM53GolHGWOt7nr7-Duqe27wdWaosODXkhMEMQFTy1GKW6eFtR7IVcPiLFT6bPvklFkknAWsa5_HL_cxvDR3pZA_P7aA_wk4OgRQb4E0KIDEZ287Fv7H8DfSFBye9V7SYslC5Go_dno1G0VoPIYxaGqd2R2ktyuh6TYUyGkJk53UbcvrAr93HvRQ3WWDknb1qfoK7sm4E70E34Kj_r6yfzdaq7zoKTiQfpQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getOILosers?top=200&series=XX",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getOILosers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "200"
+						},
+						{
+							"key": "series",
+							"value": "XX"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndexGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getindexgainers?top=100&indexname=NIFTY 50&segment=EQ&response=csv&exchange=NSE",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getindexgainers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "indexname",
+							"value": "NIFTY 50"
+						},
+						{
+							"key": "segment",
+							"value": "EQ",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getStocksInUpperCircuit",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "f7-UqStFD7l1Wv5qUJ7QDJ4bi_x2LsSj5kwV38cwxlb8A14qO959ywh99OPaI34YiWPIE47JAPgsi2UYf6lSLW4HQpRn7xxZhPrp15ZPHxUpvjpgpSN6NLdpPuljL4oltqDfuWHbzRIoqKAwF0xwp_tOkeGp7R4YGGu0GTvtcQr2h1iT5x3mbmi5rtKwv5ttPdYF-TyaAGDHe1BP-b5pQCCjkpd-lMlUSxdDvvA5es6gsXGByhsBlGFSvg3Ljdj1lh3go9A-Skc6CurDemGkaQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getStocksInUpperCircuit?top=100&response=csv&exchange=NSE",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getStocksInUpperCircuit"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getStocksInLowerCircuit",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "f7-UqStFD7l1Wv5qUJ7QDJ4bi_x2LsSj5kwV38cwxlb8A14qO959ywh99OPaI34YiWPIE47JAPgsi2UYf6lSLW4HQpRn7xxZhPrp15ZPHxUpvjpgpSN6NLdpPuljL4oltqDfuWHbzRIoqKAwF0xwp_tOkeGp7R4YGGu0GTvtcQr2h1iT5x3mbmi5rtKwv5ttPdYF-TyaAGDHe1BP-b5pQCCjkpd-lMlUSxdDvvA5es6gsXGByhsBlGFSvg3Ljdj1lh3go9A-Skc6CurDemGkaQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getStocksInLowerCircuit?top=100&response=csv&exchange=NSE",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getStocksInLowerCircuit"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndexLosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "z1Y-Mn-2e6lGexnOQUGSRsHetgwMMBOWWGDJQSTwX3TAwKhoATlaJwmplSuBta8zng1PG9UHVQkicYC--37TGwkAxGiScNWRZurugbJSzFalFcN8id8X1tJ-KadeKFrQnv-gzUSeyJtnUbiIsLeSLMSQMUpbOaWGoRnsthLeZz_8VeosxafK6h1QjLGyHf-7xkQPX_IrKaAxAsfyvgPdnBJ4u4C8a7eF0DiIBgVGqV0iZJV3OpBBN_SmErCzPFafDps0Nl126xhtSu7cYPCo3g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getindexlosers?top=100&indexname=ALL&segment=eq&response=csv&exchange=NSE",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getindexlosers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "indexname",
+							"value": "ALL"
+						},
+						{
+							"key": "segment",
+							"value": "eq",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv",
+							"description": "csv\njson"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getMostActiveByVolume",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "R7XJ_yhzWAecGm7GnLiIVuD2Q4uYXokDvekLaLdYYFF0lO4sFKpYxuefj3o3fB4vLn3ANtPLJuvPYgjWu3947Gr1sxy84v0rYInrsGpW2pe8aFMNr35i39gUqF5qsSyCTuQMV7DxpR9UwLfOj4snAoJsAGL7EPr02uH1oEZjXYGy7fwNlvvpmhg_irMgHKJ-6_7KOef8vmnMLmqLhO5KsKMVFrcUcxh2K20H7URkX_A46EMpsXocowSxTCCDO7DThj3O3d3vH7OPvgjtvHyAzA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getMostActiveByVolume?top=100&segment=eq&response=csv&exchange=NSE&indexName=all",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getMostActiveByVolume"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "segment",
+							"value": "eq",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv",
+							"description": "csv\njson"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						},
+						{
+							"key": "indexName",
+							"value": "all"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getMostActiveByTurnover",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "2KqRzUXISfycgP7hbnu6nxVneXfZimDrCtVpHdxh1U4sZ8Bg0nxeAPqixfF4HO8nUSHqaVhl8_pex2SXhqeufO-xKBJs0m0Kg9PnZqvVqvSbNDkapsZHbui2mXrwJVfStjg9ZU8nCuQ-cekpnTjFLkw0mt2junh0eVne6e3IcyoiVqC18h4VPw2Qx10fm6sk5y38jR7dh1ZxufO39vHqkYvpHETu4e1Kz0XI3YUM5tjjNLrIBuiYXJTqvo4SruzTe5P--sFV65ZrkK8pzFU-lg",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getMostActiveByTurnover?top=100&segment=eq&response=csv&exchange=NSE&indexName=NIFTY 50",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getMostActiveByTurnover"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "100",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						},
+						{
+							"key": "segment",
+							"value": "eq",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv",
+							"description": "csv\njson"
+						},
+						{
+							"key": "exchange",
+							"value": "NSE"
+						},
+						{
+							"key": "indexName",
+							"value": "NIFTY 50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndustryGainers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getIndustryGainers?industry=Healthcare&top=100&segment=eq&response=csv",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getIndustryGainers"
+					],
+					"query": [
+						{
+							"key": "industry",
+							"value": "Healthcare",
+							"description": "Diversified\nConsumer Durables\nHealthcare\nTextiles\nInformation Technology\nTelecommunication\nFinancial Services\nAutomobile and Auto Components\nOil Gas & Consumable Fuels\nCapital Goods\nConstruction Materials\nConstruction\nMetals & Mining\nConsumer Services\nForest Materials\nMedia Entertainment & Publication\nChemicals\nServices\nPower\nFast Moving Consumer Goods\nRealty"
+						},
+						{
+							"key": "top",
+							"value": "100"
+						},
+						{
+							"key": "segment",
+							"value": "eq",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndustryLosers",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "y2CmlvvfBp9ZB4Flliy5v9ws2dQDJqoh6mFsnZgtM-n01t9FKxNGNPmbBbEqQxK7KV9SqjRgzxHMskjY05eKse8m6OqlMdX34ZNzdaxg9D2T9MpsbMn-cFkkDYUPt62UE_9gE0LlHTEYF7LUi2R61f17YJqwn_SdWxA9S7CssyWgKlI6toy9DphTVNbhUAYX5DA60kVBZAxG4Xh1V4w5vb4Z5UjOyHQwwLLrARbvSdHr7YRpDu7PbGT6mzTZw07zw7wCLSlyMKX4ojW2utYwgw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getIndustryLosers?industry=Information Technology&top=100&segment=eq",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getIndustryLosers"
+					],
+					"query": [
+						{
+							"key": "industry",
+							"value": "Information Technology",
+							"description": "Diversified\nConsumer Durables\nHealthcare\nTextiles\nInformation Technology\nTelecommunication\nFinancial Services\nAutomobile and Auto Components\nOil Gas & Consumable Fuels\nCapital Goods\nConstruction Materials\nConstruction\nMetals & Mining\nConsumer Services\nForest Materials\nMedia Entertainment & Publication\nChemicals\nServices\nPower\nFast Moving Consumer Goods\nRealty"
+						},
+						{
+							"key": "top",
+							"value": "100"
+						},
+						{
+							"key": "segment",
+							"value": "eq",
+							"description": "EQ\nFUT"
+						},
+						{
+							"key": "response",
+							"value": "json",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAdvanceDecline",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "BBnVCDOlNPMBljIaN7G532FeF-ye5pDgpj6RbiXclVjH21_S8xWE-1rNtn0WvirW2me7YtnRzv0vHXZZ0UqfSlxZIBNtr2Qdr4ZG3xqzz4ta2-SMcdsKxMZuj-yyUvO9PpOflELFeQarg9cj7hK3_61ubWoIhg3KkCAuoV2psEKhTZzATnrFGjEquhJAVc29rQ5nOm4rxL33GMzJxtAwwXcykEoQCCc-gkVnTqyY55opXu1q5rpH3AY7D3pFupKDizyBtEmoNZ0Rb-qtjDSC6g",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "analytics.truedata.in/api/getMarketAdvDec?indexName=NIFTY TOTAL MARKET",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getMarketAdvDec"
+					],
+					"query": [
+						{
+							"key": "indexName",
+							"value": "NIFTY TOTAL MARKET"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndexGainerLosersPreOpen",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "jROEnPdZEW7a9snjTM-ngVtEtcesYVm09KafwEgh1LlBINCA7vmp-izxGUKqhaglgnX04-8mykHXaI2ReWRcQaD0K2UYapRkhcxgVWdKyhAu3P8Fqjm8GaU-zGqcWxain_lcUK9PpUJAUQGSNrgmq3e9Ei6O0pKEI0gOfhzrPlWBmC3oWfJBmI-MmVGQk1EMp-wnAALNUcwTeeyWpL1-3FqrEpTsH8LYM14eKwz79mFPzqf8_s88Uwg1fNmH2zKmOJ0725QF7ipz9URpTPaPCw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://analytics.truedata.in/api/getindexgainersandlosers?top=300&indexname=NSE%20FNO&segment=EQ&response=csv&ascending=true&orderby=change&preopen=true",
+					"protocol": "https",
+					"host": [
+						"analytics",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"api",
+						"getindexgainersandlosers"
+					],
+					"query": [
+						{
+							"key": "top",
+							"value": "300"
+						},
+						{
+							"key": "indexname",
+							"value": "NSE%20FNO"
+						},
+						{
+							"key": "segment",
+							"value": "EQ"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "ascending",
+							"value": "true"
+						},
+						{
+							"key": "orderby",
+							"value": "change"
+						},
+						{
+							"key": "preopen",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getTickHistory",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": ""
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "url",
+			"value": "analytics.truedata.in",
+			"type": "string"
+		},
+		{
+			"key": "user",
+			"value": "xxxx",
+			"type": "string"
+		},
+		{
+			"key": "password",
+			"value": "yyyy",
+			"type": "string"
+		}
+	]
+}

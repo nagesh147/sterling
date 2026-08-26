@@ -105,7 +105,10 @@ export function Section({
             {title}
           </span>
           {description ? (
-            <span style={{ display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440 }}>
+            <span style={{
+              display: 'block', color: k.dim, fontSize: 10.5, lineHeight: 1.35, marginTop: 1, maxWidth: 440,
+              whiteSpace: 'pre-line',
+            }}>
               {description}
             </span>
           ) : null}
@@ -309,7 +312,7 @@ export function Switch({ checked, label, onChange, disabled = false }: {
         position: 'relative',
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        background: checked ? k.orange : '#ccc',
+        background: checked ? k.orange : 'var(--k-faint-5)',
         transition: 'background .15s ease',
       }}
     >
@@ -381,5 +384,121 @@ export function CheckOption({ label, hint, checked, indeterminate = false, onCha
         )}
       </span>
     </label>
+  );
+}
+
+
+/**
+ * A numeric setting that tells you whether it is still at the engine's default.
+ *
+ * Without this a panel of numbers gives no clue which ones you have moved. The
+ * default is supplied by the server (not mirrored in the client) so the badge
+ * cannot drift from the engine, and a changed field shows what it was and
+ * offers one click back.
+ */
+/**
+ * "default" / "changed · default X ↺" for any setting, not just numbers.
+ *
+ * A panel of fields is only readable at a glance if every one of them answers
+ * the same question the same way, so choices, switches and time windows use
+ * this too — a number was never the only kind of value a user can move.
+ */
+export function DefaultBadge({ isDefault, defaultLabel, onRestore, restoreTitle }: {
+  isDefault: boolean;
+  /** The default, already formatted for reading. */
+  defaultLabel: string;
+  onRestore: () => void;
+  restoreTitle?: string;
+}) {
+  if (isDefault) {
+    return (
+      <span
+        title="Unchanged from the engine default"
+        style={{
+          color: k.dim, fontSize: 9, fontWeight: 600, letterSpacing: '.03em',
+          border: `1px solid ${k.border}`, borderRadius: 3, padding: '0 5px', height: 16, lineHeight: '15px',
+        }}
+      >
+        default
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onRestore}
+      title={restoreTitle ?? `Restore the default, ${defaultLabel}`}
+      style={{
+        border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), color: k.orange,
+        borderRadius: 3, padding: '0 5px', height: 16, fontSize: 9, fontWeight: 700,
+        letterSpacing: '.03em', cursor: 'pointer', fontFamily: 'inherit',
+      }}
+    >
+      changed · default {defaultLabel} ↺
+    </button>
+  );
+}
+
+export function NumberField({
+  label, hint, value, defaultValue, onChange,
+  min, max, step = 1, suffix, disabled = false, format,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  /** The engine's default. Omit only when the server does not publish one. */
+  defaultValue?: number;
+  onChange: (next: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+  disabled?: boolean;
+  format?: (v: number) => string;
+}) {
+  const known = defaultValue != null && Number.isFinite(defaultValue);
+  // Compare on the step's precision: 1.15 typed back over 1.15 is not a change.
+  const decimals = String(step).includes('.') ? String(step).split('.')[1].length : 0;
+  const same = (a: number, b: number) => a.toFixed(decimals) === b.toFixed(decimals);
+  const isDefault = !known || same(value, defaultValue as number);
+  const show = format ?? ((v: number) => String(v));
+
+  return (
+    <Field
+      label={label}
+      hint={hint}
+      badge={known ? (
+        <DefaultBadge
+          isDefault={isDefault}
+          defaultLabel={show(defaultValue as number)}
+          onRestore={() => onChange(defaultValue as number)}
+        />
+      ) : undefined}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            if (Number.isFinite(next)) onChange(next);
+          }}
+          style={{
+            ...inputStyle,
+            width: 96,
+            textAlign: 'right',
+            // A moved value is tinted so a panel of numbers reads at a glance.
+            borderColor: isDefault ? k.border : k.orange,
+            background: isDefault ? 'var(--k-bg)' : tint(k.orange, 6),
+            opacity: disabled ? 0.55 : 1,
+          }}
+        />
+        {suffix && <span style={{ color: k.dim, fontSize: 11, minWidth: 26 }}>{suffix}</span>}
+      </div>
+    </Field>
   );
 }

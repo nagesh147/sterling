@@ -1,0 +1,50 @@
+{
+	"info": {
+		"_postman_id": "56fcf0f0-e159-4093-90b6-55789b147e95",
+		"name": "TD Auth",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595"
+	},
+	"item": [
+		{
+			"name": "Auth Request",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "your_user_id",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "your_password",
+							"type": "text"
+						},
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://auth.truedata.in/token",
+					"protocol": "https",
+					"host": [
+						"auth",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"token"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

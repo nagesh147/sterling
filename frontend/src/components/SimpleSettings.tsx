@@ -188,7 +188,7 @@ function ExchangeSection() {
               marginBottom: 8, padding: '6px 10px',
               background: 'var(--t-bg2)', border: '1px solid var(--t-amber)33', borderRadius: 4,
             }}>
-              <div style={{ fontSize: 9, color: '#888', marginBottom: 3 }}>WHITELIST THIS SERVER IP IN DELTA EXCHANGE:</div>
+              <div style={{ fontSize: 9, color: 'var(--k-ink-6)', marginBottom: 3 }}>WHITELIST THIS SERVER IP IN DELTA EXCHANGE:</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
                   fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: 'var(--t-amber)',
@@ -207,7 +207,7 @@ function ExchangeSection() {
                   COPY
                 </button>
               </div>
-              <div style={{ fontSize: 9, color: '#666', marginTop: 4, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 9, color: 'var(--k-ink-4)', marginTop: 4, lineHeight: 1.5 }}>
                 Go to india.delta.exchange → Profile → API Keys → Edit Key → Allowed IPs → Add this IP
               </div>
             </div>
@@ -753,7 +753,7 @@ function AlgoSection() {
         </div>
 
         {enabled && (
-          <div style={{ fontSize: 10, color: '#666', lineHeight: 1.6, marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-4)', lineHeight: 1.6, marginBottom: 12 }}>
             Failed orders appear in the Positions tab with a <strong style={{ color: 'var(--t-red)' }}>✕ FAILED</strong> badge and a <strong style={{ color: 'var(--t-blue)' }}>RETRY</strong> button.
           </div>
         )}

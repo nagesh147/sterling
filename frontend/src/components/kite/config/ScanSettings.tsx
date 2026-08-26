@@ -2,7 +2,7 @@ import React from 'react';
 import { useStockRegistry } from '../../../hooks/useSterlingKiteEngine';
 import type { LiquidityGroup, Moneyness, ScanExpiry, ScanSource } from '../../../types/kiteEngine';
 import {
-  BORDER, CheckOption, ChoiceRow, DIM, Field, ORANGE, ORANGE_SOFT, Switch, TEXT,
+  BORDER, CheckOption, ChoiceRow, DIM, Field, NumberField, ORANGE, ORANGE_SOFT, Switch, TEXT,
 } from '../kiteSettingsPrimitives';
 import { ConfigNote } from './ConfigPrimitives';
 import { FIELDS, INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
@@ -38,10 +38,19 @@ export function InstrumentsGroup({
   return (
     <>
       <Field label="Indices" wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '6px 12px',
+            width: '100%',
+          }}
+        >
           {INDEX_OPTIONS.map((option) => (
             <CheckOption
-              key={option.value} label={option.label}
+              key={option.value}
+              label={option.label}
               checked={indices.includes(option.value)}
               onChange={() => onChange({
                 scan_indices: toggle(indices, option.value, allowEmptyIndices ? [] : ['NIFTY 50']),
@@ -50,146 +59,148 @@ export function InstrumentsGroup({
           ))}
         </div>
       </Field>
+
       <Field
         label="Single-stock underlyings"
         hint="Off leaves stocks out of the scan entirely. Indices are unaffected."
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Switch
-            checked={stockContracts} label={`${idPrefix} scan single-stock underlyings`}
-            onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
-          />
-          <span style={{ color: TEXT, fontSize: 12 }}>
-            {stockContracts ? 'Scanning stocks' : 'Indices only'}
-          </span>
-        </div>
-        {!stockContracts && (
-          <ConfigNote>
-            No stock contracts are resolved and no stock rows appear. Your stock selection is
-            kept, so turning this back on restores it.
-          </ConfigNote>
-        )}
+        <Switch
+          checked={stockContracts}
+          label={`${idPrefix} scan single-stock underlyings`}
+          onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
+        />
       </Field>
+
+      {!stockContracts && (
+        <ConfigNote>
+          No stock contracts are resolved and no stock rows appear. Your stock selection is
+          kept, so turning this back on restores it.
+        </ConfigNote>
+      )}
+
       {stockContracts && (
-        <>
-          <Field
-            label="F&O stocks"
-            hint="Use the full eligible universe, or curate a smaller list."
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Switch
-                checked={allStocks} label={`${idPrefix} scan all F&O stocks`}
-                onChange={() => onChange({ scan_all_stocks: !allStocks })}
-              />
-              <span style={{ color: TEXT, fontSize: 12 }}>
-                {allStocks ? 'Scan all eligible F&O stocks' : 'Curated list'}
-              </span>
-            </div>
-          </Field>
-          {!allStocks && (
-            <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                {(stockRegistry ?? []).map((group: LiquidityGroup) => (
-                  <div key={group.liquidity}>
-                    <div style={{
-                      color: DIM, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-                      marginBottom: 4, textTransform: 'uppercase' as const,
-                    }}>
-                      {group.liquidity}
-                    </div>
-                    <div className="sk-config-check-grid" style={{
-                      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3,
-                    }}>
-                      {group.stocks.map((s) => {
-                        const name = s.name;
-                        return (
-                          <CheckOption
-                            key={name}
-                            label={s.label || name}
-                            compact
-                            checked={stocks.includes(name)}
-                            onChange={() => onChange({ scan_stocks: toggle(stocks, name, []) })}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+        <Field
+          label="F&O stocks"
+          hint="Use the full eligible universe, or curate a smaller list."
+        >
+          <Switch
+            checked={allStocks}
+            label={`${idPrefix} scan all F&O stocks`}
+            onChange={() => onChange({ scan_all_stocks: !allStocks })}
+          />
+        </Field>
+      )}
+
+      {stockContracts && !allStocks && (
+        <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+            {(stockRegistry ?? []).map((group: LiquidityGroup) => (
+              <div key={group.liquidity}>
+                <div style={{
+                  color: DIM, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+                  marginBottom: 4, textTransform: 'uppercase' as const,
+                }}>
+                  {group.liquidity}
+                </div>
+                <div
+                  className="sk-config-check-grid"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                    gap: '2px 8px',
+                  }}
+                >
+                  {group.stocks.map((s) => {
+                    const name = s.name;
+                    return (
+                      <CheckOption
+                        key={name}
+                        label={s.label || name}
+                        compact
+                        checked={stocks.includes(name)}
+                        onChange={() => onChange({ scan_stocks: toggle(stocks, name, []) })}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            </Field>
-          )}
-        </>
+            ))}
+            {!stockRegistry?.length && (
+              // Without this, a failed or empty registry renders an empty box that
+              // reads as "no stocks are eligible" rather than "we could not load
+              // the list" — and the user curates a scope from nothing.
+              <div style={{ color: DIM, fontSize: 11 }}>Stock universe unavailable.</div>
+            )}
+          </div>
+        </Field>
       )}
     </>
   );
 }
 
-/** Chart source — one horizontal row of four tiles (label + short description). */
-export function SignalSourceGroup({ value, onChange, name, options = SCAN_SOURCE_OPTIONS }: {
+
+/** Which chart this engine reads a signal from (main-branch descriptions + tile style). */
+export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The chart this engine takes its entry signal off.' }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
   name: string;
-  options?: Array<{ value: ScanSource; label: string; hint: string }>;
+  fieldHint?: string | null;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-label={name || 'Chart source'}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-        gap: 8,
-        width: '100%',
-      }}
-    >
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            title={option.hint}
-            onClick={() => onChange(option.value)}
-            style={{
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              padding: '10px 12px',
-              borderRadius: 9,
-              border: selected ? `1.5px solid ${ORANGE}` : `1px solid ${BORDER}`,
-              background: selected ? ORANGE_SOFT : '#fff',
-              boxShadow: selected ? '0 1px 3px rgba(240,100,40,.12)' : '0 1px 2px rgba(0,0,0,.025)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 5,
-              minHeight: 0,
-              minWidth: 0,
-              transition: 'border-color .12s ease, background .12s ease',
-            }}
-          >
-            <span style={{ color: TEXT, fontSize: 12, fontWeight: 700, letterSpacing: '-0.01em' }}>
-              {option.label}
-            </span>
-            <span style={{ color: selected ? TEXT : DIM, fontSize: 10.5, lineHeight: 1.4, fontWeight: 500 }}>
-              {option.hint}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+    <Field label="Read from" hint={fieldHint ?? undefined} wide>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8, width: '100%' }}>
+        {SCAN_SOURCE_OPTIONS.map((option) => {
+          const selected = value === option.value;
+          return (
+            <label key={option.value} style={{
+              minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)',
+              alignItems: 'start', gap: 9, textAlign: 'left', padding: '10px 11px', borderRadius: 7,
+              cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box',
+              border: `1px solid ${selected ? 'var(--k-border-brand)' : BORDER}`,
+              background: selected ? ORANGE_SOFT : 'var(--k-bg)',
+            }}>
+              <input
+                type="radio" name={name} checked={selected}
+                onChange={() => onChange(option.value)}
+                style={{ width: 15, height: 15, margin: '1px 0 0', accentColor: ORANGE }}
+              />
+              <span>
+                <span style={{ display: 'block', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>{option.label}</span>
+                <span style={{ display: 'block', color: DIM, fontSize: 9.5, lineHeight: 1.35, marginTop: 3 }}>{option.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </Field>
   );
 }
 
 /** Which strikes and expiry cycles this engine resolves. */
-export function ContractsGroup({ strikes, indexExpiries, onChange }: {
+export function ContractsGroup({
+  strikes, indexExpiries, onChange,
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote,
+}: {
   strikes: Moneyness[];
   indexExpiries: ScanExpiry[];
   onChange: (next: {
     strike_moneyness?: Moneyness[];
     scan_expiries_indices?: ScanExpiry[];
+    expiry_dte_min?: number;
+    expiry_dte_max?: number;
+    avoid_expiry_day?: boolean;
   }) => void;
+  /* The expiry window, shared by every engine under these names. Optional so a
+     caller that has not adopted them yet renders exactly what it did before —
+     but every option engine now passes them, and this is the one place the
+     wording lives, so "minimum days to expiry" cannot come to mean two things
+     on two pages. */
+  dteMin?: number;
+  dteMax?: number;
+  avoidExpiryDay?: boolean;
+  dteDefaults?: { min?: number; max?: number };
+  /** Engine-specific note under the window, e.g. why one of them is off. */
+  dteNote?: React.ReactNode;
 }) {
   const toggleStrikeGroup = (values: Moneyness[]) => {
     const all = values.every((v) => strikes.includes(v));
@@ -200,13 +211,29 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
     const next = indexExpiries.includes(expiry)
       ? indexExpiries.filter((x) => x !== expiry)
       : [...indexExpiries, expiry];
-    onChange({ scan_expiries_indices: next.length ? next : ['weekly'] });
+    // Falling back to BOTH, not to weekly. Unticking your last remaining cycle is
+    // "I did not mean to leave this empty", not "put me on weeklies" — and weekly
+    // and monthly contracts do not behave alike, so silently moving someone from
+    // one to the other is a real change of position dressed as a no-op.
+    onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
   };
 
   return (
     <>
-      <Field label="Strike range" hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits." wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
+      <Field
+        label="Strike range"
+        hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits."
+        wide
+      >
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gap: '8px 10px',
+            width: '100%',
+          }}
+        >
           {STRIKE_GROUPS.map((group) => {
             const checked = group.values.every((v) => strikes.includes(v));
             const partial = !checked && group.values.some((v) => strikes.includes(v));
@@ -223,8 +250,17 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           })}
         </div>
       </Field>
+
       <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '6px 12px',
+            maxWidth: 320,
+          }}
+        >
           {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
             <CheckOption
               key={expiry}
@@ -235,6 +271,37 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
           ))}
         </div>
       </Field>
+
+      {dteMin !== undefined && dteMax !== undefined && (
+        <>
+          <NumberField
+            label="Minimum days to expiry"
+            hint="Contracts closer to expiry than this are not eligible."
+            value={dteMin} defaultValue={dteDefaults?.min}
+            onChange={(v) => onChange({ expiry_dte_min: v })}
+            min={0} max={365} step={1}
+          />
+          <NumberField
+            label="Maximum days to expiry"
+            hint="Contracts further out than this are not eligible."
+            value={dteMax} defaultValue={dteDefaults?.max}
+            onChange={(v) => onChange({ expiry_dte_max: v })}
+            min={0} max={400} step={1}
+          />
+          <Field
+            label="Expiry day"
+            hint="Expiry-day options gain and lose value fastest, and their open interest is settlement mechanics rather than positioning."
+          >
+            <Switch
+              checked={!!avoidExpiryDay}
+              label="Avoid expiry-day entries"
+              onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
+            />
+          </Field>
+          {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
+        </>
+      )}
+
       <ConfigNote>
         Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
         Whether stocks are scanned at all is under Instruments.
@@ -242,3 +309,4 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
     </>
   );
 }
+

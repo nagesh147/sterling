@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     max_position_pct: float = 0.05
     default_capital: float = 100_000.0
 
+    # TrueData market-data credentials/configuration. Credentials are loaded
+    # from environment/.env and are never committed to the repository.
+    truedata_username: str = ""
+    truedata_password: str = ""
+    truedata_auth_url: str = "https://auth.truedata.in/token"
+    truedata_history_base_url: str = "https://history.truedata.in"
+    truedata_market_api_base_url: str = "https://api.truedata.in"
+    truedata_timeout_seconds: float = 30.0
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _parse_cors(cls, v):

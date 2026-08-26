@@ -1,24 +1,31 @@
 import React, { CSSProperties } from 'react';
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Kite Light Theme UI Tokens
- * Strict light theme to match Zerodha Kite parity.
+ * Kite UI tokens.
+ *
+ * These resolve through CSS variables (see ../styles/theme.ts) so the whole
+ * terminal follows the light/dark switch without any component knowing a theme
+ * exists. In light mode every one of them computes to the exact hex it used to
+ * be hardcoded as, so this indirection changed nothing visible.
+ *
+ * Canvas and chart libraries cannot resolve a variable — they need
+ * `readThemeHex()` instead.
  * ───────────────────────────────────────────────────────────────────────── */
 
 export const k = {
-  bg: '#ffffff',
-  surface: '#f9f9f9',
-  surfaceHover: '#f1f1f1',
-  border: '#e0e0e0',
-  text: '#444444',
-  dim: '#9b9b9b',
-  blue: '#4184f3',
-  red: '#df514c',
-  green: '#4caf50',
-  amber: '#f5a623',
-  orange: '#ff5722',
-  cyan: '#00bcd4',
-  purple: '#9c27b0',
+  bg: 'var(--k-bg)',
+  surface: 'var(--k-surface)',
+  surfaceHover: 'var(--k-surface-hover)',
+  border: 'var(--k-border)',
+  text: 'var(--k-text)',
+  dim: 'var(--k-dim)',
+  blue: 'var(--k-blue)',
+  red: 'var(--k-red)',
+  green: 'var(--k-green)',
+  amber: 'var(--k-amber)',
+  orange: 'var(--k-orange)',
+  cyan: 'var(--k-cyan)',
+  purple: 'var(--k-purple)',
   fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
 };
 
