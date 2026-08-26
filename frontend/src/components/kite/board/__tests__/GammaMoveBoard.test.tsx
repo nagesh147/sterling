@@ -30,7 +30,9 @@ const CONFIG = {
 
 const STRATEGY = {
   id: 'gamma_move', name: 'Gamma Move', live_ready: false,
-  headline_finding: 'The entry triple alone did not separate from baseline.',
+  headline_finding: 'Only the level filter is proven.',
+  what_to_do: 'Trust the distance badge on the row.',
+  evidence: 'Reaching +30% within two sessions: 46.2% [31.6, 61.4] within 1% of a level.',
   calibration: {}, calibrated_fields: [],
 };
 
@@ -70,10 +72,22 @@ beforeEach(() => {
 });
 
 describe('GammaMoveBoard', () => {
-  it('shows the calibration finding above the rows', () => {
+  it('leads with what the finding means and what to do about it', () => {
     render(<GammaMoveBoard nowMs={Date.now()} />);
     expect(screen.getByText('NOT VALIDATED')).toBeTruthy();
-    expect(screen.getByText(/did not separate from baseline/)).toBeTruthy();
+    expect(screen.getByText(/Only the level filter is proven/)).toBeTruthy();
+    expect(screen.getByText(/Trust the distance badge/)).toBeTruthy();
+  });
+
+  it('keeps the statistics off the banner and on a hover', () => {
+    /* This was a line of confidence intervals across the top of a trading
+       screen. The evidence is still one gesture away, but it is no longer the
+       first thing shouted at someone deciding whether to click Buy. */
+    render(<GammaMoveBoard nowMs={Date.now()} />);
+    expect(screen.queryByText(/46\.2%/)).toBeNull();
+    const banner = screen.getByText('NOT VALIDATED').closest('[title]');
+    expect(banner).toBeTruthy();
+    expect(banner!.getAttribute('title')).toContain('46.2%');
   });
 
   it('offers a scan and runs it', () => {
