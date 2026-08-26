@@ -122,7 +122,7 @@ function StatCard({ label, value, color = t.bright, sub }: {
     <div style={S.statCard}>
       <div style={S.statLabel}>{label}</div>
       <div style={{ ...S.statVal, color }}>{value}</div>
-      {sub && <div style={{ color: '#444', fontSize: 10, marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ color: 'var(--k-text)', fontSize: 10, marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -131,7 +131,7 @@ function WinRateBar({ label, rate, n }: { label: string; rate?: number | null; n
   if (rate == null) return (
     <div style={S.qualityRow}>
       <span style={S.qualityLabel}>{label}</span>
-      <span style={{ color: '#333', fontSize: 11 }}>—</span>
+      <span style={{ color: 'var(--k-ink-1)', fontSize: 11 }}>—</span>
     </div>
   );
   const w = Math.min(100, Math.max(0, rate));
@@ -142,11 +142,11 @@ function WinRateBar({ label, rate, n }: { label: string; rate?: number | null; n
         <div style={{ width: 80, height: 5, background: '#1e1e1e', borderRadius: 3 }}>
           <div style={{
             width: `${w}%`, height: '100%', borderRadius: 3,
-            background: w >= 60 ? '#44cc88' : w >= 50 ? '#f0c040' : '#cc4444',
+            background: w >= 60 ? 'var(--k-green-mint)' : w >= 50 ? 'var(--k-gold)' : 'var(--k-red-muted)',
           }} />
         </div>
         <span style={winRateStyle(rate)}>{rate.toFixed(1)}%</span>
-        {n != null && <span style={{ color: '#444', fontSize: 10 }}>n={n}</span>}
+        {n != null && <span style={{ color: 'var(--k-text)', fontSize: 10 }}>n={n}</span>}
       </div>
     </div>
   );
@@ -156,7 +156,7 @@ function AvgReturn({ label, val }: { label: string; val?: number | null }) {
   if (val == null) return (
     <div style={S.qualityRow}>
       <span style={S.qualityLabel}>{label}</span>
-      <span style={{ color: '#333', fontSize: 11 }}>—</span>
+      <span style={{ color: 'var(--k-ink-1)', fontSize: 11 }}>—</span>
     </div>
   );
   return (
@@ -177,10 +177,10 @@ function MiniChart({ bars }: { bars: BacktestBarResult[] }) {
   const range = maxP - minP || 1;
 
   const colorFor = (b: BacktestBarResult) => {
-    if (b.green_arrow) return '#f0c040';
+    if (b.green_arrow) return 'var(--k-gold)';
     if (b.red_arrow) return '#ff8844';
-    if (b.macro_regime === 'bullish' && b.signal_trend === 1) return '#44cc88';
-    if (b.macro_regime === 'bearish' && b.signal_trend === -1) return '#cc4444';
+    if (b.macro_regime === 'bullish' && b.signal_trend === 1) return 'var(--k-green-mint)';
+    if (b.macro_regime === 'bearish' && b.signal_trend === -1) return 'var(--k-red-muted)';
     if (b.macro_regime === 'bullish') return '#336644';
     if (b.macro_regime === 'bearish') return '#663333';
     return '#2a2a2a';
@@ -189,14 +189,14 @@ function MiniChart({ bars }: { bars: BacktestBarResult[] }) {
   return (
     <div style={S.section}>
       <div style={S.legend}>
-        <span><span style={{ ...S.dot, background: '#44cc88' }} />Bull aligned</span>
-        <span><span style={{ ...S.dot, background: '#cc4444' }} />Bear aligned</span>
-        <span><span style={{ ...S.dot, background: '#f0c040' }} />Green arrow</span>
+        <span><span style={{ ...S.dot, background: 'var(--k-green-mint)' }} />Bull aligned</span>
+        <span><span style={{ ...S.dot, background: 'var(--k-red-muted)' }} />Bear aligned</span>
+        <span><span style={{ ...S.dot, background: 'var(--k-gold)' }} />Green arrow</span>
         <span><span style={{ ...S.dot, background: '#ff8844' }} />Red arrow</span>
         <span><span style={{ ...S.dot, background: '#2a2a2a' }} />Mixed/filtered</span>
       </div>
       {tooltip && (
-        <div style={{ color: '#888', fontSize: 10, marginBottom: 4 }}>{tooltip}</div>
+        <div style={{ color: 'var(--k-ink-6)', fontSize: 10, marginBottom: 4 }}>{tooltip}</div>
       )}
       <div style={S.barChart}>
         {bars.map((b, i) => {
@@ -232,22 +232,22 @@ function QualityPanel({ s, bars }: { s: BacktestStats; bars: BacktestBarResult[]
       <div style={S.sectionTitle}>SIGNAL QUALITY — 4H FORWARD RETURN</div>
       <div style={S.grid2}>
         <div style={{ background: '#0d1a0d', border: '1px solid #1a2a1a', borderRadius: 4, padding: 10 }}>
-          <div style={{ color: '#44cc88', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>LONG SIGNALS</div>
+          <div style={{ color: 'var(--k-green-mint)', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>LONG SIGNALS</div>
           <WinRateBar label="Green arrow win rate (4H)" rate={s.arrow_long_win_rate_4h} n={greenArrowN} />
           <WinRateBar label="Green arrow win rate (12H)" rate={s.arrow_long_win_rate_12h} />
           <WinRateBar label="All-green signal accuracy (4H)" rate={s.signal_accuracy_long_4h} />
           <AvgReturn label="Confirmed setup avg return (4H)" val={s.setup_long_avg_return_4h} />
           <AvgReturn label="Confirmed setup avg return (12H)" val={s.setup_long_avg_return_12h} />
-          {confLongN > 0 && <div style={{ color: '#444', fontSize: 10, marginTop: 4 }}>n={confLongN} confirmed long setups</div>}
+          {confLongN > 0 && <div style={{ color: 'var(--k-text)', fontSize: 10, marginTop: 4 }}>n={confLongN} confirmed long setups</div>}
         </div>
         <div style={{ background: '#1a0d0d', border: '1px solid #2a1a1a', borderRadius: 4, padding: 10 }}>
-          <div style={{ color: '#cc4444', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SHORT SIGNALS</div>
+          <div style={{ color: 'var(--k-red-muted)', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SHORT SIGNALS</div>
           <WinRateBar label="Red arrow win rate (4H)" rate={s.arrow_short_win_rate_4h} n={redArrowN} />
           <WinRateBar label="Red arrow win rate (12H)" rate={s.arrow_short_win_rate_12h} />
           <WinRateBar label="All-red signal accuracy (4H)" rate={s.signal_accuracy_short_4h} />
           <AvgReturn label="Confirmed setup avg return (4H)" val={s.setup_short_avg_return_4h != null ? s.setup_short_avg_return_4h : null} />
           <AvgReturn label="Confirmed setup avg return (12H)" val={s.setup_short_avg_return_12h != null ? s.setup_short_avg_return_12h : null} />
-          {confShortN > 0 && <div style={{ color: '#444', fontSize: 10, marginTop: 4 }}>n={confShortN} confirmed short setups</div>}
+          {confShortN > 0 && <div style={{ color: 'var(--k-text)', fontSize: 10, marginTop: 4 }}>n={confShortN} confirmed short setups</div>}
         </div>
       </div>
     </div>
@@ -633,7 +633,7 @@ function EquityCurve({ curve, initial }: { curve: number[]; initial: number }) {
   const range = maxV - minV || 1;
   const toY   = (v: number) => H - PB - ((v - minV) / range) * (H - PB - 4) - 2;
   const pts   = all.map((v, i) => `${((i / (all.length - 1)) * W).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-  const color = curve[curve.length - 1] >= initial ? '#10B981' : '#EF4444';
+  const color = curve[curve.length - 1] >= initial ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
 
   // Drawdown series
   let peak = initial;
@@ -653,8 +653,8 @@ function EquityCurve({ curve, initial }: { curve: number[]; initial: number }) {
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
         <linearGradient id="dd-g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#EF4444" stopOpacity="0" />
-          <stop offset="100%" stopColor="#EF4444" stopOpacity="0.3" />
+          <stop offset="0%" stopColor="var(--k-red-500)" stopOpacity="0" />
+          <stop offset="100%" stopColor="var(--k-red-500)" stopOpacity="0.3" />
         </linearGradient>
       </defs>
       {/* Zero line */}
@@ -696,7 +696,7 @@ function PnLHistogram({ dist }: { dist: number[] }) {
         const bMax = bMin + bucketW;
         const isLoss = bMax <= 0;
         const isMixed = bMin < 0 && bMax > 0;
-        const col = isLoss ? '#EF4444' : isMixed ? '#F59E0B' : '#10B981';
+        const col = isLoss ? 'var(--k-red-500)' : isMixed ? 'var(--k-amber-3)' : 'var(--k-emerald-2)';
         const bH  = Math.max(2, (c / maxCount) * H);
         const x   = (i / buckets) * W;
         const bW  = (W / buckets) - 1;
@@ -771,34 +771,34 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
   };
   const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
   const metricColor = (v: number, goodHigh = true) =>
-    (goodHigh ? v >= 0 : v <= 0) ? '#10B981' : '#EF4444';
-  const rateColor = (v: number) => v >= 60 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
+    (goodHigh ? v >= 0 : v <= 0) ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
+  const rateColor = (v: number) => v >= 60 ? 'var(--k-emerald-2)' : v >= 50 ? 'var(--k-amber-3)' : 'var(--k-red-500)';
 
   const inp: React.CSSProperties = {
     ...T, borderRadius: 4, padding: '4px 8px',
-    color: 'var(--t-bright, #e0e0e0)', fontFamily: 'inherit',
+    color: 'var(--t-bright, var(--k-border))', fontFamily: 'inherit',
     fontSize: 11, width: 80, outline: 'none',
   };
-  const toggle = (active: boolean, color = '#10B981'): React.CSSProperties => ({
+  const toggle = (active: boolean, color = 'var(--k-emerald-2)'): React.CSSProperties => ({
     padding: '3px 9px', borderRadius: 4, fontSize: 9, fontWeight: 700,
     cursor: 'pointer', fontFamily: 'inherit',
     border: active ? `1px solid ${color}55` : '1px solid var(--t-border, #2a2a2a)',
     background: active ? `${color}18` : 'transparent',
-    color: active ? color : 'var(--t-dim, #555)',
+    color: active ? color : 'var(--t-dim, var(--k-ink-3))',
     transition: 'all 0.1s',
   });
   const sectionHdr = (label: string, extra?: React.ReactNode): React.ReactNode => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--t-border, #1e1e1e)' }}>
       <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
-        color: 'var(--t-dim, #555)' }}>{label}</span>
+        color: 'var(--t-dim, var(--k-ink-3))' }}>{label}</span>
       {extra}
     </div>
   );
   const exitColor = (r: ExitReason) => ({
-    TP: '#10B981', SL: '#EF4444', 'TRAIL SL': '#F59E0B',
-    TIMEOUT: '#71717A', 'CIRCUIT BREAKER': '#EF4444'
-  }[r] ?? '#888');
+    TP: 'var(--k-emerald-2)', SL: 'var(--k-red-500)', 'TRAIL SL': 'var(--k-amber-3)',
+    TIMEOUT: '#71717A', 'CIRCUIT BREAKER': 'var(--k-red-500)'
+  }[r] ?? 'var(--k-ink-6)');
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
@@ -815,14 +815,14 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
 
           {/* Capital */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>STARTING CAPITAL ($)</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>STARTING CAPITAL ($)</label>
             <input style={{ ...inp, width: 110 }} type="number" min={1000} step={5000}
               value={capital} onChange={e => setCapital(+e.target.value || 100000)} />
           </div>
 
           {/* Sizing mode */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>POSITION SIZING</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>POSITION SIZING</label>
             <div style={{ display: 'flex', gap: 3 }}>
               {(['pct', 'fixed', 'kelly'] as SizingMode[]).map(m => (
                 <button key={m} style={toggle(sizingMode === m)} onClick={() => setSizingMode(m)}>
@@ -841,7 +841,7 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
                 placeholder="USD notional" />
             )}
             {sizingMode === 'kelly' && (
-              <span style={{ fontSize: 8, color: 'var(--t-dim, #555)', marginTop: 4 }}>
+              <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))', marginTop: 4 }}>
                 Adaptive Kelly — computed from trailing 20-trade window
               </span>
             )}
@@ -849,20 +849,20 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
 
           {/* SL / TP */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>STOP LOSS %</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>STOP LOSS %</label>
             <input style={inp} type="number" min={0.1} max={20} step={0.1}
               value={stopPct} onChange={e => setStopPct(+e.target.value || 2)} />
           </div>
 
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>R:R RATIO (TP = SL × R:R)</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>R:R RATIO (TP = SL × R:R)</label>
             <input style={inp} type="number" min={0.5} max={10} step={0.5}
               value={rrRatio} onChange={e => setRrRatio(+e.target.value || 2)} />
-            <span style={{ fontSize: 8, color: 'var(--t-dim, #555)' }}>TP = {(stopPct * rrRatio).toFixed(1)}% from entry</span>
+            <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))' }}>TP = {(stopPct * rrRatio).toFixed(1)}% from entry</span>
           </div>
 
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>LEVERAGE</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>LEVERAGE</label>
             <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
               {[1, 3, 5, 10, 20, 50].map(l => (
                 <button key={l} style={toggle(leverage === l)} onClick={() => setLeverage(l)}>{l}×</button>
@@ -872,25 +872,25 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
 
           {/* Trail SL */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>TRAILING STOP</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>TRAILING STOP</label>
             <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
               <button style={toggle(trailEnabled)} onClick={() => setTrailEnabled(s => !s)}>
                 {trailEnabled ? 'ON' : 'OFF'}
               </button>
               {trailEnabled && (
-                <span style={{ fontSize: 8, color: 'var(--t-dim, #555)' }}>activates after</span>
+                <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))' }}>activates after</span>
               )}
               {trailEnabled && (
                 <input style={{ ...inp, width: 50 }} type="number" min={0.1} max={10} step={0.1}
                   value={trailActivation} onChange={e => setTrailActivation(+e.target.value || 1)} />
               )}
-              {trailEnabled && <span style={{ fontSize: 8, color: 'var(--t-dim, #555)' }}>% profit</span>}
+              {trailEnabled && <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))' }}>% profit</span>}
             </div>
           </div>
 
           {/* Fees */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>EXCHANGE FEE</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>EXCHANGE FEE</label>
             <div style={{ display: 'flex', gap: 3 }}>
               {(['taker', 'maker', 'zero'] as FeeMode[]).map(f => (
                 <button key={f} style={toggle(feeMode === f)} onClick={() => setFeeMode(f)}>
@@ -899,7 +899,7 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
               ))}
             </div>
             <div style={S.field}>
-              <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em', marginTop: 6 }}>SLIPPAGE %</label>
+              <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em', marginTop: 6 }}>SLIPPAGE %</label>
               <input style={{ ...inp, width: 70 }} type="number" min={0} max={1} step={0.01}
                 value={slippagePct} onChange={e => setSlippagePct(+e.target.value || 0)} />
             </div>
@@ -907,7 +907,7 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
 
           {/* Signal + horizon */}
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>SIGNAL TYPE</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>SIGNAL TYPE</label>
             <div style={{ display: 'flex', gap: 3 }}>
               {(['arrows', 'confirmed', 'both'] as SignalFilter[]).map(f => (
                 <button key={f} style={toggle(signalFilter === f)} onClick={() => setSignalFilter(f)}>
@@ -918,7 +918,7 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
           </div>
 
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>EXIT HORIZON</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>EXIT HORIZON</label>
             <div style={{ display: 'flex', gap: 3 }}>
               {(['4h', '12h', '24h'] as const).map(h => (
                 <button key={h} style={toggle(fwdHorizon === h)} onClick={() => setFwdHorizon(h)}>
@@ -926,35 +926,35 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
                 </button>
               ))}
             </div>
-            <span style={{ fontSize: 8, color: 'var(--t-dim, #555)', marginTop: 3 }}>
+            <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))', marginTop: 3 }}>
               Multi-step: checks 4H→12H→24H for SL/TP at each step
             </span>
           </div>
 
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>COOLDOWN (bars)</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>COOLDOWN (bars)</label>
             <input style={{ ...inp, width: 60 }} type="number" min={0} max={20}
               value={cooldownBars} onChange={e => setCooldownBars(+e.target.value || 0)} />
           </div>
 
           <div style={S.field}>
-            <label style={{ ...S.label, color: 'var(--t-dim, #555)', fontSize: 9, letterSpacing: '0.1em' }}>CIRCUIT BREAKER %</label>
+            <label style={{ ...S.label, color: 'var(--t-dim, var(--k-ink-3))', fontSize: 9, letterSpacing: '0.1em' }}>CIRCUIT BREAKER %</label>
             <input style={{ ...inp, width: 60 }} type="number" min={0} max={100}
               value={circuitBreaker} onChange={e => setCircuitBreaker(+e.target.value || 0)} />
-            <span style={{ fontSize: 8, color: 'var(--t-dim, #555)' }}>0 = disabled</span>
+            <span style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))' }}>0 = disabled</span>
           </div>
         </div>
       )}
 
       {summary.trades === 0 ? (
-        <div style={{ color: 'var(--t-dim, #555)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>
+        <div style={{ color: 'var(--t-dim, var(--k-ink-3))', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>
           No signals in the selected filter / backtest window.
         </div>
       ) : (
         <>
           {summary.halted && (
             <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6,
-              background: '#EF444415', border: '1px solid #EF444440', fontSize: 10, color: '#EF4444' }}>
+              background: '#EF444415', border: '1px solid #EF444440', fontSize: 10, color: 'var(--k-red-500)' }}>
               ⚠ Circuit breaker triggered — simulation halted at {summary.trades} trades
               (drawdown exceeded {circuitBreaker}% from peak)
             </div>
@@ -967,32 +967,32 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
               { lbl: 'TOTAL P&L',       val: fmtMoney(summary.totalPnlUsd),         col: metricColor(summary.totalPnlUsd) },
               { lbl: 'RETURN %',        val: fmtPct(summary.totalPnlPct),            col: metricColor(summary.totalPnlPct) },
               { lbl: 'WIN RATE',        val: `${summary.winRate.toFixed(1)}%`,       col: rateColor(summary.winRate) },
-              { lbl: 'TRADES',          val: String(summary.trades),                 col: 'var(--t-bright, #e0e0e0)' },
-              { lbl: 'WINS / LOSSES',   val: `${summary.wins} / ${summary.losses}`, col: '#888' },
-              { lbl: 'PROFIT FACTOR',   val: summary.profitFactor >= 999 ? '∞' : summary.profitFactor.toFixed(2), col: summary.profitFactor >= 1.5 ? '#10B981' : summary.profitFactor >= 1 ? '#F59E0B' : '#EF4444' },
-              { lbl: 'MAX DRAWDOWN',    val: `-${summary.maxDrawdownPct.toFixed(1)}%`, col: summary.maxDrawdownPct > 20 ? '#EF4444' : summary.maxDrawdownPct > 10 ? '#F59E0B' : '#10B981' },
-              { lbl: 'SHARPE',          val: summary.sharpe.toFixed(2),              col: summary.sharpe >= 1 ? '#10B981' : summary.sharpe >= 0 ? '#F59E0B' : '#EF4444' },
-              { lbl: 'SORTINO',         val: summary.sortino.toFixed(2),             col: summary.sortino >= 1.5 ? '#10B981' : summary.sortino >= 0 ? '#F59E0B' : '#EF4444' },
-              { lbl: 'CALMAR',          val: summary.calmar.toFixed(2),              col: summary.calmar >= 1 ? '#10B981' : summary.calmar >= 0 ? '#F59E0B' : '#EF4444' },
+              { lbl: 'TRADES',          val: String(summary.trades),                 col: 'var(--t-bright, var(--k-border))' },
+              { lbl: 'WINS / LOSSES',   val: `${summary.wins} / ${summary.losses}`, col: 'var(--k-ink-6)' },
+              { lbl: 'PROFIT FACTOR',   val: summary.profitFactor >= 999 ? '∞' : summary.profitFactor.toFixed(2), col: summary.profitFactor >= 1.5 ? 'var(--k-emerald-2)' : summary.profitFactor >= 1 ? 'var(--k-amber-3)' : 'var(--k-red-500)' },
+              { lbl: 'MAX DRAWDOWN',    val: `-${summary.maxDrawdownPct.toFixed(1)}%`, col: summary.maxDrawdownPct > 20 ? 'var(--k-red-500)' : summary.maxDrawdownPct > 10 ? 'var(--k-amber-3)' : 'var(--k-emerald-2)' },
+              { lbl: 'SHARPE',          val: summary.sharpe.toFixed(2),              col: summary.sharpe >= 1 ? 'var(--k-emerald-2)' : summary.sharpe >= 0 ? 'var(--k-amber-3)' : 'var(--k-red-500)' },
+              { lbl: 'SORTINO',         val: summary.sortino.toFixed(2),             col: summary.sortino >= 1.5 ? 'var(--k-emerald-2)' : summary.sortino >= 0 ? 'var(--k-amber-3)' : 'var(--k-red-500)' },
+              { lbl: 'CALMAR',          val: summary.calmar.toFixed(2),              col: summary.calmar >= 1 ? 'var(--k-emerald-2)' : summary.calmar >= 0 ? 'var(--k-amber-3)' : 'var(--k-red-500)' },
               { lbl: 'EXPECTANCY',      val: fmtMoney(summary.expectancyUsd),        col: metricColor(summary.expectancyUsd) },
-              { lbl: 'AVG WIN',         val: fmtMoney(summary.avgWinUsd, false),     col: '#10B981' },
-              { lbl: 'AVG LOSS',        val: fmtMoney(-summary.avgLossUsd),          col: '#EF4444' },
-              { lbl: 'MAX CONSEC WINS', val: String(summary.maxConsecWins),          col: '#10B981' },
-              { lbl: 'MAX CONSEC LOSS', val: String(summary.maxConsecLosses),        col: '#EF4444' },
-              { lbl: 'FEES PAID',       val: fmtMoney(-summary.totalFeesUsd),        col: '#F59E0B' },
+              { lbl: 'AVG WIN',         val: fmtMoney(summary.avgWinUsd, false),     col: 'var(--k-emerald-2)' },
+              { lbl: 'AVG LOSS',        val: fmtMoney(-summary.avgLossUsd),          col: 'var(--k-red-500)' },
+              { lbl: 'MAX CONSEC WINS', val: String(summary.maxConsecWins),          col: 'var(--k-emerald-2)' },
+              { lbl: 'MAX CONSEC LOSS', val: String(summary.maxConsecLosses),        col: 'var(--k-red-500)' },
+              { lbl: 'FEES PAID',       val: fmtMoney(-summary.totalFeesUsd),        col: 'var(--k-amber-3)' },
               { lbl: 'SLIPPAGE COST',   val: fmtMoney(-summary.totalSlippageUsd),    col: '#71717A' },
-              { lbl: 'PEAK CAPITAL',    val: fmtMoney(summary.peakCapital, false),   col: '#F59E0B' },
-              { lbl: 'DD FROM PEAK $',  val: fmtMoney(-summary.maxDrawdownUsd),      col: '#EF4444' },
+              { lbl: 'PEAK CAPITAL',    val: fmtMoney(summary.peakCapital, false),   col: 'var(--k-amber-3)' },
+              { lbl: 'DD FROM PEAK $',  val: fmtMoney(-summary.maxDrawdownUsd),      col: 'var(--k-red-500)' },
             ].map(({ lbl, val, col }) => (
               <div key={lbl} style={{ ...T, borderRadius: 5, padding: '7px 10px' }}>
-                <div style={{ fontSize: 7, color: 'var(--t-dim, #555)', letterSpacing: '0.12em', marginBottom: 3 }}>{lbl}</div>
+                <div style={{ fontSize: 7, color: 'var(--t-dim, var(--k-ink-3))', letterSpacing: '0.12em', marginBottom: 3 }}>{lbl}</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: col, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
               </div>
             ))}
           </div>
 
           {/* Config summary pill */}
-          <div style={{ fontSize: 8, color: 'var(--t-dim, #555)', marginBottom: 12,
+          <div style={{ fontSize: 8, color: 'var(--t-dim, var(--k-ink-3))', marginBottom: 12,
             display: 'flex', gap: 12, flexWrap: 'wrap', padding: '5px 0', borderBottom: '1px solid var(--t-border, #1e1e1e)' }}>
             <span>${capital.toLocaleString()} capital</span>
             <span>{sizingMode === 'pct' ? `${positionPct}% × ${leverage}× = ${(positionPct * leverage).toFixed(0)}% eff.`
@@ -1035,7 +1035,7 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--t-border, #1e1e1e)' }}>
                       {['MONTH', 'TRADES', 'WIN RATE', 'P&L $', 'P&L %'].map(h => (
-                        <th key={h} style={{ padding: '4px 10px', color: 'var(--t-dim, #555)', fontWeight: 700, textAlign: 'right', fontSize: 9, letterSpacing: '0.08em' }}>{h}</th>
+                        <th key={h} style={{ padding: '4px 10px', color: 'var(--t-dim, var(--k-ink-3))', fontWeight: 700, textAlign: 'right', fontSize: 9, letterSpacing: '0.08em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1045,13 +1045,13 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
                       const pct = capital > 0 ? m.pnl / capital * 100 : 0;
                       return (
                         <tr key={month} style={{ borderBottom: '1px solid var(--t-border, #111)', background: m.pnl >= 0 ? 'rgba(16,185,129,0.04)' : 'rgba(239,68,68,0.04)' }}>
-                          <td style={{ padding: '4px 10px', color: 'var(--t-bright, #ccc)', textAlign: 'right', fontWeight: 700 }}>{month}</td>
-                          <td style={{ padding: '4px 10px', color: 'var(--t-dim, #666)', textAlign: 'right' }}>{m.trades}</td>
+                          <td style={{ padding: '4px 10px', color: 'var(--t-bright, var(--k-faint-5))', textAlign: 'right', fontWeight: 700 }}>{month}</td>
+                          <td style={{ padding: '4px 10px', color: 'var(--t-dim, var(--k-ink-4))', textAlign: 'right' }}>{m.trades}</td>
                           <td style={{ padding: '4px 10px', textAlign: 'right', color: rateColor(wr) }}>{wr.toFixed(0)}%</td>
-                          <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 700, color: m.pnl >= 0 ? '#10B981' : '#EF4444' }}>
+                          <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 700, color: m.pnl >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                             {fmtMoney(m.pnl)}
                           </td>
-                          <td style={{ padding: '4px 10px', textAlign: 'right', color: pct >= 0 ? '#10B981' : '#EF4444' }}>
+                          <td style={{ padding: '4px 10px', textAlign: 'right', color: pct >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                             {fmtPct(pct)}
                           </td>
                         </tr>
@@ -1076,51 +1076,51 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--t-bg2, #141414)', zIndex: 1 }}>
                     <tr style={{ borderBottom: '1px solid var(--t-border, #1e1e1e)' }}>
                       {['#', 'DATE', 'DIR', 'ENTRY', 'SL', 'TRAIL SL', 'TP', 'EXIT', 'REASON', 'GROSS%', 'FEES%', 'NET%', 'P&L $', 'POS $', 'CAPITAL', 'DD%'].map(h => (
-                        <th key={h} style={{ padding: '5px 7px', color: 'var(--t-dim, #555)', fontWeight: 700, letterSpacing: '0.05em', textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid var(--t-border, #222)' }}>{h}</th>
+                        <th key={h} style={{ padding: '5px 7px', color: 'var(--t-dim, var(--k-ink-3))', fontWeight: 700, letterSpacing: '0.05em', textAlign: 'right', whiteSpace: 'nowrap', borderBottom: '1px solid var(--t-border, #222)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {trades.map(t => (
                       <tr key={t.n} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: t.isWin ? 'rgba(16,185,129,0.04)' : 'rgba(239,68,68,0.04)' }}>
-                        <td style={{ padding: '4px 7px', color: 'var(--t-dim, #444)', textAlign: 'right' }}>{t.n}</td>
-                        <td style={{ padding: '4px 7px', color: 'var(--t-dim, #666)', textAlign: 'right', whiteSpace: 'nowrap' }}>{t.date}</td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 800, color: t.direction === 'long' ? '#10B981' : '#EF4444' }}>
+                        <td style={{ padding: '4px 7px', color: 'var(--t-dim, var(--k-text))', textAlign: 'right' }}>{t.n}</td>
+                        <td style={{ padding: '4px 7px', color: 'var(--t-dim, var(--k-ink-4))', textAlign: 'right', whiteSpace: 'nowrap' }}>{t.date}</td>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 800, color: t.direction === 'long' ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                           {t.direction === 'long' ? '↑L' : '↓S'}
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-bright, #ccc)' }}>${t.entry.toLocaleString()}</td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: '#EF4444' }}>${t.initialSl.toLocaleString()}</td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.trailSl !== t.initialSl ? '#F59E0B' : 'var(--t-dim, #333)' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-bright, var(--k-faint-5))' }}>${t.entry.toLocaleString()}</td>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--k-red-500)' }}>${t.initialSl.toLocaleString()}</td>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.trailSl !== t.initialSl ? 'var(--k-amber-3)' : 'var(--t-dim, var(--k-ink-1))' }}>
                           {t.trailSl !== t.initialSl ? `$${t.trailSl.toLocaleString()}` : '—'}
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: '#10B981' }}>${t.tp.toLocaleString()}</td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-bright, #ccc)' }}>${t.exit.toLocaleString()}</td>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--k-emerald-2)' }}>${t.tp.toLocaleString()}</td>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-bright, var(--k-faint-5))' }}>${t.exit.toLocaleString()}</td>
                         <td style={{ padding: '4px 7px', textAlign: 'right' }}>
                           <span style={{ color: exitColor(t.exitReason), fontWeight: 800 }}>{t.exitReason}</span>
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.grossPnlPct >= 0 ? '#10B981' : '#EF4444' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.grossPnlPct >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                           {t.grossPnlPct >= 0 ? '+' : ''}{t.grossPnlPct.toFixed(2)}%
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: '#F59E0B' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--k-amber-3)' }}>
                           -{t.feesPct.toFixed(3)}%
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 700, color: t.netPnlPct >= 0 ? '#10B981' : '#EF4444' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 700, color: t.netPnlPct >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                           {t.netPnlPct >= 0 ? '+' : ''}{t.netPnlPct.toFixed(2)}%
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 700, color: t.pnlUsd >= 0 ? '#10B981' : '#EF4444' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', fontWeight: 700, color: t.pnlUsd >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)' }}>
                           {t.pnlUsd >= 0 ? '+' : ''}{Math.abs(t.pnlUsd) >= 1000
                             ? `$${Math.abs(t.pnlUsd).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                             : `$${Math.abs(t.pnlUsd).toFixed(2)}`}{t.pnlUsd < 0 ? '' : ''}
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-dim, #666)' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: 'var(--t-dim, var(--k-ink-4))' }}>
                           ${Math.round(t.positionUsd).toLocaleString()}
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.capitalAfter >= t.capitalBefore ? '#10B981' : '#EF4444', fontWeight: 700 }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.capitalAfter >= t.capitalBefore ? 'var(--k-emerald-2)' : 'var(--k-red-500)', fontWeight: 700 }}>
                           {t.capitalAfter >= 1000
                             ? `$${(t.capitalAfter / 1000).toFixed(1)}k`
                             : `$${t.capitalAfter.toFixed(0)}`}
                         </td>
-                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.drawdownPct > 10 ? '#EF4444' : t.drawdownPct > 5 ? '#F59E0B' : 'var(--t-dim, #555)' }}>
+                        <td style={{ padding: '4px 7px', textAlign: 'right', color: t.drawdownPct > 10 ? 'var(--k-red-500)' : t.drawdownPct > 5 ? 'var(--k-amber-3)' : 'var(--t-dim, var(--k-ink-3))' }}>
                           {t.drawdownPct > 0.01 ? `-${t.drawdownPct.toFixed(1)}%` : '—'}
                         </td>
                       </tr>
@@ -1137,14 +1137,14 @@ function SimulationPanel({ bars, underlying }: SimPanelProps) {
 }
 // ── MTF components ────────────────────────────────────────────────────────────
 function MTFSparkline({ curve }: { curve: number[] }) {
-  if (curve.length < 2) return <span style={{ color: '#333' }}>—</span>;
+  if (curve.length < 2) return <span style={{ color: 'var(--k-ink-1)' }}>—</span>;
   const W = 80, H = 24;
   const min = Math.min(...curve), max = Math.max(...curve);
   const range = max - min || 1;
   const pts = curve.map((v, i) =>
     `${((i / (curve.length - 1)) * W).toFixed(1)},${(H - ((v - min) / range) * H).toFixed(1)}`
   ).join(' ');
-  const color = curve[curve.length - 1] >= curve[0] ? '#10B981' : '#EF4444';
+  const color = curve[curve.length - 1] >= curve[0] ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
@@ -1158,13 +1158,13 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
   const { profiles, recommended } = data;
   const _rows = _MTF_PROFILE_ORDER.filter(k => profiles[k]);
   const rateCol = (v: number | null) =>
-    v == null ? '#444' : v >= 60 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
+    v == null ? 'var(--k-text)' : v >= 60 ? 'var(--k-emerald-2)' : v >= 50 ? 'var(--k-amber-3)' : 'var(--k-red-500)';
   const numCol = (v: number | null) =>
-    v == null ? '#444' : v >= 0 ? '#10B981' : '#EF4444';
+    v == null ? 'var(--k-text)' : v >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
   const fmt = (v: number | null, dec = 2) => v == null ? '—' : v.toFixed(dec);
 
   const th: React.CSSProperties = {
-    padding: '5px 10px', color: '#555', fontSize: 9, fontWeight: 700,
+    padding: '5px 10px', color: 'var(--k-ink-3)', fontSize: 9, fontWeight: 700,
     letterSpacing: '0.1em', textAlign: 'right' as const,
     borderBottom: '1px solid #1e1e1e', whiteSpace: 'nowrap' as const,
   };
@@ -1175,7 +1175,7 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
 
   return (
     <div style={{ marginTop: 20, borderTop: '1px solid #1e1e1e', paddingTop: 16 }}>
-      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', color: '#555', marginBottom: 12 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--k-ink-3)', marginBottom: 12 }}>
         MULTI-TIMEFRAME COMPARISON
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -1191,7 +1191,7 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
           <tbody>
             {_rows.length === 0 ? (
               <tr>
-                <td colSpan={11} style={{ padding: '12px 10px', color: '#444', fontSize: 11, textAlign: 'center' as const }}>
+                <td colSpan={11} style={{ padding: '12px 10px', color: 'var(--k-text)', fontSize: 11, textAlign: 'center' as const }}>
                   No recognized profiles returned
                 </td>
               </tr>
@@ -1203,25 +1203,25 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
                   borderBottom: '1px solid #111',
                   background: isRec ? 'rgba(16,185,129,0.06)' : 'transparent',
                 }}>
-                  <td style={{ ...tdBase, color: '#e0e0e0', fontWeight: 700, textAlign: 'left' as const }}>
+                  <td style={{ ...tdBase, color: 'var(--k-border)', fontWeight: 700, textAlign: 'left' as const }}>
                     {r.label}
                   </td>
-                  <td style={{ ...tdBase, color: '#666', fontSize: 10 }}>
+                  <td style={{ ...tdBase, color: 'var(--k-ink-4)', fontSize: 10 }}>
                     {r.signal_tf} / {r.regime_tf}
                   </td>
-                  <td style={{ ...tdBase, color: '#ccc' }}>{r.total_trades}</td>
+                  <td style={{ ...tdBase, color: 'var(--k-faint-5)' }}>{r.total_trades}</td>
                   <td style={{ ...tdBase, color: rateCol(r.win_rate) }}>
                     {r.win_rate != null ? `${r.win_rate.toFixed(1)}%` : '—'}
                   </td>
                   <td style={{ ...tdBase, color: numCol(r.sharpe) }}>{fmt(r.sharpe)}</td>
                   <td style={{ ...tdBase, color: numCol(r.calmar) }}>{fmt(r.calmar)}</td>
                   <td style={{ ...tdBase, color: numCol(r.profit_factor) }}>{fmt(r.profit_factor)}</td>
-                  <td style={{ ...tdBase, color: r.max_drawdown != null && r.max_drawdown < -20 ? '#EF4444' : '#F59E0B' }}>
+                  <td style={{ ...tdBase, color: r.max_drawdown != null && r.max_drawdown < -20 ? 'var(--k-red-500)' : 'var(--k-amber-3)' }}>
                     {r.max_drawdown != null ? `${r.max_drawdown.toFixed(1)}%` : '—'}
                   </td>
                   <td style={{ ...tdBase, color: rateCol(r.fwd1_long_win_rate), fontSize: 10 }}>
                     {r.fwd1_long_win_rate != null ? `${r.fwd1_long_win_rate.toFixed(1)}%` : '—'}
-                    <span style={{ color: '#444', marginLeft: 3, fontSize: 9 }}>{r.fwd1_label}</span>
+                    <span style={{ color: 'var(--k-text)', marginLeft: 3, fontSize: 9 }}>{r.fwd1_label}</span>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' as const }}>
                     <MTFSparkline curve={r.equity_curve} />
@@ -1229,7 +1229,7 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
                   <td style={{ padding: '4px 8px' }}>
                     {isRec && (
                       <span style={{
-                        background: '#10B98122', color: '#10B981',
+                        background: '#10B98122', color: 'var(--k-emerald-2)',
                         border: '1px solid #10B98155', borderRadius: 3,
                         padding: '2px 6px', fontSize: 8, fontWeight: 800,
                       }}>BEST</span>
@@ -1241,7 +1241,7 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
           </tbody>
         </table>
       </div>
-      <div style={{ color: '#333', fontSize: 9, marginTop: 8 }}>
+      <div style={{ color: 'var(--k-ink-1)', fontSize: 9, marginTop: 8 }}>
         Recommended = highest Sharpe with ≥5 trades · Fee 0.1% RT · ATR-based exits
       </div>
     </div>
@@ -1344,28 +1344,28 @@ export function BacktestPanel({ underlying }: Props) {
           <div style={S.grid3}>
             <StatCard label="BULLISH REGIME"
               value={`${(s.bullish_regime_bars / totalBars * 100).toFixed(0)}%`}
-              color="#44cc88"
+              color="var(--k-green-mint)"
               sub={`${s.bullish_regime_bars} bars`} />
             <StatCard label="BEARISH REGIME"
               value={`${(s.bearish_regime_bars / totalBars * 100).toFixed(0)}%`}
-              color="#cc4444"
+              color="var(--k-red-muted)"
               sub={`${s.bearish_regime_bars} bars`} />
             <StatCard label="NEUTRAL REGIME"
               value={`${(s.neutral_regime_bars / totalBars * 100).toFixed(0)}%`}
-              color="#888"
+              color="var(--k-ink-6)"
               sub={`${s.neutral_regime_bars} bars`} />
           </div>
 
           <div style={S.sectionTitle}>SETUP COUNTS</div>
           <div style={S.grid4}>
-            <StatCard label="GREEN ARROWS" value={s.green_arrows} color="#44cc88" />
-            <StatCard label="RED ARROWS" value={s.red_arrows} color="#cc4444" />
-            <StatCard label="CONFIRMED LONG" value={s.confirmed_long_setups} color="#44cc88" />
-            <StatCard label="CONFIRMED SHORT" value={s.confirmed_short_setups} color="#cc4444" />
+            <StatCard label="GREEN ARROWS" value={s.green_arrows} color="var(--k-green-mint)" />
+            <StatCard label="RED ARROWS" value={s.red_arrows} color="var(--k-red-muted)" />
+            <StatCard label="CONFIRMED LONG" value={s.confirmed_long_setups} color="var(--k-green-mint)" />
+            <StatCard label="CONFIRMED SHORT" value={s.confirmed_short_setups} color="var(--k-red-muted)" />
             <StatCard label="EARLY LONG" value={s.early_long_setups} color="#f0a500" />
             <StatCard label="EARLY SHORT" value={s.early_short_setups} color="#f0a500" />
-            <StatCard label="FILTERED" value={s.filtered_bars} color="#555" />
-            <StatCard label="IDLE" value={s.idle_bars} color="#333" />
+            <StatCard label="FILTERED" value={s.filtered_bars} color="var(--k-ink-3)" />
+            <StatCard label="IDLE" value={s.idle_bars} color="var(--k-ink-1)" />
           </div>
 
           <QualityPanel s={s} bars={data.bars} />
@@ -1379,22 +1379,22 @@ export function BacktestPanel({ underlying }: Props) {
                 <StatCard
                   label="CALL WIN RATE 4H"
                   value={s.bs_arrow_long_win_rate_4h != null ? `${s.bs_arrow_long_win_rate_4h.toFixed(0)}%` : '—'}
-                  color={s.bs_arrow_long_win_rate_4h != null && s.bs_arrow_long_win_rate_4h >= 50 ? '#44cc88' : '#cc4444'}
+                  color={s.bs_arrow_long_win_rate_4h != null && s.bs_arrow_long_win_rate_4h >= 50 ? 'var(--k-green-mint)' : 'var(--k-red-muted)'}
                   sub="on green arrows" />
                 <StatCard
                   label="PUT WIN RATE 4H"
                   value={s.bs_arrow_short_win_rate_4h != null ? `${s.bs_arrow_short_win_rate_4h.toFixed(0)}%` : '—'}
-                  color={s.bs_arrow_short_win_rate_4h != null && s.bs_arrow_short_win_rate_4h >= 50 ? '#44cc88' : '#cc4444'}
+                  color={s.bs_arrow_short_win_rate_4h != null && s.bs_arrow_short_win_rate_4h >= 50 ? 'var(--k-green-mint)' : 'var(--k-red-muted)'}
                   sub="on red arrows" />
                 <StatCard
                   label="AVG CALL P&L 4H"
                   value={s.bs_arrow_long_avg_pnl_4h != null ? `${s.bs_arrow_long_avg_pnl_4h.toFixed(1)}%` : '—'}
-                  color={s.bs_arrow_long_avg_pnl_4h != null && s.bs_arrow_long_avg_pnl_4h >= 0 ? '#44cc88' : '#cc4444'}
+                  color={s.bs_arrow_long_avg_pnl_4h != null && s.bs_arrow_long_avg_pnl_4h >= 0 ? 'var(--k-green-mint)' : 'var(--k-red-muted)'}
                   sub="% of premium" />
                 <StatCard
                   label="AVG PUT P&L 4H"
                   value={s.bs_arrow_short_avg_pnl_4h != null ? `${s.bs_arrow_short_avg_pnl_4h.toFixed(1)}%` : '—'}
-                  color={s.bs_arrow_short_avg_pnl_4h != null && s.bs_arrow_short_avg_pnl_4h >= 0 ? '#44cc88' : '#cc4444'}
+                  color={s.bs_arrow_short_avg_pnl_4h != null && s.bs_arrow_short_avg_pnl_4h >= 0 ? 'var(--k-green-mint)' : 'var(--k-red-muted)'}
                   sub="% of premium" />
               </div>
             </>

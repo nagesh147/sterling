@@ -24,7 +24,7 @@ export function RegimeSparkline({ underlying }: Props) {
   if (isLoading || !data || data.count < 5) {
     return (
       <svg width={W} height={H} style={{ opacity: 0.3 }}>
-        <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="#333" strokeWidth="1" />
+        <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="var(--k-ink-1)" strokeWidth="1" />
       </svg>
     );
   }
@@ -42,7 +42,7 @@ export function RegimeSparkline({ underlying }: Props) {
   const emaPath = buildPath(emas, min, range, n);
 
   const last = bars[bars.length - 1];
-  const lineColor = last.is_bullish ? '#44cc88' : last.regime === 'bearish' ? '#cc4444' : '#888';
+  const lineColor = last.is_bullish ? 'var(--k-green-mint)' : last.regime === 'bearish' ? 'var(--k-red-muted)' : 'var(--k-ink-6)';
 
   // Segments colored by regime
   const segments = bars.slice(0, -1).map((bar, i) => {
@@ -50,7 +50,7 @@ export function RegimeSparkline({ underlying }: Props) {
     const x2 = PAD + ((i + 1) / (n - 1)) * (W - PAD * 2);
     const y1 = PAD + (1 - (bar.close - min) / range) * (H - PAD * 2);
     const y2 = PAD + (1 - (bars[i + 1].close - min) / range) * (H - PAD * 2);
-    const col = bar.is_bullish ? '#44cc88' : bar.regime === 'bearish' ? '#cc4444' : '#666';
+    const col = bar.is_bullish ? 'var(--k-green-mint)' : bar.regime === 'bearish' ? 'var(--k-red-muted)' : 'var(--k-ink-4)';
     return { x1, y1, x2, y2, col };
   });
 
@@ -58,7 +58,7 @@ export function RegimeSparkline({ underlying }: Props) {
     <div title={`${underlying} 4H regime sparkline: ${last.regime} | Close ${last.close.toFixed(0)} EMA50 ${last.ema50.toFixed(0)}`}>
       <svg width={W} height={H} style={{ display: 'block' }}>
         {/* EMA50 line */}
-        <path d={emaPath} stroke="#555" strokeWidth="1" fill="none" strokeDasharray="2,2" />
+        <path d={emaPath} stroke="var(--k-ink-3)" strokeWidth="1" fill="none" strokeDasharray="2,2" />
         {/* Price segments colored by regime */}
         {segments.map((s, i) => (
           <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}

@@ -35,7 +35,7 @@ async def test_authentication_uses_documented_form_fields():
     assert seen["method"] == "POST"
     assert "username=user" in seen["body"]
     assert "password=secret" in seen["body"]
-    assert "grant_type=passoword" in seen["body"]
+    assert "grant_type=password" in seen["body"]
 
 
 @pytest.mark.asyncio

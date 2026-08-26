@@ -56,7 +56,7 @@ export function AdaptiveEdgeSettingsPanel() {
     return <div style={{ padding: 18, color: MUTED, fontSize: 12 }}>Loading Adaptive Edge settings…</div>;
   }
   if (error) {
-    return <div style={{ padding: 18, color: '#c9433e', fontSize: 12 }}>Failed to load Adaptive Edge settings.</div>;
+    return <div style={{ padding: 18, color: 'var(--k-red-brick)', fontSize: 12 }}>Failed to load Adaptive Edge settings.</div>;
   }
 
   const patch = (partial: Partial<AdaptiveEdgeSettings>) => {
@@ -92,7 +92,7 @@ export function AdaptiveEdgeSettingsPanel() {
       />
 
       {invalid && (
-        <div style={{ margin: '0 0 16px', padding: '10px 12px', borderRadius: 8, background: '#fff6f5', border: '1px solid #f0d2c2', color: '#c9433e', fontSize: 12, lineHeight: 1.5 }}>
+        <div style={{ margin: '0 0 16px', padding: '10px 12px', borderRadius: 8, background: '#fff6f5', border: '1px solid #f0d2c2', color: 'var(--k-red-brick)', fontSize: 12, lineHeight: 1.5 }}>
           {invalid}
         </div>
       )}
@@ -161,9 +161,16 @@ export function AdaptiveEdgeSettingsPanel() {
           <ContractsGroup
             strikes={(draft.strike_moneyness as Moneyness[])}
             indexExpiries={indexExpiries}
+            dteMin={draft.expiry_dte_min ?? 0}
+            dteMax={draft.expiry_dte_max ?? 400}
+            avoidExpiryDay={draft.avoid_expiry_day ?? false}
+            dteDefaults={{ min: 0, max: 400 }}
             onChange={(next) => patch({
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.expiry_dte_min !== undefined ? { expiry_dte_min: next.expiry_dte_min } : {}),
+              ...(next.expiry_dte_max !== undefined ? { expiry_dte_max: next.expiry_dte_max } : {}),
+              ...(next.avoid_expiry_day !== undefined ? { avoid_expiry_day: next.avoid_expiry_day } : {}),
             })}
           />
           <ConfigNote>
@@ -224,7 +231,7 @@ export function AdaptiveEdgeSettingsPanel() {
               label="Enable daily drawdown circuit breaker"
               onChange={() => patch({ drawdown_circuit_breaker_enabled: !(draft.drawdown_circuit_breaker_enabled ?? true) })}
             />
-            <span style={{ color: (draft.drawdown_circuit_breaker_enabled ?? true) ? '#2e7d32' : MUTED, fontSize: 11.5, fontWeight: 500 }}>
+            <span style={{ color: (draft.drawdown_circuit_breaker_enabled ?? true) ? 'var(--k-green-deep)' : MUTED, fontSize: 11.5, fontWeight: 500 }}>
               {(draft.drawdown_circuit_breaker_enabled ?? true) ? 'Active' : 'Disabled'}
             </span>
           </div>
@@ -286,7 +293,7 @@ export function AdaptiveEdgeSettingsPanel() {
           {(snapshot.data?.readiness ?? []).map((item) => (
             <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12 }}>
               <span style={{ color: TEXT }}>{item.name.split('_').join(' ')}</span>
-              <span style={{ color: item.ready ? '#2e7d32' : '#b85c00' }}>{item.ready ? 'ready' : 'blocked'}</span>
+              <span style={{ color: item.ready ? 'var(--k-green-deep)' : '#b85c00' }}>{item.ready ? 'ready' : 'blocked'}</span>
             </div>
           ))}
           {!snapshot.data && <div style={{ color: MUTED, fontSize: 12 }}>Snapshot not loaded yet.</div>}

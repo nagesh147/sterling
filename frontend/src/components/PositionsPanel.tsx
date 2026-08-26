@@ -344,7 +344,7 @@ export function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: n
         {pos.exit_mode && (
           <div style={styles.cell}>
             <span style={styles.key}>EXIT MODE</span>
-            <span style={{...styles.val, fontSize: 10, background: '#333', padding: '1px 4px', borderRadius: 2}}>
+            <span style={{...styles.val, fontSize: 10, background: 'var(--k-ink-1)', padding: '1px 4px', borderRadius: 2}}>
               {pos.exit_mode} {pos.current_red_count != null && pos.exit_threshold != null ? `(${pos.current_red_count}/${pos.exit_threshold} red)` : ''}
             </span>
             {pos.current_red_count != null && pos.exit_threshold != null && pos.exit_threshold > 0 && (

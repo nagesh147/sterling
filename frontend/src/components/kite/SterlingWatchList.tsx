@@ -82,8 +82,8 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
       {!hideHeaderAndActions && (
         <>
           <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
-             <button onClick={onBuy} style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>BUY</button>
-             <button onClick={onSell} style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>SELL</button>
+             <button onClick={onBuy} style={{ flex: 1, background: 'var(--k-blue)', color: 'var(--k-on-accent)', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>BUY</button>
+             <button onClick={onSell} style={{ flex: 1, background: 'var(--k-orange)', color: 'var(--k-on-accent)', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>SELL</button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
           </div>
@@ -143,7 +143,7 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
         </div>)}
 
       {/* ── OHLC Box ── */}
-      {hasQ && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, marginBottom: 16 }}>
+      {hasQ && (<div style={{ background: 'var(--k-surface)', padding: '12px 16px', borderRadius: 4, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
             <span style={{ color: t.dim }}>Open</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.open)}</span>
@@ -162,15 +162,15 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
         </div>
         
         {/* Progress Bar */}
-        <div style={{ height: 4, background: '#e0e0e0', borderRadius: 2, position: 'relative' }}>
+        <div style={{ height: 4, background: 'var(--k-border)', borderRadius: 2, position: 'relative' }}>
           <div style={{ position: 'absolute', left: '20%', right: '30%', top: 0, bottom: 0, background: t.red, borderRadius: 2 }} />
-          <div style={{ position: 'absolute', left: '20%', top: '100%', borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: '5px solid #999', marginTop: 1, transform: 'translateX(-50%)' }} />
-          <div style={{ position: 'absolute', right: '30%', top: '100%', width: 6, height: 6, background: '#999', borderRadius: '50%', marginTop: 2, transform: 'translateX(50%)' }} />
+          <div style={{ position: 'absolute', left: '20%', top: '100%', borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: '5px solid var(--k-dim-2)', marginTop: 1, transform: 'translateX(-50%)' }} />
+          <div style={{ position: 'absolute', right: '30%', top: '100%', width: 6, height: 6, background: 'var(--k-dim-2)', borderRadius: '50%', marginTop: 2, transform: 'translateX(50%)' }} />
         </div>
       </div>)}
 
       {/* ── Key Stats ── */}
-      {hasQ && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+      {hasQ && (<div style={{ background: 'var(--k-surface)', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
             <span style={{ color: t.dim }}>Volume</span><span style={{ color: t.text }}>{q.volume != null ? num(q.volume).toLocaleString('en-IN') : 'N/A'}</span>
@@ -209,7 +209,7 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
       </div>)}
 
       {/* ── Greeks ── */}
-      {greeks && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+      {greeks && (<div style={{ background: 'var(--k-surface)', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
             <span style={{ color: t.dim }}>IV</span><span style={{ color: t.text }}>{(greeks.iv * 100).toFixed(1)}%</span>
@@ -283,13 +283,13 @@ export function KiteSearchBar({
             <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, display: 'flex', alignItems: 'center' }}>CHANGE TYPE <span style={{ marginLeft: 6, cursor: 'pointer' }}><Icons.Info /></span></div>
             <div style={{ display: 'flex', gap: 24 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: s.chgType === 'close' ? t.text : t.dim }}>
-                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'close' ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'close' ? t.blue : 'var(--k-faint-5)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {s.chgType === 'close' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.blue }} />}
                 </div>
                 <input type="radio" style={{ display: 'none' }} name="chgType" checked={s.chgType === 'close'} onChange={() => s.setChgType('close')} /> Close price
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: s.chgType === 'open' ? t.text : t.dim }}>
-                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'open' ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'open' ? t.blue : 'var(--k-faint-5)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {s.chgType === 'open' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.blue }} />}
                 </div>
                 <input type="radio" style={{ display: 'none' }} name="chgType" checked={s.chgType === 'open'} onChange={() => s.setChgType('open')} /> Open price
@@ -308,7 +308,7 @@ export function KiteSearchBar({
                 { lbl: 'Leg', val: s.showLeg, set: () => s.toggleShow('showLeg') }
               ].map(opt => (
                 <label key={opt.lbl} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: opt.val ? t.text : t.dim }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 2, border: `1px solid ${opt.val ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 2, border: `1px solid ${opt.val ? t.blue : 'var(--k-faint-5)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {opt.val && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 5 l1.5 1.5 l3.5 -3.5" fill="none" stroke={t.blue} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                   <input type="checkbox" style={{ display: 'none' }} checked={opt.val} onChange={() => opt.set()} /> {opt.lbl}
@@ -325,7 +325,7 @@ export function KiteSearchBar({
                   key={lbl} 
                   onClick={() => s.setSortBy(lbl === s.sortBy ? 'Custom' : lbl)}
                   style={{ 
-                    background: '#fff', 
+                    background: 'var(--k-bg)', 
                     border: `1px solid ${s.sortBy === lbl ? t.blue : t.border}`, 
                     padding: '4px 16px', 
                     borderRadius: 3, 

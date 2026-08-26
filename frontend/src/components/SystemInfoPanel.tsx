@@ -38,7 +38,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
   },
   btnPurple: {
-    background: t.raised, color: '#aa88ff', border: '1px solid #aa88ff',
+    background: t.raised, color: 'var(--k-violet-3)', border: '1px solid var(--k-violet-3)',
     padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
   },
   btnOrange: {
@@ -139,7 +139,7 @@ export function SystemInfoPanel() {
         </div>
         <div style={S.cell}>
           <span style={S.key}>ACTIVE SOURCE</span>
-          <span style={{ ...S.val, color: '#aa88ff' }}>
+          <span style={{ ...S.val, color: 'var(--k-violet-3)' }}>
             {data.active_data_source.toUpperCase()}
           </span>
         </div>

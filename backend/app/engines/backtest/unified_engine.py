@@ -170,7 +170,25 @@ def generate_strategy_signals(
     close = df["close"]
     high = df["high"]
     low = df["low"]
-    volume = df["volume"] if "volume" in df.columns else pd.Series(1.0, index=df.index)
+    has_vol = "volume" in df.columns and (df["volume"] > 0).any()
+    volume = df["volume"] if has_vol else pd.Series(0.0, index=df.index)
+
+    # Intraday Date Series for Anchoring
+    if "dt" in df.columns:
+        date_series = df["dt"].dt.date
+    elif "timestamp" in df.columns:
+        date_series = pd.to_datetime(df["timestamp"]).dt.date
+    else:
+        date_series = pd.Series(0, index=df.index)
+
+    # Intraday Daily-Anchored VWAP
+    if has_vol:
+        pv_series = df["close"] * df["volume"]
+        cum_pv = pv_series.groupby(date_series).cumsum()
+        cum_vol = df["volume"].groupby(date_series).cumsum()
+        vwap = cum_pv / (cum_vol + 1e-9)
+    else:
+        vwap = close.ewm(span=20, adjust=False).mean()
 
     if strategy == "supertrend":
         period1 = params.get("period1", 10)
@@ -190,18 +208,23 @@ def generate_strategy_signals(
         short_signals = st1_flipped_short & (~trend2) & (close < ema50)
 
     elif strategy == "adaptive_edge":
-        # TBT Order Flow Imbalance + Volume Profile POC proxy
+        # Multi-Regime Microstructure: Daily-Anchored VWAP + Value Area High/Low Breakout + Dynamic Volatility Surge
         atr = calculate_atr(df, 14)
-        rolling_poc = close.rolling(20, min_periods=5).median()
-        vwap = (close * volume).cumsum() / (volume.cumsum() + 1e-9)
+        bar_range = high - low
 
-        # Volume momentum surge
-        vol_ma = volume.rolling(20, min_periods=5).mean()
-        vol_surge = volume > (vol_ma * 1.3)
+        if has_vol:
+            vol_ma = volume.rolling(20, min_periods=5).mean()
+            vol_surge = (volume > vol_ma * 1.25) | (bar_range > atr * 1.2)
+        else:
+            vol_surge = bar_range > (atr * 1.2)
 
-        # Price rejecting POC from above with high momentum
-        long_cond = (close > vwap) & (close > rolling_poc) & (close.shift(1) <= rolling_poc) & vol_surge
-        short_cond = (close < vwap) & (close < rolling_poc) & (close.shift(1) >= rolling_poc) & vol_surge
+        # Dynamic Value Area Structure (20-bar rolling VAH/VAL)
+        vah = high.rolling(20, min_periods=5).max().shift(1)
+        val = low.rolling(20, min_periods=5).min().shift(1)
+        ema20 = close.ewm(span=20, adjust=False).mean()
+
+        long_cond = (close > vah) & (close > vwap) & (close > ema20) & vol_surge
+        short_cond = (close < val) & (close < vwap) & (close < ema20) & vol_surge
 
         long_signals = long_cond
         short_signals = short_cond
@@ -221,7 +244,7 @@ def generate_strategy_signals(
         short_signals = squeeze_release_short & (~squeeze_release_short.shift(1).fillna(False))
 
     elif strategy == "directional":
-        # High-Momentum VCP (Volatility Contraction Pattern) + Volume Breakout
+        # High-Momentum VCP (Volatility Contraction Pattern) + Volume/Range Breakout
         atr = calculate_atr(df, 14)
         high_20 = high.rolling(20, min_periods=5).max().shift(1)
         low_20 = low.rolling(20, min_periods=5).min().shift(1)
@@ -229,7 +252,11 @@ def generate_strategy_signals(
         breakout_high = (close > high_20) & (close.shift(1) <= high_20)
         breakdown_low = (close < low_20) & (close.shift(1) >= low_20)
 
-        vol_surge = volume > volume.rolling(20, min_periods=5).mean() * 1.5
+        if has_vol:
+            vol_surge = volume > (volume.rolling(20, min_periods=5).mean() * 1.3)
+        else:
+            vol_surge = (high - low) > (atr * 1.1)
+
         long_signals = breakout_high & vol_surge
         short_signals = breakdown_low & vol_surge
 

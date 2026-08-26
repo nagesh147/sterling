@@ -12,7 +12,7 @@ export function MacKiteToggle() {
   const macKite = useKiteSettings((s) => s.macKite);
   const setMacKite = useKiteSettings((s) => s.setMacKite);
 
-  const ORANGE = '#f06428';
+  const ORANGE = 'var(--k-brand)';
   return (
     <button
       onClick={() => setMacKite(!macKite)}
@@ -20,9 +20,9 @@ export function MacKiteToggle() {
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
         height: 22, padding: '0 8px', borderRadius: 11, cursor: 'pointer',
-        border: `1px solid ${macKite ? ORANGE : '#e0e0e0'}`,
+        border: `1px solid ${macKite ? ORANGE : 'var(--k-border)'}`,
         background: macKite ? 'rgba(240,100,40,0.08)' : 'transparent',
-        color: macKite ? ORANGE : '#9b9b9b',
+        color: macKite ? ORANGE : 'var(--k-dim)',
         fontSize: 10, fontWeight: 600, letterSpacing: 0.3,
         transition: 'all 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
       }}
@@ -40,7 +40,7 @@ export function MacKiteToggle() {
       }}>
         <span style={{
           position: 'absolute', top: 1, left: 1, width: 10, height: 10, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
           transform: macKite ? 'translateX(10px)' : 'translateX(0)',
           transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         }} />

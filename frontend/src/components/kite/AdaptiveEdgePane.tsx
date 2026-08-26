@@ -830,7 +830,7 @@ export function AdaptiveEdgePane({
                         height: 34,
                         padding: '0 14px',
                         background: k.blue,
-                        color: '#ffffff',
+                        color: 'var(--k-bg)',
                         border: 0,
                         borderRadius: 3,
                         fontSize: 12,

@@ -7,6 +7,15 @@ const addMutate = vi.fn();
 const deleteMutate = vi.fn();
 const updateMutate = vi.fn();
 const updateSettingsMutate = vi.fn();
+const runDiagMutateAsync = vi.fn().mockResolvedValue({
+  categories: [
+    {
+      id: 'truedata_auth',
+      status: 'PASS',
+      latency_ms: 372.9,
+    },
+  ],
+});
 
 vi.mock('../../../hooks/useTrueData', () => ({
   useTrueDataSettings: () => ({
@@ -34,6 +43,7 @@ vi.mock('../../../hooks/useTrueData', () => ({
   useAddTrueDataCredential: () => ({ mutate: addMutate, isPending: false, error: null }),
   useUpdateTrueDataCredential: () => ({ mutate: updateMutate, isPending: false, error: null }),
   useDeleteTrueDataCredential: () => ({ mutate: deleteMutate, isPending: false }),
+  useRunTrueDataDiagnostics: () => ({ mutateAsync: runDiagMutateAsync, isPending: false }),
   useTrueDataStatus: () => ({
     data: {
       connected: true,
@@ -51,6 +61,7 @@ describe('TrueDataCredentialsPanel', () => {
     deleteMutate.mockClear();
     updateMutate.mockClear();
     updateSettingsMutate.mockClear();
+    runDiagMutateAsync.mockClear();
   });
 
   it('renders data source selector with TrueData and Zerodha options', () => {
@@ -65,12 +76,22 @@ describe('TrueDataCredentialsPanel', () => {
     expect(updateSettingsMutate).toHaveBeenCalledWith({ data_source: 'zerodhakite' });
   });
 
-  it('renders status card without exposing raw credentials', () => {
+  it('renders status card without exposing raw credentials and supports test connection', async () => {
     render(<TrueDataCredentialsPanel />);
     expect(screen.getByText('TRUEDATA MARKET DATA STATUS')).toBeInTheDocument();
     expect(screen.getByText('Connected (tu****23)')).toBeInTheDocument();
     expect(screen.getByText('Primary TrueData Feed')).toBeInTheDocument();
     expect(screen.getByText('User: tu****23 · Active Feed · Connected')).toBeInTheDocument();
+
+    // Expand the card
+    const cardHeader = screen.getByText('Primary TrueData Feed');
+    fireEvent.click(cardHeader);
+
+    // Verify Test button is rendered and functional
+    const testBtn = screen.getByRole('button', { name: /Test Connection/i });
+    expect(testBtn).toBeInTheDocument();
+    await fireEvent.click(testBtn);
+    expect(runDiagMutateAsync).toHaveBeenCalledWith({ category_id: 'truedata_auth' });
   });
 
   it('allows clicking add button to reveal form with password input', () => {

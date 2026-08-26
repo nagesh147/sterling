@@ -164,7 +164,7 @@ function TickerSkeleton({ count }: { count: number }) {
   return (
     <div style={{ minHeight: 124, padding: '10px 20px', display: 'flex', alignItems: 'stretch', gap: 10, overflow: 'hidden', borderBottom: `1px solid ${k.border}`, boxSizing: 'border-box', fontFamily: k.fontFamily }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} style={{ width: 250, minHeight: 102, flexShrink: 0, padding: '12px 14px', boxSizing: 'border-box', border: '1px solid #d7d9dd', borderRadius: 7, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 76px', gap: 12, alignItems: 'center', background: '#fff' }}>
+        <div key={i} style={{ width: 250, minHeight: 102, flexShrink: 0, padding: '12px 14px', boxSizing: 'border-box', border: '1px solid #d7d9dd', borderRadius: 7, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 76px', gap: 12, alignItems: 'center', background: 'var(--k-bg)' }}>
           <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9 }}>
             <MacSkeleton width={i === 1 ? '74%' : '58%'} height={9} radius={5} />
             <MacSkeleton width={i === 2 ? '64%' : '78%'} height={24} radius={7} />

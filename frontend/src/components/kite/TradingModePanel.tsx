@@ -35,7 +35,7 @@ function RunningRow({ label, description, on, children }: {
     }}>
       <span aria-hidden style={{
         width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-        background: on ? '#4caf50' : '#c7c7c7',
+        background: on ? 'var(--k-green)' : '#c7c7c7',
       }} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ color: TEXT, fontSize: 12.5, fontWeight: 700 }}>{label}</div>
@@ -96,8 +96,8 @@ export function TradingModePanel() {
               type="button"
               onClick={() => openSettingsSection('navigator')}
               style={{
-                minHeight: 32, border: `1px solid ${BORDER}`, borderRadius: 7, background: '#fff',
-                color: '#f06428', padding: '0 12px', fontFamily: 'inherit',
+                minHeight: 32, border: `1px solid ${BORDER}`, borderRadius: 7, background: 'var(--k-bg)',
+                color: 'var(--k-brand)', padding: '0 12px', fontFamily: 'inherit',
                 fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
               }}
             >

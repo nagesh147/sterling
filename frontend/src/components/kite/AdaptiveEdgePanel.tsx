@@ -162,7 +162,7 @@ export function formatModeBadge(
         : isUpgradePath
         ? 'rgba(16, 185, 129, 0.08)'
         : currentMeta.bg,
-      color: isDowngradePath ? '#dc2626' : isUpgradePath ? '#059669' : currentMeta.color,
+      color: isDowngradePath ? 'var(--k-red-deep)' : isUpgradePath ? 'var(--k-emerald)' : currentMeta.color,
       border: isDowngradePath
         ? '1px solid rgba(239, 68, 68, 0.25)'
         : isUpgradePath
@@ -184,7 +184,7 @@ export function formatModeBadge(
       label,
       title: `Upgraded trade: Entered as ${entryMeta.desc}, promoted to ${peakMeta.desc} on favorable expansion`,
       bg: 'rgba(16, 185, 129, 0.08)',
-      color: '#059669',
+      color: 'var(--k-emerald)',
       border: '1px solid rgba(16, 185, 129, 0.25)',
       isUpgraded: true,
       isDowngraded: false,
@@ -201,7 +201,7 @@ export function formatModeBadge(
       label: `${fromCfg.label} ↘ ${currentMeta.label}`,
       title: `Downgraded trade: Transitioned down from ${fromCfg.desc} to ${currentMeta.desc} due to momentum consolidation`,
       bg: 'rgba(239, 68, 68, 0.08)',
-      color: '#dc2626',
+      color: 'var(--k-red-deep)',
       border: '1px solid rgba(239, 68, 68, 0.25)',
       isUpgraded: false,
       isDowngraded: true,
@@ -740,7 +740,7 @@ export function AdaptiveEdgePanel({
             background: selected || isExpanded
               ? k.surfaceHover
               : rIdx % 2 === 1
-              ? '#fafafa'
+              ? 'var(--k-surface-2)'
               : k.bg,
             cursor: 'pointer',
             borderBottom: `1px solid ${k.border}`,
@@ -1021,7 +1021,7 @@ export function AdaptiveEdgePanel({
                         height: 34,
                         padding: '0 14px',
                         background: k.blue,
-                        color: '#ffffff',
+                        color: 'var(--k-bg)',
                         border: 0,
                         borderRadius: 3,
                         fontSize: 12,
@@ -1203,7 +1203,7 @@ export function AdaptiveEdgePanel({
 
           {/* ── IN-TABLE LIVE SCANNING PROGRESS ROW (WHEN SIGNALS ALREADY LOADED) ── */}
           {rows.length > 0 && (scanning || isFetching || (pendingSymbols && pendingSymbols.length > 0)) && (
-            <tr style={{ background: '#f9f9f9', borderTop: `1px dashed ${k.blue}60`, borderBottom: `1px solid ${k.border}` }}>
+            <tr style={{ background: 'var(--k-surface)', borderTop: `1px dashed ${k.blue}60`, borderBottom: `1px solid ${k.border}` }}>
               <td colSpan={COLUMNS.length} style={{ padding: '12px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                   {/* Left: Animated Pulse indicator & Status */}

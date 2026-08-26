@@ -82,3 +82,37 @@ export function useTrueDataStatus() {
     refetchInterval: 30_000,
   });
 }
+
+export function useRunTrueDataDiagnostics() {
+  const qc = useQueryClient();
+  return useMutation<
+    import('../types/truedata').DiagnosticSuiteResult,
+    Error,
+    { category_id?: string } | void
+  >({
+    mutationFn: (params) =>
+      api.post<import('../types/truedata').DiagnosticSuiteResult>(
+        `${TD}/diagnostics/run`,
+        params || {}
+      ),
+    onSuccess: (data) => {
+      qc.setQueryData(['truedata-diagnostics-latest'], data);
+      qc.invalidateQueries({ queryKey: ['truedata-status'] });
+    },
+  });
+}
+
+export function useTrueDataDiagnosticsSummary() {
+  return useQuery<{
+    authenticated: boolean;
+    username_hint?: string | null;
+    is_active: boolean;
+    realtime_port: number;
+    has_credentials: boolean;
+  }>({
+    queryKey: ['truedata-diagnostics-summary'],
+    queryFn: () => api.get(`${TD}/diagnostics/summary`),
+    refetchInterval: 15_000,
+  });
+}
+

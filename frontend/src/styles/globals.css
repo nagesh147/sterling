@@ -282,6 +282,28 @@
 
 html, body { margin: 0; padding: 0; }
 
+/* ─── Viewport normalisation ───────────────────────────────────────────────
+   The app lays out against a fixed design width and scales to fit, so the
+   same page is the same page on every monitor regardless of how many CSS
+   pixels that monitor's scale factor hands us. Written by
+   styles/applyViewportScale.ts.
+
+   Both rules are gated on [data-app-scaled], which the applier only sets when
+   the scale is not exactly 1 — an app at 1:1 is left completely untouched.
+
+   The pin is required, not cosmetic: scaling above 1 makes the document
+   taller than the viewport, and the scrollbar that raises steals width back
+   out of the layout. The terminal is fixed/inset:0 and never scrolls the
+   document anyway. */
+html[data-app-scaled] {
+  zoom: var(--app-zoom, 1);
+}
+html[data-app-scaled],
+html[data-app-scaled] body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
@@ -445,3 +467,75 @@ button, a, input, select, textarea,
 
 /* Brand-tinted selection (scrollbars handled by the macOS overlay rules above). */
 ::selection { background: color-mix(in srgb, var(--brand-2) 32%, transparent); color: var(--text-primary); }
+
+/* The app-level light/dark switch. Hover lifts it the same way the other
+   top-bar icon actions do, so it reads as one of them and not as a widget. */
+.sk-theme-toggle:hover {
+  color: var(--t-bright) !important;
+  border-color: color-mix(in srgb, var(--t-bright) 28%, transparent) !important;
+}
+.sk-theme-toggle:active > span { transform: scale(.86) rotate(-18deg); }
+.sk-theme-toggle:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-theme-toggle, .sk-theme-toggle > span { transition: none !important; }
+}
+
+/* ── Signal board ─────────────────────────────────────────────────────────
+ * Hover and focus are the same weight, so keyboard use is not a second-class
+ * path through a board that places real orders. The left accent thickens
+ * rather than the row changing colour twice, which keeps the direction colour
+ * readable while hovered.
+ */
+.sb-row { transition: background .12s ease, box-shadow .12s ease; }
+.sb-row:hover { background: var(--k-surface-hover) !important; }
+.sb-row:focus-visible {
+  outline: none;
+  background: var(--k-surface-hover) !important;
+  box-shadow: inset 0 0 0 1px var(--k-blue);
+}
+.sb-row:active { background: var(--k-surface) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-row { transition: none !important; }
+}
+
+/* ── Engine toolbar ───────────────────────────────────────────────────── */
+.sb-tab { transition: color .13s ease, border-color .13s ease; }
+.sb-tab:hover { color: var(--k-text) !important; }
+.sb-tab:focus-visible { outline: 2px solid var(--k-blue); outline-offset: -2px; }
+
+.sb-tool { transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.sb-tool:hover:not(:disabled) { background: var(--k-surface-hover) !important; color: var(--k-text) !important; }
+.sb-tool:focus-visible { outline: 2px solid var(--k-blue); outline-offset: 1px; }
+
+/* Reserved for a live engine that has something armed — motion that means
+   one specific thing keeps meaning it. */
+@keyframes sb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-tab, .sb-tool { transition: none !important; }
+  [style*="sb-pulse"] { animation: none !important; }
+}
+
+/* The instrument label is a link into the full detail page, and it sits inside
+   a row that also responds to clicks. Underlining on hover is what separates
+   "this opens something else" from "this expands here". */
+.sb-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sb-name:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Sortable column headers. The sort arrows are hidden until the column is
+   active or hovered, so a twelve-column board is not a wall of chevrons. */
+.sb-head:hover:not(:disabled) { color: var(--k-text) !important; }
+.sb-head:hover:not(:disabled) > span[aria-hidden] { opacity: .45 !important; }
+.sb-head:focus-visible {
+  outline: 2px solid var(--k-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

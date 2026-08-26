@@ -21,13 +21,13 @@ const MOTION_CSS = `
   --km-accent: #e95420;
   --km-hover: rgba(233,84,32,.055);
   --km-ring: rgba(233,84,32,.28);
-  --km-list-surface: #f1f1f1;
+  --km-list-surface: var(--k-surface-hover);
 }
 
 .kite-motion-enabled[data-motion-style='mac'] {
   --km-fast: 110ms; --km-ui: 170ms; --km-pop: 220ms;
   --km-ease: cubic-bezier(.22,1,.36,1); --km-pop-ease: cubic-bezier(.16,1,.3,1);
-  --km-accent: #4184f3; --km-hover: rgba(65,132,243,.055); --km-ring: rgba(65,132,243,.28);
+  --km-accent: var(--k-blue); --km-hover: rgba(65,132,243,.055); --km-ring: rgba(65,132,243,.28);
 }
 .kite-motion-enabled[data-motion-style='material'] {
   --km-fast: 100ms; --km-ui: 155ms; --km-pop: 190ms;
@@ -52,7 +52,7 @@ const MOTION_CSS = `
 .kite-motion-enabled[data-motion-style='minimal'] {
   --km-fast: 1ms; --km-ui: 1ms; --km-pop: 1ms;
   --km-ease: linear; --km-pop-ease: linear;
-  --km-accent: #666; --km-hover: rgba(0,0,0,.025); --km-ring: rgba(0,0,0,.18);
+  --km-accent: var(--k-ink-4); --km-hover: rgba(0,0,0,.025); --km-ring: rgba(0,0,0,.18);
 }
 
 .kite-motion-enabled button,
@@ -87,7 +87,7 @@ const MOTION_CSS = `
   .kite-motion-enabled .st-leg-row,
   .kite-motion-enabled .st-group-header,
   .kite-motion-enabled .kv-rows > * {
-    background-color: #fff !important;
+    background-color: var(--k-bg) !important;
   }
 
   .kite-motion-enabled .mw-item:hover {

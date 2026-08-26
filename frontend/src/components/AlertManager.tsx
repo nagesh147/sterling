@@ -73,7 +73,7 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
       fontSize: 10, letterSpacing: 1,
-      color: active ? t.bright : '#444',
+      color: active ? t.bright : 'var(--k-text)',
       padding: '4px 10px',
       borderBottom: active ? `2px solid ${t.green}` : '2px solid transparent',
     }}>
@@ -335,7 +335,7 @@ export function AlertManager() {
           {DAY_OPTIONS.map(([val, label]) => (
             <button key={val} onClick={() => setDayFilter(val)} style={{
               background: dayFilter === val ? '#1a2a1a' : 'none',
-              color: dayFilter === val ? t.green : '#444',
+              color: dayFilter === val ? t.green : 'var(--k-text)',
               border: dayFilter === val ? '1px solid #44cc8844' : `1px solid ${t.border}`,
               padding: '3px 8px', borderRadius: 3, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: 10,

@@ -1,7 +1,6 @@
 """Local TrueData 1-minute bar cache for trial F-101 feature construction.
 
-Acquisition cache only. Provenance is persisted and returned so Adaptive Edge
-replay cannot relabel synthetic or mixed-provider rows as TrueData.
+Acquisition cache only. Not an A197 calibration dataset.
 """
 from __future__ import annotations
 
@@ -54,20 +53,16 @@ class BarStore:
         interval: str,
         request_from: str,
         request_to: str,
-        source: str = "truedata",
-        source_version: str = "2.6",
     ) -> str:
         with self._connect() as conn:
             for row in rows:
-                row_source = str(row.get("source", source))
-                row_version = str(row.get("source_version", source_version))
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO truedata_bars (
                         symbol, interval, provider_timestamp,
                         open, high, low, close, volume, oi,
-                        request_from, request_to, source, source_version
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        request_from, request_to
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         symbol,
@@ -81,8 +76,6 @@ class BarStore:
                         _num(row.get("oi")),
                         request_from,
                         request_to,
-                        row_source,
-                        row_version,
                     ),
                 )
         return self.dataset_sha256(symbol, interval)
@@ -92,8 +85,7 @@ class BarStore:
             rows = conn.execute(
                 """
                 SELECT provider_timestamp AS timestamp,
-                       open, high, low, close, volume, oi,
-                       source, source_version
+                       open, high, low, close, volume, oi
                 FROM truedata_bars
                 WHERE symbol = ? AND interval = ?
                 ORDER BY provider_timestamp

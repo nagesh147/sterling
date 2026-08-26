@@ -16,38 +16,38 @@ import {
   type KiteBrandIconSize,
 } from '../../utils/kiteBrandIcon';
 
-// Kite light theme — white cards, #e0e0e0 borders, orange #f06428 accents.
+// Kite light theme — white cards, var(--k-border) borders, orange var(--k-brand) accents.
 // Matches ConnectPane's inline-style conventions; this panel is the Kite-specific
 // multi-bot Telegram manager (distinct from the global crypto TelegramConfigPanel).
-const ORANGE = '#f06428';
+const ORANGE = 'var(--k-brand)';
 
 const S: Record<string, React.CSSProperties> = {
-  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 5, fontWeight: 750 },
-  sub: { color: '#888', fontSize: 11.5, marginBottom: 14, lineHeight: 1.55 },
-  row: { background: '#f7f7f8', border: '1px solid #e0e0e0', borderRadius: 7, padding: '11px 12px', marginBottom: 8 },
-  name: { fontWeight: 700, color: '#444', fontSize: 13 },
-  meta: { color: '#9b9b9b', fontSize: 11 },
+  title: { color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 5, fontWeight: 750 },
+  sub: { color: 'var(--k-ink-6)', fontSize: 11.5, marginBottom: 14, lineHeight: 1.55 },
+  row: { background: 'var(--k-surface-sunken-2)', border: '1px solid var(--k-border)', borderRadius: 7, padding: '11px 12px', marginBottom: 8 },
+  name: { fontWeight: 700, color: 'var(--k-text)', fontSize: 13 },
+  meta: { color: 'var(--k-dim)', fontSize: 11 },
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' },
-  btn: { minHeight: 34, background: '#fff', color: '#444', border: '1px solid #dcdcdc', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  btnOrange: { minHeight: 34, background: ORANGE, color: '#fff', border: `1px solid ${ORANGE}`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { minHeight: 34, background: '#fff', color: '#c9433e', border: '1px solid #dcdcdc', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  input: { minHeight: 36, background: '#fff', color: '#444', border: '1px solid #dcdcdc', borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' },
-  label: { color: '#777', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
-  hint: { color: '#888', fontSize: 11.5 },
-  err: { color: '#e53935', fontSize: 11, marginTop: 6 },
-  ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
+  btn: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-text)', border: '1px solid var(--k-border-strong-2)', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  btnOrange: { minHeight: 34, background: ORANGE, color: 'var(--k-bg)', border: `1px solid ${ORANGE}`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-red-brick)', border: '1px solid var(--k-border-strong-2)', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  input: { minHeight: 36, background: 'var(--k-bg)', color: 'var(--k-text)', border: '1px solid var(--k-border-strong-2)', borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' },
+  label: { color: 'var(--k-ink-5)', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
+  hint: { color: 'var(--k-ink-6)', fontSize: 11.5 },
+  err: { color: 'var(--k-red-strong)', fontSize: 11, marginTop: 6 },
+  ok: { color: 'var(--k-green)', fontSize: 11, marginTop: 6 },
   guide: { background: '#fff8f4', border: '1px solid #ecd1c4', borderRadius: 8, padding: '12px 14px', marginBottom: 12 },
-  step: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#444', lineHeight: 1.6, marginBottom: 8 },
-  stepNum: { flex: '0 0 18px', width: 18, height: 18, borderRadius: '50%', background: ORANGE, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  handle: { display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f1f1f1', border: '1px solid #e0e0e0', borderRadius: 3, padding: '0 4px 0 6px', fontFamily: 'monospace', fontSize: 12, color: ORANGE },
-  copyBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#9b9b9b', fontSize: 11, padding: '1px 3px', fontFamily: 'inherit' },
+  step: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--k-text)', lineHeight: 1.6, marginBottom: 8 },
+  stepNum: { flex: '0 0 18px', width: 18, height: 18, borderRadius: '50%', background: ORANGE, color: 'var(--k-bg)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  handle: { display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--k-surface-hover)', border: '1px solid var(--k-border)', borderRadius: 3, padding: '0 4px 0 6px', fontFamily: 'monospace', fontSize: 12, color: ORANGE },
+  copyBtn: { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--k-dim)', fontSize: 11, padding: '1px 3px', fontFamily: 'inherit' },
 };
 
 function dotStyle(reachable: boolean): React.CSSProperties {
   return {
     width: 9, height: 9, borderRadius: '50%',
-    background: reachable ? '#4caf50' : '#bdbdbd',
-    border: `1px solid ${reachable ? '#4caf50' : '#9b9b9b'}`,
+    background: reachable ? 'var(--k-green)' : 'var(--k-faint-3)',
+    border: `1px solid ${reachable ? 'var(--k-green)' : 'var(--k-dim)'}`,
     display: 'inline-block', flex: '0 0 9px',
   };
 }
@@ -115,15 +115,15 @@ function IconChoice({ option, selected, size, onPick, compact = false }: {
         display: 'flex', alignItems: 'center', gap: compact ? 6 : 8,
         minWidth: compact ? 106 : 132,
         minHeight: 46, padding: compact ? '7px 9px' : '8px 10px', cursor: 'pointer',
-        background: selected ? '#fff5f0' : '#fff',
-        border: `1px solid ${selected ? '#e2b6a4' : '#e0e0e0'}`,
+        background: selected ? 'var(--k-surface-warm)' : 'var(--k-bg)',
+        border: `1px solid ${selected ? 'var(--k-border-brand)' : 'var(--k-border)'}`,
         borderRadius: 7, fontFamily: 'inherit', textAlign: 'left',
       }}
     >
       <span style={{ width: compact ? 28 : 30, height: compact ? 28 : 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <IconPreview option={option} size={size} px={compact ? 25 : 28} />
       </span>
-      <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600, color: selected ? ORANGE : '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600, color: selected ? ORANGE : 'var(--k-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {option.label}
       </span>
     </button>
@@ -171,7 +171,7 @@ export function BrandIconPicker() {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ ...S.label, marginBottom: 7 }}>FAVICON SIZE</div>
-        <div style={{ display: 'inline-flex', gap: 2, padding: 3, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
+        <div style={{ display: 'inline-flex', gap: 2, padding: 3, border: '1px solid var(--k-border)', borderRadius: 8, background: '#f6f6f7' }}>
           {KITE_BRAND_ICON_SIZES.map((size) => {
             const selected = brandIconSize === size.value;
             return (
@@ -180,8 +180,8 @@ export function BrandIconPicker() {
                 type="button"
                 onClick={() => pickSize(size.value)}
                 style={{
-                  minHeight: 32, background: selected ? '#fff' : 'transparent',
-                  color: selected ? '#444' : '#777',
+                  minHeight: 32, background: selected ? 'var(--k-bg)' : 'transparent',
+                  color: selected ? 'var(--k-text)' : 'var(--k-ink-5)',
                   border: 'none', borderRadius: 6,
                   boxShadow: selected ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
                   padding: '0 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
@@ -195,9 +195,9 @@ export function BrandIconPicker() {
         </div>
       </div>
 
-      <div style={{ maxHeight: 360, overflowY: 'auto', padding: '8px 10px 10px', border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff' }}>
+      <div style={{ maxHeight: 360, overflowY: 'auto', padding: '8px 10px 10px', border: '1px solid var(--k-border)', borderRadius: 8, background: 'var(--k-bg)' }}>
         {KITE_BRAND_ICON_GROUPS.map((group, idx) => (
-          <div key={group.category} style={{ paddingTop: idx === 0 ? 0 : 12, marginTop: idx === 0 ? 0 : 12, borderTop: idx === 0 ? 'none' : '1px solid #f0f0f0' }}>
+          <div key={group.category} style={{ paddingTop: idx === 0 ? 0 : 12, marginTop: idx === 0 ? 0 : 12, borderTop: idx === 0 ? 'none' : '1px solid var(--k-surface-hover-2)' }}>
             <div style={{ ...S.label, marginBottom: 8 }}>{group.category}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8 }}>
               {group.options.map((o) => (
@@ -316,7 +316,7 @@ function TargetRow({ target }: { target: KiteTelegramTarget }) {
       {del.error && <div style={S.err}>✗ {del.error.message}</div>}
 
       <div style={S.actions}>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: '#9b9b9b' }}>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: 'var(--k-dim)' }}>
           <input type="checkbox" checked={target.enabled} onChange={toggleEnabled} disabled={update.isPending} /> Enabled
         </label>
         <button style={S.btn} onClick={() => test.mutate(target.id)} disabled={test.isPending}>
@@ -327,7 +327,7 @@ function TargetRow({ target }: { target: KiteTelegramTarget }) {
       </div>
 
       {edit && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e0e0e0' }}>
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--k-border)' }}>
           <TargetForm
             mode="edit"
             initial={{ label: target.label, chat_id: target.chat_id, enabled: target.enabled }}
@@ -353,7 +353,7 @@ function AddTarget() {
   const [open, setOpen] = useState(false);
   if (!open) return <button style={S.btnOrange} onClick={() => setOpen(true)}>+ ADD BOT</button>;
   return (
-    <div style={{ ...S.row, background: '#fff' }}>
+    <div style={{ ...S.row, background: 'var(--k-bg)' }}>
       <div style={S.title}>ADD TELEGRAM BOT</div>
       <TargetForm
         mode="add"
@@ -372,7 +372,7 @@ export function KiteTelegramPanel() {
 
   return (
     <div>
-      <section style={{ padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <section style={{ padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
         <div style={S.title}>KITE TELEGRAM ALERTS</div>
         <div style={S.sub}>
           Send Kite signal alerts to your own Telegram bot(s) — separate from the crypto dashboard’s Telegram.

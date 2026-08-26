@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   useAddTrueDataCredential,
   useDeleteTrueDataCredential,
+  useRunTrueDataDiagnostics,
   useTrueDataCredentials,
   useTrueDataSettings,
   useTrueDataStatus,
@@ -12,15 +13,15 @@ import type { MarketDataSource, TrueDataCredential } from '../../types/truedata'
 
 const S: Record<string, React.CSSProperties> = {
   card: {
-    background: '#fff',
-    border: '1px solid #e0e0e0',
+    background: 'var(--k-bg)',
+    border: '1px solid var(--k-border)',
     borderRadius: 9,
     padding: 18,
     marginBottom: 16,
     boxShadow: '0 1px 2px rgba(0,0,0,.025)',
   },
   title: {
-    color: '#777',
+    color: 'var(--k-ink-5)',
     fontSize: 10.5,
     letterSpacing: 0.75,
     marginBottom: 12,
@@ -28,9 +29,9 @@ const S: Record<string, React.CSSProperties> = {
   },
   btn: {
     minHeight: 34,
-    background: '#fff',
-    color: '#444',
-    border: '1px solid #dcdcdc',
+    background: 'var(--k-bg)',
+    color: 'var(--k-text)',
+    border: '1px solid var(--k-border-strong-2)',
     padding: '0 12px',
     borderRadius: 7,
     cursor: 'pointer',
@@ -40,9 +41,9 @@ const S: Record<string, React.CSSProperties> = {
   },
   btnGreen: {
     minHeight: 34,
-    background: '#f06428',
-    color: '#fff',
-    border: '1px solid #f06428',
+    background: 'var(--k-brand)',
+    color: 'var(--k-on-accent)',
+    border: '1px solid var(--k-brand)',
     padding: '0 13px',
     borderRadius: 7,
     cursor: 'pointer',
@@ -52,9 +53,9 @@ const S: Record<string, React.CSSProperties> = {
   },
   btnRed: {
     minHeight: 34,
-    background: '#fff',
-    color: '#c9433e',
-    border: '1px solid #dcdcdc',
+    background: 'var(--k-bg)',
+    color: 'var(--k-red-brick)',
+    border: '1px solid var(--k-border-strong-2)',
     padding: '0 12px',
     borderRadius: 7,
     cursor: 'pointer',
@@ -64,9 +65,9 @@ const S: Record<string, React.CSSProperties> = {
   },
   input: {
     minHeight: 36,
-    background: '#fff',
-    color: '#444',
-    border: '1px solid #dcdcdc',
+    background: 'var(--k-bg)',
+    color: 'var(--k-text)',
+    border: '1px solid var(--k-border-strong-2)',
     borderRadius: 7,
     padding: '0 10px',
     fontFamily: 'inherit',
@@ -75,16 +76,16 @@ const S: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
   label: {
-    color: '#777',
+    color: 'var(--k-ink-5)',
     fontSize: 10,
     letterSpacing: 0.7,
     marginBottom: 4,
     display: 'block',
     fontWeight: 650,
   },
-  hint: { color: '#888', fontSize: 11.5 },
-  err: { color: '#e53935', fontSize: 11, marginTop: 6 },
-  ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
+  hint: { color: 'var(--k-ink-6)', fontSize: 11.5 },
+  err: { color: 'var(--k-red-strong)', fontSize: 11, marginTop: 6 },
+  ok: { color: 'var(--k-green)', fontSize: 11, marginTop: 6 },
 };
 
 function initials(s: string): string {
@@ -96,6 +97,7 @@ function initials(s: string): string {
 function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
   const del = useDeleteTrueDataCredential();
   const update = useUpdateTrueDataCredential();
+  const runDiag = useRunTrueDataDiagnostics();
 
   const [expanded, setExpanded] = useState(false);
   const [edit, setEdit] = useState(false);
@@ -103,6 +105,31 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [port, setPort] = useState(cred.realtime_port || 8082);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleTest = async () => {
+    setTestResult(null);
+    try {
+      const res = await runDiag.mutateAsync({ category_id: 'truedata_auth' });
+      const authCat = res.categories?.find((c) => c.id === 'truedata_auth') || res.categories?.[0];
+      if (authCat && authCat.status === 'PASS') {
+        setTestResult({
+          ok: true,
+          message: `✓ Connection Verified (${authCat.latency_ms.toFixed(1)} ms) — WebAPI HTTP 200`,
+        });
+      } else {
+        setTestResult({
+          ok: false,
+          message: `✗ ${authCat?.error_message || 'Authentication check failed'}`,
+        });
+      }
+    } catch (err: any) {
+      setTestResult({
+        ok: false,
+        message: `✗ ${err?.message || 'Connection failed'}`,
+      });
+    }
+  };
 
   const subParts = [
     cred.username_hint ? `User: ${cred.username_hint}` : null,
@@ -114,11 +141,11 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
   return (
     <div
       style={{
-        border: '1px solid #e0e0e0',
+        border: '1px solid var(--k-border)',
         borderRadius: 9,
         marginBottom: 16,
         overflow: 'hidden',
-        background: '#fff',
+        background: 'var(--k-bg)',
         boxShadow: '0 1px 2px rgba(0,0,0,.025)',
       }}
     >
@@ -138,12 +165,12 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
             width: 36,
             height: 36,
             borderRadius: '50%',
-            background: '#e8e8e8',
+            background: 'var(--k-border-2)',
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#666',
+            color: 'var(--k-ink-4)',
             fontWeight: 700,
             fontSize: 13,
           }}
@@ -151,13 +178,13 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
           {initials(cred.label)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, color: '#444', fontSize: 13 }}>{cred.label}</div>
-          <div style={{ color: '#9b9b9b', fontSize: 11, marginTop: 2 }}>{subText}</div>
+          <div style={{ fontWeight: 700, color: 'var(--k-text)', fontSize: 13 }}>{cred.label}</div>
+          <div style={{ color: 'var(--k-dim)', fontSize: 11, marginTop: 2 }}>{subText}</div>
         </div>
         <span
           aria-hidden
           style={{
-            color: '#bbb',
+            color: 'var(--k-faint-2)',
             fontSize: 11,
             transform: expanded ? 'rotate(180deg)' : 'none',
             transition: 'transform .15s',
@@ -170,7 +197,7 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
       {expanded && (
         <div
           style={{
-            borderTop: '1px solid #f0f0f0',
+            borderTop: '1px solid var(--k-surface-hover-2)',
             padding: '14px 16px',
             display: 'flex',
             flexDirection: 'column',
@@ -178,6 +205,37 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
           }}
         >
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              style={{
+                ...S.btn,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                borderColor: 'var(--k-border-slate-strong)',
+                background: 'var(--k-surface-sunken)',
+              }}
+              onClick={handleTest}
+              disabled={runDiag.isPending}
+            >
+              {runDiag.isPending ? (
+                <>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      border: '2px solid rgba(0,0,0,0.2)',
+                      borderTopColor: '#0f172a',
+                      borderRadius: '50%',
+                      animation: 'spin 0.6s linear infinite',
+                      display: 'inline-block',
+                    }}
+                  />
+                  Testing…
+                </>
+              ) : (
+                '▶ Test Connection'
+              )}
+            </button>
             <button style={S.btn} onClick={() => setEdit((v) => !v)}>
               {edit ? 'Cancel' : 'Edit Credential'}
             </button>
@@ -190,6 +248,22 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
               Remove
             </button>
           </div>
+
+          {testResult && (
+            <div
+              style={{
+                fontSize: 11,
+                padding: '6px 10px',
+                borderRadius: 6,
+                background: testResult.ok ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${testResult.ok ? '#bbf7d0' : '#fecaca'}`,
+                color: testResult.ok ? '#15803d' : '#b91c1c',
+                lineHeight: 1.4,
+              }}
+            >
+              {testResult.message}
+            </div>
+          )}
 
           {edit ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -279,9 +353,30 @@ function TrueDataCredentialCard({ cred }: { cred: TrueDataCredential }) {
               {update.error && <div style={S.err}>✗ {update.error.message}</div>}
             </div>
           ) : (
-            <div style={{ marginTop: 14, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
+            <div style={{ marginTop: 14, fontSize: 12, color: 'var(--k-ink-4)', lineHeight: 1.6 }}>
               <div><strong>Port:</strong> {cred.realtime_port || 8082}</div>
-              <div><strong>Status:</strong> {cred.connected ? 'Connected' : 'Not Connected'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <strong>Status:</strong>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: cred.connected ? 'var(--k-green-600)' : '#ea580c',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: cred.connected ? 'var(--k-green-600)' : '#ea580c',
+                    }}
+                  />
+                  {cred.connected ? 'Connected & Verified' : 'Configured (Standby)'}
+                </span>
+              </div>
               <div><strong>Configured:</strong> {new Date(cred.created_at_ms).toLocaleDateString()}</div>
             </div>
           )}
@@ -314,7 +409,7 @@ function DataSourceSelector() {
             padding: '2px 8px',
             borderRadius: 4,
             background: currentSource === 'truedata' ? 'rgba(240, 100, 40, 0.12)' : 'rgba(56, 126, 209, 0.12)',
-            color: currentSource === 'truedata' ? '#f06428' : '#387ed1',
+            color: currentSource === 'truedata' ? 'var(--k-brand)' : 'var(--k-blue-kite)',
             border: currentSource === 'truedata' ? '1px solid rgba(240, 100, 40, 0.3)' : '1px solid rgba(56, 126, 209, 0.3)',
           }}
         >
@@ -322,7 +417,7 @@ function DataSourceSelector() {
         </span>
       </div>
 
-      <div style={{ fontSize: 12, color: '#666', marginBottom: 14, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 12, color: 'var(--k-ink-4)', marginBottom: 14, lineHeight: 1.5 }}>
         Choose whether Adaptive Edge, orderflow indicators, and market scanners ingest live data from TrueData or Zerodha Kite.
       </div>
 
@@ -331,10 +426,10 @@ function DataSourceSelector() {
         <div
           onClick={() => setSource('truedata')}
           style={{
-            border: `1.5px solid ${currentSource === 'truedata' ? '#f06428' : '#e0e0e0'}`,
+            border: `1.5px solid ${currentSource === 'truedata' ? 'var(--k-brand)' : 'var(--k-border)'}`,
             borderRadius: 8,
             padding: 14,
-            background: currentSource === 'truedata' ? 'rgba(240, 100, 40, 0.04)' : '#fff',
+            background: currentSource === 'truedata' ? 'rgba(240, 100, 40, 0.04)' : 'var(--k-bg)',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
@@ -345,13 +440,13 @@ function DataSourceSelector() {
               name="market_data_source"
               checked={currentSource === 'truedata'}
               onChange={() => setSource('truedata')}
-              style={{ cursor: 'pointer', accentColor: '#f06428' }}
+              style={{ cursor: 'pointer', accentColor: 'var(--k-brand)' }}
             />
-            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'truedata' ? '#f06428' : '#333' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'truedata' ? 'var(--k-brand)' : 'var(--k-ink-1)' }}>
               TrueData Feed (Recommended)
             </span>
           </div>
-          <div style={{ fontSize: 11.5, color: '#777', lineHeight: 1.45, marginLeft: 22 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--k-ink-5)', lineHeight: 1.45, marginLeft: 22 }}>
             Institutional tick-level data, Level 2 orderbook, and CVD/VWAP analytics for NIFTY-I and BANKNIFTY-I.
           </div>
         </div>
@@ -360,10 +455,10 @@ function DataSourceSelector() {
         <div
           onClick={() => setSource('zerodhakite')}
           style={{
-            border: `1.5px solid ${currentSource === 'zerodhakite' ? '#387ed1' : '#e0e0e0'}`,
+            border: `1.5px solid ${currentSource === 'zerodhakite' ? 'var(--k-blue-kite)' : 'var(--k-border)'}`,
             borderRadius: 8,
             padding: 14,
-            background: currentSource === 'zerodhakite' ? 'rgba(56, 126, 209, 0.04)' : '#fff',
+            background: currentSource === 'zerodhakite' ? 'rgba(56, 126, 209, 0.04)' : 'var(--k-bg)',
             cursor: 'pointer',
             transition: 'all 0.15s ease',
           }}
@@ -374,19 +469,19 @@ function DataSourceSelector() {
               name="market_data_source"
               checked={currentSource === 'zerodhakite'}
               onChange={() => setSource('zerodhakite')}
-              style={{ cursor: 'pointer', accentColor: '#387ed1' }}
+              style={{ cursor: 'pointer', accentColor: 'var(--k-blue-kite)' }}
             />
-            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'zerodhakite' ? '#387ed1' : '#333' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: currentSource === 'zerodhakite' ? 'var(--k-blue-kite)' : 'var(--k-ink-1)' }}>
               Zerodha Kite Feed
             </span>
           </div>
-          <div style={{ fontSize: 11.5, color: '#777', lineHeight: 1.45, marginLeft: 22 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--k-ink-5)', lineHeight: 1.45, marginLeft: 22 }}>
             Direct broker WebSocket option quote ticks, spot OHLC snapshots, and SuperTrend scans from Kite Connect.
           </div>
         </div>
       </div>
       {update.isPending && (
-        <div style={{ fontSize: 11, color: '#888', marginTop: 10, fontStyle: 'italic' }}>
+        <div style={{ fontSize: 11, color: 'var(--k-ink-6)', marginTop: 10, fontStyle: 'italic' }}>
           Updating data source preference…
         </div>
       )}
@@ -501,10 +596,10 @@ export function TrueDataCredentialsPanel() {
               width: 8,
               height: 8,
               borderRadius: 4,
-              background: status?.connected ? '#4caf50' : '#777',
+              background: status?.connected ? 'var(--k-green)' : 'var(--k-ink-5)',
             }}
           />
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--k-text)' }}>
             {status?.connected
               ? `Connected (${status.username_hint || 'TrueData'})`
               : status?.message || 'Not Connected'}
@@ -530,3 +625,4 @@ export function TrueDataCredentialsPanel() {
     </div>
   );
 }
+
