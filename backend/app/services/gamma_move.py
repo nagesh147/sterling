@@ -194,10 +194,32 @@ def descriptor() -> dict:
         # settings should see that before they change a threshold.
         "calibration": CALIBRATION,
         "calibrated_fields": sorted(CALIBRATED_FIELDS),
+        # Two fields, not one paragraph. The board had a line of confidence
+        # intervals across the top of a trading screen, which is a paper
+        # abstract in the place where an operator is deciding whether to click
+        # Buy. `headline_finding` says what it means for the next trade;
+        # `evidence` carries the numbers for anyone who wants to check it, and
+        # the UI hangs it off a hover rather than shouting it.
+        # No number in this sentence on purpose. It used to say "inside 1% of
+        # its level", which is `level_proximity_pct` — a setting. Widen that to
+        # 1.5 and the claim silently becomes false, which is worse than vague.
+        # The band is on the row badge and in the setting; this says what kind
+        # of thing was proven, not what it is set to today.
         "headline_finding": (
-            "The entry triple alone did not separate from baseline (24.7% [20.9,28.9] vs "
-            "21.7% [21.5,21.9] reaching +30% within two sessions). The measured edge is "
-            "the level filter: 46.2% [31.6,61.4] when spot sits within 1% of a level."
+            "Only the level filter is proven. A setup with spot inside its proximity "
+            "band worked about twice as often as an average bar — the open-interest "
+            "trigger on its own did no better than picking a bar at random."
+        ),
+        "what_to_do": (
+            "Trust the distance badge on the row. Inside the band is the setup that was "
+            "measured; outside it, the trigger is the only thing left and it showed no edge."
+        ),
+        "evidence": (
+            "Share of bars reaching +30% within two sessions, at the calibrated 1% band: "
+            "46.2% [31.6, 61.4] within 1% of a level, against 24.7% [20.9, 28.9] for the entry triple alone and 21.7% "
+            "[21.5, 21.9] for every bar. The trigger's interval overlaps the baseline's; "
+            "the level filter's does not. 598 contracts, 193,135 fifteen-minute bars, "
+            "measured 2026-08-26 — see docs/strategy/gamma-move/VALIDATION_REPORT.md."
         ),
     }
 
