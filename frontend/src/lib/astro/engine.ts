@@ -1,8 +1,12 @@
 /**
- * Artifact A5–A8 — gap call, 30-minute clock, trade language, month projection.
+ * Artifact A5–A8 — gap call, muhurta clock, 30-minute execution grid, month projection.
  *
  * Purely astrological. No price, no OI, no candles. Same IST date always yields
  * the same book. Market hours 09:15–15:30 IST at Mumbai.
+ *
+ * `netResults` are irregular windows cut at hora / choghadiya / Rahu-Yamagandam /
+ * lagna-sign / Abhijit — the actual muhurta clock. `slots` resample the same
+ * sky onto a 13-slot 30-minute execution grid.
  */
 
 import {
@@ -35,6 +39,7 @@ import {
   formatIstIsoDate,
   getIstParts,
   MARKET_CLOSE_MIN,
+  MARKET_OPEN_MIN,
   minutesOfDay,
   utcFromIstParts,
 } from "./time";
@@ -152,6 +157,38 @@ function kalamAt(date: Date, panchang: Panchang): KalamFlag {
   const yamaPart = [4, 3, 2, 1, 0, 6, 5][wd];
   const gulikaPart = [6, 5, 4, 3, 2, 1, 0][wd];
   return { rahu: i === rahuPart, yamagandam: i === yamaPart, gulika: i === gulikaPart };
+}
+
+function istMinutes(date: Date): number {
+  const p = getIstParts(date);
+  return minutesOfDay(p.hour, p.minute);
+}
+
+/** Muhurta cuts inside the cash session: opening range, hora, choghadiya/kalam, Abhijit, lagna-sign. */
+function collectAstroCuts(year: number, month: number, day: number, panchang: Panchang): number[] {
+  const openRangeEnd = MARKET_OPEN_MIN + 30;
+  const cuts = new Set<number>([MARKET_OPEN_MIN, openRangeEnd, MARKET_CLOSE_MIN]);
+  const add = (d: Date) => {
+    const m = istMinutes(d);
+    if (m > openRangeEnd && m < MARKET_CLOSE_MIN) cuts.add(m);
+  };
+  const rise = new Date(panchang.sunriseIso).getTime();
+  const set = new Date(panchang.sunsetIso).getTime();
+  const dayMs = Math.max(1, set - rise);
+  for (let i = 0; i <= 12; i++) add(new Date(rise + (i * dayMs) / 12));
+  for (let i = 0; i <= 8; i++) add(new Date(rise + (i * dayMs) / 8));
+  const mid = (rise + set) / 2;
+  add(new Date(mid - 12 * 60 * 1000));
+  add(new Date(mid + 12 * 60 * 1000));
+  let lastSign: number | null = null;
+  for (let m = openRangeEnd; m <= MARKET_CLOSE_MIN; m += 1) {
+    const dt = utcFromIstParts(year, month, day, Math.floor(m / 60), m % 60, 0);
+    const { lagna } = panchangAt(dt);
+    const s = Math.floor((((lagna % 360) + 360) % 360) / 30);
+    if (lastSign !== null && s !== lastSign) cuts.add(m);
+    lastSign = s;
+  }
+  return [...cuts].sort((a, b) => a - b);
 }
 
 function planetScore(name: PlanetName): { dir: number; vol: number } {
@@ -656,24 +693,6 @@ function scoreWindow(
   return { dir, vol };
 }
 
-function mergeNet(slots: WindowSlot[]): WindowSlot[] {
-  if (!slots.length) return [];
-  const out: WindowSlot[] = [];
-  for (const s of slots) {
-    const prev = out[out.length - 1];
-    if (prev && prev.regime === s.regime && prev.action === s.action && prev.hora === s.hora) {
-      prev.to = s.to;
-      prev.toMin = s.toMin;
-      prev.isLive = prev.isLive || s.isLive;
-      prev.isPast = prev.isPast && s.isPast;
-      prev.strength = Math.round((prev.strength + s.strength) / 2);
-      continue;
-    }
-    out.push({ ...s, kalam: { ...s.kalam } });
-  }
-  return out;
-}
-
 function applyHoldBook(slots: WindowSlot[]): WindowSlot[] {
   return slots.map((s, i) => {
     const prev = slots[i - 1];
@@ -719,10 +738,7 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
   const nowMin = minutesOfDay(nowParts.hour, nowParts.minute);
   const sameDay = nowParts.year === p.year && nowParts.month === p.month && nowParts.day === p.day;
 
-  const raw: WindowSlot[] = SLOT_STARTS.map(([h, m], i) => {
-    const fromMin = minutesOfDay(h, m);
-    const next = SLOT_STARTS[i + 1];
-    const toMin = next ? minutesOfDay(next[0], next[1]) : MARKET_CLOSE_MIN;
+  const buildRange = (fromMin: number, toMin: number): WindowSlot => {
     const midMin = Math.floor((fromMin + toMin) / 2);
     const mid = utcFromIstParts(p.year, p.month, p.day, Math.floor(midMin / 60), midMin % 60, 0);
     const { panchang: pan, lagna: lag } = panchangAt(mid);
@@ -732,7 +748,7 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
     const abhijit = isAbhijit(mid, pan);
     const scoredSlot = scoreWindow(hora.lord, pan, lag, kalam, cho, abhijit, thesis);
     const regime = regimeFrom(scoredSlot.dir, scoredSlot.vol);
-    const forceWait = i === 0 && (gap.openAction === "WAIT" || thesis.fadeOpen);
+    const forceWait = fromMin === MARKET_OPEN_MIN && (gap.openAction === "WAIT" || thesis.fadeOpen);
     const traded = actionFrom(regime, kalam, hora.lord, thesis, { forceWait, abhijit });
     const isLive = sameDay && nowMin >= fromMin && nowMin < toMin;
     const isPast = sameDay ? nowMin >= toMin : now.getTime() > mid.getTime();
@@ -761,9 +777,23 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
       choghadiyaKind: cho.kind,
       abhijit,
     };
+  };
+
+  const raw: WindowSlot[] = SLOT_STARTS.map(([h, m], i) => {
+    const fromMin = minutesOfDay(h, m);
+    const next = SLOT_STARTS[i + 1];
+    const toMin = next ? minutesOfDay(next[0], next[1]) : MARKET_CLOSE_MIN;
+    return buildRange(fromMin, toMin);
   });
 
+  const cuts = collectAstroCuts(p.year, p.month, p.day, panchang);
+  const rawNet: WindowSlot[] = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    rawNet.push(buildRange(cuts[i], cuts[i + 1]));
+  }
+
   const slots = applyHoldBook(raw);
+  const netResults = applyHoldBook(rawNet);
 
   const ceSlots = slots.filter((s) => s.side === "CE" && s.action !== "AVOID" && s.action !== "WAIT");
   const peSlots = slots.filter((s) => s.side === "PE" && s.action !== "AVOID" && s.action !== "WAIT");
@@ -798,7 +828,7 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
     gap,
     playbook,
     slots,
-    netResults: mergeNet(slots),
+    netResults,
     aspects: findAspects(planets),
     dignities: planets.map(dignityOf),
   };

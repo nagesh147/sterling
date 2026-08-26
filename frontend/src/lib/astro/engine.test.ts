@@ -20,8 +20,10 @@ describe("financial astrology engine", () => {
     expect(book.slots.length).toBe(13);
     expect(book.slots[0].from).toBe("9:15 AM");
     expect(book.slots[book.slots.length - 1].to).toBe("3:30 PM");
-    expect(book.netResults.length).toBeGreaterThanOrEqual(1);
-    expect(book.netResults.length).toBeLessThanOrEqual(book.slots.length);
+    expect(book.netResults.length).toBeGreaterThanOrEqual(8);
+    expect(book.netResults.length).toBeLessThanOrEqual(18);
+    expect(book.netResults[0].from).toBe("9:15 AM");
+    expect(book.netResults[book.netResults.length - 1].to).toBe("3:30 PM");
   });
 
   it("always suggests CE, PE, both, or wait in trading language", () => {
@@ -103,4 +105,15 @@ describe("financial astrology engine", () => {
     expect(bCe).toBeGreaterThan(bSides.length / 2);
   });
 
+  it("astro timings pin the 30-min opening range, then cut on muhurta", () => {
+    const book = forecastDay(session, "NIFTY", session);
+    expect(book.netResults[0].from).toBe("9:15 AM");
+    expect(book.netResults[0].to).toBe("9:45 AM");
+    expect(book.netResults[0].action).toBe("WAIT");
+    const lens = book.netResults.slice(1).map((s) => s.toMin - s.fromMin);
+    expect(lens.some((n) => n !== 30)).toBe(true);
+    const grid = new Set([555, 585, 615, 645, 675, 705, 735, 765, 795, 825, 855, 885, 915]);
+    const offGrid = book.netResults.filter((s) => !grid.has(s.fromMin));
+    expect(offGrid.length).toBeGreaterThanOrEqual(3);
+  });
 });

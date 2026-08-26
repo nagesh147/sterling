@@ -119,8 +119,8 @@ export function AstroPane() {
     return map;
   }, [rows, tape, nowMin, sameDay]);
   const tally = useMemo(
-    () => summariseTape(book.slots, tape, nowMin, sameDay, book.gap.kind),
-    [book.slots, tape, nowMin, sameDay, book.gap.kind],
+    () => summariseTape(rows, tape, nowMin, sameDay, book.gap.kind),
+    [rows, tape, nowMin, sameDay, book.gap.kind],
   );
   const selected = rows.find((s) => `${s.from}-${s.to}` === selectedKey) ?? live ?? null;
   const remaining = live && now
@@ -252,14 +252,14 @@ export function AstroPane() {
         <section>
           <div style={meta}>Session tape 09:15–15:30</div>
           <div style={{ marginTop: 8, display: 'flex', height: 32, overflow: 'hidden', border: `1px solid ${k.border}`, borderRadius: 6 }}>
-            {book.slots.map((s) => {
+            {book.netResults.map((s) => {
               const w = ((s.toMin - s.fromMin) / (15 * 60 + 30 - 9 * 60 - 15)) * 100;
               return (
                 <button
                   key={`${s.from}-${s.to}`}
                   type="button"
                   title={`${s.from}–${s.to} ${s.regime} · ${s.action}`}
-                  onClick={() => { setView('thirty'); setSelectedKey(`${s.from}-${s.to}`); }}
+                  onClick={() => { setView('net'); setSelectedKey(`${s.from}-${s.to}`); }}
                   style={{
                     width: `${w}%`,
                     minWidth: 0,
@@ -284,7 +284,7 @@ export function AstroPane() {
             <div>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>Intraday timings</h2>
               <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--k-ink-5)' }}>
-                {view === 'net' ? 'Merged net results — consecutive identical horas collapsed.' : 'Raw 30-minute clock, 13 slots from 9:15 to 3:30.'}
+                {view === 'net' ? 'Astro timings — cut at hora, choghadiya, Rahu/Yamagandam, lagna and Abhijit. Opening range is always 9:15–9:45.' : '30-minute execution grid. Use this to place CE/PE.'}
                 {' '}Result is live tape vs the play — HIT / MISS / SIT.
               </p>
             </div>
@@ -313,7 +313,7 @@ export function AstroPane() {
                     fontWeight: 600,
                   }}
                 >
-                  {id === 'net' ? 'Net results' : 'Every 30 min'}
+                  {id === 'net' ? 'Astro timings' : 'Every 30 min'}
                 </button>
               ))}
             </div>
@@ -349,7 +349,7 @@ export function AstroPane() {
                         <td style={{ ...td, fontWeight: 650, color: regimeColor(slot.regime) }}>
                           {slot.regime}
                           <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--k-ink-5)', marginTop: 2 }}>
-                            {slot.hora} hora · {slot.choghadiya}{slot.kalam.rahu ? ' · Rahu Kalam' : ''}
+                            {slot.toMin - slot.fromMin}m · {slot.hora} hora · {slot.choghadiya}{slot.kalam.rahu ? ' · Rahu Kalam' : ''}{slot.kalam.yamagandam ? ' · Yamagandam' : ''}
                           </div>
                         </td>
                         <td style={{ ...tdMono, fontWeight: 700, color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
