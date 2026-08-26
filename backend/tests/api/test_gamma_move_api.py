@@ -180,3 +180,34 @@ def test_contract_settings_round_trip(client):
                                            "avoid_expiry_day": True,
                                            "scan_expiries_indices": ["weekly", "monthly"],
                                            "expiry_selection": "nearest"})
+
+
+def test_the_finding_is_split_from_its_evidence(client):
+    """A board banner is not the place for confidence intervals.
+
+    The claim, the action it implies, and the measurement behind it are three
+    separate fields so the UI can lead with what to do and keep the statistics
+    one gesture away — rather than putting a paper abstract across the top of a
+    trading screen.
+    """
+    s = client.get("/config/gamma-move").json()["strategy"]
+    assert s["headline_finding"] and s["what_to_do"] and s["evidence"]
+    # The claim carries no measurements; the evidence carries all of them.
+    assert "[" not in s["headline_finding"], "confidence intervals belong in evidence"
+    # And no configurable value either: `level_proximity_pct` can be changed, so
+    # a claim naming today's setting silently goes stale the moment it is.
+    assert "1%" not in s["headline_finding"]
+    assert "46.2" not in s["headline_finding"]
+    assert "46.2%" in s["evidence"]
+    assert "21.7%" in s["evidence"]
+    # And it says where to check it.
+    assert "VALIDATION_REPORT" in s["evidence"]
+
+
+def test_the_finding_still_says_the_trigger_alone_showed_nothing(client):
+    """Readability must not sand off the conclusion."""
+    s = client.get("/config/gamma-move").json()["strategy"]
+    combined = f"{s['headline_finding']} {s['what_to_do']}".lower()
+    assert "level filter" in combined
+    assert "random" in combined or "no edge" in combined
+    assert s["validated"] is False
