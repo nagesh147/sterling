@@ -50,4 +50,22 @@ describe("financial astrology engine", () => {
     expect(fifteenth).toBeTruthy();
     expect(fifteenth?.isWeekend).toBe(true);
   });
+
+  it("uses today's Mumbai sunrise so hora actually changes in cash hours", () => {
+    const book = forecastDay(session, "NIFTY", session);
+    const rise = new Date(book.panchang.sunriseIso);
+    const set = new Date(book.panchang.sunsetIso);
+    const riseIst = new Date(rise.getTime() + 5.5 * 3600 * 1000);
+    const setIst = new Date(set.getTime() + 5.5 * 3600 * 1000);
+    expect(riseIst.getUTCDate()).toBe(26);
+    expect(riseIst.getUTCMonth() + 1).toBe(8);
+    expect(riseIst.getUTCHours()).toBeGreaterThanOrEqual(5);
+    expect(riseIst.getUTCHours()).toBeLessThanOrEqual(7);
+    expect(setIst.getUTCHours()).toBeGreaterThanOrEqual(18);
+    expect(setIst.getUTCHours()).toBeLessThanOrEqual(20);
+    const horas = new Set(book.slots.map((s) => s.hora));
+    expect(horas.size).toBeGreaterThanOrEqual(3);
+    expect(book.gap.horaAtOpen).toBeTruthy();
+    expect(book.slots[0].hora).not.toBe(book.slots[book.slots.length - 1].hora);
+  });
 });

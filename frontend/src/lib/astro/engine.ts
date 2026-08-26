@@ -34,7 +34,6 @@ import {
   clockFromMinutes,
   formatIstIsoDate,
   getIstParts,
-  julianDate,
   MARKET_CLOSE_MIN,
   minutesOfDay,
   utcFromIstParts,
@@ -47,7 +46,7 @@ import {
   planetByName,
   signName,
   snapshot,
-  sunRiseSet,
+  sunRiseSetIst,
 } from "./ephemeris";
 import { holidayName, isMuhurat, isNseHoliday } from "./holidays";
 import {
@@ -100,8 +99,7 @@ export function panchangAt(date: Date): { panchang: Panchang; planets: PlanetPos
   else karana = KARANAS[(karanaIdx - 1) % 7];
 
   const p = getIstParts(date);
-  const noon = utcFromIstParts(p.year, p.month, p.day, 12, 0, 0);
-  const rs = sunRiseSet(julianDate(noon));
+  const rs = sunRiseSetIst(p.year, p.month, p.day);
   const rise = jdToDate(rs.rise);
   const set = jdToDate(rs.set);
 

@@ -240,6 +240,14 @@ export function sunRiseSet(jdNoon: number, lat = MUMBAI.lat, lon = MUMBAI.lon): 
   return { rise: Jtransit - H / (2 * Math.PI), set: Jtransit + H / (2 * Math.PI) };
 }
 
+/** Sunrise/set for an IST civil date (year, month 1-12, day).
+ *  Use UTC noon of that civil date — IST local noon (06:30 UTC) floors onto the previous NOAA day. */
+export function sunRiseSetIst(year: number, month: number, day: number, lat = MUMBAI.lat, lon = MUMBAI.lon): { rise: number; set: number } {
+  const utcNoon = Date.UTC(year, month - 1, day, 12, 0, 0);
+  return sunRiseSet(julianDate(new Date(utcNoon)), lat, lon);
+}
+
+
 function makePlanet(name: PlanetName, tropical: number, ayan: number, retrograde: boolean): PlanetPos {
   const sidereal = norm360(tropical - ayan);
   return {
