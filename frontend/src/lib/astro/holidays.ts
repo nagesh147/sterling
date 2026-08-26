@@ -1,6 +1,6 @@
 /** Artifact A3 — NSE equity trading calendar (weekends + published 2026 holidays). */
 
-import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts, MARKET_OPEN_MIN } from "./time";
+import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } from "./time";
 
 export const NSE_HOLIDAYS_2026: Record<string, string> = {
   "2026-01-15": "Municipal Corporation Election — Maharashtra",
@@ -52,6 +52,21 @@ export function lastCompletedSessionIso(now = new Date()): string {
   if (open) return today;
   for (let i = 0; i < 14; i++) {
     cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+    const iso = formatIstIsoDate(cursor);
+    if (!isNseClosed(iso)) return iso;
+  }
+  return today;
+}
+
+/** Next cash session a trader can still trade. Before 15:30 IST on an open day that is today. */
+export function nextSessionIso(now = new Date()): string {
+  const p = getIstParts(now);
+  let cursor = utcFromIstParts(p.year, p.month, p.day, 12, 0, 0);
+  const today = formatIstIsoDate(cursor);
+  const nowMin = minutesOfDay(p.hour, p.minute);
+  if (!isNseClosed(today) && nowMin < MARKET_CLOSE_MIN) return today;
+  for (let i = 0; i < 14; i++) {
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
     const iso = formatIstIsoDate(cursor);
     if (!isNseClosed(iso)) return iso;
   }

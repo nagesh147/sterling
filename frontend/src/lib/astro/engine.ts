@@ -21,7 +21,9 @@ import {
   type DayForecast,
   type DayPlaybook,
   type GapCall,
+  type HoraInfo,
   type KalamFlag,
+  type LiveNow,
   type MonthDay,
   type MonthProjection,
   type Panchang,
@@ -53,7 +55,7 @@ import {
   snapshot,
   sunRiseSetIst,
 } from "./ephemeris";
-import { holidayName, isMuhurat, isNseHoliday } from "./holidays";
+import { holidayName, isMuhurat, isNseClosed, isNseHoliday, nextSessionIso } from "./holidays";
 import {
   aspectScore,
   choghadiyaAt,
@@ -145,6 +147,41 @@ export function horaAt(date: Date, panchang: Panchang): { lord: PlanetName; inde
   const starts = new Date(rise.getTime() + idx * horaLen);
   const ends = new Date(rise.getTime() + (idx + 1) * horaLen);
   return { lord, index: idx, startsAt: starts.toISOString(), endsAt: ends.toISOString() };
+}
+
+/** Day horas 0–11 sunrise→sunset; night horas 12–23 sunset→next sunrise, cycle continues. */
+export function horaAround(date: Date): HoraInfo {
+  const { panchang } = panchangAt(date);
+  const rise = new Date(panchang.sunriseIso).getTime();
+  const set = new Date(panchang.sunsetIso).getTime();
+  const t = date.getTime();
+  if (t >= rise && t < set) return horaAt(date, panchang);
+
+  const p = getIstParts(date);
+  let nightStart: number;
+  let nightEnd: number;
+  let dayLord0: PlanetName;
+  if (t >= set) {
+    const noon = utcFromIstParts(p.year, p.month, p.day, 12, 0, 0);
+    const next = new Date(noon.getTime() + 24 * 60 * 60 * 1000);
+    nightStart = set;
+    nightEnd = new Date(panchangAt(next).panchang.sunriseIso).getTime();
+    dayLord0 = WEEKDAY_LORDS[panchang.weekdayIndex];
+  } else {
+    const noon = utcFromIstParts(p.year, p.month, p.day, 12, 0, 0);
+    const prev = new Date(noon.getTime() - 24 * 60 * 60 * 1000);
+    const prevPan = panchangAt(prev).panchang;
+    nightStart = new Date(prevPan.sunsetIso).getTime();
+    nightEnd = rise;
+    dayLord0 = WEEKDAY_LORDS[prevPan.weekdayIndex];
+  }
+  const horaLen = Math.max(1, nightEnd - nightStart) / 12;
+  const idx = clamp(Math.floor((t - nightStart) / horaLen), 0, 11);
+  const start = HORA_CYCLE.indexOf(dayLord0);
+  const lord = HORA_CYCLE[(start + 12 + idx) % 7];
+  const starts = new Date(nightStart + idx * horaLen);
+  const ends = new Date(nightStart + (idx + 1) * horaLen);
+  return { lord, index: 12 + idx, startsAt: starts.toISOString(), endsAt: ends.toISOString() };
 }
 
 function kalamAt(date: Date, panchang: Panchang): KalamFlag {
@@ -924,4 +961,87 @@ export function isTradingDay(iso: string, weekday: number): boolean {
   if (weekday === 0 || weekday === 6) return false;
   if (isMuhurat(iso)) return true;
   return !isNseHoliday(iso);
+}
+
+function isoParts(iso: string): { y: number; m: number; d: number } {
+  const [y, m, d] = iso.split("-").map(Number);
+  return { y, m, d };
+}
+
+function utcAtMin(iso: string, min: number): Date {
+  const { y, m, d } = isoParts(iso);
+  return utcFromIstParts(y, m, d, Math.floor(min / 60), min % 60, 0);
+}
+
+function sideOf(action: TradeAction): TradeSide {
+  if (action.includes("CE") && action.includes("PE")) return "BOTH";
+  if (action.includes("CE")) return "CE";
+  if (action.includes("PE")) return "PE";
+  if (action === "STRADDLE" || action === "IRON FLY") return "BOTH";
+  return "WAIT";
+}
+
+/** Current sky + the cash window that is live, about to open, or next. */
+export function liveNow(now: Date, underlying: Underlying): LiveNow {
+  const p = getIstParts(now);
+  const todayIso = formatIstIsoDate(now);
+  const nowMin = minutesOfDay(p.hour, p.minute);
+  const todayClosed = isNseClosed(todayIso);
+  const inCash = !todayClosed && nowMin >= MARKET_OPEN_MIN && nowMin < MARKET_CLOSE_MIN;
+  const preOpen = !todayClosed && nowMin < MARKET_OPEN_MIN;
+  const phase: LiveNow["phase"] = inCash ? "live" : preOpen ? "pre" : todayClosed ? "closed" : "post";
+  const sessionIso = nextSessionIso(now);
+  const { y, m, d } = isoParts(sessionIso);
+  const sessionDate = utcFromIstParts(y, m, d, 9, 0, 0);
+  const book = forecastDay(sessionDate, underlying, now);
+  const sky = panchangAt(now);
+  const hora = horaAround(now);
+  const riseMs = new Date(sky.panchang.sunriseIso).getTime();
+  const setMs = new Date(sky.panchang.sunsetIso).getTime();
+  const daySky = now.getTime() >= riseMs && now.getTime() < setMs;
+  const cho = daySky
+    ? choghadiyaAt(now, sky.panchang)
+    : { name: "Night" as const, kind: "move" as const, index: -1 };
+  const kalam = daySky ? kalamAt(now, sky.panchang) : { rahu: false, yamagandam: false, gulika: false };
+
+  let window: WindowSlot | null = null;
+  let next: WindowSlot | null = null;
+  if (inCash) {
+    const i = book.netResults.findIndex((s) => s.isLive);
+    window = i >= 0 ? book.netResults[i] : book.slots.find((s) => s.isLive) ?? null;
+    next = i >= 0 ? (book.netResults[i + 1] ?? null) : book.netResults[0] ?? null;
+  } else {
+    next = book.netResults[0] ?? null;
+  }
+
+  const play = window ? window.action : book.gap.openAction;
+  const suggestion = window ? window.suggestion : book.gap.summary;
+
+  return {
+    iso: todayIso,
+    sessionIso,
+    weekday: sky.panchang.weekday,
+    phase,
+    hora,
+    lagnaSign: sky.panchang.lagnaSign,
+    lagnaDegree: sky.panchang.lagnaDegree,
+    nakshatra: sky.panchang.nakshatra,
+    tithiName: sky.panchang.tithiName,
+    paksha: sky.panchang.paksha,
+    yoga: sky.panchang.yoga,
+    karana: sky.panchang.karana,
+    choghadiya: cho.name,
+    choghadiyaKind: cho.kind,
+    kalam,
+    window,
+    next,
+    play,
+    side: window ? window.side : sideOf(play),
+    suggestion,
+    regime: window ? window.regime : book.playbook.closeBias,
+    gap: book.gap,
+    thesis: book.gap.thesis,
+    bellMs: utcAtMin(sessionIso, MARKET_OPEN_MIN).getTime(),
+    closeMs: utcAtMin(inCash ? todayIso : sessionIso, MARKET_CLOSE_MIN).getTime(),
+  };
 }
