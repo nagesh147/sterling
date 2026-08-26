@@ -18,24 +18,24 @@ import type {
 
 const S: Record<string, React.CSSProperties> = {
   wrap: { width: '100%', height: '100%', overflow: 'auto', padding: '24px 32px', boxSizing: 'border-box' },
-  h1: { fontSize: 18, fontWeight: 700, color: '#333', marginBottom: 4 },
-  sub: { fontSize: 12, color: '#9b9b9b', marginBottom: 20 },
-  card: { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: 18, marginBottom: 16 },
-  label: { display: 'block', fontSize: 11, color: '#9b9b9b', fontWeight: 700, letterSpacing: 0.6, marginBottom: 6, textTransform: 'uppercase' },
-  input: { width: '100%', background: '#fff', color: '#333', border: '1px solid #e0e0e0', borderRadius: 4, padding: '8px 10px', fontSize: 13, boxSizing: 'border-box', minWidth: 0 },
+  h1: { fontSize: 18, fontWeight: 700, color: 'var(--k-ink-1)', marginBottom: 4 },
+  sub: { fontSize: 12, color: 'var(--k-dim)', marginBottom: 20 },
+  card: { background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 6, padding: 18, marginBottom: 16 },
+  label: { display: 'block', fontSize: 11, color: 'var(--k-dim)', fontWeight: 700, letterSpacing: 0.6, marginBottom: 6, textTransform: 'uppercase' },
+  input: { width: '100%', background: 'var(--k-bg)', color: 'var(--k-ink-1)', border: '1px solid var(--k-border)', borderRadius: 4, padding: '8px 10px', fontSize: 13, boxSizing: 'border-box', minWidth: 0 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 },
-  runBtn: { background: '#f06428', color: '#fff', border: 'none', borderRadius: 4, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer' },
+  runBtn: { background: 'var(--k-brand)', color: 'var(--k-on-accent)', border: 'none', borderRadius: 4, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer' },
   statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12, marginTop: 14 },
-  statBox: { border: '1px solid #eee', borderRadius: 4, padding: '10px 12px' },
-  statVal: { fontSize: 16, fontWeight: 700, color: '#333' },
-  statLbl: { fontSize: 10, color: '#9b9b9b', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  statBox: { border: '1px solid var(--k-hairline-3)', borderRadius: 4, padding: '10px 12px' },
+  statVal: { fontSize: 16, fontWeight: 700, color: 'var(--k-ink-1)' },
+  statLbl: { fontSize: 10, color: 'var(--k-dim)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
   caveat: { fontSize: 12, color: '#8a6d00', background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.5)', borderRadius: 4, padding: '8px 12px', marginTop: 10 },
 };
 
 const modeBtn = (active: boolean): React.CSSProperties => ({
   flex: 1, padding: '8px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-  border: `1px solid ${active ? '#f06428' : '#e0e0e0'}`,
-  color: active ? '#fff' : '#666', background: active ? '#f06428' : '#fff',
+  border: `1px solid ${active ? 'var(--k-brand)' : 'var(--k-border)'}`,
+  color: active ? 'var(--k-bg)' : 'var(--k-ink-4)', background: active ? 'var(--k-brand)' : 'var(--k-bg)',
   borderRadius: 4, textAlign: 'center',
 });
 
@@ -75,7 +75,7 @@ function Sparkline({ curve }: { curve: number[] }) {
   const up = curve[curve.length - 1] >= curve[0];
   return (
     <svg width={w} height={h} style={{ marginTop: 10 }}>
-      <polyline points={pts} fill="none" stroke={up ? '#4caf50' : '#e53935'} strokeWidth={1.5} />
+      <polyline points={pts} fill="none" stroke={up ? 'var(--k-green)' : 'var(--k-red-strong)'} strokeWidth={1.5} />
     </svg>
   );
 }
@@ -83,7 +83,7 @@ function Sparkline({ curve }: { curve: number[] }) {
 function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={S.statBox}>
-      <div style={{ ...S.statVal, color: color ?? '#333' }}>{value}</div>
+      <div style={{ ...S.statVal, color: color ?? 'var(--k-ink-1)' }}>{value}</div>
       <div style={S.statLbl}>{label}</div>
     </div>
   );
@@ -91,14 +91,14 @@ function StatBox({ label, value, color }: { label: string; value: string; color?
 
 function RunCard({ run }: { run: BacktestRun }) {
   const s: BacktestStats = run.stats;
-  const pnlColor = s.net_pnl >= 0 ? '#2e7d32' : '#c62828';
+  const pnlColor = s.net_pnl >= 0 ? 'var(--k-green-deep)' : 'var(--k-red-crimson)';
   return (
     <div style={S.card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#333', textTransform: 'capitalize' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--k-ink-1)', textTransform: 'capitalize' }}>
           {run.mode} mode
         </span>
-        <span style={{ fontSize: 11, color: '#9b9b9b' }}>{s.trades} trades</span>
+        <span style={{ fontSize: 11, color: 'var(--k-dim)' }}>{s.trades} trades</span>
       </div>
       {run.caveat && <div style={S.caveat}>⚠ {run.caveat}</div>}
       <Sparkline curve={run.equity_curve} />
@@ -110,7 +110,7 @@ function RunCard({ run }: { run: BacktestRun }) {
         <StatBox label="Sharpe" value={fmt(s.sharpe, 2)} />
         <StatBox label="Max DD" value={`${fmt(s.max_drawdown, 1)}%`} />
         <StatBox label="Expectancy" value={`₹${fmt(s.expectancy)}`} />
-        <StatBox label="Total costs" value={`₹${fmt(s.total_costs)}`} color="#c62828" />
+        <StatBox label="Total costs" value={`₹${fmt(s.total_costs)}`} color="var(--k-red-crimson)" />
         <StatBox label="Wins / Losses" value={`${s.wins} / ${s.losses}`} />
         <StatBox label="Final capital" value={`₹${fmt(s.final_capital)}`} />
       </div>
@@ -170,7 +170,7 @@ export function BacktestPane() {
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: '#9b9b9b', marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--k-dim)', marginBottom: 16 }}>
           {MODES.find((m) => m.key === mode)?.hint}
           {mode !== 'real'
             ? "  ·  For synthetic/both, enter the UNDERLYING name (e.g. 'NIFTY 50')."
@@ -216,7 +216,7 @@ export function BacktestPane() {
       </div>
 
       {bt.isError && (
-        <div style={{ ...S.card, borderColor: '#e53935', color: '#c62828', fontSize: 13 }}>
+        <div style={{ ...S.card, borderColor: 'var(--k-red-strong)', color: 'var(--k-red-crimson)', fontSize: 13 }}>
           {bt.error?.message ?? 'Backtest failed.'}
         </div>
       )}
@@ -224,9 +224,9 @@ export function BacktestPane() {
       {res && (
         <>
           {res.notes?.length > 0 && (
-            <div style={{ ...S.card, background: '#fafafa' }}>
+            <div style={{ ...S.card, background: 'var(--k-surface-2)' }}>
               {res.notes.map((n, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>• {n}</div>
+                <div key={i} style={{ fontSize: 12, color: 'var(--k-ink-4)', marginBottom: 4 }}>• {n}</div>
               ))}
               {res.bs_vs_real_drift_pct != null && (
                 <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 6, fontWeight: 600 }}>
@@ -236,7 +236,7 @@ export function BacktestPane() {
             </div>
           )}
           {res.runs.length === 0 && (
-            <div style={{ ...S.card, fontSize: 13, color: '#9b9b9b' }}>
+            <div style={{ ...S.card, fontSize: 13, color: 'var(--k-dim)' }}>
               No runs produced — see the notes above (usually an unresolved symbol or too little data).
             </div>
           )}

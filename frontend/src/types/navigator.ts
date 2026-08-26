@@ -33,9 +33,6 @@ export interface AvwapConfig {
   stop_buffer_atr: number;
   max_stop_distance_atr: number;
   target_r: number;
-  show_session_vwap: boolean;
-  show_daily_range: boolean;
-  show_weekly_range: boolean;
 }
 
 export interface RangesConfig {
@@ -93,7 +90,6 @@ export interface FlowConfig {
   strong_zone: number;
   extreme_zone: number;
   require_for_index_gate: boolean;
-  allow_na_for_single_stocks: boolean;
 }
 
 export interface GammaConfig {
@@ -107,7 +103,6 @@ export interface GammaConfig {
   min_samples: number;
   blast_z_min: number;
   acceleration_z_min: number;
-  expiry_profile_enabled: boolean;
   expiry_profile_start_ist: string;
   require_flow_alignment: boolean;
   required_for_gate: boolean;
@@ -161,6 +156,10 @@ export interface NavigatorConfigModel {
    */
   strike_moneyness?: Moneyness[] | null;
   scan_expiries_indices?: Array<'weekly' | 'monthly'> | null;
+  /** Expiry window. Unset = follow the Kite engine's. */
+  expiry_dte_min?: number | null;
+  expiry_dte_max?: number | null;
+  avoid_expiry_day?: boolean | null;
   scan_expiries_stocks?: Array<'monthly'> | null;
   // ── Structure Radar / Signal Origination (additive, all off by default) ──
   // See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.

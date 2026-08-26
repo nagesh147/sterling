@@ -37,7 +37,6 @@
   font-family: var(--app-font, 'Plus Jakarta Sans', 'Google Sans', system-ui, sans-serif);
   font-size: 12px;
   line-height: 1.4;
-  zoom: var(--app-zoom, 1);
   overflow: hidden;
   display: flex;
   flex-direction: column;

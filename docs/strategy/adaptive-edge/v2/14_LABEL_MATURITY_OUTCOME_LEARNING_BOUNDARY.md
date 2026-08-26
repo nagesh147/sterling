@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — Label Maturity, Outcome Construction and Learning Boundary
 
-**Artifact:** A38
-**Version:** 2.0.0-draft
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
+**Artifact:** A38  
+**Version:** 2.0.0-draft  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
 **Implementation:** NONE
 
 ## 1. Purpose

@@ -49,7 +49,7 @@ export function SessionStatsPanel() {
         </div>
         <div style={S.cell}>
           <span style={S.key}>PARTIAL CLOSE</span>
-          <span style={{ ...S.val, color: data.paper_positions_partially_closed > 0 ? t.amber : '#333', fontSize: 14 }}>
+          <span style={{ ...S.val, color: data.paper_positions_partially_closed > 0 ? t.amber : 'var(--k-ink-1)', fontSize: 14 }}>
             {data.paper_positions_partially_closed}
           </span>
         </div>

@@ -998,12 +998,12 @@
 	"variable": [
 		{
 			"key": "userid",
-			"value": "YOUR_REDACTED_VALUE",
+			"value": "your_id",
 			"type": "string"
 		},
 		{
 			"key": "password",
-			"value": "YOUR_REDACTED_VALUE",
+			"value": "your_pwd",
 			"type": "string"
 		},
 		{

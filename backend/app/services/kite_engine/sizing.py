@@ -23,6 +23,13 @@ class SizingResult:
     est_risk: float          # risk_per_lot × lots
     est_cost: float          # entry × qty (margin/outlay needed)
     reason: str              # human-readable explanation of the sizing decision
+    #: True when the smallest tradable size would break the risk budget and the
+    #: override is off — i.e. there is no size that honours the cap, so the trade must
+    #: not be placed at all. Distinct from ``qty == 0`` for a missing lot size, which
+    #: is a data problem rather than a risk decision. Callers MUST check this: they
+    #: fall back to a default order size when ``qty`` is 0, so a blocked result that
+    #: only zeroed the quantity would place the *unsized* order instead of none.
+    blocked: bool = False
 
 
 def size_position(
@@ -33,16 +40,25 @@ def size_position(
     available_capital: float,
     risk_pct: float,
     max_lots: int,
+    allow_min_lot_over_risk: bool = False,
 ) -> SizingResult:
     """Decide lots for one option BUY.
 
-    Target: ``risk_per_lot × lots ≤ risk_pct% × available_capital``.
-    Then floor at 1 lot (we always take at least the minimum tradable size when a
-    signal fires) and cap by both ``max_lots`` and what the margin can afford.
+    Target: ``risk_per_lot × lots ≤ risk_pct% × available_capital``, capped by both
+    ``max_lots`` and what the margin can afford.
+
+    When even ONE lot breaks that budget there is no size that honours the cap, so the
+    result is ``blocked`` and the caller must not trade. It used to floor to a single
+    lot and place the order anyway, which quietly turned ``risk_pct`` into a
+    suggestion — on a lot-size-50 index option a 1% setting could commit well over ten
+    times that. ``allow_min_lot_over_risk`` restores the old behaviour for anyone who
+    would rather take the minimum size than miss the signal; it is a deliberate choice
+    rather than the default.
 
     Degenerate inputs (non-positive lot size, or stop ≥ entry so risk is undefined)
-    fall back to a single lot — the signal is real, we just can't risk-size it, so
-    we take the smallest position rather than skip or over-buy.
+    still fall back to a single lot. That is not the same case: there is no budget to
+    compare against, so there is nothing to honour. It is reached only when the caller
+    has already resolved a positive entry and stop, which makes it rare.
     """
     lot_size = int(lot_size or 0)
     if lot_size <= 0:
@@ -65,6 +81,18 @@ def size_position(
     # Margin affordability: never order more than the outlay we can pay for.
     cost_per_lot = entry * lot_size
     by_margin = int(float(available_capital or 0.0) // cost_per_lot) if cost_per_lot > 0 else 0
+
+    # Only a KNOWN budget can be exceeded. ``available_fo_capital`` returns 0.0 when
+    # the margins call fails, and treating that as "over budget" would turn a
+    # transient broker API outage into a silent halt of every automatic entry — a far
+    # bigger behaviour change than the one being fixed here, and one that looks
+    # exactly like the engine being broken. Unknown capital keeps the old 1-lot floor.
+    if by_risk < 1 and not allow_min_lot_over_risk and float(available_capital or 0.0) > 0:
+        return SizingResult(
+            0, 0, risk_per_lot, 0.0, 0.0,
+            f"risk/lot ₹{risk_per_lot:.0f} > budget ₹{budget:.0f} "
+            f"({risk_pct:.1f}% of ₹{available_capital:.0f}) — no size honours the cap",
+            blocked=True)
 
     lots = max(1, by_risk)                 # floor at 1 lot
     lots = min(lots, int(max_lots))        # ceiling
@@ -96,13 +124,14 @@ def size_future_position(
     available_capital: float,
     risk_pct: float,
     max_lots: int,
+    allow_min_lot_over_risk: bool = False,
 ) -> SizingResult:
     """Decide lots for one futures position (directional mode).
 
-    Risk basis is ``(entry − stop) × lot_size`` (notional loss at stop).
-    Same floor/cap logic as the options sizer: floor at 1 lot, cap by max_lots
-    and margin affordability. Margin for futures ≈ SPAN margin (~10-15% of
-    contract value); we conservatively use 15% for affordability check.
+    Risk basis is ``(entry − stop) × lot_size`` (notional loss at stop). Same rules as
+    the options sizer, including blocking when one lot already breaks the budget —
+    which bites harder here, since a single index-futures lot carries the full
+    notional and its stop distance is measured in index points.
     """
     lot_size = int(lot_size or 0)
     if lot_size <= 0:
@@ -125,6 +154,18 @@ def size_future_position(
     # Margin affordability: SPAN margin ≈ 15% of contract value.
     margin_per_lot = entry * lot_size * 0.15
     by_margin = int(float(available_capital or 0.0) // margin_per_lot) if margin_per_lot > 0 else 0
+
+    # Only a KNOWN budget can be exceeded. ``available_fo_capital`` returns 0.0 when
+    # the margins call fails, and treating that as "over budget" would turn a
+    # transient broker API outage into a silent halt of every automatic entry — a far
+    # bigger behaviour change than the one being fixed here, and one that looks
+    # exactly like the engine being broken. Unknown capital keeps the old 1-lot floor.
+    if by_risk < 1 and not allow_min_lot_over_risk and float(available_capital or 0.0) > 0:
+        return SizingResult(
+            0, 0, risk_per_lot, 0.0, 0.0,
+            f"risk/lot ₹{risk_per_lot:.0f} > budget ₹{budget:.0f} "
+            f"({risk_pct:.1f}% of ₹{available_capital:.0f}) — no size honours the cap",
+            blocked=True)
 
     lots = max(1, by_risk)
     lots = min(lots, int(max_lots))

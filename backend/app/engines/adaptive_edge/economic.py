@@ -1,14 +1,15 @@
-"""Economic evaluation anchored to Master Specification §§31 and 66.
+"""Economic evaluation for Adaptive Edge.
 
-This module calculates the source-defined economic relationship only.
-Eligibility is a downstream conservative-EV decision and is deliberately not
-inferred from raw NetEV here.
+Prediction and risk are deliberately not part of this module. This module
+answers only whether the expected opportunity remains economically viable
+after execution costs.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from .edge import EdgeAssessment
+from .formula_registry import require_implemented
 
 
 @dataclass(frozen=True)
@@ -16,28 +17,39 @@ class EconomicAssessment:
     expected_gross_value: float
     expected_execution_cost: float
     expected_net_value: float
-    formula_id: str = "MS-31/66"
+    eligible: bool
+    formula_id: str = "F-004"
     formula_version: str = "1.0"
+    reason: str | None = None
 
 
 def evaluate_economics(
     edge: EdgeAssessment,
     *,
     execution_cost: float,
+    minimum_net_value: float = 0.0,
 ) -> EconomicAssessment:
-    """Compute NetEV = E[Profit] - E[Loss] - E[ExecutionCost].
+    definition = require_implemented("F-004")
+    gross = edge.expected_gross_value
+    if gross is None:
+        return EconomicAssessment(
+            expected_gross_value=0.0,
+            expected_execution_cost=execution_cost,
+            expected_net_value=0.0,
+            eligible=False,
+            formula_id=definition.formula_id,
+            formula_version=definition.version,
+            reason="missing_expected_gross_value",
+        )
 
-    This function intentionally does not implement the downstream eligibility
-    rule. §66 requires a positive conservative estimate; that estimate and
-    its lower-confidence construction are separate inputs and remain blocked
-    until their source-defined calibration method is recovered.
-    """
-    if edge.expected_gross_value is None:
-        raise ValueError("expected gross value is required")
-
-    net = edge.expected_gross_value - execution_cost
+    net = gross - execution_cost
+    eligible = net >= minimum_net_value
     return EconomicAssessment(
-        expected_gross_value=edge.expected_gross_value,
+        expected_gross_value=gross,
         expected_execution_cost=execution_cost,
         expected_net_value=net,
+        eligible=eligible,
+        formula_id=definition.formula_id,
+        formula_version=definition.version,
+        reason=None if eligible else "expected_net_value_below_threshold",
     )

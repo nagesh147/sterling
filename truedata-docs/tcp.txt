@@ -1,0 +1,1642 @@
+CONFIDENTIAL
+
+TCP Based Market Data API
+(Real-time + REST (History) )
+Technical Specifications
+
+27 Feb 2025
+V2.3
+
+This document is covered under a Non-Disclosure agreement with the recipient. No Part of
+this document must be reproduced or forwarded to any person other than the Intended
+Recipient. In case you received this document by mistake, please destroy the same
+immediately.
+
+CONFIDENTIAL
+
+2
+
+Table of Contents:
+1.
+
+Change History ................................................................................................................................................ 3
+
+2.
+
+About TrueData............................................................................................. Error! Bookmark not defined.
+
+3.
+
+TrueData Advantage & Features .............................................................. Error! Bookmark not defined.
+
+4.
+
+TCP API Specifications .................................................................................................................................. 8
+
+a)
+b)
+
+c)
+
+Overview ............................................................................................................................................... 8
+Streaming TCP (Real Time) ................................................................................................................... 8
+i)
+Streaming TCP IP (Real Time) ...................................................................................................... 8
+ii)
+Authentication/Login .............................................................................................................. 10
+iii)
+Market Messages .................................................................................................................... 11
+iv)
+Getting Symbol List ................................................................................................................ 12
+v) Tick/Trade Streaming Packet (Real Time).................................................................................... 13
+vi)
+BidAsk Level1 Streaming Packet (Real Time) ......................................................................... 14
+vii)
+BidAsk Level2 Packet ............................................................................................................. 15
+Historical Data over REST ................................................................................................................... 16
+i)
+Historical Data API & URL ......................................................................................................... 16
+ii)
+REST Authentication .............................................................................................................. 18
+iii)
+Tick Data History .................................................................................................................... 19
+iv)
+Bar Data History ..................................................................................................................... 20
+v) Last N Bars History ..................................................................................................................... 21
+vi)
+Last n Ticks History ................................................................................................................ 22
+vii)
+Retrieve the Bhavcopy ............................................................................................................ 23
+viii)
+Retrieve the Bhavcopy Availability Status for the day .............................................................. 24
+ix)
+Retrieve the LTP of any symbol .............................................................................................. 24
+
+5.
+
+Support Contact Details ............................................................................................................................... 26
+
+Appendix I ......................................................................................................................... Error! Bookmark not defined.
+6.
+
+Pre-built Client Library for Weboscket and REST Details (Python) .... Error! Bookmark not defined.
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+3
+
+1.
+
+Change History
+
+Version
+0.9
+
+Date
+15 Apr 2021
+
+Notes
+First version (Beta)
+
+2.1
+
+11 July 2023
+
+BSE EQ and BSE FNO with BID ASK Level 2 (5
+depth)
+
+2.2
+
+12 April 2024
+
+OI and Prev Oi Size increased to 8 Bytes
+
+2.3
+
+27 Feb 2025
+
+Document Update
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+4
+
+2.
+
+About TrueData
+A. TrueData Financial Information Pvt. Ltd. is a leading provider of real-time
+market data APIs for Indian stock and commodity exchanges. As an official realtime data vendor for NSE, BSE, and MCX, we offer ultra-low latency, highaccuracy data solutions designed for traders, investors, algo traders, and
+financial technology platforms
+B. Since our inception in 2007 with the launch of True Data Financial Information
+Pvt Ltd., we have been at the forefront of market data innovation. Our proprietary
+APIs, along with our flagship product Velocity, provide seamless real-time and
+historical data access through advanced plugins and direct exchange feeds.
+C. Our APIs offer extensive market coverage, including corporate action-adjusted
+market data, corporate announcements, option Greeks, financial reports,
+and shareholding patterns. To simplify integration for trading platforms and
+fintech developers, we provide ready-made API modules, such as symbol
+master, option chain, top gainers/losers, company logos, 52-week high/low,
+and much more.
+D. Driven by our motto, "Positioning You for Profits!", TrueData empowers
+
+traders with accurate real-time data, advanced analytics, and seamless API
+integration, ensuring better decision-making and execution efficiency.
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+5
+
+3. The TrueData API Advantage
+TrueData continuously innovates to provide best-in-class APIs and data integration solutions that meet
+the evolving needs of professional traders, fintech platforms, and algo trading systems.
+
+Key Features & API Offerings
+1. Ultra-Low Latency Real-Time Market Data Feeds
+
+
+Direct connectivity to NSE, BSE, and MCX ensures lightning-fast data delivery.
+
+
+
+Optimized for high-frequency trading (HFT), algo trading, and automated systems.
+
+
+
+Institutional-grade data feeds with minimal latency, ensuring accurate trade execution.
+
+2. Advanced Data Infrastructure for High Performance
+
+
+Our backend is optimized for handling massive volumes of tick data efficiently.
+
+
+
+99.9% uptime ensures reliable, stable, and uninterrupted market data access.
+
+
+
+High-speed delivery with minimal packet loss, crucial for professional trading strategies.
+
+3. Seamless REST API Access
+
+
+Easily integrate real-time and historical data into trading platforms, research tools, and mobile
+apps.
+
+
+
+REST APIs provide access to: real-time price updates, corporate actions, option chain data,
+financial reports, and more.
+
+
+
+Flexible data formats (JSON, CSV, Binary) for easy customization based on user needs .
+
+4. Developer-Friendly Libraries & SDKs
+
+
+We offer plug-and-play libraries to make integration effortless:
+
+
+
+Python: TrueData Python Library – Ideal for algo trading, backtesting, and research.
+
+
+
+Node.js: TrueData Node.js Library – Perfect for real-time streaming and web-based trading
+applications.
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+6
+
+
+
+C# .NET: TrueData .NET Library – Designed for Windows-based trading systems and enterprise
+applications.
+
+5. Ready-Made API Modules for Easy Integration
+
+
+TrueData provides pre-built API modules for seamless integration with trading platforms:
+
+
+
+Symbol Master API – A complete database of all tradable instruments on NSE, BSE, and MCX.
+
+
+
+Option Chain API – Live option chain data with bid-ask spreads, open interest, IVs, and Greeks.
+
+
+
+Top Gainers/Losers API – Quickly fetch top-performing and worst-performing stocks based on
+real-time metrics.
+
+
+
+Company Logos API – Retrieve official stock symbols with logos for a visually enhanced user
+experience.
+
+
+
+52-Week High/Low API – Identify stocks hitting their yearly highs or lows for trend analysis.
+
+
+
+More API Modules Continuously Added for advanced market insights.
+
+6. Scalable & Flexible Data Streaming – No Symbol Limitations
+
+
+TrueData provides unlimited real-time market data streaming with two powerful modes:
+
+
+
+Limited Feed (Pub/Sub Model) – Best for retail traders and small-scale algo traders. Users
+subscribe to specific symbols and receive real-time price updates, optimizing bandwidth and
+efficiency.
+
+
+
+Full Market Streaming – Built for HFTs, institutions, and fintech platforms. As soon as a user
+connects, all trades for the subscribed segment stream automatically—tick by tick—without any
+symbol limitations. This mode delivers the full depth of the market in real time, making it perfect
+for market-making, algo trading, and deep market analysis.
+
+
+
+No restrictions. No delays. Just pure, real-time market action.
+
+7. Streaming Candle Data API
+
+
+Real-time candle updates for 1-minute and 5-minute bars for live trend analysis.
+
+
+
+Perfect for intraday traders, scalpers, and automated strategies.
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+7
+
+8. REST API Access to Historical Market Data
+
+
+Access to tick-by-tick, intraday, and EOD data via REST APIs.
+
+
+
+Data is fully adjusted for corporate actions (splits, bonuses, dividends, rights).
+
+
+
+Note: Historical market data access is available via our APIs, subject to compliance with
+exchange regulations.
+
+9. Corporate Announcements & Financial Reports APIs
+
+
+Get real-time earnings reports, shareholding patterns, and key disclosures.
+
+
+
+Integrate fundamental analysis into trading strategies.
+
+10. Option Greeks API
+
+
+Real-time Delta, Gamma, Theta, Vega, and Rho for precise option trading strategies.
+
+11. Continuous & Contract Futures API
+
+
+Access both continuous futures and specific contract futures simultaneously (e.g., NIFTY-I and
+NIFTY20MARFUT).
+
+
+
+Essential for backtesting, technical analysis, and automated trading.
+
+12. Premium Adjusted Continuous Futures API
+
+
+Seamless long-term analysis with adjusted continuous futures at rollover (NIFTY-IP).
+
+13. Extensive Market Coverage & Real-Time Data Access
+
+
+Tick-by-tick data for 60,000+ symbols across NSE, BSE, and MCX.
+
+
+
+Instant access to intraday and EOD data, covering all market segments
+
+14. Unmatched API Support & Customer Service
+We provide dedicated API support through multiple channels.
+ Live Chat & Phone Support – Get real-time help from our experts.
+
+
+Email & Ticketing System – Submit queries and receive fast resolution.
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+8
+
+
+
+Remote Setup via TeamViewer – Hassle-free API integration assistance.
+
+
+
+Comprehensive Knowledge Base & FAQs – Self-service troubleshooting for smooth
+implementation.
+
+Why Choose TrueData?
+1. Official Data Vendor for NSE, BSE & MCX
+2. Ultra-Low Latency & High-Performance APIs
+3. Seamless REST API & Streaming Access
+4. Scalable, Enterprise-Ready Solutions
+5. Comprehensive Market Data Coverage
+6. Dedicated Technical & Developer Support
+
+4.
+
+TCP API Specifications
+a)
+
+Overview
+i) The TrueData API provides Real Time streaming data via TCP while the historical data is provided
+via REST. A client would need to connect to the respective TCP port for which they wish to receive
+the real time data. In case historical data is required, then the client would need to login to the REST
+service using the same login details and obtain the authentication token (bearer token) which would
+be needed for each subsequent request.
+
+b)
+
+Streaming TCP (Real Time)
+i)
+
+Streaming TCP IP (Real Time)
+
+Streaming TCP URL/IP
+Streaming TCP Port
+
+tcp.truedata.in / push.truedata.in (old)
+7070
+
+Beta Testing URL
+Beta TCP Port
+
+pushbeta.truedata.in(180.179.151.148)
+7070
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+9
+
+To check TCP via Putty, input enter IP and Port number, and use Connection type as
+Raw as shown below:
+
+Upon successful connection following window shall open with Truedata TCP RT Service message:
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+10
+
+ii)
+
+Authentication/Login
+a)
+After successful connection, to start receiving stream enter following command
+to login:
+
+Login Request
+Login Response
+Format
+
+LOGIN username password
+TrueData Real Time Data Service:800:NSE,FO,MCX:12/31/2021
+12:00:00 AM
+TrueData Real Time Data
+Service:no_of_symbols:segment:validity
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+11
+
+a) If the client is connected elsewhere, the client would not be able to connect. You would
+first need to logout from your previous session and then attempt a login.
+
+iii)
+
+Market Messages
+a)
+Market messages indicating the start and stop of the various market sessions
+have been added for NSE. The following messages are pushed automatically in the real
+time TCP streams: -
+
+Market
+Messages
+
+•
+•
+•
+•
+•
+•
+•
+•
+•
+
+NSE EQ Pre Open Start
+NSE EQ Pre Open End
+NSE EQ Normal Market Start
+
+•
+•
+•
+•
+
+MCX Market Status: 5 Session No: 1
+MCX Market Status: 6 Session No: 1
+MCX Market Status: 1 Session No: 2
+MCX Market Status: 2 Session No: 2
+
+NSE FO Normal Market End
+NSE EQ Post Close Start
+NSE EQ Post Close End
+NSE FO Normal Market Start
+NSE FO Normal Market End
+
+Message (40 bytes)
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+12
+
+Packet
+(42
+Bytes)
+Example
+
+Code(2 Byte)
+
+PO
+PC
+CO
+CC
+CK
+CL
+
+NSE EQ Pre Open Start
+NSE EQ Pre Open Start
+NSE EQ Normal Market Start
+NSE EQ Normal Market End
+NSE EQ Post Close Start
+NSE EQ Post Close End
+
+FO
+FC
+
+NSE FO Normal Market Start
+NSE FO Normal Market End
+
+DO
+DC
+
+CDS Normal Market Start
+CDS Normal Market End
+
+b)
+Other than the market messages which are pushed automatically, you can also
+check at any time if a particular market is open or closed.
+
+iv)
+
+Getting Symbol List
+a)
+
+Search for a symbol / symbol keyword in the masters - Another way to get
+the symbol id list would be to search for the symbols (recommended) or request
+for the entire masters (not recommended) from the following mentioned URL to
+get the master files in json format: https://api.truedata.in/getAllSymbols?segment=eq&user=your_user_id&passwo
+rd=your_pas sword&search=RELIANCE
+
+b)
+
+Download entire Master files - You can also download the entire Master files
+if needed. This however, may not be needed as Symbol ID is already returned
+when you first subscribe to the symbol for the streaming feed.
+
+https://api.truedata.in/getAllSymbols?segment=fut&user=your_user_id&password=your_
+pa ssword&csv=true&allexpiry=false
+Please change the segment in this URL as desired by you: -
+
+1. segment=eq
+2. segment=fo
+3. segment=fut
+
+–
+–
+–
+
+CONFIDENTIAL
+
+Equity Master (NSE)
+Futures & Options Master (NSE)
+Futures (Only) Master
+
+CONFIDENTIAL
+
+13
+
+4.
+5.
+6.
+7.
+
+segment=mcx
+segment=bseeq
+segment=bsefo
+segment=all
+
+–
+-–
+
+MCX Master
+Equity Master (BSE)
+Futures & Options Master (BSE)
+Full master (all segments)
+
+*Please note that it is not necessary to download the master files as the symbol ID is returned once
+a symbol subscription request is sent (as shown below).
+*The instrument list API returns large amounts of data. It's best to request it once a day (ideally at
+around 08:30 AM) and store in a database at your end.
+*JSON format – removing &csv=True would give you the response in JSON format. Note that this
+would increase the download size and could take longer to download
+*&allexpiry=true would download all the symbols (including all expired symbols) in the TrueData
+database. This could be a huge list and it is recommended to use the &search command instead as
+explained above.
+
+c)
+Get Option Chain Symbols - If you need to get all the symbols of an Option
+chain, you can get those by calling the getOption Chain command. You need to specify the
+symbol and the expiry date in yyyymmdd format. Default format for the option chain is
+json. If you need the option in csv format add “&csv=true” in the end.
+https://api.truedata.in/getOptionChain?user=your_user_id&password=your_password
+&symbol=NIFTY&expiry=20230727&csv=true
+https://api.truedata.in/getOptionChain?user=your_user_id&password=your_password
+&symbol=SENSEX&expiry=20230714&csv=true
+d)
+
+Add symbol request and response is now updated to an array. Many additional
+fields have been added like timestamp, Bid, Ask. Except for the message >
+symbols added, the format of the message is same as the touchline message. For
+detailed format of the message see the touchline fields as explained in Sl. No.
+vii. An example of the return when symbols are added is as below: -
+
+v) Tick/Trade Streaming Packet (Real Time)
+Each packet with trade information will consist of 87 bytes
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+14
+
+-
+
+Index
+
+Description
+
+Example
+
+0-1
+
+Code (2 Byte)
+
+TR
+
+2-5
+
+SymbolId (4 Bytes)
+
+100001262
+
+6-9
+
+Unix Timestamp (4 Bytes)
+
+Integer
+
+10-13
+
+Sequence No (4 Bytes)
+
+12456
+
+14-17
+
+LTP (last trade price) (4 Byte)
+
+1450.45
+
+18-21
+
+Last Tick Volume (4 Byte)
+
+52
+
+22-25
+26-29
+
+ATP(average traded price) (4 Byte)
+Total Traded Quantity(today) (4 Byte)
+
+1423.50
+55256
+
+30-33
+
+Day Open (4 Byte)
+
+1410.2
+
+34-37
+38-41
+
+Day High (4 Byte)
+Day Low (4 Byte)
+
+1470.55
+1400.25
+
+42-45
+46-53
+54-61
+
+Previous Close(yesterday) (4 Byte)
+Open Interest(8 Byte)
+Prev Day Open Interest (8 Byte)
+
+1390.75
+2221700000
+2221500000
+
+62-69
+
+Turnover (8 Byte)
+
+2153125648.58
+
+70-73
+74-77
+
+Best Bid( 4 Byte)
+Best Bid Qty (4 Byte)
+
+1448.75
+45
+
+78-81
+82-85
+86-86
+
+Best Ask(4 Bytes)
+Best Ask Qty(4 Byte)
+Footer (1 Byte)
+
+1453.5
+65
+Z
+
+vi) BidAsk Level1 Streaming Packet (Real Time)
+Each packet with trade information will consist of 27 bytes
+Index
+0-1
+
+Description
+Code (2 Byte)
+
+Example
+BA
+
+2-5
+6-9
+
+SymbolId (4 Bytes)
+Unix Timestamp (4 Bytes)
+
+100001262
+Integer
+
+10-13
+
+Bid( 4 Byte)
+
+1448.75
+
+14-17
+18-21
+22-25
+
+Bid Qty (4 Byte)
+Ask(4 Bytes)
+Ask Qty(4 Byte)
+
+45
+1453.5
+65
+
+26-27
+
+Footer (1 Byte)
+
+Z
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+15
+
+vii)
+
+BidAsk Level2 Packet
+Each packet with trade information will consist of 139 bytes
+Index
+
+Description
+
+Example
+
+0-1
+
+Code (2 Byte)
+
+L2
+
+2-5
+
+SymbolId (4 Bytes)
+
+410001262
+
+6-9
+
+Unix Timestamp (4 Bytes)
+
+Integer
+
+10-13
+
+Bid1( 4 Byte)
+
+1448.75
+
+14-17
+
+Bid Qty1 (4 Byte)
+
+45
+
+18-21
+
+No of Bid1 (4 Byte)
+
+1
+
+22-25
+
+Ask1(4 Bytes)
+
+1453.5
+
+26-29
+
+Ask Qty1(4 Byte)
+
+65
+
+30-33
+
+No of Ask1 (4 Byte)
+
+2
+
+34-37
+
+Bid2( 4 Byte)
+
+38-41
+
+Bid Qty2 (4 Byte)
+
+42-45
+
+No of Bid2 (4 Byte)
+
+46-49
+
+Ask2(4 Bytes)
+
+50-53
+
+Ask Qty2(4 Byte)
+
+54-57
+
+No of Ask2 (4 Byte)
+
+58-61
+
+Bid3( 4 Byte)
+
+62-65
+
+Bid Qty3 (4 Byte)
+
+66-69
+
+No of Bid3 (4 Byte)
+
+70-73
+
+Ask3(4 Bytes)
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+16
+
+c)
+
+74-77
+
+Ask Qty3(4 Byte)
+
+78-81
+
+No of Ask3 (4 Byte)
+
+82-85
+
+Bid4( 4 Byte)
+
+86-89
+
+Bid Qty4 (4 Byte)
+
+90-93
+
+No of Bid4 (4 Byte)
+
+94-97
+
+Ask4(4 Bytes)
+
+98-101
+
+Ask Qty4(4 Byte)
+
+102-105
+
+No of Ask4 (4 Byte)
+
+106-109
+
+Bid5( 4 Byte)
+
+110-113
+
+Bid Qty5 (4 Byte)
+
+114-117
+
+No of Bid5 (4 Byte)
+
+118-121
+
+Ask5(4 Bytes)
+
+122-125
+
+Ask Qty5(4 Byte)
+
+126-129
+
+No of Ask5 (4 Byte)
+
+130-133
+
+Total Bid Qty
+
+Integer
+
+134-137
+
+Total Ask Qty
+
+Integer
+
+138-139
+
+Footer
+
+Z
+
+Historical Data over REST
+i)
+
+Historical Data API & URL
+a)
+b)
+c)
+d)
+
+History URL for login / authentication > https://auth.truedata.in/token
+History URL for subsequent requests > https://history.truedata.in/...
+History tokens have a validity of 3600 seconds. A new token needs to be
+obtained in time in case further requests are required to be made.
+Request rates are currently limited for tick history as follows. (This includes all
+REST calls): i)
+
+ii)
+iii)
+e)
+
+f)
+
+Calls in 1 second – 3 (Max)
+Calls in 1 minute – 100 (Max)
+Calls in 1 hour – 6000 (Max)
+
+The access token is renewed once every day at around 4 am. A fresh token
+needs to be obtained at that time to continue using the service without any
+interruptions.
+In case there is no data available for the date time range, given in the request,
+then you will get a message like so: -
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+17
+
+"No Data exists for <Symbol>"
+g)
+
+You can download the entire postman collection for quicker development from
+this link here:
+
+h)
+
+You can pull the response in csv or json formats. You need to declare the
+response format needed in your request. However, a csv response is
+recommended as it lowers the amount of data transfer / bandwidth consumption
+and thereby the data lands up faster due to its comparably smaller size.
+
+i)
+
+The recommended and default response format is csv. Json responses are
+also possible. We recommend choosing the csv response format as it ensures
+comparatively smaller bandwidthusage for the same historical data thereby
+enabling faster delivery over the internet.
+
+j)
+
+Sample csv format is as follows:-
+
+timestamp,open,high,low,close,oi,volume
+2021-02-01T09:07,1859.4,1859.4,1859.4,1859.4,1,0
+2021-02-01T09:15,1859.4,1862.3,1853.05,1856.95,578586,0 2021-0201T09:16,1857.8,1861.6,1856.15,1860.4,240393,0
+……
+
+k)
+
+Sample json format is as follows:-
+
+{
+"status": "Success",
+"Records": [
+[
+"2021-03-22T15:29:40",
+14756.55,
+150,
+8712225,
+14756.4,
+150,
+14757.0,
+375
+],
+[
+"2021-03-22T15:29:42",
+14757.0,
+975,
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+18
+
+8712225,
+14756.5,
+300,
+14757.0,
+225
+]]}
+
+l)
+
+For the rest of the document we have depicted all responses in the recommended
+format which is csv.
+
+m)
+To hasten your development process, the Postman collection for the Historical
+REST API is available from this link. Please unzip the file and import it into Postman
+(https://www.postman.com/) to work with it :TrueData_History_REST_API_v1.1.postman_collection
+
+ii)
+
+REST Authentication
+a)
+
+The first step in the authentication process is to obtain the token which can be
+used for subsequent requests. This is a POST request like so: Service URL
+Request Method
+Format
+Request Parameters
+
+b)
+
+https://auth.truedata.in/token
+
+POST
+x-www-from-urlencoded
+username <user-id> password
+<user-pwd> grant_type
+passoword
+
+The above request typically sends JSON response as follows: Response
+
+JSON
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+19
+
+{
+
+Sample
+Response
+
+"access_token": "og6zhJqQZuLAT54CpwPFNI8yOhC
+RasyMiO6eMS62YF19A9tAMkgqJNP4LreC2vt_muHKpcMOisi
+wPZgHZNmxwvfplKvU3SVZJ2QMtET3oeAMT8smgAP9HIxLTYn
+QJIMJ_QB0xYWGe5efwGO4Kwun16nZ9GvNdQyPhPNed5toRajdg_bSGdzb8XusmMbctC5aiCE2w2dcknuWKm6v8follpLD6
+VvYBhEIHWxguePUuTfNztsZyVDyLn4p_vlwmquxDtt5BHqQfSksq_zy9hA",
+"token_type": "bearer",
+"expires_in": 13961,
+"userName": "<your_username>",
+".expires": "Sun, 21 Mar 2021 22:30:00 GMT",
+".issued": "Sun, 21 Mar 2021 18:37:18 GMT"
+}
+
+Response access_token : will be used in subsequent request to retireve data
+parameters expires_in : token validity in seconds Token_type: bearer (type of token)
+
+Error
+
+{
+"error": "invalid_grant",
+"error_description": "The user name or password is incorrect."
+}
+{
+"error": "invalid_grant",
+"error_description": "User subscription expired." }
+
+iii)
+
+Tick Data History
+a)
+
+Tick Data can be retrieved using the following request. This is a GET request
+like so: -
+
+Service URL
+
+https://history.truedata.in/getticks?
+symbol=NIFTY-I&bidask=0&from=210224T09:00:00&
+to=210225T15:30:00&response=csv
+
+Request Method
+Headers
+
+GET
+bearer your-token – supply token obtained from auth
+service in header
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+20
+
+GET
+Query string
+Parameters
+
+symbol=symbol-name e.g. NIFTY-I or RELIANCE or CURDEOIL-I
+bidask=0/1 , set 1 to get bid/ask in response otherwise 0
+from=yymmddTHH:mm:ss
+–
+from
+date
+to=yymmddTHH:mm:ss – to date response=csv/json –
+response type required
+
+b) Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+timestamp,ltp,volume,oi,bid,bidqty,ask,askqty
+2021-02-24T09:15:00,14755.15,1,7390425,14730,225,14745.45,375
+
+Csv >
+
+2021-02-24T09:15:00,14755.35,1,7390425,14730,225,14745.45,375
+2021-02-24T09:15:00,14725,1,7390425,14730,225,14745.45,375 ….
+
+Response
+parameters
+Error Response1
+
+time,ltp, tickvol, openinterest,bid,bidqty,ask,askqty
+
+Error Response2
+Error Response3
+Error Response4
+Error Response5
+
+iv)
+
+API calls quota exceeded! maximum admitted 1 per
+Second.
+Segment not subscribed
+Symbol does not exist
+Authorization has been denied for this request.
+No data exists for <symbol>
+
+Bar Data History
+a)
+
+Bar Data History can be retrieved using the following request. This is a GET
+request like so: -
+
+Service URL
+
+https:// history.truedata.in/getbars?
+symbol=RELIANCE&from=210201T09:00:00&
+to=210224T15:30:00&response=csv&interval=1min
+
+Request Method
+Headers
+
+GET
+bearer your-token – supply token obtained from auth
+service in header
+symbol=symbol-name e.g. NIFTY-I or RELIANCE or CURDEOIL-I
+from=yymmddTHH:mm:ss – from date
+to=yymmddTHH:mm:ss – to date response=csv/json
+– response type required
+interval=1min/2min/3min/5min/10min/15min/30min/60min
+
+GET
+Query string
+Parameters
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+21
+
+b)
+
+Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+timestamp,open,high,low,close,oi,volume
+2021-02-01T09:07,1859.4,1859.4,1859.4,1859.4,1,0
+2021-02-01T09:15,1859.4,1862.3,1853.05,1856.95,578586,0
+2021-02-01T09:16,1857.8,1861.6,1856.15,1860.4,240393,0
+……
+
+Response parameters
+Error Response1
+Error Response2
+Error Response3
+Error Response4
+Error Response5
+
+v)
+
+time,open,high,low,close,volume,openinterest
+API calls quota exceeded! maximum admitted 1 per
+Second.
+Segment not subscribed
+Symbol does not exist
+Authorization has been denied for this request.
+No data exists for <symbol>
+
+Last N Bars History
+a)
+b)
+
+Last N Bars History is currently enabled for 1 min & EOD bars. More bar sizes
+will be added in the future.
+The Data of the last ‘n’ bars can be retrieved using the following request. This is
+a GET request like so: Service URL
+
+Request Method
+Headers
+GET
+Query string
+Parameters
+
+c)
+
+https:// history.truedata.in/getlastnbars? symbol=NIFTYI
+&response=csv&nbars=200&interval=1min&bidask=0
+GET
+bearer your-token – supply token obtained from auth
+service in header
+symbol=symbol-name e.g. NIFTY-I or RELIANCE or CURDEOIL-I
+nbars=1 to 200 (max 200)
+response=csv/json – response type required bidask=0
+(must be 0)
+interval=1min/2min/3min/5min/15min/30min/60min/eod
+
+Above request typically sends CSV or JSON response as follows: Response
+
+CSV/JSON
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+22
+
+Sample Response
+
+timestamp,open,high,low,close,oi,volume
+2021-02-01T09:07,1859.4,1859.4,1859.4,1859.4,1,0
+2021-02-01T09:15,1859.4,1862.3,1853.05,1856.95,578586,0
+2021-02-01T09:16,1857.8,1861.6,1856.15,1860.4,240393,0
+……
+
+Response parameters
+Error Response1
+Error Response2
+Error Response3
+Error Response4
+Error Response5
+
+vi)
+
+time,open,high,low,close,volume,openinterest
+API calls quota exceeded! maximum admitted 1 per
+Second.
+Segment not subscribed
+Symbol does not exist
+Authorization has been denied for this request.
+No data exists for <symbol>
+
+Last n Ticks History
+a)
+
+The Data of the last ‘n’ ticks can be retrieved using the following request. This is
+a GET request like so: -
+
+Service URL
+
+https:// history.truedata.in/getlastnticks?
+
+symbol=ACC& bidask=1&
+response=csv&
+nticks=2000&interval=tick
+Request Method
+Headers
+GET
+Query string
+Parameters
+
+b)
+
+GET
+bearer your-token – supply token obtained from auth
+service in header
+symbol=symbol-name e.g. NIFTY-I or RELIANCE or CURDEOIL-I
+nticks=1 to 200 (max 200)
+response=csv/json – response type required
+interval=tick – must be tick
+
+Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+timestamp,ltp,volume,oi,bid,bidqty,ask,askqty
+2021-02-24T09:15:00,14755.15,1,7390425,14730,225,14745.45,375
+2021-02-24T09:15:00,14755.35,1,7390425,14730,225,14745.45,375
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+23
+
+2021-02-24T09:15:00,14725,1,7390425,14730,225,14745.45,375 ….
+
+Response
+parameters
+Error Response1
+Error Response2
+Error Response3
+Error Response4
+Error Response5
+
+time,ltp, tickvol, openinterest,bid,bidqty,ask,askqty
+API calls quota exceeded! maximum admitted 1 per
+Second.
+Segment not subscribed
+Symbol does not exist
+Authorization has been denied for this request.
+No data exists for <symbol>
+
+Note: bid, bid_qty, ask, ask_qty only comes if requested & enabled
+
+vii)
+
+Retrieve the Bhavcopy
+a)
+
+The Bhavcopy of any particular date, can be retrieved. The token obtained in
+authentication would need to be used in this too, like in any other request. This
+is a GET request like so: -
+
+Service URL
+
+Request Method
+Headers
+GET
+Query string
+Parameters
+
+b)
+
+https:// history.truedata.in/
+
+getbhavcopy?segment=MCX&date=20200218&response=csv
+GET
+bearer your-token – supply token obtained from auth
+service in header
+segment=eq/fo/mcx/cds date=yyyy-MM-dd
+response=csv/json – response type required
+
+Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+symbolid,symbol,open,high,low,close,volume,oi
+800000372,MCXCOMPDEX,11059.52,11133.83,10984.32,11110.59,0,0
+800000373,MCXBULLDEX,14944.58,14956.36,14771.68,14877.5,0,0
+…
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+24
+
+Response
+parameters
+Error Response1
+Error Response2
+
+viii)
+
+Authorization has been denied for this request.
+No data exists for <date>
+
+Retrieve the Bhavcopy Availability Status for the day
+a)
+b)
+
+Before you can request for the Bhavcopy, you need to know if the Bhavcopy for
+the day has arrived or not.
+You can retrieve the Bhavcopy availability status of today’s bhavcopy or for
+that matter, for any particular date. The token obtained in authentication would
+need to be used in this too, like in any other request. This is a GET request like
+so: -
+
+Service URL
+
+Request Method
+Headers
+GET
+Query string
+Parameters
+c)
+
+ix)
+
+symbolid,symbol,dopen,dhigh,dlow,dclose,volume,oi
+
+https:// history.truedata.in/
+
+/getbhavcopystatus?segment=FO&date=2020-0220&response=csv
+GET
+bearer your-token – supply token obtained from auth
+service in header
+segment=eq/fo/mcx/cds date=yyyy-MM-dd
+response=csv/json – response type required
+
+Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+
+Response parameters
+Error Response1
+Error Response2
+
+Segment, timestamp
+Authorization has been denied for this request.
+No data exists for <date>
+
+segment,timestamp
+FO,3/2/2021
+7:54:00 PM
+
+Retrieve the LTP of any symbol
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+25
+
+a)
+
+The Last traded price (LTP) of any particular date, can be retrieved. The token
+obtained in authentication would need to be used in this too, like in any other
+request. This is a GET request like so: -
+
+Service URL
+
+https:// history.truedata.in/getlastnticks?
+
+symbol=RELIANCE& bidask=1&response=csv&
+nticks=1&interval=tick
+Request Method
+Headers
+GET
+Query string
+Parameters
+
+b)
+
+GET
+bearer your-token – supply token obtained from auth
+service in header
+symbol=symbol-name e.g. NIFTY-I or RELIANCE or CURDEOIL-I
+nticks=1
+response=csv/json – response type required
+interval=tick
+
+Above request typically sends CSV or JSON response as follows: Response
+Sample Response
+
+CSV/JSON
+timestamp,ltp,volume,oi,bid,bidqty,ask,askqty
+2021-0303T15:30:00,15300,900,10911825,15299.95,150,153
+03 ,75
+
+Response
+parameters
+Error Response1
+Error Response2
+Error Response3
+Error Response4
+Error Response5
+
+timestamp,ltp,volume,oi,bid,bidqty,ask,askqty
+API calls quota exceeded! maximum admitted 1 per
+Second.
+Segment not subscribed
+Symbol does not exist
+Authorization has been denied for this request.
+No data exists for <symbol>
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+26
+
+5.
+
+Support Contact Details
+Data Vendor Name
+
+TRUEDATA FINANCIAL INFORMATION
+PVT. LTD
+
+GSTIN
+
+24AAECT8911G1ZD
+
+Permanent Account Number
+
+AAECT8911G
+
+Address
+
+309-310, Ugati Corporate Park, Opposite
+ICICI Bank, PIN - 382421
+
+City
+
+Gandhinagar
+
+State
+
+Gujarat
+
+Email address of contact person
+
+support@truedata.in
+
+Client Support Number
+
++91-7304-22-44-66
+
+CONFIDENTIAL
+
+CONFIDENTIAL
+
+27
+
+Appendix I
+Pre-built Client Library Details (Python)
+a)
+b)
+
+You can run ‘pip install truedata’ to get the latest version of the library.
+Refer this link for latest updates >> https://pypi.org/project/truedata/
+
+Pre-built Client Library Details (nodejs)
+c)
+d)
+
+You can run ‘npm install truedata-nodejs’ to get the latest version of the library.
+Refer this link for latest updates >> https://www.npmjs.com/package/truedata-nodejs
+
+Pre-built Client Library Details (.Net)
+e)
+You can run ‘dotnet add package TrueData-DotNet --version 1.4.6’ to get the latest
+version of the library.
+f)
+Refer this link for latest updates >> https://www.nuget.org/packages/TrueData-DotNet
+
+CONFIDENTIAL
+
+

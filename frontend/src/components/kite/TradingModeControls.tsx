@@ -15,19 +15,19 @@ function vehicleOrderLabel(cfg?: EngineConfigModel | null): string {
 }
 
 // Central trading-mode panel for the active Kite account. Two orthogonal axes:
-//   • EXECUTION  — PAPER vs LIVE  (account.is_paper; where orders actually go)
-//   • SIGNALS    — MANUAL vs AUTO (engine.auto_execute; who places them)
+//   • WHERE ORDERS GO — PAPER vs LIVE  (account.is_paper)
+//   • WHO PLACES ORDERS — MANUAL vs AUTO (engine.auto_execute)
 // Both read/write existing backend state, so this stays in sync with the
 // per-account row toggles and the engine sidebar's Auto-execute switch.
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
-  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 14, fontWeight: 750 },
-  hint: { color: '#888', fontSize: 11.5, lineHeight: 1.5 },
+  card: { background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
+  title: { color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 14, fontWeight: 750 },
+  hint: { color: 'var(--k-ink-6)', fontSize: 11.5, lineHeight: 1.5 },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
-  modeLabel: { fontSize: 10, letterSpacing: .75, color: '#777', fontWeight: 750, marginBottom: 3 },
-  modeDesc: { fontSize: 11.5, color: '#666', lineHeight: 1.45 },
-  divider: { height: 1, background: '#eee', margin: '2px 0' },
+  modeLabel: { fontSize: 10, letterSpacing: .75, color: 'var(--k-ink-5)', fontWeight: 750, marginBottom: 3 },
+  modeDesc: { fontSize: 11.5, color: 'var(--k-ink-4)', lineHeight: 1.45 },
+  divider: { height: 1, background: 'var(--k-hairline-3)', margin: '2px 0' },
 };
 
 type ConfirmKind = null | 'go-live' | 'enable-auto';
@@ -52,7 +52,7 @@ export function TradingModeControls() {
     return (
       <div style={S.card}>
         <div style={S.title}>TRADING MODE</div>
-        <div style={S.hint}>Add and activate a Kite account below to set paper/live and manual/auto.</div>
+        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, and who places orders.</div>
       </div>
     );
   }
@@ -76,22 +76,22 @@ export function TradingModeControls() {
 
   return (
     <div style={S.card}>
-      <div style={S.title}>TRADING MODE — {active.label}</div>
+      <div style={S.title}>TRADING MODE · {active.label}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* EXECUTION — PAPER / LIVE */}
+        {/* Paper / Live — where orders go */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
-            <div style={S.modeLabel}>EXECUTION</div>
+            <div style={S.modeLabel}>WHERE ORDERS GO</div>
             <div style={S.modeDesc}>
-              {isLive ? 'Orders execute on your real Zerodha account.' : 'Orders are simulated — no real money at risk.'}
+              {isLive ? 'Live — orders hit your real Zerodha account.' : 'Paper — orders are simulated, no real money at risk.'}
             </div>
           </div>
           <ModeToggle
             left="PAPER" right="LIVE"
             value={isPaper ? 'left' : 'right'}
             onSelect={onExec}
-            leftColor="#387ed1" rightColor="#4caf50"
+            leftColor="var(--k-blue-kite)" rightColor="var(--k-green)"
             rightDotWhenActive busy={execBusy}
             rightDisabled={!hasKeys}
             rightTitle={hasKeys ? undefined : 'Add API keys first (below) to trade live.'}
@@ -100,21 +100,21 @@ export function TradingModeControls() {
 
         <div style={S.divider} />
 
-        {/* SIGNALS — MANUAL / AUTO */}
+        {/* Manual / Auto — who places orders */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
-            <div style={S.modeLabel}>SIGNALS</div>
+            <div style={S.modeLabel}>WHO PLACES ORDERS</div>
             <div style={S.modeDesc}>
               {auto
-                ? 'The engine auto-places ready signals (live-safety gated).'
-                : 'You place every order yourself from the signal list.'}
+                ? 'Automatic — the engine places ready signals (live-safety gated).'
+                : 'Manual — you place every order yourself from the signal list.'}
             </div>
           </div>
           <ModeToggle
             left="MANUAL" right="AUTO"
             value={auto ? 'right' : 'left'}
             onSelect={onSignals}
-            leftColor="#387ed1" rightColor="#ff9800"
+            leftColor="var(--k-blue-kite)" rightColor="var(--k-amber-2)"
             rightDotWhenActive busy={autoBusy}
           />
         </div>
@@ -128,13 +128,13 @@ export function TradingModeControls() {
       )}
       {auto && !connected && (
         <div style={{ marginTop: 8, ...S.hint }}>
-          Auto-execute is on, but this account isn’t connected — log in below for the engine to trade.
+          Automatic is on, but this account isn’t connected — log in below for the engine to trade.
         </div>
       )}
 
       {confirm === 'go-live' && (
         <ConfirmModal
-          title="⚡ Switch to LIVE" accent="#4caf50" busy={execBusy}
+          title="⚡ Switch to LIVE" accent="var(--k-green)" busy={execBusy}
           confirmLabel={execBusy ? 'Switching…' : 'Go Live'}
           onCancel={() => setConfirm(null)} onConfirm={confirmGoLive}
           body={<>Orders on <strong>{active.label}</strong> will execute on your <strong>real Zerodha account</strong>
@@ -143,7 +143,7 @@ export function TradingModeControls() {
       )}
       {confirm === 'enable-auto' && (
         <ConfirmModal
-          title="⚡ Enable AUTO-execute" accent="#ff9800" busy={autoBusy}
+          title="⚡ Enable AUTO-execute" accent="var(--k-amber-2)" busy={autoBusy}
           confirmLabel={autoBusy ? 'Enabling…' : 'Enable Auto'}
           onCancel={() => setConfirm(null)} onConfirm={confirmEnableAuto}
           body={<>Ready signals will place <strong>1-lot {vehicleOrderLabel(cfg)}</strong> on{' '}
@@ -163,16 +163,16 @@ function ConfirmModal({ title, accent, body, confirmLabel, busy, onConfirm, onCa
       onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <div style={{ width: 380, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10, padding: '22px 24px', boxShadow: '0 16px 40px rgba(0,0,0,.16)' }}>
+      <div style={{ width: 380, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 10, padding: '22px 24px', boxShadow: '0 16px 40px rgba(0,0,0,.16)' }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: accent, marginBottom: 8 }}>{title}</div>
-        <div style={{ fontSize: 12, color: '#444', lineHeight: 1.6, marginBottom: 18 }}>{body}</div>
+        <div style={{ fontSize: 12, color: 'var(--k-text)', lineHeight: 1.6, marginBottom: 18 }}>{body}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} disabled={busy}
-            style={{ minHeight: 36, background: '#fff', color: '#555', border: '1px solid #dcdcdc', padding: '0 14px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
+            style={{ minHeight: 36, background: 'var(--k-bg)', color: 'var(--k-ink-3)', border: '1px solid var(--k-border-strong-2)', padding: '0 14px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
             Cancel
           </button>
           <button onClick={onConfirm} disabled={busy}
-            style={{ minHeight: 36, background: accent, color: '#fff', border: `1px solid ${accent}`, padding: '0 16px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>
+            style={{ minHeight: 36, background: accent, color: 'var(--k-bg)', border: `1px solid ${accent}`, padding: '0 16px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>
             {confirmLabel}
           </button>
         </div>

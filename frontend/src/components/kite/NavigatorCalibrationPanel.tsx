@@ -6,9 +6,9 @@ import {
 } from '../../hooks/useNavigator';
 import type { CalibrationCriteria, CalibrationReport } from '../../types/navigator';
 
-const GREEN = '#4caf50';
-const RED = '#df514c';
-const AMBER = '#f5a623';
+const GREEN = 'var(--k-green)';
+const RED = 'var(--k-red)';
+const AMBER = 'var(--k-amber)';
 
 function pct(v: number | null | undefined): string {
   return v == null ? '—' : `${Math.round(v * 100)}%`;
@@ -22,7 +22,7 @@ function CriterionRow({ passed, label, detail }: { passed: boolean; label: strin
         style={{
           flexShrink: 0, marginTop: 1, width: 15, height: 15, borderRadius: '50%',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 800, color: '#fff', background: passed ? GREEN : '#c2c2c2',
+          fontSize: 9, fontWeight: 800, color: 'var(--k-bg)', background: passed ? GREEN : '#c2c2c2',
         }}
       >
         {passed ? '✓' : '·'}
@@ -74,23 +74,36 @@ export function NavigatorCalibrationPanel() {
   const canPromote = !!criteria?.eligible && !!reportId && revision != null && !ready;
 
   return (
-    <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-      <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ color: TEXT, fontSize: 13.5, fontWeight: 800 }}>Calibration &amp; Gate readiness</div>
-            <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>
-              Scores every call Navigator has made against what the market actually did next. Gate mode
-              stays locked until this passes — and even then, promoting is your decision, never automatic.
-            </div>
+    <details
+      style={{
+        background: 'var(--k-bg)', border: `1px solid ${BORDER}`, borderRadius: 9,
+        overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      }}
+    >
+      <summary style={{
+        listStyle: 'none', cursor: 'pointer', padding: '12px 16px',
+        display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none',
+        background: 'var(--k-bg)',
+      }}>
+        <span aria-hidden style={{ width: 14, color: DIM, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>›</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>Calibration &amp; Gate readiness</div>
+          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.4, marginTop: 1, maxWidth: 440 }}>
+            Gate stays locked until calibration passes. Expand to score and promote.
           </div>
-          <span style={{
-            flexShrink: 0, fontSize: 9.5, fontWeight: 700, borderRadius: 4, padding: '3px 9px',
-            color: ready ? GREEN : DIM, background: ready ? '#e8f5e9' : '#f2f2f3',
-            border: `1px solid ${ready ? `${GREEN}55` : BORDER}`,
+        </div>
+        <span className="sk-config-summary" style={{
+            flexShrink: 0, width: 168, color: DIM, fontSize: 10.5, fontWeight: 500,
+            textAlign: 'right', lineHeight: 1.3,
           }}>
-            {ready ? 'Ready — gate unlocked' : 'Not yet calibrated'}
-          </span>
+          {ready ? 'Ready — gate unlocked' : 'Not yet calibrated'}
+        </span>
+      </summary>
+
+      <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${BORDER}` }}>
+        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, margin: '12px 0 0', maxWidth: 440 }}>
+          Scores every call Navigator has made against what the market actually did next. Gate mode
+          stays locked until this passes — and even then, promoting is your decision, never automatic.
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -162,7 +175,7 @@ export function NavigatorCalibrationPanel() {
         )}
 
         {!!report?.warnings?.length && (
-          <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4' }}>
+          <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: 'var(--k-surface-warm)', border: '1px solid var(--k-border-brand)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: TEXT, fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
               <Icons.Warning /> This report couldn&apos;t score everything
             </div>
@@ -184,17 +197,17 @@ export function NavigatorCalibrationPanel() {
           </>
         )}
       </div>
-    </section>
+    </details>
   );
 }
 
 const pillButton: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: '#fff',
+  display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${BORDER}`, background: 'var(--k-bg)',
   color: MUTED, borderRadius: 7, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const primaryButton: React.CSSProperties = {
-  border: 'none', background: '#f06428', color: '#fff', borderRadius: 7, padding: '8px 16px',
+  border: 'none', background: 'var(--k-brand)', color: 'var(--k-on-accent)', borderRadius: 7, padding: '8px 16px',
   fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 };
 

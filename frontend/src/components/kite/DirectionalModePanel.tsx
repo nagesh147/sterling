@@ -34,7 +34,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'Out of the Money',
     delta: 0.28, deltaLabel: 'δ 0.20 – 0.35',
     thetaPctPerDay: 3.5,
-    color: '#1565c0',
+    color: 'var(--k-blue-deep)',
     desc: 'Cheapest entry per lot. High leverage if a big move comes fast — but theta decay is brutal. The option loses ~3–4% of its premium every single day the market does nothing. You need the move to happen quickly.',
     risk: 'Max loss is exactly what you paid — nothing more. But time decay is your biggest enemy.',
     isExperimental: false, premiumMult: 0.4,
@@ -46,7 +46,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'At the Money',
     delta: 0.50, deltaLabel: 'δ 0.45 – 0.55',
     thetaPctPerDay: 2.0,
-    color: '#2e7d32',
+    color: 'var(--k-green-deep)',
     desc: 'The default. Best liquidity and tightest bid-ask spreads. You capture roughly half of every point the underlying moves. Theta is still present (~2%/day) but more manageable than OTM.',
     risk: 'Max loss is the premium paid. Standard risk-reward. Most traders start here.',
     isExperimental: false, premiumMult: 1.0,
@@ -58,7 +58,7 @@ const PROFILES: ProfileDef[] = [
     sublabel: 'In the Money',
     delta: 0.65, deltaLabel: 'δ 0.60 – 0.70',
     thetaPctPerDay: 1.0,
-    color: '#e65100',
+    color: 'var(--k-warn-deep)',
     desc: 'More intrinsic value, less time value. Theta slows down significantly. You pay more upfront, but a larger chunk of your premium is "real" value that doesn\'t melt away with time.',
     risk: 'Max loss is the premium paid. Higher cost per lot means fewer lots for the same capital.',
     isExperimental: true, premiumMult: 1.8,
@@ -157,17 +157,17 @@ function DefaultNote({ changed, defaultText }: { changed: boolean; defaultText: 
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  card:        { background: '#fff', padding: '16px 2px 2px' },
-  section:     { fontSize: 10, fontWeight: 750, letterSpacing: .75, color: '#777', textTransform: 'uppercase' as const, marginBottom: 10 },
-  hint:        { fontSize: 11.5, color: '#888', lineHeight: 1.5 },
-  divider:     { height: 1, background: '#f0f0f0', margin: '14px 0' },
+  card:        { background: 'var(--k-bg)', padding: '16px 2px 2px' },
+  section:     { fontSize: 10, fontWeight: 750, letterSpacing: .75, color: 'var(--k-ink-5)', textTransform: 'uppercase' as const, marginBottom: 10 },
+  hint:        { fontSize: 11.5, color: 'var(--k-ink-6)', lineHeight: 1.5 },
+  divider:     { height: 1, background: 'var(--k-surface-hover-2)', margin: '14px 0' },
   row:         { display: 'flex', alignItems: 'center', gap: 8 },
   filterRow:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
-  filterLabel: { fontSize: 11, color: '#444', lineHeight: 1.5 },
-  numInput:    { width: 72, height: 36, boxSizing: 'border-box' as const, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, textAlign: 'right' as const, fontFamily: 'inherit' },
-  select:      { minHeight: 36, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, background: '#fff', fontFamily: 'inherit' },
+  filterLabel: { fontSize: 11, color: 'var(--k-text)', lineHeight: 1.5 },
+  numInput:    { width: 72, height: 36, boxSizing: 'border-box' as const, fontSize: 11.5, padding: '0 9px', border: '1px solid var(--k-border-strong-3)', borderRadius: 7, textAlign: 'right' as const, fontFamily: 'inherit' },
+  select:      { minHeight: 36, fontSize: 11.5, padding: '0 9px', border: '1px solid var(--k-border-strong-3)', borderRadius: 7, background: 'var(--k-bg)', fontFamily: 'inherit' },
   toggle:      { width: 40, height: 22, borderRadius: 11, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0 },
-  toggleDot:   { width: 18, height: 18, borderRadius: 9, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
+  toggleDot:   { width: 18, height: 18, borderRadius: 9, background: 'var(--k-bg)', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -189,6 +189,8 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
   const [lotSize, setLotSize]       = useState(liveLotSize && liveLotSize > 0 ? liveLotSize : 75);
   const [customDelta, setCustomDelta] = useState('');  // delta override input
   const [userEdited, setUserEdited] = useState(false); // once true, stop auto-syncing from live
+  const [showImpact, setShowImpact] = useState(false);
+  const [showProfileHelp, setShowProfileHelp] = useState(false);
 
   // Pre-fill from the live signal when it arrives — but never clobber a value the
   // user has typed themselves.
@@ -230,109 +232,136 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
     <div style={S.card}>
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
-      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        HOW SHOULD AUTO-EXECUTE TRADE THE SIGNAL?
+      <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: 'var(--k-text)', fontSize: 12, fontWeight: 700 }}>What the algo buys</span>
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
       </div>
-
-      {/* What this panel controls — and what it does NOT. */}
       <div style={{
-        fontSize: 11, lineHeight: 1.55, color: '#555', marginBottom: 10,
-        padding: '8px 11px', borderRadius: 5,
-        background: cfg.auto_execute ? '#e8f5e9' : '#fff8e1',
-        border: `1px solid ${cfg.auto_execute ? '#a5d6a7' : '#ffe082'}`,
+        display: 'flex', width: '100%', gap: 0, marginBottom: 10,
+        border: '1px solid var(--k-border)', borderRadius: 2, background: 'var(--k-bg)', overflow: 'hidden',
       }}>
-        {cfg.auto_execute ? (
-          <><strong style={{ color: '#2e7d32' }}>AUTO is ON.</strong> The engine will buy the instrument
-            below for each fresh signal. This is purely an <strong>execution</strong> choice — it does
-            <em> not</em> change which signals or strikes you see (set those in the signal table).</>
-        ) : (
-          <><strong style={{ color: '#e65100' }}>You're in MANUAL mode.</strong> These settings only kick in
-            once you switch <strong>SIGNALS → AUTO</strong> above. In MANUAL you pick the strike yourself
-            from each signal (use the Trade Impact Calculator), so the choice below is just pre-configuration.</>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: 2, padding: 3, marginBottom: 14, flexWrap: 'wrap' as const, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
-        {PROFILES.map(p => {
+        {PROFILES.map((p, i) => {
           const active = p.id === activeId;
           return (
             <button
               key={p.id}
+              type="button"
               disabled={busy}
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
-                minHeight: 44, flex: '1 1 88px', padding: '5px 7px', borderRadius: 6,
-                border: 'none',
-                background: active ? '#fff' : 'transparent',
-                boxShadow: active ? 'inset 0 -2px #f06428, 0 1px 2px rgba(0,0,0,.08)' : 'none',
+                flex: 1, minWidth: 0, minHeight: 40, padding: '6px 4px', border: 'none',
+                borderLeft: i > 0 ? '1px solid var(--k-border)' : 'none',
+                background: active ? 'var(--k-surface)' : 'var(--k-bg)',
+                boxShadow: active ? 'inset 0 -2px 0 var(--k-orange)' : 'none',
                 cursor: busy ? 'default' : 'pointer',
-                textAlign: 'center' as const, transition: 'all 0.15s',
+                textAlign: 'center' as const, fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: active ? 700 : 600, color: active ? '#444' : '#666' }}>{p.label}</div>
-              <div style={{ fontSize: 9, color: '#999', marginTop: 2 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 11, fontWeight: active ? 700 : 600, color: active ? 'var(--k-text)' : 'var(--k-dim)' }}>{p.label}</div>
+              <div style={{ fontSize: 9.5, color: 'var(--k-dim)', marginTop: 1 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
       </div>
 
-      {/* Active profile description card */}
-      <div style={{
-        padding: '11px 12px', borderRadius: 7, marginBottom: 12,
-        background: '#fff8f4', border: '1px solid #ecd1c4', borderLeft: '3px solid #f06428',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>{activeProfile.sublabel}</span>
-          {activeProfile.isExperimental && (
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>
-              EXPERIMENTAL
-            </span>
+      {/* Profile help — hidden until asked */}
+      <div style={{ marginBottom: showProfileHelp ? 10 : 8 }}>
+        <button
+          type="button"
+          onClick={() => setShowProfileHelp((v) => !v)}
+          aria-expanded={showProfileHelp}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showProfileHelp ? 'var(--k-brand)' : 'var(--k-ink-6)',
+            fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit', padding: '4px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showProfileHelp ? 'var(--k-brand)' : '#c8c8c8'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, fontWeight: 700, lineHeight: 1,
+              color: showProfileHelp ? 'var(--k-brand)' : 'var(--k-ink-6)',
+            }}
+          >
+            ?
+          </span>
+          {showProfileHelp ? 'Hide profile help' : `About ${activeProfile.sublabel}`}
+        </button>
+      </div>
+      {showProfileHelp && (
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: 8,
+            marginBottom: 12,
+            background: 'var(--k-bg)',
+            border: '1px solid var(--k-border-2)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--k-ink-1)' }}>{activeProfile.sublabel}</span>
+            {activeProfile.isExperimental && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>EXPERIMENTAL</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--k-ink-3)', lineHeight: 1.5, marginBottom: 6 }}>{activeProfile.desc}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--k-ink-4)', lineHeight: 1.45, marginBottom: isFutures ? 0 : 4 }}>
+            {activeProfile.risk}
+          </div>
+          {!isFutures && (
+            <div style={{ fontSize: 11.5, color: 'var(--k-ink-4)', lineHeight: 1.45 }}>
+              δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing ITM at expiry.
+              {probItm < 40 && ' Most OTM buys expire worthless.'}
+              {probItm >= 40 && probItm < 60 && ' Roughly coin-flip at expiry — you only need a quick move.'}
+              {probItm >= 60 && ' Higher odds, higher premium.'}
+            </div>
           )}
         </div>
-        <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
-        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4, marginBottom: isFutures ? 0 : 5 }}>⚡ {activeProfile.risk}</div>
-        {!isFutures && (
-          <div style={{ fontSize: 10, color: '#a65525', lineHeight: 1.4, fontWeight: 600 }}>
-            🎯 δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing in-the-money at expiry.
-            {probItm < 40 && ' Most OTM buys expire worthless — you win big occasionally, lose small often.'}
-            {probItm >= 40 && probItm < 60 && ' Roughly coin-flip odds at expiry, but you only need a quick move, not expiry.'}
-            {probItm >= 60 && ' Favourable odds — you are paying up for a higher-probability position.'}
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Custom delta override */}
+      {/* Target delta — exact δ the algo aims for when picking a strike */}
       {!isFutures && (
-        <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
-          <span style={{ ...S.hint, flexShrink: 0 }}>Custom delta override:</span>
-          <input
-            type="number"
-            style={{
-              ...S.numInput, width: 72,
-              ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
-            }}
-            value={customDelta}
-            placeholder={activeProfile.delta.toFixed(2)}
-            step={0.05} min={0.10} max={0.99}
-            onChange={e => {
-              setCustomDelta(e.target.value);
-              const d = parseFloat(e.target.value);
-              if (d >= 0.10 && d <= 0.99) {
-                const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
-                onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
-              }
-            }}
-            disabled={busy}
-          />
-          {customDelta && (
-            <button
-              style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
-              onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
-            >✕ clear</button>
-          )}
-          <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
-          {!customDelta && <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
+            <span style={{ ...S.hint, flexShrink: 0 }}>Target delta:</span>
+            <input
+              type="number"
+              style={{
+                ...S.numInput, width: 72,
+                ...(customDelta ? { borderColor: 'var(--k-warn-deep)', background: '#fff8f2', fontWeight: 700 } : {}),
+              }}
+              value={customDelta}
+              placeholder={activeProfile.delta.toFixed(2)}
+              step={0.05} min={0.10} max={0.99}
+              onChange={e => {
+                setCustomDelta(e.target.value);
+                const d = parseFloat(e.target.value);
+                if (d >= 0.10 && d <= 0.99) {
+                  const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
+                  onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
+                }
+              }}
+              disabled={busy}
+              aria-label="Target delta"
+            />
+            {customDelta && (
+              <button
+                type="button"
+                style={{ fontSize: 10, color: 'var(--k-dim-2)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
+              >✕ clear</button>
+            )}
+            <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
+          </div>
+          <div style={{ ...S.hint, lineHeight: 1.45 }}>
+            {customDelta && parseFloat(customDelta) >= 0.10 && parseFloat(customDelta) <= 0.99
+              ? <>Algo buys the strike <strong>closest to δ {parseFloat(customDelta).toFixed(2)}</strong> — not “above this value”. The OTM / ATM / ITM buttons follow this number.</>
+              : <>Leave blank to use the profile default (now δ {activeProfile.delta.toFixed(2)}). Algo picks the nearest live delta to that target.</>}
+          </div>
         </div>
       )}
 
@@ -384,19 +413,54 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         </>
       )}
 
-      {/* ── 3. Trade impact calculator ─────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={S.section}>TRADE IMPACT CALCULATOR</div>
-      <div style={{ ...S.hint, marginBottom: 10 }}>
+      {/* ── 3. Impact estimate — hidden until the user asks ───────────────── */}
+      <div style={{ marginTop: 4, marginBottom: showImpact ? 0 : 4 }}>
+        <button
+          type="button"
+          onClick={() => setShowImpact((v) => !v)}
+          aria-expanded={showImpact}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: showImpact ? 'var(--k-brand)' : 'var(--k-ink-5)',
+            fontSize: 11.5, fontWeight: 650, fontFamily: 'inherit',
+            padding: '8px 0',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${showImpact ? 'var(--k-brand)' : '#c9c9c9'}`,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700, color: showImpact ? 'var(--k-brand)' : 'var(--k-ink-6)',
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </span>
+          {showImpact ? 'Hide impact estimate' : 'Estimate impact for this profile'}
+        </button>
+      </div>
+
+      {showImpact && (
+      <div style={{
+        marginBottom: 4, padding: '12px 14px 14px',
+        borderRadius: 8, border: '1px solid var(--k-border-2)', background: 'var(--k-surface-2)',
+      }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--k-ink-1)', marginBottom: 4 }}>
+        Impact estimate
+      </div>
+      <div style={{ ...S.hint, marginBottom: 12, lineHeight: 1.5 }}>
         {(livePremium || liveLotSize) && !userEdited
-          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to explore other scenarios.</>
-          : <>Adjust the inputs below to see how this profile behaves on your trade.</>}
+          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to try other scenarios. Rough guide only — not a live quote.</>
+          : <>Adjust the inputs to see how this profile behaves. Rough guide only — not a live quote.</>}
       </div>
 
       {/* Simulator inputs */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' as const }}>
         <div style={{ flex: '1 1 120px' }}>
-          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>UNDERLYING MOVES</div>
+          <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>UNDERLYING MOVES</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="number" style={{ ...S.numInput, flex: 1 }}
               value={simMove} min={10} max={2000} step={25}
@@ -406,7 +470,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         </div>
         {!isFutures && (
           <div style={{ flex: '1 1 120px' }}>
-            <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>YOUR ENTRY PREMIUM</div>
+            <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>YOUR ENTRY PREMIUM</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={S.hint}>₹</span>
               <input type="number" style={{ ...S.numInput, flex: 1 }}
@@ -416,7 +480,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           </div>
         )}
         <div style={{ flex: '1 1 100px' }}>
-          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>LOT SIZE</div>
+          <div style={{ fontSize: 10, color: 'var(--k-dim)', marginBottom: 4, fontWeight: 600 }}>LOT SIZE</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="number" style={{ ...S.numInput, flex: 1 }}
               value={lotSize} min={1} max={10000} step={5}
@@ -429,7 +493,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {/* Impact rows */}
       <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 7 }}>
 
-        <ImpactRow icon="📈" color="#2e7d32"
+        <ImpactRow icon="📈" color="var(--k-green-deep)"
           label={`Underlying moves ${simMove} pts in your direction`}
           value={`+₹${perLotGain.toLocaleString('en-IN')} / lot`}
           sub={isFutures
@@ -437,7 +501,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
             : `δ ${effectiveDelta.toFixed(2)} × ${simMove} pts = +₹${optionMove}/share × ${lotSize} qty. The rest of the move doesn't reach you.`}
         />
 
-        <ImpactRow icon="📉" color="#c62828"
+        <ImpactRow icon="📉" color="var(--k-red-crimson)"
           label={`Underlying moves ${simMove} pts against you`}
           value={isFutures ? `−₹${perLotGain.toLocaleString('en-IN')} / lot (until stop)` : `−₹${perLotGain.toLocaleString('en-IN')} / lot premium loss`}
           sub={isFutures
@@ -446,7 +510,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         />
 
         {!isFutures && (
-          <ImpactRow icon="⏳" color="#e65100"
+          <ImpactRow icon="⏳" color="var(--k-warn-deep)"
             label="Daily theta — what you lose if the market does nothing"
             value={`−₹${perLotThetaDay.toLocaleString('en-IN')} / lot / day`}
             sub={`≈ ${activeProfile.thetaPctPerDay}% of your ₹${simPremium} premium (₹${thetaDaily}/share) disappears each calendar day. Weekends included.`}
@@ -454,7 +518,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
 
         {isFutures && (
-          <ImpactRow icon="⏳" color="#2e7d32"
+          <ImpactRow icon="⏳" color="var(--k-green-deep)"
             label="Daily theta — what you lose if the market does nothing"
             value="₹0 — zero time decay"
             sub="Futures carry no premium, so there is no theta. You hold with margin instead of paying for time."
@@ -462,7 +526,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
 
         {!isFutures && (
-          <ImpactRow icon="⚖️" color="#1565c0"
+          <ImpactRow icon="⚖️" color="var(--k-blue-deep)"
             label="Break-even — underlying must move at least"
             value={`${breakEvenPts} pts in your direction`}
             sub={`₹${simPremium} premium ÷ δ ${effectiveDelta.toFixed(2)} = ${breakEvenPts} pts just to recover your entry cost at expiry.`}
@@ -477,7 +541,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           />
         )}
 
-        <ImpactRow icon="🛡️" color={isFutures ? '#c62828' : '#555'}
+        <ImpactRow icon="🛡️" color={isFutures ? 'var(--k-red-crimson)' : 'var(--k-ink-3)'}
           label="Maximum possible loss"
           value={isFutures ? 'Trail stop distance × lot — no fixed cap' : `₹${perLotCost?.toLocaleString('en-IN')} / lot — what you paid`}
           sub={isFutures
@@ -491,21 +555,21 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {!isFutures && (
         <>
           <div style={{ ...S.divider, marginTop: 12 }} />
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#9b9b9b', marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--k-dim)', marginBottom: 8 }}>
             PREMIUM BREAKDOWN (APPROXIMATE) — ₹{simPremium} total
           </div>
           <div style={{ height: 14, borderRadius: 7, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-            <div style={{ width: `${intrinsicFrac * 100}%`, background: '#2e7d32', transition: 'width 0.35s', minWidth: intrinsicFrac > 0 ? 4 : 0 }} />
-            <div style={{ flex: 1, background: '#e65100', opacity: 0.75 }} />
+            <div style={{ width: `${intrinsicFrac * 100}%`, background: 'var(--k-green-deep)', transition: 'width 0.35s', minWidth: intrinsicFrac > 0 ? 4 : 0 }} />
+            <div style={{ flex: 1, background: 'var(--k-warn-deep)', opacity: 0.75 }} />
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const }}>
-            <span style={{ fontSize: 10, color: '#2e7d32' }}>
+            <span style={{ fontSize: 10, color: 'var(--k-green-deep)' }}>
               ■ Intrinsic value ≈ ₹{intrinsicAmt}
-              <span style={{ color: '#9b9b9b' }}> — real value, doesn't decay</span>
+              <span style={{ color: 'var(--k-dim)' }}> — real value, doesn't decay</span>
             </span>
-            <span style={{ fontSize: 10, color: '#e65100' }}>
+            <span style={{ fontSize: 10, color: 'var(--k-warn-deep)' }}>
               ■ Time value ≈ ₹{timeValueAmt}
-              <span style={{ color: '#9b9b9b' }}> — theta eats this daily</span>
+              <span style={{ color: 'var(--k-dim)' }}> — theta eats this daily</span>
             </span>
           </div>
           {intrinsicFrac === 0 && (
@@ -543,20 +607,20 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               style={{
                 display: 'grid', gridTemplateColumns: '74px 1fr 1fr 1fr', gap: 6, alignItems: 'center',
                 padding: '7px 9px', borderRadius: 5, cursor: busy ? 'default' : 'pointer',
-                background: isActiveP ? p.color + '14' : '#fafafa',
-                border: `1px solid ${isActiveP ? p.color + '55' : '#f0f0f0'}`,
+                background: isActiveP ? p.color + '14' : 'var(--k-surface-2)',
+                border: `1px solid ${isActiveP ? p.color + '55' : 'var(--k-surface-hover-2)'}`,
               }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: p.color }}>{p.label}</span>
-              <span style={{ fontSize: 10, color: '#444' }}>
-                <span style={{ color: '#999' }}>gain</span> +₹{gainSh}/sh
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
+                <span style={{ color: 'var(--k-dim-2)' }}>gain</span> +₹{gainSh}/sh
               </span>
-              <span style={{ fontSize: 10, color: '#444' }}>
-                <span style={{ color: '#999' }}>cost</span> {estPrem === null ? 'margin' : `₹${estPrem}/sh`}
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
+                <span style={{ color: 'var(--k-dim-2)' }}>cost</span> {estPrem === null ? 'margin' : `₹${estPrem}/sh`}
               </span>
-              <span style={{ fontSize: 10, color: '#444' }}>
+              <span style={{ fontSize: 10, color: 'var(--k-text)' }}>
                 {p.id === 'futures'
-                  ? <><span style={{ color: '#999' }}>decay</span> none</>
-                  : <><span style={{ color: '#999' }}>×eff</span> {effic}%</>}
+                  ? <><span style={{ color: 'var(--k-dim-2)' }}>decay</span> none</>
+                  : <><span style={{ color: 'var(--k-dim-2)' }}>×eff</span> {effic}%</>}
               </span>
             </div>
           );
@@ -566,13 +630,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <strong>gain</strong> = δ × move captured per share · <strong>cost</strong> = est. premium per share ·
         <strong> ×eff</strong> = ₹ gain per ₹100 of premium (higher = more leverage, but more decay/IV risk).
       </div>
+      </div>
+      )}
 
-      {/* Sections 4 and 5 (entry-quality filters and the risk-infrastructure
-          toggle) were removed on 2026-08-08. They are not vehicle settings, and
-          rendering them here put a SECOND editable control for adx_min,
-          atr_pct_min and wire_risk_infra on the same page as the Automatic
-          Rules copies — with different input bounds, both writing the same
-          field. Those now have exactly one home, in Automatic Rules. */}
+      {/* Entry filters and portfolio risk live only under Algo Trade — not here. */}
 
     </div>
   );
@@ -586,13 +647,13 @@ function ImpactRow({ icon, label, value, sub, color }: {
   return (
     <div style={{
       display: 'flex', gap: 10, padding: '9px 11px',
-      background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0',
+      background: 'var(--k-surface-2)', borderRadius: 6, border: '1px solid var(--k-surface-hover-2)',
     }}>
       <span style={{ fontSize: 15, flexShrink: 0, lineHeight: '1.5', paddingTop: 1 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 10, color: 'var(--k-ink-6)', marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 3 }}>{value}</div>
-        <div style={{ fontSize: 10, color: '#999', lineHeight: 1.45 }}>{sub}</div>
+        <div style={{ fontSize: 10, color: 'var(--k-dim-2)', lineHeight: 1.45 }}>{sub}</div>
       </div>
     </div>
   );

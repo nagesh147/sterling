@@ -1,9 +1,9 @@
 # Adaptive Edge V2 — Risk Measure / EffectiveRisk Definition
 
-**Version:** 2.0.0-draft
-**Artifact:** A32
-**Status:** RESOLVED-BLOCKED
-**Depends on:** A31, A29, execution/contract semantics
+**Version:** 2.0.0-draft  
+**Artifact:** A32  
+**Status:** RESOLVED-BLOCKED  
+**Depends on:** A31, A29, execution/contract semantics  
 **Implementation authorization:** NONE
 
 ## 1. Purpose

@@ -13,20 +13,16 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements.txt
-
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
-
       - name: Run tests
         working-directory: backend
         run: pytest tests/ -q --tb=short
@@ -37,33 +33,23 @@ jobs:
           DEFAULT_UNDERLYING: BTC
           LOG_LEVEL: WARNING
 
-      - name: Test count summary
-        working-directory: backend
-        run: pytest tests/ --co -q 2>&1 | tail -3
-        if: always()
-
   frontend-typecheck:
     name: Frontend Type Check
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
       - name: Install dependencies
         working-directory: frontend
         run: npm ci --silent
-
       - name: Type check
         working-directory: frontend
         run: npx tsc --noEmit
-
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -73,21 +59,14 @@ jobs:
   frontend-tests:
     name: Frontend Tests (Vitest)
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci --silent
-
       - name: Run Vitest
         working-directory: frontend
         run: npx vitest run --coverage=false
@@ -101,36 +80,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Full matrix: 3 browsers × 256 shards (using matrix include for manageability) for ultra parallel e2e + sharded reports
-        # Separate parity job below for full directional vs kite matrix
         project: [chromium, firefox, webkit]
-        shard: ["1/256", "2/256", "3/256", "4/256", "5/256", "6/256", "7/256", "8/256", "9/256", "10/256", "11/256", "12/256", "13/256", "14/256", "15/256", "16/256", "17/256", "18/256", "19/256", "20/256", "21/256", "22/256", "23/256", "24/256", "25/256", "26/256", "27/256", "28/256", "29/256", "30/256", "31/256", "32/256", "33/256", "34/256", "35/256", "36/256", "37/256", "38/256", "39/256", "40/256", "41/256", "42/256", "43/256", "44/256", "45/256", "46/256", "47/256", "48/256", "49/256", "50/256", "51/256", "52/256", "53/256", "54/256", "55/256", "56/256", "57/256", "58/256", "59/256", "60/256", "61/256", "62/256", "63/256", "64/256", "65/256", "66/256", "67/256", "68/256", "69/256", "70/256", "71/256", "72/256", "73/256", "74/256", "75/256", "76/256", "77/256", "78/256", "79/256", "80/256", "81/256", "82/256", "83/256", "84/256", "85/256", "86/256", "87/256", "88/256", "89/256", "90/256", "91/256", "92/256", "93/256", "94/256", "95/256", "96/256", "97/256", "98/256", "99/256", "100/256", "101/256", "102/256", "103/256", "104/256", "105/256", "106/256", "107/256", "108/256", "109/256", "110/256", "111/256", "112/256", "113/256", "114/256", "115/256", "116/256", "117/256", "118/256", "119/256", "120/256", "121/256", "122/256", "123/256", "124/256", "125/256", "126/256", "127/256", "128/256", "129/256", "130/256", "131/256", "132/256", "133/256", "134/256", "135/256", "136/256", "137/256", "138/256", "139/256", "140/256", "141/256", "142/256", "143/256", "144/256", "145/256", "146/256", "147/256", "148/256", "149/256", "150/256", "151/256", "152/256", "153/256", "154/256", "155/256", "156/256", "157/256", "158/256", "159/256", "160/256", "161/256", "162/256", "163/256", "164/256", "165/256", "166/256", "167/256", "168/256", "169/256", "170/256", "171/256", "172/256", "173/256", "174/256", "175/256", "176/256", "177/256", "178/256", "179/256", "180/256", "181/256", "182/256", "183/256", "184/256", "185/256", "186/256", "187/256", "188/256", "189/256", "190/256", "191/256", "192/256", "193/256", "194/256", "195/256", "196/256", "197/256", "198/256", "199/256", "200/256", "201/256", "202/256", "203/256", "204/256", "205/256", "206/256", "207/256", "208/256", "209/256", "210/256", "211/256", "212/256", "213/256", "214/256", "215/256", "216/256", "217/256", "218/256", "219/256", "220/256", "221/256", "222/256", "223/256", "224/256", "225/256", "226/256", "227/256", "228/256", "229/256", "230/256", "231/256", "232/256", "233/256", "234/256", "235/256", "236/256", "237/256", "238/256", "239/256", "240/256", "241/256", "242/256", "243/256", "244/256", "245/256", "246/256", "247/256", "248/256", "249/256", "250/256", "251/256", "252/256", "253/256", "254/256", "255/256", "256/256"]
+        shard: ["1/8", "2/8", "3/8", "4/8", "5/8", "6/8", "7/8", "8/8"]
         parity: [directional, kite]
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Set up Python (for backend)
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci --silent
-
       - name: Install backend deps
         run: pip install -r backend/requirements.txt
-
-      - name: Start backend (uvicorn)
+      - name: Start backend
         working-directory: backend
         env:
           ENVIRONMENT: test
@@ -139,47 +111,82 @@ jobs:
           DEFAULT_UNDERLYING: BTC
           LOG_LEVEL: WARNING
         run: |
-          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
+          set -euo pipefail
+          uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
           echo $! > /tmp/uvicorn.pid
-          for i in {1..15}; do
-            curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1 && break
-            curl -sf http://127.0.0.1:8000/ >/dev/null 2>&1 && break
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then exit 0; fi
+            if ! kill -0 "$(cat /tmp/uvicorn.pid)" 2>/dev/null; then cat /tmp/backend.log; exit 1; fi
             sleep 1
           done
-          echo "Backend health check complete"
-
-      - name: Install Playwright browsers
+          cat /tmp/backend.log
+          exit 1
+      - name: Install Playwright browser
         working-directory: frontend
         run: npx playwright install --with-deps ${{ matrix.project }}
-
-      - name: Run Playwright e2e (${{ matrix.project }} ${{ matrix.shard }} parity ${{ matrix.parity }})
+      - name: Run Playwright E2E
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: http://localhost:8000
+          VITE_API_BASE_URL: http://127.0.0.1:8000
           CI: "true"
           PARITY_ENGINE: ${{ matrix.parity }}
-          # Global setup + storageState + extra X-User-Id handled in playwright.config + e2e/*.setup.ts
         run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }} --reporter=list
-
-      - name: Run parity pytest markers (${{ matrix.parity }})
+      - name: Run parity tests
         working-directory: backend
-        run: python -m pytest tests/test_common_trailing.py -q --disable-warnings -k "${{ matrix.parity }}" --tb=line || true
-
-      - name: Upload Playwright report + traces + videos (always on CI for failures)
+        run: python -m pytest tests/test_common_trailing.py -q --disable-warnings -m "${{ matrix.parity }}" --tb=line
+      - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results-${{ matrix.project }}-${{ matrix.shard }}-parity-${{ matrix.parity }}
+          name: playwright-results-${{ matrix.project }}-${{ matrix.shard }}-${{ matrix.parity }}
           path: |
             frontend/playwright-report/
             frontend/test-results/
           retention-days: 7
-
-      - name: Dump backend log (debug)
+      - name: Dump backend log
         if: failure()
         run: cat /tmp/backend.log || true
 
-  # Separate full parity job matrix for directional vs kite monitor (red count, greeks, PnL, compute_signal parity)
+  orb-options-gate:
+    name: ORB Automated Options Safety Gate
+    runs-on: ubuntu-latest
+    needs: [backend-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run ORB strategy, replay, execution and validation tests
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          pytest -q \
+            tests/strategies/test_nifty_orb_option_replay.py \
+            tests/strategies/test_nifty_orb_options.py \
+            tests/services/test_nifty_orb_execution.py \
+            tests/services/test_nifty_orb_execution_safety.py \
+            tests/services/test_nifty_orb_execution_e2e.py \
+            tests/services/test_nifty_orb_daily_loss_integration.py \
+            tests/services/test_nifty_orb_config_load.py \
+            tests/services/test_nifty_orb_scanner_internals.py \
+            tests/engines/test_nifty_orb_validation.py \
+            tests/engines/test_nifty_orb_options.py \
+            tests/engines/test_nifty_orb_options_contracts.py \
+            tests/engines/test_nifty_orb_plan_matches_executor.py \
+            tests/engines/test_nifty_orb_universe_repaint.py \
+            tests/api/test_nifty_orb_replay_api.py \
+            tests/test_live_safety.py
+        env:
+          ENVIRONMENT: test
+          PAPER_TRADING: "true"
+          REAL_PUBLIC_DATA: "false"
+          LOG_LEVEL: WARNING
+
   parity-matrix:
     name: Parity Matrix (${{ matrix.parity }})
     runs-on: ubuntu-latest
@@ -188,38 +195,16 @@ jobs:
       fail-fast: false
       matrix:
         parity: [directional, kite]
-        # Can combine with limited shards if needed, here full for parity coverage
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-
       - name: Install deps
         run: pip install -r backend/requirements.txt
-
-      - name: Start backend
+      - name: Run parity tests
         working-directory: backend
-        env:
-          ENVIRONMENT: test
-          PAPER_TRADING: "true"
-        run: |
-          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/parity.log 2>&1 &
-          sleep 5
-
-      - name: Run parity tests (${{ matrix.parity }})
-        working-directory: backend
-        run: python -m pytest tests/test_common_trailing.py -q --disable-warnings -k "${{ matrix.parity }}" --tb=line || true
-
-      - name: Upload parity report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-${{ matrix.parity }}
-          path: |
-            backend/test-results/
-          retention-days: 5
+        run: python -m pytest tests/test_common_trailing.py -q --disable-warnings -m "${{ matrix.parity }}" --tb=line

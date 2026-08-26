@@ -37,7 +37,7 @@ export function PositionsTable({ positions }: { positions: PaperPosition[] }) {
             <td style={{ padding: '4px 8px' }}>{p.symbol}</td>
             <td style={{ padding: '4px 8px' }}>{p.sleeve ?? '—'}</td>
             <td style={{ padding: '4px 8px',
-                         color: p.direction === 'short' ? '#ef4444' : '#22c55e' }}>
+                         color: p.direction === 'short' ? 'var(--k-red-500)' : 'var(--k-green-500)' }}>
               {p.direction}</td>
             <td style={{ padding: '4px 8px' }}>{usd(p.entry_price)}</td>
             <td style={{ padding: '4px 8px' }}>{usd(p.sl)}</td>
@@ -54,7 +54,7 @@ export function PositionsTable({ positions }: { positions: PaperPosition[] }) {
               ) : '—'}
             </td>
             <td style={{ padding: '4px 8px',
-                         color: (p.unrealized_pnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
+                         color: (p.unrealized_pnl ?? 0) >= 0 ? 'var(--k-green-500)' : 'var(--k-red-500)' }}>
               {pct(p.unrealized_pnl)}</td>
           </tr>
         ))}
@@ -82,7 +82,7 @@ export function PaperResearchTab() {
   }
 
   const sum = summary.data;
-  const upColor = (s.return_pct ?? 0) >= 0 ? '#22c55e' : '#ef4444';
+  const upColor = (s.return_pct ?? 0) >= 0 ? 'var(--k-green-500)' : 'var(--k-red-500)';
 
   return (
     <div>
@@ -129,7 +129,7 @@ export function PaperResearchTab() {
         <div style={{ ...box, flex: 1, minWidth: 200 }}>
           <div style={dim}>KILL-SWITCH</div>
           <div style={{ fontSize: 16, marginTop: 6,
-                        color: s.tripped ? '#ef4444' : '#22c55e' }}>
+                        color: s.tripped ? 'var(--k-red-500)' : 'var(--k-green-500)' }}>
             {s.tripped ? 'TRIPPED · FLAT' : `ARMED · ${s.buffer_to_trip}% buffer`}
           </div>
           <div style={{ ...dim, marginTop: 4 }}>
@@ -187,7 +187,7 @@ export function PaperResearchTab() {
                       <td style={{ padding: '4px 8px' }}>{tr.sleeve}</td>
                       <td style={{ padding: '4px 8px' }}>{tr.direction}</td>
                       <td style={{ padding: '4px 8px',
-                                   color: tr.pnl_pct >= 0 ? '#22c55e' : '#ef4444' }}>
+                                   color: tr.pnl_pct >= 0 ? 'var(--k-green-500)' : 'var(--k-red-500)' }}>
                         {(tr.pnl_pct * 100).toFixed(2)}%</td>
                     </tr>
                   ))}

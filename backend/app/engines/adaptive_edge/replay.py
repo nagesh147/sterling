@@ -1,143 +1,148 @@
-"""A46 deterministic historical replay and state reconstruction.
-
-Replay consumes only immutable, versioned events selected by a manifest. It does
-not retrieve live provider values or invent unavailable strategy parameters.
-"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
-from hashlib import sha256
+import hashlib
 import json
-from typing import Callable, Sequence
+from dataclasses import dataclass
+from typing import Iterable, Sequence
+
+from .e2e import AuditRecord, E2ETrace
+from .event_boundary import CanonicalMarketEvent
+from .feature_engine import (
+    FeatureInput,
+    FeatureProvenance,
+    FeatureSnapshot,
+    FeatureStatus,
+    InstrumentContext,
+    build_feature_snapshot,
+)
 
 
-class ReplayError(ValueError):
-    """Raised when a deterministic replay invariant is violated."""
-
-
-@dataclass(frozen=True)
-class ReplayEvent:
-    event_id: str
-    observed_at: datetime
-    sequence_number: int
-    event_type: str
-    payload_fingerprint: str
-    source_version: str
-
-    def __post_init__(self) -> None:
-        for name in ("event_id", "event_type", "payload_fingerprint", "source_version"):
-            if not getattr(self, name).strip():
-                raise ReplayError(f"{name} must not be empty")
-        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
-            raise ReplayError("observed_at must be timezone-aware")
-        if self.sequence_number < 0:
-            raise ReplayError("sequence_number must be non-negative")
-
-
-@dataclass(frozen=True)
-class ReplayManifest:
-    manifest_id: str
-    specification_versions: tuple[str, ...]
-    feature_snapshot_ids: tuple[str, ...]
-    model_state_id: str | None
-    event_ids: tuple[str, ...]
-    cutoff: datetime | None = None
-
-    def __post_init__(self) -> None:
-        if not self.manifest_id.strip():
-            raise ReplayError("manifest_id must not be empty")
-        if any(not value.strip() for value in self.specification_versions):
-            raise ReplayError("specification versions must not be empty")
-        if any(not value.strip() for value in self.feature_snapshot_ids):
-            raise ReplayError("feature snapshot IDs must not be empty")
-        if self.model_state_id is not None and not self.model_state_id.strip():
-            raise ReplayError("model_state_id must not be empty when supplied")
-        if any(not value.strip() for value in self.event_ids):
-            raise ReplayError("event IDs must not be empty")
-        if len(set(self.event_ids)) != len(self.event_ids):
-            raise ReplayError("manifest event IDs must be unique")
-        if self.cutoff is not None and (
-            self.cutoff.tzinfo is None or self.cutoff.utcoffset() is None
-        ):
-            raise ReplayError("cutoff must be timezone-aware")
+EXPECTED_STAGES = (
+    "market_event", "feature_snapshot", "prediction", "edge", "economics", "decision",
+    "risk_authorization", "instrument", "order_intent", "execution_event", "position",
+    "lifecycle",
+)
 
 
 @dataclass(frozen=True)
 class ReplayResult:
-    state: object
-    state_fingerprint: str
-    replay_fingerprint: str
-    event_ids: tuple[str, ...]
+    deterministic: bool
+    stages: tuple[str, ...]
+    object_ids: tuple[str, ...]
+    reason: str | None = None
 
 
-def _canonical_fingerprint(value: object) -> str:
-    try:
-        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
-    except (TypeError, ValueError) as exc:
-        raise ReplayError("value is not deterministically serializable") from exc
-    return sha256(encoded).hexdigest()
+def validate_audit_chain(records: Iterable[AuditRecord]) -> ReplayResult:
+    records = tuple(records)
+    stages = tuple(record.stage for record in records)
+    object_ids = tuple(record.object_id for record in records)
+    if tuple(record.sequence for record in records) != tuple(range(len(records))):
+        return ReplayResult(False, stages, object_ids, "non_contiguous_audit_sequence")
+    if stages != EXPECTED_STAGES[: len(stages)]:
+        return ReplayResult(False, stages, object_ids, "invalid_causal_stage_order")
+    for current, previous in zip(records[1:], records):
+        if previous.object_id not in current.parent_ids:
+            if not (current.stage == "economics" and previous.stage == "edge"):
+                return ReplayResult(False, stages, object_ids, "broken_parent_reference")
+    return ReplayResult(True, stages, object_ids)
 
 
-def _select_events(
-    manifest: ReplayManifest,
-    events: Sequence[ReplayEvent],
-) -> tuple[ReplayEvent, ...]:
-    by_id: dict[str, ReplayEvent] = {}
-    for event in events:
-        if event.event_id in by_id:
-            raise ReplayError(f"duplicate event identity: {event.event_id}")
-        by_id[event.event_id] = event
-
-    missing = [event_id for event_id in manifest.event_ids if event_id not in by_id]
-    if missing:
-        raise ReplayError("missing manifest events: " + ", ".join(missing))
-
-    selected = [by_id[event_id] for event_id in manifest.event_ids]
-    if manifest.cutoff is not None:
-        future = [event.event_id for event in selected if event.observed_at > manifest.cutoff]
-        if future:
-            raise ReplayError("events after replay cutoff: " + ", ".join(future))
-
-    sequence_numbers = [event.sequence_number for event in selected]
-    if len(sequence_numbers) != len(set(sequence_numbers)):
-        raise ReplayError("ambiguous ordering: duplicate sequence number")
-
-    return tuple(sorted(selected, key=lambda e: (e.observed_at, e.sequence_number, e.event_id)))
+def replay_trace(trace: E2ETrace) -> ReplayResult:
+    """Validate the captured trace without recomputing unresolved strategy math."""
+    return validate_audit_chain(trace.audit)
 
 
-def replay(
-    manifest: ReplayManifest,
-    events: Sequence[ReplayEvent],
-    initial_state: object,
-    reducer: Callable[[object, ReplayEvent], object],
-) -> ReplayResult:
-    """Reconstruct state from exactly the immutable events named by manifest."""
-    ordered = _select_events(manifest, events)
-    state = initial_state
-    fingerprint_parts: list[object] = [
-        manifest.manifest_id,
-        manifest.specification_versions,
-        manifest.feature_snapshot_ids,
-        manifest.model_state_id,
-    ]
+@dataclass(frozen=True)
+class CanonicalEventSequence:
+    """Immutable, deterministically sorted sequence of CanonicalMarketEvents."""
 
-    for event in ordered:
-        state = reducer(state, event)
-        fingerprint_parts.append(
-            {
-                "event_id": event.event_id,
-                "observed_at": event.observed_at.isoformat(),
-                "sequence_number": event.sequence_number,
-                "event_type": event.event_type,
-                "payload_fingerprint": event.payload_fingerprint,
-                "source_version": event.source_version,
-            }
+    events: tuple[CanonicalMarketEvent, ...]
+    sequence_hash: str
+
+    @classmethod
+    def from_events(cls, events: Iterable[CanonicalMarketEvent]) -> CanonicalEventSequence:
+        seen_records: set[str] = set()
+        unique_events: list[CanonicalMarketEvent] = []
+
+        for evt in events:
+            if evt.available_at < evt.event_time:
+                raise ValueError(
+                    f"available_at ({evt.available_at}) cannot precede event_time ({evt.event_time})"
+                )
+            if evt.record_id in seen_records:
+                continue
+            seen_records.add(evt.record_id)
+            unique_events.append(evt)
+
+        sorted_events = tuple(sorted(unique_events, key=lambda e: (e.event_time, e.record_id)))
+
+        hasher = hashlib.sha256()
+        for e in sorted_events:
+            payload_str = json.dumps(dict(e.payload), sort_keys=True)
+            entry = f"{e.record_id}|{e.event_type}|{e.instrument_id}|{e.event_time}|{e.available_at}|{e.source}|{payload_str}"
+            hasher.update(entry.encode("utf-8"))
+        seq_hash = hasher.hexdigest()
+
+        return cls(events=sorted_events, sequence_hash=seq_hash)
+
+
+def event_to_feature_snapshot(
+    event: CanonicalMarketEvent,
+    *,
+    strategy_version: str = "1.0",
+    feature_set_version: str = "1.0",
+) -> FeatureSnapshot:
+    """Bridge a CanonicalMarketEvent to a versioned FeatureSnapshot."""
+    inputs: list[FeatureInput] = []
+    source_ids = (event.record_id,)
+
+    for key, value in sorted(event.payload.items()):
+        if value is None:
+            val_float = None
+            status = FeatureStatus.MISSING
+        else:
+            try:
+                val_float = float(value)
+                status = FeatureStatus.VALID
+            except (ValueError, TypeError):
+                val_float = None
+                status = FeatureStatus.INVALID
+
+        inputs.append(
+            FeatureInput(
+                name=key,
+                value=val_float,
+                available_at=event.available_at,
+                status=status,
+                provenance=FeatureProvenance(source_event_ids=source_ids),
+            )
         )
 
-    return ReplayResult(
-        state=state,
-        state_fingerprint=_canonical_fingerprint(state),
-        replay_fingerprint=_canonical_fingerprint(fingerprint_parts),
-        event_ids=tuple(event.event_id for event in ordered),
+    return build_feature_snapshot(
+        snapshot_id=f"SNAP-{event.record_id}",
+        strategy_version=strategy_version,
+        feature_set_version=feature_set_version,
+        observation_cutoff_time=event.available_at,
+        decision_time=event.available_at,
+        instrument_context=InstrumentContext(instrument_id=event.instrument_id),
+        inputs=inputs,
     )
+
+
+def replay_canonical_sequence(
+    sequence: CanonicalEventSequence,
+    *,
+    strategy_version: str = "1.0",
+    feature_set_version: str = "1.0",
+) -> tuple[FeatureSnapshot, ...]:
+    """Replay a CanonicalEventSequence producing a sequence of FeatureSnapshots."""
+    snapshots: list[FeatureSnapshot] = []
+    for evt in sequence.events:
+        snapshots.append(
+            event_to_feature_snapshot(
+                evt,
+                strategy_version=strategy_version,
+                feature_set_version=feature_set_version,
+            )
+        )
+    return tuple(snapshots)

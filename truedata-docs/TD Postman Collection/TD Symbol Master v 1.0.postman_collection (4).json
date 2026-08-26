@@ -13,7 +13,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
+					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=your_id&password=your_pwd&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -31,11 +31,11 @@
 						},
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_id"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_pwd"
 						},
 						{
 							"key": "token",
@@ -90,7 +90,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
+					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=your_id&password=your_pwd&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -108,11 +108,11 @@
 						},
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_id"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_pwd"
 						},
 						{
 							"key": "token",
@@ -167,7 +167,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getoptionchain?segment=mcx&user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&symbol=reliance&expiry=20230329&csv=true",
+					"raw": "https://api.truedata.in/getoptionchain?segment=mcx&user=your_id&password=your_pwd&symbol=reliance&expiry=20230329&csv=true",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -184,11 +184,11 @@
 						},
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_id"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_pwd"
 						},
 						{
 							"key": "symbol",
@@ -213,7 +213,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getIndexComponents?user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&response=csv&indexName=NIFTY 50",
+					"raw": "https://api.truedata.in/getIndexComponents?user=your_id&password=your_pwd&response=csv&indexName=NIFTY 50",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -226,11 +226,11 @@
 					"query": [
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_id"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_pwd"
 						},
 						{
 							"key": "response",
@@ -252,7 +252,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getSymbolExpiryList?user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&symbol=RELIANCE&response=csv",
+					"raw": "https://api.truedata.in/getSymbolExpiryList?user=utkr1&password=utkr1@123&symbol=RELIANCE&response=csv",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -265,11 +265,11 @@
 					"query": [
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "utkr1"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "utkr1@123"
 						},
 						{
 							"key": "symbol",
@@ -324,7 +324,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getIndices?user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE&response=csv",
+					"raw": "https://api.truedata.in/getIndices?user=your_id&password=your_pwd&response=csv",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -337,11 +337,11 @@
 					"query": [
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_id"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "your_pwd"
 						},
 						{
 							"key": "response",
@@ -358,7 +358,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getETFlist?user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE",
+					"raw": "https://api.truedata.in/getETFlist?user=xxxx&password=xxxxx",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -371,11 +371,11 @@
 					"query": [
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "xxxx"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "xxxxx"
 						}
 					]
 				}
@@ -388,7 +388,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "https://api.truedata.in/getunderlyinglist?segment=eq&user=YOUR_REDACTED_VALUE&password=YOUR_REDACTED_VALUE",
+					"raw": "https://api.truedata.in/getunderlyinglist?segment=eq&user=utkr1&password=utkr1@123456",
 					"protocol": "https",
 					"host": [
 						"api",
@@ -405,11 +405,11 @@
 						},
 						{
 							"key": "user",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "utkr1"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE"
+							"value": "utkr1@123456"
 						}
 					]
 				}

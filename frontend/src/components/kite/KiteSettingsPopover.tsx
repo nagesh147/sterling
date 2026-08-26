@@ -46,14 +46,14 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1100 }} />
       <div style={{ position: 'fixed', top: 60, right: 40, width: 320, maxWidth: '92vw', maxHeight: 'calc(100vh - 80px)', overflowY: 'auto', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily, padding: '16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#444' }}>Display settings</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 16, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500, color: 'var(--k-text)' }}>Display settings</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--k-dim)', cursor: 'pointer' }}>✕</button>
         </div>
 
         <div style={{ paddingBottom: 12, marginBottom: 8, borderBottom: `1px solid ${k.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
             <div>
-              <div style={{ fontSize: 12.5, color: '#444', fontWeight: 500 }}>Exchanges</div>
+              <div style={{ fontSize: 12.5, color: 'var(--k-text)', fontWeight: 500 }}>Exchanges</div>
               <div style={{ fontSize: 10.5, color: k.dim, marginTop: 2 }}>Controls instrument searches, ticker tiles, and Sterling signals.</div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -63,7 +63,7 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px 10px' }}>
             {KITE_EXCHANGES.map((exchange) => (
-              <label key={exchange} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#444', cursor: 'pointer', padding: '4px 0' }}>
+              <label key={exchange} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--k-text)', cursor: 'pointer', padding: '4px 0' }}>
                 <input type="checkbox" checked={exchanges.includes(exchange)} onChange={() => toggleExchange(exchange)} style={{ accentColor: k.blue, width: 14, height: 14 }} />
                 {exchange}
               </label>
@@ -73,7 +73,7 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
         </div>
 
         {TOGGLES.map(({ key, label }) => (
-          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#444', cursor: 'pointer', padding: '6px 0' }}>
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--k-text)', cursor: 'pointer', padding: '6px 0' }}>
             <input type="checkbox" checked={settings[key]} onChange={() => settings.toggleShow(key)} style={{ accentColor: k.blue, width: 14, height: 14 }} />
             {label}
           </label>

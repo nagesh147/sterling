@@ -26,6 +26,38 @@ export function fmtN(val: number | null | undefined, decimals = 2): string {
   return val.toFixed(decimals);
 }
 
+/** Round to nearest tick (default 0.05 paise) with 2 decimals max */
+export function roundToTick(val: number | null | undefined, tickSize = 0.05): number | null {
+  if (val == null || !Number.isFinite(val)) return null;
+  return Number((Math.round(val / tickSize) * tickSize).toFixed(2));
+}
+
+/** Format to nearest tick (0.05 multiple, 2 decimals max): e.g. 175.77233 -> "175.75" */
+export function fmtTick(val: number | null | undefined, tickSize = 0.05): string {
+  if (val == null || !Number.isFinite(val)) return '—';
+  const rounded = Math.round(val / tickSize) * tickSize;
+  return rounded.toFixed(2);
+}
+
+/** Safe INR currency format: +₹5,957.50 / -₹43.75 / ₹12,608.75 */
+export function fmtINR(val: number | null | undefined, options: { decimals?: number; showSign?: boolean } = {}): string {
+  if (val == null || !Number.isFinite(val)) return '—';
+  const decimals = options.decimals ?? 2;
+  const isNegative = val < 0;
+  const absVal = Math.abs(val);
+  const formatted = absVal.toLocaleString('en-IN', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  if (isNegative) {
+    return `-₹${formatted}`;
+  }
+  if (options.showSign && val > 0) {
+    return `+₹${formatted}`;
+  }
+  return `₹${formatted}`;
+}
+
 /** Safe currency format */
 export function fmtUSD(val: number | null | undefined, decimals = 0): string {
   if (val == null || !isFinite(val)) return '—';
@@ -37,11 +69,11 @@ export function fmtUSD(val: number | null | undefined, decimals = 0): string {
 
 /** Null-safe IVR color */
 export function ivrColor(ivr: number | null | undefined): string {
-  if (ivr == null) return '#555';
-  if (ivr < 40) return '#44cc88';
-  if (ivr < 60) return '#f0c040';
+  if (ivr == null) return 'var(--k-ink-3)';
+  if (ivr < 40) return 'var(--k-green-mint)';
+  if (ivr < 60) return 'var(--k-gold)';
   if (ivr < 80) return '#f0a500';
-  return '#cc4444';
+  return 'var(--k-red-muted)';
 }
 
 /** Null-safe IVR bar width percent (0-100) */
