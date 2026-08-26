@@ -1,0 +1,53 @@
+import { describe, it, expect } from "vitest";
+import { forecastDay, forecastMonth } from "./engine";
+import { utcFromIstParts } from "./time";
+
+describe("financial astrology engine", () => {
+  const session = utcFromIstParts(2026, 8, 26, 9, 0, 0);
+
+  it("is deterministic for a given IST date", () => {
+    const a = forecastDay(session, "NIFTY", session);
+    const b = forecastDay(session, "NIFTY", session);
+    expect(a.gap.kind).toBe(b.gap.kind);
+    expect(a.gap.label).toBe(b.gap.label);
+    expect(a.slots.length).toBe(b.slots.length);
+    expect(a.slots.map((s) => s.regime)).toEqual(b.slots.map((s) => s.regime));
+    expect(a.slots.map((s) => s.action)).toEqual(b.slots.map((s) => s.action));
+  });
+
+  it("prints a full cash-session 30-minute clock", () => {
+    const book = forecastDay(session, "BANKNIFTY", session);
+    expect(book.slots.length).toBe(13);
+    expect(book.slots[0].from).toBe("9:15 AM");
+    expect(book.slots[book.slots.length - 1].to).toBe("3:30 PM");
+    expect(book.netResults.length).toBeGreaterThanOrEqual(1);
+    expect(book.netResults.length).toBeLessThanOrEqual(book.slots.length);
+  });
+
+  it("always suggests CE, PE, both, or wait in trading language", () => {
+    const book = forecastDay(session, "NIFTY", session);
+    for (const slot of book.slots) {
+      expect(["CE", "PE", "BOTH", "WAIT"]).toContain(slot.side);
+      expect(slot.action.length).toBeGreaterThan(0);
+      expect(slot.suggestion.length).toBeGreaterThan(10);
+      expect(slot.choghadiya.length).toBeGreaterThan(0);
+      expect(["good", "move", "bad"]).toContain(slot.choghadiyaKind);
+    }
+    expect(["up", "flat", "down"]).toContain(book.gap.kind);
+    expect(book.gap.confidence).toBeGreaterThanOrEqual(50);
+    expect(book.gap.confidence).toBeLessThanOrEqual(94);
+    expect(book.gap.horaAtOpen).toBeTruthy();
+    expect(book.dignities.length).toBe(9);
+  });
+
+  it("projects only NSE trading days in a month", () => {
+    const month = forecastMonth(2026, 8, "NIFTY", session);
+    expect(month.month).toBe(8);
+    expect(month.tradingDays).toBeGreaterThanOrEqual(18);
+    expect(month.tradingDays).toBeLessThanOrEqual(23);
+    expect(month.gapUp + month.gapDown + month.gapFlat).toBe(month.tradingDays);
+    const fifteenth = month.days.find((d) => d.date === "2026-08-15");
+    expect(fifteenth).toBeTruthy();
+    expect(fifteenth?.isWeekend).toBe(true);
+  });
+});
