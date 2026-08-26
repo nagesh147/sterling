@@ -34,11 +34,12 @@ from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.services.kite_engine.greeks import (
-    black_scholes_greeks, implied_vol, premium_stop_from_move,
+    black_scholes_greeks, bs_price, implied_vol, premium_stop_from_move,
 )
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
-    ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
+    expiry_window_of,
+    ExpiryType, OptionPick, chain_rows_for, filter_liquid_contracts, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
 from app.services.kite_engine import state
@@ -228,7 +229,8 @@ def evaluate_item(
         # price trades through the trailing stop — whichever comes first. Once it fires
         # the trade is dead even if conditions reverse later (that's a new entry).
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         # Freeze the readouts at the exit bar: a dead trade whose trail kept ratcheting
         # for days afterwards shows a stop it was never protected by.
@@ -272,6 +274,13 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
     then re-derived that parent's leg premium from the now-zero ``spot``, wiping the
     Entry/TSL of exactly one leg per grouped derivatives row on every pass after the
     first (~1 blank leg per row in the live board).
+
+    Idempotent means ``f(f(x)) == f(x)``, over OUTPUT rows and not merely over the
+    same input twice: an already-grouped parent carries many legs, and
+    ``held_contract_scan`` appends to the compiled ``us.rows`` and re-compiles. So
+    every leg of every input row is folded in, not just ``legs[0]`` — reading only
+    the first kept one strike per group and dropped the others, taking their per-leg
+    ``current_reds`` (which the red-count exit reads) with them.
     """
     grouped_derivs: Dict[tuple, EngineSignalRow] = {}
     leg_ts: Dict[tuple, int] = {}
@@ -281,52 +290,112 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
             final_rows.append(r)
             continue
         key = (r.underlying, r.option_type)
-        leg = r.legs[0].model_copy(deep=True)
-        # Premiums are stamped at birth by evaluate_derivative_contract; fill them
-        # here only for a leg that arrived without them (legacy cached rows).
-        if not leg.premium_spot:
-            leg.premium_spot = r.spot or leg.premium_spot
-        if not leg.premium_sl:
-            leg.premium_sl = r.stop_loss or leg.premium_sl
-        leg.token = leg.token or r.token
-        leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)
-        leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
-        leg.alignment = leg.alignment or r.alignment
-        leg.exit_state = leg.exit_state or r.exit_state
-        if leg.current_reds is None:
-            leg.current_reds = r.current_reds
-        sym_key = (*key, leg.option_symbol)
-        if key not in grouped_derivs:
-            parent = r.model_copy(deep=True)
-            parent.spot = 0
-            parent.stop_loss = 0
-            parent.entry_sl = None   # per-leg (leg.entry_sl) is authoritative for grouped deriv rows
-            parent.legs = [leg]
-            grouped_derivs[key] = parent
-            leg_ts[sym_key] = r.timestamp_ms
-            continue
-        parent = grouped_derivs[key]
-        if sym_key not in leg_ts:
-            parent.legs.append(leg)
-            leg_ts[sym_key] = r.timestamp_ms
-        elif r.timestamp_ms > leg_ts[sym_key]:
-            for i, existing in enumerate(parent.legs):
-                if existing.option_symbol == leg.option_symbol:
-                    parent.legs[i] = leg
-                    break
-            leg_ts[sym_key] = r.timestamp_ms
-        parent.is_active = parent.is_active or leg.is_active
-        parent.is_fresh = parent.is_fresh or r.is_fresh
-        if r.timestamp_ms > parent.timestamp_ms:
-            parent.timestamp_ms = r.timestamp_ms
-            # keep the underlying-spot aligned with the displayed (latest) trigger bar
-            if (r.underlying_spot or 0) > 0:
-                parent.underlying_spot = r.underlying_spot
+        for source_leg in (r.legs or []):
+            leg = source_leg.model_copy(deep=True)
+            # Premiums are stamped at birth by evaluate_derivative_contract; fill them
+            # here only for a leg that arrived without them (legacy cached rows). On a
+            # re-compile the parent's spot/stop_loss are 0, so these stay no-ops.
+            if not leg.premium_spot:
+                leg.premium_spot = r.spot or leg.premium_spot
+            if not leg.premium_sl:
+                leg.premium_sl = r.stop_loss or leg.premium_sl
+            leg.token = leg.token or r.token
+            leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)
+            leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
+            leg.alignment = leg.alignment or r.alignment
+            leg.exit_state = leg.exit_state or r.exit_state
+            if leg.current_reds is None:
+                leg.current_reds = r.current_reds
+            # Per-leg, not the row's: a parent's timestamp_ms is the MAX across its
+            # legs, so using it to age-compare individual strikes would let the
+            # newest leg's stamp shadow an older one on the next merge.
+            stamp = int(leg.signal_timestamp_ms or r.timestamp_ms)
+            sym_key = (*key, leg.option_symbol)
+            if key not in grouped_derivs:
+                parent = r.model_copy(deep=True)
+                parent.spot = 0
+                parent.stop_loss = 0
+                parent.entry_sl = None   # per-leg (leg.entry_sl) is authoritative for grouped deriv rows
+                parent.legs = [leg]
+                grouped_derivs[key] = parent
+                leg_ts[sym_key] = stamp
+                continue
+            parent = grouped_derivs[key]
+            if sym_key not in leg_ts:
+                parent.legs.append(leg)
+                leg_ts[sym_key] = stamp
+            elif stamp > leg_ts[sym_key]:
+                for i, existing in enumerate(parent.legs):
+                    if existing.option_symbol == leg.option_symbol:
+                        parent.legs[i] = leg
+                        break
+                leg_ts[sym_key] = stamp
+            parent.is_active = parent.is_active or leg.is_active
+            parent.is_fresh = parent.is_fresh or r.is_fresh
+            if r.timestamp_ms > parent.timestamp_ms:
+                parent.timestamp_ms = r.timestamp_ms
+                # keep the underlying-spot aligned with the displayed (latest) trigger bar
+                if (r.underlying_spot or 0) > 0:
+                    parent.underlying_spot = r.underlying_spot
     final_rows.extend(grouped_derivs.values())
     for r in final_rows:
         if r.source == "derivatives" and len(r.legs) > 1:
             r.legs.sort(key=lambda leg: _MONEYNESS_ORDER.get(leg.moneyness, 99))
     return final_rows
+
+
+def live_red_counts(candles: Sequence[Candle], cfg: SterlingKiteEngineConfig) -> Dict[str, int]:
+    """Red SuperTrend lines against each direction at the LATEST bar.
+
+    Deliberately independent of whether this instrument produced a signal row. The
+    red-count exit reads its number off the scan's rows, and a row only exists where
+    there was an entry TRANSITION — so the moment the signal that opened a position
+    ends, there is nothing left to refresh the count from and it holds its last value
+    for the life of the position. The regime is computed either way; this just keeps
+    the answer instead of discarding it.
+
+    Empty when there are too few bars to run the engine, which the caller must treat
+    as "cannot say" rather than as a zero — a zero reads as "nothing against us" and
+    would disarm the exit outright.
+    """
+    if len(candles) <= cfg.warmup + 1:
+        return {}
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    c = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, c, cfg)
+    last = len(c) - 1
+    return {"long": int(r.red_line_count("long", last)),
+            "short": int(r.red_line_count("short", last))}
+
+
+def contract_bar_is_current(
+    contract_ts: int, underlying_ts: int, *,
+    max_stale_bars: int = 0, bar_ms: int = 3_600_000,
+) -> bool:
+    """Whether a derivative contract's latest bar is recent enough to trade on.
+
+    ``is_fresh`` for a derivatives row means "the signal fired on the LAST bar this
+    contract has" — which says nothing about WHEN that bar was. An illiquid strike
+    that last printed at 11:00 still reports its 11:00 bar as the latest one at 15:00,
+    so a transition there reads as a live trigger hours after the fact. Auto-exec then
+    sends a MARKET order against a premium that has not been quoted since.
+
+    The underlying always trades, so its latest 1H bar is the clock. A contract whose
+    own latest bar keeps up with it is current; one that lags by more than
+    ``max_stale_bars`` is not.
+
+    An unknown underlying bar (0) returns True. The underlying candle fetch can fail
+    while a quote-derived spot still carries the scan, and refusing every automatic
+    entry because the clock is missing is a far larger action than the one this guard
+    exists to prevent. Display is unaffected either way — the row still appears; only
+    the automatic order is withheld.
+    """
+    if underlying_ts <= 0 or contract_ts <= 0 or bar_ms <= 0:
+        return True
+    lag_bars = (int(underlying_ts) - int(contract_ts)) / float(bar_ms)
+    return lag_bars <= int(max_stale_bars) + 1e-9
 
 
 def evaluate_derivative_contract(
@@ -363,7 +432,8 @@ def evaluate_derivative_contract(
         # "running" until the red counter fires (per exit_mode) or the premium trades
         # through its trail. For derivatives all entries are long (BUY), so red = -1.
         last_idx = len(c) - 1
-        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts)
+        is_stock = item.name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts, is_stock=is_stock)
         active = exit_j is None
         end_idx = last_idx if exit_j is None else int(exit_j)
         stop_loss = exits.reported_trail_level(r, "long", int(i), exit_j, last_idx, cfg)
@@ -414,9 +484,12 @@ def attach_strikes(
     """
     today = today or datetime.now(_IST).date()
     chain = chain_rows_for(option_rows, option_name, today)
+    is_stock = option_name.upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+    chain = filter_liquid_contracts(chain, is_stock=is_stock)
     ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
-                         moneynesses=ordered, expiry_types=expiry_types, today=today)
+                         moneynesses=ordered, expiry_types=expiry_types, today=today,
+                         **expiry_window_of(cfg))
     row.resolution_reason = None
     if not picks:
         if not chain:
@@ -494,6 +567,10 @@ class ScanDiag:
     deriv_charts: int = 0      # option contracts charted (had premium candles)
     deriv_no_data: int = 0     # contracts skipped: no token / empty premium fetch
     deriv_fired: int = 0       # contracts that produced a BUY signal
+    #: Fired contracts whose auto-exec was refused because the contract's own last
+    #: bar lags the underlying's — the signal is real but it is not CURRENT, and a
+    #: market order would fill nowhere near the premium the row is quoting.
+    deriv_stale_skipped: int = 0
     deriv_min_bars: int = 0    # premium-chart bar depth of charted contracts (history)
     deriv_max_bars: int = 0
     confluence_fired: int = 0  # merged rows where the underlying AND a leg's premium both fired
@@ -517,6 +594,15 @@ class UserScan:
     # Internal de-duplication for the held-contract extension. Unlike the removed
     # per-contract report, this retains symbols only—no trace payload or API surface.
     scanned_contract_symbols: set[str] = field(default_factory=set)
+    #: Live red-line counts for EVERY instrument this scan evaluated, whether or not
+    #: it emitted a signal row. Rows only exist where there was an entry transition,
+    #: so a position outlives the row that opened it and the red-count exit had
+    #: nothing left to read. These two maps are what it reads instead.
+    #: underlying display name → {"long": n, "short": n}
+    underlying_reds: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    #: option tradingsymbol → count against a long-premium position (a derivatives
+    #: signal runs on the contract's own premium, so "long" is its only direction)
+    contract_reds: Dict[str, int] = field(default_factory=dict)
     # token → row index, lazily built and invalidated when a new scan lands
     # (keyed by generated_ms + row count). Turns detail lookup O(n)→O(1).
     _idx_key: tuple = (-1, -1)
@@ -681,8 +767,21 @@ class KiteEngineScanner:
                     ]
                     if candidates:
                         entry_px = float(max(candidates, key=lambda c: int(c.timestamp_ms)).close)
+                    elif candles and not row.is_fresh:
+                        entry_px = float(candles[0].open or candles[0].close)
                 except Exception as exc:  # noqa: BLE001
                     log.debug("kite-engine spot premium history fail %s: %s", leg.option_symbol, exc)
+            if entry_px <= 0 and not row.is_fresh and (row.spot or 0) > 0 and leg.strike:
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                iv_est = 0.32 if is_stock else 0.18
+                dte = _dte_from_expiry(leg.expiry, row.timestamp_ms)
+                entry_px = bs_price(
+                    spot=float(row.spot),
+                    strike=float(leg.strike),
+                    dte_days=max(dte, 1.0),
+                    iv=iv_est,
+                    option_type=leg.option_type,
+                )
             if entry_px > 0:
                 leg.premium_spot = entry_px
                 _stamp_leg_premium_stops(row, leg)
@@ -791,6 +890,10 @@ class KiteEngineScanner:
                 if len(candles) <= cfg.warmup + 1:
                     _no_data(item)
                     return
+                # Keep this bar's red counts even when no transition fires below. An
+                # open position outlives the row that opened it, and this is the only
+                # thing that keeps its red-count exit alive once the signal ends.
+                us.underlying_reds[item.name] = live_red_counts(candles, cfg)
                 diag.evaluated += 1
                 if item.is_index:
                     diag.index_evaluated += 1
@@ -853,6 +956,9 @@ class KiteEngineScanner:
                 # Underlying spot at each 1H bar, so a derivative signal can report the
                 # spot at its trigger timestamp (the premium chart alone never carries it).
                 under_close_by_ts = {int(c.timestamp_ms): float(c.close) for c in under}
+                # The underlying trades continuously, so its latest closed bar is the
+                # clock every contract's own latest bar is measured against.
+                under_latest_ts = int(under[-1].timestamp_ms) if under else 0
                 if spot <= 0:
                     try:
                         # Quote by DISPLAY name (mirrors detail._spot_symbol): the LTP
@@ -913,6 +1019,11 @@ class KiteEngineScanner:
                     bars = len(oc)               # premium-history depth, to expose short weeklies
                     diag.deriv_min_bars = bars if diag.deriv_min_bars == 0 else min(diag.deriv_min_bars, bars)
                     diag.deriv_max_bars = max(diag.deriv_max_bars, bars)
+                    # Same reason as the spot pass: a held contract keeps its exit
+                    # alive off this, long after its own entry transition scrolled away.
+                    deriv_reds = live_red_counts(oc, cfg)
+                    if "long" in deriv_reds:
+                        us.contract_reds[pick.option_symbol] = deriv_reds["long"]
                     drows = evaluate_derivative_contract(item, m, pick, oc, cfg)
                     latest_ts = oc[-1].timestamp_ms
                     # Keep running/just-fired entries plus the most-recent recently-ended
@@ -931,10 +1042,23 @@ class KiteEngineScanner:
                         if is_fresh:
                             diag.deriv_fired += 1
                             if place_cb is not None:  # auto-exec is universal (spot + derivatives)
-                                try:
-                                    await place_cb(drow, item)
-                                except Exception as exc:  # noqa: BLE001
-                                    log.warning("kite-engine deriv auto-exec fail %s: %s", pick.option_symbol, exc)
+                                # "Fired on its own last bar" is not the same as "fired
+                                # now". Only the underlying's clock can tell them apart.
+                                if not contract_bar_is_current(
+                                        int(latest_ts), under_latest_ts,
+                                        max_stale_bars=int(getattr(
+                                            cfg, "max_contract_staleness_bars", 0) or 0)):
+                                    diag.deriv_stale_skipped += 1
+                                    if log_cb:
+                                        lag_h = max(0, (under_latest_ts - int(latest_ts))) // 3_600_000
+                                        log_cb(f"⚠ {pick.option_symbol}: signal is on a bar "
+                                               f"{lag_h}h behind the underlying — shown, but "
+                                               f"not auto-executed (contract has not traded since)")
+                                else:
+                                    try:
+                                        await place_cb(drow, item)
+                                    except Exception as exc:  # noqa: BLE001
+                                        log.warning("kite-engine deriv auto-exec fail %s: %s", pick.option_symbol, exc)
 
                 await asyncio.gather(*[_contract(m, p) for m, p in contracts])
 
@@ -971,6 +1095,11 @@ class KiteEngineScanner:
                 if len(candles) <= cfg.warmup + 1:
                     _no_data(item)
                     return
+                # As in the spot pass. Confluence is a whole scan_source of its own, so
+                # without this an account running it would have no underlying reading at
+                # all and every position's red counter would go back to freezing — the
+                # `return` two lines below leaves early on the common no-signal path.
+                us.underlying_reds[item.name] = live_red_counts(candles, cfg)
                 diag.evaluated += 1
                 if item.is_index:
                     diag.index_evaluated += 1

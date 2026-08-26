@@ -16,12 +16,12 @@
 					"urlencoded": [
 						{
 							"key": "username",
-							"value": "YOUR_REDACTED_VALUE",
+							"value": "your_user_id",
 							"type": "text"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_REDACTED_VALUE",
+							"value": "your_password",
 							"type": "text"
 						},
 						{

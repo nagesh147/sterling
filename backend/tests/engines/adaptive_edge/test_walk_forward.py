@@ -66,6 +66,10 @@ def test_training_requires_causal_features_and_mature_labels() -> None:
     rows = [
         observation("ok", 5, maturity_day=9),
         observation("future-feature", 5, feature_day=6, maturity_day=9),
+        # Genuinely immature: the label resolves AFTER the training cutoff (dt(10)),
+        # so training on it would be lookahead. This used to say maturity_day=10,
+        # which is the cutoff itself and therefore mature — see the boundary test
+        # below — so the case never tested what its name claimed.
         observation("immature", 5, maturity_day=11),
         observation("outside", 12, maturity_day=12),
     ]
@@ -73,6 +77,28 @@ def test_training_requires_causal_features_and_mature_labels() -> None:
     assert [row.observation_id for row in eligible_training_observations(rows, c)] == ["ok"]
     assert assign_observation(rows[0], c) is ObservationDisposition.TRAIN
     assert assign_observation(rows[1], c) is ObservationDisposition.INELIGIBLE
+    assert assign_observation(rows[2], c) is ObservationDisposition.INELIGIBLE
+
+
+def test_a_label_maturing_exactly_at_the_training_cutoff_is_eligible() -> None:
+    """The maturity boundary is INCLUSIVE, and that is a deliberate contract choice.
+
+    docs/strategy/adaptive-edge/v2/15_WALK_FORWARD_EVALUATION_CONTRACT.md section 5
+    states the training population rule as `label_maturity_time <= training_cutoff`.
+    An outcome that resolves exactly at the cutoff is known at the cutoff, so using
+    it is not lookahead.
+
+    It is worth pinning because every other boundary here is half-open — spans are
+    `start <= t < end`, and validation begins at the same instant training ends —
+    so an inclusive rule reads like an off-by-one unless it is stated. Pinning it
+    means a future change to either side has to disagree with this test out loud.
+    """
+    c = cycle()   # training [dt(1), dt(10)) -> cutoff dt(10)
+    at_cutoff = observation("at-cutoff", 5, maturity_day=10)
+
+    assert [row.observation_id
+            for row in eligible_training_observations([at_cutoff], c)] == ["at-cutoff"]
+    assert assign_observation(at_cutoff, c) is ObservationDisposition.TRAIN
 
 
 def test_cycle_rejects_overlapping_windows_and_late_promotion() -> None:

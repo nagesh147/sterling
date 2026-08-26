@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — Position Sizing and Quantity Constraints
 
-**Artifact:** A33
-**Version:** 2.0.0-draft
-**Status:** RESOLVED-BLOCKED
+**Artifact:** A33  
+**Version:** 2.0.0-draft  
+**Status:** RESOLVED-BLOCKED  
 **Implementation:** NONE
 
 ## Purpose

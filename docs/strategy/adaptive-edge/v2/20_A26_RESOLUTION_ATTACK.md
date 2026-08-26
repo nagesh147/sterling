@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — A26 Resolution Attack: Opportunity, Outcome, Target and Horizon
 
-**Artifact:** A26-RA
-**Version:** 2.0.0-draft
-**Status:** RESOLUTION-ATTACK / BLOCKED
+**Artifact:** A26-RA  
+**Version:** 2.0.0-draft  
+**Status:** RESOLUTION-ATTACK / BLOCKED  
 **Implementation:** NONE
 
 ## 1. Purpose

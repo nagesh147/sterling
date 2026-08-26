@@ -1,24 +1,14 @@
 import React from 'react';
 import { useStockRegistry } from '../../../hooks/useSterlingKiteEngine';
-import type { Moneyness, ScanExpiry, ScanSource } from '../../../types/kiteEngine';
+import type { LiquidityGroup, Moneyness, ScanExpiry, ScanSource } from '../../../types/kiteEngine';
 import {
-  BORDER, CheckOption, DIM, Field, ORANGE, ORANGE_SOFT, Switch, TEXT,
+  BORDER, CheckOption, ChoiceRow, DIM, Field, NumberField, ORANGE, ORANGE_SOFT, Switch, TEXT,
 } from '../kiteSettingsPrimitives';
 import { ConfigNote } from './ConfigPrimitives';
-import { INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
+import { FIELDS, INDEX_OPTIONS, SCAN_SOURCE_OPTIONS, STRIKE_GROUPS } from './registry';
 
 /**
  * The scan controls, rendered from plain values so BOTH engines can own a copy.
- *
- * These used to live on a single "Market & Contracts" page that claimed both
- * engines read everything on it. They do not: Navigator has its own signal
- * source, its own instrument universe, and now its own contract coverage. A
- * page that presents one set of values as universal cannot express "SuperTrend
- * on the full ladder, Navigator on ATM only", which is a reasonable thing to
- * want from two engines that look for different things.
- *
- * So the controls are engine-agnostic components, and each engine's page owns
- * the values it passes in.
  */
 
 /** Which instruments an engine scans. */
@@ -28,17 +18,6 @@ export function InstrumentsGroup({
   indices: string[];
   stocks: string[];
   allStocks: boolean;
-  /**
-   * Master switch for single-stock underlyings.
-   *
-   * This lives here, with the rest of the universe, because that is where the
-   * backend applies it: `select_scan_universe` drops single-stock items right
-   * alongside the index/stock/all-stocks selection. It was previously rendered
-   * under "Contracts", which on Navigator's page is gated by the contract-
-   * coverage link rather than the scan-scope link — so the switch could be
-   * shown while the backend was reading the other engine's value, and hidden
-   * while it was reading this one's.
-   */
   stockContracts: boolean;
   onChange: (next: {
     scan_indices?: string[];
@@ -47,14 +26,6 @@ export function InstrumentsGroup({
     scan_stock_contracts?: boolean;
   }) => void;
   idPrefix: string;
-  /**
-   * Whether every index may be unticked.
-   *
-   * SuperTrend keeps a fallback so it can never end up scanning nothing.
-   * Navigator's own scope legitimately allows an indices-empty, stocks-only
-   * universe — and its panel already warns and blocks Apply on a fully empty
-   * one — so a silent fallback there would fight the user.
-   */
   allowEmptyIndices?: boolean;
 }) {
   const { data: stockRegistry } = useStockRegistry();
@@ -66,11 +37,20 @@ export function InstrumentsGroup({
 
   return (
     <>
-      <Field label="Indices">
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
+      <Field label="Indices" wide>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: '6px 12px',
+            width: '100%',
+          }}
+        >
           {INDEX_OPTIONS.map((option) => (
             <CheckOption
-              key={option.value} label={option.label}
+              key={option.value}
+              label={option.label}
               checked={indices.includes(option.value)}
               onChange={() => onChange({
                 scan_indices: toggle(indices, option.value, allowEmptyIndices ? [] : ['NIFTY 50']),
@@ -79,57 +59,78 @@ export function InstrumentsGroup({
           ))}
         </div>
       </Field>
+
       <Field
         label="Single-stock underlyings"
         hint="Off leaves stocks out of the scan entirely. Indices are unaffected."
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Switch
-            checked={stockContracts} label={`${idPrefix} scan single-stock underlyings`}
-            onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
-          />
-          <span style={{ color: TEXT, fontSize: 12 }}>
-            {stockContracts ? 'Scanning stocks' : 'Indices only'}
-          </span>
-        </div>
-        {!stockContracts && (
-          <ConfigNote>
-            No stock contracts are resolved and no stock rows appear. Your stock selection is
-            kept, so turning this back on restores it.
-          </ConfigNote>
-        )}
+        <Switch
+          checked={stockContracts}
+          label={`${idPrefix} scan single-stock underlyings`}
+          onChange={() => onChange({ scan_stock_contracts: !stockContracts })}
+        />
       </Field>
+
+      {!stockContracts && (
+        <ConfigNote>
+          No stock contracts are resolved and no stock rows appear. Your stock selection is
+          kept, so turning this back on restores it.
+        </ConfigNote>
+      )}
+
       {stockContracts && (
-      <Field label="F&O stocks" hint="Use the full eligible universe, or curate a smaller list.">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <Field
+          label="F&O stocks"
+          hint="Use the full eligible universe, or curate a smaller list."
+        >
           <Switch
-            checked={allStocks} label={`${idPrefix} scan all F&O stocks`}
+            checked={allStocks}
+            label={`${idPrefix} scan all F&O stocks`}
             onChange={() => onChange({ scan_all_stocks: !allStocks })}
           />
-          <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&amp;O stocks</span>
-        </div>
-      </Field>
+        </Field>
       )}
+
       {stockContracts && !allStocks && (
-        <Field label="Selected stocks" hint={`${stocks.length} selected`}>
-          <div style={{ maxHeight: 240, overflow: 'auto', paddingRight: 4 }}>
-            {(stockRegistry ?? []).map((group, groupIndex) => (
-              <div key={group.liquidity ?? groupIndex} style={{ marginBottom: 10 }}>
-                <div style={{ color: DIM, fontSize: 9, fontWeight: 700, letterSpacing: .5, marginBottom: 5 }}>
-                  {(group.liquidity ?? '').toUpperCase()}
+        <Field label="Selected stocks" hint={`${stocks.length} selected`} wide>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+            {(stockRegistry ?? []).map((group: LiquidityGroup) => (
+              <div key={group.liquidity}>
+                <div style={{
+                  color: DIM, fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+                  marginBottom: 4, textTransform: 'uppercase' as const,
+                }}>
+                  {group.liquidity}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3 }}>
-                  {group.stocks.map((stock) => (
-                    <CheckOption
-                      key={stock.name} label={stock.label || stock.name} compact
-                      checked={stocks.includes(stock.name)}
-                      onChange={() => onChange({ scan_stocks: toggle(stocks, stock.name, []) })}
-                    />
-                  ))}
+                <div
+                  className="sk-config-check-grid"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                    gap: '2px 8px',
+                  }}
+                >
+                  {group.stocks.map((s) => {
+                    const name = s.name;
+                    return (
+                      <CheckOption
+                        key={name}
+                        label={s.label || name}
+                        compact
+                        checked={stocks.includes(name)}
+                        onChange={() => onChange({ scan_stocks: toggle(stocks, name, []) })}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ))}
-            {!stockRegistry?.length && <div style={{ color: DIM, fontSize: 11 }}>Stock universe unavailable.</div>}
+            {!stockRegistry?.length && (
+              // Without this, a failed or empty registry renders an empty box that
+              // reads as "no stocks are eligible" rather than "we could not load
+              // the list" — and the user curates a scope from nothing.
+              <div style={{ color: DIM, fontSize: 11 }}>Stock universe unavailable.</div>
+            )}
           </div>
         </Field>
       )}
@@ -137,16 +138,17 @@ export function InstrumentsGroup({
   );
 }
 
-/** Which chart this engine reads a signal from. */
-export function SignalSourceGroup({ value, onChange, name }: {
+
+/** Which chart this engine reads a signal from (main-branch descriptions + tile style). */
+export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The chart this engine takes its entry signal off.' }: {
   value: ScanSource;
   onChange: (next: ScanSource) => void;
-  /** Radio-group name — must differ per engine so the two do not share state. */
   name: string;
+  fieldHint?: string | null;
 }) {
   return (
-    <Field label="Read from" hint="The chart this engine takes its entry signal off.">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8 }}>
+    <Field label="Read from" hint={fieldHint ?? undefined} wide>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8, width: '100%' }}>
         {SCAN_SOURCE_OPTIONS.map((option) => {
           const selected = value === option.value;
           return (
@@ -154,8 +156,8 @@ export function SignalSourceGroup({ value, onChange, name }: {
               minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)',
               alignItems: 'start', gap: 9, textAlign: 'left', padding: '10px 11px', borderRadius: 7,
               cursor: 'pointer', fontFamily: 'inherit', boxSizing: 'border-box',
-              border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
-              background: selected ? ORANGE_SOFT : '#fff',
+              border: `1px solid ${selected ? 'var(--k-border-brand)' : BORDER}`,
+              background: selected ? ORANGE_SOFT : 'var(--k-bg)',
             }}>
               <input
                 type="radio" name={name} checked={selected}
@@ -174,20 +176,31 @@ export function SignalSourceGroup({ value, onChange, name }: {
   );
 }
 
-/**
- * Which strikes and expiry cycles this engine resolves.
- *
- * Deliberately does NOT hold the single-stock master switch: that is a universe
- * filter, and on Navigator's page the two are gated by different scope links.
- * It lives in `InstrumentsGroup`.
- */
-export function ContractsGroup({ strikes, indexExpiries, onChange }: {
+/** Which strikes and expiry cycles this engine resolves. */
+export function ContractsGroup({
+  strikes, indexExpiries, onChange,
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote,
+}: {
   strikes: Moneyness[];
   indexExpiries: ScanExpiry[];
   onChange: (next: {
     strike_moneyness?: Moneyness[];
     scan_expiries_indices?: ScanExpiry[];
+    expiry_dte_min?: number;
+    expiry_dte_max?: number;
+    avoid_expiry_day?: boolean;
   }) => void;
+  /* The expiry window, shared by every engine under these names. Optional so a
+     caller that has not adopted them yet renders exactly what it did before —
+     but every option engine now passes them, and this is the one place the
+     wording lives, so "minimum days to expiry" cannot come to mean two things
+     on two pages. */
+  dteMin?: number;
+  dteMax?: number;
+  avoidExpiryDay?: boolean;
+  dteDefaults?: { min?: number; max?: number };
+  /** Engine-specific note under the window, e.g. why one of them is off. */
+  dteNote?: React.ReactNode;
 }) {
   const toggleStrikeGroup = (values: Moneyness[]) => {
     const all = values.every((v) => strikes.includes(v));
@@ -198,41 +211,102 @@ export function ContractsGroup({ strikes, indexExpiries, onChange }: {
     const next = indexExpiries.includes(expiry)
       ? indexExpiries.filter((x) => x !== expiry)
       : [...indexExpiries, expiry];
+    // Falling back to BOTH, not to weekly. Unticking your last remaining cycle is
+    // "I did not mean to leave this empty", not "put me on weeklies" — and weekly
+    // and monthly contracts do not behave alike, so silently moving someone from
+    // one to the other is a real change of position dressed as a no-op.
     onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
   };
 
   return (
     <>
-      <Field label="Strike coverage" hint="Which strikes are resolved for each setup. An automatic BUY takes the leg nearest spot from exactly these.">
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
+      <Field
+        label="Strike range"
+        hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits."
+        wide
+      >
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gap: '8px 10px',
+            width: '100%',
+          }}
+        >
           {STRIKE_GROUPS.map((group) => {
-            const count = group.values.filter((v) => strikes.includes(v)).length;
+            const checked = group.values.every((v) => strikes.includes(v));
+            const partial = !checked && group.values.some((v) => strikes.includes(v));
             return (
               <CheckOption
-                key={group.label} label={group.label} hint={group.hint}
-                checked={count === group.values.length}
-                indeterminate={count > 0 && count < group.values.length}
+                key={group.label}
+                label={group.label}
+                hint={group.hint}
+                checked={checked}
+                indeterminate={partial}
                 onChange={() => toggleStrikeGroup(group.values)}
               />
             );
           })}
         </div>
       </Field>
-      <Field label="Index expiries" hint="Contract cycles scanned for indices.">
-        <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
+
+      <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
+        <div
+          className="sk-config-check-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '6px 12px',
+            maxWidth: 320,
+          }}
+        >
           {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
             <CheckOption
-              key={expiry} label={expiry === 'weekly' ? 'Weekly' : 'Monthly'}
+              key={expiry}
+              label={expiry === 'weekly' ? 'Weekly' : 'Monthly'}
               checked={indexExpiries.includes(expiry)}
               onChange={() => toggleIndexExpiry(expiry)}
             />
           ))}
         </div>
       </Field>
+
+      {dteMin !== undefined && dteMax !== undefined && (
+        <>
+          <NumberField
+            label="Minimum days to expiry"
+            hint="Contracts closer to expiry than this are not eligible."
+            value={dteMin} defaultValue={dteDefaults?.min}
+            onChange={(v) => onChange({ expiry_dte_min: v })}
+            min={0} max={365} step={1}
+          />
+          <NumberField
+            label="Maximum days to expiry"
+            hint="Contracts further out than this are not eligible."
+            value={dteMax} defaultValue={dteDefaults?.max}
+            onChange={(v) => onChange({ expiry_dte_max: v })}
+            min={0} max={400} step={1}
+          />
+          <Field
+            label="Expiry day"
+            hint="Expiry-day options gain and lose value fastest, and their open interest is settlement mechanics rather than positioning."
+          >
+            <Switch
+              checked={!!avoidExpiryDay}
+              label="Avoid expiry-day entries"
+              onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
+            />
+          </Field>
+          {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
+        </>
+      )}
+
       <ConfigNote>
-        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to
-        choose. Whether stocks are scanned at all is under <b>Instruments</b>.
+        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
+        Whether stocks are scanned at all is under Instruments.
       </ConfigNote>
     </>
   );
 }
+

@@ -63,8 +63,11 @@ def test_paper_module_does_not_import_study():
     # Checked in a FRESH interpreter — process-global sys.modules in the pytest
     # process is polluted by sibling tests that legitimately import study.
     import subprocess
+    from pathlib import Path
+    backend_dir = str(Path(__file__).resolve().parent.parent)
     code = (
-        "import sys, app.api.v1.endpoints.paper; "
+        f"import sys; sys.path.insert(0, {backend_dir!r}); "
+        "import app.api.v1.endpoints.paper; "
         "leak=[m for m in sys.modules if m=='study' or m.startswith('study.')]; "
         "assert not leak, leak; print('OK')"
     )

@@ -132,9 +132,14 @@ def solve_options(
     risk_pct = abs(entry_spot - stop_spot) / entry_spot * 100 if entry_spot else 0.0
     rr = (premium_at_tp - premium_now) / max(1e-9, premium_now - sl_premium)
 
+    sl_prem_rounded = round(round(sl_premium / 0.05) * 0.05, 2)
+    tp_prem_rounded = round(round(tp_premium / 0.05) * 0.05, 2)
+    stop_spot_rounded = round(round(stop_spot / 0.05) * 0.05, 2) if stop_spot else stop_spot
+    target_spot_rounded = round(round(target_spot / 0.05) * 0.05, 2) if target_spot else target_spot
+
     return SLTPResolution(
-        ok=True, stop_loss=stop_spot, take_profit=target_spot,
-        sl_premium=round(sl_premium, 4), tp_premium=round(tp_premium, 4),
+        ok=True, stop_loss=stop_spot_rounded, take_profit=target_spot_rounded,
+        sl_premium=sl_prem_rounded, tp_premium=tp_prem_rounded,
         tp_source="bsm_at_exit_T_hybrid", rr=round(rr, 3), risk_pct=risk_pct,
         reason="ok",
     )

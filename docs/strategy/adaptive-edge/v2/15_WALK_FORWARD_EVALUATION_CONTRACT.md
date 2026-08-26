@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — Training / Validation / Test Walk-Forward Evaluation Contract
 
-**Artifact:** A39
-**Version:** 2.0.0-draft
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
+**Artifact:** A39  
+**Version:** 2.0.0-draft  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
 **Implementation:** PARTIAL — temporal evaluation primitives implemented; numerical evaluation remains blocked
 
 ## 1. Purpose

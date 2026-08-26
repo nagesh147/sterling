@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — Accounting, P&L and Risk-Reconciliation Contract
 
-**Artifact:** A37
-**Version:** 2.0.0-draft
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
+**Artifact:** A37  
+**Version:** 2.0.0-draft  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
 **Implementation:** NONE
 
 ## 1. Purpose

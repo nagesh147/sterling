@@ -70,3 +70,28 @@ def raise_for_kite(message: str, error_type: str = "", status_code: Optional[int
     """Raise the most specific KiteError subclass for a Kite error envelope."""
     cls, default = _ERROR_MAP.get(error_type, (KiteError, "Kite request failed."))
     raise cls(message or default, error_type=error_type, status_code=status_code, data=data)
+
+# Errors that will fail identically no matter how many times the same request is
+# repeated. Retrying these wastes the retry budget and buries genuinely transient
+# failures under noise — a missing session is not a flaky network.
+_NON_RETRYABLE = (KiteTokenError, KitePermissionError, KiteInputError, KiteOrderError, KiteMarginError)
+
+
+def is_retryable(exc: BaseException) -> bool:
+    """True when repeating the identical request could plausibly succeed.
+
+    Rate limits and upstream/network failures are transient. A missing or
+    expired session, a permission denial and a malformed request are not: the
+    second attempt has exactly the same inputs and the same outcome.
+
+    Non-Kite exceptions (socket timeouts, transport errors) are treated as
+    retryable, because that is what they usually are and the caller still has a
+    bounded attempt budget.
+    """
+    # A 429 is transient even when it arrives wearing another error_type.
+    if isinstance(exc, KiteError) and exc.status_code == 429:
+        return True
+    if "429" in str(exc):
+        return True
+    return not isinstance(exc, _NON_RETRYABLE)
+

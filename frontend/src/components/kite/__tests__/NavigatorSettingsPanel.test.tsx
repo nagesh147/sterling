@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { NavigatorSettingsPanel } from '../NavigatorSettingsPanel';
 import type { NavigatorConfigModel } from '../../../types/navigator';
@@ -17,7 +17,6 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       atr_period: 14, relative_volume_period: 20, touch_tolerance_atr: 0.2, min_body_atr: 0.35, min_relative_volume: 1.2,
       breakout_buffer_atr: 0.1, max_extension_atr: 1.5, cooldown_bars: 5, grade_a_plus_min: 85, grade_a_min: 75,
       grade_b_min: 65, stop_buffer_atr: 0.15, max_stop_distance_atr: 2.0, target_r: 2.0,
-      show_session_vwap: true, show_daily_range: true, show_weekly_range: true,
     },
     ranges: {
       method: 'rolling_empirical_quantile_v1', target_coverage: 0.8, daily_lookback_sessions: 120, daily_min_sessions: 60,
@@ -34,12 +33,12 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
       manual_expiry: null, manual_atm: null, strike_step_override: null, max_quote_age_seconds: 20, max_sample_gap_seconds: 150,
       min_chain_completeness: 0.8, max_spread_pct: 0.08, warmup_samples: 30, robust_window_samples: 120,
       price_scale_floor: 0.0001, oi_intensity_weight: 0.25, z_scale: 2.0, zero_hysteresis: 10, strong_zone: 68,
-      extreme_zone: 96, require_for_index_gate: true, allow_na_for_single_stocks: true,
+      extreme_zone: 96, require_for_index_gate: true,
     },
     gamma: {
       enabled: true, rate_source: 'manual', risk_free_rate: null, dividend_yield: null, min_iv: 0.01, max_iv: 5.0,
       robust_window_samples: 120, min_samples: 30, blast_z_min: 3.0, acceleration_z_min: 2.0,
-      expiry_profile_enabled: true, expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
+      expiry_profile_start_ist: '14:00', require_flow_alignment: true, required_for_gate: false,
     },
     expiry_profile: {
       enabled: true, require_expansion: true, min_avwap_grade: 'A', min_abs_flow: 68, max_extension_atr: 1.0, emit_tighten_note: true,
@@ -80,8 +79,15 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
 }));
 
+// Retrying after a revision conflict has to re-read the revision the server holds
+// now, so the panel calls refetch(). It resolves with whatever `queryData` is at
+// that moment, which is how a test moves the server on underneath the draft.
+const refetchConfig = vi.fn(async () => ({ data: queryData }));
+
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: queryData, isLoading: !queryData, error: null }),
+  useNavigatorConfig: () => ({
+    data: queryData, isLoading: !queryData, error: null, refetch: refetchConfig,
+  }),
   useSetNavigatorConfig: () => ({ mutate: setConfig, isPending: false, isError: false, error: null }),
   useResetNavigatorConfig: () => ({ mutate: resetConfig }),
   useValidateNavigatorConfig: () => ({ mutate: vi.fn() }),
@@ -104,14 +110,18 @@ describe('NavigatorSettingsPanel', () => {
 
   it('loads server config disabled by default and shows the master toggle off', () => {
     render(<NavigatorSettingsPanel />);
-    const toggle = screen.getByRole('switch', { name: 'Enable Navigator' });
+    const toggle = screen.getByRole('switch', { name: 'Value-Flow Navigator engine' });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    // A freshly loaded config is not a draft. The bar no longer says "Saved" —
+    // the clean state is the quiet one, and the absence of the unsaved warning
+    // is what carries the meaning. Reset stays reachable either way.
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reset to defaults/i })).toBeInTheDocument();
   });
 
   it('does not autosave — toggling shows Unsaved changes and requires Apply', () => {
     render(<NavigatorSettingsPanel />);
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Navigator' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(setConfig).not.toHaveBeenCalled();
 
@@ -120,6 +130,69 @@ describe('NavigatorSettingsPanel', () => {
     const [body] = setConfig.mock.calls[0];
     expect(body.expected_revision).toBe(1);
     expect(body.config.enabled).toBe(true);
+  });
+
+  it('retrying after a revision conflict actually overwrites', async () => {
+    // The banner says "Reload or Apply to overwrite". `baseRevision` is refreshed
+    // only while !dirty, and a conflict leaves you dirty by definition — so every
+    // retry resent the revision the server had just rejected and 409'd forever.
+    // The user was offered two ways out where only one worked, and the one that
+    // worked (Reload) throws their edits away.
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onError?.(new Error('REVISION_CONFLICT: expected 1, found 2'));
+    });
+    render(<NavigatorSettingsPanel />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    expect(setConfig.mock.calls[0][0].expected_revision).toBe(1);
+    expect(await screen.findByText(/changed elsewhere/i)).toBeInTheDocument();
+
+    // Someone else's write landed; the server is now at revision 2.
+    queryData = makeRecord({}, { revision: 2 });
+    setConfig.mockImplementation((_body, opts) => {
+      opts?.onSuccess?.({ record: { ...queryData!.record, revision: 3 } });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    await waitFor(() => expect(setConfig).toHaveBeenCalledTimes(2));
+    expect(refetchConfig).toHaveBeenCalled();
+    expect(setConfig.mock.calls[1][0].expected_revision).toBe(2);
+    expect(setConfig.mock.calls[1][0].config.enabled).toBe(true);
+  });
+
+  it('treats a stocks-only scope with stocks switched off as empty', () => {
+    // The single-stock master switch drops every stock from the universe backend
+    // side, so this scope scans nothing at all. The guard only looked at whether
+    // the stock LIST was populated, so it let Apply through with no warning and
+    // Navigator saved a scope that could never produce a row.
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: false,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.getByText(/scans nothing at all/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
+  });
+
+  it('a stocks-only scope with stocks switched ON is not empty', () => {
+    queryData = makeRecord({
+      scan_scope_mode: 'custom',
+      scan_indices: [],
+      scan_stocks: ['RELIANCE'],
+      scan_all_stocks: false,
+      scan_stock_contracts: true,
+    });
+    render(<NavigatorSettingsPanel />);
+
+    expect(screen.queryByText(/scans nothing at all/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
+    expect(screen.getByRole('button', { name: /Apply changes/i })).not.toBeDisabled();
   });
 
   it('gate mode is locked until calibration is ready', () => {
@@ -146,29 +219,31 @@ describe('NavigatorSettingsPanel', () => {
     expect(resetConfig).toHaveBeenCalledTimes(1);
   });
 
+  // The one "What Navigator scans" section became three, matching SuperTrend's
+  // order (chart source → instruments → contracts) so the two engines read the
+  // same way. "Instruments" and "Contracts" each appear twice — the scope wrapper
+  // and the group inside it — so these are matched by getAllByText.
+  const SECTION_TITLES = [
+    'Chart source', 'Instruments', 'Contracts',
+    'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+    'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
+    'Fusion and eligibility', 'Data retention',
+  ];
+
   it('renders every settings section', () => {
     render(<NavigatorSettingsPanel />);
-    for (const title of [
-      'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
-      'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
-      'Fusion and eligibility', 'Data retention and diagnostics',
-    ]) {
-      expect(screen.getByText(title)).toBeInTheDocument();
+    for (const title of SECTION_TITLES) {
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0);
     }
   });
 
   describe('Scan scope — shared with SuperTrend, or Navigator\'s own', () => {
     it('defaults to shared and shows what the engine currently covers, read-only', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText(/Following SuperTrend:/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true'); // mirrors mocked engine cfg
-      // Navigator's OWN signal source stays visible on a shared scope: sharing
-      // covers the instrument universe only (navigator/runtime._resolve_nav_universe),
-      // and navigator/runtime reads `record.config.scan_source` regardless. It
-      // used to be hidden here while the engine's source was displayed above as
-      // if it were Navigator's.
-      expect(screen.getByText('Signal source')).toBeInTheDocument(); // no custom pickers
+      expect(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('Chart source')).toBeInTheDocument();
     });
 
     it('the dead read-only "Engine source" row is gone', () => {
@@ -179,25 +254,25 @@ describe('NavigatorSettingsPanel', () => {
 
     it('switching to its own scope reveals the universe pickers and a contracts choice', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
-      expect(screen.getByText('Signal source')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
+      expect(screen.getByText('Chart source')).toBeInTheDocument();
       expect(screen.getByText('Indices')).toBeInTheDocument();
       expect(screen.queryByText('Currently covering')).not.toBeInTheDocument();
     });
 
     it('seeds a fresh custom scope from the engine so the first save is never empty', () => {
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
       expect(body.config.scan_scope_mode).toBe('custom');
-      expect(body.config.scan_indices).toEqual(['NIFTY 50', 'NIFTY BANK']); // copied, not blank
+      expect(body.config.scan_indices).toEqual(['NIFTY 50', 'NIFTY BANK']);
     });
 
     it('blocks Apply and warns when a custom scope has nothing selected', () => {
       queryData = makeRecord({ scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'] });
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('checkbox', { name: 'NIFTY' })); // clear the only pick
+      fireEvent.click(screen.getByRole('checkbox', { name: 'NIFTY' }));
       expect(screen.getByText(/Navigator scans nothing at all/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
     });
@@ -214,32 +289,20 @@ describe('NavigatorSettingsPanel', () => {
     it('a configured custom universe survives flipping to shared and back', () => {
       queryData = makeRecord({ scan_scope_mode: 'custom', scan_stocks: ['RELIANCE'] });
       render(<NavigatorSettingsPanel />);
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Same as SuperTrend' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Like SuperTrend' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
       fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
       const [body] = setConfig.mock.calls[0];
-      expect(body.config.scan_stocks).toEqual(['RELIANCE']); // not re-seeded over
+      expect(body.config.scan_stocks).toEqual(['RELIANCE']);
     });
 
-    // The single-stock master switch is gated by the SCAN SCOPE link, because
-    // that is the axis the backend gates it on: navigator/runtime._resolve_nav_universe
-    // and kite_engine.service both read `nav_cfg.scan_stock_contracts` only when
-    // `scan_scope_mode == "custom"`, and otherwise use the engine's value.
-    //
-    // It was previously rendered inside the CONTRACTS group, which is linked by
-    // `strike_moneyness == null` instead. That put it on the wrong axis in both
-    // directions: shown-but-ignored on a shared scope with its own contracts,
-    // and hidden-but-live on a custom scope following the engine's contracts.
     describe('the single-stock switch follows the scope the backend reads', () => {
       const SWITCH = 'Navigator scan single-stock underlyings';
 
       it('is hidden on a shared scope, where the engine\'s value is what applies', () => {
         queryData = makeRecord({ scan_scope_mode: 'shared', strike_moneyness: ['ATM'] });
         render(<NavigatorSettingsPanel />);
-        // Contracts is unlinked here, so the Contracts controls ARE on screen…
-        expect(screen.getByText('Strike coverage')).toBeInTheDocument();
-        // …but the stock switch must not be, or it would save a value the
-        // backend never reads while the board kept scanning stocks.
+        expect(screen.getByText('Strike range')).toBeInTheDocument();
         expect(screen.queryByRole('switch', { name: SWITCH })).not.toBeInTheDocument();
       });
 
@@ -248,9 +311,7 @@ describe('NavigatorSettingsPanel', () => {
           scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'], strike_moneyness: null,
         });
         render(<NavigatorSettingsPanel />);
-        // Contracts is linked, so its controls are summarised away…
-        expect(screen.queryByText('Strike coverage')).not.toBeInTheDocument();
-        // …and the stock switch, which IS live for this user, stays reachable.
+        expect(screen.queryByText('Strike range')).not.toBeInTheDocument();
         expect(screen.getByRole('switch', { name: SWITCH })).toBeInTheDocument();
       });
 
@@ -269,7 +330,7 @@ describe('NavigatorSettingsPanel', () => {
       it('seeds from the engine, so an indices-only engine does not silently gain stocks', () => {
         engineCfg = { ...engineCfg, scan_stock_contracts: false };
         render(<NavigatorSettingsPanel />);
-        fireEvent.click(screen.getByRole('button', { name: 'Instruments: Its own' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Instruments: Own' }));
         fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
         expect(setConfig.mock.calls[0][0].config.scan_stock_contracts).toBe(false);
       });
@@ -295,7 +356,7 @@ describe('NavigatorSettingsPanel', () => {
       const toggle = screen.getByRole('switch', { name: 'Auto-Execute Originated' });
       expect(toggle).toHaveAttribute('aria-checked', 'false');
       fireEvent.click(toggle);
-      expect(toggle).toHaveAttribute('aria-checked', 'false'); // still locked — Full not selected yet
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
     it('auto-execute originated is locked until calibration is ready even when Full is selected', () => {
@@ -303,7 +364,7 @@ describe('NavigatorSettingsPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
       const toggle = screen.getByRole('switch', { name: 'Auto-Execute Originated' });
       fireEvent.click(toggle);
-      expect(toggle).toHaveAttribute('aria-checked', 'false'); // calibration_readiness is 'not_ready' by default
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
     it('auto-execute originated is togglable once Full is selected and calibration is ready', () => {
@@ -338,7 +399,7 @@ describe('NavigatorSettingsPanel', () => {
   describe('Strategy Definition is the "Advanced" (collapsed, protected) group', () => {
     it('is collapsed by default, badged "6/6 at manual default", and shows no revert buttons', () => {
       render(<NavigatorSettingsPanel />);
-      const heading = screen.getByText('Advanced — Strategy Definition (from the source manual)');
+      const heading = screen.getByText('Strategy definition (from the source manual)');
       expect(heading).toBeInTheDocument();
       expect(screen.getByText('6/6 at manual default')).toBeInTheDocument();
       const advancedDetails = heading.closest('details') as HTMLDetailsElement;
@@ -348,13 +409,11 @@ describe('NavigatorSettingsPanel', () => {
 
     it('every ordinary settings section is a sibling, NOT nested inside the Strategy Definition group', () => {
       render(<NavigatorSettingsPanel />);
-      const advancedDetails = screen.getByText('Advanced — Strategy Definition (from the source manual)').closest('details') as HTMLDetailsElement;
-      for (const title of [
-        'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
-        'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
-        'Fusion and eligibility', 'Data retention and diagnostics',
-      ]) {
-        expect(advancedDetails.contains(screen.getByText(title))).toBe(false);
+      const advancedDetails = screen.getByText('Strategy definition (from the source manual)').closest('details') as HTMLDetailsElement;
+      for (const title of SECTION_TITLES) {
+        for (const node of screen.getAllByText(title)) {
+          expect(advancedDetails.contains(node)).toBe(false);
+        }
       }
     });
 
@@ -368,8 +427,7 @@ describe('NavigatorSettingsPanel', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.getByText(/Dynamic watches only the strikes closest to the price/)).toBeInTheDocument();
       expect(screen.getByText(/Below a confidence score of 60, Navigator isn't sure enough/)).toBeInTheDocument();
-      // No element in the Strategy Definition group relies on a hover-only "?" cursor.
-      const advancedDetails = screen.getByText('Advanced — Strategy Definition (from the source manual)').closest('details') as HTMLDetailsElement;
+      const advancedDetails = screen.getByText('Strategy definition (from the source manual)').closest('details') as HTMLDetailsElement;
       const helpCursorEls = Array.from(advancedDetails.querySelectorAll('*')).filter((el) => (el as HTMLElement).style.cursor === 'help');
       expect(helpCursorEls.length).toBe(0);
     });
@@ -408,13 +466,13 @@ describe('NavigatorSettingsPanel', () => {
       fireEvent.change(extremeZoneInput, { target: { value: '99' } });
       expect(screen.getByText('4/6 at manual default')).toBeInTheDocument();
       fireEvent.click(screen.getAllByRole('button', { name: /revert/i })[0]);
-      expect(extremeZoneInput.value).toBe('99'); // untouched
+      expect(extremeZoneInput.value).toBe('99');
       expect(screen.getByText('5/6 at manual default')).toBeInTheDocument();
     });
 
     it('the old sections point to the moved fields instead of duplicating an editable control', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getAllByText(/Moved to Strategy Definition/).length).toBeGreaterThanOrEqual(4);
+      expect(screen.getAllByText(/Set under Strategy definition/).length).toBeGreaterThanOrEqual(4);
     });
   });
 

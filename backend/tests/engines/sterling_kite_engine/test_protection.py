@@ -59,7 +59,7 @@ class _FakeClient:
     def __init__(self, cancel_error: str | None = None, *, gtt_status: str = "active",
                  ltp: float = 0.0, move_fails: bool = False, order_history: list | None = None,
                  gtt_book: list | None = None, order_book: list | None = None,
-                 book_error: str | None = None):
+                 book_error: str | None = None, net_positions: dict | None = None):
         self.sells: list = []
         self.cancelled: list = []
         self.gtts: list = []
@@ -73,6 +73,9 @@ class _FakeClient:
         self.gtt_book = gtt_book or []
         self.order_book = order_book or []
         self.book_error = book_error
+        #: GET /portfolio/positions. Default: the broker still holds everything, so a
+        #: test must opt IN to "the position is gone" rather than get it by accident.
+        self.net_positions = net_positions if net_positions is not None else {"net": []}
 
     async def get_gtts(self):
         self.calls.append("get_gtts")
@@ -131,6 +134,12 @@ class _FakeClient:
         self.calls.append("order_history")
         return self.order_history
 
+    async def get_positions_raw(self):
+        self.calls.append("positions")
+        if self.book_error == "positions":
+            raise RuntimeError("positions unreachable")
+        return self.net_positions
+
 
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
@@ -138,6 +147,7 @@ def _no_network(monkeypatch):
         return {"ok": True}
     monkeypatch.setattr(_ticker_manager, "unsubscribe", _noop)
     monkeypatch.setattr(_ticker_manager, "subscribe", _noop)
+    monitor.forget_holdings()
     monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
                         lambda *a, **k: None)
     # The "what became of this GTT?" answer is cached for 15s per (uid, symbol, trigger).
@@ -182,7 +192,10 @@ class TestBrokerStopWinsThePriceRace:
 
         await monitor.on_tick("p2", 777, 79.0, client=client)
 
-        assert client.calls == ["cancel", "sell"]
+        # Order, not an exact list — the exit path also reads the portfolio before
+        # selling (see "never sell what we do not hold"). What matters here is that
+        # the cancel precedes the sell; cancelling after it cannot prevent anything.
+        assert client.calls.index("cancel") < client.calls.index("sell")
         assert client.cancelled == [555]
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
         assert pos.get("p2", "NIFTY24JUN24000CE").status == pos.CLOSED
@@ -211,7 +224,8 @@ class TestBrokerStopWinsThePriceRace:
         out = await monitor.on_tick("p4", 777, 79.0, client=client)
 
         assert out == "NIFTY24JUN24000CE"
-        assert client.calls == ["sell"]
+        assert "cancel" not in client.calls, "there was no trigger to cancel"
+        assert "sell" in client.calls
 
 
 # ── 2. the orphaned GTT ───────────────────────────────────────────────────────
@@ -957,10 +971,11 @@ class TestAMissingTriggerIsProvedNotGuessed:
             "was ever going to exit this position, so standing down abandons it"
         )
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
-        assert client.calls[:5] == ["cancel", "get_gtt", "get_gtts", "get_orders", "sell"], (
+        assert client.calls[:4] == ["cancel", "get_gtt", "get_gtts", "get_orders"], (
             "the two confirming reads must both happen, and only after the cheap one fails"
         )
-        assert client.calls[5:] == ["cancel"], "the post-sell orphan chase still runs"
+        # then the holdings check, the sell, and the post-sell orphan chase
+        assert client.calls[4:] == ["positions", "sell", "cancel"]
 
     @pytest.mark.asyncio
     async def test_a_filled_exit_in_the_order_book_still_blocks_our_sell(self):
@@ -1648,6 +1663,79 @@ class TestTheRowMustDescribeThisPosition:
                            legs=[("ATM", "RELIANCE25JUN3000PE", 3000.0, None)])]
         assert service._live_red_count(p, rows) is None
 
+
+class TestTheCounterOutlivesTheSignal:
+    """A row exists only where there was an entry TRANSITION.
+
+    So a position routinely outlives the row that opened it, and the counter used to
+    stop being refreshed at exactly that moment — the count froze at its last value
+    and the red-count exit quietly stopped working for the rest of the trade. The scan
+    computes the regime for every instrument it evaluates regardless of whether a row
+    comes out; the snapshot now keeps that reading.
+    """
+
+    class _Snap:
+        def __init__(self, underlying_reds=None, contract_reds=None):
+            self.underlying_reds = underlying_reds or {}
+            self.contract_reds = contract_reds or {}
+
+    @staticmethod
+    def _pos(symbol, *, signal_direction, underlying="RELIANCE"):
+        return pos.OpenPosition(uid="m", symbol=symbol, exchange="NFO", qty=250,
+                                direction="long", signal_direction=signal_direction,
+                                underlying=underlying, status=pos.OPEN)
+
+    def test_a_spot_position_reads_the_scan_when_its_signal_has_ended(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 2, "short": 1}})
+        assert service._live_red_count(p, [], snap) == 2
+
+    def test_the_scan_fallback_still_respects_the_signal_direction(self):
+        """The trap this counter has fallen into three times. A bear position's reds
+        are the SHORT count; reading the long count would market-sell a position whose
+        own trend is perfectly intact."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 3, "short": 0}})
+        assert service._live_red_count(p, [], snap) == 0
+
+    def test_a_held_contract_reads_its_own_premium_series(self):
+        """Keyed by the exact symbol held, so it cannot pick up another strike's count
+        the way an underlying match would."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN2900CE", signal_direction="long")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 0, "short": 0}},
+                          contract_reds={"RELIANCE25JUN2900CE": 3})
+        assert service._live_red_count(p, [], snap) == 3
+
+    def test_a_matching_row_still_wins_over_the_scan_reading(self):
+        """A row is scoped to the exact signal, not just the instrument, so it stays
+        the more specific answer."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        snap = self._Snap(underlying_reds={"RELIANCE": {"long": 0, "short": 3}})
+        assert service._live_red_count(p, [_spot_row(direction="short", current_reds=1)],
+                                       snap) == 1
+
+    def test_an_instrument_the_scan_never_looked_at_is_still_unknown(self):
+        """The genuinely unknowable case must stay None — a 0 here would report
+        "nothing against us" and disarm the exit."""
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, [], self._Snap(underlying_reds={"INFY": {"long": 2}})) is None
+
+    def test_a_missing_direction_in_the_reading_is_unknown_not_zero(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000PE", signal_direction="short")
+        assert service._live_red_count(p, [], self._Snap(
+            underlying_reds={"RELIANCE": {"long": 2}})) is None
+
+    def test_no_snapshot_at_all_behaves_as_before(self):
+        from app.services.kite_engine import service
+        p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
+        assert service._live_red_count(p, []) is None
+
     def test_no_row_at_all_is_unknown(self):
         from app.services.kite_engine import service
         p = self._pos("RELIANCE25JUN3000CE", signal_direction="long")
@@ -1920,3 +2008,498 @@ class TestASessionlessClientCannotManufactureEvidence:
         paper = KiteClient(api_key="ak", access_token="", is_paper=True)
         assert await paper.get_gtts() == []
         assert await paper.get_orders() == []
+
+
+# ── 25. the risk cap has to stop the ORDER, not just the sizer ────────────────
+
+class _CapitalClient(_QuotingClient):
+    """A broker that answers a margins call, so risk sizing has a real budget to
+    compare against. Without one, available_fo_capital returns 0 and the sizer
+    deliberately keeps the 1-lot floor rather than halt every entry on an API blip."""
+
+    def __init__(self, ltp: float = 90.0, capital: float = 50_000.0):
+        super().__init__(ltp=ltp)
+        self.capital = capital
+
+    async def get_margins(self, segment="equity"):
+        return {"available": {"live_balance": self.capital}}
+
+
+class TestTheRiskCapBlocksTheEntryNotJustTheSize:
+    """`size_position` refuses when one lot already breaks risk_pct, returning
+    blocked=True and qty 0. That is only half the guarantee: `qty` still holds the
+    un-risk-sized default from the signal args, so a caller that read only `qty > 0`
+    would place the very order the cap just refused. The sizer is well covered; the
+    CALLER path was not, and that is exactly where the two previous rounds of this
+    work went wrong — right module, wrong path."""
+
+    @staticmethod
+    def _cfg(uid, **over):
+        from app.services.kite_engine import state
+        cfg = state.get_config(uid).model_dump()
+        cfg.update({"risk_sizing": True, "risk_pct": 0.1, "max_lots": 10}, **{})
+        cfg.update(over)
+        from app.engines.sterling_kite_engine.schemas import EngineConfigModel
+        return state.set_config(uid, EngineConfigModel(**cfg))
+
+    @pytest.mark.asyncio
+    async def test_an_over_budget_signal_places_no_order(self):
+        from app.services.kite_engine import service, state
+        state.reset("cap1")
+        pos.reset("cap1")
+        # ₹50,000 × 0.1% = ₹50 of budget against a 250-lot option risking far more.
+        self._cfg("cap1")
+        client = _CapitalClient(ltp=90.0, capital=50_000.0)
+
+        await service._make_place_cb(client, "cap1")(_spot_row(), None)
+
+        assert client.placed == [], (
+            "the sizer refused every size that honours risk_pct, and the entry went in "
+            "anyway at the un-risk-sized default")
+        kinds = [e.kind for e in state.activity("cap1")]
+        assert "order_blocked" in kinds and "order_placed" not in kinds
+
+    @pytest.mark.asyncio
+    async def test_the_block_says_what_to_change(self):
+        from app.services.kite_engine import service, state
+        state.reset("cap2")
+        pos.reset("cap2")
+        self._cfg("cap2")
+
+        await service._make_place_cb(_CapitalClient(), "cap2")(_spot_row(), None)
+
+        msg = next(e.message for e in state.activity("cap2") if e.kind == "order_blocked")
+        assert "Risk per trade" in msg and "minimum lot" in msg, (
+            f"a refusal the user cannot act on is a dead end: {msg}")
+
+    @pytest.mark.asyncio
+    async def test_allow_min_lot_over_risk_takes_the_smallest_lot(self):
+        """The escape hatch is a deliberate choice, not the default — and it must
+        actually reach the order."""
+        from app.services.kite_engine import service, state
+        state.reset("cap3")
+        pos.reset("cap3")
+        self._cfg("cap3", allow_min_lot_over_risk=True)
+
+        client = _CapitalClient(ltp=90.0, capital=50_000.0)
+        await service._make_place_cb(client, "cap3")(_spot_row(), None)
+
+        assert len(client.placed) == 1, "the opt-in did not reach the order path"
+        assert client.placed[0][2] == 250, "should take exactly one lot"
+
+    @pytest.mark.asyncio
+    async def test_a_comfortable_budget_still_trades(self):
+        """The cap must not become a blanket halt."""
+        from app.services.kite_engine import service, state
+        state.reset("cap4")
+        pos.reset("cap4")
+        self._cfg("cap4", risk_pct=50.0)
+
+        client = _CapitalClient(ltp=90.0, capital=50_000_000.0)
+        await service._make_place_cb(client, "cap4")(_spot_row(), None)
+
+        assert len(client.placed) == 1
+
+    @pytest.mark.asyncio
+    async def test_unknown_capital_does_not_halt_every_entry(self):
+        """A failed margins call returns 0. Reading that as "over budget" would turn a
+        transient broker outage into a silent stop on all automatic entries — which
+        looks exactly like the engine being broken."""
+        from app.services.kite_engine import service, state
+        state.reset("cap5")
+        pos.reset("cap5")
+        self._cfg("cap5")
+
+        class _NoMargins(_QuotingClient):
+            async def get_margins(self, segment="equity"):
+                raise RuntimeError("margins unavailable")
+
+        client = _NoMargins(ltp=90.0)
+        await service._make_place_cb(client, "cap5")(_spot_row(), None)
+
+        assert len(client.placed) == 1, "a margins outage must not halt entries"
+
+
+# ── 26. the premium translation needs UNDERLYING-domain inputs ────────────────
+
+class TestTheTranslationIsFedTheUnderlyingNotThePremium:
+    """`_resolve_premium_stop` carries a SuperTrend level on the UNDERLYING's chart into
+    a premium via delta, so both its `spot` and `trail_level` must be underlying-domain
+    numbers. A derivatives-source row has neither: its ST ran on the contract's own
+    premium series, so `spot` is that premium (place_cb sees the raw row, before
+    grouping zeroes it) and `stop_loss` is a premium level too.
+
+    Normal derivatives rows never reach this — their leg carries premium_spot/premium_sl
+    so entry_px and stop_px are already set. A leg that arrived without them (a legacy
+    cached row) did fall through, and priced a ₹90 premium against a ₹3000 strike: the
+    vol solve fails, delta collapses to the ±0.5 fallback, and the resulting invented
+    number became the broker's trigger."""
+
+    @staticmethod
+    def _deriv_row_without_premium_stop():
+        from app.engines.sterling_kite_engine.schemas import (
+            AlignmentChip, EngineSignalRow, OptionLeg)
+        return EngineSignalRow(
+            underlying="RELIANCE", token=111, exchange="NFO", regime="BULL",
+            alignment=AlignmentChip(fast=1, mid=1, slow=1),
+            direction="long", option_type="CE", source="derivatives",
+            legs=[OptionLeg(moneyness="ATM", option_type="CE",
+                            option_symbol="RELIANCE25JUN3000CE", strike=3000.0,
+                            expiry="2026-06-26", lot_size=250)],  # no premium_spot/_sl
+            spot=90.0,                 # the CONTRACT's premium, not an index level
+            underlying_spot=3010.0,    # the underlying, captured separately
+            stop_loss=70.0,            # a PREMIUM stop, not an underlying trail
+            score=85.0, timestamp_ms=1000)
+
+    @pytest.mark.asyncio
+    async def test_a_derivatives_row_with_no_leg_premium_stop_is_refused(self):
+        from app.services.kite_engine import service, state
+        state.reset("dm1")
+        pos.reset("dm1")
+        client = _QuotingClient(ltp=90.0)
+
+        await service._make_place_cb(client, "dm1")(
+            self._deriv_row_without_premium_stop(), None)
+
+        assert client.placed == [], (
+            "opened a position whose broker trigger was derived by pricing a premium "
+            "as if it were the underlying")
+        kinds = [e.kind for e in state.activity("dm1")]
+        assert "order_blocked" in kinds and "order_placed" not in kinds
+
+    @pytest.mark.asyncio
+    async def test_a_spot_row_still_translates_and_trades(self):
+        """The guard must be narrow: a spot-source row's levels ARE underlying-domain,
+        which is the case the translation exists for."""
+        from app.services.kite_engine import service, state
+        state.reset("dm2")
+        pos.reset("dm2")
+        client = _QuotingClient(ltp=90.0)
+
+        await service._make_place_cb(client, "dm2")(_spot_row(), None)
+
+        assert len(client.placed) == 1
+        _sym, _side, _size, stop_loss = client.placed[0]
+        assert stop_loss is not None and stop_loss > 0
+
+    @pytest.mark.asyncio
+    async def test_the_translation_is_given_the_underlying_spot(self):
+        """Pins the input itself, so the board and auto-exec cannot drift apart on
+        which number they call 'spot'."""
+        from app.services.kite_engine import service, state
+        state.reset("dm3")
+        pos.reset("dm3")
+        seen = {}
+
+        async def _spy(client, **kw):
+            seen.update(kw)
+            return 90.0, 70.0, 0.5
+
+        row = _spot_row()
+        row.underlying_spot = 3010.0
+        row.spot = 3010.0
+        import app.services.kite_engine.service as svc
+        orig = svc._resolve_premium_stop
+        svc._resolve_premium_stop = _spy
+        try:
+            await service._make_place_cb(_QuotingClient(), "dm3")(row, None)
+        finally:
+            svc._resolve_premium_stop = orig
+
+        assert seen.get("spot") == 3010.0, (
+            f"the translation was handed {seen.get('spot')} as the underlying level")
+
+
+# ── the other end of the trade: an exit we were never told about ──────────────
+
+class TestClosedPositionsAreReconciled:
+    """`_reconcile_pending_positions` recovers an ENTRY whose postback was lost. This
+    is the mirror at the exit, and it is the more dangerous half.
+
+    An exit fills at Zerodha — a GTT firing, a square-off in the Kite app, or the exit
+    the monitor deliberately stood down for when it could not confirm a cancel — and
+    we hear about it only through an order postback. Miss that message and the registry
+    still believes we hold the position. The board lies, the auto-open slot stays
+    blocked forever, and the expiry square-off, the time stop and the tick monitor
+    will each place a SELL for something the account no longer owns: a naked short.
+    """
+
+    @staticmethod
+    def _open(uid, *, qty=50, gtt_id=555, guard="NIFTY24JUN24000CE"):
+        pos.reset(uid)
+        return pos.register(pos.OpenPosition(
+            uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+            qty=qty, lot_size=50, entry_premium=100.0, fill_price=100.0,
+            stop_premium=80.0, order_id="E1", status=pos.OPEN, gtt_id=gtt_id,
+            guard_key=guard))
+
+    @staticmethod
+    def _net(qty, *, sell_price=0.0):
+        """Kite keeps a squared-off position in `net` with quantity 0 for the rest of
+        the day — that row, not its absence, is what says it closed."""
+        return {"net": [{"tradingsymbol": "NIFTY24JUN24000CE", "exchange": "NFO",
+                         "quantity": qty, "sell_price": sell_price}]}
+
+    @pytest.mark.asyncio
+    async def test_a_position_the_broker_no_longer_holds_is_closed(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c1")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        cleared: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open",
+                            lambda uid, key: cleared.append(key))
+
+        await ksvc._reconcile_closed_positions(client, "c1")
+
+        held = pos.get("c1", "NIFTY24JUN24000CE")
+        assert held.status == pos.CLOSED
+        assert "reconciled closed at broker" in held.exit_reason
+        assert cleared == ["NIFTY24JUN24000CE"], "the auto-open slot stayed blocked"
+        assert client.cancelled == [555], "our trigger was left resting over nothing"
+
+    @pytest.mark.asyncio
+    async def test_it_never_places_an_order(self, monkeypatch):
+        """Reconciliation repairs bookkeeping. Selling on the strength of a positions
+        read — which can be stale or wrong — is exactly what must not happen here."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c2")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c2")
+
+        assert client.sells == []
+
+    @pytest.mark.asyncio
+    async def test_the_exit_price_is_taken_from_the_broker_not_invented(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c3")
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        booked: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+        monkeypatch.setattr(ksvc.state, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        await ksvc._reconcile_closed_positions(client, "c3")
+
+        # (142.5 − 100.0) × 50
+        assert booked == [pytest.approx(2125.0)]
+
+    @pytest.mark.asyncio
+    async def test_no_exit_price_means_no_fabricated_pnl(self, monkeypatch):
+        """A wrong realized number feeds the daily-loss breaker. Closing the position
+        is the urgent part; guessing what it closed at is not."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c4")
+        client = _FakeClient(net_positions=self._net(0))  # no sell_price
+        booked: list = []
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+        monkeypatch.setattr(ksvc.state, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        await ksvc._reconcile_closed_positions(client, "c4")
+
+        assert pos.get("c4", "NIFTY24JUN24000CE").status == pos.CLOSED
+        assert booked == []
+
+    @pytest.mark.asyncio
+    async def test_a_still_held_position_is_left_alone(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c5")
+        client = _FakeClient(net_positions=self._net(50))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c5")
+
+        assert pos.get("c5", "NIFTY24JUN24000CE").status == pos.OPEN
+        assert client.cancelled == []
+
+    @pytest.mark.asyncio
+    async def test_a_symbol_absent_from_the_book_is_not_evidence_of_a_close(self, monkeypatch):
+        """A carry-over position, or simply a symbol the day's book does not list, must
+        not be closed on absence — only a present row with quantity 0 proves an exit."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c6")
+        client = _FakeClient(net_positions={"net": []})
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c6")
+
+        assert pos.get("c6", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_failed_positions_read_changes_nothing(self, monkeypatch):
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c7")
+        client = _FakeClient(book_error="positions")
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c7")
+
+        assert pos.get("c7", "NIFTY24JUN24000CE").status == pos.OPEN
+
+    @pytest.mark.asyncio
+    async def test_a_partial_exit_elsewhere_resizes_rather_than_closes(self, monkeypatch):
+        """Overselling on the next exit is the failure being prevented: the trail and
+        the GTT must be sized to what is actually held."""
+        from app.services.kite_engine import service as ksvc
+
+        self._open("c8", qty=150)
+        client = _FakeClient(net_positions=self._net(50))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c8")
+
+        held = pos.get("c8", "NIFTY24JUN24000CE")
+        assert (held.status, held.qty) == (pos.OPEN, 50)
+
+    @pytest.mark.asyncio
+    async def test_a_pending_entry_is_left_to_its_own_reconciler(self, monkeypatch):
+        """A PENDING entry legitimately has no holding yet — closing it on that basis
+        would delete a position that is about to exist."""
+        from app.services.kite_engine import service as ksvc
+
+        p = self._open("c9")
+        pos.register(p.__class__(**{**p.__dict__, "status": pos.PENDING}))
+        client = _FakeClient(net_positions=self._net(0, sell_price=142.5))
+        monkeypatch.setattr(ksvc.state, "clear_auto_open", lambda uid, key: None)
+
+        await ksvc._reconcile_closed_positions(client, "c9")
+
+        assert pos.get("c9", "NIFTY24JUN24000CE").status == pos.PENDING
+
+
+# ── the last guard: never sell what we do not hold ────────────────────────────
+
+class TestTheExitChecksWhatItIsSelling:
+    """Everything above reasons about the broker's TRIGGER. None of it notices a
+    position closed with no trigger involved at all — squared off in the Kite app, or
+    an exit whose postback was lost before the next scan's reconcile pass. On the next
+    tick through the stop the monitor would SELL a position the account no longer owns,
+    which opens a naked short. Asking what we hold is the only guard that depends on
+    neither a postback nor the GTT bookkeeping.
+    """
+
+    @staticmethod
+    def _net(qty, symbol="NIFTY24JUN24000CE"):
+        return {"net": [{"tradingsymbol": symbol, "exchange": "NFO", "quantity": qty}]}
+
+    @pytest.mark.asyncio
+    async def test_a_position_closed_elsewhere_is_reconciled_not_sold(self):
+        _held("h1", gtt_id=0)
+        client = _FakeClient(net_positions=self._net(0))
+
+        out = await monitor.on_tick("h1", 777, 79.0, client=client)
+
+        assert out is None
+        assert client.sells == [], "sold a position the account no longer held"
+        held = pos.get("h1", "NIFTY24JUN24000CE")
+        assert held.status == pos.CLOSED
+        assert "holds none" in held.exit_reason
+
+    @pytest.mark.asyncio
+    async def test_a_partial_exit_elsewhere_clamps_the_sell(self):
+        """Selling the registry's larger figure would short the difference."""
+        _held("h2", gtt_id=0, qty=150)
+        client = _FakeClient(net_positions=self._net(50))
+
+        await monitor.on_tick("h2", 777, 79.0, client=client)
+
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_a_symbol_absent_from_the_book_still_exits(self):
+        """Absence is not evidence — a position carried from a previous day has no row
+        in today's book. Refusing to exit on that would strand a real position."""
+        _held("h3", gtt_id=0)
+        client = _FakeClient(net_positions={"net": []})
+
+        out = await monitor.on_tick("h3", 777, 79.0, client=client)
+
+        assert out == "NIFTY24JUN24000CE"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_portfolio_still_exits(self):
+        """Fail OPEN. A stop that will not fire because a read timed out is a worse
+        outcome than the double-sell this check is guarding against."""
+        _held("h4", gtt_id=0)
+        client = _FakeClient(book_error="positions")
+
+        out = await monitor.on_tick("h4", 777, 79.0, client=client)
+
+        assert out == "NIFTY24JUN24000CE"
+        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+
+    @pytest.mark.asyncio
+    async def test_the_portfolio_is_read_once_across_a_burst_of_ticks(self):
+        """The exit path is tick-driven; a collapsing premium delivers many ticks a
+        second. One portfolio read per tick would add latency to a stop and earn a
+        rate limit."""
+        _held("h5", gtt_id=0, stop=80.0)
+        client = _FakeClient(net_positions=self._net(50))
+
+        for _ in range(5):
+            await monitor.on_tick("h5", 777, 85.0, client=client)  # above the stop
+        # not a breach, so no probe at all yet
+        assert client.calls.count("positions") == 0
+
+        await monitor.on_tick("h5", 777, 79.0, client=client)
+        assert client.calls.count("positions") == 1
+
+    @pytest.mark.asyncio
+    async def test_our_own_sell_invalidates_the_cached_read(self):
+        _held("h6", gtt_id=0)
+        client = _FakeClient(net_positions=self._net(50))
+
+        await monitor.on_tick("h6", 777, 79.0, client=client)
+
+        assert monitor._holdings_probe.get("h6") is None, (
+            "a cached portfolio that predates our own SELL would misreport the next check"
+        )
+
+
+# ── leads closed out from the 2026-08-04 audit ────────────────────────────────
+
+class TestAFillLandingMidExitIsNotBookedTwice:
+    """Audit lead 10. Every step before the SELL awaits — the GTT cancel, the status
+    probe, the holdings read — and `on_order_update` does not take the `_exiting`
+    claim. So an exit fill can land mid-flight, close the position and book its PnL,
+    while this coroutine carries on with a `p` snapshot from before the await: a second
+    SELL, and the same loss booked twice, which trips the INR daily-loss breaker at
+    half the configured limit."""
+
+    @pytest.mark.asyncio
+    async def test_a_close_during_the_awaits_stops_the_sell(self, monkeypatch):
+        booked: list = []
+        from app.services.kite_engine import state as kstate
+        monkeypatch.setattr(kstate, "record_realized_pnl",
+                            lambda uid, amount: booked.append(amount))
+
+        p = _held("mid1", gtt_id=555, stop=80.0)
+
+        class _RacingClient(_FakeClient):
+            """The broker's own exit fill arrives while we are cancelling its trigger."""
+
+            async def delete_gtt(self, tid):
+                await monitor.on_order_update(
+                    "mid1", {"tradingsymbol": p.symbol, "status": "COMPLETE",
+                             "transaction_type": "SELL", "order_id": "GTT-FILL",
+                             "average_price": 79.0}, client=self)
+                return await super().delete_gtt(tid)
+
+        client = _RacingClient()
+
+        out = await monitor.on_tick("mid1", 777, 79.0, client=client)
+
+        assert out is None
+        assert client.sells == [], "second SELL placed after the position had closed"
+        assert len(booked) == 1, f"realized PnL booked {len(booked)} times, expected once"
+        assert pos.get("mid1", p.symbol).status == pos.CLOSED

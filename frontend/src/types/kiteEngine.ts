@@ -222,6 +222,10 @@ export interface EngineConfigModel {
   scan_expiries_stocks?: Array<'monthly'> | null;
   // The API persists zero-based series ranks for compatibility. The UI resolves
   // these private values to exact Kite-listed contract dates before displaying them.
+  /** The expiry window, shared by every engine under these names. */
+  expiry_dte_min?: number;
+  expiry_dte_max?: number;
+  avoid_expiry_day?: boolean;
   scan_weekly_series_indices?: number[];
   scan_monthly_series_indices?: number[];
   scan_monthly_series_stocks?: number[];
@@ -236,6 +240,10 @@ export interface EngineConfigModel {
   risk_sizing: boolean;
   risk_pct: number;
   max_lots: number;
+  /** Take the smallest lot even when it breaks risk_pct. Off = skip the entry. */
+  allow_min_lot_over_risk?: boolean;
+  /** 1H bars a contract's own last bar may lag the underlying's and still auto-execute. */
+  max_contract_staleness_bars?: number;
   // ── Exit / auto-exec guards (all default off / conservative) ───────────────
   // Square off an option this many calendar days before expiry (0 = off; options only).
   expiry_square_off_days?: number;

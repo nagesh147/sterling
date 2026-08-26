@@ -1,9 +1,9 @@
 # Adaptive Edge V2 — Economic Assessment and Eligibility Definition
 
-**Version:** 2.0.0-draft
-**Artifact:** A29
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
-**Depends on:** A25, A26, A27, A28
+**Version:** 2.0.0-draft  
+**Artifact:** A29  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
+**Depends on:** A25, A26, A27, A28  
 **Implementation authorization:** NONE
 
 ## 1. Purpose
