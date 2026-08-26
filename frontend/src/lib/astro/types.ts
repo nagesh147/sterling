@@ -210,6 +210,36 @@ export interface DayForecast {
   dignities: DignityHit[];
 }
 
+export type MarketPhase = "pre" | "live" | "post" | "closed";
+
+export interface LiveNow {
+  iso: string;
+  sessionIso: string;
+  weekday: string;
+  phase: MarketPhase;
+  hora: HoraInfo;
+  lagnaSign: string;
+  lagnaDegree: number;
+  nakshatra: string;
+  tithiName: string;
+  paksha: "Shukla" | "Krishna";
+  yoga: string;
+  karana: string;
+  choghadiya: string;
+  choghadiyaKind: "good" | "move" | "bad";
+  kalam: KalamFlag;
+  window: WindowSlot | null;
+  next: WindowSlot | null;
+  play: TradeAction;
+  side: TradeSide;
+  suggestion: string;
+  regime: Regime | null;
+  gap: GapCall;
+  thesis: DayThesis;
+  bellMs: number;
+  closeMs: number;
+}
+
 export const UNDERLYINGS: { id: Underlying; label: string; step: number }[] = [
   { id: "NIFTY", label: "Nifty 50", step: 50 },
   { id: "BANKNIFTY", label: "Bank Nifty", step: 100 },
