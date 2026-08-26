@@ -124,9 +124,13 @@ class GammaMoveStrategy:
 
         if not expiry_in_window(candidate.instrument.expiry, today, self.cfg):
             return GammaSignal(**base, metrics=None, state="watching",
-                               reason=(f"{candidate.days_to_expiry} days to expiry is outside "
-                                       f"the {self.cfg.min_days_to_expiry}-"
-                                       f"{self.cfg.max_days_to_expiry} day window"))
+                               reason=(
+                                   f"{candidate.days_to_expiry} days to expiry is outside "
+                                   f"the {self.cfg.expiry_dte_min}-{self.cfg.expiry_dte_max} "
+                                   f"day window"
+                                   + (" (expiry day excluded)"
+                                      if self.cfg.avoid_expiry_day
+                                      and candidate.days_to_expiry == 0 else "")))
         if not regime_allows(regime, candidate.option_type, self.cfg):  # type: ignore[arg-type]
             return GammaSignal(**base, metrics=None, state="watching",
                                reason=regime_reason(regime, candidate.option_type))  # type: ignore[arg-type]

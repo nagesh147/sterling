@@ -13,12 +13,37 @@ from typing import Iterable, Optional, Sequence
 from .models import InstrumentRef, OptionPairRef
 
 
+def _eligible(values: Sequence[str], today: date, *, dte_min: int, dte_max: int,
+              avoid_expiry_day: bool) -> list[str]:
+    """The listed expiries inside the configured window.
+
+    Applied before the policy chooses, so "nearest" means nearest ELIGIBLE
+    rather than nearest listed — a window that excluded the front contract would
+    otherwise be silently ignored by every policy that reaches for it first.
+    """
+    from datetime import datetime
+    out = []
+    for value in values:
+        try:
+            dte = (datetime.strptime(value[:10], "%Y-%m-%d").date() - today).days
+        except (ValueError, TypeError):
+            continue
+        if avoid_expiry_day and dte == 0:
+            continue
+        if dte_min <= dte <= dte_max:
+            out.append(value)
+    return out
+
+
 def select_expiry(
     listed: Sequence[str],
     *,
     policy: str,
     today: date,
     explicit: str = "",
+    dte_min: int = 0,
+    dte_max: int = 3650,
+    avoid_expiry_day: bool = False,
 ) -> str:
     """Pick one expiry from the listed set (ISO ``YYYY-MM-DD`` strings).
 
@@ -30,6 +55,13 @@ def select_expiry(
     values = sorted({str(e).strip() for e in listed if str(e).strip()})
     if not values:
         raise ValueError("no listed expiries available")
+    eligible = _eligible(values, today, dte_min=dte_min, dte_max=dte_max,
+                         avoid_expiry_day=avoid_expiry_day)
+    if not eligible:
+        raise ValueError(
+            f"no listed expiry falls inside {dte_min}-{dte_max} days to expiry"
+            + (" with expiry day excluded" if avoid_expiry_day else ""))
+    values = eligible
 
     iso_today = today.isoformat()
 

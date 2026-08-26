@@ -73,7 +73,10 @@ def get_config() -> GammaMoveConfig:
         known = GammaMoveConfig.field_names()
         merged = {**GammaMoveConfig().as_dict(),
                   **{k: v for k, v in dict(stored).items() if k in known}}
-        for key in ("scan_stocks", "scan_indices"):
+        for key in ("scan_stocks", "scan_indices",
+                    "scan_expiries_indices", "scan_expiries_stocks",
+                    "scan_weekly_series_indices", "scan_monthly_series_indices",
+                    "scan_monthly_series_stocks"):
             if isinstance(merged.get(key), list):
                 merged[key] = tuple(merged[key])
         return GammaMoveConfig(**merged).validate()
@@ -90,7 +93,10 @@ def set_config(values: dict[str, Any]) -> GammaMoveConfig:
     if unknown:
         raise ValueError(f"Unknown {STRATEGY_ID} config fields: {', '.join(unknown)}")
     current.update(values)
-    for key in ("scan_stocks", "scan_indices"):
+    for key in ("scan_stocks", "scan_indices",
+                "scan_expiries_indices", "scan_expiries_stocks",
+                "scan_weekly_series_indices", "scan_monthly_series_indices",
+                "scan_monthly_series_stocks"):
         if isinstance(current.get(key), list):
             current[key] = tuple(current[key])
     cfg = GammaMoveConfig(**current).validate()

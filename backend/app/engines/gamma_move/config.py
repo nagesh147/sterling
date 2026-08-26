@@ -37,6 +37,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Optional
 
+from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES
+
 LEVEL_TIMEFRAMES: frozenset[str] = frozenset({"day", "60minute", "15minute"})
 TRIGGER_TIMEFRAMES: frozenset[str] = frozenset({"5minute", "15minute", "30minute"})
 EXIT_POLICIES: frozenset[str] = frozenset({"TIME_STOP", "PERCENT_TARGET", "TRAILING_STOP"})
@@ -148,11 +150,37 @@ class GammaMoveConfig:
     strike_window_pct: float = 2.0
     max_candidates: int = 25
 
-    # --- expiry -------------------------------------------------------------
+    # --- contracts ----------------------------------------------------------
+    #: Same names, order and meaning as every other engine's contract settings.
+    #: An earlier draft called these `min_days_to_expiry`/`max_days_to_expiry`,
+    #: which is the same idea under a private name -- one more vocabulary for a
+    #: reader to hold.
+    #:
     #: The source trades only the last week or two of a contract. NSE stock
     #: options are monthly-only, so this window is roughly the 15th onward.
-    min_days_to_expiry: int = 1
-    max_days_to_expiry: int = 14
+    expiry_selection: str = "nearest"
+    expiry_dte_min: int = 0
+    expiry_dte_max: int = 14
+    #: On expiry day the open-interest signal degenerates into settlement
+    #: mechanics and the premium is nearly all gamma already -- a different
+    #: trade wearing this one's name. Previously expressed as
+    #: `min_days_to_expiry = 1`, which said the same thing less clearly.
+    avoid_expiry_day: bool = True
+    #: Which listed expiries the contract picker offers, shared vocabulary with
+    #: the other engines. Stocks are monthly-only on NSE.
+    scan_expiries_indices: tuple[str, ...] = ("weekly", "monthly")
+    scan_expiries_stocks: tuple[str, ...] = ("monthly",)
+    #: Which *listed* contracts, by rank, the Option contracts picker selects —
+    #: the same storage the SuperTrend engine's picker writes, so the control is
+    #: literally the same one rather than a lookalike.
+    #:
+    #: Ranks, not dates: "nearest listed" is rank 0 whatever date the exchange
+    #: has it on, and the exact date differs between instruments. Expired
+    #: contracts drop out on their own, and nothing is inferred from weekdays or
+    #: holidays.
+    scan_weekly_series_indices: tuple[int, ...] = (0, 1, 2, 3)
+    scan_monthly_series_indices: tuple[int, ...] = (0, 1)
+    scan_monthly_series_stocks: tuple[int, ...] = (0, 1)
 
     # --- trigger ------------------------------------------------------------
     trigger_timeframe: str = "15minute"
@@ -282,13 +310,31 @@ class GammaMoveConfig:
             raise ValueError(
                 "nothing to scan: stock_contracts is off and no indices are selected")
 
-        # Expiry window. max_days_to_expiry = 0 is a mistake, not "no limit".
-        if self.max_days_to_expiry <= 0:
-            raise ValueError("max_days_to_expiry must be > 0 (0 is not 'no limit')")
-        if self.min_days_to_expiry < 0:
-            raise ValueError("min_days_to_expiry cannot be negative")
-        if self.min_days_to_expiry >= self.max_days_to_expiry:
-            raise ValueError("min_days_to_expiry must be below max_days_to_expiry")
+        # Contracts. Same rules and wording as the other engines.
+        if self.expiry_selection.strip().lower() not in EXPIRY_SELECTIONS:
+            raise ValueError(f"expiry_selection must be one of {sorted(EXPIRY_SELECTIONS)}")
+        if self.expiry_dte_min < 0:
+            raise ValueError("expiry_dte_min must be zero or greater")
+        if self.expiry_dte_max < self.expiry_dte_min:
+            raise ValueError(
+                "expiry_dte_max must be greater than or equal to expiry_dte_min")
+        # `expiry_dte_max = 0` with avoid_expiry_day on leaves nothing eligible:
+        # the only day in range is the one being excluded.
+        if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
+            raise ValueError(
+                "avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
+        for name in ("scan_expiries_indices", "scan_expiries_stocks"):
+            bad = sorted(set(getattr(self, name)) - EXPIRY_SERIES)
+            if bad:
+                raise ValueError(f"{name} must be drawn from {sorted(EXPIRY_SERIES)}")
+        for name, limit in (("scan_weekly_series_indices", 4),
+                            ("scan_monthly_series_indices", 2),
+                            ("scan_monthly_series_stocks", 2)):
+            ranks = getattr(self, name)
+            if any(not isinstance(r, int) or r < 0 or r >= limit for r in ranks):
+                raise ValueError(f"{name} ranks must be between 0 and {limit - 1}")
+            if len(set(ranks)) != len(ranks):
+                raise ValueError(f"{name} contains a duplicate rank")
 
         if self.regime_period < 2:
             raise ValueError("regime_period must be >= 2")

@@ -103,7 +103,7 @@ def test_empty_body_is_refused(client):
     ({"level_proximity_pct": 0}, "level_proximity_pct"),
     ({"min_oi_drop_pct": 0}, "min_oi_drop_pct"),
     ({"volume_spike_mult": 1.0}, "volume_spike_mult"),
-    ({"max_days_to_expiry": 0}, "no limit"),
+    ({"expiry_dte_min": 5, "expiry_dte_max": 2}, "expiry_dte_max"),
     ({"stop_percent": 100}, "100% stop"),
     ({"confirm_bars": 9}, "confirm_bars"),
 ])
@@ -153,3 +153,30 @@ def test_simulate_validates_its_arguments(client):
     assert client.post("/config/gamma-move/simulate", json={}).status_code == 422
     assert client.post("/config/gamma-move/simulate",
                        json={"symbols": ["X"], "days": 999}).status_code == 422
+
+
+def test_contract_vocabulary_matches_the_other_engines(client):
+    """One vocabulary for one idea. A value that means something on the ORB page
+    must mean the same here, so both read it from the same definition."""
+    from app.engines.option_contracts import EXPIRY_SELECTIONS
+    v = client.get("/config/gamma-move").json()["vocabularies"]
+    assert set(v["expiry_selection"]) == set(EXPIRY_SELECTIONS)
+    assert set(v["scan_expiries_indices"]) == {"weekly", "monthly"}
+    # NSE lists no weekly single-stock options, and offering one would be a
+    # control that cannot be honoured.
+    assert v["scan_expiries_stocks"] == ["monthly"]
+
+
+def test_contract_settings_round_trip(client):
+    body = {"expiry_selection": "monthly", "expiry_dte_min": 2,
+            "expiry_dte_max": 21, "avoid_expiry_day": False,
+            "scan_expiries_indices": ["monthly"]}
+    got = client.put("/config/gamma-move", json=body).json()["config"]
+    assert got["expiry_selection"] == "monthly"
+    assert (got["expiry_dte_min"], got["expiry_dte_max"]) == (2, 21)
+    assert got["avoid_expiry_day"] is False
+    assert got["scan_expiries_indices"] == ["monthly"]
+    client.put("/config/gamma-move", json={"expiry_dte_min": 0, "expiry_dte_max": 14,
+                                           "avoid_expiry_day": True,
+                                           "scan_expiries_indices": ["weekly", "monthly"],
+                                           "expiry_selection": "nearest"})

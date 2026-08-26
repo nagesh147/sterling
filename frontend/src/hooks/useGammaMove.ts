@@ -11,6 +11,9 @@ export type ExitPolicy = 'TIME_STOP' | 'PERCENT_TARGET' | 'TRAILING_STOP';
 export type StopBasis = 'POINTS' | 'PERCENT';
 export type SizingMode = 'LOTS' | 'RISK_PCT';
 export type StopMode = 'broker' | 'monitor' | 'both';
+/** Shared with every other option engine — one vocabulary, one meaning. */
+export type ExpirySelection = 'nearest' | 'weekly' | 'monthly' | 'any';
+export type ExpirySeries = 'weekly' | 'monthly';
 export type SignalState = 'watching' | 'armed' | 'running' | 'weakening' | 'ended' | 'error';
 export type Regime = 'up' | 'down' | 'unknown';
 
@@ -35,8 +38,18 @@ export interface GammaMoveConfig {
   level_proximity_pct: number;
   strike_window_pct: number;
   max_candidates: number;
-  min_days_to_expiry: number;
-  max_days_to_expiry: number;
+  /** Contract settings — same names as every other engine's. */
+  expiry_selection: ExpirySelection;
+  expiry_dte_min: number;
+  expiry_dte_max: number;
+  avoid_expiry_day: boolean;
+  scan_expiries_indices: ExpirySeries[];
+  scan_expiries_stocks: ExpirySeries[];
+  /** Which listed contracts by RANK — the same storage the shared Option
+   *  contracts picker writes, so it is the same control here as elsewhere. */
+  scan_weekly_series_indices: number[];
+  scan_monthly_series_indices: number[];
+  scan_monthly_series_stocks: number[];
   trigger_timeframe: TriggerTimeframe;
   volume_lookback: number;
   min_oi_drop_pct: number;

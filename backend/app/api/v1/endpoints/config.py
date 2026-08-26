@@ -581,7 +581,8 @@ async def get_gamma_move_config() -> dict:
     chosen specifically because the conventional value inverted the gate. An
     operator changing a number should be able to see what it cost to pick it.
     """
-    from app.engines.gamma_move.config import (EXIT_POLICIES, LEVEL_TIMEFRAMES,
+    from app.engines.gamma_move.config import (EXIT_POLICIES, EXPIRY_SELECTIONS,
+                                               EXPIRY_SERIES, LEVEL_TIMEFRAMES,
                                                RESEARCH_ONLY_EXIT_POLICIES,
                                                SIZING_MODES, STOP_BASES, STOP_MODES,
                                                TRIGGER_TIMEFRAMES, GammaMoveConfig)
@@ -600,6 +601,10 @@ async def get_gamma_move_config() -> dict:
             "stop_basis": sorted(STOP_BASES),
             "sizing_mode": sorted(SIZING_MODES),
             "stop_mode": sorted(STOP_MODES),
+            # Contract vocabulary, shared with every other option engine.
+            "expiry_selection": sorted(EXPIRY_SELECTIONS),
+            "scan_expiries_indices": sorted(EXPIRY_SERIES),
+            "scan_expiries_stocks": ["monthly"],
             "data_source": ["kite"],
             # The eligible universe, published rather than typed: the same
             # curated high-liquidity registry every other engine scans.

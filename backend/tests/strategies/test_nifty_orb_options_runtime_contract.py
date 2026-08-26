@@ -11,16 +11,25 @@ def test_engine_contract_is_kite_and_strategy_has_no_local_execution_mode():
     assert cfg.data_source == "kite"
     assert cfg.execution_broker == "kite"
     assert not hasattr(cfg, "paper_only")
-    assert cfg.enabled is False
+    # Power switch, not a safety device — paper/live is `account.is_paper` and
+    # this engine has never carried a copy of it (the assertion above).
+    assert cfg.enabled is True
     assert cfg.opening_range_minutes == 15
     assert cfg.interval_minutes == 5
     assert cfg.max_risk_inr == 3000.0
     assert cfg.max_spread_pct == 1.5
 
 
-def test_runtime_default_is_disabled():
+def test_runtime_default_is_enabled():
+    """Enabled by default, like the other option engines.
+
+    For THIS engine that is a stronger statement than for the others: the runner
+    gates on `enabled` and the market clock and then executes, with no
+    `auto_execute` check — so `account.is_paper` is the thing standing between it
+    and real orders.
+    """
     cfg = get_config()
-    assert cfg.enabled is False
+    assert cfg.enabled is True
     assert not hasattr(cfg, "paper_only")
     assert cfg.execution_broker == "kite"
 

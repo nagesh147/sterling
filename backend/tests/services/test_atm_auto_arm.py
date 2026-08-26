@@ -96,6 +96,7 @@ async def test_one_broken_account_does_not_stop_the_others(monkeypatch):
 
     monkeypatch.setattr(runner, "can_arm_now", lambda *a, **k: True)
     monkeypatch.setattr(runner, "_kite_user_ids", lambda: ["bad", "good"])
+    monkeypatch.setattr(runner, "_auto_execute_enabled", lambda *a, **k: True)
     import app.services.atm_premium_imbalance as store
     monkeypatch.setattr(store, "get_config", lambda: cfg)
 
@@ -129,3 +130,59 @@ async def test_an_already_armed_user_is_skipped_without_resolving_the_chain(monk
         raise AssertionError("arm() must not be called for an armed user")
     monkeypatch.setattr(runner, "arm", boom)
     assert await runner.auto_arm_once() == {}
+
+
+@pytest.mark.asyncio
+async def test_auto_arm_respects_manual_auto(monkeypatch):
+    """AUTO is the switch that lets the loop open a position on its own.
+
+    In MANUAL the engine still resolves the pair and watches — a human pressing
+    Arm on the board is an explicit act and still works. What MANUAL stops is
+    this loop deciding by itself at 09:14.
+    """
+    from app.engines.atm_premium_imbalance import ATMPremiumImbalanceConfig
+    cfg = ATMPremiumImbalanceConfig(enabled=True, quantity=80).validate()
+    monkeypatch.setattr(runner, "can_arm_now", lambda *a, **k: True)
+    monkeypatch.setattr(runner, "_kite_user_ids", lambda: ["u1"])
+    import app.services.atm_premium_imbalance as store
+    monkeypatch.setattr(store, "get_config", lambda: cfg)
+    monkeypatch.setattr(runner, "_sessions", {})
+
+    async def fake_arm(uid, c=None):
+        return {"status": "armed"}
+    monkeypatch.setattr(runner, "arm", fake_arm)
+
+    monkeypatch.setattr(runner, "_auto_execute_enabled", lambda *a, **k: False)
+    assert await runner.auto_arm_once() == {}
+
+    monkeypatch.setattr(runner, "_auto_execute_enabled", lambda *a, **k: True)
+    assert await runner.auto_arm_once() == {"u1": "armed"}
+
+
+def test_pricing_proof_follows_the_account_not_the_config():
+    """The gate that decides whether an undatable quote may price an entry must
+    follow whether the order can actually reach the exchange.
+
+    Keyed on `cfg.execution_mode` it was invertible: a config left on "paper"
+    against a live account would price a REAL order off a quote that cannot be
+    dated to this session — the exact failure this strategy was reconstructed
+    from.
+    """
+    from app.engines.atm_premium_imbalance import (ATMPremiumImbalanceConfig,
+                                                   ATMPremiumImbalanceStrategy)
+    import dataclasses
+    fields = {f.name for f in dataclasses.fields(ATMPremiumImbalanceStrategy)}
+    assert "live" in fields
+    # Permissive by default so replay still reproduces the recorded bot...
+    assert ATMPremiumImbalanceStrategy.__dataclass_fields__["live"].default is False
+    # ...and the runner is what sets it, from the account.
+    import inspect
+    from app.services import atm_premium_imbalance_runner as r
+    src = inspect.getsource(r)
+    assert "live=not _is_paper(user_id)" in src
+
+
+def test_is_paper_defaults_safe_without_an_account():
+    from app.services import atm_premium_imbalance_runner as r
+    assert r._is_paper("nobody") is True
+    assert r._auto_execute_enabled("nobody") is False

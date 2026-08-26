@@ -8,9 +8,17 @@
  * to carry the measurement next to the control.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { GammaMoveSettings } from '../GammaMoveSettings';
+
+/** The shared Option contracts picker this page now hosts uses react-query, so
+ *  the panel is rendered the way the app renders it rather than bare. */
+function render(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 let cfgQuery: any;
 let updateState: any;
@@ -26,7 +34,11 @@ const DEFAULTS = {
   max_spread_pct: 3, level_timeframe: 'day', level_lookback_days: 120,
   pivot_lookback: 5, level_cluster_pct: 0.75, min_level_touches: 2,
   level_proximity_pct: 1.0, strike_window_pct: 2, max_candidates: 25,
-  min_days_to_expiry: 1, max_days_to_expiry: 14, trigger_timeframe: '15minute',
+  expiry_selection: 'nearest', expiry_dte_min: 0, expiry_dte_max: 14,
+  avoid_expiry_day: true,
+  scan_expiries_indices: ['weekly', 'monthly'], scan_expiries_stocks: ['monthly'],
+  scan_weekly_series_indices: [0, 1, 2, 3], scan_monthly_series_indices: [0, 1],
+  scan_monthly_series_stocks: [0, 1], trigger_timeframe: '15minute',
   volume_lookback: 20, min_oi_drop_pct: 3, volume_spike_mult: 2.5,
   min_price_gain_pct: 2, confirm_bars: 1, regime_enabled: true,
   regime_timeframe: 'day', regime_period: 10, regime_multiplier: 2,
@@ -70,7 +82,8 @@ beforeEach(() => {
       strategy: STRATEGY,
       config: { ...DEFAULTS },
       defaults: { ...DEFAULTS },
-      vocabularies: {},
+      vocabularies: { scan_stocks: ['RELIANCE', 'HDFCBANK'],
+                      expiry_selection: ['any', 'monthly', 'nearest', 'weekly'] },
       research_only: { exit_policy: ['PERCENT_TARGET', 'TRAILING_STOP'] },
       live_requires: {},
     },
@@ -127,5 +140,44 @@ describe('GammaMoveSettings', () => {
     cfgQuery = { isLoading: true, data: undefined };
     render(<GammaMoveSettings />);
     expect(screen.getByText(/Loading strategy settings/)).toBeTruthy();
+  });
+});
+
+
+describe('GammaMoveSettings — structure and terminology', () => {
+  it('presents Instruments before Contracts, like every other engine', () => {
+    render(<GammaMoveSettings />);
+    const text = document.body.textContent ?? '';
+    const instruments = text.indexOf('Instruments');
+    const contracts = text.indexOf('Contracts');
+    expect(instruments).toBeGreaterThan(-1);
+    expect(contracts).toBeGreaterThan(instruments);
+    // "Universe" merged the two questions — what is watched, and which contract
+    // the signal is expressed through — into one word.
+    expect(text).not.toContain('Universe');
+  });
+
+  it('uses the shared contract vocabulary, not a private one', () => {
+    render(<GammaMoveSettings />);
+    const text = document.body.textContent ?? '';
+    for (const label of ['Strike range', 'Expiry', 'Minimum days to expiry',
+                         'Maximum days to expiry', 'Expiry day']) {
+      expect(text).toContain(label);
+    }
+  });
+
+  it('hosts the shared Option contracts picker', () => {
+    render(<GammaMoveSettings />);
+    expect(document.body.textContent).toContain('Option contracts');
+  });
+
+  it('drafts an expiry-window change like any other field', () => {
+    render(<GammaMoveSettings />);
+    fireEvent.click(screen.getByRole('switch', { name: /avoid expiry-day entries/i }));
+    const apply = screen.getAllByRole('button')
+      .find((b) => /apply/i.test(b.textContent ?? ''));
+    fireEvent.click(apply!);
+    expect(updateState.mutate).toHaveBeenCalledTimes(1);
+    expect(updateState.mutate.mock.calls[0][0].avoid_expiry_day).toBe(false);
   });
 });

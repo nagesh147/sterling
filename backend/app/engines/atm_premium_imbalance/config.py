@@ -10,8 +10,12 @@ refuse to guess wherever it is not:
   than as the operator-maintained price file it actually read.
   ``FIRST_TICK_PLUS_BUFFER`` exists only so the rejected model stays replayable;
   it is never a default. See A232.
-* ``enabled`` defaults ``False``. Nothing about this strategy has been through a
-  walk-forward, so it must be switched on deliberately.
+* ``enabled`` defaults ``True``, matching the other option engines. It is a
+  power switch rather than a safety device -- ``size_is_set`` is the gate that
+  actually stops this strategy trading before anyone has stated a size, and it
+  defaults to zero. Nothing about this strategy has been through a walk-forward,
+  and that is said where the operator will see it rather than enforced by
+  shipping the engine switched off.
 
 Validation lives here rather than at the API boundary so a config persisted by
 an older build -- or edited straight in the database -- cannot become a trading
@@ -101,7 +105,16 @@ def _hhmm(value: str, label: str) -> str:
 class ATMPremiumImbalanceConfig:
     """Immutable strategy configuration. Construct, then :meth:`validate`."""
 
-    enabled: bool = False
+    #: Whether this engine arms and trades. Defaults ON, matching the other
+    #: option engines.
+    #:
+    #: It is a power switch, not a safety device. What stands between this
+    #: strategy and real money is `account.is_paper`, the kill switch, the live
+    #: guards in `_validate_live`, and — specific to this engine —
+    #: `size_is_set`: `auto_arm_once` refuses unless a lot or quantity has been
+    #: stated, and both default to zero. So enabling alone cannot place an order
+    #: at tomorrow's open; someone has to say how big first.
+    enabled: bool = True
 
     # --- universe -----------------------------------------------------------
     underlying: str = "SENSEX"
@@ -111,6 +124,19 @@ class ATMPremiumImbalanceConfig:
     expiry_policy: str = "NEAREST"
     explicit_expiry: str = ""
     strike_policy: str = "ATM_NEAREST"
+
+    # --- contracts ----------------------------------------------------------
+    # The same three settings every other engine's Contracts section carries,
+    # under the same names, so a reader moving between strategies is reading one
+    # vocabulary rather than three. `expiry_policy` above answers WHICH listed
+    # expiry; these answer whether it is eligible at all.
+    #
+    # Defaults are deliberately permissive here and not copied from another
+    # engine: this strategy legitimately trades the same-day contract, so a
+    # borrowed `avoid_expiry_day = True` would quietly disable it.
+    expiry_dte_min: int = 0
+    expiry_dte_max: int = 60
+    avoid_expiry_day: bool = False
 
     # --- session ------------------------------------------------------------
     session_start: str = "09:15"
@@ -197,6 +223,20 @@ class ATMPremiumImbalanceConfig:
             raise ValueError(f"expiry_policy must be one of {sorted(EXPIRY_POLICIES)}")
         if self.expiry_policy == "EXPLICIT" and not self.explicit_expiry:
             raise ValueError("expiry_policy=EXPLICIT requires explicit_expiry")
+        if self.expiry_dte_min < 0:
+            raise ValueError("expiry_dte_min must be zero or greater")
+        if self.expiry_dte_max < self.expiry_dte_min:
+            raise ValueError(
+                "expiry_dte_max must be greater than or equal to expiry_dte_min")
+        if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
+            raise ValueError(
+                "avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
+        # SAME_DAY is by definition zero days to expiry, so excluding expiry day
+        # leaves it nothing to trade. Refused rather than discovered at the bell.
+        if self.avoid_expiry_day and self.expiry_policy == "SAME_DAY":
+            raise ValueError(
+                "expiry_policy=SAME_DAY and avoid_expiry_day contradict each other: "
+                "the same-day contract IS the expiry-day contract")
         if self.strike_policy not in STRIKE_POLICIES:
             raise ValueError(f"strike_policy must be one of {sorted(STRIKE_POLICIES)}")
         if self.quote_mode not in QUOTE_MODES:
