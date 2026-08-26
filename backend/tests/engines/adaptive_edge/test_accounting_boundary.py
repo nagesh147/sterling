@@ -25,8 +25,14 @@ def test_execution_cost_requires_source_and_policy():
 
 
 def test_valuation_rejects_availability_before_observation():
+    """Availability must not precede observation — that is a lookahead value.
+
+    T0 is 10:00, so the availability argument was T0.replace(minute=9) = 10:09,
+    which is nine minutes *after* observation and therefore perfectly valid. The
+    guard was right not to raise. hour=9 gives the 09:00 the name describes.
+    """
     with pytest.raises(AccountingBoundaryError, match="availability_time"):
-        ValuationObservation("NIFTY", "last", 100.0, "provider", T0, T0.replace(minute=9), 0, "v1")
+        ValuationObservation("NIFTY", "last", 100.0, "provider", T0, T0.replace(hour=9), 0, "v1")
 
 
 def test_net_result_subtracts_only_explicit_costs():

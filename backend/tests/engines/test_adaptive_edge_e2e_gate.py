@@ -40,6 +40,11 @@ class FakePredictionEngine:
 
 
 class FailingExecutionGateway:
+    # e2e reads this to check the gateway's authorization scope matches the
+    # run's formula scope. None means "no scope configured", which is what a
+    # double that must never be reached should say.
+    authorized_formula_ids = None
+
     def submit(self, order):
         raise AssertionError("execution must not be reached while the gate is blocked")
 

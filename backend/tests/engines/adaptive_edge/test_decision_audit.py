@@ -16,7 +16,10 @@ def record(at=100, links=None):
         decision_id="decision-1",
         policy_id="policy-1",
         policy_version="1",
-        links=tuple(links or [AuditLink("feature_snapshot", "feature-1")]),
+        # `links or [default]` swallowed the one case this file needs to test:
+        # an explicitly empty list is falsy, so links=[] silently became the
+        # default and the record under test had lineage after all.
+        links=tuple([AuditLink("feature_snapshot", "feature-1")] if links is None else links),
     )
 
 

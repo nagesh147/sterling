@@ -12,13 +12,18 @@ def edge(gross):
         expected_gross_value=gross,
         formula_id="MS-test",
         formula_version="1.0",
+        # EdgeAssessment carries the inputs its score came from, so a score can
+        # be traced back rather than taken on faith.
+        inputs={},
     )
 
 
 def test_zero_net_value_is_not_eligible():
     result = evaluate_economics(edge(10.0), execution_cost=10.0)
     assert not result.eligible
-    assert result.formula_id == "MS-31/66"
+    # Formula ids come from the registry: F-004. "MS-31/66" is a master-spec
+    # section reference and appears nowhere else in the engine or its tests.
+    assert result.formula_id == "F-004"
 
 
 def test_negative_execution_cost_is_rejected():

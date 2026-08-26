@@ -25,7 +25,10 @@ def test_unknown_dependence_cannot_be_treated_as_iid():
     assert evidence.iid_justified is False
     with pytest.raises(StatisticalUncertaintyError, match="known dependence"):
         evidence.attach_specification(
-            UncertaintySpecification("iid-method", DependenceClass.UNKNOWN, "", "1")
+            # A justification is required and is checked first, so leaving it
+            # empty made this assert the wrong refusal. The point here is that
+            # UNKNOWN dependence cannot be treated as iid however well argued.
+            UncertaintySpecification("iid-method", DependenceClass.UNKNOWN, "episodes assumed independent", "1")
         )
 
 

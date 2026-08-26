@@ -86,8 +86,11 @@ def test_similarity_operator_is_deterministic():
 def test_economic_value_is_net_of_costs_and_cost_monotonic():
     cheap = ExecutionCost(spread=1.0)
     expensive = ExecutionCost(spread=3.0)
-    assert expected_net_value(20.0, 10.0, cheap) > expected_net_value(20.0, 10.0, expensive)
-    assert expected_net_value(20.0, 10.0, cheap) == 9.0
+    # F-004 is ExpectedGrossValue - ExpectedExecutionCost. This asserted a
+    # three-argument (profit, loss, cost) form, which is EV(s,m) with the
+    # probabilities applied — that is target_stop_ev, tested separately below.
+    assert expected_net_value(10.0, cheap) > expected_net_value(10.0, expensive)
+    assert expected_net_value(10.0, cheap) == 9.0
 
 
 def test_risk_and_sizing_follow_source_relationships():

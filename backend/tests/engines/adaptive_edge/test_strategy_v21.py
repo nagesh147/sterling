@@ -64,8 +64,9 @@ def test_f105_protection_is_monotonic_for_long_and_short():
 
 def test_f106_dynamic_risk_is_capped_and_disabled_is_zero():
     p = StrategyParameters(maximum_risk=100)
-    assert f106_dynamic_risk(200, 1, OperatingMode.NORMAL, p) == pytest.approx(100)
-    assert f106_dynamic_risk(200, 1, OperatingMode.DISABLED, p) == pytest.approx(0)
+    # f106_dynamic_risk is keyword-only, like every other F-1xx in strategy_v21.
+    assert f106_dynamic_risk(authorized_base_risk=200, edge_strength=1, mode=OperatingMode.NORMAL, p=p) == pytest.approx(100)
+    assert f106_dynamic_risk(authorized_base_risk=200, edge_strength=1, mode=OperatingMode.DISABLED, p=p) == pytest.approx(0)
 
 
 def test_f107_risk_per_unit_includes_explicit_costs():

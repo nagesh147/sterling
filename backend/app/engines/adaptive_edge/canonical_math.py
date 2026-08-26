@@ -155,22 +155,49 @@ class ExecutionCost:
         return sum((self.spread, self.slippage, self.brokerage, self.exchange_charges, self.taxes, self.latency, self.market_impact))
 
 
-def expected_net_value(expected_profit: float, expected_loss: float, execution_cost: ExecutionCost) -> float:
-    return expected_profit - expected_loss - execution_cost.total
+def expected_net_value(expected_gross_value: float, execution_cost: ExecutionCost) -> float:
+    """F-004: ExpectedNetValue = ExpectedGrossValue - ExpectedExecutionCost.
+
+    Stated in that form in both 05_ECONOMIC_ASSESSMENT.md and
+    11_EXECUTION_PRICE_COST_ORDER_CONTRACT.md. This previously took
+    (expected_profit, expected_loss, execution_cost), which is EV(s,m) with the
+    probabilities already applied — the same thing `target_stop_ev` below
+    computes, and a different formula from the one F-004 names. Every caller in
+    the engine passes a single gross value.
+    """
+    return expected_gross_value - execution_cost.total
 
 
-def risk_per_unit(entry_price: float, initial_stop: float) -> float:
-    return entry_price - initial_stop
+def risk_per_unit(
+    entry_price: float,
+    initial_stop: float,
+    point_value: float = 1.0,
+    execution_cost_per_unit: float = 0.0,
+) -> float:
+    """F-107: EffectiveRiskPerUnit = NominalRiskPerUnit + ExpectedExecutionCostPerUnit.
+
+    Per Master Spec v1.0 Sec 31/36, as documented on
+    `risk_sizing.calculate_risk_per_unit`. `point_value` scales the nominal
+    distance into account currency, so a contract worth more than one unit of
+    price is not sized as though a point were a rupee. Both trailing arguments
+    default to the identity, so the two-argument nominal call is unchanged.
+    """
+    return (entry_price - initial_stop) * point_value + execution_cost_per_unit
 
 
 def gross_risk(risk_per_unit_value: float, quantity: float) -> float:
     return risk_per_unit_value * quantity
 
 
-def position_size(max_risk: float, effective_risk_per_unit: float) -> int:
+def position_size(max_risk: float, effective_risk_per_unit: float, lot_size: int = 1) -> int:
+    """F-108: floor(max_risk / effective_risk_per_unit), truncated to whole lots.
+
+    Rounding down twice is deliberate: sizing up to reach a lot boundary would
+    authorize more risk than was granted.
+    """
     if effective_risk_per_unit <= 0:
         raise ValueError("effective_risk_per_unit must be positive")
-    return floor(max_risk / effective_risk_per_unit)
+    return enforce_lot_size(floor(max_risk / effective_risk_per_unit), lot_size)
 
 
 def enforce_lot_size(quantity: int, lot_size: int) -> int:

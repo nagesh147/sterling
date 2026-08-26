@@ -30,6 +30,10 @@ def evaluate_economics(
     minimum_net_value: float = 0.0,
 ) -> EconomicAssessment:
     definition = require_implemented("F-004")
+    if execution_cost < 0:
+        # A negative cost is a cost that pays you. It inflates net value and so
+        # turns unviable opportunities eligible — fail closed instead.
+        raise ValueError(f"execution cost cannot be negative: {execution_cost}")
     gross = edge.expected_gross_value
     if gross is None:
         return EconomicAssessment(
@@ -43,7 +47,11 @@ def evaluate_economics(
         )
 
     net = gross - execution_cost
-    eligible = net >= minimum_net_value
+    # Strictly greater: the source rule is "EV_conservative <= 0 -> NO_TRADE",
+    # so an opportunity whose expected net value is exactly the threshold is not
+    # eligible. With the default threshold of zero, `>=` admitted trades with no
+    # expected profit and real risk.
+    eligible = net > minimum_net_value
     return EconomicAssessment(
         expected_gross_value=gross,
         expected_execution_cost=execution_cost,

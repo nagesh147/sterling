@@ -12,8 +12,15 @@ from app.engines.adaptive_edge.decision_operators import (
 
 
 def test_target_stop_expected_value_matches_canonical_equation():
+    """EV(s,m) = P_target * E[Gain] - P_stop * E[Loss] - Costs.
+
+    Stated identically in SOURCE_TRACEABILITY_V1.md and in the v2.1 economic
+    contract, which adds that costs must not be double-counted. Here that is
+    0.6*10.0 - 0.3*8.0 - 1.0 = 6.0 - 2.4 - 1.0 = 2.6. This asserted 3.2, which
+    no reading of the equation produces; the implementation was correct.
+    """
     estimate = TargetStopEstimate("c1", 0.6, 10.0, 0.3, 8.0, 1.0)
-    assert target_stop_expected_value(estimate) == pytest.approx(3.2)
+    assert target_stop_expected_value(estimate) == pytest.approx(2.6)
 
 
 def test_target_stop_probability_inputs_are_bounded():
