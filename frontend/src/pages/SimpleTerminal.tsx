@@ -290,6 +290,7 @@ export function SimpleTerminal() {
                 <div className="kite-topnav">
                 {([
                   { id: 'dashboard' as const, label: 'Dashboard' },
+                  { id: 'astro' as const, label: 'Astrology' },
                   { id: 'orders' as const, label: 'Orders' },
                   { id: 'holdings' as const, label: 'Holdings' },
                   { id: 'positions' as const, label: 'Positions' },
