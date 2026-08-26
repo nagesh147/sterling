@@ -478,10 +478,22 @@ export function NavigatorSettingsPanel() {
           <ContractsGroup
             strikes={draft.strike_moneyness ?? engineCfg?.strike_moneyness ?? ['ATM']}
             indexExpiries={draft.scan_expiries_indices ?? ['weekly', 'monthly']}
+            /* Unset means "follow SuperTrend", the same rule the strike ladder
+               and expiry cycles above already use — so the box shows what
+               Navigator will actually do, not a blank. */
+            dteMin={draft.expiry_dte_min ?? engineCfg?.expiry_dte_min ?? 0}
+            dteMax={draft.expiry_dte_max ?? engineCfg?.expiry_dte_max ?? 400}
+            avoidExpiryDay={draft.avoid_expiry_day ?? engineCfg?.avoid_expiry_day ?? false}
+            dteDefaults={{ min: engineCfg?.expiry_dte_min ?? 0,
+                           max: engineCfg?.expiry_dte_max ?? 400 }}
+            dteNote="Left at SuperTrend's values these follow it; change one and Navigator keeps its own."
             onChange={(next) => patch({
               ...draft,
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.expiry_dte_min !== undefined ? { expiry_dte_min: next.expiry_dte_min } : {}),
+              ...(next.expiry_dte_max !== undefined ? { expiry_dte_max: next.expiry_dte_max } : {}),
+              ...(next.avoid_expiry_day !== undefined ? { avoid_expiry_day: next.avoid_expiry_day } : {}),
             })}
           />
         </ScopedGroup>

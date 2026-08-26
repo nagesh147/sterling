@@ -161,9 +161,16 @@ export function AdaptiveEdgeSettingsPanel() {
           <ContractsGroup
             strikes={(draft.strike_moneyness as Moneyness[])}
             indexExpiries={indexExpiries}
+            dteMin={draft.expiry_dte_min ?? 0}
+            dteMax={draft.expiry_dte_max ?? 400}
+            avoidExpiryDay={draft.avoid_expiry_day ?? false}
+            dteDefaults={{ min: 0, max: 400 }}
             onChange={(next) => patch({
               ...(next.strike_moneyness !== undefined ? { strike_moneyness: next.strike_moneyness } : {}),
               ...(next.scan_expiries_indices !== undefined ? { scan_expiries_indices: next.scan_expiries_indices } : {}),
+              ...(next.expiry_dte_min !== undefined ? { expiry_dte_min: next.expiry_dte_min } : {}),
+              ...(next.expiry_dte_max !== undefined ? { expiry_dte_max: next.expiry_dte_max } : {}),
+              ...(next.avoid_expiry_day !== undefined ? { avoid_expiry_day: next.avoid_expiry_day } : {}),
             })}
           />
           <ConfigNote>

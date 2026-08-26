@@ -15,6 +15,7 @@ import {
   ChoiceRow, Field, NumberField, Section, Switch, DIM,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { InstrumentsGroup } from './kite/config/ScanSettings';
 import { OptionContractsPicker } from './kite/config/OptionContractsPicker';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
 
@@ -187,59 +188,45 @@ export function GammaMoveSettings() {
             ? `all ${eligible.length} high-liquidity stocks`
             : `${cfg.scan_stocks.length} of ${eligible.length} stocks`)
           : 'indices only'}
-        persistKey="gamma-universe"
+        // NOT "gamma-universe". That was this section's key when it was called
+        // "Universe", and Section persists open/closed under the key: a reader
+        // who had collapsed Universe would find Instruments collapsed too, and
+        // `defaultOpen` cannot override a stored choice. A renamed section is a
+        // different section and must not inherit the old one's state.
+        persistKey="gamma-instruments"
         defaultOpen
       >
         <ConfigNote>
           <span>
             The eligible set is the same curated high-liquidity registry every other
-            engine here scans — {eligible.length} names. Thin or arbitrary F&amp;O
-            names are not selectable: a 2× on a contract you cannot exit is not a 2×.
+            engine here scans. Thin or arbitrary F&amp;O names are not selectable:
+            a 2&times; on a contract you cannot exit is not a 2&times;.
           </span>
         </ConfigNote>
-        <Field label="Single stocks" hint="Master switch above the list. Off leaves single-stock underlyings out of the scan entirely.">
-          <Switch
-            checked={cfg.stock_contracts}
-            label={cfg.stock_contracts ? 'Scanned' : 'Excluded'}
-            onChange={() => patch({ stock_contracts: !cfg.stock_contracts })}
-          />
-        </Field>
-        <Field label="Which stocks" hint="All eligible names, or a chosen subset of them.">
-          <Switch
-            checked={cfg.scan_all_stocks}
-            label={cfg.scan_all_stocks ? `All ${eligible.length}` : 'Chosen only'}
-            disabled={!cfg.stock_contracts}
-            onChange={() => patch({ scan_all_stocks: !cfg.scan_all_stocks })}
-          />
-        </Field>
-        {cfg.stock_contracts && !cfg.scan_all_stocks && (
-          <Field label="Stocks" hint="Only names in the curated registry can be selected." wide>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {eligible.map((name) => {
-                const on = cfg.scan_stocks.includes(name);
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => patch({
-                      scan_stocks: on
-                        ? cfg.scan_stocks.filter((n) => n !== name)
-                        : [...cfg.scan_stocks, name],
-                    })}
-                    style={{
-                      background: 'transparent',
-                      border: `1px solid ${on ? 'var(--k-orange)' : 'var(--k-border)'}`,
-                      color: on ? 'var(--k-text)' : 'var(--k-dim)',
-                      borderRadius: 5, padding: '3px 8px', fontSize: 11, cursor: 'pointer',
-                    }}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-        )}
+
+        {/* The same control the ORB page uses, not a lookalike. It reads the
+            registry itself, so the selectable set cannot drift from the one the
+            scanner accepts, and the two pages cannot diverge as either changes. */}
+        <InstrumentsGroup
+          idPrefix="gamma"
+          indices={cfg.scan_indices}
+          stocks={cfg.scan_stocks}
+          allStocks={cfg.scan_all_stocks}
+          stockContracts={cfg.stock_contracts}
+          allowEmptyIndices
+          onChange={(next) => patch({
+            ...(next.scan_indices !== undefined ? { scan_indices: next.scan_indices } : {}),
+            ...(next.scan_stocks !== undefined ? { scan_stocks: next.scan_stocks } : {}),
+            ...(next.scan_all_stocks !== undefined
+              ? { scan_all_stocks: next.scan_all_stocks } : {}),
+            // ORB calls this `scan_stock_contracts`; this engine calls it
+            // `stock_contracts`. Mapped here rather than renaming a field on a
+            // working engine — the control is shared, the storage stays each
+            // engine's own.
+            ...(next.scan_stock_contracts !== undefined
+              ? { stock_contracts: next.scan_stock_contracts } : {}),
+          })}
+        />
       </Section>
 
       <Section

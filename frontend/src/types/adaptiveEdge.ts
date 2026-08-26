@@ -10,6 +10,10 @@ export interface AdaptiveEdgeSettings {
   strike_moneyness: string[];
   scan_expiries: Array<'weekly' | 'monthly'>;
   scan_expiries_indices: Array<'weekly' | 'monthly'>;
+  /** Expiry window, shared vocabulary with every other engine. */
+  expiry_dte_min?: number;
+  expiry_dte_max?: number;
+  avoid_expiry_day?: boolean;
   w_short: number;
   w_long: number;
   stop_points: number;

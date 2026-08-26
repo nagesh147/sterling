@@ -29,7 +29,9 @@ vi.mock('../../hooks/useGammaMove', () => ({
 }));
 
 const DEFAULTS = {
-  enabled: false, include_indices: false, max_universe: 150, explicit_symbols: [],
+  enabled: false,
+  scan_indices: [] as string[], scan_stocks: [] as string[],
+  scan_all_stocks: true, stock_contracts: true, include_indices: false, max_universe: 150, explicit_symbols: [],
   min_option_oi: 50000, min_option_volume: 1000, min_option_premium: 10,
   max_spread_pct: 3, level_timeframe: 'day', level_lookback_days: 120,
   pivot_lookback: 5, level_cluster_pct: 0.75, min_level_touches: 2,
@@ -187,5 +189,46 @@ describe('GammaMoveSettings — structure and terminology', () => {
     fireEvent.click(apply!);
     expect(updateState.mutate).toHaveBeenCalledTimes(1);
     expect(updateState.mutate.mock.calls[0][0].avoid_expiry_day).toBe(false);
+  });
+});
+
+
+describe('GammaMoveSettings — a renamed section is a different section', () => {
+  /**
+   * `Section` persists open/closed under `persistKey`, and a stored choice beats
+   * `defaultOpen`. So reusing the key of a section that has been renamed hands
+   * the new section the old one's collapsed state — and the reader, who
+   * collapsed something else entirely, sees an empty page and reports the
+   * settings missing. There is no way for them to tell that from a bug.
+   */
+  beforeEach(() => localStorage.clear());
+
+  it('does not inherit the collapsed state of the old "Universe" section', () => {
+    localStorage.setItem('kite-settings-section:gamma-universe', '0');
+    render(<GammaMoveSettings />);
+    const summary = [...document.querySelectorAll('summary')]
+      .find((el) => /Instruments/.test(el.textContent ?? ''));
+    expect(summary).toBeTruthy();
+    expect((summary!.closest('details') as HTMLDetailsElement).open,
+           'Instruments inherited the old Universe key').toBe(true);
+  });
+
+  it('still honours a choice made against its own key', () => {
+    localStorage.setItem('kite-settings-section:gamma-instruments', '0');
+    render(<GammaMoveSettings />);
+    const summary = [...document.querySelectorAll('summary')]
+      .find((el) => /Instruments/.test(el.textContent ?? ''));
+    expect((summary!.closest('details') as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it('opens Contracts even when every other section was collapsed', () => {
+    for (const k of ['gamma-universe', 'gamma-instruments', 'gamma-levels',
+                     'gamma-trigger', 'gamma-regime', 'gamma-exit', 'gamma-risk']) {
+      localStorage.setItem(`kite-settings-section:${k}`, '0');
+    }
+    render(<GammaMoveSettings />);
+    const summary = [...document.querySelectorAll('summary')]
+      .find((el) => /Contracts/.test(el.textContent ?? ''));
+    expect((summary!.closest('details') as HTMLDetailsElement).open).toBe(true);
   });
 });
