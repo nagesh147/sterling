@@ -1,13 +1,13 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.deployment_gate import (
+from app.engines.adaptive_edge.deployment_gate import (
     DeploymentGateError,
     GateStatus,
     assemble_deployment_readiness,
 )
-from backend.app.engines.adaptive_edge.final_holdout import FinalHoldoutEvidence, HoldoutCandidate
-from backend.app.engines.adaptive_edge.claim_statistics import CorrectionStatus, StatisticalValidityContract
-from backend.app.engines.adaptive_edge.promotion_boundary import PromotionDecision, assemble_promotion_eligibility
+from app.engines.adaptive_edge.final_holdout import FinalHoldoutEvidence, HoldoutCandidate
+from app.engines.adaptive_edge.claim_statistics import CorrectionStatus, StatisticalValidityContract
+from app.engines.adaptive_edge.promotion_boundary import PromotionDecision, assemble_promotion_eligibility
 
 
 def evidence():

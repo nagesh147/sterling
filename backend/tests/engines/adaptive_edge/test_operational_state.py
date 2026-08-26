@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.operational_state import (
+from app.engines.adaptive_edge.operational_state import (
     OperationalState,
     OperationalStateError,
     OperationalTradingState,

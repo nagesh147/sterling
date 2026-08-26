@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.claim_statistics import (
+from app.engines.adaptive_edge.claim_statistics import (
     ClaimStatisticsError,
     CorrectionStatus,
     StatisticalValidityContract,

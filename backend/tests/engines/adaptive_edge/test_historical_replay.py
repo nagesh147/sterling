@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.app.engines.adaptive_edge.historical_replay import (
+from app.engines.adaptive_edge.historical_replay import (
     HistoricalReplayError,
     ReplayEvent,
     build_manifest,

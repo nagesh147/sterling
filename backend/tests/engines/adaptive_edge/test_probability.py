@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.probability import (
+from app.engines.adaptive_edge.probability import (
     HistoricalOutcome,
     Outcome,
     ProbabilityError,

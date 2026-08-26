@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.evaluation_evidence import (
+from app.engines.adaptive_edge.evaluation_evidence import (
     CycleEvaluationResult,
     EvaluationEvidenceError,
     EvaluationEvidenceSet,

@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.end_to_end_gate import (
+from app.engines.adaptive_edge.end_to_end_gate import (
     ChainEvent,
     ChainStage,
     EndToEndGateError,

@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.position_lifecycle import (
+from app.engines.adaptive_edge.position_lifecycle import (
     PositionLifecycleError,
     PositionState,
     ProtectionState,

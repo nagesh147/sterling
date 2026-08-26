@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.position_sizing import (
+from app.engines.adaptive_edge.position_sizing import (
     QuantityConstraints,
     SizingRequest,
     SizingStatus,

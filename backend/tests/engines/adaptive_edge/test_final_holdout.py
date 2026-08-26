@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.final_holdout import (
+from app.engines.adaptive_edge.final_holdout import (
     FinalHoldoutError,
     FinalHoldoutEvidence,
     HoldoutCandidate,

@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from backend.app.engines.adaptive_edge.oos_claims import (
+from app.engines.adaptive_edge.oos_claims import (
     ClaimStatus,
     EvaluationEvidence,
     OOSClaimError,
@@ -70,7 +70,7 @@ def test_reconstitution_cannot_reuse_contaminated_boundary():
 
 def test_contaminated_claim_requires_event_identity():
     with pytest.raises(OOSClaimError, match="contamination events"):
-        from backend.app.engines.adaptive_edge.oos_claims import OOSClaim
+        from app.engines.adaptive_edge.oos_claims import OOSClaim
         OOSClaim(
             claim_id="claim-1",
             evaluation_id="eval-1",

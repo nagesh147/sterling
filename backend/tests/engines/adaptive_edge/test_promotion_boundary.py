@@ -1,8 +1,8 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.claim_statistics import CorrectionStatus, StatisticalValidityContract
-from backend.app.engines.adaptive_edge.final_holdout import FinalHoldoutEvidence, HoldoutCandidate
-from backend.app.engines.adaptive_edge.promotion_boundary import (
+from app.engines.adaptive_edge.claim_statistics import CorrectionStatus, StatisticalValidityContract
+from app.engines.adaptive_edge.final_holdout import FinalHoldoutEvidence, HoldoutCandidate
+from app.engines.adaptive_edge.promotion_boundary import (
     PromotionBoundaryError,
     assemble_promotion_eligibility,
 )

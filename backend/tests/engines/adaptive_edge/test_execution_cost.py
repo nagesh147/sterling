@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.execution_cost import (
+from app.engines.adaptive_edge.execution_cost import (
     ExecutionCostError,
     ExecutionCostInput,
 )

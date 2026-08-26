@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from backend.app.engines.adaptive_edge.normalization import (
+from app.engines.adaptive_edge.normalization import (
     NormalizationContext,
     Observation,
     conditional_percentile,

@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.recovery_resume import (
+from app.engines.adaptive_edge.recovery_resume import (
     RecoveryDecision,
     RecoveryError,
     RecoveryState,

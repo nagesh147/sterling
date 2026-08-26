@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.engines.adaptive_edge.statistical_uncertainty import (
+from app.engines.adaptive_edge.statistical_uncertainty import (
     DependenceClass,
     DependenceUnit,
     StatisticalUncertaintyError,
