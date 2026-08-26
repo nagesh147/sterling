@@ -164,6 +164,17 @@ export function SuperTrendEnginePanel() {
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
+            dteMin={cfg.expiry_dte_min ?? 0}
+            dteMax={cfg.expiry_dte_max ?? 400}
+            avoidExpiryDay={cfg.avoid_expiry_day ?? false}
+            dteDefaults={{ min: 0, max: 400 }}
+            dteNote={
+              <>
+                Separate from the expiry square-off below: this decides which
+                contracts may be <em>entered</em>, that one closes a position
+                already held as its contract runs out.
+              </>
+            }
             onChange={(next) => patch(next)}
           />
         </Section>

@@ -38,6 +38,7 @@ from app.services.kite_engine.greeks import (
 )
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
+    expiry_window_of,
     ExpiryType, OptionPick, chain_rows_for, filter_liquid_contracts, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
@@ -487,7 +488,8 @@ def attach_strikes(
     chain = filter_liquid_contracts(chain, is_stock=is_stock)
     ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
-                         moneynesses=ordered, expiry_types=expiry_types, today=today)
+                         moneynesses=ordered, expiry_types=expiry_types, today=today,
+                         **expiry_window_of(cfg))
     row.resolution_reason = None
     if not picks:
         if not chain:
