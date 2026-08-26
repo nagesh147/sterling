@@ -21,12 +21,6 @@ class TestSetContaminatedError(EvaluationContractError):
     """Raised when final-test evidence is allowed to influence selection."""
 
 
-# These are domain types, not pytest test classes, despite their conventional
-# Test* names. Prevent pytest from attempting to collect them when imported by
-# the A39 test module.
-TestSetContaminatedError.__test__ = False
-
-
 class ObservationDisposition(str, Enum):
     TRAIN = "train"
     VALIDATION = "validation"
@@ -43,6 +37,8 @@ class HoldoutStatus(str, Enum):
 
 @dataclass(frozen=True, order=True)
 class TemporalSpan:
+    """Half-open temporal interval [start, end)."""
+
     start: datetime
     end: datetime
 
@@ -59,6 +55,8 @@ class TemporalSpan:
 
 @dataclass(frozen=True)
 class EvaluationObservation:
+    """Decision-linked observation used by the A38/A39 temporal boundary."""
+
     observation_id: str
     decision_time: datetime
     feature_available_time: datetime
@@ -75,6 +73,11 @@ class EvaluationObservation:
 
 @dataclass(frozen=True)
 class EvaluationCycle:
+    """One causal train -> validation -> promotion -> test cycle.
+
+    Purge/embargo are explicit optional boundaries. No duration is inferred.
+    """
+
     cycle_id: str
     training: TemporalSpan
     validation: TemporalSpan
@@ -106,6 +109,8 @@ class EvaluationCycle:
 
 
 def validate_walk_forward_sequence(cycles: Sequence[EvaluationCycle]) -> None:
+    """Require strictly forward progression of cycle test boundaries."""
+
     previous: EvaluationCycle | None = None
     for cycle in cycles:
         if previous is not None:
@@ -116,7 +121,15 @@ def validate_walk_forward_sequence(cycles: Sequence[EvaluationCycle]) -> None:
         previous = cycle
 
 
-def eligible_training_observations(observations: Iterable[EvaluationObservation], cycle: EvaluationCycle) -> list[EvaluationObservation]:
+def eligible_training_observations(
+    observations: Iterable[EvaluationObservation],
+    cycle: EvaluationCycle,
+) -> list[EvaluationObservation]:
+    """Apply A38 causal eligibility at the cycle's training cutoff.
+
+    This intentionally does not infer a label horizon or purge duration.
+    """
+
     eligible: list[EvaluationObservation] = []
     for observation in observations:
         if not cycle.training.contains(observation.decision_time):
@@ -129,7 +142,17 @@ def eligible_training_observations(observations: Iterable[EvaluationObservation]
     return eligible
 
 
-def purge_for_boundary(observations: Iterable[EvaluationObservation], evaluation_boundary: TemporalSpan) -> tuple[list[EvaluationObservation], list[EvaluationObservation]]:
+def purge_for_boundary(
+    observations: Iterable[EvaluationObservation],
+    evaluation_boundary: TemporalSpan,
+) -> tuple[list[EvaluationObservation], list[EvaluationObservation]]:
+    """Split observations whose resolved outcome span crosses a boundary.
+
+    If no outcome span is supplied, the observation is not purged here because
+    A26 has not yet defined the target/horizon. Final evaluation must supply
+    the resolved outcome spans before treating purge as complete.
+    """
+
     safe: list[EvaluationObservation] = []
     purged: list[EvaluationObservation] = []
     for observation in observations:
@@ -140,7 +163,11 @@ def purge_for_boundary(observations: Iterable[EvaluationObservation], evaluation
     return safe, purged
 
 
-def detect_overlapping_outcomes(observations: Sequence[EvaluationObservation]) -> list[tuple[str, str]]:
+def detect_overlapping_outcomes(
+    observations: Sequence[EvaluationObservation],
+) -> list[tuple[str, str]]:
+    """Return observation pairs whose resolved outcome spans overlap."""
+
     spans = [observation for observation in observations if observation.outcome_span is not None]
     overlaps: list[tuple[str, str]] = []
     for index, left in enumerate(spans):
@@ -153,11 +180,22 @@ def detect_overlapping_outcomes(observations: Sequence[EvaluationObservation]) -
 
 
 def count_independent_episodes(observations: Iterable[EvaluationObservation]) -> int:
-    episode_ids = {observation.independent_episode_id for observation in observations if observation.independent_episode_id is not None}
+    """Count explicit independent economic episodes without assuming IID data."""
+
+    episode_ids = {
+        observation.independent_episode_id
+        for observation in observations
+        if observation.independent_episode_id is not None
+    }
     return len(episode_ids)
 
 
-def assign_observation(observation: EvaluationObservation, cycle: EvaluationCycle) -> ObservationDisposition:
+def assign_observation(
+    observation: EvaluationObservation,
+    cycle: EvaluationCycle,
+) -> ObservationDisposition:
+    """Assign by decision boundary while enforcing A38 training eligibility."""
+
     if cycle.training.contains(observation.decision_time):
         if observation.feature_causally_available() and observation.label_mature_at(cycle.training_cutoff):
             return ObservationDisposition.TRAIN
@@ -171,6 +209,8 @@ def assign_observation(observation: EvaluationObservation, cycle: EvaluationCycl
 
 @dataclass(frozen=True)
 class CandidateSpec:
+    """Immutable identity of one researched candidate."""
+
     candidate_id: str
     code_version: str
     feature_version: str
@@ -197,11 +237,11 @@ class TestUseEvent:
     purpose: str
     influenced_selection: bool
 
-TestUseEvent.__test__ = False
-
 
 @dataclass
 class ResearchRegistry:
+    """Append-only research identity for candidates and evaluation results."""
+
     candidates: dict[str, CandidateSpec] = field(default_factory=dict)
     results: list[CandidateResult] = field(default_factory=list)
     test_use: list[TestUseEvent] = field(default_factory=list)
@@ -209,7 +249,9 @@ class ResearchRegistry:
     def register_candidate(self, candidate: CandidateSpec) -> None:
         existing = self.candidates.get(candidate.candidate_id)
         if existing is not None and existing != candidate:
-            raise EvaluationContractError(f"candidate_id {candidate.candidate_id!r} already identifies a different candidate")
+            raise EvaluationContractError(
+                f"candidate_id {candidate.candidate_id!r} already identifies a different candidate"
+            )
         self.candidates[candidate.candidate_id] = candidate
 
     def record_result(self, result: CandidateResult) -> None:
@@ -229,6 +271,8 @@ class ResearchRegistry:
 
 @dataclass
 class FinalHoldout:
+    """State machine protecting the final untouched evaluation boundary."""
+
     status: HoldoutStatus = HoldoutStatus.OPEN
     candidate_id: str | None = None
     selection_frozen_at: datetime | None = None
@@ -247,8 +291,15 @@ class FinalHoldout:
             raise EvaluationContractError("final holdout cannot be used before selection is frozen")
         if influenced_selection:
             self.status = HoldoutStatus.CONTAMINATED
-            raise TestSetContaminatedError("final holdout result influenced selection; it is no longer an untouched test set")
+            raise TestSetContaminatedError(
+                "final holdout result influenced selection; it is no longer an untouched test set"
+            )
 
 
-def final_test_is_claim_eligible(registry: ResearchRegistry, holdout: FinalHoldout) -> bool:
+def final_test_is_claim_eligible(
+    registry: ResearchRegistry,
+    holdout: FinalHoldout,
+) -> bool:
+    """Return whether the test boundary remains eligible as final evidence."""
+
     return holdout.status is HoldoutStatus.FROZEN and not registry.test_contaminated

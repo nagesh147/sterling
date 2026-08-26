@@ -29,7 +29,7 @@ export interface ModeToggleProps {
 
 export function ModeToggle({
   left, right, value, onSelect,
-  leftColor = '#387ed1', rightColor = '#4caf50',
+  leftColor = 'var(--k-blue-kite)', rightColor = 'var(--k-green)',
   rightDotWhenActive = false, rightDisabled = false, rightTitle,
   busy = false, size = 'md',
 }: ModeToggleProps) {
@@ -43,8 +43,8 @@ export function ModeToggle({
     minHeight: height,
     border: 'none',
     borderRadius: 6,
-    background: active ? '#fff' : 'transparent',
-    color: active ? '#444' : '#888',
+    background: active ? 'var(--k-bg)' : 'transparent',
+    color: active ? 'var(--k-text)' : 'var(--k-ink-6)',
     fontFamily: 'inherit',
     fontSize: fs,
     fontWeight: active ? 700 : 500,
@@ -63,7 +63,7 @@ export function ModeToggle({
       gap: 2,
       padding: 3,
       background: '#f6f6f7',
-      border: '1px solid #e0e0e0',
+      border: '1px solid var(--k-border)',
       borderRadius: 8,
       opacity: busy ? 0.6 : 1,
     }}>

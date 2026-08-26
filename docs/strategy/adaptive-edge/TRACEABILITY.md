@@ -1,108 +1,43 @@
-# Adaptive Edge — Exact Source Traceability
+# Adaptive Edge — Traceability
 
-## Authority
-
-The original strategy authority remains:
-
-```text
-Adaptive Order-Flow Options Scalping and Intraday Strategy
-Master Mathematical Specification — Version 1.0
-```
-
-That source does not contain complete authoritative definitions for F-101..F-114.
-
-The new-definition path is explicitly separated:
-
-```text
-Original source recovery: NOT RECOVERED
-V2.1 new strategy definition: 2.1.0-proposed
-```
-
-## Rule
-
-A component is `EXACT` only when its implemented relationship is directly anchored to the source document and every required input has source-defined semantics/provenance and tests verify the relationship.
-
-A V2.1 component is instead marked `IMPLEMENTED-PROPOSED` when it is fully defined by the explicitly versioned A26-ND strategy proposal but is not claimed as recovered historical mathematics.
-
-## Traceability
-
-| Source | Requirement | Code | Status |
-|---|---|---|---|
-| §7 | Mid / spread / relative spread / price change / return / velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for stated operators |
-| §8 | Incremental volume | `canonical_math.py`, `feature_state.py` | EXACT for reset semantics |
-| §9 | Aggressor classification | `canonical_math.py`, `feature_state.py` | EXACT |
-| §10 | Delta / cumulative delta / delta velocity / acceleration | `canonical_math.py`, `feature_state.py` | EXACT for implemented fields |
-| §11 | Liquidity imbalance | `canonical_math.py`, `feature_state.py` | EXACT |
-| §12 | Volume intensity | `canonical_math.py` | PARTIAL: exact ratio; expected-rate semantic source remains upstream |
-| §19 | Causal contextual normalization | `normalization.py`, `test_normalization.py` | PARTIAL: empirical CDF and causal filtering exact for explicit context; context construction/min-data policy remain unresolved |
-| §21 | Directional probability / normalized return | `canonical_math.py`, probability layer | PARTIAL: baseline empirical probability implemented; outcome/calibration parameters remain unfrozen |
-| §22 | Multinomial logistic model | `canonical_math.py`, probability contract | PARTIAL: equation exists; exact fitting/optimization method not recovered |
-| §23 | Empirical similarity | `canonical_math.py`, `similarity_selection.py`, `statistics.py` | PARTIAL: operators and explicit effective-sample gate implemented; complete source-defined selection procedure remains unresolved |
-| §24 | Bayesian state | `canonical_math.py`, `bayesian_state.py` | PARTIAL: additive and explicit-decay update boundaries implemented; initialization and learned decay semantics remain unresolved |
-| §25 | Probability calibration | `v2/25_PROBABILITY_CALIBRATION_CONTRACT.md` | BLOCKED: original-source calibration method is undefined |
-| §28 | Horizon distribution | `v2/28_HORIZON_DISTRIBUTION_CONTRACT.md` | BLOCKED: original-source target/horizon semantics are undefined |
-| §31 | Execution cost decomposition | `execution_cost.py`, `economic.py` | PARTIAL: additive provider-neutral boundary implemented; provider-specific distributions remain unresolved |
-| §32 | Option selection by ExpectedNetEV | `option_selection.py`, `test_option_selection.py` | PARTIAL: argmax/constraint boundary implemented; upstream candidate derivation remains unresolved |
-| §33 | Target/stop EV competition | `target_stop.py` | EXACT for source-defined argmax over supplied candidate estimates |
-| §34 | Conservative EV / no-trade | `target_stop.py` | PARTIAL: relationship/gate exact; confidence-bound estimation remains unresolved |
-| §35 | Entry gates | `entry_gates.py` | EXACT predicate for stated gate conditions; upstream gate-input derivations remain blocked |
-| §36 | Risk per unit / position sizing | `canonical_math.py` | PARTIAL: generic operators exist; original `EffectiveRiskPerUnit` semantics unresolved |
-| §39 | Continuation value | `canonical_math.py` | EXACT operator over supplied expected quantities |
-| §40 | Giveback / profit accounting | `canonical_math.py`, `position_management.py` | PARTIAL: PeakPnL/CurrentPnL/Giveback exact; AllowedGiveback estimator remains blocked |
-| §41 | Monotonic stop | `canonical_math.py`, `position_management.py` | PARTIAL: monotonic operator exact; original learned protection inputs remain unresolved |
-| §42 | No risk expansion | `canonical_math.maximum_accepted_risk` | EXACT invariant |
-| §43 | Dynamic mode | `canonical_math.py` | PARTIAL: original function unresolved; V2.1 replacement is explicitly versioned below |
-| §§50–54 | Walk-forward learning | `research_dataset.py`, `walk_forward.py` | PARTIAL: causal fold machinery exists; exact original fitting/calibration method remains blocked |
-| §66 | Canonical trade objective / EV per risk | `canonical_math.py`, economic layer | PARTIAL: NetEV and EV-per-risk relationship exists; original `EffectiveRisk_i` derivation remains blocked |
-
-## V2.1 proposed strategy traceability
-
-| Formula | V2.1 definition | Implementation | Tests | Status |
+| ID | Requirement | Code | Tests | Status |
 |---|---|---|---|---|
-| F-101 | weighted z-score composite bounded by tanh | `strategy_v21.py:f101_feature_score` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-102 | three-state softmax directional edge | `strategy_v21.py:f102_edge_score` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-103 | edge + economics + data-quality + mode eligibility | `strategy_v21.py:f103_opportunity_eligibility` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-104 | volatility/drawdown mode state machine | `strategy_v21.py:f104_dynamic_mode` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-105 | monotonic favorable-direction protection | `strategy_v21.py:f105_profit_protection` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-106 | capped mode/edge dynamic risk | `strategy_v21.py:f106_dynamic_risk` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-107 | protection distance + explicit execution cost | `strategy_v21.py:f107_risk_per_unit` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-108 | floor/increment/max constrained sizing | `strategy_v21.py:f108_position_sizing` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-109 | directional CE/PE + constraint argmax | `strategy_v21.py:f109_instrument_selection` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-110 | directional trigger | `strategy_v21.py:f110_entry_trigger` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-111 | protection/target/horizon exit | `strategy_v21.py:f111_exit_trigger` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-112 | explicit protection parameters | `strategy_v21.py:f112_protection_parameters` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-113 | cooldown + new-opportunity re-entry | `strategy_v21.py:f113_reentry` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
-| F-114 | shared risk capacity + max positions | `strategy_v21.py:f114_multi_position_interaction` | `test_strategy_v21.py` | IMPLEMENTED-PROPOSED |
+| F-001 | Causal availability | `adaptive_edge/feature_engine.py` | `test_adaptive_edge_pipeline.py` | RESOLVED |
+| F-002 | Peak P&L | Accounting/protection owner | Pending strategy integration test | RESOLVED-ANCHORED |
+| F-003 | Profit giveback | Accounting/protection owner | Pending strategy integration test | RESOLVED-ANCHORED |
+| F-004 | Gross minus execution cost | `adaptive_edge/economic.py` | `test_adaptive_edge_pipeline.py` | RESOLVED |
+| F-005 | Risk authorization immutable | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | RESOLVED |
+| F-006 | Mode/risk independent | `adaptive_edge/contracts.py` | `test_adaptive_edge_contracts.py` | RESOLVED |
+| F-007 | BUY uses executable ask | Execution owner | Pending | RESOLVED-ANCHORED |
+| F-008 | SELL uses executable bid | Execution owner | Pending | RESOLVED-ANCHORED |
+| F-101 | Feature formula | `adaptive_edge/feature_engine.py` contract | Pending | RESOLVED-BLOCKED |
+| F-102 | Edge/prediction | `adaptive_edge/edge.py` contract | Pending | RESOLVED-BLOCKED |
+| F-103 | Eligibility | Pending | Pending | RESOLVED-BLOCKED |
+| F-104 | Dynamic mode | `adaptive_edge/contracts.py` state model | Pending exact thresholds | RESOLVED-BLOCKED |
+| F-105 | Profit protection | Pending | Pending | RESOLVED-BLOCKED |
+| F-106 | Dynamic risk | Pending | Pending | RESOLVED-BLOCKED |
+| F-107 | Risk per unit | Pending | Pending | RESOLVED-BLOCKED |
+| F-108 | Position sizing | Pending | Pending | RESOLVED-BLOCKED |
+| F-109 | Instrument selection | Pending | Pending | RESOLVED-BLOCKED |
+| F-110 | Entry trigger | Pending | Pending | RESOLVED-BLOCKED |
+| F-111 | Exit trigger | Pending | Pending | RESOLVED-BLOCKED |
+| F-112 | Protection parameterization | Pending | Pending | RESOLVED-BLOCKED |
+| F-113 | Re-entry | Pending | Pending | RESOLVED-BLOCKED |
+| F-114 | Multi-position interaction | Pending | Pending | RESOLVED-BLOCKED |
 
-## Promotion boundary
+## Resolution semantics
 
-```text
-IMPLEMENTED-PROPOSED
-        |
-        v
-walk-forward research
-        |
-        v
-validation report
-        |
-        v
-explicit promotion approval
-        |
-        v
-EXECUTION AUTHORIZED
-```
+`RESOLVED` means the formula and all required inputs are authoritative, causal, versioned, and testable.
 
-`promotion.py` currently sets the strategy to `RESEARCH_ONLY`. Therefore implementation of F-101..F-114 does not authorize live execution.
+`RESOLVED-ANCHORED` means the relationship is authoritative but integration testing remains outstanding.
 
-## Risk-specific recovery conclusion
+`RESOLVED-BLOCKED` means the artifact has been individually attacked against the currently available source set and no authoritative complete definition was recovered. It is a terminal resolution of the current investigation, not an implementation authorization.
 
-The original repository still does not provide an authoritative historical definition of:
+## Change rule
 
-```text
-EffectiveRisk_i
-EffectiveRiskPerUnit
-historical F-107
-historical F-108
-```
+No implementation change may promote a `RESOLVED-BLOCKED` artifact by inference. To unlock it, either:
 
-The V2.1 definitions are explicitly new strategy semantics and must not be described as recovered historical formulas.
+1. recover the authoritative original artifact; or
+2. create an explicitly versioned Adaptive Edge strategy revision containing the complete definition and obtain strategy change approval.
+
+The complete attack and resolution procedure is defined in `ARTIFACT_RESOLUTION.md`.

@@ -161,9 +161,9 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
 
       {/* score bars */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
-        <ScoreBar label="LONG SCORE" value={data.score_long} color="#44cc88" />
+        <ScoreBar label="LONG SCORE" value={data.score_long} color="var(--k-green-mint)" />
         <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />
-        <ScoreBar label="SHORT SCORE" value={data.score_short} color="#cc4444" />
+        <ScoreBar label="SHORT SCORE" value={data.score_short} color="var(--k-red-muted)" />
       </div>
 
       {/* arrows + exec row */}

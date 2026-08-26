@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# kitelake launcher — works from any directory.
+#
+# `python -m kitelake` only resolves when the repo root is on sys.path, and the CLI needs
+# the dedicated venv (pyarrow/polars/duckdb are not installed system-wide). This wrapper
+# supplies both so you can call `kitelake` from anywhere.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VENV="$REPO/.venv-kitelake/bin/python"
+
+if [[ ! -x "$VENV" ]]; then
+  echo "error: kitelake venv missing at $VENV" >&2
+  echo "create it with:" >&2
+  echo "    python3 -m venv $REPO/.venv-kitelake" >&2
+  echo "    $REPO/.venv-kitelake/bin/pip install -r $REPO/kitelake/requirements.txt" >&2
+  exit 1
+fi
+
+exec env PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}" "$VENV" -m kitelake "$@"

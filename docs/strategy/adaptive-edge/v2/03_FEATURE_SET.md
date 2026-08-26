@@ -2,10 +2,8 @@
 
 **Version:** 2.0.0-draft
 **Artifact:** A27
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-RESOLVED
-**Depends on:** A25 Strategy Charter, A26 Opportunity and Outcome Definition, A01 TrueData Market-Data Contract
-**Market-data authority:** TrueData only
-**Trading/execution authority:** Zerodha Kite only; execution data is downstream and cannot enter a pre-decision feature snapshot
+**Status:** SPECIFICATION-DRAFT
+**Depends on:** A25 Strategy Charter, A26 Opportunity and Outcome Definition
 **Implementation authorization:** NONE
 
 ## 1. Purpose
@@ -21,10 +19,7 @@ A feature is not permitted to encode a future outcome, prediction, risk authoriz
 The feature layer is therefore:
 
 ```text
-TrueData observations
-        |
-        v
-Canonical market events/state
+Causally available observations
         |
         v
 Canonical feature values
@@ -35,15 +30,7 @@ FeatureSnapshot
 
 No strategy decision is made inside this layer.
 
-## 2. Source boundary
-
-All Adaptive Edge market/research observations used by this feature layer must originate from TrueData and pass through the canonical market-data boundary defined by A01.
-
-The feature layer must not consume Kite quotes, Kite positions, Kite fills, or any other broker execution state.
-
-Kite data may enter later execution/accounting/reconciliation artifacts, but cannot be used to construct a feature for a decision that predates the corresponding broker event.
-
-## 3. Feature definition contract
+## 2. Feature definition contract
 
 Every production feature must have:
 
@@ -66,7 +53,7 @@ owner
 
 A formula without these semantics is not a complete feature definition.
 
-## 4. Feature classes
+## 3. Feature classes
 
 V2 distinguishes four feature classes:
 
@@ -79,7 +66,7 @@ NORMALIZED
 
 ### OBSERVED
 
-A canonical value directly represented by an authoritative TrueData market-data event.
+A canonical value directly represented by an authoritative market-data event.
 
 ### DERIVED
 
@@ -93,9 +80,9 @@ A deterministic transformation over a defined historical observation window.
 
 A transformation using learned or estimated reference quantities. Normalization parameters are versioned learned state and must obey the training-boundary rules defined by the learning artifact.
 
-## 5. Canonical observed feature boundary
+## 4. Canonical observed feature boundary
 
-V2 defines the following semantic feature slots, subject to A01 source availability:
+V2 defines the following semantic feature slots, subject to provider availability:
 
 ```text
 F-OBS-BID
@@ -104,25 +91,29 @@ F-OBS-LAST
 F-OBS-VOLUME
 ```
 
-These names define canonical semantics, not TrueData field names.
+These names define canonical semantics, not provider field names.
 
 ### F-OBS-BID
 
-Best currently available bid for the instrument at the observation timestamp, sourced from the canonical TrueData quote event.
+Best currently available executable bid for the instrument at the observation timestamp.
 
 ### F-OBS-ASK
 
-Best currently available ask for the instrument at the observation timestamp, sourced from the canonical TrueData quote event.
+Best currently available executable ask for the instrument at the observation timestamp.
 
 ### F-OBS-LAST
 
-Most recent canonical traded/last-price observation available at the observation timestamp, sourced from TrueData.
+Most recent canonical traded/last-price observation available at the observation timestamp.
 
 ### F-OBS-VOLUME
 
-Cumulative traded volume represented by the authoritative TrueData observation at the observation timestamp, subject to the exact source semantics documented by A01.
+Cumulative traded volume represented by the authoritative observation source at the observation timestamp.
 
-## 6. Derived quote features
+The exact provider/exchange semantics, update behavior, and availability guarantees remain external dependencies until documented.
+
+## 5. Derived quote features
+
+V2 defines the following derived feature semantics when their required inputs are valid:
 
 ### F-DER-MID
 
@@ -139,37 +130,44 @@ Ask(t)
 
 The feature is invalid when either required input is unavailable or fails the canonical quote-validity contract.
 
-`Mid` is a valuation/reference quantity. It is not an executable fill price.
-
 ### F-DER-SPREAD
 
 ```text
 Spread(t) = Ask(t) - Bid(t)
 ```
 
-A negative spread is not silently corrected. Crossed/locked market handling belongs to the A01 canonical market-data validity contract.
+Required inputs:
+
+```text
+Bid(t)
+Ask(t)
+```
+
+A negative spread is not silently corrected. Crossed/locked market handling belongs to the canonical market-data contract.
 
 ### F-DER-SPREAD-BPS
+
+The semantic definition is:
 
 ```text
 SpreadBps(t) = 10000 * Spread(t) / Mid(t)
 ```
 
-Valid only when `Mid(t) > 0` and the quote state is valid.
+It is valid only when `Mid(t) > 0` and the quote state is valid.
 
-Unit: basis points.
+The unit is basis points.
 
-## 7. Price-return features
+## 6. Price-return features
 
 V2 permits return features only when their observation interval is explicitly versioned.
 
-Canonical equation:
+The canonical return equation is:
 
 ```text
 Return(t, Δ) = P(t) / P(t-Δ) - 1
 ```
 
-where `P` is an explicitly selected canonical price feature.
+where `P` must itself be an explicitly selected canonical price feature.
 
 The interval `Δ` is currently:
 
@@ -181,7 +179,7 @@ No numerical lookback is frozen in A27.
 
 Therefore no specific return feature instance is production-authorized yet.
 
-## 8. Aggregated features
+## 7. Aggregated features
 
 Aggregated features require an explicit window:
 
@@ -197,7 +195,7 @@ every observation used
 availability_time <= decision_time
 ```
 
-Permitted architectural families include:
+The following feature families are permitted but not numerically instantiated:
 
 ```text
 rolling return
@@ -209,19 +207,24 @@ range statistics
 
 No lookback value is chosen because changing the window changes the statistical population and strategy behavior.
 
-## 9. Volume features
+## 8. Volume features
 
-`F-OBS-VOLUME` is source-defined cumulative volume.
+`F-OBS-VOLUME` is cumulative source-defined volume.
 
 Derived volume-rate features require an explicit interval and aggregation convention.
 
-The implementation must not assume that a field named `volume` means a particular unit until A01/TrueData documentation establishes it.
+No assumption is made that:
 
-## 10. Time features
+```textvolume rate = cumulative volume / elapsed time
+```
+
+because session boundaries, market closures, missing observations, and provider semantics must first be defined.
+
+## 9. Time features
 
 Time-derived features are permitted only from the canonical decision timestamp and authoritative session calendar.
 
-Examples:
+Examples of semantic slots include:
 
 ```text
 session state
@@ -229,9 +232,11 @@ elapsed session time
 remaining session time
 ```
 
-Exact session semantics remain an external dependency until the exchange/instrument contract is frozen.
+The exact session calendar is an external dependency and remains UNKNOWN until the exchange/instrument contract is frozen.
 
-## 11. Instrument-context features
+Therefore these are not yet production feature instances.
+
+## 10. Instrument-context features
 
 Feature snapshots may carry immutable instrument context required to interpret observations:
 
@@ -249,9 +254,9 @@ These are context, not predictive features by default.
 
 Their exact availability and historical validity are governed by the instrument contract.
 
-## 12. Option-specific features
+## 11. Option-specific features
 
-The following are not automatically admitted to the predictive feature set merely because TrueData may provide them:
+V2 does not automatically include:
 
 ```text
 delta
@@ -263,34 +268,11 @@ open_interest
 option-chain rank
 ```
 
-Each requires a separate canonical semantic definition, source provenance, timestamp semantics, and causal availability contract before use.
+These require additional source/model semantics and are therefore not part of the canonical feature set until a later artifact explicitly defines them.
 
-Provider-supplied Greeks remain distinct from internally reconstructed Greeks.
+In particular, an option Greek cannot be introduced merely because it is mathematically computable. Its pricing model, volatility input, timestamp, contract specification, and calibration semantics would all need to be defined.
 
-## 13. Order-flow features
-
-The master strategy specification defines aggressor-side and delta concepts, but A01 currently marks authoritative aggressor-side volume as UNKNOWN.
-
-Therefore the following remain unavailable to the canonical feature set until their source semantics are resolved:
-
-```text
-aggressive buy volume
-aggressive sell volume
-cumulative delta
-flow imbalance
-```
-
-A quote-based reconstruction may be considered only as an explicitly DERIVED feature after its classification error is defined and validated.
-
-## 14. Historical microstructure constraint
-
-A01 establishes that default documented TrueData tick history is limited and historical depth is not established.
-
-Therefore A27 cannot silently assume multi-year tick/depth history for feature normalization or model training.
-
-Feature populations must record the actual historical source coverage used.
-
-## 15. Feature snapshot
+## 12. Feature snapshot
 
 At decision time `t_d`:
 
@@ -315,7 +297,7 @@ FeatureSnapshot
 
 A snapshot is immutable once used for a decision.
 
-## 16. Causal availability
+## 13. Causal availability
 
 For every feature value `f` used by a decision:
 
@@ -327,15 +309,15 @@ For a derived feature, this must hold for every dependency.
 
 For an aggregated feature, every constituent observation must satisfy the same availability boundary.
 
-## 17. Current-bar rule
+## 14. Current-bar rule
 
 A partially forming bar may not contribute its eventual final OHLC value to an earlier decision.
 
 If a feature uses a completed bar, the bar's completion/availability timestamp must be <= `decision_time`.
 
-The authoritative availability semantics must come from the TrueData feed contract, not from assumptions about generic bars.
+The data contract must provide the authoritative availability semantics.
 
-## 18. Missing-data states
+## 15. Missing-data states
 
 A feature value must carry an explicit status:
 
@@ -353,7 +335,7 @@ Stale values are not silently treated as current.
 
 Invalid source data is not silently repaired inside the strategy feature layer.
 
-## 19. Staleness
+## 16. Staleness
 
 A feature requiring freshness must define:
 
@@ -367,13 +349,15 @@ No universal numerical freshness threshold is frozen here.
 
 Until a feature-specific freshness policy exists, the feature cannot be used where freshness is a required strategy condition.
 
-## 20. Initialization
+## 17. Initialization
 
 A rolling feature cannot become valid before its required historical observation population exists.
 
-It must not be initialized using future observations or undocumented defaults.
+For example, a feature requiring a window `W` cannot be initialized using future observations or an undocumented default value.
 
-## 21. Normalization
+The exact warm-up policy belongs to the feature definition.
+
+## 18. Normalization
 
 Any fitted transformation such as:
 
@@ -387,9 +371,9 @@ They must be estimated only from the permitted training population and must neve
 
 Full-dataset normalization before temporal evaluation is forbidden.
 
-## 22. Feature dependencies
+## 19. Feature dependencies
 
-Every feature has an explicit dependency graph.
+Each feature has an explicit dependency graph.
 
 Example:
 
@@ -416,12 +400,12 @@ feature -> execution result
 feature -> future label
 ```
 
-## 23. Feature provenance
+## 20. Feature provenance
 
 Every feature value used in a decision must be traceable to:
 
 ```text
-TrueData raw source event(s)
+raw source event(s)
     -> canonical event(s)
     -> canonical state
     -> feature formula/version
@@ -429,7 +413,9 @@ TrueData raw source event(s)
     -> FeatureSnapshot
 ```
 
-## 24. Feature versioning
+This is required for reproducibility and audit.
+
+## 21. Feature versioning
 
 A semantic change to any of the following requires a new feature version:
 
@@ -447,13 +433,15 @@ unit
 
 Historical snapshots retain the version that actually produced them.
 
-## 25. Feature set versioning
+## 22. Feature set versioning
 
 A `feature_set_version` identifies the exact collection of features supplied to a model/decision stage.
 
-Changing feature membership is distinguishable from changing one feature's formula.
+Changing feature membership is therefore distinguishable from changing one feature's formula.
 
-## 26. Attack — future information
+Both changes are versioned.
+
+## 23. Attack — future information
 
 Forbidden:
 
@@ -467,23 +455,34 @@ future normalized distribution
 
 entering a snapshot before those observations were available.
 
-## 27. Attack — provider semantics
+## 24. Attack — provider semantics
 
-A TrueData field cannot be mapped to a canonical feature merely because its name looks equivalent.
+A provider field cannot be mapped to a canonical feature merely because its name looks equivalent.
 
-For example:
+Example:
 
 ```text
-TrueData field = "volume"
+provider_field = "volume"
 ```
 
-does not establish whether the field represents cumulative session volume, interval volume, last-trade quantity, or another quantity until the authoritative source contract establishes it.
+does not prove whether it represents:
 
-## 28. Attack — stale quote
+```text
+cumulative session volume
+bar volume
+tick count
+contract volume
+```
 
-A bid/ask that is present but stale must not be interpreted as a contemporaneous executable quote.
+The provider documentation must establish the mapping.
 
-## 29. Attack — crossed quote
+## 25. Attack — stale quote
+
+A bid/ask that is present but stale must not be silently interpreted as a contemporaneous executable quote.
+
+The stale policy must be explicit.
+
+## 26. Attack — crossed quote
 
 For:
 
@@ -491,11 +490,61 @@ For:
 Ask < Bid
 ```
 
-V2 does not silently reorder values.
+V2 does not silently reorder the values.
 
-The canonical market-data contract determines whether the observation is invalid or otherwise handled.
+The market-data validity contract must determine whether the observation is invalid, corrected, or otherwise handled.
 
-## 30. Attack — hidden execution information
+## 27. Attack — negative/zero price
+
+Price-derived features must define their domain.
+
+For example:
+
+```text
+SpreadBps
+```
+
+requires:
+
+```text
+Mid > 0
+```
+
+A zero/negative denominator must produce an explicit invalid state, not an arbitrary numerical replacement.
+
+## 28. Attack — survivorship
+
+Historical instrument context must be time-valid.
+
+A current instrument universe cannot be substituted for the historical universe.
+
+## 29. Attack — feature selection overfitting
+
+Choosing features because they perform best on the eventual test period is forbidden.
+
+Feature selection is itself a learned/model-selection process and must obey the training/validation/test protocol.
+
+## 30. Attack — multiple testing
+
+If many candidate features are evaluated and the best subset is selected, the selection process must be included in the validation design.
+
+The final test set cannot be repeatedly inspected to choose the feature set.
+
+## 31. Attack — duplicate information
+
+Two feature names may encode substantially identical information.
+
+The feature registry must retain semantic definitions so redundancy can be detected rather than accidentally interpreted as independent evidence.
+
+## 32. Attack — leakage through normalization
+
+A feature may appear causally valid while its normalization parameters were fitted using future data.
+
+That is still leakage.
+
+Therefore preprocessing belongs inside the temporal validation boundary.
+
+## 33. Attack — hidden execution information
 
 Features may not use:
 
@@ -509,31 +558,9 @@ post-decision order-book response
 
 for a prediction made before those events occurred.
 
-## 31. Attack — survivorship and instrument leakage
+## 34. Initial V2 feature inventory
 
-Historical instrument context must be time-valid.
-
-A current instrument universe cannot be substituted for the historical universe.
-
-## 32. Attack — feature-selection overfitting
-
-Selecting features because they perform best on the eventual test period is forbidden.
-
-Feature selection is itself a model-selection operation and must obey the temporal validation protocol.
-
-## 33. Attack — multiple testing
-
-If many candidate features are evaluated and the best subset is selected, the selection process must be included in the validation design.
-
-The final test set cannot be repeatedly inspected to choose the feature set.
-
-## 34. Attack — redundant evidence
-
-Feature names must not be treated as independent evidence merely because they are distinct names.
-
-Semantic and statistical redundancy must be assessed during research.
-
-## 35. Initial V2 feature inventory
+The canonical inventory at this artifact level is:
 
 ```text
 OBSERVED
@@ -549,7 +576,7 @@ F-DER-MID
 F-DER-SPREAD
 F-DER-SPREAD-BPS
 
-DEFERRED / PARAMETERIZED
+PARAMETERIZED / DEFERRED
 ------------------------
 Return(Δ)
 RollingReturn(W)
@@ -557,26 +584,27 @@ RollingVolatility(W)
 RollingVolume(W)
 RollingSpread(W)
 SessionTime
-AggressorSide
-Delta
-FlowImbalance
-OptionGreeks
-OpenInterest-derived features
 ```
 
-Only the first seven feature semantics are mathematically specified at this stage, and their provider availability remains governed by A01.
+Only the first seven feature semantics are fully specified mathematically at this stage, subject to source-data validity.
 
-## 36. Dependencies
+The parameterized families are architectural slots, not production-authorized feature instances.
 
-```text
-A01 TrueData Market-Data Contract
-A26 Opportunity / Outcome boundary
-Instrument/contract metadata contract
-Exchange session/calendar contract
-Normalization and learning contract
-```
+## 35. External dependencies
 
-## 37. Completion criterion
+### TrueData
+
+Status: UNKNOWN.
+
+No provider field mapping is frozen without TrueData documentation.
+
+### Exchange/instrument specification
+
+Status: UNKNOWN.
+
+Required for exact session calendar, contract metadata, historical instrument validity, and instrument-specific market-data semantics.
+
+## 36. Completion criterion
 
 A feature is production-resolvable only when:
 
@@ -593,7 +621,7 @@ semantic meaning
 + version
 ```
 
-are defined and the required TrueData source semantics are confirmed.
+are defined.
 
 ## ARCHITECTURE STATUS
 
@@ -601,7 +629,6 @@ Frozen:
 
 ```text
 feature-layer ownership
-TrueData-only market-data boundary
 causal feature boundary
 FeatureSnapshot contract
 observed quote feature semantics
@@ -616,26 +643,27 @@ normalization leakage prohibition
 ## UNRESOLVED
 
 ```text
-TrueData exact field mappings where not yet confirmed
+provider mappings
 session semantics
-return intervals
+exact return intervals
 rolling windows
-warm-up policies
+warm-up policies for parameterized features
 feature-specific freshness thresholds
 option-specific derived features
-aggressor classification
-historical microstructure coverage
+normalization methodology
 final predictive feature subset
 ```
 
 ## BLOCKERS
 
-TrueData-specific feature implementation is blocked wherever the source contract is not confirmed.
+No blocker to the feature architecture.
 
-Parameterized features remain blocked until their windows and semantics are established and validated.
+TrueData-specific feature implementation remains blocked until provider documentation is received.
 
-A26's exact predictive target remains unresolved and therefore predictive feature selection cannot yet be finalized.
+Parameterized features remain blocked until their windows and semantics are established and subsequently validated.
 
 ## NEXT ARTIFACT
 
-**A28 — Edge / Prediction Contract.**
+**A28 — Edge / Prediction Definition**
+
+A28 must define exactly what V2 predicts from the FeatureSnapshot, the mathematical prediction object, prediction horizon dependency, calibration semantics, and the separation between prediction and economic eligibility.

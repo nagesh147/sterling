@@ -23,8 +23,11 @@ import type {
 // Exported so the board and other panes can deep-link without duplicating the
 // string literals (they used to pass unvalidated bare strings).
 export type SectionId =
-  | 'account' | 'mode' | 'manualRules' | 'autoRules'
-  | 'engine' | 'navigator' | 'markets' | 'notifications' | 'experience';
+  | 'account' | 'truedata' | 'diagnostics' | 'mode' | 'manualRules' | 'autoRules'
+  | 'engine' | 'navigator' | 'adaptiveEdge' | 'orbOptions' | 'atmPremiumImbalance'
+  | 'gammaMove'
+  | 'markets' | 'notifications'
+  | 'experience' | 'dataLake';
 
 /** Where an order came from. The axis the user asked to see settings split by. */
 export type Applies = 'manual' | 'auto' | 'both';
@@ -88,14 +91,14 @@ export const FIELDS = F({
   // ── What an engine scans ──────────────────────────────────────────────────
   scan_source: {
     key: 'scan_source',
-    label: 'Signal source',
-    help: 'Which chart a SuperTrend signal is read from. Navigator keeps its own separate setting for this.',
+    label: 'Chart source',
+    help: 'Which price series SuperTrend reads. Navigator keeps its own separate setting.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'service.scan_user builds the spot/premium/confluence universes from it, and service._make_place_cb uses it for the both-mode cross guard.',
   },
   strike_moneyness: {
     key: 'strike_moneyness',
-    label: 'Strike coverage',
+    label: 'Strike range',
     help: 'Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits.',
     owner: 'market', applies: 'both', stage: 'discovery', rescan: true, home: 'engine',
     evidence: 'scanner.option_order_args picks the automatic leg from exactly these strikes. Navigator falls back to this list only when it has no ladder of its own.',
@@ -139,14 +142,14 @@ export const FIELDS = F({
   // ── SuperTrend strategy mechanics ─────────────────────────────────────────
   trail_target: {
     key: 'trail_target',
-    label: 'Trailing style',
+    label: 'Trail tightness',
     help: 'Which SuperTrend line the stop follows. Tight is the most out-of-sample robust in the 7.5y sweep.',
     owner: 'supertrend', applies: 'both', stage: 'trail', rescan: true, home: 'engine',
     evidence: 'Computes the board plan that protection.plan_for_symbol hands to a hand-placed arm, as well as the automatic one.',
   },
   exit_mode: {
     key: 'exit_mode',
-    label: 'Exit confirmation',
+    label: 'Exit rule',
     help: 'How many SuperTrend lines must turn red to close a trade. Entry always needs three green lines and a fresh signal.',
     owner: 'supertrend', applies: 'both', stage: 'exit', rescan: true, home: 'engine',
     evidence: 'protection.arm_position freezes it onto the position at arm time, for manual arms too; the monitor reads it from there.',
@@ -160,7 +163,7 @@ export const FIELDS = F({
   },
   price_stop_exit: {
     key: 'price_stop_exit',
-    label: 'Trailing stop closes a trade',
+    label: 'Trail can close the trade',
     help: 'On: a trade is closed the first bar price trades through its trail. Off restores the old rule where only the exit counter could close it.',
     owner: 'supertrend', applies: 'both', stage: 'exit', rescan: true, home: 'engine',
     evidence: 'Governs exits.trail_exit_index — the board’s exit_state/exit_reason. The live tick monitor enforces the trail regardless.',
@@ -169,45 +172,59 @@ export const FIELDS = F({
   // ── Trade Rules — engine-independent execution ────────────────────────────
   stop_mode: {
     key: 'stop_mode',
-    label: 'Protection mode',
-    help: 'Where the protective stop lives: at the broker as a GTT, in the server-side tick monitor, or both.',
+    label: 'Place stop at',
+    help: 'Where the stop-loss lives after a fill.',
     owner: 'execution', applies: 'both', stage: 'stop', rescan: false, home: 'autoRules',
     evidence: 'service.arm_manual_option_buy passes it to protection.arm_position, exactly as the automatic path does.',
   },
   protect_manual_orders: {
     key: 'protect_manual_orders',
-    label: 'Protect orders I place by hand',
-    help: 'Arm your own BUY the same way an automatic one is armed, using the stop this board already shows for that contract.',
+    label: 'Add stop when I buy',
+    help: 'After your BUY fills, place a stop-loss and watch the position.',
     owner: 'execution', applies: 'manual', stage: 'protection', rescan: false, home: 'manualRules',
     evidence: 'service.place_manual_order / arm_manual_option_buy — consulted only on the hand-placed order path.',
   },
   expiry_square_off_days: {
     key: 'expiry_square_off_days',
-    label: 'Expiry square-off',
-    help: 'Close an option position this many calendar days before expiry. 0 disables it.',
+    label: 'Exit before expiry',
+    help: 'Days before expiry to close. 0 = off.',
     owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._square_off_expiring iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
   time_stop_bars: {
     key: 'time_stop_bars',
-    label: 'Time stop',
-    help: 'Close a position after this many 1H bars held. 0 disables it.',
+    label: 'Max hold time',
+    help: 'Hours on the chart before forced exit. 0 = off.',
     owner: 'execution', applies: 'both', stage: 'exit', rescan: false, home: 'autoRules',
     evidence: 'service._time_stop_positions iterates positions.open_positions — every registered position, hand-placed ones included.',
   },
   risk_sizing: {
     key: 'risk_sizing',
-    label: 'Risk-based sizing',
+    label: 'Size by risk',
     help: 'Size automatic orders so the premium at risk stays within a set share of available capital.',
     owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb only — the automatic placement path.',
   },
   risk_pct: {
     key: 'risk_pct',
-    label: 'Risk per trade',
+    label: 'Risk % per trade',
     help: 'Percent of available F&O capital risked on one automatic entry.',
     owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb only — the automatic placement path.',
+  },
+  max_contract_staleness_bars: {
+    key: 'max_contract_staleness_bars',
+    label: 'Max contract lag',
+    help: 'How many hours a contract’s own last 1H bar may lag the underlying’s and still be auto-executed. 0 means it must be current. The row is shown either way; only the automatic order is held.',
+    owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
+    evidence: 'scanner.contract_bar_is_current gates the place_cb call in the derivatives pass. Display and the board are untouched.',
+  },
+  allow_min_lot_over_risk: {
+    key: 'allow_min_lot_over_risk',
+    label: 'Allow 1 lot over risk',
+    help: 'When even one lot would exceed the risk cap, take it anyway instead of skipping the entry. Off keeps the cap binding.',
+    owner: 'execution', applies: 'auto', stage: 'size', rescan: false, home: 'autoRules',
+    evidence: 'sizing.size_position / size_future_position return blocked=True and service._make_place_cb returns without ordering. Automatic placement path only.',
   },
   max_lots: {
     key: 'max_lots',
@@ -232,21 +249,21 @@ export const FIELDS = F({
   },
   block_entry_minutes_before_close: {
     key: 'block_entry_minutes_before_close',
-    label: 'Late-entry block',
+    label: 'Block late entries',
     help: 'Refuse new automatic entries in the last N minutes before 15:30, so a late signal cannot enter straight into an overnight gap. 0 disables it.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb gates the automatic entry only.',
   },
   max_spread_pct: {
     key: 'max_spread_pct',
-    label: 'Maximum spread',
+    label: 'Max spread %',
     help: 'Skip an automatic entry whose bid-ask spread is wider than this share of mid. Blank disables it.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb makes one quote call at automatic entry.',
   },
   min_oi: {
     key: 'min_oi',
-    label: 'Minimum open interest',
+    label: 'Min open interest',
     help: 'Skip an automatic entry into a strike thinner than this. Blank disables it.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb makes one quote call at automatic entry.',
@@ -260,21 +277,21 @@ export const FIELDS = F({
   },
   wire_risk_infra: {
     key: 'wire_risk_infra',
-    label: 'Portfolio risk infrastructure',
+    label: 'Portfolio risk guards',
     help: 'Feed the drawdown circuit breaker and correlation penalty into automatic sizing.',
     owner: 'execution', applies: 'auto', stage: 'guard', rescan: false, home: 'autoRules',
     evidence: 'service._make_place_cb — consulted during automatic sizing only.',
   },
   directional_mode: {
     key: 'directional_mode',
-    label: 'Directional mode',
+    label: 'Order vehicle',
     help: 'Monetise a signal through a chosen vehicle instead of the default option leg.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Selects the contract the engine buys; a manual trader picks their own contract.',
   },
   vehicle: {
     key: 'vehicle',
-    label: 'Vehicle',
+    label: 'What to buy',
     help: 'What an automatic order buys: an option leg, a deep in-the-money option, or an index future.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Read by the automatic placement callback when choosing the instrument.',
@@ -288,7 +305,7 @@ export const FIELDS = F({
   },
   itm_depth: {
     key: 'itm_depth',
-    label: 'In-the-money depth',
+    label: 'ITM depth',
     help: 'How many strike steps into the money. Only used when no target delta is set.',
     owner: 'execution', applies: 'auto', stage: 'entry', rescan: false, home: 'autoRules',
     evidence: 'Only consulted when no target delta is set — a target delta overrides it.',
@@ -352,9 +369,18 @@ export const TRAIL_OPTIONS: Array<{ value: TrailTarget; label: string; hint: str
 ];
 
 export const STOP_MODE_OPTIONS: Array<{ value: EngineConfigModel['stop_mode']; label: string; hint: string }> = [
-  { value: 'both', label: 'Both', hint: 'Broker stop and server monitor together. Recommended for real money.' },
-  { value: 'broker', label: 'Broker', hint: 'A GTT/SL-M order sits at Zerodha, so it survives this server going down.' },
-  { value: 'monitor', label: 'Monitor', hint: 'The server-side tick monitor exits on a trail breach, intrabar.' },
+  {
+    value: 'both', label: 'Zerodha + Sterling',
+    hint: 'Stop at Zerodha, and Sterling watches too. Best for live.',
+  },
+  {
+    value: 'broker', label: 'Zerodha',
+    hint: 'Stop only at Zerodha. Works if the app is offline.',
+  },
+  {
+    value: 'monitor', label: 'Sterling',
+    hint: 'Sterling watches price and exits. Needs the app online.',
+  },
 ];
 
 export const STRIKE_GROUPS: Array<{ label: string; hint: string; values: Moneyness[] }> = [
@@ -398,9 +424,14 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
   settings: 'experience',
 };
 
+// Must list every SectionId. A missing entry makes `isSectionId` false for it,
+// which silently turns `openSettingsSection` into a no-op and stops the section
+// from being restored on reload -- 'diagnostics' was absent and had both bugs.
 export const SECTION_IDS: SectionId[] = [
-  'account', 'mode', 'manualRules', 'autoRules', 'engine', 'navigator',
-  'markets', 'notifications', 'experience',
+  'account', 'truedata', 'diagnostics', 'mode', 'manualRules', 'autoRules', 'engine',
+  'navigator', 'adaptiveEdge', 'orbOptions', 'atmPremiumImbalance', 'gammaMove', 'markets',
+  'notifications', 'experience',
+  'dataLake',
 ];
 
 export function isSectionId(value: unknown): value is SectionId {

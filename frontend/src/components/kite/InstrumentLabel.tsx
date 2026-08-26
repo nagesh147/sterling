@@ -96,8 +96,8 @@ export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string;
   const rawTs = parts.length > 1 ? parts[1] : symbol;
   // On a colored header (onColor set), the default blue weekly badge is invisible —
   // render it as a light chip with the accent letter instead.
-  const wkColor = onColor || 'var(--color-text-4, #4184f3)';
-  const wkBg = onColor ? 'rgba(255,255,255,0.92)' : 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)';
+  const wkColor = onColor || 'var(--color-text-4, var(--k-blue))';
+  const wkBg = onColor ? 'color-mix(in srgb, var(--k-bg) 92%, transparent)' : 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)';
   const wkBase: React.CSSProperties = {
     color: wkColor, backgroundColor: wkBg, textAlign: 'center', borderRadius: '100%',
     width: 11, height: 11, fontSize: '0.62em', lineHeight: '11px', display: 'inline-block', fontWeight: 700,
@@ -116,7 +116,7 @@ export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string;
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
         <span>{display.replace(/(CE|PE)(BFO|NFO)?$/, ' $1')}</span>
-        {exchange && <span style={{ fontSize: 9, color: '#9b9b9b', marginLeft: 4 }}>{exchange}</span>}
+        {exchange && <span style={{ fontSize: 9, color: 'var(--k-dim)', marginLeft: 4 }}>{exchange}</span>}
       </span>
     );
   }
@@ -141,7 +141,7 @@ export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string;
       </span>
       {strike && <span style={{ marginRight: 4 }}>{strike}</span>}
       {type && <span style={{ marginRight: 4 }}>{type}</span>}
-      {exchange && !type && exchange !== 'INDEX' && <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{exchange}</span>}
+      {exchange && !type && exchange !== 'INDEX' && <span style={{ fontSize: 9, color: 'var(--k-dim)', background: 'var(--k-surface-hover)', padding: '1px 4px', borderRadius: 2 }}>{exchange}</span>}
     </span>
   );
 }

@@ -1,9 +1,9 @@
 # Adaptive Edge V2 — Risk Authorization Definition
 
-**Version:** 2.0.0-draft
-**Artifact:** A31
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
-**Depends on:** A25, A30
+**Version:** 2.0.0-draft  
+**Artifact:** A31  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
+**Depends on:** A25, A30  
 **Implementation authorization:** NONE
 
 ## 1. Purpose

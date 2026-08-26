@@ -1,8 +1,8 @@
 # Adaptive Edge V2 — Feature Availability, Snapshot and Feature-Lineage Contract
 
-**Artifact:** A40
-**Version:** 2.0.0-draft
-**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED
+**Artifact:** A40  
+**Version:** 2.0.0-draft  
+**Status:** SPECIFICATION-DRAFT / PARTIALLY-BLOCKED  
 **Implementation:** NONE
 
 ## 1. Purpose

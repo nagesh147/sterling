@@ -256,9 +256,6 @@ class AvwapConfig(BaseModel):
     stop_buffer_atr: float = Field(0.15, ge=0.0, le=3.0)
     max_stop_distance_atr: float = Field(2.00, gt=0.0)
     target_r: float = Field(2.00, ge=0.5, le=10.0)
-    show_session_vwap: bool = True
-    show_daily_range: bool = True
-    show_weekly_range: bool = True
 
     @model_validator(mode="after")
     def _grade_and_stop_ordering(self) -> "AvwapConfig":
@@ -353,7 +350,6 @@ class FlowConfig(BaseModel):
     strong_zone: float = Field(68.0, ge=0.0, le=100.0)
     extreme_zone: float = Field(96.0, ge=0.0, le=100.0)
     require_for_index_gate: bool = True
-    allow_na_for_single_stocks: bool = True
 
     @model_validator(mode="after")
     def _radius_and_window_ordering(self) -> "FlowConfig":
@@ -382,7 +378,6 @@ class GammaConfig(BaseModel):
     min_samples: int = Field(30, ge=1)
     blast_z_min: float = Field(3.0, gt=0.0)
     acceleration_z_min: float = Field(2.0, gt=0.0)
-    expiry_profile_enabled: bool = True
     expiry_profile_start_ist: str = "14:00"
     require_flow_alignment: bool = True
     required_for_gate: bool = False
@@ -516,6 +511,13 @@ class NavigatorConfigModel(BaseModel):
     #: Empty list = do not scan single-stock contracts at all (the exchange
     #: lists only a monthly cycle, so "monthly" is the sole thing to include).
     scan_expiries_stocks: Optional[list[Literal["monthly"]]] = None
+    #: Navigator's OWN expiry window, same three settings as every other engine.
+    #: ``None`` means "follow the Kite engine's", matching how the strike ladder
+    #: and expiry cycles above already work — Navigator overrides contract
+    #: coverage only when it is told to.
+    expiry_dte_min: Optional[int] = None
+    expiry_dte_max: Optional[int] = None
+    avoid_expiry_day: Optional[bool] = None
     # ── Structure Radar / Signal Origination (additive, all off by default) ──
     # See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
     # Orthogonal to `operating_mode` — none of these change how Navigator

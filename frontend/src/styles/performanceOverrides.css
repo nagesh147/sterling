@@ -74,3 +74,46 @@ polyline[stroke="#df514c"] {
     pointer-events: auto;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Reduced motion, actually enforced.
+ *
+ * Individual components guard their own animations, but most of this app's
+ * motion is declared in inline style objects, and a media query in a
+ * stylesheet cannot reach an inline style — so the per-component guards only
+ * ever covered the fraction of motion that happened to live in CSS.
+ *
+ * `!important` in a stylesheet does outrank a plain inline declaration, so
+ * this one rule catches all of it: ~155 transition and animation
+ * declarations across the terminal.
+ *
+ * Durations collapse to a hair rather than to zero. `transition-duration: 0`
+ * cancels transitionend, and anything waiting on that event to unmount or
+ * clean up would hang; .01ms fires it immediately and is imperceptible.
+ * ───────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* The element selectors are not redundant with `*`. The rule above sets a
+     60ms transition on `button, a, input, …` with !important, and among
+     !important declarations the more specific selector wins — a bare `*`
+     loses to `button` and every control on the terminal would keep animating.
+     Repeating the list ties the specificity, and being later in the file
+     wins the tie. */
+  *,
+  *::before,
+  *::after,
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="tab"],
+  [role="button"],
+  [role="switch"] {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

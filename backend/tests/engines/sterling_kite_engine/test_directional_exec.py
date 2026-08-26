@@ -29,14 +29,25 @@ UID = "test-dir-exec"
 
 
 class FakeClient:
-    def __init__(self, instruments=None):
+    #: Default capital: enough that risk sizing is never the gate. These tests are
+    #: about direction, vehicle and the entry filters, but at the old ₹100,000 a
+    #: single NIFTY lot (₹2,250 of risk) already broke the 1% budget — so every one
+    #: of them would be refused by the risk cap for reasons unrelated to what it
+    #: asserts. Tests that need a small account pass ``balance`` explicitly.
+    DEFAULT_BALANCE = 5_000_000.0
+
+    def __init__(self, instruments=None, balance: float | None = None,
+                 ltp_by_symbol: dict | None = None, ltp_missing: bool = False):
         self.gtt_calls = []
         self.opt_placed = []
         self.fut_placed = []
         self._instruments = instruments or []
+        self.balance = self.DEFAULT_BALANCE if balance is None else float(balance)
+        self.ltp_by_symbol = ltp_by_symbol or {}
+        self.ltp_missing = ltp_missing
 
     async def get_margins(self, seg=None):
-        return {"available": {"live_balance": 100000.0}}
+        return {"available": {"live_balance": self.balance}}
 
     async def place_order_option(self, sym, side, size, **kw):
         self.opt_placed.append({"sym": sym, "side": side, "size": size, **kw})
@@ -54,7 +65,13 @@ class FakeClient:
         return self._instruments
 
     async def get_ltp(self, syms):
-        return {s: {"last_price": 520.0} for s in syms}
+        # ``ltp_by_symbol`` lets a test price one instrument differently — a futures
+        # contract does not trade at the same price as an option leg, and the whole
+        # point of the futures translation is that it does not trade at spot either.
+        if self.ltp_missing:
+            return {}
+        return {s: {"last_price": self.ltp_by_symbol.get(s.split(":")[-1], 520.0)}
+                for s in syms}
 
 
 def _bear_row(source="spot"):
@@ -202,6 +219,57 @@ def test_futures_bear_is_short_with_buy_to_cover_stop():
     assert not client.opt_placed                    # no option order in futures mode
     # short stop must BUY to cover (upside stop)
     assert client.gtt_calls and client.gtt_calls[0]["orders"][0]["transaction_type"] == K.TXN_BUY
+
+
+def test_futures_entry_and_stop_are_in_the_futures_price_domain():
+    """A future does not trade at spot, and its stop cannot be an index level.
+
+    The entry and the GTT trigger were taken straight from ``row.spot`` and
+    ``row.stop_loss`` — both UNDERLYING-domain. On NIFTY the basis is tens of points;
+    on a stock future it is larger. That mis-states the recorded entry (and so every
+    realized-PnL figure derived from it) and puts the broker's trigger a whole basis
+    away from the level intended — in a discount, on the wrong side of the last price
+    entirely, where it is rejected or fires immediately.
+
+    Futures track spot ~1:1, so the stop DISTANCE carries over and only the level
+    shifts by the basis.
+    """
+    client = FakeClient(instruments=_fut_dump(),
+                        ltp_by_symbol={"NIFTY26JUNFUT": 25_080.0})
+    cfg = EngineConfigModel(directional_mode=True, vehicle="futures",
+                            enabled_vehicles=["futures"], futures_expiry="near")
+    # _bear_row: spot 25,000, underlying trail 25,200 → a 200-point stop, above.
+    open_pos = _run(cfg, _bear_row(), client)
+    assert len(open_pos) == 1
+    p = open_pos[0]
+    assert p.entry_premium == pytest.approx(25_080.0), "entry is the future's own price"
+    # basis = 25,080 − 25,000 = +80 → stop 25,200 + 80.
+    assert p.stop_premium == pytest.approx(25_280.0)
+    assert p.stop_premium - p.entry_premium == pytest.approx(200.0), "distance preserved"
+
+
+def test_futures_position_records_its_expiry_so_the_square_off_can_reach_it():
+    """``pos_expiry`` was left blank for futures, so ``_square_off_expiring`` — which
+    skips anything without an expiry — never squared one off. Stock futures settle
+    physically; riding one into expiry means taking delivery."""
+    client = FakeClient(instruments=_fut_dump(),
+                        ltp_by_symbol={"NIFTY26JUNFUT": 25_080.0})
+    cfg = EngineConfigModel(directional_mode=True, vehicle="futures",
+                            enabled_vehicles=["futures"], futures_expiry="near")
+    open_pos = _run(cfg, _bear_row(), client)
+    assert len(open_pos) == 1
+    assert open_pos[0].expiry == _future_expiry(30)
+
+
+def test_futures_entry_skipped_when_the_contract_cannot_be_priced():
+    """No quote means no basis, and no basis means the stop cannot be placed where it
+    belongs. Consistent with the option path: auto-exec is unattended, so a position
+    it cannot protect is not opened."""
+    client = FakeClient(instruments=_fut_dump(), ltp_missing=True)
+    cfg = EngineConfigModel(directional_mode=True, vehicle="futures",
+                            enabled_vehicles=["futures"], futures_expiry="near")
+    assert _run(cfg, _bear_row(), client) == []
+    assert not client.fut_placed
 
 
 def test_futures_unresolved_contract_blocks_order():
@@ -412,7 +480,7 @@ def test_daily_pnl_accumulates_and_resets_per_day():
 
 
 def test_daily_loss_breaker_halts_entries():
-    client = FakeClient()  # available capital 100_000
+    client = FakeClient(balance=100_000.0)  # small account: 2% of ₹100,000 = ₹2,000
     state.reset(UID)
     positions._positions.pop(UID, None)
     live_safety._IDEMPOTENCY_CACHE.clear()
@@ -495,6 +563,34 @@ def test_new_trail_futures_short_no_update_when_wider():
         underlying="NIFTY BANK", status=positions.OPEN)
     row = _make_signal_row(underlying="NIFTY BANK", stop_loss=48800.0)  # higher → would widen
     assert service._new_trail_for_open(p, [row]) is None
+
+
+def test_new_trail_futures_translates_the_underlying_level_by_the_entry_basis():
+    """The trail arrives as an UNDERLYING level; the position's stop is a FUTURES
+    price. Without the basis the two are compared in different units, and on a
+    premium basis the underlying level never clears the futures stop — the trail
+    silently stops ratcheting for the life of the position."""
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY26JUNFUT", exchange="NFO", token=1,
+        qty=75, stop_premium=24_780.0, direction="long", vehicle="futures",
+        underlying="NIFTY 50", status=positions.OPEN,
+        entry_premium=25_080.0, entry_spot=25_000.0)     # basis +80
+    row = _make_signal_row(stop_loss=24_850.0)
+    # 24,850 underlying + 80 basis = 24,930, which tightens 24,780.
+    assert service._new_trail_for_open(p, [row]) == pytest.approx(24_930.0)
+
+
+def test_new_trail_futures_without_an_entry_spot_leaves_the_level_alone():
+    """A position written before futures entries were priced in their own domain has
+    no entry spot. Subtracting a zero spot from a real entry price would add the whole
+    contract price as 'basis' and push the stop tens of thousands of points away."""
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY26JUNFUT", exchange="NFO", token=1,
+        qty=75, stop_premium=24_700.0, direction="long", vehicle="futures",
+        underlying="NIFTY 50", status=positions.OPEN,
+        entry_premium=25_000.0, entry_spot=0.0)          # legacy row
+    row = _make_signal_row(stop_loss=24_850.0)
+    assert service._new_trail_for_open(p, [row]) == pytest.approx(24_850.0)
 
 
 def test_new_trail_otm_options_tightens():

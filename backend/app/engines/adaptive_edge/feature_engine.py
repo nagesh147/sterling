@@ -1,46 +1,113 @@
-"""Causal feature facade for Adaptive Edge.
-
-A40 owns feature identity, availability, immutable snapshots, and provenance.
-This module keeps the existing engine-facing construction API while delegating
-those semantics to the lineage layer. It intentionally contains no
-strategy-specific feature formula.
-"""
+"""Causal, versioned feature snapshot boundary for Adaptive Edge."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Sequence
-
-from .feature_lineage import (
-    FeatureDefinition,
-    FeatureInput as LineageFeatureInput,
-    FeatureQuality,
-    FeatureSnapshot,
-    SourceReference,
-    build_feature_snapshot as build_lineage_snapshot,
-)
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from types import MappingProxyType
+from typing import Mapping, Sequence
 
 
+class FeatureStatus(str, Enum):
+    VALID = "VALID"
+    MISSING = "MISSING"
+    STALE = "STALE"
+    INVALID = "INVALID"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+@dataclass(frozen=True)
+class FeatureProvenance:
+    source_event_ids: tuple[str, ...] = ()
+    formula_id: str | None = None
+    formula_version: str | None = None
+
+
+@dataclass(frozen=True)
+class InstrumentContext:
+    instrument_id: str
+    instrument_version: str | None = None
+
+
+@dataclass(frozen=True)
 class FeatureInput:
-    """Backward-compatible engine input using ISO-8601 availability timestamps."""
+    name: str
+    value: float | None
+    available_at: str
+    status: FeatureStatus = FeatureStatus.VALID
+    provenance: FeatureProvenance = FeatureProvenance()
+    formula_version: str | None = None
 
-    def __init__(self, name: str, value: float, available_at: str) -> None:
-        self.name = name
-        self.value = value
-        self.available_at = available_at
+
+@dataclass(frozen=True)
+class FeatureSnapshot:
+    snapshot_id: str
+    strategy_version: str
+    feature_set_version: str
+    decision_time: str
+    observation_cutoff_time: str
+    values: Mapping[str, float | None]
+    statuses: Mapping[str, FeatureStatus]
+    available_at: Mapping[str, str]
+    formula_ids: tuple[str, ...] = ()
+    provenance: Mapping[str, FeatureProvenance] = field(default_factory=dict)
+    instrument_context: InstrumentContext | None = None
+
+    def __post_init__(self) -> None:
+        if self.instrument_context is None or not self.instrument_context.instrument_id:
+            raise ValueError("canonical instrument identity is required")
+        names = set(self.values)
+        if names != set(self.statuses) or names != set(self.available_at):
+            raise ValueError("feature values, statuses, and availability must have identical keys")
+        if set(self.provenance) != names:
+            raise ValueError("every feature must have provenance")
+        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+        object.__setattr__(self, "statuses", MappingProxyType(dict(self.statuses)))
+        object.__setattr__(self, "available_at", MappingProxyType(dict(self.available_at)))
+        object.__setattr__(self, "provenance", MappingProxyType(dict(self.provenance)))
+        self.assert_causal(self.decision_time)
+
+    def assert_causal(self, decision_time: str) -> None:
+        decision = _parse_timestamp(decision_time)
+        for name, available_at in self.available_at.items():
+            if _parse_timestamp(available_at) > decision:
+                raise ValueError(f"lookahead detected for feature {name}: {available_at} > {decision_time}")
+
+    def assert_compatible(self, *, strategy_version: str, feature_set_version: str) -> None:
+        if self.strategy_version != strategy_version:
+            raise ValueError("unsupported strategy version")
+        if self.feature_set_version != feature_set_version:
+            raise ValueError("unsupported feature-set version")
 
 
 def _parse_timestamp(value: str) -> datetime:
-    normalized = value.replace("Z", "+00:00")
-    timestamp = datetime.fromisoformat(normalized)
-    if timestamp.tzinfo is None:
-        raise ValueError("feature timestamps must be timezone-aware ISO-8601 values")
-    return timestamp.astimezone(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"invalid canonical timestamp: {value}") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"timestamp must include timezone: {value}")
+    return parsed
 
 
-def build_feature_snapshot(*, observation_time: str, inputs: list[FeatureInput], decision_time: str, formula_ids: Sequence[str] = ()) -> FeatureSnapshot:
-    """Build an A40 snapshot without inventing feature semantics."""
-    decision = _parse_timestamp(decision_time)
-    observation = _parse_timestamp(observation_time)
-    lineage_inputs = [LineageFeatureInput(name=item.name, value=item.value, observation_time=observation, availability_time=_parse_timestamp(item.available_at), source=SourceReference(), quality=FeatureQuality.AVAILABLE) for item in inputs]
-    definitions = {item.name: FeatureDefinition(feature_id=item.name, feature_definition_version="UNSPECIFIED", transformation_version="UNSPECIFIED", source_dataset_version="UNSPECIFIED", unit="UNSPECIFIED", semantic_definition="UNSPECIFIED — feature formula not defined by A40") for item in inputs}
-    return build_lineage_snapshot(snapshot_id=f"compat:{observation.isoformat()}:{decision.isoformat()}", decision_time=decision, inputs=lineage_inputs, definitions=definitions, formula_ids=formula_ids)
+def build_feature_snapshot(*, snapshot_id: str, strategy_version: str, feature_set_version: str,
+                           observation_cutoff_time: str, inputs: list[FeatureInput],
+                           decision_time: str, instrument_context: InstrumentContext,
+                           formula_ids: Sequence[str] = ()) -> FeatureSnapshot:
+    values = {item.name: item.value for item in inputs}
+    statuses = {item.name: item.status for item in inputs}
+    available_at = {item.name: item.available_at for item in inputs}
+    provenance = {item.name: item.provenance for item in inputs}
+    return FeatureSnapshot(
+        snapshot_id=snapshot_id,
+        strategy_version=strategy_version,
+        feature_set_version=feature_set_version,
+        decision_time=decision_time,
+        observation_cutoff_time=observation_cutoff_time,
+        values=values,
+        statuses=statuses,
+        available_at=available_at,
+        formula_ids=tuple(formula_ids),
+        provenance=provenance,
+        instrument_context=instrument_context,
+    )

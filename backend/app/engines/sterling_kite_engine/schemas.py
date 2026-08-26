@@ -384,11 +384,41 @@ class EngineConfigModel(BaseModel):
     auto_execute: bool = False
     # ── Per-trade risk sizing (workstream F) ──────────────────────────────────
     # When on, auto-exec sizes lots so premium-at-risk ((entry − stop) × qty) stays
-    # within risk_pct% of available FO capital, floored at 1 lot and capped by
-    # max_lots and affordable margin. When off, falls back to a single lot.
+    # within risk_pct% of available FO capital, capped by max_lots and affordable
+    # margin. When off, falls back to a single lot.
     risk_sizing: bool = True
     risk_pct: float = 1.0          # % of available FO capital risked per trade
     max_lots: int = 10             # hard ceiling on auto-exec lots per order
+    #: What to do when even ONE lot breaks the risk budget.
+    #:
+    #: Off (default): skip the entry, because no tradable size honours ``risk_pct``.
+    #: On: take the single minimum lot anyway, accepting more risk than the setting
+    #: states. That was the old unconditional behaviour and it made ``risk_pct``
+    #: advisory — the smallest F&O lot on an index option can carry many times a 1%
+    #: budget on a modest account. Turning it on is a choice to prefer taking the
+    #: signal over holding the cap; leaving it off keeps the cap meaningful.
+    allow_min_lot_over_risk: bool = False
+    #: How many 1H bars a derivative contract's own latest bar may lag the
+    #: underlying's and still be auto-executed. 0 (default) means it must be current.
+    #:
+    #: A derivatives signal is "fresh" when it fired on the last bar that CONTRACT
+    #: has — which says nothing about when that bar was. An illiquid strike that last
+    #: printed hours ago still presents its old bar as the latest, so the transition
+    #: reads as a live trigger long after the fact and a market order fills nowhere
+    #: near the premium on screen. Raising this trades that protection for entries on
+    #: thinner strikes. Display is never affected; only the automatic order is held.
+    max_contract_staleness_bars: int = 0
+    # ── Expiry window ──────────────────────────────────────────────────────────
+    # The same three settings every other engine's Contracts section carries,
+    # under the same names, so one vocabulary covers every strategy page.
+    # `expiry_dte_min`/`expiry_dte_max` bound eligibility; `avoid_expiry_day`
+    # excludes the contract expiring today.
+    #
+    # Defaults are permissive so an existing config resolves exactly the
+    # contracts it resolved before — this adds a control, not a policy.
+    expiry_dte_min: int = 0
+    expiry_dte_max: int = 400
+    avoid_expiry_day: bool = False
     # ── Expiry square-off guard ────────────────────────────────────────────────
     # Market-exit an auto-exec option position when its contract comes within this
     # many calendar days of expiry, so a weekly can't ride into expiry unmanaged

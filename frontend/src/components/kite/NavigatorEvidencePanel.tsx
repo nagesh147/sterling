@@ -3,12 +3,12 @@ import { BORDER, DIM, MUTED, TEXT } from './kiteSettingsPrimitives';
 import type { DirectionalEvidence, NavigatorDecision, NavigatorStatus } from '../../types/navigator';
 
 const STATUS_COLOR: Record<NavigatorStatus, string> = {
-  NO_DATA: '#9b9b9b',
-  WAIT: '#9b9b9b',
-  WATCH: '#4184f3',
-  CONFLICT: '#df514c',
-  CONFIRMED: '#4caf50',
-  HIGH_CONVICTION: '#2e7d32',
+  NO_DATA: 'var(--k-dim)',
+  WAIT: 'var(--k-dim)',
+  WATCH: 'var(--k-blue)',
+  CONFLICT: 'var(--k-red)',
+  CONFIRMED: 'var(--k-green)',
+  HIGH_CONVICTION: 'var(--k-green-deep)',
 };
 
 const STATUS_LABEL: Record<NavigatorStatus, string> = {
@@ -25,7 +25,7 @@ function ComponentRow({ evidence }: { evidence: DirectionalEvidence | null }) {
     return null;
   }
   const dirLabel = evidence.direction === 1 ? 'bullish' : evidence.direction === -1 ? 'bearish' : 'neutral';
-  const qualityColor = evidence.quality === 'ok' ? '#4caf50' : evidence.quality === 'degraded' ? '#f5a623' : '#9b9b9b';
+  const qualityColor = evidence.quality === 'ok' ? 'var(--k-green)' : evidence.quality === 'degraded' ? 'var(--k-amber)' : 'var(--k-dim)';
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '90px 70px 60px minmax(0,1fr)', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${BORDER}`, fontSize: 10.5 }}>
       <span style={{ color: TEXT, fontWeight: 700, textTransform: 'capitalize' }}>{evidence.component.replace('_', ' ')}</span>
@@ -48,7 +48,7 @@ export function NavigatorEvidencePanel({ decision }: { decision: NavigatorDecisi
   const staleAgeS = Math.max(0, Math.round(staleAgeMs / 1000));
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12, background: '#fbfbfb' }}>
+    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12, background: 'var(--k-surface-5)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 5,

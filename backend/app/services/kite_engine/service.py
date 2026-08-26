@@ -20,11 +20,14 @@ from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
 from app.services.kite_engine import monitor, positions, protection, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
-from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
+from app.services.kite_engine.greeks import (
+    black_scholes_greeks, implied_vol, premium_stop_from_move,
+)
 from app.services.kite_engine import market_hours
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
-from app.services.kite_engine.strikes import chain_rows_for, pick_by_delta, pick_strikes
+from app.services.kite_engine.strikes import (chain_rows_for, expiry_window_of,
+                                              pick_by_delta, pick_strikes)
 from app.services.kite_engine.universe import build_universe, select_scan_universe
 
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -51,6 +54,7 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
         exit_mode=c.exit_mode,
         exit_aligned_trail=getattr(c, 'exit_aligned_trail', False),
         price_stop_exit=getattr(c, 'price_stop_exit', True),
+        max_contract_staleness_bars=getattr(c, 'max_contract_staleness_bars', 0),
     )
 
 
@@ -313,6 +317,40 @@ def _passes_liquidity(quote, max_spread_pct, min_oi) -> tuple:
     return True, ""
 
 
+#: Widest solved IV still treated as a real market quote (1% … 300%). ``implied_vol``
+#: clamps into [1e-3, 5.0], and a solve pinned near either bound means the price it was
+#: given is not a tradable one — a stale print, a crossed book, or a premium below
+#: intrinsic. Those fall back to the assumption rather than poisoning the delta.
+_IV_SOLVE_BOUNDS = (0.01, 3.0)
+
+
+def _effective_iv(*, price: float, spot: float, strike: float, dte_days: float,
+                  option_type: str, fallback: float = _IV_ASSUMPTION) -> float:
+    """The volatility to translate an underlying move into a premium move with.
+
+    Prefers the IV backed out of the option's OWN last price. The delta that carries
+    the underlying's SuperTrend level into a premium stop is sensitive to vol, and a
+    flat 18% assumption is wrong by a wide margin on most real chains — an index
+    weekly frequently prints north of 25%, a single stock far more around results. The
+    consequence is not academic: the broker's GTT trigger ends up at a different
+    premium from the stop the board is showing for the same position, so the two
+    disagree about where the trade is protected.
+
+    Solving from the same quote the entry premium came from makes them agree. When the
+    quote is missing or the solve is degenerate, the caller's assumption stands.
+    """
+    if price <= 0 or spot <= 0 or strike <= 0 or dte_days <= 0:
+        return fallback
+    try:
+        solved = implied_vol(price=float(price), spot=float(spot), strike=float(strike),
+                             dte_days=float(dte_days), option_type=option_type)
+    except Exception as _exc:  # noqa: BLE001
+        log.debug("suppressed: %s", _exc)
+        return fallback
+    lo, hi = _IV_SOLVE_BOUNDS
+    return solved if lo <= solved <= hi else fallback
+
+
 async def _resolve_premium_stop(
     client, *, exch: str, symbol: str, strike: float, expiry: str,
     option_type: str, spot: float, trail_level: float, iv: float = _IV_ASSUMPTION,
@@ -322,7 +360,11 @@ async def _resolve_premium_stop(
 
     Shared by the OTM (spot-signal) and deep-ITM auto-exec paths so the spot→premium
     stop translation lives in exactly one place. ``entry_premium`` is 0 when the quote
-    is unavailable (caller then degrades to single-lot sizing + the tick monitor)."""
+    is unavailable (caller then degrades to single-lot sizing + the tick monitor).
+
+    ``iv`` is only the FALLBACK. When the quote answers, the vol is solved out of that
+    same premium instead — see ``_effective_iv``.
+    """
     entry_premium = 0.0
     qkey = f"{exch}:{symbol}"
     try:
@@ -332,8 +374,10 @@ async def _resolve_premium_stop(
     except Exception as _exc:  # noqa: BLE001
         log.debug("suppressed: %s", _exc)
     dte = _dte_from_expiry(expiry)
+    eff_iv = _effective_iv(price=entry_premium, spot=float(spot), strike=float(strike),
+                           dte_days=dte, option_type=option_type, fallback=iv)
     g = black_scholes_greeks(spot=float(spot), strike=float(strike), dte_days=dte,
-                             iv=iv, option_type=option_type)
+                             iv=eff_iv, option_type=option_type)
     # SIGNED delta: + for a CE, − for a PE. Falls back to a signed ±0.5 if BS returns
     # a degenerate 0 so the translation still produces a stop on either side.
     delta = g.delta if g.delta != 0.0 else (0.5 if str(option_type).upper().startswith("C") else -0.5)
@@ -370,6 +414,42 @@ async def _resolve_future(client, item, expiry_pref: str) -> Optional[futures_mo
         today=datetime.now(_IST).date())
 
 
+async def _futures_entry_and_stop(
+    client, *, exchange: str, symbol: str, spot: float, trail_level: float,
+) -> tuple:
+    """Translate an UNDERLYING-domain entry and trail into the futures contract's own
+    price domain. Returns ``(entry, stop)``, or ``(0.0, 0.0)`` when it cannot.
+
+    A future trades at spot plus basis (cost of carry less dividends). On an index
+    that is tens of points; on a single-stock future it is larger, and it can be
+    NEGATIVE (a discount). Using the index level as the futures entry mis-states the
+    entry that every realized-PnL figure is derived from, and using the underlying's
+    SuperTrend level as the GTT trigger puts the broker's stop a whole basis from
+    where it was meant to sit — in a discount, on the wrong side of the last traded
+    price, where the exchange either rejects the trigger or fires it at once.
+
+    Futures track spot ~1:1, so the stop DISTANCE is already correct and only the
+    level needs shifting: ``stop = trail + (futures_ltp − spot)``. That holds for both
+    directions — a long's stop sits below the entry and a short's above it, by the
+    same number of points as on the underlying chart.
+
+    Returning zeros on an unavailable quote lets the caller's existing "no stop, no
+    trade" guard refuse the entry, rather than opening a position whose protective
+    trigger is in the wrong units.
+    """
+    if spot <= 0 or trail_level <= 0:
+        return 0.0, 0.0
+    key = f"{exchange}:{symbol}"
+    try:
+        quote = await client.get_ltp([key])
+        last = float((quote or {}).get(key, {}).get("last_price") or 0.0)
+    except Exception:  # noqa: BLE001
+        return 0.0, 0.0
+    if last <= 0:
+        return 0.0, 0.0
+    return last, max(0.0, trail_level + (last - spot))
+
+
 async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     """Resolve a deep-ITM (≈delta-0.9) CE/PE for the signal direction, with an
     LTP-based entry premium and a delta-implied premium stop derived from the
@@ -384,7 +464,11 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     if not chain:
         return None
     direction = "long" if getattr(row, "direction", "long") in ("long", "bull", 1) else "short"
-    iv = 0.18
+    # Strike SELECTION keeps the flat assumption: picking a ~0.9-delta strike compares
+    # candidates across a whole chain, and solving a real IV for each would need a
+    # quote per strike. The chosen leg's protective stop does not — it is derived from
+    # that one contract's own price, and `_resolve_premium_stop` solves the vol there.
+    iv = _IV_ASSUMPTION
     expiry_types = tuple(cfg.scan_expiries or ())
     if cfg.target_delta:
         pick = pick_by_delta(chain, spot=row.spot, direction=direction,
@@ -393,7 +477,8 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     else:
         picks = pick_strikes(chain, spot=row.spot, direction=direction,
                              moneynesses=[cfg.itm_depth or "ITM10"],
-                             expiry_types=expiry_types, today=today)
+                             expiry_types=expiry_types, today=today,
+                             **expiry_window_of(cfg))
         pick = picks[0][1] if picks else None
     if pick is None or not pick.option_symbol:
         return None
@@ -545,9 +630,21 @@ def _make_place_cb(client, uid: str):
                 return
             trade_symbol, trade_exchange = fp.tradingsymbol, fp.exchange
             trade_token, trade_lot = int(fp.token or 0), int(fp.lot_size or 0)
-            # Futures risk is in INDEX POINTS: entry ≈ spot, stop = the underlying ST trail.
-            entry_px = float(row.spot or 0.0)
-            stop_px = float(row.stop_loss or 0.0)
+            # The contract's OWN expiry. Left blank, `_square_off_expiring` skipped the
+            # position entirely — and a single-stock future settles physically, so
+            # riding one into expiry means taking delivery.
+            pos_expiry = str(fp.expiry or "")
+            # Futures risk is in INDEX POINTS, but the LEVELS belong to the futures
+            # contract, not the underlying: it trades at spot plus basis.
+            entry_px, stop_px = await _futures_entry_and_stop(
+                client, exchange=trade_exchange, symbol=trade_symbol,
+                spot=float(row.spot or 0.0), trail_level=float(row.stop_loss or 0.0))
+            if entry_px <= 0:
+                state.log(uid, "order_blocked",
+                          f"{row.underlying} {trade_symbol}: no futures quote — cannot "
+                          f"place the stop in the contract's own price domain, "
+                          f"auto-entry skipped")
+                return
         elif use_deep_itm:
             rt = await _resolve_deep_itm(client, item, row, cfg)
             if rt is None or not rt.symbol:
@@ -575,21 +672,67 @@ def _make_place_cb(client, uid: str):
                 pos_expiry = str(leg.expiry or "")
                 target_px = float(getattr(leg, "premium_target", 0.0) or 0.0)
                 if entry_px <= 0 or stop_px <= 0:
+                    # The translation is UNDERLYING → premium: it carries a SuperTrend
+                    # level on the underlying's chart into a premium via delta. Two
+                    # inputs therefore have to be in the underlying's domain, and on a
+                    # derivatives-source row neither one is. There, `spot` holds the
+                    # CONTRACT's premium (the ST ran on its own premium series, and
+                    # place_cb sees the raw row before grouping zeroes it) and
+                    # `stop_loss` is a premium level too. Feeding those in prices a
+                    # ₹90 premium against a ₹3000 strike: the vol solve fails, delta
+                    # collapses to the ±0.5 fallback, and the "stop" is an invented
+                    # number that then becomes the broker's trigger.
+                    #
+                    # A derivatives row needs no translation — its leg already carries
+                    # the premium stop. If that is missing (a legacy cached leg), there
+                    # is nothing here to derive it from, and leaving stop_px at 0 lets
+                    # the no-stop-no-trade guard refuse the entry rather than arm a
+                    # fabricated one. `underlying_spot` matches what the board feeds
+                    # `_stamp_leg_premium_stops`, so the two stay in step.
+                    under_spot = float(getattr(row, "underlying_spot", 0.0) or 0.0)
+                    if row.source == "derivatives":
+                        state.log(uid, "order_blocked",
+                                  f"{trade_symbol}: derivatives signal carries no premium "
+                                  f"stop on its leg, and its levels are not in the "
+                                  f"underlying's domain to derive one — auto-entry skipped")
+                        return
+                    if under_spot <= 0:
+                        under_spot = float(row.spot or 0.0)
                     entry_px, stop_px, pos_delta = await _resolve_premium_stop(
                         client, exch=trade_exchange, symbol=trade_symbol,
                         strike=pos_strike, expiry=pos_expiry, option_type=row.option_type,
-                        spot=float(row.spot), trail_level=float(row.stop_loss or row.spot))
+                        spot=under_spot, trail_level=float(row.stop_loss or under_spot))
 
-        # ── risk sizing (the default options branch is byte-identical to before) ─
+        # ── risk sizing ───────────────────────────────────────────────────────
+        # No longer byte-identical to the pre-risk-cap behaviour, in one direction:
+        # a size that breaks the budget is now refused rather than floored to one lot.
         qty = int(args["size"])
         lots = 1
         capital = None
+        # A blocked result means no tradable size honours ``risk_pct``. It must abort
+        # the entry rather than fall through: ``qty`` still holds the un-risk-sized
+        # default from ``args``, so treating "no size" as "keep the default" would
+        # place the very order the cap just refused.
+        allow_min_lot = bool(getattr(cfg, "allow_min_lot_over_risk", False))
+
+        def _blocked(sized) -> bool:
+            if not getattr(sized, "blocked", False):
+                return False
+            state.log(uid, "order_blocked",
+                      f"{trade_symbol} entry skipped — {sized.reason}. Lower the stop "
+                      f"distance, raise Risk per trade, or turn on 'Allow minimum lot "
+                      f"over risk' to take the smallest lot anyway.")
+            return True
+
         if use_futures:
             if cfg.risk_sizing and entry_px > 0 and stop_px > 0 and trade_lot > 0:
                 capital = await available_fo_capital(client)
                 sized = sizing.size_future_position(
                     entry_price=entry_px, stop_price=stop_px, lot_size=trade_lot,
-                    available_capital=capital, risk_pct=cfg.risk_pct, max_lots=cfg.max_lots)
+                    available_capital=capital, risk_pct=cfg.risk_pct, max_lots=cfg.max_lots,
+                    allow_min_lot_over_risk=allow_min_lot)
+                if _blocked(sized):
+                    return
                 if sized.qty > 0:
                     qty, lots = sized.qty, sized.lots
                     state.log(uid, "info", f"futures sizing → {sized.reason}")
@@ -601,7 +744,10 @@ def _make_place_cb(client, uid: str):
                 capital = await available_fo_capital(client)
                 sized = sizing.size_position(
                     entry_premium=entry_px, stop_premium=stop_px, lot_size=trade_lot,
-                    available_capital=capital, risk_pct=cfg.risk_pct, max_lots=cfg.max_lots)
+                    available_capital=capital, risk_pct=cfg.risk_pct, max_lots=cfg.max_lots,
+                    allow_min_lot_over_risk=allow_min_lot)
+                if _blocked(sized):
+                    return
                 if sized.qty > 0:
                     qty, lots = sized.qty, sized.lots
                     state.log(uid, "info", f"{trade_symbol} sizing → {sized.reason}")
@@ -617,7 +763,10 @@ def _make_place_cb(client, uid: str):
                 available_capital=capital,
                 risk_pct=cfg.risk_pct,
                 max_lots=cfg.max_lots,
+                allow_min_lot_over_risk=allow_min_lot,
             )
+            if _blocked(sized):
+                return
             if sized.qty > 0:
                 qty, lots = sized.qty, sized.lots
                 state.log(uid, "info", f"{trade_symbol} sizing → {sized.reason}")
@@ -698,8 +847,16 @@ def _make_place_cb(client, uid: str):
                 # it is what the protective GTT and the tick monitor below use, and for
                 # a spot/navigator row it is the only one resolved into the premium
                 # domain at all.
+                is_stock = str(row.underlying).upper() not in {"NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX", "MIDCPNIFTY"}
+                if is_stock and entry_px > 0:
+                    limit_px = round(entry_px * 1.003, 2)
+                    order_type = "limit_order"
+                else:
+                    limit_px = None
+                    order_type = "market_order"
                 result = await client.place_order_option(
-                    trade_symbol, "buy", qty, exchange=trade_exchange,
+                    trade_symbol, "buy", qty, order_type=order_type, limit_price=limit_px,
+                    exchange=trade_exchange,
                     stop_loss=(stop_px if stop_px > 0 else None), tag=idem)
         except Exception as exc:  # noqa: BLE001
             state.log(uid, "order_failed", f"{row.underlying} {trade_symbol}: {exc}")
@@ -797,6 +954,109 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
         await monitor.on_order_update(uid, last, client=client)
 
 
+def _broker_net_row(raw: dict, symbol: str) -> Optional[dict]:
+    """The broker's net-positions row for ``symbol``, or None if absent.
+
+    Kite keeps a squared-off position in ``net`` with ``quantity: 0`` for the rest of
+    the day, so "row present, quantity 0" is the signal that it CLOSED — distinct
+    from "row absent", which means it was never opened today (a carry-over, or a
+    symbol we are simply wrong about).
+    """
+    for row in ((raw or {}).get("net") or []):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("tradingsymbol", "")).strip().upper() == symbol.strip().upper():
+            return row
+    return None
+
+
+async def _reconcile_closed_positions(client, uid: str) -> None:
+    """Close registry positions the broker no longer holds.
+
+    The mirror of ``_reconcile_pending_positions``, at the other end of the trade. An
+    exit that fills at Zerodha — a GTT firing, a square-off in the Kite app, or the
+    exit the monitor deliberately stood down for when it could not confirm a GTT
+    cancel — reaches us only as an order postback. Miss that message and the registry
+    believes we still hold a position that is gone, which is worse than cosmetic:
+
+      * the board shows an open trade that does not exist;
+      * the auto-open guard stays held, so that slot can never re-enter;
+      * and every exit path still sees a live position — the expiry square-off, the
+        time stop and the tick monitor will each place a SELL for something the
+        account no longer owns, which is a NAKED SHORT.
+
+    So ask the broker instead of waiting. This function only ever repairs bookkeeping;
+    it never places an order. A quantity that shrank (a partial exit outside the
+    engine) is corrected in place rather than closed, so what protection remains is
+    sized to what is actually held.
+    """
+    open_now = [p for p in positions.open_positions(uid) if p.status == positions.OPEN]
+    if not open_now:
+        return
+    try:
+        raw = await client.get_positions_raw()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("kite closed-position reconcile skipped for %s: %s", uid, exc)
+        return
+    if not isinstance(raw, dict) or not isinstance(raw.get("net"), list):
+        return  # a malformed reply is not evidence that anything closed
+
+    for p in open_now:
+        row = _broker_net_row(raw, p.symbol)
+        if row is None:
+            continue  # never opened today at the broker — not evidence of a close
+        try:
+            held_qty = abs(int(row.get("quantity", 0) or 0))
+        except (TypeError, ValueError):
+            continue
+
+        if held_qty == 0:
+            # The broker's average sell price for the day is the honest exit price.
+            # Without it we still close the position — the bookkeeping error is the
+            # dangerous part — but we do NOT invent a realized PnL, because a wrong
+            # number here feeds the daily-loss breaker.
+            exit_px = 0.0
+            try:
+                exit_px = float(row.get("sell_price") or 0.0) if p.direction == "long" \
+                    else float(row.get("buy_price") or 0.0)
+            except (TypeError, ValueError):
+                exit_px = 0.0
+            if p.gtt_id:
+                # Whatever did the selling, our trigger is now resting over nothing.
+                outcome = await protective_stop.cancel_stop_result(client, p.gtt_id)
+                state.log(uid, "info",
+                          f"{p.symbol}: protective GTT #{p.gtt_id} {outcome} (position "
+                          f"already closed at the broker)")
+                positions.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
+            positions.close(
+                uid, p.symbol,
+                reason=(f"reconciled closed at broker @ ₹{exit_px:.2f}" if exit_px
+                        else "reconciled closed at broker (exit price unknown)"))
+            if exit_px > 0:
+                monitor._record_realized(uid, p, exit_px)
+            if p.guard_key:
+                state.clear_auto_open(uid, p.guard_key)
+            if p.token:
+                try:
+                    from app.services.exchanges.kite import ticker_manager
+                    await ticker_manager.unsubscribe(uid, [p.token])
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("suppressed: %s", exc)
+            state.log(uid, "order_placed",
+                      f"{p.symbol}: exit postback never arrived — the broker holds none, "
+                      f"so the position is reconciled CLOSED"
+                      + (f" @ ₹{exit_px:.2f}" if exit_px else
+                         " (no exit price available, realized PnL not recorded)"))
+        elif held_qty < p.qty:
+            # Partially exited elsewhere. Shrink to what is held so the trail, the GTT
+            # and any later exit are sized to the real position instead of overselling.
+            was = p.qty
+            positions.mark_filled(uid, p.symbol, p.fill_price, filled_qty=held_qty)
+            state.log(uid, "info",
+                      f"{p.symbol}: broker holds {held_qty} of {was} — position resized "
+                      f"to match (partial exit outside the engine)")
+
+
 async def _square_off_expiring(client, uid: str) -> None:
     """Market-exit auto-exec option positions inside the configured expiry window.
 
@@ -878,6 +1138,26 @@ def _new_trail_for_open(p, rows) -> Optional[float]:
             continue
         if p.vehicle == "futures":
             new_sl = float(row.stop_loss or 0.0)
+            if new_sl <= 0:
+                return None
+            # ``row.stop_loss`` is an UNDERLYING level; ``p.stop_premium`` lives in the
+            # futures contract's price domain. Comparing them directly would compare
+            # index points with futures points and, on a premium basis, freeze the
+            # trail — the underlying level would never clear the futures stop.
+            # The basis recorded at entry carries it across. It narrows toward expiry,
+            # so holding the entry basis leaves a long's stop slightly tighter over
+            # time, which is the safe direction to be wrong in.
+            #
+            # BOTH ends must be present. A row written before the futures entry was
+            # priced in its own domain has ``entry_spot`` unset, and subtracting a zero
+            # spot from a real entry price would add the WHOLE contract price as
+            # "basis" — a stop tens of thousands of points away, i.e. no stop at all.
+            # Missing either end means the position's stop is already in the same
+            # domain as the row, so leave it alone.
+            entry_px_rec = float(getattr(p, "entry_premium", 0.0) or 0.0)
+            entry_spot_rec = float(getattr(p, "entry_spot", 0.0) or 0.0)
+            if entry_px_rec > 0 and entry_spot_rec > 0:
+                new_sl += entry_px_rec - entry_spot_rec
             if new_sl <= 0:
                 return None
             if p.direction == "long":
@@ -965,13 +1245,16 @@ _red_stale_warned: set = set()
 def _warn_if_red_count_stale(uid: str, p) -> None:
     """Say so when a position's red counter has stopped being refreshed.
 
-    No scan row of this position's signal direction means there is nothing to compute a
-    fresh count from — the signal that opened it ended, or its underlying dropped out of
-    the scan universe. Holding the last value is the safe choice (inventing a 0 would
-    disarm the exit outright), but a counter that has silently stopped counting looks
-    exactly like a working one on the board, and the user would go on believing the
-    red-count exit is watching this position. It is not; only the price trail and the
-    expiry square-off are.
+    This is now the narrow case: the scan did not EVALUATE this position's instrument
+    at all, so there is no reading to take — its underlying dropped out of the scan
+    universe, or its candles came back empty. The signal merely ending no longer gets
+    here; `_live_red_count` falls back to the scan's own regime reading for that.
+
+    Holding the last value is still the safe choice (inventing a 0 would disarm the
+    exit outright), but a counter that has silently stopped counting looks exactly like
+    a working one on the board, and the user would go on believing the red-count exit
+    is watching this position. It is not; only the price trail and the expiry
+    square-off are.
     """
     key = (uid, p.symbol)
     stamped = int(getattr(p, "red_count_ms", 0) or 0)
@@ -989,7 +1272,7 @@ def _warn_if_red_count_stale(uid: str, p) -> None:
               f"The price trail and the expiry square-off still apply.")
 
 
-def _live_red_count(p, rows) -> Optional[int]:
+def _live_red_count(p, rows, snap=None) -> Optional[int]:
     """This position's live red count from the fresh scan, or None when the scan cannot
     say — in which case the caller must leave the last known count alone.
 
@@ -1009,6 +1292,14 @@ def _live_red_count(p, rows) -> Optional[int]:
     a row hydrated from a cache written before the field existed. Reading that as 0 would
     say "nothing against us" and overwrite a real count of 2 or 3, disarming the red exit
     one tick before it fired.
+
+    3. **The scan's own reading**, when no row matches at all. A row exists only where
+       there was an entry TRANSITION, so the moment the signal that opened a position
+       ends there is nothing left to match — and the count froze at its last value for
+       the life of the position, which is exactly when the exit stopped working. The
+       scan evaluates the regime for every instrument regardless, so ``snap`` carries
+       that reading; steps 1 and 2 still come first because a row is the more specific
+       answer (it is scoped to the exact signal, not just the instrument).
     """
     sym = str(getattr(p, "symbol", "") or "").upper()
     for r in rows:
@@ -1027,6 +1318,22 @@ def _live_red_count(p, rows) -> Optional[int]:
             continue
         reds = getattr(r, "current_reds", None)
         return None if reds is None else int(reds)
+    if snap is not None:
+        # The contract's own premium series first — it is what a derivatives-source
+        # position's counter is defined against, and it is keyed by the exact symbol
+        # we hold, so it cannot be confused with another leg on the same underlying.
+        contract_reds = getattr(snap, "contract_reds", None) or {}
+        held = contract_reds.get(str(getattr(p, "symbol", "") or ""))
+        if held is not None:
+            return int(held)
+        by_dir = (getattr(snap, "underlying_reds", None) or {}).get(
+            str(getattr(p, "underlying", "") or ""))
+        if by_dir:
+            # Same direction rule as step 2: a bear position's reds are the SHORT
+            # count. Reading the long count here is C5 through a third door.
+            reds = by_dir.get(want_dir)
+            if reds is not None:
+                return int(reds)
     return None
 
 
@@ -1102,11 +1409,15 @@ async def _update_open_position_trails(client, uid: str) -> None:
         #
         # See `_live_red_count` for how the row is chosen. None → leave the last known
         # count alone: writing 0 would disarm the red exit for a position whose underlying
-        # simply dropped out of this scan's universe. KNOWN LIMIT: if the signal that
-        # opened a position ends and no row of that direction is emitted again, the count
-        # freezes at its last value and only the price trail and the expiry square-off
-        # remain. That is the safe direction, but it is not a working red counter.
-        current_reds = _live_red_count(p, rows)
+        # dropped out of this scan's universe entirely.
+        #
+        # The signal ending no longer freezes it. A row exists only where there was an
+        # entry transition, so a position routinely outlives the row that opened it —
+        # and the counter used to stop there, which is precisely when its exit stopped
+        # working. The scan computes the regime for every instrument it evaluates
+        # whether or not a row comes out, and `snap` carries that reading. What is left
+        # is the genuinely unknowable case: an instrument this scan never looked at.
+        current_reds = _live_red_count(p, rows, snap)
         if current_reds is None:
             _warn_if_red_count_stale(uid, p)
         if current_reds is not None:
@@ -1287,6 +1598,10 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # Reconcile FIRST: everything below skips a position that is still PENDING, so a
         # lost fill postback would otherwise hide it from all of them.
         await _reconcile_pending_positions(client, uid)
+        # ...and at the other end of the trade: a position the broker no longer holds
+        # must leave the registry before the trail, the expiry square-off or the time
+        # stop below can act on it and SELL something we do not own.
+        await _reconcile_closed_positions(client, uid)
         await _reconcile_orphan_stops(client, uid)
         await _update_open_position_trails(client, uid)
         await _square_off_expiring(client, uid)
@@ -1407,6 +1722,9 @@ async def reconcile_user_auto_open(client, uid: str) -> None:
                       f"stale slot(s) ({', '.join(sorted(dropped))}); {len(after)} still open.")
     except Exception as exc:  # noqa: BLE001
         log.warning("kite-engine auto-open reconcile failed for %s: %s", uid, exc)
+    # A restart is the likeliest way to miss an exit postback entirely, so repair the
+    # POSITIONS too — not just the guard slots — before the first scan can act on them.
+    await _reconcile_closed_positions(client, uid)
 
 
 async def reconcile_all_auto_open() -> None:

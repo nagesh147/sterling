@@ -162,8 +162,8 @@ function StagePanelInner({
         // Collapsed (terminal minimized) → shrink to the grip + footer bar so it
         // never fills the slot as a tall empty panel.
         flex: collapsed ? '0 0 auto' : 1,
-        background: '#fff',
-        border: '1px solid #e0e0e0',
+        background: 'var(--k-bg)',
+        border: '1px solid var(--k-border)',
         borderRadius: 8,
         overflow: 'hidden',
         boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.18)' : '0 1px 3px rgba(0,0,0,0.06)',
@@ -185,8 +185,8 @@ function StagePanelInner({
           alignItems: 'center',
           gap: 8,
           padding: '0 10px',
-          borderBottom: '1px solid #ececec',
-          background: '#fafafa',
+          borderBottom: '1px solid var(--k-border-3)',
+          background: 'var(--k-surface-2)',
           cursor: 'grab',
           userSelect: 'none',
           touchAction: 'none',
@@ -197,7 +197,7 @@ function StagePanelInner({
           <Dot />
           <Dot />
         </span>
-        <span style={{ fontSize: 11, fontWeight: 500, color: '#9b9b9b', letterSpacing: 0.4 }}>
+        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--k-dim)', letterSpacing: 0.4 }}>
           {PANEL_TITLE[panelKey]}
         </span>
       </div>
@@ -431,7 +431,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
             style={{
               position: 'absolute',
               inset: 4,
-              border: '2px dashed #f06428',
+              border: '2px dashed var(--k-brand)',
               borderRadius: 10,
               background: 'rgba(240,100,40,0.06)',
               pointerEvents: 'none',
@@ -475,12 +475,12 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
           alignItems: 'center',
           gap: 8,
           padding: '0 12px',
-          borderBottom: '1px solid #ececec',
-          background: '#fff',
+          borderBottom: '1px solid var(--k-border-3)',
+          background: 'var(--k-bg)',
         }}
       >
-        <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>STAGE</span>
-        <span style={{ fontSize: 10, color: dragging ? '#f06428' : '#c4c4c4', transition: 'color 0.2s' }}>
+        <span style={{ fontSize: 10, color: 'var(--k-dim)', letterSpacing: 0.4 }}>STAGE</span>
+        <span style={{ fontSize: 10, color: dragging ? 'var(--k-brand)' : '#c4c4c4', transition: 'color 0.2s' }}>
           {dragging ? 'drop on a layout below, or into a slot' : 'drag a panel grip to rearrange'}
         </span>
 
@@ -497,7 +497,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
               registerRef={(el) => registerPreset(p.id, el)}
             />
           ))}
-          <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
+          <span style={{ width: 1, height: 16, background: 'var(--k-border)', margin: '0 2px' }} />
           <button
             onClick={resetLayout}
             title="Reset stage arrangement to default"
@@ -508,9 +508,9 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
               height: 20,
               padding: '0 8px',
               fontSize: 10,
-              color: '#9b9b9b',
+              color: 'var(--k-dim)',
               background: 'transparent',
-              border: '1px solid #e0e0e0',
+              border: '1px solid var(--k-border)',
               borderRadius: 4,
               cursor: 'pointer',
             }}
@@ -555,7 +555,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
                 transition: 'height 0.2s',
                 borderRadius: 8,
                 position: 'relative',
-                border: dragging ? '2px dashed #e0e0e0' : 'none',
+                border: dragging ? '2px dashed var(--k-border)' : 'none',
               }}
             >
               {hoverSlot === 'bottom' && dragging && (
@@ -563,7 +563,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    border: '2px dashed #f06428',
+                    border: '2px dashed var(--k-brand)',
                     borderRadius: 8,
                     background: 'rgba(240,100,40,0.06)',
                   }}
@@ -593,14 +593,14 @@ interface PresetThumbProps {
 }
 function PresetThumb({ preset, active, highlighted, dragging, onApply, registerRef }: PresetThumbProps) {
   const perSlot = (slot: SlotKey) => ALL_PANELS.filter((p) => preset.map[p] === slot);
-  const ORANGE = '#f06428';
+  const ORANGE = 'var(--k-brand)';
 
   const cells = (slot: SlotKey, dir: 'col' | 'row') => {
     const n = perSlot(slot).length;
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: dir === 'col' ? 'column' : 'row', gap: 1, minWidth: 0, minHeight: 0 }}>
         {n === 0
-          ? <div style={{ flex: 1, borderRadius: 1, background: '#f0f0f0' }} />
+          ? <div style={{ flex: 1, borderRadius: 1, background: 'var(--k-surface-hover-2)' }} />
           : perSlot(slot).map((p) => (
               <div key={p} style={{ flex: 1, borderRadius: 1, background: highlighted || active ? ORANGE : '#bcbcbc' }} />
             ))}
@@ -609,7 +609,7 @@ function PresetThumb({ preset, active, highlighted, dragging, onApply, registerR
   };
 
   const hasBottom = perSlot('bottom').length > 0;
-  const borderColor = highlighted ? ORANGE : active ? ORANGE : '#e0e0e0';
+  const borderColor = highlighted ? ORANGE : active ? ORANGE : 'var(--k-border)';
 
   return (
     <button
@@ -626,7 +626,7 @@ function PresetThumb({ preset, active, highlighted, dragging, onApply, registerR
         gap: 1,
         padding: 2,
         cursor: 'pointer',
-        background: highlighted ? 'rgba(240,100,40,0.10)' : active ? 'rgba(240,100,40,0.06)' : '#fff',
+        background: highlighted ? 'rgba(240,100,40,0.10)' : active ? 'rgba(240,100,40,0.06)' : 'var(--k-bg)',
         border: `1px solid ${borderColor}`,
         borderRadius: 4,
         boxShadow: highlighted ? `0 0 0 2px rgba(240,100,40,0.25)` : 'none',

@@ -11,7 +11,10 @@ export interface KiteAccount {
   connected: boolean;
   has_refresh_token: boolean;
   kite_user_id?: string | null;
+  user_name?: string | null;
   last_login_at_ms?: number | null;
+  /** The 06:00 IST boundary this account's stored token dies at (epoch ms). */
+  token_expires_at_ms?: number | null;
   created_at_ms: number;
   updated_at_ms: number;
 }
@@ -30,6 +33,13 @@ export interface KiteStatus {
   kite_user_id?: string | null;
   user_name?: string | null;
   message: string;
+  /** The 06:00 IST boundary this access_token dies at (epoch ms). */
+  token_expires_at_ms?: number | null;
+  expires_in_s?: number | null;
+  /** True when this answer came from a live Kite call rather than the cached window. */
+  validated?: boolean;
+  /** True when the backend silently minted a new token to answer this. */
+  auto_renewed?: boolean;
 }
 
 export interface KiteSessionResult {

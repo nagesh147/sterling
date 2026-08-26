@@ -22,12 +22,56 @@ class TestSizing:
         assert r.risk_per_lot == pytest.approx(1000.0)
         assert r.est_risk == pytest.approx(5000.0)
 
-    def test_floors_at_one_lot_when_risk_too_big(self):
-        # risk/lot ₹1000 > budget (1% of ₹50,000 = ₹500) → floor 1 lot.
+    def test_blocks_when_one_lot_would_exceed_the_risk_budget(self):
+        """risk/lot ₹1000 > budget (1% of ₹50,000 = ₹500).
+
+        This used to floor to 1 lot and trade anyway, which made ``risk_pct``
+        advisory: ₹1000 of risk against a ₹500 budget is 2% on a 1% setting, and on a
+        real index option the gap is far wider than that. A control that says it caps
+        risk has to cap it.
+        """
         r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
                                  available_capital=50_000, risk_pct=1.0, max_lots=10)
+        assert r.blocked is True
+        assert r.lots == 0 and r.qty == 0
+        assert "₹1000" in r.reason and "₹500" in r.reason
+
+    def test_floors_at_one_lot_when_the_override_is_set(self):
+        r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
+                                 available_capital=50_000, risk_pct=1.0, max_lots=10,
+                                 allow_min_lot_over_risk=True)
+        assert r.blocked is False
         assert r.lots == 1
         assert "floored to 1 lot" in r.reason
+
+    def test_futures_sizing_blocks_on_the_same_rule(self):
+        r = sizing.size_future_position(entry_price=24_000, stop_price=23_900, lot_size=50,
+                                        available_capital=50_000, risk_pct=1.0, max_lots=10)
+        assert r.blocked is True and r.qty == 0
+        r_allowed = sizing.size_future_position(
+            entry_price=24_000, stop_price=23_900, lot_size=50,
+            available_capital=50_000, risk_pct=1.0, max_lots=10,
+            allow_min_lot_over_risk=True)
+        assert r_allowed.blocked is False and r_allowed.lots == 1
+
+    def test_unreadable_capital_falls_back_to_one_lot_rather_than_blocking(self):
+        """available_fo_capital returns 0.0 when the margins call fails.
+
+        Reading that as "over budget" would make a transient broker outage halt every
+        automatic entry — indistinguishable, from the outside, from the engine being
+        down. Only a capital figure we actually have can be exceeded.
+        """
+        r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
+                                 available_capital=0.0, risk_pct=1.0, max_lots=10)
+        assert r.blocked is False and r.lots == 1
+        rf = sizing.size_future_position(entry_price=24_000, stop_price=23_900, lot_size=50,
+                                         available_capital=0.0, risk_pct=1.0, max_lots=10)
+        assert rf.blocked is False and rf.lots == 1
+
+    def test_a_sizeable_trade_is_never_blocked(self):
+        r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
+                                 available_capital=500_000, risk_pct=1.0, max_lots=10)
+        assert r.blocked is False and r.lots == 5
 
     def test_capped_by_max_lots(self):
         r = sizing.size_position(entry_premium=10, stop_premium=9, lot_size=50,
@@ -355,6 +399,73 @@ async def test_concurrent_exit_paths_place_single_sell(monkeypatch):
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)], "exactly one SELL placed"
     assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
     assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0), "booked once, not twice"
+
+
+@pytest.mark.asyncio
+async def test_exit_fill_postback_arriving_mid_placement_books_once(monkeypatch):
+    """The ordering neither test above covers: our SELL's COMPLETE postback lands
+    while ``_exit_position`` is still inside the placement await.
+
+    ``_exiting`` is held, but the position is still OPEN — ``pos.close`` runs only
+    after the order returns. ``on_order_update`` guards on status alone, so it saw a
+    live position and booked the exit; ``_exit_position`` then resumed and booked it
+    AGAIN. Double realized PnL feeding the INR daily-loss breaker, which then halts
+    trading at half the configured limit (and, on a winner, licenses twice the loss).
+    """
+    uid = "mrace2"
+    pos.reset(uid)
+    state.reset(uid)
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    p = pos.register(pos.OpenPosition(
+        uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", gtt_id=0, guard_key="NIFTY"))
+
+    class _PostbackDuringPlacement(_FakeClient):
+        async def place_order_option(self, sym, side, size, **kw):
+            result = await super().place_order_option(sym, side, size, **kw)
+            # Kite streams the fill before our own coroutine gets to pos.close().
+            await monitor.on_order_update(uid, {
+                "tradingsymbol": sym, "status": "COMPLETE", "transaction_type": "SELL",
+                "order_id": result["order_id"], "average_price": 80.0})
+            return result
+
+    client = _PostbackDuringPlacement()
+    await monitor._exit_position(client, uid, p, 80.0, reason="tick breach")
+
+    assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)], "exactly one SELL"
+    assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
+    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0), "booked once, not twice"
+
+
+@pytest.mark.asyncio
+async def test_broker_gtt_fill_during_our_exit_still_reconciles(monkeypatch):
+    """The mirror case, which is why the guard cannot simply be "skip if _exiting".
+
+    Here the BROKER's stop filled and its postback arrives while our own exit path
+    holds the claim but has not placed anything. Someone must still reconcile the
+    position to CLOSED and book it once — skipping on the claim alone would leave a
+    flat position marked open, with its auto-open guard still held.
+    """
+    uid = "mrace3"
+    pos.reset(uid)
+    state.reset(uid)
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", gtt_id=0, guard_key="NIFTY"))
+    monitor._exiting.add((uid, "NIFTY24JUN24000CE"))
+    try:
+        await monitor.on_order_update(uid, {
+            "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+            "transaction_type": "SELL", "order_id": "GTT-FILL", "average_price": 80.0})
+    finally:
+        monitor._exiting.discard((uid, "NIFTY24JUN24000CE"))
+    assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
+    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
 
 
 # ── C: broker-side protective GTT stop ───────────────────────────────────────
