@@ -1,31 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { k, tint } from '../../styles/kiteUI';
+import { k } from '../../styles/kiteUI';
 import { forecastDay, forecastMonth } from '../../lib/astro/engine';
 import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
 import { formatIstDate, formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
-import { UNDERLYINGS, type GapKind, type Regime, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
+import { UNDERLYINGS, type GapKind, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
 import { useCandles } from '../../hooks/useCandles';
 
 function todayIso(): string {
   return formatIstIsoDate(new Date());
 }
 
-function shiftIso(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = utcFromIstParts(y, m, d, 12, 0, 0);
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return formatIstIsoDate(dt);
-}
-
 function isoToDate(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return utcFromIstParts(y, m, d, 9, 0, 0);
-}
-
-function regimeColor(regime: Regime): string {
-  if (regime.includes('Positive')) return 'var(--k-green)';
-  if (regime.includes('Negative')) return 'var(--k-red)';
-  return 'var(--k-amber)';
 }
 
 function gapColor(kind: GapKind): string {
@@ -35,55 +22,99 @@ function gapColor(kind: GapKind): string {
 }
 
 function actionColor(action: TradeAction, side: TradeSide): string {
-  if (action === 'AVOID' || action === 'WAIT') return 'var(--k-ink-4)';
+  if (action === 'AVOID' || action === 'WAIT') return 'var(--k-dim)';
   if (side === 'CE') return 'var(--k-green)';
   if (side === 'PE') return 'var(--k-red)';
   return 'var(--k-amber)';
 }
 
-function gradeColor(kind: SlotGrade['kind']): string {
-  if (kind === 'HIT') return 'var(--k-green)';
-  if (kind === 'MISS') return 'var(--k-red)';
-  if (kind === 'LIVE') return 'var(--k-ink-1)';
-  if (kind === 'SIT') return 'var(--k-ink-4)';
-  return 'var(--k-ink-5)';
+function underlyingLabel(id: Underlying): string {
+  return UNDERLYINGS.find((u) => u.id === id)?.label ?? id;
 }
 
-function GradeMark({ grade }: { grade: SlotGrade | undefined }) {
-  if (!grade || grade.kind === 'NONE' || grade.kind === 'PENDING') {
-    return <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>—</span>;
-  }
-  return (
-    <div style={{ minWidth: 72 }}>
-      <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, fontWeight: 700, color: gradeColor(grade.kind) }}>{grade.label}</div>
-      {grade.delta !== null && (
-        <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10, color: 'var(--k-ink-5)' }}>
-          {grade.delta >= 0 ? '+' : ''}{grade.delta.toFixed(0)}{grade.dir ? ` ${grade.dir}` : ''}
-        </div>
-      )}
-    </div>
-  );
+function sideClass(side: WindowSlot['side']): string {
+  if (side === 'CE') return 'ko-pill ko-pill-ce';
+  if (side === 'PE') return 'ko-pill ko-pill-pe';
+  return 'ko-pill ko-pill-wait';
 }
 
-const pill: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: '0.04em',
-  padding: '2px 6px',
-  borderRadius: 3,
-  background: 'var(--k-surface-2)',
-  color: 'var(--k-ink-3)',
-};
+function sideLabel(side: WindowSlot['side']): string {
+  if (side === 'CE') return 'CE';
+  if (side === 'PE') return 'PE';
+  if (side === 'BOTH') return 'BOTH';
+  return 'WAIT';
+}
+
+function productClass(product: string): string {
+  if (product === 'MIS') return 'ko-prod ko-prod-mis';
+  if (product === 'NRML') return 'ko-prod ko-prod-nrml';
+  return 'ko-prod ko-prod-other';
+}
+
+function gradeClass(kind: SlotGrade['kind']): string {
+  if (kind === 'HIT') return 'ko-st ko-st-hit';
+  if (kind === 'MISS') return 'ko-st ko-st-miss';
+  if (kind === 'LIVE') return 'ko-st ko-st-live';
+  return 'ko-st ko-st-sit';
+}
+
+const CSS = `
+.kite-astro{display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:${k.fontFamily};font-size:14px}
+.kite-astro *{box-sizing:border-box}
+.ko-head{padding:0 32px;border-bottom:1px solid var(--k-surface-hover);margin-top:12px}
+.ko-title-row{display:flex;align-items:center;gap:16px;margin:0 0 24px;min-height:32px}
+.ko-title-row h2{margin:0;font-size:24px;font-weight:400;color:var(--k-text);flex:1}
+.ko-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ko-tools select,.ko-tools input[type=date]{height:32px;border:1px solid var(--k-border);background:var(--k-bg);color:var(--k-text);font-size:13px;padding:0 8px;border-radius:2px;font-family:inherit}
+.ko-link{border:0;background:none;color:var(--k-blue-kite);font-size:13px;padding:0;cursor:pointer;font-family:inherit}
+.ko-link:hover{text-decoration:underline}
+.ko-tabs{display:flex;gap:32px;margin-bottom:-1px;overflow-x:auto}
+.ko-tabs button{padding:0 0 12px;border:0;background:none;color:var(--k-text);font-size:14px;font-weight:400;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;font-family:inherit;transition:color .2s}
+.ko-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange)}
+.ko-body{flex:1;overflow:auto;padding:20px 32px 40px}
+.ko-sub{margin:0 0 16px;font-size:13px;color:var(--k-dim);line-height:1.5}
+.ko-notes{margin:0 0 16px;padding:0 0 0 18px;font-size:13px;line-height:1.55;color:var(--k-text)}
+.ko-notes li{margin:4px 0}
+.ko-scroll{overflow-x:auto}
+.ko-table{width:100%;min-width:720px;border-collapse:collapse;text-align:left}
+.ko-table th{padding:12px 16px;font-size:12px;font-weight:400;color:var(--k-dim);border-bottom:1px solid var(--k-surface-hover);background:var(--k-bg);white-space:nowrap}
+.ko-table td{padding:12px 16px;font-size:13px;color:var(--k-text);border-bottom:1px solid var(--k-surface-hover);vertical-align:middle}
+.ko-table td:nth-child(1),.ko-table td:nth-child(2),.ko-table td:nth-child(4),.ko-table td:nth-child(6){white-space:nowrap}
+.ko-table tbody tr{cursor:pointer}
+.ko-table tbody tr:hover{background:var(--k-surface-2)}
+.ko-table tbody tr[data-on="true"]{background:var(--k-surface-2)}
+.ko-expand td{padding:8px 16px 16px;font-size:13px;line-height:1.5;cursor:default;background:var(--k-surface-2);white-space:normal}
+.ko-pill{display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px;line-height:1.3}
+.ko-pill-ce{color:var(--k-green);background:rgba(76,175,80,.1)}
+.ko-pill-pe{color:var(--k-red);background:rgba(229,57,53,.1)}
+.ko-pill-wait{color:var(--k-dim);background:rgba(155,155,155,.1)}
+.ko-st{display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px}
+.ko-st-hit{color:var(--k-green);background:rgba(76,175,80,.1)}
+.ko-st-miss{color:var(--k-red);background:rgba(223,81,76,.1)}
+.ko-st-live{color:#f57c00;background:rgba(255,152,0,.1)}
+.ko-st-sit{color:var(--k-dim);background:rgba(155,155,155,.1)}
+.ko-tag{display:inline-block;margin-left:8px;font-size:9px;color:var(--k-dim);background:var(--k-surface-hover);padding:1px 4px;border-radius:2px;vertical-align:middle}
+.ko-prod{display:inline-block;padding:2px 7px;border-radius:2px;font-size:10px;font-weight:500}
+.ko-prod-mis{color:var(--k-blue-kite);background:rgba(56,126,209,.1)}
+.ko-prod-nrml{color:#c856a2;background:rgba(200,86,162,.1)}
+.ko-prod-other{color:var(--k-dim);background:var(--k-surface-hover)}
+.ko-foot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:24px;padding:13px 16px;border-top:1px solid var(--k-border);font-size:12px}
+.ko-foot .lbl{color:var(--k-dim);margin-right:7px}
+@media(max-width:800px){
+  .ko-head,.ko-body{padding-left:16px;padding-right:16px}
+  .ko-title-row{flex-wrap:wrap;margin-bottom:16px}
+  .ko-title-row h2{width:100%}
+  .ko-tabs{gap:20px}
+}
+`;
 
 export function AstroPane() {
   const [iso, setIso] = useState(todayIso);
   const [underlying, setUnderlying] = useState<Underlying>('NIFTY');
-  const [view, setView] = useState<'net' | 'thirty'>('net');
+  const [tab, setTab] = useState<'timings' | 'thirty' | 'month'>('timings');
   const [now, setNow] = useState<Date | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [notes, setNotes] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => {
     const p = getIstParts(new Date());
     return { year: p.year, month: p.month };
@@ -103,9 +134,8 @@ export function AstroPane() {
     [monthCursor, underlying, now, dayDate],
   );
 
-  const rows = view === 'net' ? book.netResults : book.slots;
+  const rows = tab === 'thirty' ? book.slots : book.netResults;
   const live = book.slots.find((s) => s.isLive) ?? null;
-  const dateLabel = formatIstDate(dayDate);
   const nowParts = now ? getIstParts(now) : null;
   const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
   const sameDay = Boolean(now && nowParts && formatIstIsoDate(now) === iso);
@@ -119,464 +149,183 @@ export function AstroPane() {
     return map;
   }, [rows, tape, nowMin, sameDay]);
   const tally = useMemo(
-    () => summariseTape(book.slots, tape, nowMin, sameDay, book.gap.kind),
-    [book.slots, tape, nowMin, sameDay, book.gap.kind],
+    () => summariseTape(rows, tape, nowMin, sameDay, book.gap.kind),
+    [rows, tape, nowMin, sameDay, book.gap.kind],
   );
-  const selected = rows.find((s) => `${s.from}-${s.to}` === selectedKey) ?? live ?? null;
-  const remaining = live && now
-    ? Math.max(0, live.toMin * 60 - (getIstParts(now).hour * 3600 + getIstParts(now).minute * 60 + getIstParts(now).second))
-    : 0;
-  const remainLabel = live
-    ? `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`
-    : null;
+  const instrument = underlyingLabel(underlying);
+
+  const goToday = () => {
+    const t = todayIso();
+    setIso(t);
+    const p = getIstParts(new Date());
+    setMonthCursor({ year: p.year, month: p.month });
+  };
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'auto', background: 'var(--k-surface-sunken-2)', fontFamily: k.fontFamily, color: k.text }}>
-      <style>{`@media (max-width: 860px) { .astro-hero { grid-template-columns: 1fr !important; } }`}</style>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '22px 22px 48px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <header style={{ display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div style={{ minWidth: 0, maxWidth: 720 }}>
-            <div style={{ fontSize: 11, fontWeight: 650, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--k-brand)' }}>Financial astrology</div>
-            <h1 style={{ margin: '6px 0 0', fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--k-ink-1)' }}>
-              Opening gap, 30-minute clock, month book
-            </h1>
-            <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--k-ink-5)' }}>
-              Sidereal Lahiri at Mumbai. Day thesis first (fade / trend / chop), then hora, choghadiya, Rahu Kalam, sector lords. No candles, no OI — the same date always reprints the same book.
-            </p>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <select
-              value={underlying}
-              onChange={(e) => setUnderlying(e.target.value as Underlying)}
-              style={ctrl}
-            >
+    <div className="kite-astro">
+      <style>{CSS}</style>
+      <div className="ko-head">
+        <div className="ko-title-row">
+          <h2>Astrology</h2>
+          <div className="ko-tools">
+            <select aria-label="Underlying" value={underlying} onChange={(e) => setUnderlying(e.target.value as Underlying)}>
               {UNDERLYINGS.map((u) => (
                 <option key={u.id} value={u.id}>{u.label}</option>
               ))}
             </select>
-            <div style={{ display: 'flex', height: 36, border: `1px solid ${k.border}`, borderRadius: 6, background: k.surface }}>
-              <button type="button" aria-label="Previous session" onClick={() => setIso(shiftIso(iso, -1))} style={iconBtn}>‹</button>
-              <input
-                type="date"
-                value={iso}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  setIso(e.target.value);
-                  const [y, m] = e.target.value.split('-').map(Number);
-                  setMonthCursor({ year: y, month: m });
-                }}
-                style={{ ...ctrl, border: 0, width: 148, height: 34 }}
-              />
-              <button type="button" aria-label="Next session" onClick={() => setIso(shiftIso(iso, 1))} style={iconBtn}>›</button>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const t = todayIso();
-                setIso(t);
-                const p = getIstParts(new Date());
-                setMonthCursor({ year: p.year, month: p.month });
+            <input
+              aria-label="Session date"
+              type="date"
+              value={iso}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setIso(e.target.value);
+                const [y, m] = e.target.value.split('-').map(Number);
+                setMonthCursor({ year: y, month: m });
               }}
-              style={ctrl}
-            >
-              Today
-            </button>
+            />
+            <button type="button" className="ko-link" onClick={goToday}>Today</button>
           </div>
-        </header>
+        </div>
+        <div className="ko-tabs">
+          <button type="button" data-on={tab === 'timings'} onClick={() => setTab('timings')}>Timings</button>
+          <button type="button" data-on={tab === 'thirty'} onClick={() => setTab('thirty')}>30 min</button>
+          <button type="button" data-on={tab === 'month'} onClick={() => setTab('month')}>{month.label}</button>
+        </div>
+      </div>
 
-        <section className="astro-hero" style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(0,1.4fr) minmax(260px,1fr)' }}>
-          <div style={card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={meta}>Pre-open gap call · {dateLabel} · {book.panchang.weekday}</div>
-                <div style={{ marginTop: 10, fontSize: 42, fontWeight: 750, letterSpacing: '-0.04em', lineHeight: 1, color: gapColor(book.gap.kind) }}>
-                  {book.gap.label}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 22 }}>{book.gap.confidence}</div>
-                <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--k-ink-5)' }}>confidence</div>
-              </div>
-            </div>
-            <p style={{ margin: '14px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--k-ink-2)' }}>{book.gap.summary}</p>
-            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <span style={pill}>{book.gap.openAction}</span>
-              <span style={{ ...pill, color: 'var(--k-ink-1)', background: tint('var(--k-brand)', 16) }}>{book.gap.thesis.replace('-', ' ')}</span>
-              <span style={pill}>{book.gap.volatility} vol</span>
-              <span style={pill}>{book.gap.bias}</span>
-              <span style={pill}>{book.gap.horaAtOpen} hora</span>
-              <span style={pill}>{book.panchang.tithiName} · {book.panchang.paksha}</span>
-              <span style={pill}>{book.panchang.nakshatra} p{book.panchang.nakshatraPada}</span>
-              <span style={pill}>Lagna {book.panchang.lagnaSign}</span>
-              {book.gap.eclipse && <span style={{ ...pill, color: 'var(--k-red)', background: tint('var(--k-red)', 12) }}>Eclipse corridor</span>}
-              {book.gap.gandanta && <span style={{ ...pill, color: 'var(--k-amber)', background: tint('var(--k-amber)', 12) }}>Gandanta</span>}
-              {tally.gapActual && (
-                <span style={{ ...pill, color: tally.gapHit ? 'var(--k-green)' : 'var(--k-red)', background: tint(tally.gapHit ? 'var(--k-green)' : 'var(--k-red)', 12) }}>
-                  Tape gap {tally.gapActual}{tally.gapPts !== null ? ` ${tally.gapPts >= 0 ? '+' : ''}${tally.gapPts.toFixed(0)}` : ''}{tally.gapHit ? ' · HIT' : ' · MISS'}
-                </span>
-              )}
-            </div>
-            <p style={{ margin: '14px 0 0', paddingTop: 14, borderTop: `1px solid ${k.border}`, fontSize: 13, lineHeight: 1.55, color: 'var(--k-ink-5)' }}>
-              {book.gap.firstHourNote}
-            </p>
-            <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--k-ink-5)' }}>{book.gap.thesisNote}</p>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={card}>
-              <div style={meta}>This window</div>
-              {live ? (
-                <>
-                  <div style={{ marginTop: 8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 }}>{live.from} – {live.to}</div>
-                  <div style={{ marginTop: 4, fontSize: 20, fontWeight: 700, color: regimeColor(live.regime) }}>{live.regime}</div>
-                  <div style={{ marginTop: 2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 15, fontWeight: 700, color: actionColor(live.action, live.side) }}>{live.action}</div>
-                  <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.45, color: 'var(--k-ink-5)' }}>{live.suggestion}</p>
-                  {remainLabel && <p style={{ margin: '10px 0 0', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>Ends in {remainLabel}</p>}
-                </>
-              ) : (
-                <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--k-ink-5)' }}>{book.playbook.headline}</p>
-              )}
-            </div>
-            <div style={card}>
-              <div style={meta}>Day playbook</div>
-              <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-                <li><span style={{ color: 'var(--k-ink-5)' }}>Thesis · </span>{book.gap.thesis.replace('-', ' ')}</li>
-                <li><span style={{ color: 'var(--k-ink-5)' }}>Best CE · </span><span style={{ color: 'var(--k-green)' }}>{book.playbook.bestCe ? `${book.playbook.bestCe.from}–${book.playbook.bestCe.to} · ${book.playbook.bestCe.product}` : 'no clean CE slot'}</span></li>
-                <li><span style={{ color: 'var(--k-ink-5)' }}>Best PE · </span><span style={{ color: 'var(--k-red)' }}>{book.playbook.bestPe ? `${book.playbook.bestPe.from}–${book.playbook.bestPe.to} · ${book.playbook.bestPe.product}` : 'no clean PE slot'}</span></li>
-                <li><span style={{ color: 'var(--k-ink-5)' }}>Sit out · </span>{book.playbook.avoid.length ? book.playbook.avoid.map((s) => `${s.from}–${s.to}`).join(', ') : 'no Rahu Kalam overlap'}</li>
-                <li><span style={{ color: 'var(--k-ink-5)' }}>Close · </span><span style={{ color: regimeColor(book.playbook.closeBias) }}>{book.playbook.closeBias}</span></li>
-              </ul>
-            </div>
-          </div>
-        </section>
+      <div className="ko-body">
+        <p className="ko-sub">
+          {book.panchang.weekday} · {book.panchang.tithiName} {book.panchang.paksha} · {book.panchang.nakshatra} · {book.gap.firstHourNote}{' '}
+          <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>{notes ? 'Hide notes' : 'View notes'}</button>
+        </p>
+        {notes && (
+          <ul className="ko-notes">
+            {book.gap.reasons.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        )}
 
-        <section>
-          <div style={meta}>Session tape 09:15–15:30</div>
-          <div style={{ marginTop: 8, display: 'flex', height: 32, overflow: 'hidden', border: `1px solid ${k.border}`, borderRadius: 6 }}>
-            {book.slots.map((s) => {
-              const w = ((s.toMin - s.fromMin) / (15 * 60 + 30 - 9 * 60 - 15)) * 100;
-              return (
-                <button
-                  key={`${s.from}-${s.to}`}
-                  type="button"
-                  title={`${s.from}–${s.to} ${s.regime} · ${s.action}`}
-                  onClick={() => { setView('thirty'); setSelectedKey(`${s.from}-${s.to}`); }}
-                  style={{
-                    width: `${w}%`,
-                    minWidth: 0,
-                    border: 0,
-                    padding: 0,
-                    cursor: 'pointer',
-                    background: regimeColor(s.regime),
-                    opacity: s.isLive ? 1 : 0.78,
-                    boxShadow: s.isLive ? 'inset 0 0 0 2px rgba(0,0,0,.35)' : undefined,
-                  }}
-                />
-              );
-            })}
+        {tab === 'month' ? (
+          <div className="ko-scroll">
+            <table className="ko-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Gap</th>
+                  <th>Open</th>
+                  <th>Bias</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {month.days.map((day) => {
+                  const closed = day.isWeekend || day.isHoliday;
+                  const color = day.gap === 'up' ? 'var(--k-green)' : day.gap === 'down' ? 'var(--k-red)' : 'var(--k-amber)';
+                  return (
+                    <tr
+                      key={day.date}
+                      data-on={day.date === iso}
+                      onClick={() => {
+                        if (closed) return;
+                        setIso(day.date);
+                        setTab('timings');
+                      }}
+                      style={{ cursor: closed ? 'default' : 'pointer', opacity: closed ? 0.45 : 1 }}
+                    >
+                      <td>{formatIstDate(isoToDate(day.date))}{day.isToday ? ' · today' : ''}</td>
+                      <td style={{ color: closed ? 'var(--k-dim)' : color }}>
+                        {closed ? (day.isHoliday ? day.holidayName || 'Holiday' : 'Weekend') : day.gapLabel}
+                      </td>
+                      <td>{closed ? '—' : day.openAction}</td>
+                      <td>{closed ? '—' : day.bias}</td>
+                      <td style={{ color: 'var(--k-dim)' }}>{day.note}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10, color: 'var(--k-ink-5)' }}>
-            <span>9:15</span><span>12:15</span><span>3:30</span>
-          </div>
-        </section>
-
-        <section>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, alignItems: 'flex-end', marginBottom: 10 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em' }}>Intraday timings</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--k-ink-5)' }}>
-                {view === 'net' ? 'Merged net results — consecutive identical horas collapsed.' : 'Raw 30-minute clock, 13 slots from 9:15 to 3:30.'}
-                {' '}Result is live tape vs the play — HIT / MISS / SIT.
-              </p>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>
-                {tally.directional
-                  ? `${tally.hits}/${tally.directional} HIT${tally.sits ? ` · ${tally.sits} SIT` : ''} · ${(tally.hitRate! * 100).toFixed(0)}% · ${tally.pnl >= 0 ? '+' : ''}${tally.pnl.toFixed(0)} pts`
-                  : candles.isLoading
-                    ? 'Loading tape…'
-                    : 'No tape'}
-              </div>
-              {(['net', 'thirty'] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setView(id)}
-                  style={{
-                    height: 32,
-                    padding: '0 12px',
-                    border: 0,
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    background: view === id ? 'var(--k-surface-2)' : 'transparent',
-                    color: view === id ? 'var(--k-ink-1)' : 'var(--k-ink-5)',
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                >
-                  {id === 'net' ? 'Net results' : 'Every 30 min'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {view === 'net' ? (
-            <div style={{ overflowX: 'auto', border: `1px solid ${k.border}`, borderRadius: 10, background: k.surface }}>
-              <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse', textAlign: 'left' }}>
+        ) : (
+          <>
+            <div className="ko-scroll">
+              <table className="ko-table">
                 <thead>
-                  <tr style={{ background: 'var(--k-surface-2)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--k-ink-5)' }}>
-                    <th style={th}>Date</th>
-                    <th style={th}>From</th>
-                    <th style={th}>To</th>
-                    <th style={th}>Timings net results</th>
-                    <th style={th}>Play</th>
-                    <th style={th}>Result</th>
-                    <th style={th}>Suggestion</th>
+                  <tr>
+                    <th>Time</th>
+                    <th>Type</th>
+                    <th>Instrument</th>
+                    <th>Product</th>
+                    <th>Net results</th>
+                    <th>Play</th>
+                    <th>Result</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((slot) => {
                     const key = `${slot.from}-${slot.to}`;
-                    const on = selectedKey === key || slot.isLive;
+                    const grade = grades.get(key);
+                    const open = openKey === key;
                     return (
-                      <tr
-                        key={key}
-                        onClick={() => setSelectedKey(key)}
-                        style={{ cursor: 'pointer', background: on ? tint('var(--k-brand)', 8) : 'transparent', borderTop: `1px solid ${k.border}` }}
-                      >
-                        <td style={tdMono}>{dateLabel}</td>
-                        <td style={tdMono}>{slot.from}</td>
-                        <td style={tdMono}>{slot.to}</td>
-                        <td style={{ ...td, fontWeight: 650, color: regimeColor(slot.regime) }}>
-                          {slot.regime}
-                          <div style={{ fontWeight: 400, fontSize: 11, color: 'var(--k-ink-5)', marginTop: 2 }}>
-                            {slot.hora} hora · {slot.choghadiya}{slot.kalam.rahu ? ' · Rahu Kalam' : ''}
-                          </div>
-                        </td>
-                        <td style={{ ...tdMono, fontWeight: 700, color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
-                        <td style={td}><GradeMark grade={grades.get(key)} /></td>
-                        <td style={{ ...td, fontSize: 12.5, color: 'var(--k-ink-4)', maxWidth: 360 }}>{slot.suggestion}</td>
-                      </tr>
+                      <React.Fragment key={key}>
+                        <tr data-on={open} onClick={() => setOpenKey(open ? null : key)}>
+                          <td>
+                            {slot.from} – {slot.to}
+                            {slot.isLive ? <span className="ko-tag">LIVE</span> : null}
+                          </td>
+                          <td><span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{instrument}<span className="ko-tag">NSE</span></td>
+                          <td><span className={productClass(slot.product)}>{slot.product}</span></td>
+                          <td>
+                            {slot.regime}
+                            <span style={{ color: 'var(--k-dim)' }}>
+                              {' '}· {slot.toMin - slot.fromMin}m · {slot.hora}
+                              {slot.kalam.rahu ? ' · Rahu' : ''}
+                              {slot.kalam.yamagandam ? ' · Yama' : ''}
+                            </span>
+                          </td>
+                          <td style={{ color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
+                          <td>
+                            {!grade || grade.kind === 'NONE' || grade.kind === 'PENDING' ? (
+                              <span style={{ color: 'var(--k-dim)' }}>—</span>
+                            ) : (
+                              <span>
+                                <span className={gradeClass(grade.kind)}>{grade.label}</span>
+                                {grade.delta !== null && (
+                                  <span style={{ color: 'var(--k-dim)' }}> {grade.delta >= 0 ? '+' : ''}{grade.delta.toFixed(0)}</span>
+                                )}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        {open && (
+                          <tr className="ko-expand">
+                            <td colSpan={7}>
+                              {slot.suggestion}
+                              <div style={{ color: 'var(--k-dim)', marginTop: 4 }}>{slot.why}</div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {rows.map((slot) => (
-                <SlotCard
-                  key={`${slot.from}-${slot.to}`}
-                  slot={slot}
-                  selected={`${slot.from}-${slot.to}` === selectedKey}
-                  onSelect={() => setSelectedKey(`${slot.from}-${slot.to}`)}
-                  grade={grades.get(`${slot.from}-${slot.to}`)}
-                />
-              ))}
+            <div className="ko-foot">
+              <span><span className="lbl">Gap</span><span style={{ color: gapColor(book.gap.kind) }}>{book.gap.label}</span></span>
+              <span><span className="lbl">Open</span>{book.gap.openAction}</span>
+              <span><span className="lbl">Window</span>{live ? live.action : 'Outside cash'}</span>
+              <span><span className="lbl">CE / PE</span>{book.playbook.bestCe?.from ?? '—'} / {book.playbook.bestPe?.from ?? '—'}</span>
+              <span>
+                <span className="lbl">Tape</span>
+                {tally.directional
+                  ? `${tally.hits}/${tally.directional} HIT${tally.sits ? ` · ${tally.sits} sit` : ''} · ${tally.pnl >= 0 ? '+' : ''}${tally.pnl.toFixed(0)}`
+                  : candles.isLoading ? 'Loading…' : '—'}
+              </span>
             </div>
-          )}
-          {selected && view === 'net' && (
-            <div style={{ ...card, marginTop: 10, padding: '12px 14px' }}>
-              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>{selected.from}–{selected.to} · {selected.product}</div>
-              <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.5 }}>{selected.suggestion}</div>
-              <div style={{ marginTop: 4, fontSize: 11, color: 'var(--k-ink-5)' }}>{selected.why}</div>
-            </div>
-          )}
-        </section>
-
-        <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-end', marginBottom: 10 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{month.label} projection</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--k-ink-5)' }}>{month.summary}</p>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button type="button" aria-label="Previous month" onClick={() => setMonthCursor((c) => c.month === 1 ? { year: c.year - 1, month: 12 } : { year: c.year, month: c.month - 1 })} style={{ ...ctrl, width: 36, padding: 0 }}>‹</button>
-              <button type="button" aria-label="Next month" onClick={() => setMonthCursor((c) => c.month === 12 ? { year: c.year + 1, month: 1 } : { year: c.year, month: c.month + 1 })} style={{ ...ctrl, width: 36, padding: 0 }}>›</button>
-            </div>
-          </div>
-          <MonthGrid month={month} selected={iso} onSelect={setIso} />
-        </section>
-
-        <section style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-          <div style={card}>
-            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Why this open</h3>
-            <ol style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {book.gap.reasons.map((r, i) => (
-                <li key={i} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.4 }}>
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10, color: 'var(--k-ink-5)' }}>{String(i + 1).padStart(2, '0')}</span>
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ol>
-            {book.gap.yogas.length > 0 && (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${k.border}` }}>
-                <div style={meta}>Yogas</div>
-                <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {book.gap.yogas.map((y) => <li key={y} style={{ fontSize: 12.5, lineHeight: 1.4 }}>{y}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-          <div style={card}>
-            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Sidereal board · 09:00 IST</h3>
-            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '2px 14px' }}>
-              {book.planets.map((p) => (
-                <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: `1px solid ${k.border}`, fontSize: 12 }}>
-                  <span style={{ color: 'var(--k-ink-5)' }}>{p.name}</span>
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}>
-                    {p.sign.slice(0, 3)} {p.degreeInSign.toFixed(1)}°{p.retrograde ? ' R' : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--k-ink-5)' }}>
-              {book.panchang.yoga} yoga · {book.panchang.karana} karana · {book.panchang.nakshatraLord} rules the Moon
-            </p>
-            {book.aspects.slice(0, 5).map((a) => (
-              <div key={`${a.a}-${a.b}-${a.kind}`} style={{ marginTop: 6, fontSize: 12, color: 'var(--k-ink-4)' }}>
-                {a.a} {a.kind} {a.b} <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: 'var(--k-ink-5)' }}>{a.orb.toFixed(1)}°</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <p style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--k-ink-5)' }}>
-          Research overlay, not a broker signal. Sidereal Lahiri at Mumbai. Deterministic — a given session always reprints the same gap, windows, and month cells. Not financial advice.
-        </p>
+          </>
+        )}
       </div>
     </div>
   );
 }
-
-function SlotCard({ slot, selected, onSelect, grade }: { slot: WindowSlot; selected: boolean; onSelect: () => void; grade?: SlotGrade }) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '3px 1fr',
-        width: '100%',
-        textAlign: 'left',
-        border: `1px solid ${slot.isLive ? 'var(--k-brand)' : k.border}`,
-        borderRadius: 8,
-        background: selected || slot.isLive ? tint('var(--k-brand)', 8) : k.surface,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        padding: 0,
-        color: 'inherit',
-        fontFamily: 'inherit',
-      }}
-    >
-      <div style={{ background: regimeColor(slot.regime) }} />
-      <div style={{ padding: '10px 12px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', alignItems: 'center' }}>
-          <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }}>{slot.from} – {slot.to}</span>
-          {slot.isLive && <span style={{ ...pill, background: 'var(--k-brand)', color: '#fff' }}>Live</span>}
-          <span style={{ fontSize: 13, fontWeight: 700, color: regimeColor(slot.regime) }}>{slot.regime}</span>
-          <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, fontWeight: 700, color: actionColor(slot.action, slot.side) }}>{slot.action}</span>
-          <GradeMark grade={grade} />
-        </div>
-        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--k-ink-5)' }}>
-          Hora {slot.hora} · Lagna {slot.lagna} · {slot.choghadiya} · {slot.product}
-        </div>
-        <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.4 }}>{slot.suggestion}</div>
-      </div>
-    </button>
-  );
-}
-
-function MonthGrid({
-  month,
-  selected,
-  onSelect,
-}: {
-  month: ReturnType<typeof forecastMonth>;
-  selected: string;
-  onSelect: (iso: string) => void;
-}) {
-  const first = month.days[0];
-  const pad = first ? new Date(`${first.date}T12:00:00+05:30`).getDay() : 0;
-  const cells: Array<(typeof month.days)[number] | null> = [...Array(pad).fill(null), ...month.days];
-  while (cells.length % 7 !== 0) cells.push(null);
-  return (
-    <div style={{ overflow: 'hidden', border: `1px solid ${k.border}`, borderRadius: 10 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--k-surface-2)', textAlign: 'center', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--k-ink-5)' }}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} style={{ padding: '8px 4px' }}>{d}</div>)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {cells.map((day, i) => {
-          if (!day) return <div key={`e-${i}`} style={{ minHeight: 74, borderTop: `1px solid ${k.border}` }} />;
-          const closed = day.isWeekend || day.isHoliday;
-          const g = day.gap;
-          const color = g === 'up' ? 'var(--k-green)' : g === 'down' ? 'var(--k-red)' : g === 'flat' ? 'var(--k-amber)' : 'var(--k-ink-5)';
-          return (
-            <button
-              key={day.date}
-              type="button"
-              disabled={closed}
-              onClick={() => onSelect(day.date)}
-              style={{
-                minHeight: 74,
-                border: 0,
-                borderTop: `1px solid ${k.border}`,
-                borderLeft: `1px solid ${k.border}`,
-                background: day.date === selected ? tint('var(--k-brand)', 12) : 'transparent',
-                textAlign: 'left',
-                padding: 8,
-                cursor: closed ? 'default' : 'pointer',
-                opacity: closed ? 0.45 : 1,
-                color: 'inherit',
-                fontFamily: 'inherit',
-              }}
-            >
-              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: day.isToday ? 'var(--k-brand)' : 'var(--k-ink-5)' }}>{Number(day.date.slice(-2))}</div>
-              <div style={{ marginTop: 4, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color }}>{closed ? (day.isHoliday ? 'Hol' : '') : g === 'up' ? 'Up' : g === 'down' ? 'Dn' : 'Flat'}</div>
-              {!closed && day.openAction && <div style={{ marginTop: 2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 9, color: 'var(--k-ink-5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{day.openAction}</div>}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const card: React.CSSProperties = {
-  background: k.surface,
-  border: `1px solid ${k.border}`,
-  borderRadius: 12,
-  padding: 18,
-};
-
-const meta: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 650,
-  letterSpacing: '0.16em',
-  textTransform: 'uppercase',
-  color: 'var(--k-ink-5)',
-};
-
-const ctrl: React.CSSProperties = {
-  height: 36,
-  border: `1px solid ${k.border}`,
-  borderRadius: 6,
-  background: k.surface,
-  color: k.text,
-  padding: '0 10px',
-  fontSize: 13,
-  fontFamily: 'inherit',
-};
-
-const iconBtn: React.CSSProperties = {
-  width: 36,
-  height: 34,
-  border: 0,
-  background: 'transparent',
-  color: 'var(--k-ink-4)',
-  cursor: 'pointer',
-  fontSize: 18,
-};
-
-const th: React.CSSProperties = { padding: '10px 12px', fontWeight: 650 };
-const td: React.CSSProperties = { padding: '10px 12px', fontSize: 13, verticalAlign: 'top' };
-const tdMono: React.CSSProperties = { ...td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, whiteSpace: 'nowrap' };
