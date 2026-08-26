@@ -25,7 +25,12 @@ def expiry_in_window(expiry: str, today: date, cfg: GammaMoveConfig) -> bool:
     dte = days_to_expiry(expiry, today)
     if dte is None:
         return False
-    return cfg.min_days_to_expiry <= dte <= cfg.max_days_to_expiry
+    if cfg.avoid_expiry_day and dte == 0:
+        # Expiry day itself. The open-interest signal degenerates into settlement
+        # mechanics there and the premium is nearly all gamma already — a
+        # different trade wearing this one's name.
+        return False
+    return cfg.expiry_dte_min <= dte <= cfg.expiry_dte_max
 
 
 def select_expiry(expiries: Sequence[str], today: date,

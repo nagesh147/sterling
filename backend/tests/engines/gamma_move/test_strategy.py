@@ -39,7 +39,7 @@ def test_expiry_window_gates_before_the_trigger(candidate, instrument, level):
                           instrument=instrument._replace(expiry="2026-12-29")
                           if hasattr(instrument, "_replace") else instrument,
                           oi=6_000_000, days_to_expiry=99, spot=1298.0, premium=53.0)
-    s = strat(min_days_to_expiry=1, max_days_to_expiry=14)
+    s = strat(expiry_dte_min=0, expiry_dte_max=14)
     from dataclasses import replace
     far = replace(candidate, instrument=replace(candidate.instrument,
                                                 expiry="2026-12-29"),

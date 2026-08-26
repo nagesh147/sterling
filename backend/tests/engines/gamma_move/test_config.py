@@ -81,14 +81,38 @@ def test_volume_multiplier_must_exceed_one():
         GammaMoveConfig(volume_spike_mult=0.5).validate()
 
 
-def test_zero_expiry_window_is_a_mistake_not_no_limit():
-    with pytest.raises(ValueError, match="not 'no limit'"):
-        GammaMoveConfig(max_days_to_expiry=0).validate()
+def test_contract_settings_use_the_shared_vocabulary():
+    """Same field names and meanings as every other engine, so a reader does not
+    have to learn a private vocabulary per strategy."""
+    from app.engines.option_contracts import EXPIRY_SELECTIONS
+    from app.engines.nifty_orb_options import EXPIRY_SELECTIONS as ORB_SELECTIONS
+    assert EXPIRY_SELECTIONS is ORB_SELECTIONS      # one object, not two equal ones
+    names = GammaMoveConfig.field_names()
+    assert {"expiry_selection", "expiry_dte_min", "expiry_dte_max",
+            "avoid_expiry_day"} <= names
+    assert not {"min_days_to_expiry", "max_days_to_expiry"} & names
 
 
 def test_expiry_window_must_be_ordered():
-    with pytest.raises(ValueError, match="min_days_to_expiry"):
-        GammaMoveConfig(min_days_to_expiry=20, max_days_to_expiry=14).validate()
+    with pytest.raises(ValueError, match="expiry_dte_max"):
+        GammaMoveConfig(expiry_dte_min=20, expiry_dte_max=14).validate()
+
+
+def test_avoid_expiry_day_with_a_zero_window_leaves_nothing():
+    with pytest.raises(ValueError, match="no eligible expiry"):
+        GammaMoveConfig(expiry_dte_min=0, expiry_dte_max=0).validate()
+
+
+def test_expiry_day_is_actually_excluded():
+    """The flag has to reach the selection, not just validate."""
+    from datetime import date
+    from app.engines.gamma_move import expiry_in_window
+    today = date(2026, 9, 29)
+    cfg = GammaMoveConfig(avoid_expiry_day=True).validate()
+    assert expiry_in_window("2026-09-29", today, cfg) is False      # expiry day
+    assert expiry_in_window("2026-10-01", today, cfg) is True
+    allow = GammaMoveConfig(avoid_expiry_day=False).validate()
+    assert expiry_in_window("2026-09-29", today, allow) is True
 
 
 def test_confirm_bars_bounded():

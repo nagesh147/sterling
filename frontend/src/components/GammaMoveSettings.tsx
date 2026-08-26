@@ -5,6 +5,7 @@ import {
   type ExitPolicy,
   type GammaMoveConfig,
   type LevelTimeframe,
+  type ExpirySelection,
   type StopMode,
   type SizingMode,
   type StopBasis,
@@ -14,6 +15,7 @@ import {
   ChoiceRow, Field, NumberField, Section, Switch, DIM,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { OptionContractsPicker } from './kite/config/OptionContractsPicker';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
 
 /**
@@ -62,13 +64,20 @@ const SIZING_OPTIONS: Array<{ value: SizingMode; label: string; hint: string }> 
   { value: 'LOTS', label: 'Fixed lots', hint: 'The same number of lots every time, regardless of how far the stop is.' },
 ];
 
+const EXPIRY_SELECTION_OPTIONS: Array<{ value: ExpirySelection; label: string; hint: string }> = [
+  { value: 'nearest', label: 'Nearest', hint: 'The soonest eligible contract.' },
+  { value: 'weekly', label: 'Weekly', hint: 'Weekly series only. Indices have them; NSE lists no weekly stock options.' },
+  { value: 'monthly', label: 'Monthly', hint: 'Monthly series only — the only series single stocks have.' },
+  { value: 'any', label: 'Any', hint: 'No preference beyond the days-to-expiry window.' },
+];
+
 const STOP_MODE_OPTIONS: Array<{ value: StopMode; label: string; hint: string }> = [
   { value: 'both', label: 'Broker + monitor', hint: 'A GTT at Zerodha that survives this process dying, plus our own tick loop for intrabar exits. The production answer.' },
   { value: 'broker', label: 'Broker only', hint: 'A GTT and nothing else. Survives a crash, but only exits on a completed trigger — no intrabar exit.' },
   { value: 'monitor', label: 'Monitor only', hint: 'Our tick loop and nothing at the broker. If this process dies while holding, the position is unprotected.' },
 ];
 
-const ADVANCED_SETTING_COUNT = 11;
+const ADVANCED_SETTING_COUNT = 7;
 
 export function GammaMoveSettings() {
   const { data, isLoading } = useGammaMoveConfig();
@@ -171,8 +180,8 @@ export function GammaMoveSettings() {
       ))}
 
       <Section
-        title="Universe"
-        description="Which contracts are eligible to be watched at all."
+        title="Instruments"
+        description="The indices and F&amp;O stocks this engine watches."
         summary={cfg.stock_contracts
           ? (cfg.scan_all_stocks
             ? `all ${eligible.length} high-liquidity stocks`
@@ -231,6 +240,48 @@ export function GammaMoveSettings() {
             </div>
           </Field>
         )}
+      </Section>
+
+      <Section
+        title="Contracts"
+        description="Which strike and expiry the signal is expressed through."
+        summary={`${cfg.strike_window_pct}% of the level · ${cfg.expiry_selection} · `
+          + `${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+        persistKey="gamma-contracts"
+        defaultOpen
+      >
+        <NumberField
+          label="Strike range"
+          hint="How far from the level the heaviest strike may sit. The source allows the strike to be a couple up or down from the exact level."
+          value={cfg.strike_window_pct} defaultValue={defaults.strike_window_pct}
+          onChange={(v) => patch({ strike_window_pct: v })} min={0.1} max={10} step={0.1} suffix="%"
+        />
+        <Field label="Expiry" hint="Which listed contract the signal is expressed through. Weekly and monthly are separated by the venue calendar, not by DTE guesswork.">
+          <ChoiceRow
+            value={cfg.expiry_selection}
+            options={EXPIRY_SELECTION_OPTIONS}
+            onChange={(v) => patch({ expiry_selection: v })}
+          />
+        </Field>
+        <NumberField
+          label="Minimum days to expiry"
+          hint="Contracts closer than this are not eligible."
+          value={cfg.expiry_dte_min} defaultValue={defaults.expiry_dte_min}
+          onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={60} step={1}
+        />
+        <NumberField
+          label="Maximum days to expiry"
+          hint="The source trades only the last week or two of a contract — earlier in the cycle it says open interest does not behave this way. NSE stock options are monthly-only, so this window is roughly the 15th onward."
+          value={cfg.expiry_dte_max} defaultValue={defaults.expiry_dte_max}
+          onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={90} step={1}
+        />
+        <Field label="Expiry day" hint="On expiry day the open-interest signal degenerates into settlement mechanics and the premium is nearly all gamma already — a different trade wearing this one's name.">
+          <Switch
+            checked={cfg.avoid_expiry_day}
+            label="Avoid expiry-day entries"
+            onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
+          />
+        </Field>
         <NumberField
           label="Minimum premium"
           hint={measured('min_option_premium', 'Contracts cheaper than this are skipped.')}
@@ -241,6 +292,28 @@ export function GammaMoveSettings() {
           label="Minimum open interest" hint="A contract with thin open interest has no writers to squeeze."
           value={cfg.min_option_oi} defaultValue={defaults.min_option_oi}
           onChange={(v) => patch({ min_option_oi: v })} min={0} step={10000}
+        />
+        <NumberField
+          label="Contracts watched" hint="The cap on the trigger pass. Each one costs a paced historical request every bar, which is what keeps the scan inside the rate limit."
+          value={cfg.max_candidates} defaultValue={defaults.max_candidates}
+          onChange={(v) => patch({ max_candidates: v })} min={1} max={100} step={1}
+        />
+
+        {/* The same picker every other engine uses, reading and writing THIS
+            strategy's selection. Edits join the draft like any other field, so
+            one Apply saves the whole page. */}
+        <OptionContractsPicker
+          title="Option contracts"
+          config={{
+            scan_indices: cfg.scan_indices,
+            scan_stocks: cfg.scan_stocks,
+            scan_all_stocks: cfg.scan_all_stocks,
+            scan_weekly_series_indices: cfg.scan_weekly_series_indices,
+            scan_monthly_series_indices: cfg.scan_monthly_series_indices,
+            scan_monthly_series_stocks: cfg.scan_monthly_series_stocks,
+          }}
+          saving={setCfg.isPending}
+          onSave={(p) => patch(p as Partial<GammaMoveConfig>)}
         />
       </Section>
 
@@ -436,26 +509,6 @@ export function GammaMoveSettings() {
       </Section>
 
       <AdvancedSection count={ADVANCED_SETTING_COUNT}>
-        <NumberField
-          label="Minimum days to expiry" hint="On expiry day the open-interest signal degenerates into settlement mechanics."
-          value={cfg.min_days_to_expiry} defaultValue={defaults.min_days_to_expiry}
-          onChange={(v) => patch({ min_days_to_expiry: v })} min={0} max={30} step={1}
-        />
-        <NumberField
-          label="Maximum days to expiry" hint="The source's 'only the last week or two'. NSE stock options are monthly-only, so this is roughly the 15th onward. Zero is refused — it is a mistake, not 'no limit'."
-          value={cfg.max_days_to_expiry} defaultValue={defaults.max_days_to_expiry}
-          onChange={(v) => patch({ max_days_to_expiry: v })} min={1} max={60} step={1}
-        />
-        <NumberField
-          label="Strike window" hint="How far from the level the heaviest strike may sit. The source allows 'a couple of strikes up or down'."
-          value={cfg.strike_window_pct} defaultValue={defaults.strike_window_pct}
-          onChange={(v) => patch({ strike_window_pct: v })} min={0.1} max={10} step={0.1} suffix="%"
-        />
-        <NumberField
-          label="Contracts watched" hint="The cap on stage C. Each one costs a paced historical request every bar, which is what keeps the scan inside the rate limit."
-          value={cfg.max_candidates} defaultValue={defaults.max_candidates}
-          onChange={(v) => patch({ max_candidates: v })} min={1} max={100} step={1}
-        />
         <NumberField
           label="Volume baseline" hint="Bars averaged for 'normal' volume. Reaches back across sessions on purpose — a within-session window is undefined until 13:15."
           value={cfg.volume_lookback} defaultValue={defaults.volume_lookback}

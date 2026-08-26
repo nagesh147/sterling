@@ -21,6 +21,10 @@ export interface AtmPremiumImbalanceConfig {
   expiry_policy: ExpiryPolicy;
   explicit_expiry: string;
   strike_policy: string;
+  /** Contract settings — same names as every other engine's. */
+  expiry_dte_min: number;
+  expiry_dte_max: number;
+  avoid_expiry_day: boolean;
   session_start: string;
   session_end: string;
   quote_mode: QuoteMode;

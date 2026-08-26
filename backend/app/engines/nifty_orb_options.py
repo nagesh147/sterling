@@ -16,9 +16,11 @@ IST = ZoneInfo("Asia/Kolkata")
 Direction = Literal["LONG", "SHORT", "NONE"]
 Regime = Literal["EXPANSION", "TREND", "RANGE", "UNKNOWN"]
 
-#: Canonical expiry-preference vocabulary shared by the engine and every provider.
-EXPIRY_SELECTIONS = frozenset({"nearest", "weekly", "monthly", "any"})
-MONEYNESS = frozenset({"ATM", "ITM", "OTM"})
+#: Canonical expiry-preference vocabulary shared by the engine and every
+#: provider. Defined once in `app.engines.option_contracts` and re-exported here
+#: so existing importers keep working -- the point is that every engine uses the
+#: same object, not merely an equal one.
+from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES, MONEYNESS  # noqa: E402,F401
 
 
 @dataclass(frozen=True)

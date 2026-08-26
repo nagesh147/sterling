@@ -152,6 +152,9 @@ async def resolve_option_pair(
         policy=cfg.expiry_policy,
         today=day,
         explicit=cfg.explicit_expiry,
+        dte_min=cfg.expiry_dte_min,
+        dte_max=cfg.expiry_dte_max,
+        avoid_expiry_day=cfg.avoid_expiry_day,
     )
 
     if underlying_ltp is None:

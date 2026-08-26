@@ -1,9 +1,13 @@
 /**
- * SuperTrend's exact option contracts, as a settings section.
+ * Exact option contracts, as a settings section — for whichever engine hosts it.
  *
- * Same picker as before; it has simply moved to where every other engine
- * configures its contracts. Nothing here is a new control — the change is that
- * it no longer competes with the signal rows for the top of the board.
+ * Originally SuperTrend's, and hardwired to its config. Every option strategy
+ * has the same question to answer ("which listed contracts?") and stores the
+ * answer under the same field names, so this is now the SAME control on each
+ * page rather than one real picker and several lookalikes.
+ *
+ * Called with no props it still reads and writes the SuperTrend engine config,
+ * which is what every existing caller expects.
  */
 import React from 'react';
 import {
@@ -17,6 +21,7 @@ import { formatExpiryDate } from '../expiryCalendarPresentation';
 import {
   CONTRACT_PICKER_CSS, ExpiryGroup, MONTHLY_RANKS, WEEKLY_RANKS,
   selectedEntries, useContractSelection,
+  type ContractSelectionConfig,
 } from './optionContractsMachinery';
 import { k, tint } from '../../../styles/kiteUI';
 
@@ -28,16 +33,35 @@ function RefreshGlyph() {
   );
 }
 
-export function OptionContractsPicker() {
-  const { data: cfg } = useEngineConfig();
+export function OptionContractsPicker({ config, onSave, saving, title }: {
+  /** The hosting engine's contract selection. Omit for the SuperTrend engine. */
+  config?: ContractSelectionConfig | null;
+  /** Persist a change. Omit to write the SuperTrend engine config. */
+  onSave?: (patch: Partial<ContractSelectionConfig>) => void;
+  saving?: boolean;
+  title?: string;
+} = {}) {
+  const { data: engineCfg } = useEngineConfig();
   const calendar = useExpiryCalendar();
   const setConfig = usePatchEngineConfig();
   const runScan = useRunScan();
-  const selection = useContractSelection();
 
-  const save = (patch: Partial<EngineConfigModel>) => {
-    if (!cfg || setConfig.isPending) return;
-    setConfig.mutate(patch, { onSuccess: () => runScan.mutate() });
+  const hosted = config != null;
+  const cfg = (config ?? engineCfg) as ContractSelectionConfig | undefined;
+  const selection = useContractSelection(hosted ? config : null);
+
+  const save = (patch: Partial<ContractSelectionConfig>) => {
+    if (!cfg) return;
+    if (hosted) {
+      if (!saving) onSave?.(patch);
+      return;
+    }
+    if (setConfig.isPending) return;
+    // Only the engine's own picker triggers a rescan: a hosted engine owns its
+    // own scan cadence, and kicking SuperTrend's scan from another page would
+    // be a side effect nobody asked for.
+    setConfig.mutate(patch as Partial<EngineConfigModel>,
+                     { onSuccess: () => runScan.mutate() });
   };
 
   if (!cfg) return null;
@@ -47,7 +71,8 @@ export function OptionContractsPicker() {
     ? (cfg.scan_all_stocks ? calendar.data.stocks : selectedEntries(calendar.data.stocks, cfg.scan_stocks))
     : [];
 
-  const saveState = setConfig.isPending ? 'Saving…' : setConfig.isError ? 'Save failed' : null;
+  const saveState = (hosted ? saving : setConfig.isPending) ? 'Saving…'
+    : (!hosted && setConfig.isError) ? 'Save failed' : null;
 
   return (
     <section
@@ -57,7 +82,7 @@ export function OptionContractsPicker() {
       <style>{CONTRACT_PICKER_CSS}</style>
 
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: k.text }}>Option contracts</h3>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: k.text }}>{title ?? 'Option contracts'}</h3>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: k.green }}>
           <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
           Live Kite dates

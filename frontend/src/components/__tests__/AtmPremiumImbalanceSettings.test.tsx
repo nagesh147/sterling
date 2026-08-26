@@ -21,6 +21,7 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   enabled: false,
   underlying: 'SENSEX',
   expiry_policy: 'NEAREST',
+  expiry_dte_min: 0, expiry_dte_max: 60, avoid_expiry_day: false,
   explicit_expiry: '',
   strike_policy: 'ATM_NEAREST',
   session_start: '09:15',

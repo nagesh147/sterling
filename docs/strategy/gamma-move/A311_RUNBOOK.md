@@ -54,12 +54,29 @@ a no-op and costs nothing.
 
 ---
 
-## 1a. What it scans
+## 1a. Instruments and Contracts
 
-The same curated high-liquidity registry every other engine here scans — **14
-names** — through the same field names: `scan_stocks`, `scan_all_stocks`,
-`stock_contracts`, `scan_indices`. Names outside the registry are refused by
-`validate()`, not silently dropped, so a typo cannot look like a quiet market.
+The settings page follows the same order and vocabulary as every other engine —
+**Instruments** (what is watched) then **Contracts** (which strike and expiry the
+signal is expressed through). Those are two different questions, which is why
+neither is called "Universe".
+
+**Instruments** — the curated high-liquidity registry, **14 names**, through the
+shared field names `scan_stocks`, `scan_all_stocks`, `stock_contracts`,
+`scan_indices`. Names outside the registry are refused by `validate()`, not
+silently dropped, so a typo cannot look like a quiet market.
+
+**Contracts** — strike range, expiry selection, `expiry_dte_min`,
+`expiry_dte_max`, `avoid_expiry_day`, the premium and open-interest floors, and
+the shared **Option contracts** picker. Those expiry field names are the same
+ones the ORB engine uses and are defined once in
+`app/engines/option_contracts.py`; an earlier draft called them
+`min_days_to_expiry`/`max_days_to_expiry`, which was a private name for a shared
+idea.
+
+`avoid_expiry_day` defaults **on** here: on expiry day the open-interest signal
+degenerates into settlement mechanics. It replaced `min_days_to_expiry = 1`,
+which expressed the same rule less clearly.
 
 Storage is per-engine (engines legitimately scan different universes); what is
 shared is the vocabulary and the eligible set. An earlier draft had an invented
