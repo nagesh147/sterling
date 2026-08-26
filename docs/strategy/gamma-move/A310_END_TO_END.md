@@ -1,9 +1,27 @@
 # A310 — Gamma Move, end to end
 
-**Strategy ID** `gamma_move` · **Name** "Gamma Move" · **Contract version** A310.1
-**Status** SPECIFICATION. No code written yet. This document is the build order.
+**Strategy ID** `gamma_move` · **Name** "Gamma Move" · **Contract version** A310.2
+**Status** BUILT and CALIBRATED, 2026-08-26. Disabled, paper-only, behind the live gate.
 **Sits beside** ATM Premium Imbalance — same engine/service/API/board/settings shape,
 a peer entry in every registry, never a fork of it.
+
+> ### Superseded in part — read [VALIDATION_REPORT.md](VALIDATION_REPORT.md) first
+>
+> This document was written as the build plan, before any code or data. It is
+> kept because the architecture, the artifact manifest and the funnel argument
+> in §3.1 all held up. Three things in it did not, and the report is the
+> authority wherever they disagree:
+>
+> 1. **The three "UNSPECIFIED" gaps (U1/U2/U3) are now measured**, not guessed.
+>    The values in §1's gap table and §2's rule text are the original guesses;
+>    the shipped values are in `engines/gamma_move/config.py` and the report.
+> 2. **The headline result is negative.** The entry triple on its own did not
+>    separate from an unconditional baseline (24.7% [20.9,28.9] vs 21.7%
+>    [21.5,21.9]). The measured edge is the level filter alone: 46.2%
+>    [31.6,61.4]. §2.5 presents the trigger as the strategy's core; it is a
+>    necessary condition at best.
+> 3. **The regime multiplier default of 3.0 in §2.7 was actively harmful** —
+>    measured at −3.3pp, i.e. the gate pointed the wrong way. Shipped at 2.0.
 
 ---
 
@@ -86,7 +104,14 @@ arrives **in a single day, two at most**.
 
 ### The three gaps — and why they default to "refuse"
 
-| ID | What is missing | Why guessing is dangerous | Default |
+> **Superseded.** Every value in this table was replaced by a measured one on
+> 2026-08-26. The shipped defaults are `level_proximity_pct = 1.0`,
+> `min_oi_drop_pct = 3.0`, `volume_spike_mult = 2.5`, `min_price_gain_pct = 2.0`,
+> `regime_period = 10`, `regime_multiplier = 2.0`. The reasoning below about
+> *why each one is dangerous to guess* is what survived, and it is why they were
+> measured rather than shipped as written.
+
+| ID | What is missing | Why guessing is dangerous | Original guess |
 |---|---|---|---|
 | **U1** | How near is "near the level". | Too wide and every stock qualifies, which turns R3 off entirely and makes the whole funnel noise. | `level_proximity_pct = 1.0` (%), and the field **cannot be 0** — 0 would mean "exactly on the level", which never happens on a tick basis, so it would silently pass nothing. Validation refuses `<= 0`. |
 | **U2** | The numeric thresholds for OI drop, volume spike and price gain. | This *is* the entry. A too-loose triple fires on ordinary noise; a too-tight one never fires and the engine looks broken rather than selective. | `min_oi_drop_pct = 5.0`, `volume_spike_mult = 2.0`, `min_price_gain_pct = 2.0`. All three **must be > 0**. These are *starting points for calibration, not observed values* — the doc says so, the config docstring says so, and the board shows a `UNCALIBRATED` badge until a replay run has been recorded. |
@@ -170,7 +195,12 @@ days have passed".
 
 `max_days_to_expiry = 0` is **rejected by validation**, not treated as "no limit".
 
-### 2.5 Entry trigger — OBSERVED shape (R6, R7, R8), UNSPECIFIED thresholds (U2)
+### 2.5 Entry trigger — OBSERVED shape (R6, R7, R8), thresholds now MEASURED (U2)
+
+> **Read this first.** On 167,253 real bars this triple, evaluated on its own,
+> did **not** separate from the unconditional population. It is a necessary
+> condition, not a sufficient one, and the caller must apply 2.2's level filter
+> before treating a trigger as a setup. See the validation report §2.1.
 
 Evaluated on the **option contract's own** 15-minute series
 `(close, volume, oi)`, indexed `t` = the most recently closed bar:
@@ -212,6 +242,10 @@ from ₹5 to ₹600, so a points stop is a 4% risk at one end and a 100% risk at
 other.
 
 ### 2.7 Regime gate — OBSERVED intent (R12), OURS parameters (U3)
+
+> **Superseded default.** `regime_multiplier` shipped at **2.0**, not the 3.0
+> below. At 3.0 the gate measured *inverted* at three of four periods — agreeing
+> with it was worse than fighting it. See the validation report §2.4.
 
 SuperTrend on the **underlying spot** at `regime_timeframe`, using the existing
 `app.engines.indicators.supertrend`. CE trades require SuperTrend **up**; PE
@@ -942,6 +976,12 @@ and `{engine === 'gamma_move' && <GammaMoveBoard nowMs={nowMs} onOpenDetail={onO
 ---
 
 ## 8. Build order
+
+**All nine phases are complete** as of 2026-08-26, plus two fixes the tests
+surfaced (a swing-pivot plateau bug and a de-scale ladder that un-latched on a
+single winner) and one artifact the plan did not anticipate: the calibration
+harness under `backend/study/gamma_move/`, without which the three gaps would
+still be guesses.
 
 Nine phases. Each ends with a green test run; none leaves the tree in a state
 where the engine is reachable but half-wired.

@@ -1,6 +1,6 @@
 # Gamma Move
 
-**Strategy ID** `gamma_move` · **Contract** A310.1 · **Status** SPECIFICATION — no code yet
+**Strategy ID** `gamma_move` · **Contract** A310.2 · **Status** BUILT, calibrated, paper-only
 **Sits beside** ATM Premium Imbalance, as a peer engine in every registry.
 
 Buys the option that writers are covering. An F&O single stock trades up into a
@@ -16,9 +16,9 @@ two days.
 
 | Doc | What it is |
 |---|---|
-| [A310_END_TO_END.md](A310_END_TO_END.md) | **Start here.** Provenance, the full contract, the data-path feasibility proof, an artifact-by-artifact build manifest (33 new files, 6 edits), every backend and frontend contract, the test plan, the build order and the live gate. |
-| A311_RUNBOOK.md | *Not yet written* — arm, monitor, recover, kill. Due in phase P6. |
-| VALIDATION_REPORT.md | *Not yet written* — and must not be, until a real replay run exists. Phase P9. |
+| [VALIDATION_REPORT.md](VALIDATION_REPORT.md) | **Start here.** What the calibration measured over 598 contracts and 193,135 real bars, what it found, and the eight-item live gate. It is the authority wherever it and A310 disagree. |
+| [A310_END_TO_END.md](A310_END_TO_END.md) | The build plan: provenance, the contract, the data-path feasibility proof, the artifact manifest, every backend and frontend contract, and the funnel argument. Partly superseded — see its header. |
+| [A311_RUNBOOK.md](A311_RUNBOOK.md) | Operating it: switch on, scan, arm, monitor, recover, kill. |
 
 ## Provenance in one line
 
@@ -30,13 +30,21 @@ unreliable on numbers and names.
 
 ## Read this before touching the config
 
-Three of the strategy's rules were **never given numbers** in the source: how
-near "near a level" is, the thresholds for the open-interest drop / volume spike
-/ price gain, and the SuperTrend parameters. The shipped defaults are calibration
-starting points, not observed values. They are listed in `descriptor()` under
-`uncalibrated`, and the board badges every signal `UNCALIBRATED` until a
-validation run replaces them.
+Three of the strategy's rules were never given numbers in the source. All three
+are now **measured**, against 598 NSE stock-option contracts and 193,135
+fifteen-minute bars carrying real open interest. The measurement found something
+the source does not claim:
 
-Four winning examples were shown in the source and no losing one. Four winners
-establish nothing. `enabled` defaults to `False`, `execution_mode` to `paper`,
-and `live_ready` is `False` until the eight-item gate in A310 §10 is cleared.
+> **The entry trigger alone has no measurable edge. The level filter does.**
+> 24.7% [20.9, 28.9] of triggered bars reached +30% within two sessions, against
+> a 21.7% [21.5, 21.9] baseline — overlapping. Restricted to spot within 1% of a
+> confirmed level: 46.2% [31.6, 61.4].
+
+So `level_proximity_pct` is the load-bearing setting in this engine, and
+widening it does not add signals of the same quality — it adds signals of
+baseline quality. One more trap worth knowing before you touch anything: the
+SuperTrend gate at the conventional multiplier of 3.0 measured **inverted**.
+It ships at 2.0.
+
+`enabled` defaults to `False`, `execution_mode` to `paper`, and `live_ready` is
+`False` until the eight-item gate in the validation report is cleared.
