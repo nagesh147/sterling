@@ -29,7 +29,9 @@ vi.mock('../../hooks/useGammaMove', () => ({
 }));
 
 const DEFAULTS = {
-  enabled: false, include_indices: false, max_universe: 150, explicit_symbols: [],
+  enabled: false,
+  scan_indices: [] as string[], scan_stocks: [] as string[],
+  scan_all_stocks: true, stock_contracts: true, include_indices: false, max_universe: 150, explicit_symbols: [],
   min_option_oi: 50000, min_option_volume: 1000, min_option_premium: 10,
   max_spread_pct: 3, level_timeframe: 'day', level_lookback_days: 120,
   pivot_lookback: 5, level_cluster_pct: 0.75, min_level_touches: 2,
