@@ -52,22 +52,23 @@ import { holidayName, isMuhurat, isNseHoliday } from "./holidays";
 import {
   aspectScore,
   choghadiyaAt,
+  classifyThesis,
   dignityOf,
   dignityScore,
   eclipseCorridor,
   findAspects,
+  horaModulation,
   isAbhijit,
   isGandanta,
+  lagnaState,
   moonSpeedDegPerDay,
   mundaneHits,
+  nodalAffliction,
   specialYogas,
+  type Thesis,
 } from "./factors";
 
 const HORA_CYCLE: PlanetName[] = ["Sun", "Venus", "Mercury", "Moon", "Saturn", "Jupiter", "Mars"];
-
-const BULLISH: PlanetName[] = ["Sun", "Mars", "Jupiter", "Venus"];
-const BEARISH: PlanetName[] = ["Saturn", "Rahu", "Ketu"];
-const CHOPPY: PlanetName[] = ["Mercury", "Moon"];
 
 const FIERY_NAK = new Set([0, 1, 2, 5, 9, 10, 18, 19, 24]);
 const STABLE_NAK = new Set([3, 7, 11, 16, 20, 25]);
@@ -188,52 +189,57 @@ function signIndexOf(sidereal: number): number {
   return Math.floor((((sidereal % 360) + 360) % 360) / 30) % 12;
 }
 
-function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { dir: number; vol: number; reasons: string[] } {
+function scoreGap(
+  panchang: Panchang,
+  planets: PlanetPos[],
+  lagna: number,
+  underlying: Underlying,
+): { dir: number; vol: number; reasons: string[]; thesis: Thesis } {
   const reasons: string[] = [];
   let dir = 0;
   let vol = 0.8;
 
   const wdLord = WEEKDAY_LORDS[panchang.weekdayIndex];
   const wdS = planetScore(wdLord);
-  dir += wdS.dir * 0.55;
-  vol += wdS.vol * 0.35;
+  dir += wdS.dir * 0.35;
+  vol += wdS.vol * 0.25;
   reasons.push(
     `${panchang.weekday} is ruled by ${wdLord} — ${wdS.dir >= 1 ? "constructive open" : wdS.dir <= -1 ? "heavy open" : "mixed open"}.`,
   );
 
-  if (panchang.paksha === "Shukla") {
-    dir += 1.35;
-    reasons.push("Shukla paksha (waxing Moon) favours buyers — gap-up bias.");
+  const t = panchang.tithiIndex % 15;
+  const rikta = t === 3 || t === 8 || t === 13;
+  if (rikta) {
+    vol += 1.1;
+    reasons.push(`${panchang.tithiName} is a Rikta tithi — empty for new longs. Fade the first impulse, don't gap-chase.`);
+  } else if (panchang.paksha === "Shukla") {
+    dir += 0.45;
+    reasons.push("Shukla paksha (waxing Moon) favours buyers — mild gap-up bias.");
   } else {
-    dir -= 1.35;
-    reasons.push("Krishna paksha (waning Moon) favours sellers — gap-down bias.");
+    dir -= 0.45;
+    reasons.push("Krishna paksha (waning Moon) favours sellers — mild gap-down bias.");
   }
 
-  const t = panchang.tithiIndex % 15;
-  if (t === 3 || t === 8 || t === 13) {
-    vol += 1.4;
-    reasons.push(`${panchang.tithiName} is a Rikta tithi — wide, unreliable opening range.`);
-  }
   if (panchang.tithiName === "Purnima" || panchang.tithiName === "Amavasya") {
-    vol += 1.8;
+    vol += 1.6;
     reasons.push(`${panchang.tithiName} — full/new Moon, classic gap-and-whipsaw day.`);
   }
-  if (t === 10) {
-    dir += 0.5;
+  if (t === 10 && !rikta) {
+    dir += 0.4;
     reasons.push("Ekadashi supports a cleaner directional drive.");
   }
 
   const naks = panchang.nakshatraIndex;
   if (FIERY_NAK.has(naks)) {
-    dir += 0.7;
-    vol += 0.9;
+    dir += 0.45;
+    vol += 0.7;
     reasons.push(`Moon in ${panchang.nakshatra} (Pada ${panchang.nakshatraPada}) — fiery, trend-seeking.`);
   } else if (STABLE_NAK.has(naks)) {
-    vol -= 0.5;
+    vol -= 0.45;
     reasons.push(`Moon in ${panchang.nakshatra} — steadier tape, smaller gap.`);
   }
   if (VOL_NAK.has(naks)) {
-    vol += 1.3;
+    vol += 1.0;
     reasons.push(`${panchang.nakshatra} is a volatile nakshatra — expect a fast first 15 minutes.`);
   }
 
@@ -243,7 +249,6 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
   const jup = planetByName(planets, "Jupiter");
   const sat = planetByName(planets, "Saturn");
   const rahu = planetByName(planets, "Rahu");
-  const ven = planetByName(planets, "Venus");
   const mer = planetByName(planets, "Mercury");
 
   const aspects = findAspects(planets);
@@ -285,8 +290,11 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
 
   const yogas = specialYogas(panchang, planets, lagna);
   for (const y of yogas.slice(0, 2)) reasons.push(y);
-  if (yogas.some((y) => y.startsWith("Gajakesari"))) dir += 0.8;
-  if (yogas.some((y) => y.startsWith("Kemadruma"))) vol += 0.5;
+  if (yogas.some((y) => y.startsWith("Gajakesari"))) {
+    const sep = angularSep(moon.sidereal, jup.sidereal);
+    dir += Math.abs(sep - 180) < 12 ? 0.2 : 0.7;
+  }
+  if (yogas.some((y) => y.startsWith("Kemadruma"))) vol += 0.45;
   if (yogas.some((y) => y.startsWith("Mangal-Rahu"))) {
     vol += 1.2;
     dir -= 0.4;
@@ -306,8 +314,8 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
     if (n.includes("sponsorship") || n.includes("constructive")) dir += 0.6;
   }
 
-  dir += elementDir(moon.signIndex) * 0.8;
-  dir += elementDir(signIndexOf(lagna)) * 0.7;
+  dir += elementDir(moon.signIndex) * 0.55;
+  dir += elementDir(signIndexOf(lagna)) * 0.4;
 
   const marsMoon = angularSep(mars.sidereal, moon.sidereal);
   if (marsMoon < 12 || Math.abs(marsMoon - 180) < 10) {
@@ -317,15 +325,18 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
   }
 
   const lagnaSign = signIndexOf(lagna);
-  if (isKendra(lagnaSign, jup.signIndex) || isKendra(lagnaSign, ven.signIndex)) {
-    dir += 1.5;
-    reasons.push("Jupiter/Venus occupy a kendra from the 09:15 lagna — bid-to-cover open.");
+  if (isKendra(lagnaSign, jup.signIndex) || isKendra(lagnaSign, planetByName(planets, "Venus").signIndex)) {
+    dir += 0.7;
+    reasons.push("Jupiter/Venus occupy a kendra from the 09:15 lagna — a bid can appear.");
   }
   if (isKendra(lagnaSign, sat.signIndex) || isKendra(lagnaSign, rahu.signIndex)) {
-    dir -= 1.6;
-    vol += 0.6;
+    dir -= 0.85;
+    vol += 0.5;
     reasons.push("Saturn/Rahu on a kendra from the open lagna — supply at the bell.");
   }
+
+  const lag = lagnaState(planets, lagna);
+  if (lag.note) reasons.push(lag.note);
 
   if (mer.retrograde) {
     vol += 1.1;
@@ -333,8 +344,11 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
     reasons.push("Mercury retrograde — gap often fades inside the first hour.");
   }
   if (angularSep(mer.sidereal, sun.sidereal) < 8.5) {
-    vol += 0.8;
+    vol += 0.6;
     reasons.push("Mercury combust — mixed tape, fade the first spike.");
+  }
+  if (nodalAffliction(planets, ["Mercury", "Sun"])) {
+    reasons.push("Sun/Mercury under Rahu — news open, the first tick is the trap.");
   }
 
   const yogaBad = new Set(["Vyatipata", "Vaidhriti", "Vajra", "Vyaghata", "Parigha", "Shoola", "Ganda", "Atiganda"]);
@@ -346,35 +360,52 @@ function scoreGap(panchang: Panchang, planets: PlanetPos[], lagna: number): { di
   if (panchang.karana === "Vishti") {
     vol += 0.7;
     reasons.push("Bhadra (Vishti) karana — avoid chasing the opening tick.");
+  } else if (panchang.karana === "Garaja") {
+    vol += 0.35;
+    reasons.push("Garaja karana — unsettled, leaving not settling. Don't marry the first side.");
   }
 
   reasons.push(
     `Open lagna is ${panchang.lagnaSign} ${panchang.lagnaDegree.toFixed(1)}° — ${elementDir(lagnaSign) > 0.5 ? "fire/air, expansion" : elementDir(lagnaSign) < 0 ? "water, absorption" : "earth, digestion"}.`,
   );
 
+  const thesis = classifyThesis({
+    panchang,
+    planets,
+    lagna,
+    underlying,
+    baseDir: dir,
+    baseVol: vol,
+    yogas,
+    eclipse: ecl.active,
+  });
+
   const uniq: string[] = [];
-  for (const r of reasons) {
-    if (!uniq.includes(r)) uniq.push(r);
+  for (const r of [lag.note, thesis.sectorNote, thesis.note, ...reasons]) {
+    if (r && !uniq.includes(r)) uniq.push(r);
   }
-  return { dir, vol, reasons: uniq.slice(0, 8) };
+  return { dir: thesis.dir, vol: thesis.vol, reasons: uniq.slice(0, 10), thesis };
 }
 
-function volLabel(vol: number): GapCall["volatility"] {
-  if (vol >= 4.2) return "extreme";
-  if (vol >= 3.0) return "high";
+function volLabel(vol: number, thesis: Thesis, panchang: Panchang, eclipse: boolean, gandanta: boolean): GapCall["volatility"] {
+  const fullEmpty = panchang.tithiName === "Purnima" || panchang.tithiName === "Amavasya";
+  if (eclipse || gandanta) return "extreme";
+  if (fullEmpty && vol >= 3.8) return "extreme";
+  if (vol >= 5.5) return "extreme";
+  if (vol >= 3.0 || thesis.kind === "fade") return "high";
   if (vol >= 1.8) return "medium";
   return "low";
 }
 
-function gapFromDir(dir: number, vol: number): GapCall["kind"] {
-  const threshold = vol >= 3.2 ? 1.15 : 1.7;
+function gapFromDir(dir: number, thesis: Thesis): GapCall["kind"] {
+  const threshold = thesis.kind === "fade" ? 2.05 : thesis.vol >= 3.2 ? 1.25 : 1.55;
   if (dir >= threshold) return "up";
   if (dir <= -threshold) return "down";
   return "flat";
 }
 
-function openAction(kind: GapCall["kind"], vol: GapCall["volatility"]): TradeAction {
-  if (vol === "extreme") return "WAIT";
+function openAction(kind: GapCall["kind"], vol: GapCall["volatility"], thesis: Thesis): TradeAction {
+  if (thesis.fadeOpen || vol === "extreme") return "WAIT";
   if (kind === "up") return vol === "high" ? "SCALP CE" : "BUY CE";
   if (kind === "down") return vol === "high" ? "SCALP PE" : "BUY PE";
   if (vol === "high") return "STRADDLE";
@@ -387,32 +418,40 @@ function buildGap(
   lagna: number,
   underlying: Underlying,
   horaLord: PlanetName,
+  scored: { dir: number; vol: number; reasons: string[]; thesis: Thesis },
 ): GapCall {
-  const { dir, vol, reasons } = scoreGap(panchang, planets, lagna);
-  const kind = gapFromDir(dir, vol);
-  const volatility = volLabel(vol);
-  const confidence = clamp(Math.round(42 + Math.abs(dir) * 12 + (vol > 2 ? 6 : 0)), 52, 94);
-  const bias: GapCall["bias"] = dir > 0.7 ? "bullish" : dir < -0.7 ? "bearish" : "neutral";
-  const label = kind === "up" ? "GAP UP" : kind === "down" ? "GAP DOWN" : "FLAT / INSIDE";
-  const action = openAction(kind, volatility);
+  const { dir, vol, reasons, thesis } = scored;
+  const kind = gapFromDir(dir, thesis);
   const ecl = eclipseCorridor(planets);
   const moon = planetByName(planets, "Moon");
+  const gandanta = isGandanta(moon.sidereal) || isGandanta(lagna);
+  const volatility = volLabel(vol, thesis, panchang, ecl.active, gandanta);
+  const confidence = clamp(
+    Math.round(44 + Math.abs(dir) * 10 + (vol > 2 ? 4 : 0) - (thesis.kind === "fade" ? 6 : 0)),
+    52,
+    thesis.kind === "fade" ? 76 : 94,
+  );
+  const bias: GapCall["bias"] = dir > 0.7 ? "bullish" : dir < -0.7 ? "bearish" : "neutral";
+  const label = kind === "up" ? "GAP UP" : kind === "down" ? "GAP DOWN" : "FLAT / INSIDE";
+  const action = openAction(kind, volatility, thesis);
   const yogas = specialYogas(panchang, planets, lagna);
-  const firstHourNote =
-    volatility === "extreme" || volatility === "high"
-      ? `Do not chase 09:15. Let the first 15-minute candle close, then take ${horaLord} hora's side.`
-      : kind === "flat"
-        ? "Open inside yesterday — sell the wings, fade the first spike back to VWAP."
-        : kind === "up"
-          ? `Gap-up in ${horaLord} hora: buy CE only on a hold above the opening 5-minute low. PE only if it fails in 15 minutes.`
-          : `Gap-down in ${horaLord} hora: buy PE on a hold below the opening 5-minute high. CE only if it reclaims immediately.`;
+  const residual = dir < -0.45 ? "PE" : dir > 0.45 ? "CE" : "both wings";
+  const firstHourNote = thesis.fadeOpen
+    ? `Do not chase 09:15. Sit through the first hora and Yamagandam. Residual after the trap-open is ${residual}. If the first 15-minute close disagrees, still do not flip — this is a ${thesis.kind} session.`
+    : kind === "flat"
+      ? "Open inside yesterday — sell the wings, fade the first spike back to VWAP."
+      : kind === "up"
+        ? `Gap-up in ${horaLord} hora: buy CE only on a hold above the opening 5-minute low. PE only if it fails in 15 minutes.`
+        : `Gap-down in ${horaLord} hora: buy PE on a hold below the opening 5-minute high. CE only if it reclaims immediately.`;
 
   const summary =
-    kind === "up"
-      ? `${underlying} is astrologically set to open higher into ${horaLord} hora. ${volatility === "high" || volatility === "extreme" ? "The gap can be violent — size down." : "A constructive gap, not a trap, if the first 5-minute hold confirms."}`
-      : kind === "down"
-        ? `${underlying} is astrologically set to open lower into ${horaLord} hora. ${volatility === "high" || volatility === "extreme" ? "Respect the flush — don't catch the first knife with CE." : "A heavy open; PE is the default until hora flips."}`
-        : `${underlying} is astrologically set to open flat-to-inside into ${horaLord} hora. Two-way trade. Premium sellers have the edge until a hora shift.`;
+    thesis.kind === "fade"
+      ? `${underlying} is a fade session into ${horaLord} hora. ${thesis.note} First trade WAIT.`
+      : kind === "up"
+        ? `${underlying} is astrologically set to open higher into ${horaLord} hora. ${volatility === "high" || volatility === "extreme" ? "The gap can be violent — size down." : "A constructive gap, not a trap, if the first 5-minute hold confirms."}`
+        : kind === "down"
+          ? `${underlying} is astrologically set to open lower into ${horaLord} hora. ${volatility === "high" || volatility === "extreme" ? "Respect the flush — don't catch the first knife with CE." : "A heavy open; PE is the default until hora flips."}`
+          : `${underlying} is astrologically set to open flat-to-inside into ${horaLord} hora. Two-way trade. Premium sellers have the edge until a hora shift.`;
 
   return {
     kind,
@@ -427,7 +466,10 @@ function buildGap(
     horaAtOpen: horaLord,
     yogas,
     eclipse: ecl.active,
-    gandanta: isGandanta(moon.sidereal) || isGandanta(lagna),
+    gandanta,
+    thesis: thesis.kind,
+    thesisNote: thesis.note,
+    sectorNote: thesis.sectorNote,
   };
 }
 
@@ -446,7 +488,16 @@ function actionFrom(
   regime: Regime,
   kalam: KalamFlag,
   hora: PlanetName,
+  thesis: Thesis,
+  opts: { forceWait: boolean; abhijit: boolean },
 ): { action: TradeAction; side: TradeSide; suggestion: string } {
+  if (opts.forceWait) {
+    return {
+      action: "WAIT",
+      side: "WAIT",
+      suggestion: `${thesis.kind === "fade" ? "Fade open" : "Unstable open"} — no fresh entries this slot. Let the first hora finish, then take the residual.`,
+    };
+  }
   if (kalam.rahu) {
     return {
       action: "AVOID",
@@ -454,34 +505,91 @@ function actionFrom(
       suggestion: "Rahu Kalam — no fresh entries. If in profit, trail. If flat, sit on hands.",
     };
   }
-  if (kalam.yamagandam && (regime.includes("Sideways") || regime.includes("Volatile"))) {
+  if (kalam.yamagandam) {
     return {
       action: "WAIT",
       side: "WAIT",
-      suggestion: "Yamagandam overlapping a messy hora — skip this slot, reload next.",
+      suggestion: "Yamagandam — no new positional trades. Trail what you have, reload next slot.",
     };
   }
 
+  if (opts.abhijit && (thesis.kind === "fade" || thesis.kind === "trend-down" || thesis.kind === "trend-up")) {
+    if (thesis.dir < -0.45) {
+      return {
+        action: "BOOK PE",
+        side: "PE",
+        suggestion: "Abhijit on a residual-PE day — book 50–70% of PE, do not add CE.",
+      };
+    }
+    if (thesis.dir > 0.45) {
+      return {
+        action: "BOOK CE",
+        side: "CE",
+        suggestion: "Abhijit on a residual-CE day — book 50–70% of CE, do not add PE.",
+      };
+    }
+  }
+
+  let traded: { action: TradeAction; side: TradeSide; suggestion: string };
   switch (regime) {
     case "Strong Positive":
-      return { action: "BUY CE", side: "CE", suggestion: `Ride ${hora} hora. Buy ATM/ITM CE, trail. Do not average PE.` };
+      traded = { action: "BUY CE", side: "CE", suggestion: `Ride ${hora} hora. Buy ATM/ITM CE, trail. Do not average PE.` };
+      break;
     case "Positive":
-      return { action: "BUY CE", side: "CE", suggestion: "Buy CE on any 5-min dip. Book 40–50% at 1:1, trail the rest." };
+      traded = { action: "BUY CE", side: "CE", suggestion: "Buy CE on any 5-min dip. Book 40–50% at 1:1, trail the rest." };
+      break;
     case "Volatile Positive":
-      return { action: "SCALP CE", side: "CE", suggestion: "Fast CE scalps only. Tight stop under the prior 5-min low. No overnight." };
+      traded = { action: "SCALP CE", side: "CE", suggestion: "Fast CE scalps only. Tight stop under the prior 5-min low. No overnight." };
+      break;
     case "Sideways to Positive":
-      return { action: "SCALP CE", side: "CE", suggestion: "Range with a green tilt. Small CE, or a bull call debit spread." };
+      traded = { action: "SCALP CE", side: "CE", suggestion: "Range with a green tilt. Small CE, or a bull call debit spread." };
+      break;
     case "Sideways/Volatile":
-      return { action: "STRADDLE", side: "BOTH", suggestion: "Both sides live. Prefer a long straddle/strangle, or stay out if you only play direction." };
+      traded = {
+        action: thesis.kind === "fade" ? (thesis.dir < 0 ? "SCALP PE" : thesis.dir > 0 ? "SCALP CE" : "STRADDLE") : "STRADDLE",
+        side: thesis.kind === "fade" ? (thesis.dir < 0 ? "PE" : thesis.dir > 0 ? "CE" : "BOTH") : "BOTH",
+        suggestion:
+          thesis.kind === "fade"
+            ? `Chop inside a fade. Prefer a small ${thesis.dir < 0 ? "PE" : "CE"} scalp, not a new trend.`
+            : "Both sides live. Prefer a long straddle/strangle, or stay out if you only play direction.",
+      };
+      break;
     case "Sideways to Negative":
-      return { action: "SCALP PE", side: "PE", suggestion: "Range with a red tilt. Small PE, or a bear put debit spread." };
+      traded = { action: "SCALP PE", side: "PE", suggestion: "Range with a red tilt. Small PE, or a bear put debit spread." };
+      break;
     case "Volatile Negative":
-      return { action: "SCALP PE", side: "PE", suggestion: "Fast PE scalps. Tight stop above the prior 5-min high. Don't fade with CE." };
+      traded = { action: "SCALP PE", side: "PE", suggestion: "Fast PE scalps. Tight stop above the prior 5-min high. Don't fade with CE." };
+      break;
     case "Negative":
-      return { action: "BUY PE", side: "PE", suggestion: "Buy PE on any 5-min pop. Book 40–50% at 1:1, trail the rest." };
+      traded = { action: "BUY PE", side: "PE", suggestion: "Buy PE on any 5-min pop. Book 40–50% at 1:1, trail the rest." };
+      break;
     case "Strong Negative":
-      return { action: "BUY PE", side: "PE", suggestion: `Ride ${hora} hora. Buy ATM/ITM PE, trail. Do not average CE.` };
+      traded = { action: "BUY PE", side: "PE", suggestion: `Ride ${hora} hora. Buy ATM/ITM PE, trail. Do not average CE.` };
+      break;
   }
+
+  if (kalam.gulika && traded.action === "BUY CE") {
+    traded = { action: "SCALP CE", side: "CE", suggestion: "Gulika — no new positional CE. Scalp only, tight stop." };
+  }
+  if (kalam.gulika && traded.action === "BUY PE") {
+    traded = { action: "SCALP PE", side: "PE", suggestion: "Gulika — no new positional PE. Scalp only, tight stop." };
+  }
+
+  if (thesis.kind === "trend-up" && traded.side === "PE" && traded.action !== "WAIT") {
+    return {
+      action: "HOLD CE",
+      side: "CE",
+      suggestion: `${hora} hora is malefic on a trend-up day — hold/trail CE, do not start a PE trend.`,
+    };
+  }
+  if (thesis.kind === "trend-down" && traded.side === "CE" && traded.action !== "WAIT") {
+    return {
+      action: "HOLD PE",
+      side: "PE",
+      suggestion: `${hora} hora is benefic on a trend-down day — scalp the bounce or hold PE, do not start a CE trend.`,
+    };
+  }
+  return traded;
 }
 
 function productFor(underlying: Underlying, side: TradeSide, vol: number): string {
@@ -515,44 +623,36 @@ function slotWhy(
 function scoreWindow(
   hora: PlanetName,
   panchang: Panchang,
-  planets: PlanetPos[],
   lagna: number,
   kalam: KalamFlag,
   cho: { kind: "good" | "move" | "bad" },
   abhijit: boolean,
+  thesis: Thesis,
 ): { dir: number; vol: number } {
-  const hs = planetScore(hora);
-  let dir = hs.dir;
-  let vol = hs.vol + 0.4;
-  dir += elementDir(signIndexOf(lagna)) * 0.55;
-  dir += panchang.paksha === "Shukla" ? 0.35 : -0.35;
-  if (FIERY_NAK.has(panchang.nakshatraIndex)) vol += 0.5;
-  if (VOL_NAK.has(panchang.nakshatraIndex)) vol += 0.7;
-  if (STABLE_NAK.has(panchang.nakshatraIndex)) vol -= 0.25;
-
-  const jup = planetByName(planets, "Jupiter");
-  const sat = planetByName(planets, "Saturn");
-  const mars = planetByName(planets, "Mars");
-  if (BULLISH.includes(hora) && isKendra(signIndexOf(lagna), jup.signIndex)) dir += 0.7;
-  if (BEARISH.includes(hora) && isKendra(signIndexOf(lagna), sat.signIndex)) dir -= 0.7;
-  if (hora === "Mars" || angularSep(mars.sidereal, lagna) < 8) vol += 0.6;
-  if (CHOPPY.includes(hora)) vol += 0.5;
+  const hs = horaModulation(hora);
+  const scale = thesis.kind === "fade" || thesis.kind === "chop" ? 0.4 : 0.9;
+  let dir = thesis.dir + hs.dir * scale;
+  let vol = Math.max(0.55, thesis.vol * 0.5 + hs.vol);
+  dir += elementDir(signIndexOf(lagna)) * 0.2;
+  if (FIERY_NAK.has(panchang.nakshatraIndex)) vol += 0.25;
+  if (VOL_NAK.has(panchang.nakshatraIndex)) vol += 0.35;
+  if (STABLE_NAK.has(panchang.nakshatraIndex)) vol -= 0.2;
   if (kalam.rahu) {
-    vol += 1.2;
-    dir *= 0.35;
+    vol += 1.0;
+    dir *= 0.3;
   }
   if (kalam.yamagandam) {
-    vol += 0.6;
-    dir *= 0.6;
+    vol += 0.45;
+    dir *= 0.4;
   }
-  if (kalam.gulika) dir -= 0.25;
-  if (cho.kind === "good") dir += 0.45;
-  if (cho.kind === "move") vol += 0.55;
+  if (kalam.gulika) dir -= 0.15;
+  if (cho.kind === "good") dir += thesis.kind === "fade" ? 0.12 : 0.4;
+  if (cho.kind === "move") vol += 0.35;
   if (cho.kind === "bad") {
-    dir *= 0.7;
-    vol += 0.35;
+    dir *= 0.88;
+    vol += 0.25;
   }
-  if (abhijit) dir += 0.35;
+  if (abhijit) dir *= thesis.kind === "fade" ? 0.8 : 1.15;
   return { dir, vol };
 }
 
@@ -611,7 +711,9 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
   const bell = utcFromIstParts(p.year, p.month, p.day, 9, 15, 0);
   const { panchang, planets, lagna } = panchangAt(open);
   const horaOpen = horaAt(bell, panchang);
-  const gap = buildGap(panchang, planets, lagna, underlying, horaOpen.lord);
+  const scored = scoreGap(panchang, planets, lagna, underlying);
+  const gap = buildGap(panchang, planets, lagna, underlying, horaOpen.lord, scored);
+  const thesis = scored.thesis;
   const iso = formatIstIsoDate(open);
   const nowParts = getIstParts(now);
   const nowMin = minutesOfDay(nowParts.hour, nowParts.minute);
@@ -623,17 +725,18 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
     const toMin = next ? minutesOfDay(next[0], next[1]) : MARKET_CLOSE_MIN;
     const midMin = Math.floor((fromMin + toMin) / 2);
     const mid = utcFromIstParts(p.year, p.month, p.day, Math.floor(midMin / 60), midMin % 60, 0);
-    const { panchang: pan, planets: pls, lagna: lag } = panchangAt(mid);
+    const { panchang: pan, lagna: lag } = panchangAt(mid);
     const hora = horaAt(mid, pan);
     const kalam = kalamAt(mid, pan);
     const cho = choghadiyaAt(mid, pan);
     const abhijit = isAbhijit(mid, pan);
-    const scored = scoreWindow(hora.lord, pan, pls, lag, kalam, cho, abhijit);
-    const regime = regimeFrom(scored.dir, scored.vol);
-    const traded = actionFrom(regime, kalam, hora.lord);
+    const scoredSlot = scoreWindow(hora.lord, pan, lag, kalam, cho, abhijit, thesis);
+    const regime = regimeFrom(scoredSlot.dir, scoredSlot.vol);
+    const forceWait = i === 0 && (gap.openAction === "WAIT" || thesis.fadeOpen);
+    const traded = actionFrom(regime, kalam, hora.lord, thesis, { forceWait, abhijit });
     const isLive = sameDay && nowMin >= fromMin && nowMin < toMin;
     const isPast = sameDay ? nowMin >= toMin : now.getTime() > mid.getTime();
-    const strength = clamp(Math.round(36 + Math.abs(scored.dir) * 14 + scored.vol * 6), 40, 98);
+    const strength = clamp(Math.round(36 + Math.abs(scoredSlot.dir) * 14 + scoredSlot.vol * 6), 40, 98);
     return {
       date: iso,
       from: clockFromMinutes(fromMin),
@@ -646,10 +749,10 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
       regime,
       action: traded.action,
       side: traded.side,
-      product: productFor(underlying, traded.side, scored.vol),
+      product: productFor(underlying, traded.side, scoredSlot.vol),
       suggestion: traded.suggestion,
       strength,
-      confidence: clamp(Math.round(50 + Math.abs(scored.dir) * 10), 48, 92),
+      confidence: clamp(Math.round(50 + Math.abs(scoredSlot.dir) * 10), 48, 92),
       kalam,
       why: slotWhy(hora.lord, signName(lag), kalam, regime, pan.nakshatra, cho.name, abhijit),
       isLive,
@@ -667,9 +770,9 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
   const bestCe = [...ceSlots].sort((a, b) => b.strength - a.strength)[0] ?? null;
   const bestPe = [...peSlots].sort((a, b) => b.strength - a.strength)[0] ?? null;
   const avoid = slots.filter((s) => s.action === "AVOID" || s.kalam.rahu);
-  const last = slots[slots.length - 1];
+  const closeBias = regimeFrom(thesis.dir, Math.min(thesis.vol, 2.2));
 
-  const headline = `${gap.label} · ${gap.volatility} vol · ${horaOpen.lord} hora at the bell · first trade ${gap.openAction}. Best CE ${bestCe ? `${bestCe.from}–${bestCe.to}` : "none"}. Best PE ${bestPe ? `${bestPe.from}–${bestPe.to}` : "none"}.`;
+  const headline = `${gap.label} · ${thesis.kind} · ${gap.volatility} vol · ${horaOpen.lord} hora at the bell · first trade ${gap.openAction}. Best CE ${bestCe ? `${bestCe.from}–${bestCe.to}` : "none"}. Best PE ${bestPe ? `${bestPe.from}–${bestPe.to}` : "none"}.`;
 
   const playbook: DayPlaybook = {
     date: iso,
@@ -680,9 +783,10 @@ export function forecastDay(date: Date, underlying: Underlying = "NIFTY", now: D
     bestCe,
     bestPe,
     avoid,
-    closeBias: last.regime,
+    closeBias,
     headline,
     horaAtOpen: horaOpen.lord,
+    thesis: thesis.kind,
   };
 
   return {

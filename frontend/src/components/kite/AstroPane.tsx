@@ -98,7 +98,7 @@ export function AstroPane() {
               Opening gap, 30-minute clock, month book
             </h1>
             <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.55, color: 'var(--k-ink-5)' }}>
-              Sidereal Lahiri at Mumbai. Hora, choghadiya, Rahu Kalam, mundane India/NSE transits. No candles, no OI — the same date always reprints the same book.
+              Sidereal Lahiri at Mumbai. Day thesis first (fade / trend / chop), then hora, choghadiya, Rahu Kalam, sector lords. No candles, no OI — the same date always reprints the same book.
             </p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -158,6 +158,7 @@ export function AstroPane() {
             <p style={{ margin: '14px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--k-ink-2)' }}>{book.gap.summary}</p>
             <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <span style={pill}>{book.gap.openAction}</span>
+              <span style={{ ...pill, color: 'var(--k-ink-1)', background: tint('var(--k-brand)', 16) }}>{book.gap.thesis.replace('-', ' ')}</span>
               <span style={pill}>{book.gap.volatility} vol</span>
               <span style={pill}>{book.gap.bias}</span>
               <span style={pill}>{book.gap.horaAtOpen} hora</span>
@@ -170,6 +171,7 @@ export function AstroPane() {
             <p style={{ margin: '14px 0 0', paddingTop: 14, borderTop: `1px solid ${k.border}`, fontSize: 13, lineHeight: 1.55, color: 'var(--k-ink-5)' }}>
               {book.gap.firstHourNote}
             </p>
+            <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--k-ink-5)' }}>{book.gap.thesisNote}</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={card}>
@@ -189,6 +191,7 @@ export function AstroPane() {
             <div style={card}>
               <div style={meta}>Day playbook</div>
               <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                <li><span style={{ color: 'var(--k-ink-5)' }}>Thesis · </span>{book.gap.thesis.replace('-', ' ')}</li>
                 <li><span style={{ color: 'var(--k-ink-5)' }}>Best CE · </span><span style={{ color: 'var(--k-green)' }}>{book.playbook.bestCe ? `${book.playbook.bestCe.from}–${book.playbook.bestCe.to} · ${book.playbook.bestCe.product}` : 'no clean CE slot'}</span></li>
                 <li><span style={{ color: 'var(--k-ink-5)' }}>Best PE · </span><span style={{ color: 'var(--k-red)' }}>{book.playbook.bestPe ? `${book.playbook.bestPe.from}–${book.playbook.bestPe.to} · ${book.playbook.bestPe.product}` : 'no clean PE slot'}</span></li>
                 <li><span style={{ color: 'var(--k-ink-5)' }}>Sit out · </span>{book.playbook.avoid.length ? book.playbook.avoid.map((s) => `${s.from}–${s.to}`).join(', ') : 'no Rahu Kalam overlap'}</li>

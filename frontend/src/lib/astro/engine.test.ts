@@ -68,4 +68,39 @@ describe("financial astrology engine", () => {
     expect(book.gap.horaAtOpen).toBeTruthy();
     expect(book.slots[0].hora).not.toBe(book.slots[book.slots.length - 1].hora);
   });
+
+  it("sits the bell on a Rikta + nodal-affliction fade day, and hora does not flip the residual", () => {
+    const nifty = forecastDay(session, "NIFTY", session);
+    expect(nifty.gap.thesis).toBe("fade");
+    expect(nifty.gap.openAction).toBe("WAIT");
+    expect(nifty.slots[0].action).toBe("WAIT");
+    expect(nifty.gap.volatility).not.toBe("extreme");
+    const directional = nifty.slots.filter((s) => s.side === "CE" || s.side === "PE");
+    const pe = directional.filter((s) => s.side === "PE").length;
+    expect(pe).toBeGreaterThanOrEqual(directional.length - 1);
+  });
+
+  it("Yamagandam never issues a fresh BUY", () => {
+    const book = forecastDay(session, "NIFTY", session);
+    for (const s of book.slots) {
+      if (s.kalam.yamagandam) {
+        expect(["WAIT", "AVOID"]).toContain(s.action);
+      }
+    }
+  });
+
+  it("Bank Nifty can disagree with Nifty on the same sky — sector lords", () => {
+    const nifty = forecastDay(session, "NIFTY", session);
+    const bank = forecastDay(session, "BANKNIFTY", session);
+    expect(nifty.gap.thesis).toBe("fade");
+    expect(bank.gap.thesis).toBe("fade");
+    expect(bank.slots[0].action).toBe("WAIT");
+    const nSides = nifty.slots.filter((s) => s.side === "CE" || s.side === "PE").map((s) => s.side);
+    const bSides = bank.slots.filter((s) => s.side === "CE" || s.side === "PE").map((s) => s.side);
+    const nPe = nSides.filter((s) => s === "PE").length;
+    const bCe = bSides.filter((s) => s === "CE").length;
+    expect(nPe).toBeGreaterThan(nSides.length / 2);
+    expect(bCe).toBeGreaterThan(bSides.length / 2);
+  });
+
 });

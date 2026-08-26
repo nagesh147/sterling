@@ -2,6 +2,8 @@
 
 export type Underlying = "NIFTY" | "BANKNIFTY" | "FINNIFTY" | "SENSEX" | "MIDCPNIFTY";
 
+export type DayThesis = "trend-up" | "trend-down" | "fade" | "chop";
+
 export type GapKind = "up" | "flat" | "down";
 
 export type Regime =
@@ -118,6 +120,9 @@ export interface GapCall {
   yogas: string[];
   eclipse: boolean;
   gandanta: boolean;
+  thesis: DayThesis;
+  thesisNote: string;
+  sectorNote: string;
 }
 
 export interface WindowSlot {
@@ -157,6 +162,7 @@ export interface DayPlaybook {
   closeBias: Regime;
   headline: string;
   horaAtOpen: PlanetName;
+  thesis: DayThesis;
 }
 
 export interface MonthDay {
