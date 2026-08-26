@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.engines.adaptive_edge.event_boundary import CanonicalEventBoundary
+from app.engines.adaptive_edge.event_boundary import CanonicalEventBoundary, CanonicalMarketEvent
 from app.engines.adaptive_edge.replay import CanonicalEventSequence
 from app.services.providers.truedata.adapter import TrueDataMarketDataAdapter
 from app.services.providers.truedata.bar_store import BarStore
@@ -46,7 +46,41 @@ def test_replay_contract_rejects_synthetic_event() -> None:
         require_truedata_sequence(CanonicalEventSequence.from_events([event]), "bar")
 
 
+def _non_causal_event() -> CanonicalMarketEvent:
+    """An event whose available_at precedes its event_time.
+
+    Nothing in the normal path can produce one: CanonicalMarketEvent rejects it
+    at construction, and CanonicalEventSequence.from_events rejects it again
+    when assembling a sequence. Both guards must stay — they are what stops a
+    lookahead event from existing. Building one therefore means going around
+    __post_init__, exactly as a path that rehydrates events from storage or
+    decodes them off the wire would.
+    """
+    event = object.__new__(CanonicalMarketEvent)
+    for name, value in dict(record_id="TD-1", event_type="bar", instrument_id="NIFTY-I", event_time="2026-08-17T03:45:00+00:00", available_at="2026-08-17T03:44:59+00:00", source="truedata", source_version="2.6", payload={"close": 24700.0}, source_timestamp="2026-08-17T03:45:00+00:00", receipt_timestamp=None, sequence=None, provenance={}).items():
+        object.__setattr__(event, name, value)
+    return event
+
+
 def test_replay_contract_enforces_causal_order() -> None:
-    event = CanonicalEventBoundary.create(record_id="TD-1", event_type="bar", instrument_id="NIFTY-I", event_time="2026-08-17T03:45:00+00:00", available_at="2026-08-17T03:44:59+00:00", source="truedata", source_version="2.6", payload={"close": 24700.0}, source_timestamp="2026-08-17T03:45:00+00:00")
+    """The third and last guard: the contract check itself.
+
+    The sequence is built directly rather than through from_events, because
+    from_events would reject the event first and this test would then be
+    asserting that guard instead of this one.
+    """
+    sequence = CanonicalEventSequence(events=(_non_causal_event(),), sequence_hash="unchecked")
     with pytest.raises(ValueError, match="causal availability"):
-        require_causal_order(CanonicalEventSequence.from_events([event]), "bar")
+        require_causal_order(sequence, "bar")
+
+
+def test_boundary_refuses_to_construct_a_non_causal_event() -> None:
+    """First guard: the event type cannot represent a lookahead event."""
+    with pytest.raises(ValueError, match="available_at cannot precede event_time"):
+        CanonicalEventBoundary.create(record_id="TD-1", event_type="bar", instrument_id="NIFTY-I", event_time="2026-08-17T03:45:00+00:00", available_at="2026-08-17T03:44:59+00:00", source="truedata", source_version="2.6", payload={"close": 24700.0}, source_timestamp="2026-08-17T03:45:00+00:00")
+
+
+def test_sequence_assembly_refuses_a_non_causal_event() -> None:
+    """Second guard: assembling a sequence re-checks every event."""
+    with pytest.raises(ValueError, match="cannot precede event_time"):
+        CanonicalEventSequence.from_events([_non_causal_event()])

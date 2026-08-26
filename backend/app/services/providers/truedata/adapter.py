@@ -36,6 +36,31 @@ class TrueDataMarketDataAdapter:
     PROVIDER_TIMEZONE = "Asia/Kolkata"
 
     @classmethod
+    def require_matching_provenance(cls, record: Mapping[str, Any]) -> None:
+        """Refuse to stamp this adapter's provenance onto someone else's data.
+
+        Both event constructors below set `source`/`source_version` to
+        TrueData's unconditionally. Without this check a record that arrives
+        already labelled `synthetic` is silently relabelled `truedata`, which
+        launders fabricated data into a sequence the replay contract then
+        accepts as real. A record may stay silent about its provenance — that is
+        the normal case for raw provider rows — but if it states one it must
+        agree with ours.
+        """
+        source = record.get("source")
+        if source not in (None, "", cls.SOURCE_NAME):
+            raise ValueError(
+                f"TrueData adapter refuses conflicting provenance source: "
+                f"record declares {source!r}, adapter emits {cls.SOURCE_NAME!r}"
+            )
+        version = record.get("source_version")
+        if version not in (None, "", cls.SOURCE_VERSION):
+            raise ValueError(
+                f"TrueData adapter refuses conflicting provenance version: "
+                f"record declares {version!r}, adapter emits {cls.SOURCE_VERSION!r}"
+            )
+
+    @classmethod
     def format_iso_timestamp(cls, raw_ts: str) -> str:
         """Parse a TrueData timestamp to UTC ISO-8601.
 
@@ -85,6 +110,7 @@ class TrueDataMarketDataAdapter:
         sequence: int | None = None,
     ) -> CanonicalMarketEvent:
         """Convert a raw TrueData bar record to CanonicalMarketEvent."""
+        cls.require_matching_provenance(bar_record)
         raw_time = str(bar_record.get("timestamp") or bar_record.get("time") or "")
         event_time_iso = cls.format_iso_timestamp(raw_time)
 
@@ -136,6 +162,7 @@ class TrueDataMarketDataAdapter:
         sequence: int | None = None,
     ) -> CanonicalMarketEvent:
         """Convert a raw TrueData tick record to CanonicalMarketEvent."""
+        cls.require_matching_provenance(tick_record)
         raw_time = str(tick_record.get("timestamp") or tick_record.get("time") or "")
         event_time_iso = cls.format_iso_timestamp(raw_time)
 
