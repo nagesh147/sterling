@@ -5,7 +5,7 @@ import {
   type ExitPolicy,
   type GammaMoveConfig,
   type LevelTimeframe,
-  type ProtectionMode,
+  type StopMode,
   type SizingMode,
   type StopBasis,
   type TriggerTimeframe,
@@ -62,10 +62,10 @@ const SIZING_OPTIONS: Array<{ value: SizingMode; label: string; hint: string }> 
   { value: 'LOTS', label: 'Fixed lots', hint: 'The same number of lots every time, regardless of how far the stop is.' },
 ];
 
-const PROTECTION_OPTIONS: Array<{ value: ProtectionMode; label: string; hint: string }> = [
-  { value: 'NONE', label: 'None', hint: 'Nothing watches the position but this process. Paper only — live refuses this.' },
-  { value: 'GTT', label: 'Broker GTT', hint: 'A server-side trigger at the stop, so a crash still exits.' },
-  { value: 'RESTING_STOP_LIMIT', label: 'Resting stop', hint: 'A stop order parked on the exchange the moment the entry fills.' },
+const STOP_MODE_OPTIONS: Array<{ value: StopMode; label: string; hint: string }> = [
+  { value: 'both', label: 'Broker + monitor', hint: 'A GTT at Zerodha that survives this process dying, plus our own tick loop for intrabar exits. The production answer.' },
+  { value: 'broker', label: 'Broker only', hint: 'A GTT and nothing else. Survives a crash, but only exits on a completed trigger — no intrabar exit.' },
+  { value: 'monitor', label: 'Monitor only', hint: 'Our tick loop and nothing at the broker. If this process dies while holding, the position is unprotected.' },
 ];
 
 const ADVANCED_SETTING_COUNT = 11;
@@ -78,6 +78,10 @@ export function GammaMoveSettings() {
   const defaults = data?.defaults;
   const strategy = data?.strategy;
   const researchOnly = data?.research_only;
+  // Published by the engine, so the selectable set can never drift from the
+  // set the scanner actually accepts.
+  const eligible = data?.vocabularies?.scan_stocks ?? [];
+  const warnings = data?.warnings ?? [];
 
   const [draft, setDraft] = React.useState<GammaMoveConfig | null>(null);
   const [resetConfirm, setResetConfirm] = React.useState(false);
@@ -150,25 +154,83 @@ export function GammaMoveSettings() {
         <span>{strategy.how_it_works} {strategy.provenance}</span>
       </ConfigNote>
 
+      {/* Paper/live and manual/auto are not here on purpose — they are the
+          account's and the engine's, shared with every Kite strategy. Saying so
+          beats a duplicate switch that could disagree with the one that counts. */}
+      <ConfigNote>
+        <span>
+          <strong>Paper or live, manual or auto</strong> are set in{' '}
+          <strong>Trading Mode</strong> and apply to every Kite strategy. This page
+          does not carry its own copy: two switches for one setting is how an engine
+          ends up believing it is papering while the broker is not.
+        </span>
+      </ConfigNote>
+
+      {warnings.map((w) => (
+        <ConfigNote key={w}><span>{w}</span></ConfigNote>
+      ))}
+
       <Section
         title="Universe"
         description="Which contracts are eligible to be watched at all."
-        summary={`${cfg.max_universe} names${cfg.include_indices ? ', indices included' : ', stocks only'}`}
+        summary={cfg.stock_contracts
+          ? (cfg.scan_all_stocks
+            ? `all ${eligible.length} high-liquidity stocks`
+            : `${cfg.scan_stocks.length} of ${eligible.length} stocks`)
+          : 'indices only'}
         persistKey="gamma-universe"
         defaultOpen
       >
-        <Field label="Indices" hint="Every worked example in the source is a stock. On an index, open interest spreads across many strikes, so there is no single strike the writers are pinned at.">
+        <ConfigNote>
+          <span>
+            The eligible set is the same curated high-liquidity registry every other
+            engine here scans — {eligible.length} names. Thin or arbitrary F&amp;O
+            names are not selectable: a 2× on a contract you cannot exit is not a 2×.
+          </span>
+        </ConfigNote>
+        <Field label="Single stocks" hint="Master switch above the list. Off leaves single-stock underlyings out of the scan entirely.">
           <Switch
-            checked={cfg.include_indices}
-            label={cfg.include_indices ? 'Included' : 'Stocks only'}
-            onChange={() => patch({ include_indices: !cfg.include_indices })}
+            checked={cfg.stock_contracts}
+            label={cfg.stock_contracts ? 'Scanned' : 'Excluded'}
+            onChange={() => patch({ stock_contracts: !cfg.stock_contracts })}
           />
         </Field>
-        <NumberField
-          label="Names scanned" hint="How many F&O underlyings the daily level pass covers. Each one costs a daily-candle request, once per trading day."
-          value={cfg.max_universe} defaultValue={defaults.max_universe}
-          onChange={(v) => patch({ max_universe: v })} min={1} max={250} step={5}
-        />
+        <Field label="Which stocks" hint="All eligible names, or a chosen subset of them.">
+          <Switch
+            checked={cfg.scan_all_stocks}
+            label={cfg.scan_all_stocks ? `All ${eligible.length}` : 'Chosen only'}
+            disabled={!cfg.stock_contracts}
+            onChange={() => patch({ scan_all_stocks: !cfg.scan_all_stocks })}
+          />
+        </Field>
+        {cfg.stock_contracts && !cfg.scan_all_stocks && (
+          <Field label="Stocks" hint="Only names in the curated registry can be selected." wide>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {eligible.map((name) => {
+                const on = cfg.scan_stocks.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => patch({
+                      scan_stocks: on
+                        ? cfg.scan_stocks.filter((n) => n !== name)
+                        : [...cfg.scan_stocks, name],
+                    })}
+                    style={{
+                      background: 'transparent',
+                      border: `1px solid ${on ? 'var(--k-orange)' : 'var(--k-border)'}`,
+                      color: on ? 'var(--k-text)' : 'var(--k-dim)',
+                      borderRadius: 5, padding: '3px 8px', fontSize: 11, cursor: 'pointer',
+                    }}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        )}
         <NumberField
           label="Minimum premium"
           hint={measured('min_option_premium', 'Contracts cheaper than this are skipped.')}
@@ -314,9 +376,9 @@ export function GammaMoveSettings() {
           value={cfg.swing_lookback} defaultValue={defaults.swing_lookback}
           onChange={(v) => patch({ swing_lookback: v })} min={2} max={30} step={1}
         />
-        <Field label="Broker-side protection" hint="What watches the position if this process dies.">
-          <ChoiceRow value={cfg.protection_mode} options={PROTECTION_OPTIONS}
-                     onChange={(v) => patch({ protection_mode: v })} />
+        <Field label="Where the stop lives" hint="What watches the position if this process dies. Same vocabulary as the SuperTrend engine's stop mode.">
+          <ChoiceRow value={cfg.stop_mode} options={STOP_MODE_OPTIONS}
+                     onChange={(v) => patch({ stop_mode: v })} />
         </Field>
       </Section>
 

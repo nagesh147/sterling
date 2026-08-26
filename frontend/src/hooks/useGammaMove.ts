@@ -10,7 +10,7 @@ export type TriggerTimeframe = '5minute' | '15minute' | '30minute';
 export type ExitPolicy = 'TIME_STOP' | 'PERCENT_TARGET' | 'TRAILING_STOP';
 export type StopBasis = 'POINTS' | 'PERCENT';
 export type SizingMode = 'LOTS' | 'RISK_PCT';
-export type ProtectionMode = 'NONE' | 'GTT' | 'RESTING_STOP_LIMIT';
+export type StopMode = 'broker' | 'monitor' | 'both';
 export type SignalState = 'watching' | 'armed' | 'running' | 'weakening' | 'ended' | 'error';
 export type Regime = 'up' | 'down' | 'unknown';
 
@@ -18,9 +18,11 @@ export type Regime = 'up' | 'down' | 'unknown';
  *  side is readable on the other without a translation table to keep in sync. */
 export interface GammaMoveConfig {
   enabled: boolean;
-  include_indices: boolean;
-  max_universe: number;
-  explicit_symbols: string[];
+  /** Same names, semantics and liquidity boundary as every other engine here. */
+  scan_stocks: string[];
+  scan_all_stocks: boolean;
+  stock_contracts: boolean;
+  scan_indices: string[];
   min_option_oi: number;
   min_option_volume: number;
   min_option_premium: number;
@@ -55,7 +57,7 @@ export interface GammaMoveConfig {
   trail_pct: number;
   trail_start_pct: number;
   close_at_session_end: boolean;
-  protection_mode: ProtectionMode;
+  stop_mode: StopMode;
   session_start: string;
   session_end: string;
   scan_interval_seconds: number;
@@ -71,7 +73,21 @@ export interface GammaMoveConfig {
   descale_factor: number;
   rescale_after_wins: number;
   data_source: 'kite';
-  execution_mode: 'paper' | 'live';
+}
+
+/**
+ * Paper/live and manual/auto, read from where they actually live.
+ *
+ * Not part of `GammaMoveConfig` on purpose. Paper/live for Kite is the
+ * account's `is_paper` and manual/auto is the engine's `auto_execute`; both are
+ * shared by every Kite strategy and set from the Trading Mode panel. A copy on
+ * this config would be a claim about them rather than the thing itself, and
+ * could disagree with the client that actually places the order.
+ */
+export interface GammaModeState {
+  is_paper: boolean;
+  auto_execute: boolean;
+  note: string;
 }
 
 export interface GammaMoveStrategyInfo {
@@ -81,8 +97,10 @@ export interface GammaMoveStrategyInfo {
   tagline: string;
   how_it_works: string;
   provenance: string;
-  /** False until the readiness gate passes. The UI must not offer live. */
-  live_ready: boolean;
+  /** Whether the strategy has been validated. False — see `headline_finding`.
+   *  Deliberately NOT a lock: it informs the operator, it does not overrule
+   *  them, and paper/live has its own switch elsewhere. */
+  validated: boolean;
   enabled: boolean;
   /** What each measured default cost to establish, keyed by field name. */
   calibration: Record<string, string>;
@@ -101,7 +119,9 @@ export interface GammaMoveResponse {
   /** Options live mode refuses. Greyed out rather than offered, so the operator
    *  never clicks a switch that validation will reject afterwards. */
   research_only: { exit_policy: string[] };
-  live_requires: Record<string, (string | boolean)[]>;
+  /** Configured choices worth stating out loud. Computed by the engine, so the
+   *  UI cannot invent its own list or let one go stale. */
+  warnings: string[];
 }
 
 export interface TriggerMetrics {
@@ -150,6 +170,15 @@ export interface GammaPositionRow {
   trail: number | null; target: number | null; quantity: number; lots: number;
   entered_ms: number; entry_day: string; sessions_held: number;
   exiting: boolean; high_water: number;
+  /** Broker reality. `entry` is what we intended; `fill_price` is what happened. */
+  status: 'pending' | 'open' | 'closed' | 'rejected';
+  order_id: string;
+  fill_price: number;
+  effective_entry: number;
+  /** Broker-side GTT id. 0 means nothing at the broker — this process is the
+   *  only thing watching the position. */
+  gtt_id: number;
+  stop_mode: StopMode;
 }
 
 export interface GammaScanState {
@@ -191,6 +220,10 @@ export interface GammaMoveSnapshot {
   record: GammaTradeRecord;
   orphan_positions: { symbol: string; quantity: number; entry_price: number }[];
   universe?: { underlyings: number; sample: string[] };
+  mode?: GammaModeState;
+  /** Configured risks, as sentences. Distinct from `blockers`, which are
+   *  reasons nothing can happen at all. */
+  warnings?: string[];
   /** Every reason nothing is armed. Rendered verbatim — a quiet engine that
    *  will not say why is what this list exists to prevent. */
   blockers: string[];

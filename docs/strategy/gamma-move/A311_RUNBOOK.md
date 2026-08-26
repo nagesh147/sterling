@@ -1,9 +1,28 @@
 # A311 — Gamma Move runbook
 
 Operating the engine. For what it does and whether it works, read
-[VALIDATION_REPORT.md](VALIDATION_REPORT.md) first — the short answer is that it
-is **not validated**, ships disabled and paper-only, and live mode is refused by
-`validate()`.
+[VALIDATION_REPORT.md](VALIDATION_REPORT.md) first — the short answer is that its
+entry trigger showed **no measurable edge on its own**; the level filter is where
+the edge was. It ships disabled. It is not otherwise locked.
+
+---
+
+## 0. Paper/live and manual/auto are not settings on this page
+
+This engine has **no `execution_mode` and no paper-only lock**, on purpose.
+
+| Axis | Where it lives | How it reaches the order |
+|---|---|---|
+| PAPER / LIVE | `account.is_paper`, from the **Trading Mode** panel | `build_client` hands it to `KiteClient`, which simulates every order when set |
+| MANUAL / AUTO | the engine's `auto_execute` | read by `scan_all_once`; in AUTO the scan enters armed rows itself |
+
+Both are shared by every Kite strategy and both are **read, never stored here**.
+
+An earlier version of this engine did carry its own `execution_mode`, defaulting
+to `"paper"`. On 2026-08-26 that config read `paper` while the account it traded
+through was **live** — the strategy believed one thing and the broker did
+another. That is the entire argument against a second switch, and it is why the
+safety rules below are unconditional instead of being attached to a mode.
 
 ---
 
@@ -19,10 +38,27 @@ curl -X PUT localhost:8000/api/v1/config/gamma-move \
   -H 'Content-Type: application/json' -d '{"enabled": true}'
 ```
 
+`GET /config/gamma-move/snapshot` reports `mode.is_paper` and `mode.auto_execute`
+so you can confirm what will actually happen before enabling.
+
 The background loop (`gamma_move_runner.auto_scan_loop`, registered in
 `main.py`) then scans every `scan_interval_seconds` while the clock is inside
 `session_start`–`session_end` on a weekday. While `enabled` is false the loop is
 a no-op and costs nothing.
+
+---
+
+## 1a. What it scans
+
+The same curated high-liquidity registry every other engine here scans — **14
+names** — through the same field names: `scan_stocks`, `scan_all_stocks`,
+`stock_contracts`, `scan_indices`. Names outside the registry are refused by
+`validate()`, not silently dropped, so a typo cannot look like a quiet market.
+
+Storage is per-engine (engines legitimately scan different universes); what is
+shared is the vocabulary and the eligible set. An earlier draft had an invented
+`max_universe = 150`, which was both an arbitrary number and a way past that
+boundary — a 2× on a contract you cannot exit is not a 2×.
 
 ---
 
@@ -84,7 +120,36 @@ out from under another engine's protection monitor.
 
 Exit paths, worst first: `stop` → `trail` → `target` → `time_stop` →
 `session_end`. Each position carries an `exiting` claim that the first path to
-fire takes; without it two paths would both send a sell.
+fire takes; without it two paths would both send a sell. On exit the broker GTT
+is cancelled **before** the sell is sent — selling while a trigger is still armed
+is how one position gets sold twice — and re-armed if the sell fails.
+
+### What protects a position
+
+`stop_mode` decides, with the same vocabulary as the SuperTrend engine:
+
+| mode | GTT at Zerodha | our tick loop | if this process dies |
+|---|---|---|---|
+| `both` *(default)* | yes | yes | the GTT still exits |
+| `broker` | yes | no | the GTT still exits |
+| `monitor` | no | yes | **nothing exits** |
+
+The board says which one a position is actually in: `GTT ARMED` (green) or
+`NO BROKER STOP` (amber). A GTT that fails to place is logged and noted rather
+than being fatal — but it is never silent, because "protected" and "protected
+only while this process lives" are different states.
+
+### Durability
+
+Positions are persisted to `gamma_move_positions_{uid}` on every change, and the
+loop reconciles against the broker before its first scan. A restart that started
+scanning before knowing what it held could open a second position in the same
+contract; an in-memory guard would not have survived the restart either.
+
+`status` distinguishes `pending` (order sent, no fill confirmed) from `open`
+(the broker confirmed it). The board shows `UNCONFIRMED` for the first. When the
+fill comes in worse than the limit, the stop moves with it — leaving it where it
+was would silently widen the risk past what the sizer allowed.
 
 ---
 

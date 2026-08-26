@@ -9,7 +9,31 @@ from app.engines.gamma_move import CALIBRATED_FIELDS, GammaMoveConfig
 def test_defaults_validate():
     cfg = GammaMoveConfig().validate()
     assert cfg.enabled is False
-    assert cfg.execution_mode == "paper"
+    assert cfg.stop_mode == "both"
+
+
+def test_there_is_no_execution_mode():
+    """Paper/live for Kite is `account.is_paper`, and a copy here could disagree
+    with the client that actually places the order."""
+    assert "execution_mode" not in GammaMoveConfig.field_names()
+    assert "protection_mode" not in GammaMoveConfig.field_names()
+
+
+def test_universe_uses_the_shared_registry_vocabulary():
+    names = GammaMoveConfig.field_names()
+    assert {"scan_stocks", "scan_all_stocks", "stock_contracts", "scan_indices"} <= names
+    # The invented parallel vocabulary is gone.
+    assert not {"max_universe", "explicit_symbols", "include_indices"} & names
+
+
+def test_off_registry_stock_is_refused_not_dropped():
+    with pytest.raises(ValueError, match="curated high-liquidity registry"):
+        GammaMoveConfig(scan_stocks=("SOMEPENNYCO",)).validate()
+
+
+def test_scanning_nothing_is_refused():
+    with pytest.raises(ValueError, match="nothing to scan"):
+        GammaMoveConfig(stock_contracts=False, scan_indices=()).validate()
 
 
 def test_defaults_are_the_calibrated_values():
@@ -76,45 +100,48 @@ def test_percent_target_needs_a_target():
         GammaMoveConfig(exit_policy="PERCENT_TARGET", target_pct=0).validate()
 
 
-class TestLiveGate:
-    """Live mode refuses everything the evidence does not support."""
+class TestAlwaysOnInvariants:
+    """Safety rules that do not depend on whose money it is.
 
-    base = dict(execution_mode="live", protection_mode="GTT", lots=1,
-                sizing_mode="LOTS", regime_enabled=True)
+    These used to sit behind `execution_mode == "live"`. A rule that only holds
+    when the money is real is a rule the paper results were never measured
+    under — a paper run that trades unprotected is not a rehearsal.
+    """
 
-    def test_a_fully_specified_live_config_passes(self):
-        GammaMoveConfig(**self.base).validate()
+    def test_a_stop_is_always_required(self):
+        with pytest.raises(ValueError, match="a stop is required"):
+            GammaMoveConfig(stop_percent=0, stop_points=0).validate()
 
-    def test_research_exit_policies_refused(self):
-        with pytest.raises(ValueError, match="research-only"):
-            GammaMoveConfig(**{**self.base, "exit_policy": "PERCENT_TARGET",
-                               "target_pct": 50}).validate()
+    def test_a_percent_stop_satisfies_it(self):
+        GammaMoveConfig(stop_basis="PERCENT", stop_percent=30).validate()
 
-    def test_points_stop_refused(self):
-        with pytest.raises(ValueError, match="stop_basis=PERCENT"):
-            GammaMoveConfig(**{**self.base, "stop_basis": "POINTS",
-                               "stop_points": 5}).validate()
+    def test_a_points_stop_satisfies_it_but_warns(self):
+        cfg = GammaMoveConfig(stop_basis="POINTS", stop_points=8).validate()
+        assert any("POINTS" in w for w in cfg.warnings())
 
-    def test_unprotected_position_refused(self):
-        with pytest.raises(ValueError, match="broker-side protection"):
-            GammaMoveConfig(**{**self.base, "protection_mode": "NONE"}).validate()
 
-    def test_regime_gate_cannot_be_off(self):
-        with pytest.raises(ValueError, match="regime gate"):
-            GammaMoveConfig(**{**self.base, "regime_enabled": False}).validate()
+class TestWarnings:
+    """Configured risks are reported, not refused — the operator decides."""
 
-    def test_penny_options_refused(self):
-        with pytest.raises(ValueError, match="min_option_premium"):
-            GammaMoveConfig(**{**self.base, "min_option_premium": 1.0}).validate()
+    def test_defaults_are_quiet(self):
+        assert GammaMoveConfig().validate().warnings() == []
 
-    def test_size_must_be_set(self):
-        with pytest.raises(ValueError, match="explicit positive size"):
-            GammaMoveConfig(**{**self.base, "lots": 0}).validate()
+    def test_monitor_only_warns_about_the_broker(self):
+        cfg = GammaMoveConfig(stop_mode="monitor").validate()
+        assert any("unprotected" in w for w in cfg.warnings())
+
+    def test_unsourced_exit_warns(self):
+        cfg = GammaMoveConfig(exit_policy="PERCENT_TARGET", target_pct=50).validate()
+        assert any("not supported by the source" in w for w in cfg.warnings())
+
+    def test_disabling_the_trend_gate_warns(self):
+        cfg = GammaMoveConfig(regime_enabled=False).validate()
+        assert any("corrective market" in w for w in cfg.warnings())
 
 
 def test_as_dict_round_trips():
-    cfg = GammaMoveConfig(min_oi_drop_pct=4.5, explicit_symbols=("RELIANCE",))
+    cfg = GammaMoveConfig(min_oi_drop_pct=4.5, scan_stocks=("RELIANCE",))
     again = GammaMoveConfig(**{**cfg.as_dict(),
-                               "explicit_symbols": tuple(cfg.as_dict()["explicit_symbols"])})
+                               "scan_stocks": tuple(cfg.as_dict()["scan_stocks"])})
     assert again.min_oi_drop_pct == 4.5
-    assert again.explicit_symbols == ("RELIANCE",)
+    assert again.scan_stocks == ("RELIANCE",)

@@ -582,10 +582,10 @@ async def get_gamma_move_config() -> dict:
     operator changing a number should be able to see what it cost to pick it.
     """
     from app.engines.gamma_move.config import (EXIT_POLICIES, LEVEL_TIMEFRAMES,
-                                               PROTECTION_MODES,
                                                RESEARCH_ONLY_EXIT_POLICIES,
-                                               SIZING_MODES, STOP_BASES,
+                                               SIZING_MODES, STOP_BASES, STOP_MODES,
                                                TRIGGER_TIMEFRAMES, GammaMoveConfig)
+    from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
     from app.services.gamma_move import descriptor, get_config
     cfg = get_config()
     return {
@@ -599,18 +599,18 @@ async def get_gamma_move_config() -> dict:
             "exit_policy": sorted(EXIT_POLICIES),
             "stop_basis": sorted(STOP_BASES),
             "sizing_mode": sorted(SIZING_MODES),
-            "protection_mode": sorted(PROTECTION_MODES),
+            "stop_mode": sorted(STOP_MODES),
             "data_source": ["kite"],
-            "execution_mode": ["paper", "live"],
+            # The eligible universe, published rather than typed: the same
+            # curated high-liquidity registry every other engine scans.
+            "scan_stocks": sorted(HIGH_LIQUIDITY_STOCK_NAMES),
         },
         # The source gives no exit rule at all, so everything but the time stop
-        # is unsupported by evidence and live mode refuses it.
+        # is unsupported by evidence. It is a warning, not a refusal.
         "research_only": {"exit_policy": sorted(RESEARCH_ONLY_EXIT_POLICIES)},
-        "live_requires": {
-            "stop_basis": ["PERCENT"],
-            "protection_mode": sorted(PROTECTION_MODES - {"NONE"}),
-            "regime_enabled": [True],
-        },
+        # Configured choices worth stating out loud, computed by the engine so
+        # the UI cannot invent its own list.
+        "warnings": cfg.warnings(),
     }
 
 

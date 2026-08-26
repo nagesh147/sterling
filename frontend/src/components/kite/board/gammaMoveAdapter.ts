@@ -111,6 +111,32 @@ function flagsOf(row: GammaSignalRow, proximityPct: number): BoardOrigin[] {
   return out;
 }
 
+/**
+ * What the broker knows about a held position.
+ *
+ * Two states a board must never blur. "We sent an order" is not "we hold this",
+ * and "protected" is not "protected only while this process is alive" — the
+ * second of each is the one that costs money at 3am.
+ */
+function positionFlags(p: GammaPositionRow): BoardOrigin[] {
+  const out: BoardOrigin[] = [];
+  if (p.status === 'pending') {
+    out.push({ label: 'UNCONFIRMED', tone: 'amber',
+               hint: `Order ${p.order_id || '—'} was sent but the broker has not `
+                 + 'confirmed a fill. The position may or may not exist.' });
+  }
+  if (p.gtt_id > 0) {
+    out.push({ label: 'GTT ARMED', tone: 'green',
+               hint: `A broker-side stop (#${p.gtt_id}) is protecting this position. `
+                 + 'It survives this process dying.' });
+  } else if (p.stop_mode !== 'monitor') {
+    out.push({ label: 'NO BROKER STOP', tone: 'amber',
+               hint: 'This process is the only thing watching the position — the '
+                 + 'broker-side stop is not in place. If it dies, nothing exits.' });
+  }
+  return out;
+}
+
 function triggerSection(row: GammaSignalRow, cfg: GammaMoveSnapshot['config']): BoardSection {
   const m = row.metrics;
   const mark = (ok: boolean) => (ok ? '✓' : '✗');
@@ -188,7 +214,9 @@ function toSignal(row: GammaSignalRow, cfg: GammaMoveSnapshot['config'],
     atMs: row.at_ms || null,
     levels: {
       ltp: price(lv.ltp),
-      entry: price(position?.entry ?? lv.entry),
+      // The REAL fill once there is one. Showing the intended entry beside a
+      // live P&L computed from the actual fill is two numbers that disagree.
+      entry: price(position?.effective_entry ?? position?.entry ?? lv.entry),
       stop: price(position?.stop ?? lv.stop),
       trail: price(position?.trail ?? lv.trail),
       target: price(position?.target ?? lv.target),
@@ -205,7 +233,8 @@ function toSignal(row: GammaSignalRow, cfg: GammaMoveSnapshot['config'],
     score: null,
     reason: row.reason ?? row.exit_reason ?? null,
     origin: originOf(row),
-    flags: flagsOf(row, cfg.level_proximity_pct),
+    flags: [...flagsOf(row, cfg.level_proximity_pct),
+            ...(position ? positionFlags(position) : [])],
     underlyingPrice: price(row.spot),
     sections: [triggerSection(row, cfg), levelSection(row, cfg), contractSection(row)],
   };
@@ -237,13 +266,14 @@ export function gammaMoveToBoard(snapshot?: GammaMoveSnapshot | null): BoardSign
       direction: 'long',
       status: 'running',
       atMs: p.entered_ms || null,
-      levels: { ltp: null, entry: price(p.entry), stop: price(p.stop),
+      levels: { ltp: null, entry: price(p.effective_entry ?? p.entry), stop: price(p.stop),
                 trail: price(p.trail), target: price(p.target), exit: null },
       sizing: { lots: p.lots, quantity: p.quantity, atRiskInr: null, deployedInr: null },
       score: null,
       reason: `held since ${p.entry_day}, ${p.sessions_held} session(s)`,
       origin: { label: 'HELD', tone: 'blue',
                 hint: 'Open position; its candidate is no longer in the current scan.' },
+      flags: positionFlags(p),
       sections: [],
     });
   }

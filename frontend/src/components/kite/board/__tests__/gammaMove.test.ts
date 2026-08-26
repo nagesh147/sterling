@@ -15,8 +15,14 @@ import type {
 const CFG = {
   level_proximity_pct: 1.0, min_oi_drop_pct: 3.0, volume_spike_mult: 2.5,
   min_price_gain_pct: 2.0, volume_lookback: 20, level_timeframe: 'day',
-  execution_mode: 'paper', enabled: true,
+  stop_mode: 'both', enabled: true,
 } as unknown as GammaMoveConfig;
+
+/** Broker-side fields every position row now carries. */
+const BROKER = {
+  status: 'open' as const, order_id: 'o-1', fill_price: 0, effective_entry: 0,
+  gtt_id: 111, stop_mode: 'both' as const,
+};
 
 function metrics(over: Partial<TriggerMetrics> = {}): TriggerMetrics {
   return {
@@ -148,6 +154,7 @@ describe('gammaMoveToBoard', () => {
       symbol: 'RELIANCE26SEP1300CE', signal_id: row().id, entry: 54.2, stop: 46.1,
       trail: 60, target: null, quantity: 500, lots: 1, entered_ms: 1789009200000,
       entry_day: '2026-09-20', sessions_held: 0, exiting: false, high_water: 62,
+      ...BROKER, fill_price: 54.2, effective_entry: 54.2,
     };
     const [s] = gammaMoveToBoard(snap({ positions: [position] }));
     expect(s.status).toBe('running');
@@ -155,11 +162,48 @@ describe('gammaMoveToBoard', () => {
     expect(s.levels.trail).toBe(60);
   });
 
+  it('shows the real fill, not the intended entry', () => {
+    const position: GammaPositionRow = {
+      symbol: 'RELIANCE26SEP1300CE', signal_id: row().id, entry: 53, stop: 45,
+      trail: null, target: null, quantity: 500, lots: 1, entered_ms: 1789009200000,
+      entry_day: '2026-09-20', sessions_held: 0, exiting: false, high_water: 56,
+      ...BROKER, fill_price: 56.4, effective_entry: 56.4,
+    };
+    const [s] = gammaMoveToBoard(snap({ positions: [position] }));
+    expect(s.levels.entry).toBe(56.4);
+  });
+
+  it('warns when a position has no broker-side stop', () => {
+    const base = {
+      symbol: 'RELIANCE26SEP1300CE', signal_id: row().id, entry: 53, stop: 45,
+      trail: null, target: null, quantity: 500, lots: 1, entered_ms: 1789009200000,
+      entry_day: '2026-09-20', sessions_held: 0, exiting: false, high_water: 53,
+      ...BROKER, fill_price: 53, effective_entry: 53,
+    };
+    const armed = gammaMoveToBoard(snap({ positions: [base] }))[0];
+    expect(armed.flags?.some((f) => f.label === 'GTT ARMED')).toBe(true);
+
+    const bare = gammaMoveToBoard(snap({ positions: [{ ...base, gtt_id: 0 }] }))[0];
+    expect(bare.flags?.some((f) => f.label === 'NO BROKER STOP')).toBe(true);
+  });
+
+  it('marks an unconfirmed order as not yet a position', () => {
+    const pending: GammaPositionRow = {
+      symbol: 'RELIANCE26SEP1300CE', signal_id: row().id, entry: 53, stop: 45,
+      trail: null, target: null, quantity: 500, lots: 1, entered_ms: 1789009200000,
+      entry_day: '2026-09-20', sessions_held: 0, exiting: false, high_water: 53,
+      ...BROKER, status: 'pending', fill_price: 0, effective_entry: 53,
+    };
+    const [s] = gammaMoveToBoard(snap({ positions: [pending] }));
+    expect(s.flags?.some((f) => f.label === 'UNCONFIRMED')).toBe(true);
+  });
+
   it('keeps a held position visible after its candidate leaves the scan', () => {
     const position: GammaPositionRow = {
       symbol: 'ORPHAN26SEP1CE', signal_id: 'gone', entry: 20, stop: 14, trail: null,
       target: null, quantity: 100, lots: 1, entered_ms: 1789009200000,
       entry_day: '2026-09-19', sessions_held: 1, exiting: false, high_water: 20,
+      ...BROKER, fill_price: 20, effective_entry: 20,
     };
     const rows = gammaMoveToBoard(snap({ candidates: [], positions: [position] }));
     expect(rows).toHaveLength(1);

@@ -127,8 +127,15 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
         </button>
         {data?.universe && (
           <span style={{ fontSize: 11, color: k.dim }}>
-            {data.universe.underlyings} F&amp;O names ·{' '}
-            <strong style={{ color: k.text }}>{data.config.execution_mode}</strong>
+            {data.universe.underlyings} names ·{' '}
+            {/* Read from the account and the engine, not from this strategy's
+                config — there is no copy here to go stale. */}
+            <strong style={{ color: data.mode?.is_paper === false ? k.green : k.amber }}>
+              {data.mode?.is_paper === false ? 'LIVE' : 'PAPER'}
+            </strong>{' · '}
+            <strong style={{ color: k.text }}>
+              {data.mode?.auto_execute ? 'AUTO' : 'MANUAL'}
+            </strong>
             {data.config.enabled ? '' : ' · disabled'}
           </span>
         )}

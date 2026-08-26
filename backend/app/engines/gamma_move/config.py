@@ -42,9 +42,12 @@ TRIGGER_TIMEFRAMES: frozenset[str] = frozenset({"5minute", "15minute", "30minute
 EXIT_POLICIES: frozenset[str] = frozenset({"TIME_STOP", "PERCENT_TARGET", "TRAILING_STOP"})
 STOP_BASES: frozenset[str] = frozenset({"POINTS", "PERCENT"})
 SIZING_MODES: frozenset[str] = frozenset({"LOTS", "RISK_PCT"})
-PROTECTION_MODES: frozenset[str] = frozenset({"NONE", "GTT", "RESTING_STOP_LIMIT"})
+#: Where the protective stop lives, with the same vocabulary and default as the
+#: SuperTrend engine's ``stop_mode``. ``broker`` is a GTT at Zerodha that survives
+#: this process dying; ``monitor`` is our own tick loop, which exits intrabar but
+#: only while we are alive. ``both`` is the production answer and the default.
+STOP_MODES: frozenset[str] = frozenset({"broker", "monitor", "both"})
 DATA_SOURCES: frozenset[str] = frozenset({"kite"})
-EXECUTION_MODES: frozenset[str] = frozenset({"paper", "live"})
 
 #: Exit policies that have never been validated against anything. The source
 #: gives no exit rule at all -- its 2x and 3x figures are outcomes, not a rule --
@@ -93,12 +96,23 @@ class GammaMoveConfig:
     enabled: bool = False
 
     # --- universe -----------------------------------------------------------
-    #: Indices are excluded: every worked example in the source is a stock, and
-    #: the mechanism needs writers concentrated at one strike, which an index
-    #: chain spreads across many.
-    include_indices: bool = False
-    max_universe: int = 150
-    explicit_symbols: tuple[str, ...] = ()
+    # Same field names, semantics and liquidity boundary as every other engine
+    # here. An earlier draft invented `max_universe = 150`, which was both an
+    # arbitrary number and a way past the curated registry -- the whole point of
+    # that registry is that "arbitrary or thin F&O names cannot be included",
+    # and a 2x on a contract you cannot exit is not a 2x.
+    #
+    # Storage is per-engine because engines legitimately scan different
+    # universes; what is shared is the vocabulary and the eligible set.
+    scan_stocks: tuple[str, ...] = ()
+    #: True = every eligible high-liquidity stock, never every listed F&O name.
+    scan_all_stocks: bool = True
+    #: Master switch above the stock list, as in the SuperTrend engine.
+    stock_contracts: bool = True
+    #: Empty by design: every worked example in the source is a stock, and the
+    #: mechanism needs writers concentrated at one strike, which an index chain
+    #: spreads across many. Listed so indices are a choice, not an omission.
+    scan_indices: tuple[str, ...] = ()
     min_option_oi: int = 50_000
     min_option_volume: int = 1_000
     #: MEASURED. At a 0.05 tick, a 0.73 option moves in 7% steps, so
@@ -155,7 +169,10 @@ class GammaMoveConfig:
     trail_pct: float = 0.0
     trail_start_pct: float = 0.0
     close_at_session_end: bool = False
-    protection_mode: str = "NONE"
+    #: Broker GTT + our tick monitor. Not "NONE": an option long with nothing
+    #: watching it is the state this engine must never be in, and the previous
+    #: default advertised a protection mode that no code implemented.
+    stop_mode: str = "both"
 
     # --- session ------------------------------------------------------------
     #: Not 09:15. The first bar of a session has no prior bar inside the same
@@ -183,8 +200,16 @@ class GammaMoveConfig:
     rescale_after_wins: int = 2
 
     # --- plumbing -----------------------------------------------------------
+    # There is deliberately no `execution_mode` here.
+    #
+    # Paper-vs-live for Kite is `account.is_paper`, set from the Trading Mode
+    # panel, and `KiteClient` already simulates every order when it is on. A
+    # second copy on this config would be duplicated storage of a setting that
+    # has a home -- the exact failure this codebase keeps having to undo -- and
+    # would let the engine believe it was papering while the client traded for
+    # real, or the reverse. Likewise manual-vs-auto is the engine's
+    # `auto_execute`. Both are READ where needed and never stored here.
     data_source: str = "kite"
-    execution_mode: str = "paper"
 
     # ------------------------------------------------------------------ rules
     def validate(self) -> "GammaMoveConfig":
@@ -194,9 +219,8 @@ class GammaMoveConfig:
                             ("exit_policy", EXIT_POLICIES),
                             ("stop_basis", STOP_BASES),
                             ("sizing_mode", SIZING_MODES),
-                            ("protection_mode", PROTECTION_MODES),
-                            ("data_source", DATA_SOURCES),
-                            ("execution_mode", EXECUTION_MODES)):
+                            ("stop_mode", STOP_MODES),
+                            ("data_source", DATA_SOURCES)):
             if getattr(self, name) not in vocab:
                 raise ValueError(f"{name} must be one of {sorted(vocab)}")
 
@@ -232,8 +256,19 @@ class GammaMoveConfig:
             raise ValueError("strike_window_pct must be > 0")
         if self.max_candidates < 1:
             raise ValueError("max_candidates must be >= 1")
-        if self.max_universe < 1:
-            raise ValueError("max_universe must be >= 1")
+        # The curated registry is the eligible set for every engine here. An
+        # arbitrary or thin name is refused rather than silently dropped, so a
+        # typo in a symbol list cannot look like a quiet market.
+        from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
+        unknown = sorted(set(n.upper() for n in self.scan_stocks)
+                         - set(HIGH_LIQUIDITY_STOCK_NAMES))
+        if unknown:
+            raise ValueError(
+                f"scan_stocks contains names outside the curated high-liquidity "
+                f"registry: {', '.join(unknown)}")
+        if not self.stock_contracts and not self.scan_indices:
+            raise ValueError(
+                "nothing to scan: stock_contracts is off and no indices are selected")
 
         # Expiry window. max_days_to_expiry = 0 is a mistake, not "no limit".
         if self.max_days_to_expiry <= 0:
@@ -291,37 +326,45 @@ class GammaMoveConfig:
         if self.min_option_premium < 0:
             raise ValueError("min_option_premium cannot be negative")
 
-        if self.execution_mode == "live":
-            self._validate_live()
+        # --- engineering invariants, and they are not conditional ------------
+        #
+        # These used to sit behind `execution_mode == "live"`. That was wrong
+        # twice over: the mode was duplicated storage of `account.is_paper`, and
+        # a rule that only holds when the money is real is a rule the paper
+        # results were never measured under. A paper run that trades unprotected
+        # is not a rehearsal of the live one.
+        if self.stop_percent <= 0 and self.stop_points <= 0:
+            raise ValueError(
+                "a stop is required: this engine buys options, where the maximum "
+                "loss without one is the entire premium")
+        # `stop_mode == "monitor"` is allowed and is not silently equivalent to
+        # the others: it means nothing sits at the broker, so if this process
+        # dies while holding, the position is unprotected until it comes back.
+        # The engine surfaces that as a warning rather than refusing it, because
+        # a research run legitimately may not want to leave GTTs behind.
         return self
 
-    def _validate_live(self) -> None:
-        """Guards that only apply to real money, kept apart so they read as a set."""
-        if self.exit_policy in RESEARCH_ONLY_EXIT_POLICIES:
-            raise ValueError(
-                f"exit_policy={self.exit_policy} is research-only: the source gives no "
-                "exit rule at all, so only TIME_STOP is supported by evidence")
-        if self.stop_basis != "PERCENT":
-            raise ValueError(
-                "live mode requires stop_basis=PERCENT: these premiums run from roughly "
-                "10 to 600, so a points stop is a 5% risk at one end and 100% at the other")
-        if self.stop_percent <= 0:
-            raise ValueError("live mode requires a positive stop_percent")
-        if self.protection_mode == "NONE":
-            raise ValueError(
-                "live mode requires broker-side protection: with protection_mode=NONE a "
-                "crash or a dropped socket leaves the open position with nothing watching it")
-        if not self.size_is_set:
-            raise ValueError("live mode requires an explicit positive size")
-        if not self.regime_enabled:
-            raise ValueError(
-                "live mode requires the regime gate: the source names a corrective market "
-                "as the flaw that broke this strategy")
-        if self.min_option_premium < 5.0:
-            raise ValueError(
-                "live mode requires min_option_premium >= 5: below that the tick size is a "
-                "larger move than the entry threshold, so the trigger measures rounding")
+    def warnings(self) -> list[str]:
+        """Configured choices worth saying out loud. Not errors.
 
+        The difference matters: `validate()` refuses what is unsound, and this
+        reports what is merely risky, so the operator sees a sentence instead of
+        discovering it from a fill.
+        """
+        out: list[str] = []
+        if self.stop_mode == "monitor":
+            out.append("stop_mode=monitor leaves nothing at the broker — if this "
+                       "process dies while holding, the position is unprotected")
+        if self.exit_policy in RESEARCH_ONLY_EXIT_POLICIES:
+            out.append(f"exit_policy={self.exit_policy} is not supported by the source, "
+                       "which gives no exit rule at all — only TIME_STOP is")
+        if self.stop_basis == "POINTS":
+            out.append("stop_basis=POINTS on premiums that run from ~10 to ~600 means "
+                       "the same number is a 5% risk at one end and 100% at the other")
+        if not self.regime_enabled:
+            out.append("the trend gate is off, and the source names a corrective market "
+                       "as the flaw that broke this strategy")
+        return out
     # ------------------------------------------------------------- accessors
     @property
     def size_is_set(self) -> bool:

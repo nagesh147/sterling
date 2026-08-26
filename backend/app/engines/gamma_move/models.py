@@ -205,9 +205,35 @@ class PositionState:
     #: paths will both flatten the same position.
     exiting: bool = False
 
+    # --- broker reality ----------------------------------------------------
+    #: PENDING until a fill is confirmed. A position is not "open" because we
+    #: sent an order -- it is open when the broker says it filled, and the two
+    #: are different often enough to matter.
+    status: str = "pending"
+    order_id: str = ""
+    #: Actual average fill. `entry` is the intended price; this is what happened.
+    #: Every risk number is recomputed from this once it is known.
+    fill_price: float = 0.0
+    #: Broker-side GTT protecting this position. 0 = nothing at the broker, which
+    #: is only acceptable under stop_mode=monitor.
+    gtt_id: int = 0
+    stop_mode: str = "both"
+    #: The idempotency key the entry was sent under, so a retry after a timeout
+    #: cannot open the position twice.
+    idempotency_key: str = ""
+
+    @property
+    def effective_entry(self) -> float:
+        """The price risk is measured from: the real fill when we have one."""
+        return self.fill_price if self.fill_price > 0 else self.entry
+
+    @property
+    def is_open(self) -> bool:
+        return self.status in ("pending", "open")
+
     def __post_init__(self) -> None:
         if self.high_water <= 0:
-            self.high_water = self.entry
+            self.high_water = self.effective_entry
 
 
 @dataclass(frozen=True)

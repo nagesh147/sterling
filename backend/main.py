@@ -1542,6 +1542,8 @@ async def lifespan(app: FastAPI):
 
     # Gamma Move: levels -> strikes -> trigger, on the strategy's own cadence.
     # The loop is a no-op while the strategy is disabled, which is its default.
+    # The loop reconciles against the broker before its first scan, so a restart
+    # cannot open a second position in a contract it already holds.
     from app.services.gamma_move_runner import auto_scan_loop as _gamma_move_scan
     gamma_move_task = asyncio.create_task(_gamma_move_scan(interval=300))
     log.info("ATM PI auto-arm loop started (every 30s)")

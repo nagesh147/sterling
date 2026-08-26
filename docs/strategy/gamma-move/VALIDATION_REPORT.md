@@ -182,7 +182,23 @@ runs. Four reasons it cannot be read as a backtest:
 
 ## 5. Live readiness
 
-`live_ready = False`. Eight items, and six of them are process rather than code:
+There is **no paper-only lock and no `live_ready` flag**. Paper/live for Kite is
+`account.is_paper`, set from the Trading Mode panel, and a second switch inside a
+strategy config is how an engine ends up believing it is papering while the
+broker is not — which is exactly what happened here on 2026-08-26.
+
+What this engine owes instead is that the case against trading it is impossible
+to miss: the board carries the finding above every row, the settings page repeats
+it, and the snapshot returns it as a warning. Whether to trade an unproven edge
+is the operator's call; making it an informed one is ours.
+
+The engineering guards are unconditional rather than mode-gated — a rule that
+only holds when the money is real is a rule the paper results were never measured
+under. Every entry carries a stop, `validate()` refuses a config without one, and
+under the default `stop_mode = both` a broker-side GTT goes on at entry.
+
+The list below is therefore a **research** checklist, not a lock. Six of the eight
+are process rather than code:
 
 - [ ] Re-run this calibration on data **inside** the expiry window (DTE ≤ 14).
       NSE stock options are monthly, so the first opportunity is mid-September.

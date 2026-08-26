@@ -62,8 +62,9 @@ def get_config() -> GammaMoveConfig:
         stored = json.loads(raw) if isinstance(raw, str) else raw
         known = GammaMoveConfig.field_names()
         merged = {**default.as_dict(), **{k: v for k, v in dict(stored).items() if k in known}}
-        if isinstance(merged.get("explicit_symbols"), list):
-            merged["explicit_symbols"] = tuple(merged["explicit_symbols"])
+        for key in ("scan_stocks", "scan_indices"):
+            if isinstance(merged.get(key), list):
+                merged[key] = tuple(merged[key])
         return GammaMoveConfig(**merged).validate()
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         log.error("Stored %s config is invalid (%s); falling back to disabled defaults",
@@ -78,8 +79,9 @@ def set_config(values: dict[str, Any]) -> GammaMoveConfig:
     if unknown:
         raise ValueError(f"Unknown {STRATEGY_ID} config fields: {', '.join(unknown)}")
     current.update(values)
-    if isinstance(current.get("explicit_symbols"), list):
-        current["explicit_symbols"] = tuple(current["explicit_symbols"])
+    for key in ("scan_stocks", "scan_indices"):
+        if isinstance(current.get(key), list):
+            current[key] = tuple(current[key])
     cfg = GammaMoveConfig(**current).validate()
     from app.services import db
     db.set_config(_CONFIG_KEY, json.dumps(cfg.as_dict(), separators=(",", ":")))
@@ -118,14 +120,30 @@ def to_instrument_ref(row: dict) -> InstrumentRef:
 
 
 def stock_underlyings(rows: list[dict], cfg: GammaMoveConfig) -> list[str]:
-    """Every F&O underlying this config is willing to scan."""
-    if cfg.explicit_symbols:
-        return [s.upper() for s in cfg.explicit_symbols][:cfg.max_universe]
-    names = {str(r.get("name") or "").upper()
-             for r in rows if r.get("segment") == "NFO-OPT"}
-    if not cfg.include_indices:
-        names -= INDEX_NAMES
-    return sorted(n for n in names if n)[:cfg.max_universe]
+    """Every underlying this config is willing to scan.
+
+    Bounded by the same curated high-liquidity registry every other engine here
+    uses, and for the same reason its own docstring gives: arbitrary or thin F&O
+    names must not be scannable, through an explicit list or otherwise. This
+    replaces an invented `max_universe = 150`, which was both an arbitrary
+    number and a way past that boundary.
+    """
+    from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
+    eligible = set(HIGH_LIQUIDITY_STOCK_NAMES)
+
+    listed = {str(r.get("name") or "").upper()
+              for r in rows if r.get("segment") == "NFO-OPT"}
+
+    names: set[str] = set()
+    if cfg.stock_contracts:
+        wanted = eligible if cfg.scan_all_stocks else {n.upper() for n in cfg.scan_stocks}
+        # Intersecting with the registry a second time is deliberate: validate()
+        # already refuses an off-registry name, but a config persisted before a
+        # registry change can still hold one, and a stale name must drop out
+        # rather than reach the scanner.
+        names |= (wanted & eligible & listed)
+    names |= ({n.upper() for n in cfg.scan_indices} & listed)
+    return sorted(names)
 
 
 # ------------------------------------------------------------------ status
@@ -144,7 +162,16 @@ def descriptor() -> dict:
             "signature of option writers covering. Holds one to two sessions."
         ),
         "provenance": "Transcribed from a public podcast walkthrough; see docs/strategy/gamma-move/",
-        "live_ready": False,
+        # There is no `live_ready` flag and no paper-only lock.
+        #
+        # Paper vs live is `account.is_paper`, and blocking live from inside a
+        # strategy config was a second switch for a thing that already has one.
+        # What this engine owes the operator instead is that the case against
+        # trading it is impossible to miss -- which is what `headline_finding`
+        # and the snapshot warnings are for. Whether to trade an unproven edge
+        # is their call, and it should be an informed one, not one we pretend to
+        # make for them by flipping a flag they can flip back.
+        "validated": False,
         # Published rather than hidden: the entry triple on its own did not beat
         # the unconditional population, and an operator reading this engine's
         # settings should see that before they change a threshold.
@@ -181,15 +208,27 @@ async def snapshot(uid: str) -> dict:
     out["positions"] = session.get("positions") or []
     out["record"] = session.get("record") or out["record"]
 
+    from app.services.gamma_move_runner import auto_execute, is_paper
+    paper, auto = is_paper(uid), auto_execute(uid)
+    # Read, never stored: these are the account's and the engine's settings, and
+    # a copy here would be a claim about them rather than the thing itself.
+    out["mode"] = {
+        "is_paper": paper,
+        "auto_execute": auto,
+        "note": ("Paper/live is the account's Trading Mode setting and manual/auto is the "
+                 "engine's — both shared with every Kite strategy, neither stored here."),
+    }
     if not cfg.enabled:
         out["blockers"].append("strategy disabled")
-    if cfg.execution_mode == "paper":
-        out["blockers"].append("paper mode — no live orders will be placed")
-    # The strategy's own validation says it is not proven. Say so where the
-    # operator is deciding whether to switch it on, not only in a document.
-    out["blockers"].append(
-        "not validated: the entry trigger alone showed no edge in calibration; "
-        "see docs/strategy/gamma-move/VALIDATION_REPORT.md")
+    # Warnings are configured risks, not failures, so they read as sentences.
+    out["warnings"] = list(cfg.warnings())
+    out["warnings"].append(
+        "not validated: in calibration the entry trigger alone showed no edge — the "
+        "measured edge is the level filter. See docs/strategy/gamma-move/VALIDATION_REPORT.md")
+    if not paper:
+        out["warnings"].append(
+            "LIVE: this account places real orders. Every entry carries a stop and, "
+            f"under stop_mode={cfg.stop_mode}, a broker-side GTT.")
 
     try:
         rows = await nfo_dump(uid)
