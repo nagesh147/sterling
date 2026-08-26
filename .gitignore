@@ -131,3 +131,16 @@ youtube-transcript/
 # of hundred KB of throwaway markup — and ships it as a public asset, since
 # anything under public/ is served verbatim.
 frontend/public/_verify/
+
+# Third-party tool checkouts that live inside the repo.
+#
+# These were committed as bare gitlinks on 2026-08-17 — swept in by a `git add -A`
+# during an adaptive-edge commit — and there is no .gitmodules, so they were never
+# real submodules. Two consequences: they show as permanently "modified" whenever a
+# tool updates itself, and a fresh clone gets five empty directories instead of
+# them. Nothing in backend/app or frontend/src imports any of them.
+awesome-claude-code/
+claude-mem/
+code-review/
+frontend-design/
+skills/

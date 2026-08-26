@@ -153,11 +153,27 @@ export function GammaMoveSettings() {
         offNote="Off. Nothing is scanned and no orders can be placed."
       />
 
+      {/* A settings page is read carefully, so the evidence is shown in full
+          here rather than hidden on a hover as it is on the board.
+          This used to end "stays paper-only until the readiness gate passes",
+          which stopped being true when the per-strategy paper lock was removed —
+          paper/live is the account's setting. A page that claims a safeguard the
+          code no longer has is worse than one that claims none. */}
       <ConfigNote>
         <span>
-          <strong>Not validated.</strong> {strategy.headline_finding} Every threshold
-          below was measured over {strategy.calibration?.sample ?? 'a calibration run'}.
-          The strategy stays paper-only until the readiness gate passes.
+          <strong>Not validated.</strong> {strategy.headline_finding}
+          {strategy.what_to_do ? ` ${strategy.what_to_do}` : ''}
+        </span>
+      </ConfigNote>
+      {strategy.evidence && (
+        <ConfigNote><span>{strategy.evidence}</span></ConfigNote>
+      )}
+      <ConfigNote>
+        <span>
+          Every threshold below was measured over{' '}
+          {strategy.calibration?.sample ?? 'a calibration run'}. Whether to trade an
+          unproven edge is your call — paper or live is the account&rsquo;s Trading Mode
+          setting, not this page&rsquo;s.
         </span>
       </ConfigNote>
       <ConfigNote>

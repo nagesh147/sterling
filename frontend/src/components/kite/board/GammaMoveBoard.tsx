@@ -146,16 +146,34 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
         )}
       </div>
 
-      {/* The finding, before the rows. Someone about to act on a signal should
-          see what the calibration actually said about this trigger. */}
+      {/* The finding, before the rows, in the order a person reads it: what it
+          means, then what to do, then the numbers on hover.
+          It used to be a line of confidence intervals across the top of a
+          trading screen — a paper abstract in the place where someone is
+          deciding whether to click Buy. The evidence has not gone anywhere; it
+          has stopped being the first thing shouted. */}
       {data?.strategy?.headline_finding && (
-        <p style={{
-          ...note, borderBottom: `1px solid ${k.border}`,
-          background: 'color-mix(in srgb, var(--k-amber) 8%, transparent)',
-        }}>
-          <strong style={{ color: k.amber }}>NOT VALIDATED</strong>{' '}
-          {data.strategy.headline_finding}
-        </p>
+        <div
+          title={data.strategy.evidence ?? undefined}
+          style={{
+            ...note, borderBottom: `1px solid ${k.border}`,
+            background: 'color-mix(in srgb, var(--k-amber) 8%, transparent)',
+            cursor: data.strategy.evidence ? 'help' : undefined,
+          }}
+        >
+          <div>
+            <strong style={{ color: k.amber }}>NOT VALIDATED</strong>{' '}
+            {data.strategy.headline_finding}
+          </div>
+          {data.strategy.what_to_do && (
+            <div style={{ marginTop: 3, color: k.text }}>{data.strategy.what_to_do}</div>
+          )}
+          {data.strategy.evidence && (
+            <div style={{ marginTop: 3, color: k.dim, fontSize: 10.5 }}>
+              Hover for the measurement.
+            </div>
+          )}
+        </div>
       )}
 
       <ScanCost scan={data?.scan} />
