@@ -24,7 +24,7 @@ export function PositionHeatmap({ positions, onSelect }: PositionHeatmapProps) {
   const open = positions.filter((p) => p.status === 'open' || p.status === 'partially_closed');
 
   if (!open.length) {
-    return <div style={{ color: '#444', fontSize: 11, padding: '8px 0' }}>No open positions</div>;
+    return <div style={{ color: 'var(--k-text)', fontSize: 11, padding: '8px 0' }}>No open positions</div>;
   }
 
   return (
@@ -42,14 +42,14 @@ export function PositionHeatmap({ positions, onSelect }: PositionHeatmapProps) {
             style={{
               width: 70, height: 48, borderRadius: 4,
               background: pnlColor(pnlPct),
-              border: '1px solid #333', cursor: 'pointer',
+              border: '1px solid var(--k-ink-1)', cursor: 'pointer',
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, color: '#e0e0e0',
+              fontSize: 10, color: 'var(--k-border)',
             }}
           >
             <span style={{ fontWeight: 700 }}>{p.underlying}</span>
-            <span style={{ fontSize: 9, color: '#ccc' }}>{dir.toUpperCase()}</span>
+            <span style={{ fontSize: 9, color: 'var(--k-faint-5)' }}>{dir.toUpperCase()}</span>
             {p.exit_mode && p.current_red_count != null && p.exit_threshold != null && p.exit_threshold > 0 && (
               <div
                 role="progressbar"

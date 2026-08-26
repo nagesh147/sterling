@@ -4,16 +4,16 @@ import type { ArrowEvent } from '../hooks/useArrows';
 
 const styles: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  title: { color: 'var(--k-ink-6)', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 11 },
-  th: { color: '#444', textAlign: 'left', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', letterSpacing: 1 },
-  td: { padding: '7px 10px', borderBottom: '1px solid #141414', color: '#aaa' },
-  noData: { color: '#444', fontSize: 12, padding: '20px 0', textAlign: 'center' },
-  greenDot: { color: '#44cc88', fontWeight: 700 },
-  redDot: { color: '#cc4444', fontWeight: 700 },
+  th: { color: 'var(--k-text)', textAlign: 'left', padding: '5px 10px', borderBottom: '1px solid #1e1e1e', letterSpacing: 1 },
+  td: { padding: '7px 10px', borderBottom: '1px solid #141414', color: 'var(--k-faint)' },
+  noData: { color: 'var(--k-text)', fontSize: 12, padding: '20px 0', textAlign: 'center' },
+  greenDot: { color: 'var(--k-green-mint)', fontWeight: 700 },
+  redDot: { color: 'var(--k-red-muted)', fontWeight: 700 },
   sourceBadge: {
     fontSize: 10, padding: '1px 5px', borderRadius: 2,
-    background: '#1a1a1a', color: '#555', border: '1px solid #222',
+    background: '#1a1a1a', color: 'var(--k-ink-3)', border: '1px solid #222',
   },
 };
 
@@ -28,12 +28,12 @@ function Row({ e }: { e: ArrowEvent }) {
       </td>
       <td style={styles.td}>{e.underlying}</td>
       <td style={styles.td}>${e.spot_price.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
-      <td style={{ ...styles.td, color: isGreen ? '#44cc88' : '#cc4444' }}>
+      <td style={{ ...styles.td, color: isGreen ? 'var(--k-green-mint)' : 'var(--k-red-muted)' }}>
         {e.direction.toUpperCase()}
       </td>
-      <td style={{ ...styles.td, color: '#555', fontSize: 10 }}>{e.state}</td>
+      <td style={{ ...styles.td, color: 'var(--k-ink-3)', fontSize: 10 }}>{e.state}</td>
       <td style={styles.td}><span style={styles.sourceBadge}>{e.source}</span></td>
-      <td style={{ ...styles.td, color: '#555' }}>
+      <td style={{ ...styles.td, color: 'var(--k-ink-3)' }}>
         {(() => {
           const d = new Date(e.timestamp_ms);
           const now = new Date();
@@ -58,12 +58,12 @@ export function ArrowHistoryPanel({ underlying }: Props) {
         <div style={styles.title} >
           ARROW EVENTS · {underlying}
           {data && data.count > 0 && (
-            <span style={{ color: '#555', fontWeight: 400, marginLeft: 8 }}>({data.count})</span>
+            <span style={{ color: 'var(--k-ink-3)', fontWeight: 400, marginLeft: 8 }}>({data.count})</span>
           )}
         </div>
-        <div style={{ fontSize: 10, color: '#444', maxWidth: 260, lineHeight: 1.5, textAlign: 'right' }}>
+        <div style={{ fontSize: 10, color: 'var(--k-text)', maxWidth: 260, lineHeight: 1.5, textAlign: 'right' }}>
           Arrow popup = signal detected by live stream.
-          To see it in <strong style={{ color: '#555' }}>Alerts tab</strong>, add a{' '}
+          To see it in <strong style={{ color: 'var(--k-ink-3)' }}>Alerts tab</strong>, add a{' '}
           <em>signal_green_arrow</em> rule via ⚡ QUICK.
         </div>
       </div>

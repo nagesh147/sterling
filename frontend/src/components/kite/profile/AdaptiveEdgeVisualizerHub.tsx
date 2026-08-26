@@ -116,8 +116,8 @@ export function AdaptiveEdgeVisualizerHub({
       {(candles, isLoading) => (
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--k-bg)',
+            border: '1px solid var(--k-border-slate)',
             borderRadius: 8,
             padding: 16,
             display: 'flex',
@@ -127,7 +127,7 @@ export function AdaptiveEdgeVisualizerHub({
           }}
         >
           {/* Top Bar: Title & View Switcher */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid var(--k-surface-slate)', paddingBottom: 12 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {onBack && (
@@ -136,9 +136,9 @@ export function AdaptiveEdgeVisualizerHub({
                     onClick={onBack}
                     title="Return to Signals & Strikes Table"
                     style={{
-                      border: '1px solid #cbd5e1',
-                      background: '#f8fafc',
-                      color: '#1e293b',
+                      border: '1px solid var(--k-border-slate-strong)',
+                      background: 'var(--k-surface-sunken)',
+                      color: 'var(--k-ink-slate-1)',
                       borderRadius: 5,
                       padding: '3px 9px',
                       fontSize: 11,
@@ -156,17 +156,17 @@ export function AdaptiveEdgeVisualizerHub({
                 <h3 style={{ margin: 0, fontSize: 15, fontWeight: 750, color: '#0f172a', letterSpacing: '-0.01em' }}>
                   🎯 Microstructure, Volume & Order Overflow Visualizer
                 </h3>
-                <span style={{ fontSize: 10, fontWeight: 750, padding: '2px 6px', borderRadius: 4, background: 'rgba(37,99,235,.1)', color: '#2563eb' }}>
+                <span style={{ fontSize: 10, fontWeight: 750, padding: '2px 6px', borderRadius: 4, background: 'rgba(37,99,235,.1)', color: 'var(--k-blue-strong)' }}>
                   LIVE FEED
                 </span>
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>
+              <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--k-ink-slate-3)' }}>
                 Real-time TPO distributions, Volume-at-Price profiles, Footprint ladders, and RVOL pacing for <strong style={{ color: '#0f172a' }}>{activeSymbol}</strong>.
               </p>
             </div>
 
             {/* View Switcher Segmented Control */}
-            <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 3, borderRadius: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--k-surface-slate)', padding: 3, borderRadius: 6, flexWrap: 'wrap' }}>
               {([
                 { id: 'market_profile', label: '1. Market Profile (TPO)' },
                 { id: 'volume_profile', label: '2. Volume Profile (VP)' },
@@ -180,8 +180,8 @@ export function AdaptiveEdgeVisualizerHub({
                   onClick={() => setActiveTab(tab.id)}
                   style={{
                     border: 0,
-                    background: activeTab === tab.id ? '#ffffff' : 'transparent',
-                    color: activeTab === tab.id ? '#0f172a' : '#64748b',
+                    background: activeTab === tab.id ? 'var(--k-bg)' : 'transparent',
+                    color: activeTab === tab.id ? '#0f172a' : 'var(--k-ink-slate-3)',
                     fontWeight: activeTab === tab.id ? 750 : 550,
                     fontSize: 11,
                     padding: '5px 10px',
@@ -205,15 +205,15 @@ export function AdaptiveEdgeVisualizerHub({
               justifyContent: 'space-between',
               gap: 12,
               padding: '8px 12px',
-              background: '#f8fafc',
+              background: 'var(--k-surface-sunken)',
               borderRadius: 6,
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--k-border-slate)',
               flexWrap: 'wrap',
             }}
           >
             {/* 1. Group: Indices */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 750, color: 'var(--k-blue-strong)', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span>🏛️</span> INDICES:
               </span>
               {INDEX_LIST.map((sym) => {
@@ -224,9 +224,9 @@ export function AdaptiveEdgeVisualizerHub({
                     type="button"
                     onClick={() => setActiveSymbol(sym)}
                     style={{
-                      border: `1px solid ${isActive ? '#2563eb' : '#cbd5e1'}`,
-                      background: isActive ? 'rgba(37,99,235,.12)' : '#ffffff',
-                      color: isActive ? '#1d4ed8' : '#334155',
+                      border: `1px solid ${isActive ? 'var(--k-blue-strong)' : 'var(--k-border-slate-strong)'}`,
+                      background: isActive ? 'rgba(37,99,235,.12)' : 'var(--k-bg)',
+                      color: isActive ? '#1d4ed8' : 'var(--k-ink-slate-2)',
                       borderRadius: 4,
                       padding: '3px 9px',
                       fontSize: 11,
@@ -243,7 +243,7 @@ export function AdaptiveEdgeVisualizerHub({
 
             {/* 2. Group: F&O Stocks */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 750, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 750, color: 'var(--k-violet)', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span>🏢</span> F&O STOCKS:
               </span>
               {STOCK_LIST.slice(0, 5).map((sym) => {
@@ -254,9 +254,9 @@ export function AdaptiveEdgeVisualizerHub({
                     type="button"
                     onClick={() => setActiveSymbol(sym)}
                     style={{
-                      border: `1px solid ${isActive ? '#7c3aed' : '#cbd5e1'}`,
-                      background: isActive ? 'rgba(124,58,237,.12)' : '#ffffff',
-                      color: isActive ? '#6d28d9' : '#334155',
+                      border: `1px solid ${isActive ? 'var(--k-violet)' : 'var(--k-border-slate-strong)'}`,
+                      background: isActive ? 'rgba(124,58,237,.12)' : 'var(--k-bg)',
+                      color: isActive ? '#6d28d9' : 'var(--k-ink-slate-2)',
                       borderRadius: 4,
                       padding: '3px 8px',
                       fontSize: 10.5,
@@ -276,13 +276,13 @@ export function AdaptiveEdgeVisualizerHub({
                   if (e.target.value !== 'MORE') setActiveSymbol(e.target.value);
                 }}
                 style={{
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid var(--k-border-slate-strong)',
                   borderRadius: 4,
                   padding: '3px 6px',
                   fontSize: 10.5,
                   fontWeight: 650,
                   color: '#475569',
-                  background: '#ffffff',
+                  background: 'var(--k-bg)',
                   outline: 'none',
                   cursor: 'pointer',
                 }}
@@ -297,7 +297,7 @@ export function AdaptiveEdgeVisualizerHub({
             </div>
 
             {/* Timeframe selector */}
-            <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', gap: 2, background: 'var(--k-bg)', padding: 2, borderRadius: 4, border: '1px solid var(--k-border-slate-strong)' }}>
               {['1m', '5m', '15m', '1H'].map((tf) => (
                 <button
                   key={tf}
@@ -305,8 +305,8 @@ export function AdaptiveEdgeVisualizerHub({
                   onClick={() => setTimeframe(tf)}
                   style={{
                     border: 0,
-                    background: timeframe === tf ? '#1e293b' : 'transparent',
-                    color: timeframe === tf ? '#ffffff' : '#64748b',
+                    background: timeframe === tf ? 'var(--k-ink-slate-1)' : 'transparent',
+                    color: timeframe === tf ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
                     fontSize: 10,
                     fontWeight: 700,
                     padding: '2px 6px',
@@ -322,33 +322,33 @@ export function AdaptiveEdgeVisualizerHub({
 
           {/* Real-time Symbol Quick Ticker Ribbon */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Spot / Underlying LTP</div>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '6px 10px', background: 'var(--k-surface-sunken)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Spot / Underlying LTP</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--k-ink-slate-1)', fontVariantNumeric: 'tabular-nums' }}>
                 ₹{activeSpot.toLocaleString('en-IN')}
               </div>
             </div>
             <div style={{ padding: '6px 10px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 6 }}>
               <div style={{ fontSize: 10, color: '#b45309', fontWeight: 700 }}>POC Anchor (Fair Value)</div>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#d97706', fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--k-warn)', fontVariantNumeric: 'tabular-nums' }}>
                 ₹{activePoc.toLocaleString('en-IN')}{' '}
-                <span style={{ fontSize: 10, color: pocDiff >= 0 ? '#059669' : '#dc2626' }}>
+                <span style={{ fontSize: 10, color: pocDiff >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)' }}>
                   ({pocDiff >= 0 ? `+${pocDiff}` : pocDiff} pts)
                 </span>
               </div>
             </div>
-            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>VWAP Volatility Center</div>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: '#7c3aed', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '6px 10px', background: 'var(--k-surface-sunken)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>VWAP Volatility Center</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--k-violet)', fontVariantNumeric: 'tabular-nums' }}>
                 ₹{activeVwap.toLocaleString('en-IN')}{' '}
-                <span style={{ fontSize: 10, color: vwapDiff >= 0 ? '#059669' : '#dc2626' }}>
+                <span style={{ fontSize: 10, color: vwapDiff >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)' }}>
                   ({vwapDiff >= 0 ? `+${vwapDiff}` : vwapDiff})
                 </span>
               </div>
             </div>
-            <div style={{ padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-              <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Net CVD Flow</div>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: activeCvd >= 0 ? '#059669' : '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '6px 10px', background: 'var(--k-surface-sunken)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+              <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Net CVD Flow</div>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: activeCvd >= 0 ? 'var(--k-emerald)' : 'var(--k-red-deep)', fontVariantNumeric: 'tabular-nums' }}>
                 {activeCvd >= 0 ? `+${activeCvd.toLocaleString('en-IN')}` : activeCvd.toLocaleString('en-IN')}
               </div>
             </div>
@@ -404,9 +404,9 @@ export function AdaptiveEdgeVisualizerHub({
                   <div style={{ border: '1px solid #bfdbfe', borderRadius: 8, padding: 12, background: 'rgba(37,99,235,.03)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ fontSize: 13 }}>🏛️</span>
-                      <strong style={{ fontSize: 12, color: '#2563eb' }}>1. Initial Balance</strong>
+                      <strong style={{ fontSize: 12, color: 'var(--k-blue-strong)' }}>1. Initial Balance</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-2)', lineHeight: 1.4 }}>
                       Price acceptance above first 30m range validates session trend extension.
                     </div>
                   </div>
@@ -415,9 +415,9 @@ export function AdaptiveEdgeVisualizerHub({
                   <div style={{ border: '1px solid #ddd6fe', borderRadius: 8, padding: 12, background: 'rgba(124,58,237,.03)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ fontSize: 13 }}>📊</span>
-                      <strong style={{ fontSize: 12, color: '#7c3aed' }}>2. LVN Breakout</strong>
+                      <strong style={{ fontSize: 12, color: 'var(--k-violet)' }}>2. LVN Breakout</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-2)', lineHeight: 1.4 }}>
                       Crossing through thin volume voids triggers rapid momentum acceleration.
                     </div>
                   </div>
@@ -426,9 +426,9 @@ export function AdaptiveEdgeVisualizerHub({
                   <div style={{ border: '1px solid #a7f3d0', borderRadius: 8, padding: 12, background: 'rgba(16,185,129,.03)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ fontSize: 13 }}>🌊</span>
-                      <strong style={{ fontSize: 12, color: '#059669' }}>3. Stacked Imbalance</strong>
+                      <strong style={{ fontSize: 12, color: 'var(--k-emerald)' }}>3. Stacked Imbalance</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-2)', lineHeight: 1.4 }}>
                       Ask volume ≥ 300% diagonal Bid confirms aggressive institutional book sweeps.
                     </div>
                   </div>
@@ -439,7 +439,7 @@ export function AdaptiveEdgeVisualizerHub({
                       <span style={{ fontSize: 13 }}>📈</span>
                       <strong style={{ fontSize: 12, color: '#ea580c' }}>4. Net CVD Delta</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-2)', lineHeight: 1.4 }}>
                       Positive accumulation ensures demand is real without passive limit absorption.
                     </div>
                   </div>
@@ -450,29 +450,29 @@ export function AdaptiveEdgeVisualizerHub({
                       <span style={{ fontSize: 13 }}>⚡</span>
                       <strong style={{ fontSize: 12, color: '#db2777' }}>5. RVOL Pace (≥1.5x)</strong>
                     </div>
-                    <div style={{ fontSize: 11, color: '#334155', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-2)', lineHeight: 1.4 }}>
                       Volume surge confirms active market-wide institutional participation.
                     </div>
                   </div>
                 </div>
 
                 {/* Execution Result Banner */}
-                <div style={{ background: '#f8fafc', border: '1.5px dashed #059669', borderRadius: 8, padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ background: 'var(--k-surface-sunken)', border: '1.5px dashed var(--k-emerald)', borderRadius: 8, padding: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(5,150,105,.12)', color: '#059669' }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(5,150,105,.12)', color: 'var(--k-emerald)' }}>
                         ALL 5 CONFLUENCE PILLARS QUALIFIED (SCORE 0.88)
                       </span>
-                      <span style={{ fontSize: 12.5, fontWeight: 750, color: '#1e293b' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 750, color: 'var(--k-ink-slate-1)' }}>
                         Adaptive Edge Execution: {activeSymbol} {optionType} SCALP
                       </span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--k-ink-slate-3)', marginTop: 4 }}>
                       Market Profile above IB + LVN Void traversal + Stacked Buy Overflow + CVD Expansion + RVOL Surge.
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-emerald)' }}>
                       🛡️ Hard SL at Imbalance Floor · Trailing Giveback Lock Active
                     </span>
                   </div>

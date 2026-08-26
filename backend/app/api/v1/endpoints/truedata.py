@@ -216,3 +216,33 @@ async def get_structure(
     finally:
         await client.aclose()
 
+
+# ── Live Feed & Analytics Diagnostics Routes ──────────────────────────────────
+class DiagnosticRunRequest(BaseModel):
+    category_id: Optional[str] = None  # None runs all categories
+
+
+@router.post("/diagnostics/run")
+async def run_diagnostics(
+    body: Optional[DiagnosticRunRequest] = None,
+    user: UserContext = Depends(get_current_user),
+):
+    """Run full or category-specific verification diagnostics across all feeds and analytical models."""
+    category_id = body.category_id if body else None
+    result = await truedata_service.run_truedata_diagnostics(user.user_id, category_id=category_id)
+    return result
+
+
+@router.get("/diagnostics/summary")
+async def get_diagnostics_summary(user: UserContext = Depends(get_current_user)):
+    """Fast health summary of active TrueData market data connection."""
+    acct = truedata_service.get_active(user.user_id)
+    return {
+        "authenticated": bool(acct and acct.connected),
+        "username_hint": acct.username_hint() if acct else None,
+        "is_active": acct.is_active if acct else False,
+        "realtime_port": acct.realtime_port if acct else 8082,
+        "has_credentials": acct.has_credentials if acct else False,
+    }
+
+

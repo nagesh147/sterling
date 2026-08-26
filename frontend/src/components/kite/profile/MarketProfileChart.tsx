@@ -12,13 +12,13 @@ interface Props {
 const PERIOD_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'];
 
 const PERIOD_COLORS: Record<string, string> = {
-  A: '#2563eb',
+  A: 'var(--k-blue-strong)',
   B: '#3b82f6',
-  C: '#059669',
-  D: '#10b981',
-  E: '#d97706',
-  F: '#f59e0b',
-  G: '#7c3aed',
+  C: 'var(--k-emerald)',
+  D: 'var(--k-emerald-2)',
+  E: 'var(--k-warn)',
+  F: 'var(--k-amber-3)',
+  G: 'var(--k-violet)',
   H: '#8b5cf6',
   I: '#db2777',
   J: '#ec4899',
@@ -219,15 +219,15 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       {/* Top Profile Metrics Ribbon */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: 'var(--k-surface-sunken)', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--k-ink-slate-1)' }}>
             {symbol} Market Profile (TPO)
           </span>
-          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'rgba(37,99,235,.1)', color: '#2563eb', fontWeight: 700 }}>
+          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'rgba(37,99,235,.1)', color: 'var(--k-blue-strong)', fontWeight: 700 }}>
             {dayType}
           </span>
-          <span style={{ fontSize: 10.5, color: '#64748b' }}>
+          <span style={{ fontSize: 10.5, color: 'var(--k-ink-slate-3)' }}>
             IB Range: <strong>{ibRange} pts</strong> ({ibExtensionRatio}x ext)
           </span>
         </div>
@@ -235,14 +235,14 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
         {/* View Controls & Period Highlights */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* Split vs Merged Toggle */}
-          <div style={{ display: 'flex', gap: 2, background: '#ffffff', padding: 2, borderRadius: 4, border: '1px solid #cbd5e1' }}>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--k-bg)', padding: 2, borderRadius: 4, border: '1px solid var(--k-border-slate-strong)' }}>
             <button
               type="button"
               onClick={() => setViewStyle('merged')}
               style={{
                 border: 0,
-                background: viewStyle === 'merged' ? '#2563eb' : 'transparent',
-                color: viewStyle === 'merged' ? '#ffffff' : '#64748b',
+                background: viewStyle === 'merged' ? 'var(--k-blue-strong)' : 'transparent',
+                color: viewStyle === 'merged' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '2px 6px',
@@ -257,8 +257,8 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
               onClick={() => setViewStyle('split')}
               style={{
                 border: 0,
-                background: viewStyle === 'split' ? '#2563eb' : 'transparent',
-                color: viewStyle === 'split' ? '#ffffff' : '#64748b',
+                background: viewStyle === 'split' ? 'var(--k-blue-strong)' : 'transparent',
+                color: viewStyle === 'split' ? 'var(--k-bg)' : 'var(--k-ink-slate-3)',
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '2px 6px',
@@ -276,7 +276,7 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
               <button
                 type="button"
                 onClick={() => setHighlightLetter(null)}
-                style={{ border: 0, background: '#e2e8f0', color: '#334155', fontSize: 9.5, fontWeight: 700, padding: '2px 5px', borderRadius: 3, cursor: 'pointer' }}
+                style={{ border: 0, background: 'var(--k-border-slate)', color: 'var(--k-ink-slate-2)', fontSize: 9.5, fontWeight: 700, padding: '2px 5px', borderRadius: 3, cursor: 'pointer' }}
               >
                 Reset
               </button>
@@ -287,9 +287,9 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                 type="button"
                 onClick={() => setHighlightLetter(highlightLetter === lettr ? null : lettr)}
                 style={{
-                  border: `1px solid ${highlightLetter === lettr ? '#2563eb' : '#e2e8f0'}`,
-                  background: highlightLetter === lettr ? '#2563eb' : '#ffffff',
-                  color: highlightLetter === lettr ? '#ffffff' : PERIOD_COLORS[lettr] || '#475569',
+                  border: `1px solid ${highlightLetter === lettr ? 'var(--k-blue-strong)' : 'var(--k-border-slate)'}`,
+                  background: highlightLetter === lettr ? 'var(--k-blue-strong)' : 'var(--k-bg)',
+                  color: highlightLetter === lettr ? 'var(--k-bg)' : PERIOD_COLORS[lettr] || '#475569',
                   fontSize: 9.5,
                   fontWeight: 750,
                   padding: '2px 5px',
@@ -306,37 +306,37 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
 
       {/* Profile Key Levels Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Value Area High (VAH)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#7c3aed' }}>₹{vah.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Value Area High (VAH)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-violet)' }}>₹{vah.toLocaleString('en-IN')}</div>
         </div>
         <div style={{ padding: '6px 10px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 6 }}>
           <div style={{ fontSize: 10, color: '#b45309', fontWeight: 700 }}>Point of Control (POC)</div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#d97706' }}>₹{pocPrice.toLocaleString('en-IN')}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--k-warn)' }}>₹{pocPrice.toLocaleString('en-IN')}</div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Value Area Low (VAL)</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: '#7c3aed' }}>₹{val.toLocaleString('en-IN')}</div>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Value Area Low (VAL)</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: 'var(--k-violet)' }}>₹{val.toLocaleString('en-IN')}</div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Initial Balance (IB)</div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#2563eb' }}>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Initial Balance (IB)</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--k-blue-strong)' }}>
             ₹{ibLow.toLocaleString('en-IN')} – {ibHigh.toLocaleString('en-IN')}
           </div>
         </div>
-        <div style={{ padding: '6px 10px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Current Spot / LTP</div>
-          <div style={{ fontSize: 13, fontWeight: 750, color: spot >= pocPrice ? '#059669' : '#dc2626' }}>
+        <div style={{ padding: '6px 10px', background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 6 }}>
+          <div style={{ fontSize: 10, color: 'var(--k-ink-slate-3)', fontWeight: 600 }}>Current Spot / LTP</div>
+          <div style={{ fontSize: 13, fontWeight: 750, color: spot >= pocPrice ? 'var(--k-emerald)' : 'var(--k-red-deep)' }}>
             ₹{spot.toLocaleString('en-IN')}
           </div>
         </div>
       </div>
 
       {/* Main Profile Distribution Grid */}
-      <div style={{ flex: 1, minHeight: 320, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 320, background: 'var(--k-bg)', border: '1px solid var(--k-border-slate)', borderRadius: 8, padding: '10px 14px', overflowY: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: 'monospace' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+            <tr style={{ borderBottom: '1px solid var(--k-border-slate)', color: 'var(--k-ink-slate-3)', textAlign: 'left' }}>
               <th style={{ width: 85, padding: '4px 6px' }}>Price</th>
               <th style={{ width: 55, padding: '4px 6px' }}>TPO</th>
               <th style={{ padding: '4px 6px' }}>30-Min Bracket Letters Distribution</th>
@@ -362,27 +362,27 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                     background: isPoc
                       ? 'rgba(245,158,11,.15)'
                       : isHovered
-                      ? '#f1f5f9'
+                      ? 'var(--k-surface-slate)'
                       : b.inVa
                       ? 'rgba(124,58,237,.04)'
                       : 'transparent',
-                    borderBottom: '1px solid #f8fafc',
+                    borderBottom: '1px solid var(--k-surface-sunken)',
                     borderLeft: isPoc
-                      ? '3px solid #f59e0b'
+                      ? '3px solid var(--k-amber-3)'
                       : isVah || isVal
-                      ? '3px solid #7c3aed'
+                      ? '3px solid var(--k-violet)'
                       : isNearSpot
-                      ? '3px solid #2563eb'
+                      ? '3px solid var(--k-blue-strong)'
                       : '3px solid transparent',
                   }}
                 >
                   {/* Price Column */}
-                  <td style={{ padding: '3px 6px', fontWeight: isPoc || isVah || isVal ? 750 : 500, color: isPoc ? '#d97706' : isVah || isVal ? '#7c3aed' : '#1e293b' }}>
+                  <td style={{ padding: '3px 6px', fontWeight: isPoc || isVah || isVal ? 750 : 500, color: isPoc ? 'var(--k-warn)' : isVah || isVal ? 'var(--k-violet)' : 'var(--k-ink-slate-1)' }}>
                     ₹{b.price.toLocaleString('en-IN')}
                   </td>
 
                   {/* TPO Count */}
-                  <td style={{ padding: '3px 6px', color: '#64748b' }}>
+                  <td style={{ padding: '3px 6px', color: 'var(--k-ink-slate-3)' }}>
                     {b.letters.length ? `${b.letters.length} TPO` : '—'}
                   </td>
 
@@ -401,7 +401,7 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                               textAlign: 'center',
                               fontWeight: 750,
                               fontSize: 10,
-                              color: isMatch ? col : '#cbd5e1',
+                              color: isMatch ? col : 'var(--k-border-slate-strong)',
                               background: isMatch ? `${col}15` : 'transparent',
                               borderRadius: 2,
                               opacity: isMatch ? 1 : 0.4,
@@ -417,32 +417,32 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
                   {/* Structure Indicator Label */}
                   <td style={{ padding: '3px 6px', textAlign: 'right' }}>
                     {isPoc && (
-                      <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: '#f59e0b', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: 'var(--k-amber-3)', color: 'var(--k-on-accent)' }}>
                         POC
                       </span>
                     )}
                     {isVah && (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#7c3aed', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--k-violet)', color: 'var(--k-on-accent)' }}>
                         VAH (70%)
                       </span>
                     )}
                     {isVal && (
-                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#7c3aed', color: '#ffffff' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'var(--k-violet)', color: 'var(--k-on-accent)' }}>
                         VAL (70%)
                       </span>
                     )}
                     {isIbHigh && !isVah && (
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(37,99,235,.15)', color: '#2563eb' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(37,99,235,.15)', color: 'var(--k-blue-strong)' }}>
                         IB HIGH
                       </span>
                     )}
                     {isIbLow && !isVal && (
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(37,99,235,.15)', color: '#2563eb' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(37,99,235,.15)', color: 'var(--k-blue-strong)' }}>
                         IB LOW
                       </span>
                     )}
                     {b.isSinglePrint && !isPoc && (
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(239,68,68,.12)', color: '#dc2626' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'rgba(239,68,68,.12)', color: 'var(--k-red-deep)' }}>
                         SINGLE PRINT
                       </span>
                     )}
@@ -455,10 +455,10 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
       </div>
 
       {/* Interactive Legend & Microstructure Takeaway */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 11, color: '#64748b', background: '#f8fafc', padding: '8px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 11, color: 'var(--k-ink-slate-3)', background: 'var(--k-surface-sunken)', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--k-border-slate)' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 10, height: 10, background: '#f59e0b', borderRadius: 2 }} /> <strong>POC</strong> (Point of Control)
+            <span style={{ width: 10, height: 10, background: 'var(--k-amber-3)', borderRadius: 2 }} /> <strong>POC</strong> (Point of Control)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 10, height: 10, background: 'rgba(124,58,237,.25)', borderRadius: 2 }} /> <strong>Value Area (70%)</strong>
@@ -467,7 +467,7 @@ export function MarketProfileChart({ symbol, candles, currentSpot, poc: propPoc,
             <span style={{ width: 10, height: 10, background: 'rgba(37,99,235,.3)', borderRadius: 2 }} /> <strong>Initial Balance</strong> (09:15–09:45)
           </span>
         </div>
-        <span style={{ color: '#1e293b', fontWeight: 650 }}>
+        <span style={{ color: 'var(--k-ink-slate-1)', fontWeight: 650 }}>
           Total Session TPOs: {totalTpo}
         </span>
       </div>

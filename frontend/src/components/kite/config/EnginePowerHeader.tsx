@@ -44,7 +44,7 @@ export function EnginePowerHeader({
   return (
     <section style={{
       ...settingsCardStyle,
-      borderLeft: `3px solid ${live ? '#f06428' : '#c9c9c9'}`,
+      borderLeft: `3px solid ${live ? 'var(--k-brand)' : '#c9c9c9'}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '16px 18px' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -52,8 +52,8 @@ export function EnginePowerHeader({
             <span style={{ color: TEXT, fontSize: 15, fontWeight: 800 }}>{name}</span>
             <span style={{
               padding: '2px 8px', borderRadius: 20, fontSize: 9, fontWeight: 800, letterSpacing: .4,
-              color: live ? '#2e7d32' : MUTED,
-              background: live ? '#e8f5e9' : SOFT,
+              color: live ? 'var(--k-green-deep)' : MUTED,
+              background: live ? 'var(--k-tint-green)' : SOFT,
               border: `1px solid ${live ? '#cfe2d0' : BORDER}`,
             }}>
               {live ? 'RUNNING' : 'OFF'}

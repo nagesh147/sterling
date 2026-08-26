@@ -36,7 +36,7 @@ def test_quote_rule_then_tick_rule():
     assert classify_print(ltp=98.0, bid=99.0, ask=100.0, prev_ltp=99.5, last_side=None) == "SELL"
     assert classify_print(ltp=99.5, bid=99.0, ask=100.0, prev_ltp=99.0, last_side=None) == "BUY"
     assert CLASSIFIER == "RESEARCH_TBT_QUOTE_THEN_TICK"
-    assert FORMULAS["F-101"].status is FormulaStatus.IMPLEMENTED
+    assert FORMULAS["F-101"].status is FormulaStatus.LOCKED
 
 
 def test_structure_series_is_causal_and_labels_not_cdv():

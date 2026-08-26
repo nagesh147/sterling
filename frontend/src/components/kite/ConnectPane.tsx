@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
   useActivateKiteAccount, useAddKiteAccount, useDeleteKiteAccount, useGenerateKiteSession,
-  useKiteAccounts, useKiteBasketMargins, useKiteLoginUrl, useKiteLogout, useKiteOrderCharges,
+  useKiteAccounts, useKiteBasketMargins, useKiteLogout, useKiteOrderCharges,
   useKiteOrderMargins, useKiteMargins, useKiteStatus, useKiteTickerStatus,
-  useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
+  useKiteTickerSubscribe, useKiteTickerUnsubscribe, useOpenKiteLogin, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
@@ -13,32 +13,39 @@ import type { KiteAccount } from '../../types/kite';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
+import { OptionContractsPicker } from './config/OptionContractsPicker';
+import { TickerStripSettings } from './ticker/TickerStripSettings';
+import { DisplayScaleSettings } from './DisplayScaleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
 import { DataLakeSettingsPanel } from '../datalake/DataLakeSettingsPanel';
 import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
+import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
+import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
+import { GammaMoveSettingsPanel } from './GammaMoveSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
 import { type SectionId, resolveSectionId, openSettingsSection } from './config/registry';
 import { TrueDataCredentialsPanel } from '../truedata/TrueDataCredentialsPanel';
+import { SystemDiagnosticsChecklistPanel } from '../diagnostics/SystemDiagnosticsChecklistPanel';
 import { Icons } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
-  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 12, fontWeight: 750 },
-  row: { background: '#f7f7f8', border: `1px solid #e0e0e0`, borderRadius: 7, padding: '11px 14px', marginBottom: 8 },
-  name: { fontWeight: 700, color: '#444', fontSize: 13 },
+  card: { background: 'var(--k-bg)', border: `1px solid var(--k-border)`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
+  title: { color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 12, fontWeight: 750 },
+  row: { background: 'var(--k-surface-sunken-2)', border: `1px solid var(--k-border)`, borderRadius: 7, padding: '11px 14px', marginBottom: 8 },
+  name: { fontWeight: 700, color: 'var(--k-text)', fontSize: 13 },
   actions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
-  btn: { minHeight: 34, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  btnGreen: { minHeight: 34, background: '#f06428', color: '#fff', border: `1px solid #f06428`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { minHeight: 34, background: '#fff', color: '#c9433e', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
-  input: { minHeight: 36, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
-  label: { color: '#777', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
-  hint: { color: '#888', fontSize: 11.5 },
-  err: { color: '#e53935', fontSize: 11, marginTop: 6 },
-  ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
+  btn: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid var(--k-border-strong-2)`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  btnGreen: { minHeight: 34, background: 'var(--k-brand)', color: 'var(--k-on-accent)', border: `1px solid var(--k-brand)`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { minHeight: 34, background: 'var(--k-bg)', color: 'var(--k-red-brick)', border: `1px solid var(--k-border-strong-2)`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  input: { minHeight: 36, background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid var(--k-border-strong-2)`, borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
+  label: { color: 'var(--k-ink-5)', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
+  hint: { color: 'var(--k-ink-6)', fontSize: 11.5 },
+  err: { color: 'var(--k-red-strong)', fontSize: 11, marginTop: 6 },
+  ok: { color: 'var(--k-green)', fontSize: 11, marginTop: 6 },
 };
 
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
@@ -83,19 +90,19 @@ function KiteTroubleshooter() {
           fontFamily: 'inherit',
           fontSize: 11.5,
           fontWeight: 650,
-          color: '#444',
+          color: 'var(--k-text)',
           textAlign: 'left',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: '#f06428', fontWeight: 800 }}>⚡</span>
+          <span style={{ color: 'var(--k-brand)', fontWeight: 800 }}>⚡</span>
           <span>Kite Login Troubleshooter & Step-by-Step Fixes</span>
         </span>
-        <span style={{ fontSize: 10, color: '#888', fontWeight: 600 }}>{open ? 'Hide ▲' : 'Show Guide ▼'}</span>
+        <span style={{ fontSize: 10, color: 'var(--k-ink-6)', fontWeight: 600 }}>{open ? 'Hide ▲' : 'Show Guide ▼'}</span>
       </button>
 
       {open && (
-        <div style={{ padding: '10px 12px 14px', borderTop: '1px solid #e8e8e8', background: '#fff' }}>
+        <div style={{ padding: '10px 12px 14px', borderTop: '1px solid var(--k-border-2)', background: 'var(--k-bg)' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
             {[
               { id: 'gen_err' as const, label: '“Error generating request_token”' },
@@ -107,9 +114,9 @@ function KiteTroubleshooter() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  border: `1px solid ${activeTab === tab.id ? '#f06428' : '#e0e0e0'}`,
-                  background: activeTab === tab.id ? 'rgba(240,100,40,.08)' : '#fafafa',
-                  color: activeTab === tab.id ? '#f06428' : '#666',
+                  border: `1px solid ${activeTab === tab.id ? 'var(--k-brand)' : 'var(--k-border)'}`,
+                  background: activeTab === tab.id ? 'rgba(240,100,40,.08)' : 'var(--k-surface-2)',
+                  color: activeTab === tab.id ? 'var(--k-brand)' : 'var(--k-ink-4)',
                   borderRadius: 4,
                   padding: '3px 8px',
                   fontSize: 10.5,
@@ -123,14 +130,14 @@ function KiteTroubleshooter() {
           </div>
 
           {activeTab === 'gen_err' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#c9433e', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-red-brick)', marginBottom: 6, fontSize: 11 }}>
                 Directly from Zerodha’s Auth Gateway (kite.zerodha.com)
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <li>
                   <strong>Check Subscription Status:</strong> Log into{' '}
-                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer" style={{ color: '#387ed1', textDecoration: 'underline' }}>
+                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--k-blue-kite)', textDecoration: 'underline' }}>
                     developers.kite.trade
                   </a>
                   . Ensure your Kite Connect app status is <strong>Active</strong> (monthly credits active). If expired, renew subscription.
@@ -149,8 +156,8 @@ function KiteTroubleshooter() {
           )}
 
           {activeTab === 'not_enabled' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#f06428', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-brand)', marginBottom: 6, fontSize: 11 }}>
                 Account Authentication & Ownership
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -168,8 +175,8 @@ function KiteTroubleshooter() {
           )}
 
           {activeTab === 'token_expired' && (
-            <div style={{ fontSize: 11.5, color: '#444', lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 700, color: '#387ed1', marginBottom: 6, fontSize: 11 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--k-text)', lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, color: 'var(--k-blue-kite)', marginBottom: 6, fontSize: 11 }}>
                 Token Handshake & Checksum
               </div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -203,8 +210,8 @@ function Funds() {
       <div style={S.title}>FUNDS</div>
       {segs.map(([seg, info]: [string, any]) => (
         <div key={seg} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
-          <span style={{ color: '#9b9b9b' }}>{seg}</span>
-          <span style={{ color: '#444', fontWeight: 700 }}>
+          <span style={{ color: 'var(--k-dim)' }}>{seg}</span>
+          <span style={{ color: 'var(--k-text)', fontWeight: 700 }}>
             ₹{Number(info?.net ?? info?.available?.live_balance ?? 0).toLocaleString('en-IN')}
           </span>
         </div>
@@ -213,13 +220,70 @@ function Funds() {
   );
 }
 
+// The Redirect URL to register in the Kite developer console.
+//
+// Deliberately built from the *app's* origin rather than the backend's. In dev the
+// Vite server proxies /api to the backend, so this resolves to the same page origin
+// the app runs on — which is what lets the callback tab broadcast its success back
+// here (BroadcastChannel and postMessage are both origin-scoped). Hard-coding the
+// backend's :8000 origin would serve the callback cross-origin and silently break
+// that hand-off, leaving the login looking like it failed.
+function callbackUrl(): string {
+  return `${window.location.origin}/api/v1/kite/callback`;
+}
+
+function CopyableUrl({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+      <code>{url}</code>
+      <button
+        style={{ ...S.btn, padding: '1px 6px', fontSize: 10 }}
+        onClick={() => {
+          navigator.clipboard?.writeText(url).then(
+            () => { setCopied(true); setTimeout(() => setCopied(false), 1500); },
+            () => { /* clipboard blocked — the URL is on screen to copy by hand */ },
+          );
+        }}
+      >
+        {copied ? '✓ copied' : 'copy'}
+      </button>
+    </span>
+  );
+}
+
+// "Auto-connect" explainer. Shown above the manual paste box because the redirect
+// is the path that removes the copy-paste entirely — the paste is the fallback.
+function AutoConnectHint() {
+  return (
+    <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
+      ↪ <strong>Log in once, stay logged in:</strong> set your Kite app’s{' '}
+      <strong>Redirect URL</strong> to <CopyableUrl url={callbackUrl()} /> — the login then
+      completes itself and the session is stored, encrypted, across restarts. No token to paste.
+    </div>
+  );
+}
+
+// How much of the session is left. Kite invalidates every access_token at 06:00
+// IST, so "connected" alone is not the useful fact — when it lapses is.
+function sessionValidity(expiresAtMs?: number | null): string {
+  if (!expiresAtMs) return '';
+  const left = expiresAtMs - Date.now();
+  if (left <= 0) return 'expired';
+  const until = new Date(expiresAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const hours = Math.floor(left / 3_600_000);
+  const mins = Math.round((left % 3_600_000) / 60_000);
+  const span = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  return `valid ${span} more (until ${until})`;
+}
+
 function LoginFlow({ account }: { account: KiteAccount }) {
   // Fetch the login URL whenever credentials exist — NOT only when disconnected.
   // `account.connected` just means a token is *stored*, not that it's *valid*: after
   // Kite's daily ~6 AM expiry the token is stale-but-saved (connected=true), which
   // would otherwise leave the "Open Kite Login" button permanently disabled during
   // re-login. The /login-url endpoint only needs the api_key, so this is safe.
-  const { data: lu } = useKiteLoginUrl(account.has_credentials);
+  const kiteLogin = useOpenKiteLogin();
   const gen = useGenerateKiteSession();
   const logout = useKiteLogout();
   const refresh = useRefreshKiteSession();
@@ -233,27 +297,30 @@ function LoginFlow({ account }: { account: KiteAccount }) {
   const connected = account.connected
     && !(status?.account_id === account.id && status?.connected === false);
 
+  // Prefer the live status (it reflects a silent renewal that has not yet been
+  // re-read into the account list) and fall back to the stored account row.
+  const validity = sessionValidity(
+    status?.account_id === account.id
+      ? status?.token_expires_at_ms ?? account.token_expires_at_ms
+      : account.token_expires_at_ms,
+  );
+
   // The manual login steps (Open Kite Login + paste request_token). Shown when
   // NOT connected, or behind the "Re-login manually" toggle when a live session
   // has lapsed and the user wants to re-authenticate without logging out.
   const loginSteps = (
     <>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-        <button
-          style={S.btnGreen}
-          disabled={!lu?.login_url}
-          onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}
-        >
-          1 · Open Kite Login ↗
+        <button style={S.btnGreen} disabled={kiteLogin.opening} onClick={kiteLogin.open}>
+          {kiteLogin.opening ? 'Opening…' : '1 · Open Kite Login ↗'}
         </button>
-        <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
+        <span style={S.hint}>
+          With the Redirect URL set (below), this is the only step — you land back connected.
+        </span>
       </div>
       <KiteTroubleshooter />
-      <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
-        ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
-        <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
-      </div>
-      <label style={S.label}>2 · PASTE request_token (manual)</label>
+      <AutoConnectHint />
+      <label style={S.label}>2 · PASTE request_token (only without a Redirect URL)</label>
       <div style={{ display: 'flex', gap: 8 }}>
         <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
         <button
@@ -286,7 +353,8 @@ function LoginFlow({ account }: { account: KiteAccount }) {
       {account.has_credentials && connected && (
         <>
           <div style={{ ...S.hint, marginBottom: 10, lineHeight: 1.6 }}>
-            Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}.{' '}
+            Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}
+            {validity ? ` · ${validity}` : ''}.{' '}
             {account.has_refresh_token
               ? <>Kite Engine <strong>auto-recovers</strong> this session from the stored refresh token whenever it lapses — no
                 clicking needed. A fresh 2FA login may still be required at Zerodha’s daily ~6 AM IST reset.</>
@@ -312,7 +380,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
             {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
           </div>
           {showRelogin && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid #e0e0e0` }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid var(--k-border)` }}>
               {loginSteps}
             </div>
           )}
@@ -335,7 +403,7 @@ function initials(s: string): string {
 /** Unified account card — compact row by default, full controls on expand. */
 function AccountCard({ acc }: { acc: KiteAccount }) {
   const { data: status } = useKiteStatus();
-  const { data: lu } = useKiteLoginUrl(acc.has_credentials);
+  const kiteLogin = useOpenKiteLogin();
   const activate = useActivateKiteAccount();
   const del = useDeleteKiteAccount();
   const test = useTestKiteAccount();
@@ -354,6 +422,14 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
   const connected = acc.connected
     && !(status?.account_id === acc.id && status?.connected === false);
 
+  // How long this session has left. Prefer the live status (it reflects a silent
+  // renewal the account list has not re-read yet) over the stored row.
+  const validity = sessionValidity(
+    status?.account_id === acc.id
+      ? status?.token_expires_at_ms ?? acc.token_expires_at_ms
+      : acc.token_expires_at_ms,
+  );
+
   // Real Zerodha account holder name comes from /status (only for the connected
   // account). Prefer it over the user-chosen label, then fall back to the label.
   const statusName = status?.account_id === acc.id ? status?.user_name : null;
@@ -371,8 +447,8 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
 
   return (
     <div style={{
-      border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
-      background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+      border: '1px solid var(--k-border)', borderRadius: 9, marginBottom: 16, overflow: 'hidden',
+      background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,.025)',
     }}>
       {/* ── Collapsed row: name + quiet meta, no status badges ── */}
       <div
@@ -380,37 +456,42 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', userSelect: 'none' }}
       >
         <div style={{
-          width: 36, height: 36, borderRadius: '50%', background: '#e8e8e8', flexShrink: 0,
+          width: 36, height: 36, borderRadius: '50%', background: 'var(--k-border-2)', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#666', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
+          color: 'var(--k-ink-4)', fontWeight: 700, fontSize: 13, letterSpacing: 0.3,
         }}>
           {initials(displayName)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, color: '#444', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
+          <div style={{ fontWeight: 700, color: 'var(--k-text)', fontSize: 13, lineHeight: 1.3 }}>{displayName}</div>
           {subText ? (
-            <div style={{ color: '#9b9b9b', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
+            <div style={{ color: 'var(--k-dim)', fontSize: 11, marginTop: 2, lineHeight: 1.35 }}>{subText}</div>
           ) : null}
         </div>
         <span aria-hidden style={{
-          color: '#bbb', fontSize: 11, flexShrink: 0,
+          color: 'var(--k-faint-2)', fontSize: 11, flexShrink: 0,
           transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s',
         }}>▼</span>
       </div>
 
       {/* ── Expanded body ── */}
       {expanded && (
-        <div style={{ borderTop: '1px solid #f0f0f0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ borderTop: '1px solid var(--k-surface-hover-2)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Session info */}
           {connected ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: '#444' }}>
-                Session active{acc.has_refresh_token ? ' · auto-renews' : ' · manual re-login required after 6 AM IST'}
+              <span style={{ fontSize: 12, color: 'var(--k-text)' }}>
+                Session active
+                {/* The concrete window beats the generic warning when we know it. */}
+                {validity
+                  ? ` · ${validity}`
+                  : (acc.has_refresh_token ? '' : ' · manual re-login required after 6 AM IST')}
+                {acc.has_refresh_token ? ' · auto-renews' : ''}
               </span>
               {acc.has_refresh_token && (
                 <button style={S.btn} onClick={() => refresh.mutate({ account_id: acc.id })} disabled={refresh.isPending}>
-                  {refresh.isPending ? <ButtonLoader color="#387ed1" /> : '↻ Refresh'}
+                  {refresh.isPending ? <ButtonLoader color="var(--k-blue-kite)" /> : '↻ Refresh'}
                 </button>
               )}
               <button style={S.btn} onClick={() => setShowRelogin((v) => !v)}>
@@ -421,25 +502,23 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
               {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#999' }}>
+            <div style={{ fontSize: 12, color: 'var(--k-dim-2)' }}>
               {acc.has_credentials ? 'Not connected — use Kite Login below to get a session.' : 'Add API keys to enable login.'}
             </div>
           )}
 
           {/* Login flow */}
           {acc.has_credentials && (!connected || showRelogin) && (
-            <div style={{ background: '#fafafa', border: '1px solid #e8e8e8', borderRadius: 6, padding: 12 }}>
+            <div style={{ background: 'var(--k-surface-2)', border: '1px solid var(--k-border-2)', borderRadius: 6, padding: 12 }}>
               <div style={{ ...S.label, marginBottom: 8 }}>KITE LOGIN</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-                <button style={S.btnGreen} disabled={!lu?.login_url} onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}>
-                  1 · Open Kite Login ↗
+                <button style={S.btnGreen} disabled={kiteLogin.opening} onClick={kiteLogin.open}>
+                  {kiteLogin.opening ? 'Opening…' : '1 · Open Kite Login ↗'}
                 </button>
-                <span style={S.hint}>Log in, then copy the <code>request_token</code> from the redirect URL.</span>
+                <span style={S.hint}>With the Redirect URL set, this is the only step.</span>
               </div>
-              <div style={{ ...S.hint, marginBottom: 8 }}>
-                Or set Redirect URL to <code>http://localhost:8000/api/v1/kite/callback</code> for auto-connect.
-              </div>
-              <label style={S.label}>2 · Paste request_token (manual)</label>
+              <AutoConnectHint />
+              <label style={S.label}>2 · Paste request_token (only without a Redirect URL)</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   style={S.input}
@@ -665,7 +744,7 @@ function MarginCalc() {
         </button>
       </div>
       {latched && (
-        <pre style={{ background: '#f5f5f5', padding: 8, borderRadius: 5, fontSize: 11, overflow: 'auto', maxHeight: 200, marginTop: 8 }}>
+        <pre style={{ background: 'var(--k-surface-4)', padding: 8, borderRadius: 5, fontSize: 11, overflow: 'auto', maxHeight: 200, marginTop: 8 }}>
           {JSON.stringify(latched, null, 2)}
         </pre>
       )}
@@ -693,9 +772,9 @@ function Ticker() {
       <div style={S.title}>WEBSOCKET TICKER</div>
       {ts && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? '#4caf50' : ts.active ? '#ff9800' : '#e53935', fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
-          <div><span style={S.label}>Subscribed</span><span style={{ color: '#444' }}>{ts.subscribed?.length ?? 0} tokens</span></div>
-          <div><span style={S.label}>Ticks</span><span style={{ color: '#444' }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
+          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? 'var(--k-green)' : ts.active ? 'var(--k-amber-2)' : 'var(--k-red-strong)', fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
+          <div><span style={S.label}>Subscribed</span><span style={{ color: 'var(--k-text)' }}>{ts.subscribed?.length ?? 0} tokens</span></div>
+          <div><span style={S.label}>Ticks</span><span style={{ color: 'var(--k-text)' }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -753,12 +832,16 @@ type SectionDef = { id: ConnectSection; label: string; eyebrow: string; group: s
 const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   account: <Icons.Settings />,
   truedata: <Icons.Pulse />,
+  diagnostics: <Icons.Reload />,
   mode: <Icons.Sliders />,
   manualRules: <Icons.Filter />,
   autoRules: <Icons.Pulse />,
   engine: <Icons.Chart />,
   navigator: <Icons.Pulse />,
   adaptiveEdge: <Icons.Chart />,
+  orbOptions: <Icons.Chart />,
+  atmPremiumImbalance: <Icons.Chart />,
+  gammaMove: <Icons.Pulse />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -770,6 +853,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'API credentials and the daily Zerodha session.' },
   { id: 'truedata', label: 'TrueData Feed', eyebrow: 'Market data connection', group: 'Connection',
     pageDescription: 'Encrypted TrueData credentials for historical and real-time market data.' },
+  { id: 'diagnostics', label: 'Feed & API Checklist', eyebrow: 'Kite & TrueData health', group: 'Connection',
+    pageDescription: 'Verify broadband connectivity, Zerodha Kite API status, and TrueData market feeds.' },
   { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
     pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
@@ -782,6 +867,12 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'AVWAP structure, ranges, flow and Navigator signals.' },
   { id: 'adaptiveEdge', label: 'Adaptive Edge', eyebrow: 'Score, modes, TBT structure & protection', group: 'Signal engines',
     pageDescription: 'Score, modes, structure and protection.' },
+  { id: 'orbOptions', label: 'ORB + VWAP Options', eyebrow: 'Opening range breakout, buy-only', group: 'Signal engines',
+    pageDescription: 'Opening-range breakout with VWAP confirmation. Buys calls on LONG and puts on SHORT; never sells options. Paper/live and manual/auto stay with Trading Mode.' },
+  { id: 'atmPremiumImbalance', label: 'ATM Premium Imbalance', eyebrow: 'Cheaper ATM leg at the open, +15 points', group: 'Signal engines',
+    pageDescription: 'Buys whichever at-the-money leg is cheaper at the session open and exits at the entry fill plus a fixed target. Reverse-engineered from recordings and not yet validated, so it stays paper-only until the readiness gate passes.' },
+  { id: 'gammaMove', label: 'Gamma Move', eyebrow: 'OI unwind at a level, buy the gamma', group: 'Signal engines',
+    pageDescription: 'Buys the option that writers are covering: an F&O stock at a support or resistance level, the highest open-interest strike there, entered when open interest falls while volume and premium rise on the same 15-minute bar. Held one to two sessions. Calibrated against real market data, which found the entry trigger alone has no edge — the level filter is where it is — so it stays paper-only until the readiness gate passes.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -802,9 +893,9 @@ function readInitialSection(): ConnectSection {
 }
 
 function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; children: React.ReactNode }) {
-  const color = tone === 'good' ? '#2e7d32' : tone === 'warn' ? '#b85c00' : '#777';
+  const color = tone === 'good' ? 'var(--k-green-deep)' : tone === 'warn' ? '#b85c00' : 'var(--k-ink-5)';
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#666', padding: '3px 0', fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-ink-4)', padding: '3px 0', fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: 3, background: color }} />{children}
     </span>
   );
@@ -813,8 +904,8 @@ function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; child
 function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <h2 style={{ margin: 0, color: '#333', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
-      <p style={{ margin: '6px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
+      <h2 style={{ margin: 0, color: 'var(--k-ink-1)', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
+      <p style={{ margin: '6px 0 0', color: 'var(--k-ink-5)', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
     </div>
   );
 }
@@ -869,31 +960,33 @@ export function ConnectPane() {
   return (
     <div className="kite-settings-hub" style={{
       width: '100%', height: '100%', minHeight: '100%', boxSizing: 'border-box',
-      padding: 0, background: '#ffffff', display: 'flex', flexDirection: 'column',
+      padding: 0, background: 'var(--k-bg)', display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
     }}>
       <header style={{
         flexShrink: 0, width: '100%', boxSizing: 'border-box',
-        padding: '14px 16px 12px', borderBottom: '1px solid #e0e0e0', background: '#ffffff',
+        padding: '16px 32px 14px', borderBottom: '1px solid var(--k-border)', background: 'var(--k-bg)',
       }}>
-        <div style={{
-          color: '#9b9b9b', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
-          textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
-        }}>
-          Settings
+        <div style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+          <div style={{
+            color: 'var(--k-dim)', fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            textTransform: 'uppercase', marginBottom: 4, fontFamily: 'inherit',
+          }}>
+            Settings
+          </div>
+          <h1 style={{
+            margin: 0, color: 'var(--k-text)', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
+            letterSpacing: '-0.01em', fontFamily: 'inherit',
+          }}>
+            {page.label}
+          </h1>
+          <p style={{
+            margin: '3px 0 0', color: 'var(--k-dim)', fontSize: 12, lineHeight: 1.4,
+            fontFamily: 'inherit', maxWidth: 720,
+          }}>
+            {page.pageDescription}
+          </p>
         </div>
-        <h1 style={{
-          margin: 0, color: '#444', fontSize: 16, lineHeight: 1.3, fontWeight: 700,
-          letterSpacing: '-0.01em', fontFamily: 'inherit',
-        }}>
-          {page.label}
-        </h1>
-        <p style={{
-          margin: '3px 0 0', color: '#9b9b9b', fontSize: 12, lineHeight: 1.4,
-          fontFamily: 'inherit', maxWidth: 560,
-        }}>
-          {page.pageDescription}
-        </p>
       </header>
 
       <div className="kite-settings-layout" style={{
@@ -901,7 +994,7 @@ export function ConnectPane() {
         display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 0, alignItems: 'stretch',
       }}>
         <nav aria-label="Kite settings sections" style={{
-          background: '#ffffff', borderRight: '1px solid #e0e0e0', padding: '10px 8px 16px',
+          background: 'var(--k-bg)', borderRight: '1px solid var(--k-border)', padding: '10px 8px 16px',
           overflowY: 'auto', minHeight: 0,
         }}>
           {SECTION_DEFS.map((item, index) => {
@@ -918,21 +1011,21 @@ export function ConnectPane() {
                   </div>
                 )}
                 <button type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
-                  borderRadius: 7, background: selected ? '#fff5f0' : 'transparent',
+                  width: '100%', minHeight: 46, border: 'none', borderLeft: `3px solid ${selected ? 'var(--k-brand)' : 'transparent'}`,
+                  borderRadius: 7, background: selected ? 'var(--k-surface-warm)' : 'transparent',
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 1,
                 }}>
                   <span aria-hidden style={{
                     width: 28, height: 28, borderRadius: 7, flexShrink: 0,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    background: selected ? '#ffe8dc' : '#f4f4f5',
-                    color: selected ? '#f06428' : '#8a8a8a',
+                    background: selected ? 'var(--k-tint-warm-2)' : 'var(--k-surface-6)',
+                    color: selected ? 'var(--k-brand)' : '#8a8a8a',
                   }}>
                     {SECTION_ICONS[item.id]}
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', color: '#333', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
+                    <span style={{ display: 'block', color: 'var(--k-ink-1)', fontSize: 12.5, lineHeight: 1.25, fontWeight: selected ? 700 : 600 }}>{item.label}</span>
                     <span style={{ display: 'block', color: '#919191', fontSize: 10, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
                   </span>
                 </button>
@@ -943,103 +1036,132 @@ export function ConnectPane() {
 
         <main style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '18px 24px 32px', background: '#fff',
+          padding: '24px 32px 48px', background: 'var(--k-bg)',
         }}>
-          {section === 'account' && (
-            <>
-              {isLoading && <div style={S.hint}>Loading accounts…</div>}
-              {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
-              {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
-              <AddAccount />
-              <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
-                Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
-              </div>
-            </>
-          )}
-
-          {section === 'truedata' && (
-            <>
-              <TrueDataCredentialsPanel />
-            </>
-          )}
-
-          {section === 'mode' && (
-            <>
-              <TradingModePanel />
-              <KiteExchangeSettingsCard />
-            </>
-          )}
-
-          {section === 'manualRules' && (
-            <>
-              <ManualRulesPanel />
-            </>
-          )}
-
-          {section === 'autoRules' && (
-            <>
-              <AutomaticRulesPanel />
-            </>
-          )}
-
-          {section === 'engine' && (
-            <>
-              <SuperTrendEnginePanel />
-            </>
-          )}
-
-          {section === 'navigator' && (
-            <>
-              <NavigatorSettingsPanel />
-              <NavigatorCalibrationPanel />
-            </>
-          )}
-
-          {section === 'adaptiveEdge' && (
-            <>
-              <AdaptiveEdgeSettingsPanel />
-            </>
-          )}
-
-          {section === 'markets' && (
-            <>
-              {liveTools ? (
-                <><Funds /><MarginCalc /><Ticker /></>
-              ) : (
-                <div style={S.card}>
-                  <div style={S.title}>LIVE ACCOUNT TOOLS</div>
-                  <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+            {section === 'account' && (
+              <>
+                {isLoading && <div style={S.hint}>Loading accounts…</div>}
+                {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
+                {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
+                <AddAccount />
+                <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
+                  Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
                 </div>
-              )}
-            </>
-          )}
+              </>
+            )}
 
-          {section === 'notifications' && (
-            <>
-              <KiteTelegramPanel />
-            </>
-          )}
+            {section === 'truedata' && (
+              <>
+                <TrueDataCredentialsPanel />
+              </>
+            )}
 
-          {section === 'dataLake' && (
-            <>
-              <DataLakeSettingsPanel />
-            </>
-          )}
+            {section === 'diagnostics' && (
+              <>
+                <SystemDiagnosticsChecklistPanel />
+              </>
+            )}
 
-          {section === 'experience' && (
-            <>
-              <MotionStyleSettings />
-              <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-                <BrandIconPicker />
-              </section>
-              <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
-                <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
-                  Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+            {section === 'mode' && (
+              <>
+                <TradingModePanel />
+                <KiteExchangeSettingsCard />
+              </>
+            )}
+
+            {section === 'manualRules' && (
+              <>
+                <ManualRulesPanel />
+              </>
+            )}
+
+            {section === 'autoRules' && (
+              <>
+                <AutomaticRulesPanel />
+              </>
+            )}
+
+            {section === 'engine' && (
+              <>
+                <SuperTrendEnginePanel />
+                <OptionContractsPicker />
+              </>
+            )}
+
+            {section === 'navigator' && (
+              <>
+                <NavigatorSettingsPanel />
+                <NavigatorCalibrationPanel />
+              </>
+            )}
+
+            {section === 'adaptiveEdge' && (
+              <>
+                <AdaptiveEdgeSettingsPanel />
+              </>
+            )}
+
+            {section === 'orbOptions' && (
+              <>
+                <OrbMomentumOptionsSettingsPanel />
+              </>
+            )}
+
+            {section === 'atmPremiumImbalance' && (
+              <>
+                <AtmPremiumImbalanceSettingsPanel />
+              </>
+            )}
+
+            {section === 'gammaMove' && (
+              <>
+                <GammaMoveSettingsPanel />
+              </>
+            )}
+
+            {section === 'markets' && (
+              <>
+                {liveTools ? (
+                  <><Funds /><MarginCalc /><Ticker /></>
+                ) : (
+                  <div style={S.card}>
+                    <div style={S.title}>LIVE ACCOUNT TOOLS</div>
+                    <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {section === 'notifications' && (
+              <>
+                <KiteTelegramPanel />
+              </>
+            )}
+
+            {section === 'dataLake' && (
+              <>
+                <DataLakeSettingsPanel />
+              </>
+            )}
+
+            {section === 'experience' && (
+              <>
+                <DisplayScaleSettings />
+                <MotionStyleSettings />
+                <TickerStripSettings />
+                <section style={{ marginBottom: 16, padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                  <BrandIconPicker />
+                </section>
+                <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span aria-hidden style={{ color: 'var(--k-ink-5)', fontSize: 16 }}>ⓘ</span>
+                  <div style={{ color: 'var(--k-ink-5)', fontSize: 11, lineHeight: 1.55 }}>
+                    Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </main>
       </div>
 

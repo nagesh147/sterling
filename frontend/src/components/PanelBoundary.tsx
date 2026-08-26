@@ -25,7 +25,7 @@ export class PanelBoundary extends React.Component<Props, State> {
         background: '#141414', border: '1px solid #441111',
         borderRadius: 6, padding: 16, marginBottom: 16,
       }}>
-        <div style={{ color: '#cc4444', fontSize: 11, letterSpacing: 2, marginBottom: 6 }}>
+        <div style={{ color: 'var(--k-red-muted)', fontSize: 11, letterSpacing: 2, marginBottom: 6 }}>
           {this.props.title ? `${this.props.title} — ERROR` : 'PANEL ERROR'}
         </div>
         <div style={{ color: '#664444', fontSize: 11, fontFamily: 'monospace' }}>
@@ -33,7 +33,7 @@ export class PanelBoundary extends React.Component<Props, State> {
         </div>
         <button
           style={{
-            marginTop: 10, background: '#1a0d0d', color: '#cc4444',
+            marginTop: 10, background: '#1a0d0d', color: 'var(--k-red-muted)',
             border: '1px solid #441111', padding: '4px 10px', borderRadius: 3,
             cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
           }}

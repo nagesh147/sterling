@@ -32,7 +32,7 @@ from app.services.exchanges.trading_base import TradingExchangeAdapter
 
 from . import constants as K
 from . import session as _session
-from .errors import KiteError, KiteOrderError, KiteTokenError, raise_for_kite
+from .errors import KiteError, KiteOrderError, KiteTokenError, is_retryable, raise_for_kite
 from .instruments import InstrumentCache
 
 log = get_logger(__name__)
@@ -805,12 +805,25 @@ class KiteClient(TradingExchangeAdapter):
             instrument.underlying, resolution, interval, from_str, to_str,
         )
         max_retries = 5
+        raw: list = []
         for attempt in range(max_retries):
             try:
                 data = await self.get_historical(token, interval, from_str, to_str)
                 raw = data.get("candles", [])
                 break  # success
             except Exception as exc:
+                if not is_retryable(exc):
+                    # A missing/expired session (or a rejected request) fails
+                    # identically on every attempt. This used to burn all five
+                    # retries with a 0.5s sleep each — 2s per symbol — and then
+                    # log a full traceback, so a universe scan while logged out
+                    # emitted one stack per contract and buried real errors.
+                    # Fail fast, and say it once without a traceback.
+                    log.warning(
+                        "Kite candle fetch unavailable for %s: %s",
+                        instrument.underlying, exc,
+                    )
+                    return []
                 is_429 = "429" in str(exc)
                 if attempt < max_retries - 1:
                     # Exponential backoff on rate-limit (429) so a big multi-contract

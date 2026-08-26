@@ -32,7 +32,7 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
   };
 
   const field = (label: string, value: number | string, onChange: (v: string) => void, type: 'text' | 'number' = 'number') => (
-    <label style={{ fontSize: 12, color: '#9b9b9b' }}>{label}
+    <label style={{ fontSize: 12, color: 'var(--k-dim)' }}>{label}
       <input
         type={type}
         step={type === 'number' ? 0.05 : undefined}
@@ -49,8 +49,8 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', zIndex: 1100 }} />
       <div style={{ position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)', width: 420, maxHeight: '80vh', overflowY: 'auto', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${k.border}` }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 500, color: '#444' }}>New GTT trigger</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 500, color: 'var(--k-text)' }}>New GTT trigger</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--k-dim)', cursor: 'pointer' }}>✕</button>
         </div>
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -70,8 +70,8 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
           {error && <div style={{ color: k.red, fontSize: 12 }}>{error}</div>}
         </div>
         <div style={{ display: 'flex', gap: 10, padding: '14px 18px', borderTop: `1px solid ${k.border}` }}>
-          <button onClick={onClose} style={{ flex: 1, background: '#fff', color: '#444', border: `1px solid ${k.border}`, borderRadius: 3, padding: '9px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={submit} disabled={place.isPending} style={{ flex: 1, background: k.blue, color: '#fff', border: 'none', borderRadius: 3, padding: '9px', fontSize: 13, fontWeight: 600, cursor: place.isPending ? 'not-allowed' : 'pointer', opacity: place.isPending ? 0.6 : 1 }}>
+          <button onClick={onClose} style={{ flex: 1, background: 'var(--k-bg)', color: 'var(--k-text)', border: `1px solid ${k.border}`, borderRadius: 3, padding: '9px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={submit} disabled={place.isPending} style={{ flex: 1, background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, padding: '9px', fontSize: 13, fontWeight: 600, cursor: place.isPending ? 'not-allowed' : 'pointer', opacity: place.isPending ? 0.6 : 1 }}>
             {place.isPending ? '…' : 'Create GTT'}
           </button>
         </div>

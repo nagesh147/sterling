@@ -87,6 +87,8 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useSetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useEngineSignals: () => ({ data: { rows: [] } }),
+  useExpiryCalendar: () => ({ data: undefined, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() }),
+  useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../../../hooks/useNavigator', () => ({
   useNavigatorConfig: () => ({ data: { record: { config: { enabled: false } } } }),

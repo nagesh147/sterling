@@ -9,26 +9,26 @@ interface Props {
 }
 
 const C = {
-  bg: '#ffffff',
+  bg: 'var(--k-bg)',
   surface: '#fcfcfc',
-  card: '#ffffff',
-  border: '#e2e8f0',
+  card: 'var(--k-bg)',
+  border: 'var(--k-border-slate)',
   text: '#0f172a',
-  muted: '#64748b',
-  dim: '#94a3b8',
-  green: '#059669',
+  muted: 'var(--k-ink-slate-3)',
+  dim: 'var(--k-ink-slate-4)',
+  green: 'var(--k-emerald)',
   greenBg: 'rgba(5,150,105,.08)',
   greenBorder: 'rgba(5,150,105,.25)',
-  red: '#dc2626',
+  red: 'var(--k-red-deep)',
   redBg: 'rgba(220,38,38,.08)',
   redBorder: 'rgba(220,38,38,.25)',
-  orange: '#d97706',
+  orange: 'var(--k-warn)',
   orangeBg: 'rgba(217,119,6,.08)',
   orangeBorder: 'rgba(217,119,6,.25)',
-  blue: '#2563eb',
+  blue: 'var(--k-blue-strong)',
   blueBg: 'rgba(37,99,235,.08)',
   blueBorder: 'rgba(37,99,235,.25)',
-  purple: '#7c3aed',
+  purple: 'var(--k-violet)',
   purpleBg: 'rgba(124,58,237,.08)',
   purpleBorder: 'rgba(124,58,237,.25)',
 };
@@ -122,7 +122,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.surface, overflow: 'auto' }}>
       {/* Top Controls Bar: Sub-Navigation + Instrument Selector */}
-      <div style={{ padding: '10px 20px', borderBottom: `1px solid ${C.border}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ padding: '10px 20px', borderBottom: `1px solid ${C.border}`, background: 'var(--k-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         {/* Navigation Tabs */}
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {([
@@ -164,7 +164,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
               padding: '4px 10px',
               borderRadius: 6,
               border: `1px solid ${C.border}`,
-              background: '#fff',
+              background: 'var(--k-bg)',
               fontSize: 12,
               fontWeight: 700,
               color: C.text,
@@ -184,7 +184,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
               onClick={onOpenSettings}
               style={{
                 border: `1px solid ${C.border}`,
-                background: '#fff',
+                background: 'var(--k-bg)',
                 color: C.blue,
                 fontSize: 11,
                 padding: '5px 10px',
@@ -203,7 +203,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* DYNAMIC KPI SUMMARY STRIP FOR SELECTED INSTRUMENT */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
           {/* Card 1: Selected Instrument & Signal Status */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               {selectedSymbol} · Active State
             </div>
@@ -221,7 +221,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
           </div>
 
           {/* Card 2: Market Profile & VWAP Level */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Volume Point of Control (POC)
             </div>
@@ -234,7 +234,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
           </div>
 
           {/* Card 3: Order Flow & Cumulative Volume Delta */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Cumulative Volume Delta (CVD)
             </div>
@@ -252,7 +252,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
           </div>
 
           {/* Card 4: Governance & Protection Status */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Execution Gate & Sizing
             </div>
@@ -274,7 +274,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {section === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {/* Context & Explanation Card */}
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 🔍 How Adaptive Edge Generates Signals for {selectedSymbol}
               </h3>
@@ -315,7 +315,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
 
             {/* Selected Symbol Option Strike Ladder */}
             {activeSignal?.legs && activeSignal.legs.length > 0 && (
-              <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+              <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: C.text }}>
                   🎯 Option Strike Ladder & Risk Parameters for {selectedSymbol}
                 </h3>
@@ -369,7 +369,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
               optionType={activeSignal?.option_type || (activeSignal?.side === 'SELL' ? 'PE' : 'CE')}
             />
 
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 🌊 Market Profile, Volume Profile & Order Flow Breakdown ({selectedSymbol})
               </h3>
@@ -430,7 +430,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* SECTION 3: INDICES VS STOCKS MECHANICS */}
         {section === 'comparison' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 ⚡ How Adaptive Edge Operates on Indices vs. F&O Stocks
               </h3>
@@ -474,7 +474,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* SECTION 4: OPPORTUNITY MODES */}
         {section === 'modes' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 🎯 Dynamic Opportunity Mode Escalation Ladder (Rule F-104)
               </h3>
@@ -491,7 +491,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
                   <div key={m.mode} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, background: C.surface }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 13, fontWeight: 750, color: m.color }}>{m.mode}</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#fff', border: `1px solid ${C.border}` }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: 'var(--k-bg)', border: `1px solid ${C.border}` }}>
                         {m.pts}
                       </span>
                     </div>
@@ -510,7 +510,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* SECTION 5: 14 QUANTITATIVE RULES */}
         {section === 'rules' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 🛡️ 14 Quantitative Strategy & Risk Rules (F-101 .. F-114)
               </h3>
@@ -564,7 +564,7 @@ export function AdaptiveEdgeDashboard({ snapshot, onOpenSettings }: Props) {
         {/* SECTION 6: EXECUTION & AUDIT LEDGER */}
         {section === 'audit' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+            <div style={{ background: 'var(--k-bg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: C.text }}>
                 📜 Execution & Mode Transition Ledger
               </h3>

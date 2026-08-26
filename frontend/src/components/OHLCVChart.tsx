@@ -103,9 +103,9 @@ function CandlestickChart({ candles, resolution, width = 900, height = 260 }: Ch
           <span style={{ color: 'var(--t-dim)' }}>O</span>
           <span>{fmtPrice(hovered.open)}</span>
           <span style={{ color: 'var(--t-dim)' }}>H</span>
-          <span style={{ color: '#10B981' }}>{fmtPrice(hovered.high)}</span>
+          <span style={{ color: 'var(--k-emerald-2)' }}>{fmtPrice(hovered.high)}</span>
           <span style={{ color: 'var(--t-dim)' }}>L</span>
-          <span style={{ color: '#EF4444' }}>{fmtPrice(hovered.low)}</span>
+          <span style={{ color: 'var(--k-red-500)' }}>{fmtPrice(hovered.low)}</span>
           <span style={{ color: 'var(--t-dim)' }}>C</span>
           <span>{fmtPrice(hovered.close)}</span>
           <span style={{ color: 'var(--t-dim)' }}>Vol</span>
@@ -139,7 +139,7 @@ function CandlestickChart({ candles, resolution, width = 900, height = 260 }: Ch
         {visible.map((c, i) => {
           const x    = PADDING.left + (i / visible.length) * chartW + (chartW / visible.length) * 0.15;
           const isUp = c.close >= c.open;
-          const col  = isUp ? '#10B981' : '#EF4444';
+          const col  = isUp ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
           const bodyTop    = toY(Math.max(c.open, c.close));
           const bodyBottom = toY(Math.min(c.open, c.close));
           const bodyH      = Math.max(1, bodyBottom - bodyTop);
@@ -225,7 +225,7 @@ function CoverageBadge({ symbol, resolution, count, earliest, latest }: {
       <span style={{ fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.08em' }}>
         {symbol} · {resolution.toUpperCase()}
       </span>
-      <span style={{ color: count > 0 ? '#10B981' : 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+      <span style={{ color: count > 0 ? 'var(--k-emerald-2)' : 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
         {count.toLocaleString()} candles
       </span>
       <span style={{ color: 'rgba(100,130,160,0.5)' }}>
@@ -387,7 +387,7 @@ export function OHLCVChart() {
                     <span style={{ color: 'var(--t-bright)', fontWeight: 700 }}>
                       ${fmtPrice(last.close)}
                     </span>
-                    <span style={{ color: chg >= 0 ? '#10B981' : '#EF4444', fontWeight: 600 }}>
+                    <span style={{ color: chg >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)', fontWeight: 600 }}>
                       {chg >= 0 ? '+' : ''}{chg.toFixed(2)}%
                     </span>
                   </>

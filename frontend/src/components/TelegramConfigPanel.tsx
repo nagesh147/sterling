@@ -46,7 +46,7 @@ const S: Record<string, React.CSSProperties> = {
 function dotStyle(on: boolean): React.CSSProperties {
   return {
     width: 8, height: 8, borderRadius: '50%',
-    background: on ? t.green : '#333',
+    background: on ? t.green : 'var(--k-ink-1)',
     border: `1px solid ${on ? t.green : t.dim}`,
     display: 'inline-block',
   };

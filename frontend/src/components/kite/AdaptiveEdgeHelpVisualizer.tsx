@@ -859,13 +859,13 @@ export function AdaptiveEdgeHelpVisualizer() {
           </div>
 
           {/* SVG Price Trajectory Infographic */}
-          <div style={{ width: '100%', height: 160, background: '#ffffff', border: `1px solid ${k.border}`, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ width: '100%', height: 160, background: 'var(--k-bg)', border: `1px solid ${k.border}`, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
             <svg width="100%" height="100%" viewBox="0 0 500 160" preserveAspectRatio="none" style={{ display: 'block' }}>
               {/* Background Value Area Grid */}
-              <line x1="0" y1="30" x2="500" y2="30" stroke="#f1f1f1" strokeDasharray="3 3" />
-              <line x1="0" y1="65" x2="500" y2="65" stroke="#f1f1f1" strokeDasharray="3 3" />
-              <line x1="0" y1="100" x2="500" y2="100" stroke="#f1f1f1" strokeDasharray="3 3" />
-              <line x1="0" y1="135" x2="500" y2="135" stroke="#f1f1f1" strokeDasharray="3 3" />
+              <line x1="0" y1="30" x2="500" y2="30" stroke="var(--k-surface-hover)" strokeDasharray="3 3" />
+              <line x1="0" y1="65" x2="500" y2="65" stroke="var(--k-surface-hover)" strokeDasharray="3 3" />
+              <line x1="0" y1="100" x2="500" y2="100" stroke="var(--k-surface-hover)" strokeDasharray="3 3" />
+              <line x1="0" y1="135" x2="500" y2="135" stroke="var(--k-surface-hover)" strokeDasharray="3 3" />
 
               {/* Target line */}
               <line x1="0" y1="25" x2="500" y2="25" stroke={k.purple} strokeWidth="1.5" strokeDasharray="3 3" />
