@@ -7,10 +7,10 @@ interface SignalStrengthGaugeProps {
 }
 
 function segmentColor(strength: number): string {
-  if (strength < 40) return 'var(--color-danger, #cc4444)';
-  if (strength < 60) return 'var(--color-warning, #f0c040)';
+  if (strength < 40) return 'var(--color-danger, var(--k-red-muted))';
+  if (strength < 60) return 'var(--color-warning, var(--k-gold))';
   if (strength < 80) return 'var(--color-info, #4499cc)';
-  return 'var(--color-success, #44cc88)';
+  return 'var(--color-success, var(--k-green-mint))';
 }
 
 export function SignalStrengthGauge({ strength, size = 'sm' }: SignalStrengthGaugeProps) {

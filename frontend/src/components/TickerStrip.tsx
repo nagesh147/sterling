@@ -17,16 +17,16 @@ function pushPrice(sym: string, price: number) {
 
 // ── Coin meta ────────────────────────────────────────────────────────────────
 const COIN_META: Record<string, { bg: string; fg: string; icon: string }> = {
-  BTC: { bg: '#F7931A', fg: '#fff', icon: '₿' },
-  ETH: { bg: '#627EEA', fg: '#fff', icon: 'Ξ' },
-  SOL: { bg: '#9945FF', fg: '#fff', icon: '◎' },
-  XRP: { bg: '#0085C0', fg: '#fff', icon: '✕' },
+  BTC: { bg: '#F7931A', fg: 'var(--k-bg)', icon: '₿' },
+  ETH: { bg: '#627EEA', fg: 'var(--k-bg)', icon: 'Ξ' },
+  SOL: { bg: '#9945FF', fg: 'var(--k-bg)', icon: '◎' },
+  XRP: { bg: '#0085C0', fg: 'var(--k-bg)', icon: '✕' },
   BNB: { bg: '#F3BA2F', fg: '#000', icon: 'B' },
-  MATIC: { bg: '#8247E5', fg: '#fff', icon: 'M' },
+  MATIC: { bg: '#8247E5', fg: 'var(--k-bg)', icon: 'M' },
 };
 
 function CoinIcon({ sym }: { sym: string }) {
-  const m = COIN_META[sym] ?? { bg: '#3B82F6', fg: '#fff', icon: sym[0] };
+  const m = COIN_META[sym] ?? { bg: '#3B82F6', fg: 'var(--k-bg)', icon: sym[0] };
   return (
     <div style={{
       width: 28, height: 28, borderRadius: '50%',
@@ -100,7 +100,7 @@ function TickerCard({ item, price, prevPrice }: {
   const hasPrice = price != null && price > 0;
   const chg   = item.daily_change_pct ?? null;
   const isUp  = chg != null ? chg >= 0 : (price != null && prevPrice != null ? price > prevPrice : true);
-  const color = !hasPrice ? 'var(--t-dim)' : isUp ? '#10B981' : '#EF4444';
+  const color = !hasPrice ? 'var(--t-dim)' : isUp ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
   const chgStr = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : null;
 
   // Compute hourly drift from local history as "LAST HOUR" proxy
@@ -109,7 +109,7 @@ function TickerCard({ item, price, prevPrice }: {
   const hourlyPct = oldest && oldest > 0 && hasPrice
     ? ((price! - oldest) / oldest) * 100
     : null;
-  const hourlyColor = hourlyPct == null ? 'var(--t-dim)' : hourlyPct >= 0 ? '#10B981' : '#EF4444';
+  const hourlyColor = hourlyPct == null ? 'var(--t-dim)' : hourlyPct >= 0 ? 'var(--k-emerald-2)' : 'var(--k-red-500)';
   const hourlyStr   = hourlyPct != null ? `${hourlyPct >= 0 ? '+' : ''}${hourlyPct.toFixed(2)}%` : '—';
 
   // Tick flash ref

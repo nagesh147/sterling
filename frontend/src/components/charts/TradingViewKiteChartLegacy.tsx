@@ -23,6 +23,7 @@ import {
 } from './navigatorOverlay';
 import type { SignalChartData } from '../../types/kiteEngine';
 import type { NavigatorChartResponse } from '../../types/navigator';
+import { layoutViewport, toLayoutPx } from '../../styles/applyViewportScale';
 import {
   ChartTemplate,
   ComparisonOverlay,
@@ -2759,8 +2760,8 @@ export function TradingViewKiteChart({
               <div onClick={() => setPriceScaleMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
               <div className="tv-menu-anim" style={{
                 position: 'fixed',
-                left: Math.max(4, Math.min(priceScaleMenu.x, window.innerWidth - 148)),
-                top: Math.max(4, Math.min(priceScaleMenu.y, window.innerHeight - 108)),
+                left: Math.max(4, Math.min(toLayoutPx(priceScaleMenu.x), layoutViewport().width - 148)),
+                top: Math.max(4, Math.min(toLayoutPx(priceScaleMenu.y), layoutViewport().height - 108)),
                 zIndex: 200,
                 background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
                 minWidth: 140, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
@@ -2790,8 +2791,8 @@ export function TradingViewKiteChart({
               <div onClick={() => setChartContextMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
               <div className="tv-menu-anim" style={{
                 position: 'fixed',
-                left: Math.max(4, Math.min(chartContextMenu.x, window.innerWidth - 228)),
-                top: Math.max(4, Math.min(chartContextMenu.y, window.innerHeight - 388)),
+                left: Math.max(4, Math.min(toLayoutPx(chartContextMenu.x), layoutViewport().width - 228)),
+                top: Math.max(4, Math.min(toLayoutPx(chartContextMenu.y), layoutViewport().height - 388)),
                 zIndex: 200,
                 background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
                 minWidth: 220, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
@@ -2895,8 +2896,8 @@ export function TradingViewKiteChart({
             <div
               style={{
                 position: 'fixed',
-                left: Math.max(4, Math.min(drawingPopoverPos.x + 10, window.innerWidth - 190)),
-                top: Math.max(4, Math.min(drawingPopoverPos.y + 10, window.innerHeight - 160)),
+                left: Math.max(4, Math.min(toLayoutPx(drawingPopoverPos.x) + 10, layoutViewport().width - 190)),
+                top: Math.max(4, Math.min(toLayoutPx(drawingPopoverPos.y) + 10, layoutViewport().height - 160)),
                 zIndex: 20, background: tv.surface, border: `1px solid ${tv.border}`, padding: 8,
                 borderRadius: 4, fontSize: 11, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', minWidth: 180
               }}

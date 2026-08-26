@@ -118,7 +118,7 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, t
           >
             {tItem.label}
             {tItem.badge && (
-              <span style={{ background: k.orange, color: '#fff', fontSize: 8, fontWeight: 700, letterSpacing: 0.3, padding: '1px 4px', borderRadius: 3, lineHeight: 1.4 }}>
+              <span style={{ background: k.orange, color: 'var(--k-bg)', fontSize: 8, fontWeight: 700, letterSpacing: 0.3, padding: '1px 4px', borderRadius: 3, lineHeight: 1.4 }}>
                 {tItem.badge}
               </span>
             )}
@@ -338,7 +338,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       amber: '#d29922',
       orange: '#f0883e',
       cyan: '#39c5cf',
-      purple: '#a371f7',
+      purple: 'var(--k-violet-2)',
     };
   }, [isDark]);
 
@@ -1008,7 +1008,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
       {/* Instrument header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px 6px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={{ fontSize: 18, fontWeight: 600, color: '#333' }}>{name}</span>
+          <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--k-ink-1)' }}>{name}</span>
           <span style={{ fontSize: 14, fontWeight: 500, color: (spotPct ?? 0) >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>
             {spot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
@@ -1019,7 +1019,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: k.dim, cursor: 'pointer' }}>
-          <span style={{ width: 16, height: 16, background: k.orange, borderRadius: 3, color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>S</span>
+          <span style={{ width: 16, height: 16, background: k.orange, borderRadius: 3, color: 'var(--k-bg)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>S</span>
           View on Sensibull
         </div>
       </div>
@@ -1068,7 +1068,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
           <div style={{ width: 1, height: 18, background: k.border }} />
           <span style={{ ...linkStyle, color: k.dim }}><Icons.Basket /> Basket</span>
           <div style={{ width: 30, height: 16, borderRadius: 10, background: k.border, position: 'relative', cursor: 'pointer' }}>
-            <div style={{ position: 'absolute', top: 2, left: 2, width: 12, height: 12, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
+            <div style={{ position: 'absolute', top: 2, left: 2, width: 12, height: 12, borderRadius: '50%', background: 'var(--k-bg)', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
           </div>
         </div>
       </div>
@@ -1157,25 +1157,25 @@ function OptionChainView({ symbol }: { symbol: string }) {
                       <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center', zIndex: 3, boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'call')}><Icons.More /></button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, fontSize: 14 }}>⊞</button>
-                        <button onClick={(e) => handleAction(e, 'call', 'SELL', row)} style={{ background: k.orange, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
-                        <button onClick={(e) => handleAction(e, 'call', 'BUY', row)} style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
+                        <button onClick={(e) => handleAction(e, 'call', 'SELL', row)} style={{ background: k.orange, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
+                        <button onClick={(e) => handleAction(e, 'call', 'BUY', row)} style={{ background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
                       </div>
                     )}
                   </div>
                   {/* Strike */}
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', borderLeft: `1px solid ${k.border}`, borderRight: `1px solid ${k.border}`, height: '100%', zIndex: 2 }}>
                     {row.isAtm ? (
-                      <span style={{ background: '#3c3c3c', color: '#fff', fontWeight: 600, fontSize: 12.5, padding: '4px 11px', borderRadius: 4 }}>{row.strike}</span>
+                      <span style={{ background: '#3c3c3c', color: 'var(--k-bg)', fontWeight: 600, fontSize: 12.5, padding: '4px 11px', borderRadius: 4 }}>{row.strike}</span>
                     ) : (
-                      <span style={{ fontWeight: 600, color: '#333', fontSize: 12.5 }}>{row.strike}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--k-ink-1)', fontSize: 12.5 }}>{row.strike}</span>
                     )}
                   </div>
                   {/* Put LTP: value + change */}
                   <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 14, paddingLeft: 14, position: 'relative', zIndex: 2 }}>
                     {isHover && (
                       <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center', zIndex: 3, boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
-                        <button onClick={(e) => handleAction(e, 'put', 'BUY', row)} style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
-                        <button onClick={(e) => handleAction(e, 'put', 'SELL', row)} style={{ background: k.orange, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
+                        <button onClick={(e) => handleAction(e, 'put', 'BUY', row)} style={{ background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
+                        <button onClick={(e) => handleAction(e, 'put', 'SELL', row)} style={{ background: k.orange, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, fontSize: 14 }}>⊞</button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'put')}><Icons.More /></button>
                       </div>
@@ -1203,8 +1203,8 @@ function OptionChainView({ symbol }: { symbol: string }) {
                       <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center' }}>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'call')}><Icons.More /></button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, fontSize: 14 }}>⊞</button>
-                        <button onClick={(e) => handleAction(e, 'call', 'SELL', row)} style={{ background: k.orange, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
-                        <button onClick={(e) => handleAction(e, 'call', 'BUY', row)} style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
+                        <button onClick={(e) => handleAction(e, 'call', 'SELL', row)} style={{ background: k.orange, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
+                        <button onClick={(e) => handleAction(e, 'call', 'BUY', row)} style={{ background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
                       </div>
                     )}
                   </div>
@@ -1214,8 +1214,8 @@ function OptionChainView({ symbol }: { symbol: string }) {
                   <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 10, paddingLeft: 16, fontWeight: 500, position: 'relative' }}>
                     {isHover && (
                       <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center' }}>
-                        <button onClick={(e) => handleAction(e, 'put', 'BUY', row)} style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
-                        <button onClick={(e) => handleAction(e, 'put', 'SELL', row)} style={{ background: k.orange, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
+                        <button onClick={(e) => handleAction(e, 'put', 'BUY', row)} style={{ background: k.blue, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
+                        <button onClick={(e) => handleAction(e, 'put', 'SELL', row)} style={{ background: k.orange, color: 'var(--k-bg)', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>S</button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, fontSize: 14 }}>⊞</button>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'put')}><Icons.More /></button>
                       </div>
@@ -1240,7 +1240,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
         {footer.map((s) => (
           <div key={s.label} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: k.dim, marginBottom: 3 }}>{s.label}</div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#333', fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--k-ink-1)', fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
           </div>
         ))}
       </div>

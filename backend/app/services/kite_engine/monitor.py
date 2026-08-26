@@ -48,9 +48,19 @@ _exiting: set = set()
 def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None:
     """Book a closed position's realized PnL (INR) into the per-day accumulator that
     backs the INR daily-loss breaker. Long: (exit − entry)·qty; short future: negated.
-    Uses the confirmed fill price when known, else the intended entry premium."""
+    Uses the confirmed fill price when known, else the intended entry premium.
+
+    Exactly once per position, whichever exit path gets here first. Both callers —
+    this module's ``_exit_position`` and the ``on_order_update`` reconciliation — used
+    to guard on ``status`` alone, which does not cover a fill postback arriving while
+    ``_exit_position`` is still inside its placement await: the position is still OPEN
+    there, so both booked it and the day's total came out doubled. The claim is taken
+    here rather than at the call sites so no future exit path has to remember to.
+    """
     entry = float(p.fill_price or p.entry_premium or 0.0)
     if entry <= 0 or not exit_price or p.qty <= 0:
+        return
+    if not pos.claim_realized(uid, p.symbol):
         return
     sign = 1.0 if p.direction == "long" else -1.0
     state.record_realized_pnl(uid, (float(exit_price) - entry) * p.qty * sign)
@@ -213,6 +223,57 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 _stop_probe: Dict[Tuple[str, str, int], Tuple[float, str]] = {}
 _PROBE_TTL_S = 15.0
 
+#: uid → (read_at, {TRADINGSYMBOL: abs net quantity}). Cached because the exit path is
+#: tick-driven: a collapsing premium can deliver dozens of ticks a second, and one
+#: portfolio read per tick would both add latency to a stop and earn a rate limit.
+#: Short enough that a square-off done in the Kite app is seen within seconds.
+_holdings_probe: Dict[str, Tuple[float, Dict[str, int]]] = {}
+_HOLDINGS_TTL_S = 10.0
+
+
+async def _broker_holding(client, uid: str, symbol: str) -> Optional[int]:
+    """Absolute net quantity the BROKER says we hold of ``symbol``, or None if that
+    cannot be determined.
+
+    None and 0 mean different things and must not be conflated. 0 is positive evidence
+    that the position is gone — Kite keeps a squared-off row in ``net`` with
+    ``quantity: 0`` for the rest of the day. None means the question was not answered:
+    the read failed, or the symbol has no row at all, which is what a position carried
+    from a previous day looks like. Only 0 may stop an exit.
+    """
+    now = time.monotonic()
+    cached = _holdings_probe.get(uid)
+    if cached is None or now - cached[0] > _HOLDINGS_TTL_S:
+        try:
+            raw = await client.get_positions_raw()
+        except Exception as exc:  # noqa: BLE001 — an unreachable portfolio must not block an exit
+            log.debug("kite holdings probe failed for %s: %s", uid, exc)
+            return None
+        if not isinstance(raw, dict) or not isinstance(raw.get("net"), list):
+            return None
+        book: Dict[str, int] = {}
+        for row in raw["net"]:
+            if not isinstance(row, dict):
+                continue
+            sym = str(row.get("tradingsymbol", "")).strip().upper()
+            if not sym:
+                continue
+            try:
+                book[sym] = abs(int(row.get("quantity", 0) or 0))
+            except (TypeError, ValueError):
+                continue
+        _holdings_probe[uid] = (now, book)
+        cached = _holdings_probe[uid]
+    return cached[1].get(symbol.strip().upper())
+
+
+def forget_holdings(uid: str = "") -> None:
+    """Drop the cached portfolio read — after our own order changes it, and in tests."""
+    if uid:
+        _holdings_probe.pop(uid, None)
+    else:
+        _holdings_probe.clear()
+
 
 async def _broker_stop_status(client, uid: str, p: pos.OpenPosition) -> str:
     """``protective_stop.stop_status`` for this position, rate-limited (see _stop_probe).
@@ -315,6 +376,60 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                           f"{status}); exiting anyway — the broker's stop would never "
                           f"perform this exit ({reason or 'no reason given'})")
 
+    # ── never sell what we do not hold ────────────────────────────────────────
+    # The last guard, and the only one that depends on neither a postback nor the
+    # broker's GTT bookkeeping: ask what we actually own. It catches every remaining
+    # way the registry can be ahead of reality — a square-off done in the Kite app
+    # (no trigger involved at all, so nothing above notices), an exit whose postback
+    # was lost before the next scan's reconcile pass, or a partial exit elsewhere.
+    # In each case the alternative is a SELL against nothing: a naked short.
+    held = await _broker_holding(client, uid, p.symbol)
+    if held == 0:
+        # Positive evidence the position is gone. Self-heal rather than sell.
+        _exiting.discard(key)
+        if old_gtt and outcome != pstop.CANCELLED:
+            await pstop.cancel_stop_result(client, old_gtt)
+        pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
+        _stop_probe.pop((uid, p.symbol, old_gtt), None)
+        pos.close(uid, p.symbol, reason="reconciled closed at broker (holds none)")
+        if p.guard_key:
+            state.clear_auto_open(uid, p.guard_key)
+        if p.token:
+            try:
+                from app.services.exchanges.kite import ticker_manager
+                await ticker_manager.unsubscribe(uid, [p.token])
+            except Exception as _exc:  # noqa: BLE001
+                log.debug("suppressed: %s", _exc)
+        state.log(uid, "info",
+                  f"{p.symbol}: the broker holds none of this — the position was already "
+                  f"closed elsewhere. Reconciled CLOSED instead of placing a SELL that "
+                  f"would have opened a short.")
+        return False
+    if held is not None and 0 < held < p.qty:
+        # A partial exit happened outside the engine. Sell what is there; selling the
+        # registry's larger figure would short the difference.
+        was = p.qty
+        pos.mark_filled(uid, p.symbol, p.fill_price, filled_qty=held)
+        state.log(uid, "info",
+                  f"{p.symbol}: broker holds {held} of {was} — exiting {held} "
+                  f"(the rest was closed outside the engine)")
+
+    # ── did this position close while we were awaiting? ───────────────────────
+    # Everything above awaits: the GTT cancel, the status probe, the holdings read. An
+    # exit fill can land at any of them, and `on_order_update` — which does NOT take
+    # the `_exiting` claim — would then have closed this position and booked its
+    # realized PnL already. The `p` we were handed is a snapshot from before those
+    # awaits, so re-read the registry rather than trusting it: continuing would place a
+    # second SELL and book the same loss twice, which trips the INR daily-loss breaker
+    # at half the configured limit.
+    live = pos.get(uid, p.symbol)
+    if live is None or live.status not in (pos.OPEN, pos.PENDING):
+        _exiting.discard(key)
+        state.log(uid, "info",
+                  f"{p.symbol}: closed by a fill that landed while this exit was being "
+                  f"prepared — not placing a second SELL")
+        return False
+
     try:
         if is_futures:
             await client.place_order_future(
@@ -337,6 +452,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                       f"{exit_side.upper()} FAILED — this position has NO stop right now")
         state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
         return False
+    # Our own SELL just changed the portfolio, so the cached read is stale.
+    forget_holdings(uid)
     breach_dir = "≥" if p.direction == "short" else "≤"
     close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
     pos.close(uid, p.symbol, reason=close_reason)

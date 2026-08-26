@@ -70,7 +70,8 @@
       "Bash(rg -rn 'IconCrosshair|IconHLine|IconTrendline|IconRay|IconFibFan|IconFibExt|IconFib\\\\b|IconRect|IconPitchfork|IconText|IconPencil|IconFullscreen|IconClose|IconMore' frontend/src --glob '!TradingViewKiteChart.tsx')",
       "Bash(echo \"EXIT_CODE=$?\")",
       "Bash(grep -n \"^import\\\\|IconGear\\\\|onParamsChange\\\\|paramEditorKey\\\\|INDICATOR_PARAM_FIELDS\\\\|setParamField\\\\|import { MiniGridPane }\\\\|import {\\\\s*$\" TradingViewKiteChart.tsx)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(fd -t d -H '^\\(\\\\.venv|venv|env\\)$' /home/nageshmadaram/Sterling -d 3)"
     ],
     "defaultMode": "bypassPermissions"
   },

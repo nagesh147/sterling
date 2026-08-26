@@ -52,7 +52,7 @@ function STTrends({ trends, values, spot }: { trends: number[]; values?: number[
         {(trends ?? []).map((t, i) => (
           <span key={i} title={values?.[i] ? `Level: ${values[i].toLocaleString('en-US', { maximumFractionDigits: 0 })}` : undefined} style={{
             fontSize: 11, padding: '2px 5px', borderRadius: 2, cursor: values?.[i] ? 'help' : 'default',
-            background: t === 1 ? '#44cc8822' : t === -1 ? '#cc444422' : '#333',
+            background: t === 1 ? '#44cc8822' : t === -1 ? '#cc444422' : 'var(--k-ink-1)',
             color: t === 1 ? ui.green : t === -1 ? ui.red : ui.dim,
           }}>{labels[i]}</span>
         ))}
@@ -88,7 +88,7 @@ export function SnapshotPanel({ underlying }: { underlying: string }) {
   if (!data) return null;
 
   const regimeColor = { bullish: ui.green, bearish: ui.red, neutral: ui.dim }[data.macro_regime] ?? ui.dim;
-  const stateColor = STATE_COLOR[data.state] ?? '#444';
+  const stateColor = STATE_COLOR[data.state] ?? 'var(--k-text)';
   const dirColor = data.direction === 'long' ? ui.green : data.direction === 'short' ? ui.red : ui.dim;
 
   return (

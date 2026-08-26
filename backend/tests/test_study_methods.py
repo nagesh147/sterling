@@ -45,7 +45,12 @@ class TestForwardSurface:
 
     def test_groups_ticks_into_capture_surfaces(self):
         from study.forward_surface import reconstruct_surfaces, earliest_capture_ts
-        cap = time.time()
+        # Aligned to the start of a capture bucket. reconstruct_surfaces groups by
+        # `ts // 120`, and the four ticks below span cap..cap+3 — so a raw
+        # time.time() landing in the last 3 seconds of a bucket split them across
+        # two, and "assert len(surfaces) == 1" failed. That is a ~2.5% chance per
+        # run: invisible in isolation, and a periodic red in a full-suite run.
+        cap = (time.time() // 120) * 120
         exp = pd.to_datetime(cap, unit="s") + pd.Timedelta(days=30)
         exp_str = exp.strftime("%Y-%m-%d")
         # Two near-ATM contracts (one call, one put) + a 25Δ pair for skew.

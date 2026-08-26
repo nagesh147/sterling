@@ -1,0 +1,23 @@
+# kitelake dependencies, pinned to the versions this was built and tested against
+# (Python 3.14.4). Install into the dedicated venv at the repo root:
+#
+#     python3 -m venv .venv-kitelake
+#     ./.venv-kitelake/bin/pip install -r kitelake/requirements.txt
+#
+# NOTE on the split: the *core* of kitelake (volume resolution, schema, manifest,
+# instrument master, universe, writer, verify, fetcher) needs only pyarrow + httpx, which
+# the Sterling backend's interpreter already has. That is deliberate — it lets the
+# /api/v1/datalake endpoints work without adding polars/duckdb to the backend.
+# polars and duckdb are needed only by reader.py and catalog.py (the analysis layer).
+
+pyarrow==25.0.1        # parquet + arrow tables (core)
+httpx==0.28.1          # async HTTP to the Kite API (core)
+kiteconnect            # login flow + WebSocket tick recording (auth/ticks only)
+polars==1.43.2         # fast reads, resampling (analysis layer)
+duckdb==1.5.5          # SQL catalog over the parquet tree (analysis layer)
+zstandard              # zstd codec backing the parquet compression
+tenacity               # retry helpers
+
+# development
+pytest
+pytest-asyncio

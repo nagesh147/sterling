@@ -171,10 +171,14 @@ class TestOpenPositionFields:
 
 class TestFuturesSizer:
     def test_basic_sizing(self):
+        # 200 pts × 50 = ₹10,000 risk/lot; 1% of ₹5,000,000 = ₹50,000 budget → 5 lots.
+        # (The old ₹500,000 capital here did not actually size anything: one lot
+        # already broke the budget, so this only ever exercised the 1-lot floor.)
         sr = size_future_position(
             entry_price=20000.0, stop_price=19800.0, lot_size=50,
-            available_capital=500000.0, risk_pct=1.0, max_lots=5,
+            available_capital=5_000_000.0, risk_pct=1.0, max_lots=5,
         )
+        assert sr.blocked is False
         assert sr.lots >= 1
         assert sr.qty == sr.lots * 50
         assert sr.est_risk > 0
@@ -194,13 +198,23 @@ class TestFuturesSizer:
         )
         assert sr.lots <= 3
 
-    def test_floor_at_one_lot(self):
-        """Even when risk exceeds budget, floor at 1 lot."""
+    def test_blocks_rather_than_flooring_when_risk_exceeds_budget(self):
+        """5000 pts × 50 = ₹250,000 of risk against a ₹1,000 budget.
+
+        This used to floor to 1 lot and place it — 250x the stated cap. The floor is
+        now opt-in, because a futures lot carries the full notional.
+        """
         sr = size_future_position(
             entry_price=20000.0, stop_price=15000.0, lot_size=50,
             available_capital=100_000.0, risk_pct=1.0, max_lots=10,
         )
-        assert sr.lots >= 1
+        assert sr.blocked is True and sr.qty == 0
+        allowed = size_future_position(
+            entry_price=20000.0, stop_price=15000.0, lot_size=50,
+            available_capital=100_000.0, risk_pct=1.0, max_lots=10,
+            allow_min_lot_over_risk=True,
+        )
+        assert allowed.blocked is False and allowed.lots == 1
 
 
 # ── 6. validator clamping ────────────────────────────────────────────────────

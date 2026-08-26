@@ -1,0 +1,1015 @@
+{
+	"info": {
+		"_postman_id": "6475eea0-3a07-4f58-aae9-427268847067",
+		"name": "TD Corporate Copy 3",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31771595",
+		"_collection_link": "https://truedata-9910.postman.co/workspace/TrueData-Workspace~4956eeef-1d83-4242-8307-281e2d782aa0/collection/31771595-6475eea0-3a07-4f58-aae9-427268847067?action=share&source=collection_link&creator=31771595"
+	},
+	"item": [
+		{
+			"name": "Auth Request",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "username",
+							"value": "{{userid}}",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "{{password}}",
+							"type": "text"
+						},
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://auth.truedata.in/token",
+					"protocol": "https",
+					"host": [
+						"auth",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getDescriptors",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "Rc-sEX6dZoLXGxYagyXT_9WNDysjL0YJm-XAcb9sTTJPmDFqShvJ3cCDyRkbdKEFhJIuUfEJGAiPSnNyPZKg56fRKm8YJIJzHajAegniVxLY5j-hqg99p_SeGmTKo52yCySdAMj15oNvNQOaCURdODi7qRh1Hq_VHtKM3kmQa-nfqSr2Qvx1VU0kaArH6ehMcBKW7LnGnKOzEFVB0FEgadWVlmlP9JgZ5GR3mSgt8gFUro_PCLMOZnY4paX-tQTrmXcShN0giozHzkqeumBN_A",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getdescriptors?response=csv",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getdescriptors"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAnnualReportFile",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "57H5jToLokdDlPqiGvEo-_m5bLahqUn98LhX97qM2aqQVUBYdjaRjRvVkWWYYndXh_WRUsTUHUSNnJ2dKp-mRe75hnevkJXlz_TGM1juRknTLUAKWDk5qKBkLROhZr_NDb2epNxOzgoGmepvBU2qsXZE3Zi1-YFtcYKflmzvc8QKlj2crUZmT0mEyD-Ckb-R8UbRS5MqUjvbq0tqUldCxNg0cfLAglAX1H1jID5Ts6IAr5Ok2MBuPblJoAhTGKmCwLtT8NwWIHiPuuwvoCre5w",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/announcementfile2?id=321",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"announcementfile2"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "321"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getResultListByDate",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "oiEV60A_0Sf1Wtq4w7N4jlN3big5wQDLpwaIjtERzKT_386uwLFphMxUZORnS978ivWeiS2WF27-E3-mG2Hx3sC3bAxiO_oXgtgVopr5c3dtg6TZPovZsuFISgq5AkZKFWPNjtjbmz0kVO1GdCCG5B1lckYQWEDnp-ghNCoStX5Jh5I5gABThG5RySwAxeW1-Vh1HJOaGzGKvwBiT-v_7k59hQt7U6qNh2X-OhnIYWm995M5XKleNe7hcYqBukdETr0PvHB3_XrbMxqF2G5_nA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getResultList?date=2025-02-28&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getResultList"
+					],
+					"query": [
+						{
+							"key": "date",
+							"value": "2025-02-28"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAllResultByCompany",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "8ng8v5AGpkUdMInH5gsPYbXPkLyBdEqIaBNpAIlw6X64cYOWWgnF4TnFNqmk19nNg2i43IVfUDVKB2SOO1s2-qQ85_49Iu5JIGm7eMjgpl_6-29kFSFFaFau15EtwKZJqYMvEf93R9-Wgn-xnIbnOPyBxbaq2hrjhVeAHhk8oVzSDjBRtfBwg2EnFOcKhIMmnRsA4Cyy7gW4nvhx6RvRoUjEfD_KP7TOSt11Pn0WL35CBM-P1dlXReoK4SnKDr7gN4THFpDIsk1R2UffIS-cUA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getAllResultsByCompany?symbol=MUTHOOTFIN&response=json&nature=standalone&period=quarterly&type=pl",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllResultsByCompany"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "MUTHOOTFIN"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						},
+						{
+							"key": "nature",
+							"value": "standalone",
+							"description": "consolidated/standalone\n"
+						},
+						{
+							"key": "period",
+							"value": "quarterly",
+							"description": "quarterly/yearly"
+						},
+						{
+							"key": "type",
+							"value": "pl",
+							"description": "cf/pl/bs"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getPnLById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "CnVRFJuBGOBZavFQk7IK8kowVn34KgEcVJqmptp2TtkTkXpAnAsHZYxoGitRcIny0FR5kj7TqiYdsSlzDVNmL1h2hKEaRo7IuxFGiuHTNWo4hHNlCnDNP_KXPSlaw0Zw8AHbUzqzwRLzyncIZ9D_bNoQaezwz8v2vde8XeGvVALSlG_KEnkgdjgNyg6SVyYk9mvRmTc3Ca_aG5-gbRwwX84DsSkzZdqagfo43FmdL5iWojuK1LRxCJG1LJqPIfzPIpdsHv3tozaYiNCiDY5VbA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getPnLById?id=733875&response=json&cumulative=true",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getPnLById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "733875"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						},
+						{
+							"key": "cumulative",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getBalSheetById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "5GR-8SwYbjHt6HgWD6ymeVeFLBagY9UlJPuVcsLsE6upvOTk7jbN05U6jQ52F2ROiXNsDdSxAVWAd30xHnaUTHNeErlHf_TAkXo0fCENkfDztDeQBRpTfRQ4LQxGp8kFm5jZE8qfFg3dPJQ1yabIpkYwkOLREf9mwGd4R07mZmHWATBhcLfQcJkPYvQFGjNEW9EWlA4TaISnCCL0pS4zLbdT_PSOd4bvxwCdRp0lDVXxTAS6E2D9aPFnUlsMvzgDZyfIKRr7TL3QT1gnp-NypQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getBalSheetById2?id=135298&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getBalSheetById2"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "135298"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getResultALById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "R-4rHDQDi9r0O57vxtuY6vXJjNkGqCefRqUjPHsT3m9bPr8UADVDGzeYybqBb9MkyZJFDMlk9aAtfxy78aD0x4JlBVWASEA1jrI0Va1o7PyUqHYDUrgHEZyRVs2blCa8Yt0oC0M84dFQgpHcKopBIGkD_C-LSQED0blvt2w7hcMe_tmOoJDLth5D-JPHA7pihByRX5qAOsCjKWTYFqgbaBabyI5PmyAHdvUACvE3smNS5acrRjp4jwg8s9bEBC-dIRhPmWLBDK-w4TAX3ecZww",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getResultALById?id=706807&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getResultALById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "706807"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAllResultItemsById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "8ng8v5AGpkUdMInH5gsPYbXPkLyBdEqIaBNpAIlw6X64cYOWWgnF4TnFNqmk19nNg2i43IVfUDVKB2SOO1s2-qQ85_49Iu5JIGm7eMjgpl_6-29kFSFFaFau15EtwKZJqYMvEf93R9-Wgn-xnIbnOPyBxbaq2hrjhVeAHhk8oVzSDjBRtfBwg2EnFOcKhIMmnRsA4Cyy7gW4nvhx6RvRoUjEfD_KP7TOSt11Pn0WL35CBM-P1dlXReoK4SnKDr7gN4THFpDIsk1R2UffIS-cUA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getAllResultItemsById?id=722723&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllResultItemsById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "722723"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPListByDate",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "FVTmWCPtmWGZvKaI2zmXv9nhWHmn2HzTCjhXK5WazTQGLFwgfCzfcv9OJ4rBuKQPdw-AjXnQV3n2E2Zhm4Rke-Hhj6Bekx_kpN9wpw4lnhBuk398J3-zhodz2FyEDkR8tQxFrVrTvDr9OE72RteIissjhTwcJ60cR7IzhPZS1vfYc7ffc5rjwWHgTLRreFqc0UZI_AXuKA0nkg6JBM3Gwt1BGXmIWm1Fu2yLl2qOJR9IStMtUPeEllKcm-FeEqk7v_B41S6N3fmtZ7euXrYH7A",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getSHPListByDate?date=2024-12-26&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSHPListByDate"
+					],
+					"query": [
+						{
+							"key": "date",
+							"value": "2024-12-26"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPListByCompany",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "8ng8v5AGpkUdMInH5gsPYbXPkLyBdEqIaBNpAIlw6X64cYOWWgnF4TnFNqmk19nNg2i43IVfUDVKB2SOO1s2-qQ85_49Iu5JIGm7eMjgpl_6-29kFSFFaFau15EtwKZJqYMvEf93R9-Wgn-xnIbnOPyBxbaq2hrjhVeAHhk8oVzSDjBRtfBwg2EnFOcKhIMmnRsA4Cyy7gW4nvhx6RvRoUjEfD_KP7TOSt11Pn0WL35CBM-P1dlXReoK4SnKDr7gN4THFpDIsk1R2UffIS-cUA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getSHPListByCompany?symbol=TATAMOTORS&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSHPListByCompany"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "TATAMOTORS"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPAllItems",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "560232",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getAllShpById?id=240355&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllShpById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "240355"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPMemberTypes",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "getShpMemberTypes?response=json",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getShpMemberTypes?response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getShpMemberTypes"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPSummary",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "8ng8v5AGpkUdMInH5gsPYbXPkLyBdEqIaBNpAIlw6X64cYOWWgnF4TnFNqmk19nNg2i43IVfUDVKB2SOO1s2-qQ85_49Iu5JIGm7eMjgpl_6-29kFSFFaFau15EtwKZJqYMvEf93R9-Wgn-xnIbnOPyBxbaq2hrjhVeAHhk8oVzSDjBRtfBwg2EnFOcKhIMmnRsA4Cyy7gW4nvhx6RvRoUjEfD_KP7TOSt11Pn0WL35CBM-P1dlXReoK4SnKDr7gN4THFpDIsk1R2UffIS-cUA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getShpSummaryById?id=526120&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getShpSummaryById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "526120"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSHPDetailById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "8ng8v5AGpkUdMInH5gsPYbXPkLyBdEqIaBNpAIlw6X64cYOWWgnF4TnFNqmk19nNg2i43IVfUDVKB2SOO1s2-qQ85_49Iu5JIGm7eMjgpl_6-29kFSFFaFau15EtwKZJqYMvEf93R9-Wgn-xnIbnOPyBxbaq2hrjhVeAHhk8oVzSDjBRtfBwg2EnFOcKhIMmnRsA4Cyy7gW4nvhx6RvRoUjEfD_KP7TOSt11Pn0WL35CBM-P1dlXReoK4SnKDr7gN4THFpDIsk1R2UffIS-cUA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getShpDetailById?id=560232&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getShpDetailById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "560232"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCorporateInfo",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "3btML0RBvadO2sCuW6XRsehJIQD3m_iLiDHwDmt8Xb2Vyi0BDYz4oUcKAwTSWpyOCrjOFwGFDPKjkbr6arBFGTkt4HwgNA3hgNcLtIkhrlxCcvxeuaeXa5Q02ImH2nANnynERO4DPlb4M8xuZk031pr_2zh7h5Sk2uLcxHAHNbIQk79UauEMFFgo9q1k8rwTsVXrvUFkdF-0Vc-hPbgOrD9vMOiw4Bkm59iswDC09DNytSByy98r3lyLhxxhLHxBIIk3YN-XzrMRB2Tnp0Bo3w",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getCorporateInfo?symbol=TATAMOTORS&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getCorporateInfo"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "TATAMOTORS"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getFIIDIIData",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "YKuEbw7Ug5-Js4d3UaSTOEHvdHpajMDSZ1Ckpv-BQe2M9rpx6tKmGWCwrTCW7skZDuRiVN3wn2EhU-2aSYQdYDrSrf6VvhScHT6FKa-WDxtkiUmgfuMgQQjXD959o_jd-mX0EOuxTZ7G5lBQm4D6AlMta3vB3ziHDertodxNQsJVt2NS3XO6vV4apssrE1TxhIkKqegxU0qVJXLCbDM0YPlBZuuBSesTvAkIl6Zpb99p7wlfjWpitcgUQ6MJr-oxzCo28WtMXx51-szz7X5mBA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getfiidiidata?response=csv&date=250523&segment=cash",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getfiidiidata"
+					],
+					"query": [
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "date",
+							"value": "250523"
+						},
+						{
+							"key": "segment",
+							"value": "cash"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCashFlowSummaryById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "BHJHtMcxPT3ASilurtW9YvuzWEZQ3s73uApeQq130kkZwkHacVdBpAV04HRoCxVxgZo1ecQrdTfh8nhrxz8GSCiLZeRq3WPjDT65k2GC7v7Blr-LsdCeFzhHPVB96F0MUn8V6PIqMHvb_ljeYc92OrS0n7W1dgXMYSNzm3CLuR5_8hYzrbwRfbGXteRQeF4Y0kXFWJ-jkvH3vGQsoDx1Gqid2uiCKEKRs1a98WJFVRSTmDZHxqpkyeNYRD5oP6-UoDPErXWMoKvLq1X5J0tM3w",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getCashFlowSummaryById?id=738189&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getCashFlowSummaryById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "738189"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCashFlowDetailById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "zJvfBC37kXcgInh9QOJx2ENsRKDQID0LdjJmyYWfOTg8rUiGlAvFPsVz_KZoejQY81szgXn9IJKd1lwPRJvvkyBaIMR9WrThAhIrajQ6yAopoFF48aL2GrcBs-88T8huq2ULdDMWw4uwMig45RlWXhCqtJeZWspzJgDAEogUYPA8Kf9NjK_r-Qh5QRzh1E_TTHfMnmGXJ--LTkkheI806kWvVmjOQWk-Al9wLAVlryfp-bhyEmy4VJF5kKONkmGniXoJ3IwNrL6OMIXM90eGZQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getCashFlowDetailById?id=785736&response=json&cumulative=true",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getCashFlowDetailById"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "785736"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						},
+						{
+							"key": "cumulative",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getAnnoucementById",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "CcLntjdB1TN5r4hOcZlBcvK89ut_UlGbTOU53BCkUkH1LINR0-sLXHq5yT1GY0GAuqkF5aVUmReOllWeCoP0nf9M-D2MPJ5EPgHe1qBitAVJBcmCGyoVFjjtfLD7JG3MSAj04PEbjiOIeqIH8DLe9xL1kGkaljCL1L93wvvBvivnUACGsRWe6yzotIPW86BRDE-x_8yoxmdpcgzr_Cl_SqFw2pWSdcfwvFTPjdL3_927-y_ygEvjXoUrAVKacd40zair-Ta0BSoNDC0SUuEeZw",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getannouncementbyid?id=1443073&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getannouncementbyid"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "1443073"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getMarketCap",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "w79ahvWOPZlUoJdzPx5NPxUd2Vy0vW8eFdd9u37ibQQsmsSY0LRUJ_oWJ0L3SyccESrBtPNrNvZaHaCCgSWaRZHEzQQIYTsDBTryO2stvr5FI7kxUFVKdZHznlQ2rUlnEDA4LdSTpjDmQT70rrtGH3_frHQuGwkePeOF9hebIo1XMOqvWbm-O5Cc82EitYf2TpyosgkuEXWSKsOXVFjOly0gbxgXY7k69Y-hTanmmwtrBStrsGgGSOyoyP3WS-B7UskudDbAPTaY7I8KXNgXXg",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getMarketCap?symbols=ACC,RELIANCE&response=csv",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getMarketCap"
+					],
+					"query": [
+						{
+							"key": "symbols",
+							"value": "ACC,RELIANCE"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getPeerCompanies",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "mAJ-SPJOT2xdbY21i7vFHJj2pkZjkgaIcP4FfiWoUjBnJmACW3AJWxrJ-WxIjAHwaBmNTDKaG7Oc2-vXlOnIVFwfcKTzB_Kgrm3mXbsypJXl43Jy9wV-mb3me_0oZxQuE93xyq6oQurDPPDDlDwfGqAOJSXE97zIwOr4EBhRdFsnJGfxkjHIYs28_UShLN8RN7UH3GiJ8Gwqm74JE8XlnQi4TQONJmHnS0sJUrbUtaYtbo8S1Zy8Bo8EnZ0h-gY1",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getPeerCompanies?symbol=SBIN&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getPeerCompanies"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "SBIN"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getSymbolClassification",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "BpC-3l5fwng086FmQziArSWiNB3HeIs-c_u8xAnEGn3ndcQLYaeAOeVD9cyY2im1iPRzthljxV_TMt3i-AWj325c7NWZu_Sq0RB8ksrpx26QJcp7Qq6wQJfx0UwJhoSOD5uL8W7ulkxsO0De5zKCroib2uc_sMs2mEKjLHUSSu_No8lxp3UelgQySQ8GWVaG2erHAHLx_gA-6bQ4fZrNkgbK52CWq3zxu7J7zjlV_N6hPOov2Unpl7I8MhltcIPV9nvQf0V3NaG6q6de9meBWQ",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getSymbolClassification?symbol=ACC&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSymbolClassification"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "ACC"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getRatios Copy",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://corporate.truedata.in/getratiosForsymbol?symbol=ZEEL&response=json",
+					"protocol": "https",
+					"host": [
+						"corporate",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getratiosForsymbol"
+					],
+					"query": [
+						{
+							"key": "symbol",
+							"value": "ZEEL"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "userid",
+			"value": "your_id",
+			"type": "string"
+		},
+		{
+			"key": "password",
+			"value": "your_pwd",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "0TCVH7HJJI1uCJ24hkBkvDmNPdOlRz3lUZ7FK9H-8lAN2uik6fC6aRfZLCN-LzzgRbz6yO3Cuu4bqcdcdFlcr42xHiUveQFJie6twKN0r3Du6CgXVdvT_7UeQuZlX5Gz4HUeYIAVNi3Zg1lyUCf3FGL6SDsytVOLuch3aePm4K2_paIElBrgecwDqVTJWl2rEGNqxR0QgKlYC-NvagxGAf4OtsYTyGrQaLvwZlgs5piOY_Se_6vk86Dxd5TV0KOukePkf64IEkZe4lb2SlYWzw",
+			"type": "default"
+		}
+	]
+}

@@ -229,7 +229,7 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
         fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 12px', borderRadius: 6,
         cursor: closeAll.isPending ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
         border: `1px solid ${DANGER}55`, background: confirmClose ? DANGER : `${DANGER}14`,
-        color: confirmClose ? '#fff' : DANGER, transition: 'all .12s',
+        color: confirmClose ? 'var(--k-bg)' : DANGER, transition: 'all .12s',
       }}
     >
       {closeAll.isPending ? 'Closing…' : confirmClose ? `Confirm — close ${open.length}?` : `✕ Close All (${open.length})`}

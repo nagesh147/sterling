@@ -357,7 +357,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                         algoOn ? (
                           <span style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
                         ) : (
-                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>EXECUTE</button>
+                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: dirColor, color: 'var(--k-bg)', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>EXECUTE</button>
                         )
                       ) : null}
                     </td>

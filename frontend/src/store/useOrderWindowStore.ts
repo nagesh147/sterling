@@ -9,6 +9,8 @@ export interface OrderWindowOptions {
   lastPrice?: number;
   lotSize?: number;                     // 1 for equity; contract lot for F&O
   product?: Product;                    // preselect MIS/CNC/NRML (e.g. to square off a position)
+  initialSlPct?: number;                // prefilled Stoploss % for protective GTT
+  initialTgtPct?: number;               // prefilled Target % for protective GTT
   tag?: string;                         // ≤20-char audit tag
   onPlaced?: (orderId: string) => void; // fired after a successful placement
 }

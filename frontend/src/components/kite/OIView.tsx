@@ -183,11 +183,11 @@ export function OIView({ symbol, mode }: { symbol: string; mode: Mode }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
       {/* Header */}
       <div style={{ padding: '12px 16px 4px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        <span style={{ fontSize: 16, fontWeight: 600, color: '#333' }}>{name}</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--k-ink-1)' }}>{name}</span>
         <span style={{ fontSize: 13, fontWeight: 500, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
           {spot.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--k-ink-1)' }}>
           {isChange ? 'Change in OI' : 'Open Interest'}
         </span>
         {!isLive && <span style={{ fontSize: 10, color: k.amber, border: `1px solid ${k.amber}`, borderRadius: 3, padding: '1px 5px' }}>sample</span>}
@@ -251,8 +251,8 @@ export function OIView({ symbol, mode }: { symbol: string; mode: Mode }) {
               <Bar pct={cePct} side="ce" negative={isChange && ceV < 0} />
               <div style={{ textAlign: 'center' }}>
                 {r.isAtm
-                  ? <span style={{ background: '#3c3c3c', color: '#fff', fontWeight: 600, fontSize: 11.5, padding: '2px 8px', borderRadius: 4 }}>{r.strike}</span>
-                  : <span style={{ fontWeight: 600, color: '#333', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>{r.strike}</span>}
+                  ? <span style={{ background: '#3c3c3c', color: 'var(--k-bg)', fontWeight: 600, fontSize: 11.5, padding: '2px 8px', borderRadius: 4 }}>{r.strike}</span>
+                  : <span style={{ fontWeight: 600, color: 'var(--k-ink-1)', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>{r.strike}</span>}
               </div>
               <Bar pct={pePct} side="pe" negative={isChange && peV < 0} />
               <Num v={peV} signed={isChange} side="pe" />
@@ -279,7 +279,7 @@ export function OIView({ symbol, mode }: { symbol: string; mode: Mode }) {
         ).map((s) => (
           <div key={s.label} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: k.dim, marginBottom: 3 }}>{s.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#333', fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--k-ink-1)', fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
           </div>
         ))}
       </div>

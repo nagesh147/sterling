@@ -439,6 +439,50 @@ class TestStructureRadarAndOrigination:
         assert origin_rows[0].navigator.status == "CONFIRMED"
 
     @pytest.mark.asyncio
+    async def test_a_live_origination_keeps_the_bar_it_originated_on(self, monkeypatch):
+        """Audit lead 12. The row was rebuilt at the LATEST bar on every scan, so a
+        still-running origination re-stamped its trigger time and entry spot every five
+        minutes: its Entry moved with price and could never show an open P&L, and its
+        age reset continuously. The evidence is re-evaluated — that is what a radar does
+        — but the row is a position, and its numbers describe when it was taken."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap",
+                            lambda candles, config, **kw: (None, _accepted_avwap_eval(stop=24000.0)))
+        first = await nav_service.run_navigator_pass(
+            FakeKiteClient(_kite_candle_rows()), "user-1", [],
+            engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        origin = [r for r in first if r.source == "navigator"][0]
+        first_ts, first_spot = origin.timestamp_ms, origin.spot
+
+        # The setup is now LIVE: cache its decision the way a real confirmed
+        # origination does, so the next pass sees a live prior rather than a new one.
+        nav_service.cache_decision(
+            "user-1", underlying="NIFTY 50", token=256265, direction="long",
+            # The stub decision carries a placeholder bar; give it the real one this
+            # setup originated on, which is what a live decision holds in production.
+            decision=origin.navigator.model_copy(update={"bar_close_ms": first_ts}),
+        )
+
+        # A later scan. Under the old code the row rebuilt itself at the latest bar.
+        second = await nav_service.run_navigator_pass(
+            FakeKiteClient(_kite_candle_rows()), "user-1", [],
+            engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        again = [r for r in second if r.source == "navigator"][0]
+
+        assert again.is_active is True and again.is_fresh is False, (
+            "the second pass did not see a live prior — the test is not exercising the "
+            "re-stamp path"
+        )
+        assert again.timestamp_ms == first_ts, "the trigger time moved under a live setup"
+        assert again.spot == pytest.approx(first_spot), "the entry spot moved with price"
+
+    @pytest.mark.asyncio
     async def test_a_brand_new_origination_is_live_not_history(self, monkeypatch):
         """`is_active` and `is_fresh` used to be mutually exclusive here, so a
         first-bar origination arrived with is_active=False. The board reads

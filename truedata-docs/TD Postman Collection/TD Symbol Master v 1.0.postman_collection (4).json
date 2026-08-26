@@ -1,0 +1,428 @@
+{
+	"info": {
+		"_postman_id": "5daa382b-b325-49d2-963d-996077479634",
+		"name": "TD Symbol Master v 1.0",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "28618854",
+		"_collection_link": "https://dark-crater-357571.postman.co/workspace/My-Workspace~ef0e7637-ea20-4cea-8953-f87f80e69aaf/collection/10701797-5daa382b-b325-49d2-963d-996077479634?action=share&source=collection_link&creator=28618854"
+	},
+	"item": [
+		{
+			"name": "Symbol Master",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=your_id&password=your_pwd&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllSymbols"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "mcx",
+							"description": "eq/fut/fo/mcx"
+						},
+						{
+							"key": "user",
+							"value": "your_id"
+						},
+						{
+							"key": "password",
+							"value": "your_pwd"
+						},
+						{
+							"key": "token",
+							"value": "true"
+						},
+						{
+							"key": "csv",
+							"value": "true"
+						},
+						{
+							"key": "csvHeader",
+							"value": "true"
+						},
+						{
+							"key": "ticksize",
+							"value": "true"
+						},
+						{
+							"key": "companyname",
+							"value": "true"
+						},
+						{
+							"key": "isin",
+							"value": "true"
+						},
+						{
+							"key": "limit",
+							"value": "50"
+						},
+						{
+							"key": "search",
+							"value": "gold",
+							"description": "optional"
+						},
+						{
+							"key": "underlying",
+							"value": "true",
+							"description": "optional"
+						},
+						{
+							"key": "circuit",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Symbol Master Copy",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getAllSymbols?segment=mcx&user=your_id&password=your_pwd&token=true&csv=true&csvHeader=true&ticksize=true&companyname=true&isin=true&limit=50&search=gold&underlying=true&circuit=true",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getAllSymbols"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "mcx",
+							"description": "eq/fut/fo/mcx"
+						},
+						{
+							"key": "user",
+							"value": "your_id"
+						},
+						{
+							"key": "password",
+							"value": "your_pwd"
+						},
+						{
+							"key": "token",
+							"value": "true"
+						},
+						{
+							"key": "csv",
+							"value": "true"
+						},
+						{
+							"key": "csvHeader",
+							"value": "true"
+						},
+						{
+							"key": "ticksize",
+							"value": "true"
+						},
+						{
+							"key": "companyname",
+							"value": "true"
+						},
+						{
+							"key": "isin",
+							"value": "true"
+						},
+						{
+							"key": "limit",
+							"value": "50"
+						},
+						{
+							"key": "search",
+							"value": "gold",
+							"description": "optional"
+						},
+						{
+							"key": "underlying",
+							"value": "true",
+							"description": "optional"
+						},
+						{
+							"key": "circuit",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Option Chain Symbols",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getoptionchain?segment=mcx&user=your_id&password=your_pwd&symbol=reliance&expiry=20230329&csv=true",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getoptionchain"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "mcx"
+						},
+						{
+							"key": "user",
+							"value": "your_id"
+						},
+						{
+							"key": "password",
+							"value": "your_pwd"
+						},
+						{
+							"key": "symbol",
+							"value": "reliance"
+						},
+						{
+							"key": "expiry",
+							"value": "20230329"
+						},
+						{
+							"key": "csv",
+							"value": "true"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Index Components",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getIndexComponents?user=your_id&password=your_pwd&response=csv&indexName=NIFTY 50",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getIndexComponents"
+					],
+					"query": [
+						{
+							"key": "user",
+							"value": "your_id"
+						},
+						{
+							"key": "password",
+							"value": "your_pwd"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						},
+						{
+							"key": "indexName",
+							"value": "NIFTY 50",
+							"description": "NIFTY BANK\nNIFTY FMCG\nNIFTY 100\nNIFTY INFRA\nNIFTY 500\nNIFTY MNC\nNIFTY REALTY\nNIFTY ENERGY\nNIFTY MIDCAP 100\nNIFTY IT\nNIFTY PHARMA\nNIFTY MIDCAP 50\nNIFTY 50"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Symbol Expiry List",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getSymbolExpiryList?user=utkr1&password=utkr1@123&symbol=RELIANCE&response=csv",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getSymbolExpiryList"
+					],
+					"query": [
+						{
+							"key": "user",
+							"value": "utkr1"
+						},
+						{
+							"key": "password",
+							"value": "utkr1@123"
+						},
+						{
+							"key": "symbol",
+							"value": "RELIANCE"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndustryList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getIndustryList?user=user_id&password=user_pwd&response=json",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getIndustryList"
+					],
+					"query": [
+						{
+							"key": "user",
+							"value": "user_id"
+						},
+						{
+							"key": "password",
+							"value": "user_pwd"
+						},
+						{
+							"key": "response",
+							"value": "json"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getIndices",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getIndices?user=your_id&password=your_pwd&response=csv",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getIndices"
+					],
+					"query": [
+						{
+							"key": "user",
+							"value": "your_id"
+						},
+						{
+							"key": "password",
+							"value": "your_pwd"
+						},
+						{
+							"key": "response",
+							"value": "csv"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getETFList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getETFlist?user=xxxx&password=xxxxx",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getETFlist"
+					],
+					"query": [
+						{
+							"key": "user",
+							"value": "xxxx"
+						},
+						{
+							"key": "password",
+							"value": "xxxxx"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getUnderlyingList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.truedata.in/getunderlyinglist?segment=eq&user=utkr1&password=utkr1@123456",
+					"protocol": "https",
+					"host": [
+						"api",
+						"truedata",
+						"in"
+					],
+					"path": [
+						"getunderlyinglist"
+					],
+					"query": [
+						{
+							"key": "segment",
+							"value": "eq"
+						},
+						{
+							"key": "user",
+							"value": "utkr1"
+						},
+						{
+							"key": "password",
+							"value": "utkr1@123456"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "New Request",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		}
+	]
+}
