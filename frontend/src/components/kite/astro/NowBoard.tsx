@@ -158,7 +158,7 @@ export function NowBoard({
           </button>
         ) : (
           <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
-            Open {sessionLabel(status.sessionIso)} playbook
+            Open {sessionLabel(status.sessionIso)}
           </button>
         )}
         {viewingIso !== status.sessionIso ? (

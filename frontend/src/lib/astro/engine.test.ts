@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { forecastDay, forecastMonth, liveNow } from "./engine";
-import { lastCompletedSessionIso, nextSessionIso } from "./holidays";
+import { lastCompletedSessionIso, nearestOpenIso, nextSessionIso, shiftSessionIso } from "./holidays";
 import { utcFromIstParts } from "./time";
 
 describe("financial astrology engine", () => {
@@ -147,6 +147,11 @@ describe("financial astrology engine", () => {
     assert.equal(nextSessionIso(utcFromIstParts(2026, 8, 26, 10, 0, 0)), "2026-08-26");
     assert.equal(nextSessionIso(utcFromIstParts(2026, 8, 26, 16, 0, 0)), "2026-08-27");
     assert.equal(nextSessionIso(utcFromIstParts(2026, 8, 29, 11, 0, 0)), "2026-08-31");
+    assert.equal(shiftSessionIso("2026-08-26", 1), "2026-08-27");
+    assert.equal(shiftSessionIso("2026-08-28", 1), "2026-08-31");
+    assert.equal(shiftSessionIso("2026-08-31", -1), "2026-08-28");
+    assert.equal(nearestOpenIso("2026-08-26"), "2026-08-26");
+    assert.equal(nearestOpenIso("2026-08-30"), "2026-08-28");
 
     const pre = liveNow(utcFromIstParts(2026, 8, 27, 0, 18, 0), "NIFTY");
     assert.equal(pre.phase, "pre");

@@ -21,7 +21,7 @@ function dignityClass(d: DignityKind): string {
 }
 
 function mergeWindows(slots: WindowSlot[]) {
-  const rows: { from: string; to: string; fromMin: number; toMin: number; action: WindowSlot["action"]; side: WindowSlot["side"]; why: string }[] = [];
+  const rows: { from: string; to: string; fromMin: number; toMin: number; action: WindowSlot["action"]; side: WindowSlot["side"]; why: string; slot: WindowSlot }[] = [];
   const sorted = [...slots].sort((a, b) => a.fromMin - b.fromMin);
   for (const s of sorted) {
     const last = rows[rows.length - 1];
@@ -37,6 +37,7 @@ function mergeWindows(slots: WindowSlot[]) {
         action: s.action,
         side: s.side,
         why: s.why,
+        slot: s,
       });
     }
   }
@@ -49,121 +50,110 @@ function sideClass(side: WindowSlot["side"]): string {
   return "ko-pill ko-pill-wait";
 }
 
-export function PlaybookBoard({ book }: { book: DayForecast }) {
+function openSide(action: string): WindowSlot["side"] {
+  if (action.includes("CE")) return "CE";
+  if (action.includes("PE")) return "PE";
+  return "WAIT";
+}
+
+export function PlaybookStrip({
+  book,
+  onPick,
+}: {
+  book: DayForecast;
+  onPick?: (slot: WindowSlot) => void;
+}) {
   const pb = book.playbook;
   const gtone = gapTone(book.gap.kind);
-  const pan = book.panchang;
-  const avoid = mergeWindows(pb.avoid).slice(0, 6);
-  const plays: { role: string; slot: WindowSlot | null; note: string }[] = [
-    { role: "Best CE", slot: pb.bestCe, note: pb.bestCe ? pb.bestCe.suggestion : "No CE window on the 30-min grid." },
-    { role: "Best PE", slot: pb.bestPe, note: pb.bestPe ? pb.bestPe.suggestion : "No PE window on the 30-min grid." },
-  ];
+  const avoid = mergeWindows(pb.avoid)[0] ?? null;
 
   return (
-    <div className="ko-book">
-      <p className="ko-sub">{pb.headline}</p>
-
-      <div className="ko-kv">
-        <div>
+    <div className="ko-play">
+      <p className="ko-play-head">{pb.headline}</p>
+      <div className="ko-play-meta">
+        <span>
           <span className="lbl">Gap</span>
           <b className={gtone.fg}>{book.gap.label}</b>
-        </div>
-        <div>
+        </span>
+        <span>
           <span className="lbl">Thesis</span>
           <b>{THESIS[pb.thesis]}</b>
-        </div>
-        <div>
+        </span>
+        <span>
           <span className="lbl">Open</span>
-          <b className={actionTone(book.gap.openAction, book.gap.openAction.includes("CE") ? "CE" : book.gap.openAction.includes("PE") ? "PE" : "WAIT")}>
-            {book.gap.openAction}
-          </b>
-        </div>
-        <div>
-          <span className="lbl">Hora at bell</span>
+          <b className={actionTone(book.gap.openAction, openSide(book.gap.openAction))}>{book.gap.openAction}</b>
+        </span>
+        <span>
+          <span className="lbl">Hora</span>
           <b>{pb.horaAtOpen}</b>
-        </div>
-        <div>
-          <span className="lbl">Close bias</span>
+        </span>
+        <span>
+          <span className="lbl">Close</span>
           <b>{REGIME_SHORT[pb.closeBias]}</b>
-        </div>
-        <div>
-          <span className="lbl">Vol</span>
-          <b>{book.gap.volatility}</b>
-        </div>
-        <div>
-          <span className="lbl">Confidence</span>
+        </span>
+        <span>
+          <span className="lbl">Conf</span>
           <b>{book.gap.confidence}%</b>
-        </div>
-        <div>
-          <span className="lbl">Bias</span>
-          <b>{book.gap.bias}</b>
-        </div>
+        </span>
       </div>
+      <div className="ko-play-roles">
+        <button type="button" disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
+          <span className="lbl">Best CE</span>
+          {pb.bestCe ? (
+            <>
+              <span className={sideClass(pb.bestCe.side)}>CE</span>
+              {pb.bestCe.from}–{pb.bestCe.to}{" "}
+              <b className={actionTone(pb.bestCe.action, pb.bestCe.side)}>{pb.bestCe.action}</b>
+            </>
+          ) : (
+            <span className="text-muted">No CE window</span>
+          )}
+        </button>
+        <button type="button" disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
+          <span className="lbl">Best PE</span>
+          {pb.bestPe ? (
+            <>
+              <span className={sideClass(pb.bestPe.side)}>PE</span>
+              {pb.bestPe.from}–{pb.bestPe.to}{" "}
+              <b className={actionTone(pb.bestPe.action, pb.bestPe.side)}>{pb.bestPe.action}</b>
+            </>
+          ) : (
+            <span className="text-muted">No PE window</span>
+          )}
+        </button>
+        <button type="button" disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
+          <span className="lbl">Avoid</span>
+          {avoid ? (
+            <>
+              <span className={sideClass(avoid.side)}>{avoid.side}</span>
+              {avoid.from}–{avoid.to} <span className="text-muted">{avoid.action}</span>
+            </>
+          ) : (
+            <span className="text-muted">No Rahu / AVOID block</span>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
 
+export function PlaybookNotes({ book }: { book: DayForecast }) {
+  const pan = book.panchang;
+  return (
+    <div className="ko-book">
       <p className="ko-copy">{book.gap.summary}</p>
       {book.gap.thesisNote ? <p className="ko-copy">{book.gap.thesisNote}</p> : null}
       {book.gap.sectorNote ? <p className="ko-copy text-muted">{book.gap.sectorNote}</p> : null}
       {book.gap.firstHourNote ? <p className="ko-copy">{book.gap.firstHourNote}</p> : null}
 
-      <h3 className="ko-sec">Day’s playbook</h3>
-      <div className="ko-scroll">
-        <table className="ko-table">
-          <thead>
-            <tr>
-              <th>Role</th>
-              <th>Time</th>
-              <th>Type</th>
-              <th>Play</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plays.map((row) => (
-              <tr key={row.role} style={{ cursor: "default" }}>
-                <td>{row.role}</td>
-                <td>{row.slot ? `${row.slot.from} – ${row.slot.to}` : "—"}</td>
-                <td>{row.slot ? <span className={sideClass(row.slot.side)}>{row.slot.side}</span> : "—"}</td>
-                <td className={row.slot ? actionTone(row.slot.action, row.slot.side) : "text-muted"}>
-                  {row.slot ? row.slot.action : "—"}
-                </td>
-                <td className="text-muted">{row.note}</td>
-              </tr>
-            ))}
-            {avoid.map((row) => (
-              <tr key={`avoid-${row.fromMin}`} style={{ cursor: "default" }}>
-                <td>Avoid</td>
-                <td>
-                  {row.from} – {row.to}
-                </td>
-                <td>
-                  <span className={sideClass(row.side)}>{row.side}</span>
-                </td>
-                <td className="text-muted">{row.action}</td>
-                <td className="text-muted">{row.why}</td>
-              </tr>
-            ))}
-            {!avoid.length ? (
-              <tr style={{ cursor: "default" }}>
-                <td>Avoid</td>
-                <td>—</td>
-                <td>—</td>
-                <td className="text-muted">—</td>
-                <td className="text-muted">No Rahu / AVOID block on the 30-min grid.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-
       {(book.gap.yogas.length > 0 || book.gap.eclipse || book.gap.gandanta) && (
-        <p className="ko-sub" style={{ marginTop: 12 }}>
+        <p className="ko-sub">
           {book.gap.eclipse ? "Eclipse corridor · " : ""}
           {book.gap.gandanta ? "Gandanta · " : ""}
           {book.gap.yogas.length ? `Yogas: ${book.gap.yogas.join(", ")}` : null}
         </p>
       )}
 
-      <h3 className="ko-sec">Notes</h3>
       <ul className="ko-notes">
         {book.gap.reasons.map((r) => (
           <li key={r}>{r}</li>
@@ -286,5 +276,14 @@ export function PlaybookBoard({ book }: { book: DayForecast }) {
         </table>
       </div>
     </div>
+  );
+}
+
+export function PlaybookBoard({ book, onPick }: { book: DayForecast; onPick?: (slot: WindowSlot) => void }) {
+  return (
+    <>
+      <PlaybookStrip book={book} onPick={onPick} />
+      <PlaybookNotes book={book} />
+    </>
   );
 }
