@@ -188,7 +188,12 @@ export function GammaMoveSettings() {
             ? `all ${eligible.length} high-liquidity stocks`
             : `${cfg.scan_stocks.length} of ${eligible.length} stocks`)
           : 'indices only'}
-        persistKey="gamma-universe"
+        // NOT "gamma-universe". That was this section's key when it was called
+        // "Universe", and Section persists open/closed under the key: a reader
+        // who had collapsed Universe would find Instruments collapsed too, and
+        // `defaultOpen` cannot override a stored choice. A renamed section is a
+        // different section and must not inherit the old one's state.
+        persistKey="gamma-instruments"
         defaultOpen
       >
         <ConfigNote>
