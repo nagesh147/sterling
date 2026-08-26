@@ -97,6 +97,18 @@ class ATMPremiumImbalanceStrategy:
     quantity: int
     trade_id: str = "apiTrade"
     manual_table: Optional[ManualPriceTable] = None
+    #: Whether orders from this strategy will actually reach the exchange.
+    #:
+    #: Set by the runner from ``account.is_paper`` -- the one authority for Kite
+    #: paper/live -- and NOT from ``cfg.execution_mode``. Those two can disagree,
+    #: and when they did the wrong one won: pricing proof was demanded on the
+    #: config's idea of live, so a config left on "paper" against a live account
+    #: would price a REAL order off a quote that cannot be dated to this session.
+    #: That is precisely the failure this strategy was reconstructed from.
+    #:
+    #: Defaults False so replay and conformance runs keep reproducing the
+    #: recorded bot, which did price off undatable quotes. Live paths must set it.
+    live: bool = False
 
     phase: Phase = Phase.IDLE
     trades_taken: int = 0
@@ -289,7 +301,7 @@ class ATMPremiumImbalanceStrategy:
             first_tick_price=self._pricing_reference(leg.option_type),
             official_open=self.cache.official_open_for(
                 leg.option_type, self.session_open_ms,
-                require_proof=self.cfg.execution_mode == "live",
+                require_proof=self.live,
             ),
             manual_table=self.manual_table,
         )
@@ -298,12 +310,14 @@ class ATMPremiumImbalanceStrategy:
         """The first price this leg may be priced from.
 
         Mirrors the signal gate exactly: a proven previous-session price is never
-        used; an undatable one is used only outside live mode.
+        used; an undatable one is used only when the order cannot reach the
+        exchange -- which is `self.live`, read from the account, not a config
+        field that can disagree with it.
         """
         if self.cfg.require_session_origin_tick and self.session_open_ms is not None:
             return self.cache.first_session_price_for(
                 option_type, self.session_open_ms,
-                require_proof=self.cfg.execution_mode == "live",
+                require_proof=self.live,
             )
         return self.cache.first_price_for(option_type)
 

@@ -21,6 +21,7 @@ const DEFAULTS: AtmPremiumImbalanceConfig = {
   enabled: false,
   underlying: 'SENSEX',
   expiry_policy: 'NEAREST',
+  expiry_dte_min: 0, expiry_dte_max: 60, avoid_expiry_day: false,
   explicit_expiry: '',
   strike_policy: 'ATM_NEAREST',
   session_start: '09:15',
@@ -279,3 +280,38 @@ describe('the session window', () => {
   });
 });
 
+
+describe('AtmPremiumImbalanceSettings — shared contract settings', () => {
+  it('shows the same three expiry controls every other engine has', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    const text = document.body.textContent ?? '';
+    for (const label of ['Minimum days to expiry', 'Maximum days to expiry',
+                         'Expiry day']) {
+      expect(text).toContain(label);
+    }
+    // Switch renders its label as aria-label, not visible text — asserting on
+    // textContent would pass or fail for the wrong reason.
+    expect(screen.getByRole('switch', { name: /avoid expiry-day entries/i })).toBeTruthy();
+  });
+
+  it('opens the Contracts section rather than hiding it behind a disclosure', () => {
+    /* Section is a <details>, so its children are in the DOM whether it is open
+       or shut. A test that only checks textContent would pass on a section
+       nobody can see — which is exactly the report this test exists for. */
+    render(<AtmPremiumImbalanceSettings />);
+    const heading = [...document.querySelectorAll('summary')]
+      .find((el) => /Contracts/.test(el.textContent ?? ''));
+    expect(heading).toBeTruthy();
+    expect((heading!.closest('details') as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('presents Instruments before Contracts and drops "Universe"', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    const text = document.body.textContent ?? '';
+    const instruments = text.indexOf('Instruments');
+    const contracts = text.indexOf('Contracts');
+    expect(instruments).toBeGreaterThan(-1);
+    expect(contracts).toBeGreaterThan(instruments);
+    expect(text).not.toContain('Universe');
+  });
+});

@@ -61,19 +61,6 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id            TEXT PRIMARY KEY,
-            username      TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL DEFAULT '',
-            role          TEXT NOT NULL DEFAULT 'user',
-            is_active     INTEGER NOT NULL DEFAULT 1,
-            token_version INTEGER NOT NULL DEFAULT 1,
-            created_at_ms INTEGER NOT NULL,
-            updated_at_ms INTEGER NOT NULL
-        )
-    """)
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)")
-    conn.execute("""
         CREATE TABLE IF NOT EXISTS webhooks (
             id               TEXT PRIMARY KEY,
             name             TEXT NOT NULL,

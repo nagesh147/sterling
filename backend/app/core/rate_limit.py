@@ -46,7 +46,6 @@ class SlidingWindowRateLimiter:
 _run_all_limiter = SlidingWindowRateLimiter(max_calls=6, window_seconds=60)      # 6/min
 _run_once_limiter = SlidingWindowRateLimiter(max_calls=20, window_seconds=60)    # 20/min
 _backtest_limiter = SlidingWindowRateLimiter(max_calls=10, window_seconds=60)    # 10/min
-_login_limiter = SlidingWindowRateLimiter(max_calls=5, window_seconds=60)        # 5/min
 
 
 def _is_production() -> bool:
@@ -92,17 +91,4 @@ def check_backtest(request: Request) -> None:
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded: backtest max 10/min.",
-        )
-
-
-def check_login(request: Request) -> None:
-    """Brute-force guard on authentication. Unlike the others this runs in ALL
-    environments — credential stuffing is a threat in dev too, and login is cheap
-    to protect. 5 attempts / 60 s per client IP."""
-    key = _client_key(request)
-    if not _login_limiter.is_allowed(key):
-        raise HTTPException(
-            status_code=429,
-            detail="Too many login attempts; please retry shortly.",
-            headers={"Retry-After": "60"},
         )

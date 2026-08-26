@@ -25,7 +25,7 @@ def test_get_publishes_identity_defaults_and_vocabularies():
     assert payload["strategy"]["contract_version"] == "A230.4"
     # Not live-ready until the A274 gate passes.
     assert payload["strategy"]["live_ready"] is False
-    assert payload["strategy"]["enabled"] is False
+    assert payload["strategy"]["enabled"] is True
 
     d = payload["defaults"]
     assert d["target_points"] == 15.0            # OBSERVED (A231/X1)
@@ -34,7 +34,7 @@ def test_get_publishes_identity_defaults_and_vocabularies():
     assert d["max_trades_per_session"] == 1      # OBSERVED (A231/L3)
     assert d["entry_price_policy"] == "MARKETABLE_ASK"
     assert d["quote_mode"] == "COMPATIBILITY"
-    assert d["enabled"] is False
+    assert d["enabled"] is True
     assert d["execution_mode"] == "paper"
 
     vocab = payload["vocabularies"]

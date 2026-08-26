@@ -23,6 +23,7 @@ import { DataLakeSettingsPanel } from '../datalake/DataLakeSettingsPanel';
 import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
 import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
+import { GammaMoveSettingsPanel } from './GammaMoveSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -840,6 +841,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   adaptiveEdge: <Icons.Chart />,
   orbOptions: <Icons.Chart />,
   atmPremiumImbalance: <Icons.Chart />,
+  gammaMove: <Icons.Pulse />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -869,6 +871,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Opening-range breakout with VWAP confirmation. Buys calls on LONG and puts on SHORT; never sells options. Paper/live and manual/auto stay with Trading Mode.' },
   { id: 'atmPremiumImbalance', label: 'ATM Premium Imbalance', eyebrow: 'Cheaper ATM leg at the open, +15 points', group: 'Signal engines',
     pageDescription: 'Buys whichever at-the-money leg is cheaper at the session open and exits at the entry fill plus a fixed target. Reverse-engineered from recordings and not yet validated, so it stays paper-only until the readiness gate passes.' },
+  { id: 'gammaMove', label: 'Gamma Move', eyebrow: 'OI unwind at a level, buy the gamma', group: 'Signal engines',
+    pageDescription: 'Buys the option that writers are covering: an F&O stock at a support or resistance level, the highest open-interest strike there, entered when open interest falls while volume and premium rise on the same 15-minute bar. Held one to two sessions. Calibrated against real market data, which found the entry trigger alone has no edge — the level filter is where it is — so it stays paper-only until the readiness gate passes.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -1107,6 +1111,12 @@ export function ConnectPane() {
             {section === 'atmPremiumImbalance' && (
               <>
                 <AtmPremiumImbalanceSettingsPanel />
+              </>
+            )}
+
+            {section === 'gammaMove' && (
+              <>
+                <GammaMoveSettingsPanel />
               </>
             )}
 

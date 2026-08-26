@@ -1,26 +1,7 @@
-import os
-
-# ── Auth test posture (set BEFORE any app import) ─────────────────────────────
-# Fixed keys so JWT mint/verify and at-rest encryption are stable within a run;
-# a known bootstrap admin (id="default") so real-auth tests can log in. These are
-# test-only values, never used outside pytest.
-os.environ.setdefault("STERLING_SECRET_KEY", "test-secret-key-fixed-0123456789-abcdefghij")
-os.environ.setdefault("STERLING_JWT_SECRET", "test-jwt-secret-fixed-0123456789-abcdefghij")
-os.environ.setdefault("STERLING_ADMIN_USERNAME", "testadmin")
-os.environ.setdefault("STERLING_ADMIN_PASSWORD", "test-admin-password-xyz-123")
-
 import numpy as np
 import pytest
 from typing import List
 from app.schemas.market import Candle
-
-
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers",
-        "real_auth: exercise the real JWT auth gate (skip the fake-identity "
-        "fixture so 401/403 enforcement can be asserted)",
-    )
 
 
 def make_candles(n: int = 100, base: float = 30000.0, trend: float = 10.0) -> List[Candle]:
@@ -73,21 +54,6 @@ def _reset_exchange_store(eas) -> None:
     eas.bootstrap()
 
 
-def _reset_user_store() -> None:
-    """Reset the users table + in-memory store, then reseed the bootstrap admin."""
-    from app.services import db
-    from app.services.auth import user_store
-
-    try:
-        if db._available:
-            with db._conn() as connection:
-                connection.execute("DELETE FROM users")
-    except Exception:
-        pass
-    user_store.clear()
-    user_store.bootstrap()
-
-
 @pytest.fixture(autouse=True)
 def reset_global_stores():
     """Reset every module-level and persisted mutable test store."""
@@ -111,7 +77,6 @@ def reset_global_stores():
     webhook_store.clear()
     webhook_store._loaded = True
     _reset_exchange_store(eas)
-    _reset_user_store()
     kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
@@ -127,55 +92,7 @@ def reset_global_stores():
     pnl_history.clear()
     webhook_store.clear()
     _reset_exchange_store(eas)
-    _reset_user_store()
     kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
     _SIGNAL_CACHE.clear()
-
-
-@pytest.fixture(autouse=True)
-def _fake_auth(request, monkeypatch):
-    """Neutralize the global auth gate for the vast majority of tests, which
-    predate auth and assume an implicit ``"default"`` identity.
-
-    We replace the single identity seam ``auth.authenticate_request`` with one
-    that reads the legacy ``X-User-Id`` header (so the existing multi-tenant
-    isolation tests still switch tenants) and always resolves to an admin. This
-    is the test analogue of ``app.dependency_overrides`` — the production code
-    keeps NO header path. Tests marked ``real_auth`` opt out and exercise the
-    real JWT gate (to assert 401/403)."""
-    if "real_auth" in request.keywords:
-        return
-    from app.core import auth
-
-    async def _fake(req):
-        uid = (req.headers.get("X-User-Id") or "").strip() or auth.DEFAULT_USER_ID
-        return auth.UserContext(user_id=uid, username=uid, role="admin")
-
-    monkeypatch.setattr(auth, "authenticate_request", _fake)
-
-
-@pytest.fixture
-def real_admin_token():
-    """A genuine signed access token for the seeded bootstrap admin. Use in
-    ``real_auth``-marked tests."""
-    from app.core import tokens
-    from app.services.auth import user_store
-    u = user_store.get_by_id(user_store.DEFAULT_ADMIN_ID)
-    assert u is not None, "bootstrap admin not seeded"
-    return tokens.mint_access(u.id, u.username, u.role, u.token_version)
-
-
-@pytest.fixture
-def auth_headers(real_admin_token):
-    return {"Authorization": f"Bearer {real_admin_token}"}
-
-
-@pytest.fixture
-def unauth_client():
-    """A TestClient with the real auth gate active (no fake identity). Pair with
-    ``@pytest.mark.real_auth``."""
-    from fastapi.testclient import TestClient
-    from main import create_app
-    return TestClient(create_app())

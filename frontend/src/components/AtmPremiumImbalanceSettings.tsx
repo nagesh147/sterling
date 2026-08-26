@@ -185,10 +185,10 @@ export function AtmPremiumImbalanceSettings() {
       </ConfigNote>
 
       <Section
-        title="Universe"
-        description="Which index, which expiry, and which strike the two legs come from."
-        summary={`${cfg.underlying} · ${cfg.expiry_policy} · ${cfg.strike_policy}`}
-        persistKey="api-universe"
+        title="Instruments"
+        description="The index this engine watches."
+        summary={cfg.underlying}
+        persistKey="api-instruments"
         defaultOpen
       >
         <Field label="Underlying" hint="Index whose at-the-money call and put are compared.">
@@ -201,6 +201,16 @@ export function AtmPremiumImbalanceSettings() {
             }}
           />
         </Field>
+      </Section>
+
+      <Section
+        title="Contracts"
+        description="Which strike and expiry the signal is expressed through."
+        summary={`ATM · ${cfg.expiry_policy.toLowerCase().replace(/_/g, ' ')} · `
+          + `${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+        persistKey="api-contracts"
+        defaultOpen
+      >
         <Field label="Expiry" hint="Same-day refuses to arm if nothing expires today." wide>
           <ChoiceRow
             value={cfg.expiry_policy}
@@ -226,6 +236,26 @@ export function AtmPremiumImbalanceSettings() {
           hint="Nearest listed strike to the index price. Ties break to the lower strike, so replay is deterministic."
         >
           <span style={{ color: DIM, fontSize: 12 }}>ATM (nearest listed)</span>
+        </Field>
+        <NumberField
+          label="Minimum days to expiry"
+          hint="Contracts closer than this are not eligible. Applied before the expiry policy chooses, so 'nearest' means nearest ELIGIBLE."
+          value={cfg.expiry_dte_min} defaultValue={defaults.expiry_dte_min}
+          onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={60} step={1}
+        />
+        <NumberField
+          label="Maximum days to expiry"
+          hint="Contracts further out than this are not eligible."
+          value={cfg.expiry_dte_max} defaultValue={defaults.expiry_dte_max}
+          onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={365} step={1}
+        />
+        <Field label="Expiry day" hint="This strategy legitimately trades the same-day contract, so this is off by default — and turning it on alongside a same-day expiry policy is refused rather than silently leaving nothing to trade.">
+          <Switch
+            checked={cfg.avoid_expiry_day}
+            label="Avoid expiry-day entries"
+            disabled={cfg.expiry_policy === 'SAME_DAY'}
+            onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
+          />
         </Field>
         <Field label="Market data" hint="Where quotes come from." wide>
           <ChoiceRow

@@ -744,6 +744,7 @@ async def adopt(user_id: str, symbol: str,
     strategy = ATMPremiumImbalanceStrategy(
         cfg=cfg, pair=pair, quantity=match["quantity"],
         trade_id=f"adopted-{user_id}-{today.isoformat()}",
+        live=not _is_paper(user_id),
     )
     strategy.adopt_open_position(
         option_type=match["option_type"], entry_fill=match["entry_price"],
@@ -823,6 +824,7 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
     strategy = ATMPremiumImbalanceStrategy(
         cfg=cfg, pair=pair, quantity=quantity,
         trade_id=f"api-{user_id}-{today.isoformat()}",
+        live=not _is_paper(user_id),
     )
     from app.services.exchanges.kite import ticker_manager
 
@@ -859,6 +861,32 @@ async def arm(user_id: str, cfg: Optional[ATMPremiumImbalanceConfig] = None) -> 
 
 
 # ---------------------------------------------------------------- auto-arming
+
+def _is_paper(user_id: str) -> bool:
+    """The account's mode — the one authority for Kite paper/live.
+
+    Read, never stored. `cfg.execution_mode` is the operator's declared intent
+    and is used for validation; this is what actually decides whether an order
+    reaches the exchange, so it is what the pricing-proof gate follows.
+    """
+    try:
+        from app.services.exchanges.kite import accounts
+        acct = accounts.get_active(user_id)
+        return bool(getattr(acct, "is_paper", True)) if acct else True
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _auto_execute_enabled(user_id: str = "") -> bool:
+    """The engine's MANUAL/AUTO switch, shared with every Kite strategy."""
+    try:
+        from app.services.kite_engine import state as engine_state
+        uids = [user_id] if user_id else _kite_user_ids()
+        return any(bool(getattr(engine_state.get_config(u), "auto_execute", False))
+                   for u in uids)
+    except Exception:  # noqa: BLE001
+        return False
+
 
 def _kite_user_ids() -> list[str]:
     """Users with a logged-in Kite account, which is who could trade at all."""
@@ -897,6 +925,12 @@ async def auto_arm_once() -> dict[str, str]:
         log.warning("ATM PI auto-arm could not read config: %s", exc)
         return {}
     if not cfg.enabled or not cfg.size_is_set:
+        return {}
+    # MANUAL/AUTO, the same switch every other Kite strategy reads. It gates
+    # AUTOMATIC opening only: a human calling arm() from the board is an explicit
+    # act and still works in MANUAL, and nothing here touches an open position --
+    # maintaining what you already hold is not the same decision as opening.
+    if not _auto_execute_enabled():
         return {}
 
     out: dict[str, str] = {}

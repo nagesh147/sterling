@@ -334,8 +334,27 @@ export interface ContractSelection {
  * Shared by the picker's own header and by the board's summary line, so the two
  * can never disagree about how many contracts are selected.
  */
-export function useContractSelection(): ContractSelection {
-  const { data: cfg } = useEngineConfig();
+/**
+ * The contract-selection fields any engine needs to host the picker.
+ *
+ * A structural type rather than one engine's config: every option strategy
+ * stores these under the same names, so the picker can be the SAME control on
+ * each page instead of a lookalike re-implemented per strategy.
+ */
+export interface ContractSelectionConfig {
+  scan_indices: string[];
+  scan_stocks: string[];
+  scan_all_stocks: boolean;
+  scan_weekly_series_indices?: number[];
+  scan_monthly_series_indices?: number[];
+  scan_monthly_series_stocks?: number[];
+}
+
+export function useContractSelection(override?: ContractSelectionConfig | null): ContractSelection {
+  const { data: engineCfg } = useEngineConfig();
+  // Passed config wins; falling back to the engine's keeps every existing
+  // caller working unchanged.
+  const cfg = override ?? engineCfg;
   const calendar = useExpiryCalendar();
 
   if (calendar.isLoading && !calendar.data) {

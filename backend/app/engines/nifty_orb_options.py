@@ -16,9 +16,11 @@ IST = ZoneInfo("Asia/Kolkata")
 Direction = Literal["LONG", "SHORT", "NONE"]
 Regime = Literal["EXPANSION", "TREND", "RANGE", "UNKNOWN"]
 
-#: Canonical expiry-preference vocabulary shared by the engine and every provider.
-EXPIRY_SELECTIONS = frozenset({"nearest", "weekly", "monthly", "any"})
-MONEYNESS = frozenset({"ATM", "ITM", "OTM"})
+#: Canonical expiry-preference vocabulary shared by the engine and every
+#: provider. Defined once in `app.engines.option_contracts` and re-exported here
+#: so existing importers keep working -- the point is that every engine uses the
+#: same object, not merely an equal one.
+from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES, MONEYNESS  # noqa: E402,F401
 
 
 @dataclass(frozen=True)
@@ -33,7 +35,16 @@ class Bar:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    enabled: bool = False
+    #: Whether this engine scans at all. Defaults ON, matching the other option
+    #: engines.
+    #:
+    #: A power switch, not a safety device. Opening a position additionally
+    #: requires the engine's MANUAL/AUTO switch: `nifty_orb_execution.execute_scan`
+    #: returns `{"status": "advisory"}` without placing anything unless
+    #: `auto_execute` is on, so `enabled` alone means "scan and advise". And
+    #: whether an order reaches the exchange is `account.is_paper`, which this
+    #: strategy has never carried a copy of.
+    enabled: bool = True
     underlying: str = "NIFTY"
     scan_indices: tuple[str, ...] = ("NIFTY",)
     scan_stocks: tuple[str, ...] = ()

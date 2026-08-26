@@ -17,7 +17,8 @@
  */
 import type { Stat } from './StatCard';
 
-export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb' | 'atm_premium_imbalance';
+export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb'
+  | 'atm_premium_imbalance' | 'gamma_move';
 
 export const ENGINE_LABEL: Record<EngineId, string> = {
   supertrend: 'SuperTrend',
@@ -25,6 +26,7 @@ export const ENGINE_LABEL: Record<EngineId, string> = {
   adaptive_edge: 'Adaptive Edge',
   orb: 'ORB + VWAP',
   atm_premium_imbalance: 'ATM Premium Imbalance',
+  gamma_move: 'Gamma Move',
 };
 
 /** Short form for a badge, where the full name will not fit. */
@@ -34,6 +36,7 @@ export const ENGINE_TAG: Record<EngineId, string> = {
   adaptive_edge: 'AE',
   orb: 'ORB',
   atm_premium_imbalance: 'API',
+  gamma_move: 'GM',
 };
 
 /**
@@ -73,9 +76,11 @@ export type Direction = 'long' | 'short';
  * microstructure model from a plain spot scan. ORB distinguishes which feed the
  * numbers came from, because it is configurable and the two do not agree. ATM
  * distinguishes whether the quote behind the price traded in this session at
- * all, which is the rule its whole strategy turns on.
+ * all, which is the rule its whole strategy turns on. Gamma Move names which of
+ * its three entry conditions is carrying the signal, because "no signal" there
+ * can mean three different things and only one is worth waiting on.
  *
- * Same slot on the row, four different meanings — which is the point. A shared
+ * Same slot on the row, five different meanings — which is the point. A shared
  * badge that said the same thing everywhere would be decoration.
  */
 export interface BoardOrigin {
