@@ -196,7 +196,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-play-meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:13px;color:var(--k-text)}
 .ko-play-meta .lbl{color:var(--k-dim);margin-right:7px;font-size:12px}
 .ko-play-meta b{font-weight:500}
-.ko-play-roles{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.ko-play-roles{display:flex;flex-direction:column;gap:10px;margin-top:0}
 @media(min-width:801px){.ko-play-roles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 24px}}
 .ko-play-roles button,.ko-play-roles>div{border:0;background:none;text-align:left;padding:0;font-size:13px;color:var(--k-text);font-family:inherit;cursor:pointer}
 .ko-play-roles button:disabled{cursor:default;opacity:1}
@@ -401,7 +401,7 @@ export function AstroPane() {
             grade={liveGrade}
             viewingIso={iso}
             board={board}
-            bellTithi={book.panchang.tithiName}
+            sessionPnl={tally.directional ? tally.pnl : null}
             onOpenSession={(date) => {
               applyIso(date);
               setTab('timings');
@@ -418,15 +418,12 @@ export function AstroPane() {
           <PlaybookStrip
             book={book}
             onPick={pickSlot}
-            live={status?.phase === 'live' || status?.phase === 'post'}
-            nowMin={nowMin}
+            live={(status?.phase === 'live' || status?.phase === 'post') && iso === status.sessionIso}
+            nowMin={sameDay ? nowMin : null}
           />
         ) : null}
 
         <p className="ko-sub">
-          {status && status.tithiName !== book.panchang.tithiName
-            ? `Tithi now ${status.tithiName} · bell was ${book.panchang.tithiName}. `
-            : null}
           <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>{notes ? 'Hide notes' : 'View notes'}</button>
         </p>
         {notes ? <PlaybookNotes book={book} /> : null}
