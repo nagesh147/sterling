@@ -2220,12 +2220,29 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 ].map((col) => ({
                   id: col.key,
                   // `dir` is an unlabelled arrow in the header, so the menu has to
-                  // name it — an unnamed checkbox is not a choice.
-                  label: col.label || 'Direction',
+                  // name it — an unnamed checkbox is not a choice. "arrow"
+                  // because the entry below governs the colours, and two items
+                  // both called Direction would be a coin toss.
+                  label: col.label || 'Direction arrow',
                   on: !s.hiddenSignalCols.includes(col.key),
                   toggle: () => s.toggleSignalCol(col.key),
-                }))}
-                onShowAll={s.showAllSignalCols}
+                })).concat([{
+                  // Not a column — a display option, and the only one that was
+                  // lost when this table stopped offering the watchlist's gear.
+                  // It tints LTP and Chg. green or red by the move, which the
+                  // table has always honoured; there was simply no longer
+                  // anywhere to switch it. The COLUMNS menu is where this table
+                  // keeps its other per-column display choices, so it goes here.
+                  id: 'showPriceDirection',
+                  label: 'Direction colours',
+                  on: s.showPriceDirection,
+                  toggle: () => s.toggleShow('showPriceDirection'),
+                }])}
+                onShowAll={() => {
+                  s.showAllSignalCols();
+                  // "Show all" that left the colours off would be a lie.
+                  if (!s.showPriceDirection) s.toggleShow('showPriceDirection');
+                }}
               />
               <FilterToggle
                 on={bestOnly}
@@ -2307,11 +2324,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           position: relative;
           background: ${k.bg};
         }
-        .st-parent-header:hover,
-        .st-leg-row:hover,
-        .st-group-header:hover {
-          background: ${k.surfaceHover} !important;
-        }
+        /* Row hover, focus and active now come from styles/globals.css, which
+           states them once for this table's rows and the shared board's. This
+           table used to declare a bare :hover here with no transition, focus or
+           active state, so its highlight snapped on and keyboard focus showed
+           nothing -- on one table only. */
 
         .col-drag-over {
           box-shadow: inset 2px 0 0 0 ${k.blue};

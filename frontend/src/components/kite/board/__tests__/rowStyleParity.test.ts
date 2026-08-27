@@ -199,3 +199,76 @@ describe('the toolbar row matches the shared filter bar', () => {
     expect(superTrend).toContain("padding: '5px 10px'");
   });
 });
+
+/**
+ * Hover, focus and the row background.
+ *
+ * The largest remaining difference was not in either component. A global
+ * stylesheet, `kiteSignalTypography.css`, forced
+ *
+ *     .st-leg-row > span:first-child { font-weight: 100 !important; }
+ *
+ * on SuperTrend's instrument cell, so it rendered ultra-thin while the shared
+ * board renders the same cell at 700 — and no inline `fontWeight` could win
+ * against the `!important`. Setting the weight in the component looked correct
+ * and did nothing. Its companion rule matched no element at all: the class in
+ * the markup is `st-prices-parent`, not `st-prices`.
+ *
+ * Read from the stylesheet, because that is where the bug was: a component-only
+ * check passes while the rendered table is still wrong.
+ */
+// Read from disk, not via `?raw`: vitest stubs CSS imports here, so `?raw` on a
+// stylesheet returns an empty string and every assertion below would pass
+// vacuously. There is no @types/node in this tsconfig, hence the narrow
+// suppression -- readFileSync is the only thing needed from it.
+// @ts-expect-error - no @types/node; see above.
+import { readFileSync } from 'node:fs';
+
+// Relative to the working directory, which vitest sets to the package root.
+// `import.meta.url` is no good here: under vite its pathname is root-relative
+// ("/src/components/...") rather than a filesystem path, so resolving against it
+// produced "/src/styles/globals.css" and an ENOENT.
+const globalsCss: string = (() => {
+  for (const path of ['src/styles/globals.css', 'frontend/src/styles/globals.css']) {
+    try { return readFileSync(path, 'utf8'); } catch { /* try the next root */ }
+  }
+  throw new Error('globals.css not found from the test working directory');
+})();
+
+describe('no stylesheet overrides the row type', () => {
+  it('does not force a font weight on SuperTrend rows', () => {
+    expect(globalsCss).not.toMatch(/\.st-leg-row[^{]*\{[^}]*font-weight/);
+  });
+
+  it('has no stylesheet left that thins the instrument cell', () => {
+    // The whole file is gone. If it returns, so does the bug.
+    expect(globalsCss).not.toContain('font-weight: 100');
+  });
+});
+
+describe('both tables share hover, focus and active', () => {
+  const rowStates = (() => {
+    const start = globalsCss.indexOf('.sb-row,');
+    expect(start).toBeGreaterThan(-1);
+    return globalsCss.slice(start, globalsCss.indexOf('/* ── Engine toolbar', start));
+  })();
+
+  it('states them once, for both tables’ rows', () => {
+    for (const sel of ['.sb-row', '.st-leg-row', '.st-parent-header', '.st-group-header']) {
+      expect(rowStates, `${sel} hover`).toContain(`${sel}:hover`);
+      expect(rowStates, `${sel} focus`).toContain(`${sel}:focus-visible`);
+      expect(rowStates, `${sel} active`).toContain(`${sel}:active`);
+    }
+  });
+
+  it('gives SuperTrend the transition it never had', () => {
+    // Its old rule was a bare :hover, so the highlight snapped on where the
+    // shared board's eases.
+    expect(rowStates).toMatch(/transition: background \.12s ease/);
+    expect(rowStates).toContain('prefers-reduced-motion');
+  });
+
+  it('no longer declares hover locally in the component', () => {
+    expect(superTrend).not.toContain('.st-leg-row:hover');
+  });
+});
