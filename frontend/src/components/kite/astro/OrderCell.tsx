@@ -141,7 +141,10 @@ export function OrderCell({
     setPending(kind);
   };
 
-  if (!focus || plan.kind === "sit") {
+  if (plan.kind === "sit") {
+    return <span className="text-muted">—</span>;
+  }
+  if (plan.kind !== "buy" && !focus) {
     const markText = buy?.short && buy.short !== "—" ? buy.short : "—";
     return <span className={markText === "—" ? "text-muted" : "ko-buy-mark"}>{markText}</span>;
   }
