@@ -67,6 +67,30 @@ The classic misconfiguration is an expiry window that excludes everything, which
 otherwise looks identical to a quiet market. `validate()` rejects the worst case
 (`avoid_expiry_day` with `expiry_dte_max = 0`) outright.
 
+## What tomorrow's session produces
+
+Nothing arms, but the session is not wasted. Every candidate the scan surfaces is
+recorded as an **observation** — the contract, its premium, OI, volume, spread,
+spot and days to expiry, at that moment. Those rows are what the walk-forward
+calibration consumes.
+
+This is deliberate, and it is why the engine does not simply enter on the gates
+it *can* evaluate. §35 needs `DirectionalEdgeOK` and both expected-value terms,
+and all three come from the probability model calibration has to supply. The
+remaining gates — data, liquidity, slippage, risk — would mean "enter on any
+liquid contract", which is not a strategy and would fill the record with noise
+instead of evidence. Calibration does not need trades; it needs observations
+paired with what happened next.
+
+Check what a day collected:
+
+```bash
+curl -s localhost:8000/api/v1/config/adaptive-edge/snapshot | jq '.session.observations'
+```
+
+Outcomes are written back onto the observation they belong to, never appended as
+a second row — that would silently double the day's sample size.
+
 ## Settings
 
 Two surfaces, one source of truth.

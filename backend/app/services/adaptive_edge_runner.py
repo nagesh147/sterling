@@ -138,6 +138,7 @@ class Session:
     scans: int = 0
     signals: int = 0
     armed: int = 0
+    observations: int = 0
     blocked: dict[str, int] = field(default_factory=dict)
     watched: set = field(default_factory=set)
 
@@ -179,6 +180,7 @@ def session_status(uid: str) -> Optional[dict[str, Any]]:
         "scans": session.scans,
         "signals": session.signals,
         "armed": session.armed,
+        "observations": session.observations,
         "blocked": dict(session.blocked),
         "open_positions": len(open_positions(uid)),
         "is_paper": is_paper(uid),
@@ -218,10 +220,24 @@ async def scan_once(uid: str) -> dict[str, Any]:
             return state
 
         session.scans += 1
-        signals = _signals_from(result.get("candidates") or [], cfg)
+        candidates = result.get("candidates") or []
+        signals = _signals_from(candidates, cfg)
         session.signals += len(signals)
 
-        state = {**result, "signals": signals, "server_time_ms": ist_now_ms()}
+        # Nothing arms yet, so recording what the engine saw is the only way a
+        # paper session produces anything the calibration can use. Never let a
+        # storage problem take the scan down with it.
+        observed = 0
+        try:
+            from app.services import adaptive_edge_observations as observations
+            observed = observations.record(uid, str(ist_today()), candidates,
+                                           observed_ms=ist_now_ms())
+            session.observations += observed
+        except Exception:                                          # noqa: BLE001
+            log.exception("adaptive_edge: could not record observations for %s", uid)
+
+        state = {**result, "signals": signals, "observed": observed,
+                 "server_time_ms": ist_now_ms()}
         _scan_states[uid] = state
         return state
 

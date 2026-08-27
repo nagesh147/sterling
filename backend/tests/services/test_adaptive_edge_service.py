@@ -416,3 +416,77 @@ def test_session_status_reports_the_live_block():
     assert status["live_blocked"] is True
     assert status["live_blocked_reason"] == "strategy_promotion_required"
     runner.clear("u1")
+
+
+# ----------------------------------------------------------- observations
+
+@pytest.fixture
+def observation_store(monkeypatch):
+    store: dict[str, str] = {}
+    import app.services.db as db
+    monkeypatch.setattr(db, "get_config", lambda key, default="": store.get(key, default))
+    monkeypatch.setattr(db, "set_config", lambda key, value: store.__setitem__(key, value))
+    return store
+
+
+def _candidate(symbol="NIFTY26090325000CE", **over):
+    row = {"underlying": "NIFTY", "symbol": symbol, "token": 1, "option_type": "CE",
+           "strike": 25000.0, "dte": 7, "spot": 25000.0, "last_price": 120.0,
+           "oi": 60000.0, "volume": 5000.0, "bid": 119.0, "ask": 121.0}
+    row.update(over)
+    return row
+
+
+def test_observations_are_recorded_so_a_paper_session_is_not_wasted(observation_store):
+    from app.services import adaptive_edge_observations as obs
+    assert obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000) == 1
+    assert obs.summary("u1", "2026-08-27")["observations"] == 1
+
+
+def test_the_same_candidate_in_the_same_scan_is_not_recorded_twice(observation_store):
+    """Scans repeat every 60s and re-surface the same contract."""
+    from app.services import adaptive_edge_observations as obs
+    obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000)
+    assert obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000) == 0
+    assert obs.summary("u1", "2026-08-27")["observations"] == 1
+
+
+def test_the_same_contract_at_a_later_time_is_a_new_observation(observation_store):
+    from app.services import adaptive_edge_observations as obs
+    obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000)
+    obs.record("u1", "2026-08-27", [_candidate()], observed_ms=2000)
+    assert obs.summary("u1", "2026-08-27")["observations"] == 2
+
+
+def test_an_outcome_updates_its_observation_rather_than_appending(observation_store):
+    """A second row would silently double the day's sample size."""
+    from app.services import adaptive_edge_observations as obs
+    obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000)
+    key = "NIFTY26090325000CE:1000"
+    assert obs.record_outcome("u1", "2026-08-27", key,
+                              forward_premium=150.0, horizon_bars=15) is True
+    summary = obs.summary("u1", "2026-08-27")
+    assert summary["observations"] == 1 and summary["resolved"] == 1
+    row = obs.load("u1", "2026-08-27")[0]
+    assert row["forward_return_pct"] == pytest.approx(25.0)
+
+
+def test_an_unresolved_observation_is_distinguishable_from_a_zero_return(observation_store):
+    from app.services import adaptive_edge_observations as obs
+    obs.record("u1", "2026-08-27", [_candidate()], observed_ms=1000)
+    assert obs.pending("u1", "2026-08-27")
+    obs.record_outcome("u1", "2026-08-27", "NIFTY26090325000CE:1000",
+                       forward_premium=120.0, horizon_bars=15)
+    assert obs.pending("u1", "2026-08-27") == []
+    assert obs.load("u1", "2026-08-27")[0]["forward_return_pct"] == pytest.approx(0.0)
+
+
+def test_an_outcome_for_an_unknown_observation_is_refused(observation_store):
+    from app.services import adaptive_edge_observations as obs
+    assert obs.record_outcome("u1", "2026-08-27", "NOPE:1",
+                              forward_premium=1.0, horizon_bars=1) is False
+
+
+def test_a_candidate_without_a_symbol_is_not_recorded(observation_store):
+    from app.services import adaptive_edge_observations as obs
+    assert obs.record("u1", "2026-08-27", [_candidate(symbol="")], observed_ms=1000) == 0
