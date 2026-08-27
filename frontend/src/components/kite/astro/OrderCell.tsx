@@ -154,7 +154,7 @@ export function OrderCell({
 
   return (
     <div className="ko-ord" onClick={stop}>
-      <button type="button" className={cls} onClick={go(plan.kind)} disabled={disabled} title={plan.note} aria-label={plan.label}>
+      <button type="button" className={cls} onClick={go(plan.kind)} disabled={disabled} title={plan.note} aria-label={plan.kind === "buy" ? `Buy ${plan.label}` : plan.label}>
         {resolving && plan.kind === "buy" ? "…" : plan.label}
       </button>
       {pending && (hit || held) ? (

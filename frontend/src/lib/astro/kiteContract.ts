@@ -258,7 +258,7 @@ export function planWindow(
     }
     return {
       kind: "buy",
-      label: mark ? `Buy ${mark}` : "Buy",
+      label: mark && mark !== "—" ? mark : "—",
       slPct: action.startsWith("SCALP") ? -20 : action.startsWith("HOLD") ? -15 : -25,
       tgtPct: action.startsWith("SCALP") ? 30 : action.startsWith("HOLD") ? 80 : 50,
       note: "First lot. Same-side windows trail this — they do not add.",
