@@ -3,13 +3,6 @@ import { formatIstDate, getIstParts, minutesOfDay, utcFromIstParts } from "../..
 import type { IndexPlay, LiveNow, WindowSlot } from "../../../lib/astro/types";
 import { actionTone, gapTone } from "./palette";
 
-const THESIS: Record<LiveNow["thesis"], string> = {
-  "trend-up": "Trend up",
-  "trend-down": "Trend down",
-  fade: "Fade",
-  chop: "Chop",
-};
-
 const SHORT: Record<IndexPlay["id"], string> = {
   NIFTY: "Nifty",
   BANKNIFTY: "Bank",
@@ -29,6 +22,7 @@ function fmtRemain(ms: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   if (h > 0) return `${h}h ${m}m`;
+  if (m >= 2) return `${m}m`;
   if (m > 0) return `${m}m ${pad(sec)}s`;
   return `${sec}s`;
 }
@@ -40,8 +34,8 @@ function clockIst(now: Date): string {
 }
 
 function kalamLine(k: LiveNow["kalam"]): string | null {
-  if (k.rahu) return "Rahu Kalam";
-  if (k.yamagandam) return "Yamagandam";
+  if (k.rahu) return "Rahu";
+  if (k.yamagandam) return "Yama";
   if (k.gulika) return "Gulika";
   return null;
 }
@@ -77,6 +71,7 @@ export function NowBoard({
   grade,
   viewingIso,
   board,
+  bellTithi,
   onOpenSession,
   onOpenWindow,
 }: {
@@ -85,6 +80,7 @@ export function NowBoard({
   grade?: SlotGrade;
   viewingIso: string;
   board: IndexPlay[];
+  bellTithi?: string;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -100,9 +96,27 @@ export function NowBoard({
     status.phase === "live" && status.window && status.window.toMin > status.window.fromMin
       ? Math.min(1, Math.max(0, (nowFrac - status.window.fromMin) / (status.window.toMin - status.window.fromMin)))
       : null;
+  const directional = board.filter((row) => row.side === "CE" || row.side === "PE" || row.side === "BOTH");
   const nifty = board.find((x) => x.id === "NIFTY");
   const bank = board.find((x) => x.id === "BANKNIFTY");
-  const split = Boolean(nifty && bank && nifty.side !== bank.side);
+  const split = Boolean(nifty && bank && nifty.side !== bank.side && directional.length >= 2);
+  const tithi =
+    bellTithi && bellTithi !== status.tithiName
+      ? `${status.tithiName} (bell ${bellTithi})`
+      : status.tithiName;
+  const wrongSession = viewingIso !== status.sessionIso;
+  const showJump = Boolean(status.window) && wrongSession;
+  const tape =
+    grade && (grade.kind === "LIVE" || grade.kind === "HIT" || grade.kind === "MISS") && grade.delta !== null
+      ? grade.delta
+      : null;
+
+  const when =
+    status.phase === "live" && windowLeft
+      ? [windowLeft, kalam, status.window ? `${status.window.from}–${status.window.to}` : null].filter(Boolean).join(" · ")
+      : status.phase === "pre"
+        ? "at 09:15 IST"
+        : `next ${sessionLabel(status.sessionIso)}`;
 
   return (
     <div className="ko-now">
@@ -110,70 +124,34 @@ export function NowBoard({
         <span className="ko-now-phase" data-live={status.phase === "live"}>
           {phaseLabel(status, now)}
         </span>
-        <span className="ko-now-clock">{clockIst(now)} IST</span>
+        <span className="ko-now-clock">
+          {clockIst(now)} IST
+          {tape !== null ? (
+            <span className={tape >= 0 ? "text-up" : "text-down"}>
+              {" "}
+              {tape >= 0 ? "+" : ""}
+              {tape.toFixed(0)}
+            </span>
+          ) : null}
+        </span>
       </div>
 
       <div className={`ko-now-play ${playTone}`}>
-        {status.play}
-        {status.phase === "live" && windowLeft ? (
-          <span className="ko-now-sub">
-            {" "}
-            {windowLeft} left · {status.window?.from}–{status.window?.to}
-          </span>
-        ) : (
-          <span className="ko-now-sub">
-            {" "}
-            {status.phase === "pre" ? "at 09:15 IST" : `next open ${sessionLabel(status.sessionIso)}`}
-          </span>
-        )}
+        <span>{status.play}</span>
+        <span className="ko-now-sub">{when}</span>
       </div>
 
-      <p className="ko-now-copy">
-        <span className={gtone.fg}>{status.gap.label}</span>
-        {" · "}
-        {THESIS[status.thesis]}
-        {status.regime ? ` · ${status.regime}` : ""}
-        {grade && (grade.kind === "LIVE" || grade.kind === "HIT" || grade.kind === "MISS") && grade.delta !== null ? (
-          <span className={grade.delta >= 0 ? "text-up" : "text-down"}>
-            {" "}
-            · tape {grade.delta >= 0 ? "+" : ""}
-            {grade.delta.toFixed(0)}
-          </span>
-        ) : null}
-      </p>
       <p className="ko-now-copy">{status.suggestion}</p>
 
       {split && nifty && bank ? (
         <p className="ko-now-copy">
-          Sector split · Nifty {sideMark(nifty.side)} vs Bank {sideMark(bank.side)}
+          <span className={gtone.fg}>{status.gap.label}</span>
+          {" · "}
+          {SHORT.NIFTY} {sideMark(nifty.side)} vs {SHORT.BANKNIFTY} {sideMark(bank.side)}
         </p>
-      ) : null}
-
-      <div className="ko-now-meta">
-        <span>
-          {status.hora.lord} hora · {horaLeft} left
-        </span>
-        <span>
-          Lagna {status.lagnaSign} {status.lagnaDegree.toFixed(1)}°
-        </span>
-        <span>
-          {status.tithiName} {status.paksha} · {status.nakshatra}
-        </span>
-        <span>
-          {status.yoga} · {status.choghadiya}
-          {status.choghadiyaKind === "bad" ? " · sit" : ""}
-        </span>
-        {kalam ? <span className="text-down">{kalam}</span> : null}
-        {status.next ? (
-          <span>
-            Next {status.next.from} {status.next.action}
-          </span>
-        ) : null}
-      </div>
-
-      {board.length ? (
+      ) : directional.length > 0 ? (
         <div className="ko-now-board" aria-label="Index plays">
-          {board.map((row) => (
+          {directional.map((row) => (
             <span key={row.id} className={actionTone(row.play, row.side)}>
               {SHORT[row.id]} {sideMark(row.side)}
             </span>
@@ -181,32 +159,48 @@ export function NowBoard({
         </div>
       ) : null}
 
+      <div className="ko-now-meta">
+        <span>
+          {status.hora.lord} {horaLeft}
+        </span>
+        <span>
+          {status.lagnaSign} {status.lagnaDegree.toFixed(0)}°
+        </span>
+        <span>
+          {tithi} · {status.nakshatra}
+        </span>
+        {status.choghadiyaKind === "bad" ? <span>{status.choghadiya} · sit</span> : null}
+        {status.next && status.phase === "live" && status.next.action !== status.play ? (
+          <span>
+            then {status.next.action} {status.next.from}
+          </span>
+        ) : null}
+      </div>
+
       {progress !== null ? (
         <div className="ko-now-bar" aria-hidden="true">
           <span style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       ) : null}
 
-      <div className="ko-now-actions">
-        {status.window ? (
-          <button type="button" className="ko-link" onClick={() => onOpenWindow(status.window as WindowSlot)}>
-            Jump to this window
-          </button>
-        ) : (
-          <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
-            Open {sessionLabel(status.sessionIso)}
-          </button>
-        )}
-        {viewingIso !== status.sessionIso ? (
-          status.phase === "live" ? (
-            <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
-              Switch to live session
+      {wrongSession || showJump ? (
+        <div className="ko-now-actions">
+          {showJump ? (
+            <button type="button" className="ko-link" onClick={() => onOpenWindow(status.window as WindowSlot)}>
+              Jump to this window
             </button>
-          ) : (
-            <span className="text-muted">Timings below are {sessionLabel(viewingIso)}</span>
-          )
-        ) : null}
-      </div>
+          ) : null}
+          {wrongSession ? (
+            status.phase === "live" ? (
+              <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
+                Switch to live session
+              </button>
+            ) : (
+              <span className="text-muted">Timings below are {sessionLabel(viewingIso)}</span>
+            )
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
