@@ -181,3 +181,82 @@ describe('rendering a grouped board', () => {
     expect(onOpenDetail).toHaveBeenCalled();
   });
 });
+
+/**
+ * Dates on the row, and the order of the day sections.
+ *
+ * The complaint that prompted this: an Adaptive Edge board showed no date
+ * anywhere. Two things combined to cause it. Actionable rows are hoisted into
+ * one "Live now" bucket rather than a dated one — deliberate, so a position
+ * entered last Tuesday and still running does not hide under three days of
+ * closed history — and the time column rendered only `HH:MM`. So a live row
+ * from yesterday read `09:20`, indistinguishable from this morning.
+ */
+describe('dates and day order', () => {
+  const DAY = 86_400_000;
+
+  const dated = (id: string, atMs: number, status: BoardSignal['status']): BoardSignal => ({
+    id, engine: 'adaptive_edge', underlying: 'NIFTY',
+    instrument: { symbol: `SYM${id}`, exchange: 'NFO', kind: 'option', quoteKey: 'NFO:X' },
+    direction: 'long', status, atMs,
+    levels: { ltp: 100, entry: 100, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: 1, quantity: 75, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it("shows a bare time for today, so a live board is not noisy", () => {
+    render(<SignalBoard signals={[dated('a', NOW - 3_600_000, 'running')]}
+      requested={['instrument', 'time']} nowMs={NOW} />);
+    expect(screen.getByText('09:30')).toBeTruthy();
+  });
+
+  it('carries the date when the row is not from today — the actual bug', () => {
+    // A running row from yesterday sits in "Live now", which names no date, so
+    // the cell has to.
+    render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
+      requested={['instrument', 'time']} nowMs={NOW} />);
+    expect(screen.getByText(/Yesterday 10:30/)).toBeTruthy();
+  });
+
+  it('words an older date the same way its day header would', () => {
+    render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
+      requested={['instrument', 'time']} nowMs={NOW} />);
+    // sessionDayLabel's own format, reused rather than a second formatter.
+    expect(screen.getByText(/1[0-9] Aug 10:30/)).toBeTruthy();
+  });
+
+  it('orders day sections latest to oldest', () => {
+    const { container } = render(
+      <SignalBoard
+        signals={[
+          dated('old', NOW - 3 * DAY, 'ended'),
+          dated('mid', NOW - 1 * DAY, 'ended'),
+          dated('new', NOW, 'ended'),
+        ]}
+        requested={['instrument', 'time']}
+        nowMs={NOW}
+      />,
+    );
+    const heads = [...container.querySelectorAll('*')]
+      .map((e) => e.textContent ?? '')
+      .filter((s) => s === 'Today' || s === 'Yesterday' || /^\w{3} \d+ \w{3}$/.test(s));
+    // Today must precede Yesterday, which must precede the older date.
+    expect(heads.indexOf('Today')).toBeGreaterThanOrEqual(0);
+    expect(heads.indexOf('Today')).toBeLessThan(heads.indexOf('Yesterday'));
+  });
+
+  it('sorts rows newest first inside one day', () => {
+    render(
+      <SignalBoard
+        signals={[
+          dated('early', NOW - 7_200_000, 'ended'),
+          dated('late', NOW - 1_800_000, 'ended'),
+        ]}
+        requested={['instrument', 'time']}
+        nowMs={NOW}
+      />,
+    );
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('10:00')).toBeLessThan(body.indexOf('08:30'));
+  });
+});

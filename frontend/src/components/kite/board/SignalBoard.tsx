@@ -15,7 +15,7 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayLabel, trailBreached,
+  sessionDayKey, sessionDayLabel, trailBreached,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -200,6 +200,28 @@ const STALE_AFTER_S = 15;
 const hhmm = (ms: number | null) =>
   ms == null ? '—' : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
+/**
+ * The time a signal fired, carrying its date whenever that is not today.
+ *
+ * The bare time was ambiguous in exactly the case that matters. Rows in the
+ * "Live now" bucket are grouped by being live rather than by day, so an
+ * actionable row from yesterday sat under a header that named no date beside a
+ * cell that showed only `09:20` — indistinguishable from this morning. Ended
+ * rows were fine because their day header named the date; live ones were not.
+ *
+ * Today stays bare, because repeating today's date on every row of a board an
+ * operator is watching live is noise.
+ */
+const stamp = (ms: number | null, nowMs: number) => {
+  if (ms == null) return '—';
+  const time = hhmm(ms);
+  if (sessionDayKey(ms) === sessionDayKey(nowMs)) return time;
+  // Reuses sessionDayLabel so a row's date is worded exactly like the header it
+  // would have sat under — "Yesterday 09:20", "Thu 14 Aug 09:20". Two date
+  // formatters on one board is how they end up disagreeing.
+  return `${sessionDayLabel(sessionDayKey(ms), nowMs)} ${time}`;
+};
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
@@ -246,6 +268,11 @@ function cellContent(
   onOpenDetail?: (signal: BoardSignal) => void,
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>,
   isLeg = false,
+  // Needed only by the time column, which words a row's date the same way the
+  // day header would. Passed rather than read from the clock so a re-render at
+  // midnight cannot disagree with the grouping — same reason sessionDayLabel
+  // takes it.
+  nowMs = Date.now(),
 ): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
@@ -437,8 +464,8 @@ function cellContent(
       const stale = signal.quoteAgeS != null && signal.quoteAgeS > STALE_AFTER_S;
       return {
         node: stale
-          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{hhmm(signal.atMs)} · stale</span>
-          : hhmm(signal.atMs),
+          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{stamp(signal.atMs, nowMs)} · stale</span>
+          : stamp(signal.atMs, nowMs),
         color: stale ? k.red : k.dim,
       };
     }
@@ -604,7 +631,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
 
 function Row({
   signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
-  depth = 0, legCount, marks,
+  depth = 0, legCount, marks, nowMs,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -620,6 +647,8 @@ function Row({
   legCount?: number;
   /** Which of its siblings' comparisons this leg wins. */
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>;
+  /** The board's clock, so the time column can word a date like its day header. */
+  nowMs: number;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
@@ -677,7 +706,7 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs);
           const isName = col.id === 'instrument';
           return (
             <span
@@ -879,6 +908,7 @@ export function SignalBoard({
             if (!legs.length) {
               return (
                 <Row
+                  nowMs={nowMs}
                   key={signal.id}
                   signal={signal}
                   columns={cols}
@@ -908,6 +938,7 @@ export function SignalBoard({
                 />
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
+                    nowMs={nowMs}
                     key={leg.id}
                     marks={legMarks.get(leg.id)}
                     signal={leg}
