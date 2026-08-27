@@ -157,11 +157,14 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 
 .kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
 .ko-desk{display:block}
-.ko-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,max-content);gap:8px 24px;align-items:start;margin:0 0 8px}
-.ko-hero-main{min-width:0}
-.ko-rail{display:block;min-width:0;width:auto;max-width:100%;position:static}
-.ko-rail .ko-date{width:100%;justify-content:center;margin:0 0 2px}
-.ko-rail .ko-ins{width:100%;justify-content:center;gap:10px;padding:0 0 8px}
+.ko-hero{display:grid;grid-template-columns:minmax(0,1fr) max-content;grid-template-areas:"now nav" "tape cal";gap:8px 24px;align-items:start;margin:0 0 12px}
+.ko-hero-main{grid-area:now;min-width:0}
+.ko-rail-nav{grid-area:nav}
+.ko-hero > .ko-strip{grid-area:tape;min-width:0;margin:0}
+.ko-rail{grid-area:cal;display:block;min-width:0;width:auto;max-width:100%;position:static}
+.ko-hero:not([data-has-tape="true"]){grid-template-areas:"now nav" "now cal"}
+.ko-rail-nav .ko-date{width:100%;justify-content:center;margin:0}
+.ko-rail-nav .ko-ins{width:100%;justify-content:center;gap:10px;padding:0 0 4px}
 .ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
 .ko-rail-head span{flex:1;text-align:center;font-weight:500}
 .ko-tally{margin-left:14px;font-size:12px;color:var(--k-dim)}
@@ -183,8 +186,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
 .ko-desk[data-tab="month"]{display:block}
 @media(max-width:1099px){
-  .ko-hero{grid-template-columns:1fr}
-  .ko-rail{width:auto;max-width:none}
+  .ko-hero,.ko-hero:not([data-has-tape="true"]){grid-template-columns:1fr;grid-template-areas:"nav" "cal" "now" "tape"}
 }
 .ko-ins-side {
   margin-left: 5px;
@@ -576,12 +578,10 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 
 @media (width <= 1099px) {
-  .ko-hero {
+  .ko-hero,
+  .ko-hero:not([data-has-tape="true"]) {
     grid-template-columns: 1fr;
-  }
-  .ko-rail {
-    width: auto;
-    max-width: none;
+    grid-template-areas: "nav" "cal" "now" "tape";
   }
 }
 @media (width <= 800px) {
@@ -852,7 +852,7 @@ export function AstroPane() {
           {tab !== "month" ? (
             <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
           ) : null}
-          <div className="ko-hero">
+          <div className="ko-hero" data-has-tape={tab !== "month"}>
             <div className="ko-hero-main">
               {now && status ? (
                 <NowBoard
@@ -902,7 +902,7 @@ export function AstroPane() {
                 </>
               ) : null}
             </div>
-            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
+            <div className="ko-rail-nav">
               <div className="ko-date" role="group" aria-label="Session date">
                 <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
                   ‹
@@ -948,6 +948,19 @@ export function AstroPane() {
                   );
                 })}
               </div>
+            </div>
+            {tab !== "month" ? (
+              <SessionStrip
+                slots={clockRows}
+                iso={iso}
+                tape={tape}
+                nowMin={nowMin}
+                sameDay={sameDay}
+                grades={grades}
+                onPick={pickSlot}
+              />
+            ) : null}
+            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
               <div className="ko-rail-head">
                 <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
                   ‹
@@ -961,30 +974,18 @@ export function AstroPane() {
             </aside>
           </div>
 
-          {tab === "month" ? <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} /> : null}
-          {tab !== "month" ? (
-            <div className="ko-session">
-              <SessionStrip
-                slots={clockRows}
-                iso={iso}
-                tape={tape}
-                nowMin={nowMin}
-                sameDay={sameDay}
-                grades={grades}
-                onPick={pickSlot}
-              />
-              <ClockTable
-                rows={clockRows}
-                grades={grades}
-                contracts={contracts}
-                loading={tapeLoading}
-                openKey={openKey}
-                underlying={underlying}
-                asOfIso={iso}
-                onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
-              />
-            </div>
-          ) : null}
+          {tab === "month" ? <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} /> : (
+            <ClockTable
+              rows={clockRows}
+              grades={grades}
+              contracts={contracts}
+              loading={tapeLoading}
+              openKey={openKey}
+              underlying={underlying}
+              asOfIso={iso}
+              onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
+            />
+          )}
         </div>
       </div>
     </div>
