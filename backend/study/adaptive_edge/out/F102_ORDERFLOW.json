@@ -1,0 +1,28 @@
+{
+  "features": "specification order flow via structure.build_structure_series",
+  "window": "2026-08-06..2026-08-18",
+  "bars": 3374,
+  "ticks": 53884,
+  "rows": 3328,
+  "labels": {
+    "DOWN": 402,
+    "FLAT": 2633,
+    "UP": 293
+  },
+  "baseline": 0.7911658653846154,
+  "folds": [
+    {
+      "fold": 1,
+      "accuracy": 0.706766917293233,
+      "calls": 0,
+      "hit_rate": 0.0,
+      "max_confidence": 0.8534573429240212,
+      "final_loss": 0.6388519964898622
+    }
+  ],
+  "mean_oos_accuracy": 0.706766917293233,
+  "directional_calls": 0,
+  "directional_hit_rate": 0.0,
+  "verdict": "NO EDGE on the specification's own order-flow features",
+  "caveat": "roughly nine sessions of ticks; weaker evidence than the 6.5-month bar run"
+}

@@ -29,6 +29,7 @@ from app.engines.adaptive_edge import AdaptiveEdgeConfig
 from app.engines.adaptive_edge.state_machine import Event
 from app.engines.adaptive_edge.execution import align_to_tick, exit_order_price, stop_from_entry
 from app.engines.adaptive_edge.f110_entry_gate import EntryDecision, F110Evidence, evaluate_entry
+from app.engines.adaptive_edge.f111_exit_gate import ExitDecision, F111State, evaluate_exit
 from app.services.adaptive_edge import get_config, ist_now_ms, ist_today
 from app.services.adaptive_edge_positions import (
     AdaptiveEdgePosition,
@@ -677,7 +678,24 @@ async def _exit_position(uid: str, client, position: AdaptiveEdgePosition,
 
 
 async def on_ticks(uid: str, ticks: list) -> str:
-    """Drive open positions from live prices. Returns a short status word."""
+    """Drive open positions from live prices. Returns a short status word.
+
+    F-111 is the canonical exit gate and decides HOLD / UPDATE_STOP / EXIT. It
+    was implemented and uncalled, so the exit rule the specification owns was not
+    the one running.
+
+    `conservative_continuation_value` is passed as absent for the same reason
+    ConservativeEV is absent at entry: it is a bound that needs the fitted
+    probability model. The gate handles absence safely — it does not force an
+    exit on a missing value — so the protective and session conditions still
+    decide, and the trail still ratchets.
+
+    The profit target is checked separately and labelled as such. F-111 has no
+    notion of a target; its exits are a protective breach, session termination,
+    or continuation value falling to zero. Folding a target into
+    `protective_condition_breached` would file a take-profit as a stop-out and
+    make the exit ledger lie about why positions closed.
+    """
     cfg = get_config()
     holdings = open_positions(uid)
     if not holdings:
@@ -696,28 +714,41 @@ async def on_ticks(uid: str, ticks: list) -> str:
         if ltp <= 0:
             continue
 
-        # Ratchet the trail on the way up before deciding anything.
+        # Ratchet the trail on the way up before asking the gate anything.
+        stop_improved = False
         if ltp > position.peak_price:
             position.peak_price = ltp
             if cfg.profit_lock_fraction > 0:
                 locked = position.entry_price + (
                     (position.peak_price - position.entry_price) * cfg.profit_lock_fraction)
+                raised = align_to_tick(locked)
                 # A stop only ever moves up. Widening it would be an expansion of
                 # risk the position was never authorized to take.
-                position.stop_price = max(position.stop_price, align_to_tick(locked))
+                if raised > position.stop_price:
+                    position.stop_price = raised
+                    stop_improved = True
             put(uid, position)
 
+        decision = evaluate_exit(F111State(
+            protective_condition_breached=ltp <= position.stop_price,
+            conservative_continuation_value=None,   # needs the fitted model
+            emergency_reversal=False,               # no reversal detector wired
+            session_termination=session_over,
+            stop_improved=stop_improved,
+        ))
+
         reason = ""
-        if ltp <= position.stop_price:
-            reason = "stop"
+        if decision is ExitDecision.EXIT:
+            reason = "session_end" if session_over else "stop"
         elif position.target_price and ltp >= position.target_price:
+            # Configured rule, not an F-111 exit. Named separately so the ledger
+            # records a take-profit as a take-profit.
             reason = "target"
-        elif session_over:
-            reason = "session_end"
 
         if not reason:
             client = client or await _client(uid)
-            await _sync_trail(uid, client, position, cfg)
+            if decision is ExitDecision.UPDATE_STOP:
+                await _sync_trail(uid, client, position, cfg)
             continue
 
         client = client or await _client(uid)

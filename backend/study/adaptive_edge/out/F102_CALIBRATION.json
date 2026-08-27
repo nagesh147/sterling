@@ -1,0 +1,56 @@
+{
+  "symbol": "NIFTY-I",
+  "interval": "1min",
+  "bars": 50244,
+  "rows": 50168,
+  "horizon_bars": 15,
+  "move_threshold_bps": 8.0,
+  "label_distribution": {
+    "DOWN": 11204,
+    "FLAT": 28101,
+    "UP": 10863
+  },
+  "majority_baseline": 0.5601379365332483,
+  "folds": [
+    {
+      "fold": 1,
+      "train": 8000,
+      "holdout": 2000,
+      "accuracy": 0.347,
+      "directional_calls": 0,
+      "directional_hit_rate": 0.0,
+      "final_loss": 0.9378662483557045
+    },
+    {
+      "fold": 2,
+      "train": 8000,
+      "holdout": 2000,
+      "accuracy": 0.446,
+      "directional_calls": 0,
+      "directional_hit_rate": 0.0,
+      "final_loss": 1.0720073503172995
+    },
+    {
+      "fold": 3,
+      "train": 8000,
+      "holdout": 2000,
+      "accuracy": 0.656,
+      "directional_calls": 0,
+      "directional_hit_rate": 0.0,
+      "final_loss": 1.0454085609720427
+    },
+    {
+      "fold": 4,
+      "train": 8000,
+      "holdout": 2000,
+      "accuracy": 0.7445,
+      "directional_calls": 0,
+      "directional_hit_rate": 0.0,
+      "final_loss": 0.886935356001905
+    }
+  ],
+  "mean_oos_accuracy": 0.5483750000000001,
+  "directional_calls": 0,
+  "directional_hit_rate": 0.0,
+  "verdict": "NO EDGE \u2014 the gate stays shut, now for a measured reason"
+}
