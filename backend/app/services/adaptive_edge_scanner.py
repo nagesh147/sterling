@@ -31,6 +31,7 @@ from app.engines.adaptive_edge.f103_opportunity import (
     evaluate_opportunity,
 )
 from app.engines.adaptive_edge.f109_option_selection import F109Candidate, select_f109
+from app.engines.adaptive_edge.volatility_forecast import evaluate_straddle, forecast
 from app.services.adaptive_edge import ist_today, nfo_dump, underlyings
 from app.services.adaptive_edge_strategy import (
     MIN_BARS,
@@ -263,6 +264,77 @@ def rank_contracts(rows: list[dict], cfg: AdaptiveEdgeConfig,
 
     # Liquidity heuristic, not F-109. Named so nobody reads it as the formula.
     return sorted(rows, key=lambda r: (-_num(r.get("oi")), abs(_num(r.get("strike")) - _num(r.get("spot")))))
+
+
+
+
+def atm_pair(rows: list[dict], spot: float) -> tuple[dict | None, dict | None]:
+    """The call and put nearest the money, at a single shared strike.
+
+    A straddle whose legs sit at different strikes is a strangle with different
+    economics, so the strike is chosen once and both legs are taken from it or
+    neither is.
+    """
+    if spot <= 0 or not rows:
+        return None, None
+    by_strike: dict[float, dict[str, dict]] = {}
+    for row in rows:
+        by_strike.setdefault(_num(row.get("strike")), {})[str(row.get("option_type"))] = row
+    for strike in sorted(by_strike, key=lambda s: abs(s - spot)):
+        legs = by_strike[strike]
+        if "CE" in legs and "PE" in legs:
+            return legs["CE"], legs["PE"]
+    return None, None
+
+
+def straddle_signal(name: str, rows: list[dict], closes: list[float], cfg: AdaptiveEdgeConfig,
+                    *, spot: float) -> dict | None:
+    """The engine's actual trade decision: is movement cheaper than it is likely?
+
+    Long gamma, no direction. Direction was measured and abandoned — momentum,
+    mean reversion and opening-range breakout all failed to hold out of sample
+    once fills moved to the next bar's open. Magnitude survived, so this trades
+    magnitude.
+
+    Returns None rather than an ineligible signal when the straddle cannot be
+    priced or the tape is too short to forecast, because those are the engine
+    being unable to ask rather than the answer being no.
+    """
+    view = forecast(closes, horizon_bars=cfg.horizon_bars)
+    if view is None:
+        return None
+    call, put = atm_pair(rows, spot)
+    if call is None or put is None:
+        return None
+
+    gate = evaluate_straddle(
+        forecast_bps=view.excursion_bps,
+        call_premium=_num(call.get("last_price")),
+        put_premium=_num(put.get("last_price")),
+        spot=spot,
+        round_trip_cost_pct=cfg.fee_rate * 100.0 + cfg.slippage_bps / 100.0,
+    )
+    premium = _num(call.get("last_price")) + _num(put.get("last_price"))
+    return {
+        "underlying": name,
+        "structure": "STRADDLE",
+        "strike": _num(call.get("strike")),
+        "expiry": str(call.get("expiry") or ""),
+        "call": call.get("symbol"),
+        "put": put.get("symbol"),
+        "call_token": call.get("token"),
+        "put_token": put.get("token"),
+        "lot_size": int(_num(call.get("lot_size"))),
+        "spot": spot,
+        "premium": premium,
+        "forecast_bps": round(view.excursion_bps, 2),
+        "breakeven_bps": round(gate.breakeven_bps, 2),
+        "edge_ratio": round(gate.edge_ratio, 3),
+        "realised_vol_bps": round(view.realised_vol_bps, 3),
+        "vol_percentile": view.percentile,
+        "entry_ok": gate.eligible,
+        "reason": gate.reason,
+    }
 
 
 async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:

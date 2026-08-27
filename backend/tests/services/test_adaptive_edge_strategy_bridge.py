@@ -302,3 +302,89 @@ def test_unresolved_observations_are_excluded_from_the_estimate():
 
     pending = [{"forward_return_pct": None}] * 500
     assert premium_excursion_probabilities(pending, target_multiple=2.0, stop_percent=30.0) is None
+
+
+# ----------------------------------------------------- straddle signal
+
+def _leg(strike, kind, price, symbol=None):
+    return {"strike": strike, "option_type": kind, "symbol": symbol or f"{kind}{strike}",
+            "last_price": price, "lot_size": 75, "token": abs(hash((strike, kind))) % 9999,
+            "expiry": "2026-09-03"}
+
+
+def _chain():
+    return [_leg(24_800, "CE", 25.0), _leg(24_800, "PE", 22.0),
+            _leg(25_000, "CE", 8.0), _leg(25_000, "PE", 60.0)]
+
+
+def _prices(sigma: float, n: int = 45, seed: int = 3) -> list[float]:
+    import random
+    rng = random.Random(seed)
+    out = [24_800.0]
+    for _ in range(n):
+        out.append(out[-1] * (1.0 + rng.gauss(0.0, sigma)))
+    return out
+
+
+def test_the_atm_pair_shares_one_strike():
+    """A straddle whose legs sit at different strikes is a strangle with
+    different economics."""
+    from app.services.adaptive_edge_scanner import atm_pair
+
+    call, put = atm_pair(_chain(), 24_810.0)
+    assert call["strike"] == put["strike"] == 24_800
+
+
+def test_a_strike_with_only_one_side_is_not_a_straddle():
+    from app.services.adaptive_edge_scanner import atm_pair
+    assert atm_pair([_leg(25_000, "CE", 8.0)], 25_000.0) == (None, None)
+
+
+def test_an_active_tape_against_a_cheap_straddle_is_armable(cfg):
+    from app.services.adaptive_edge_scanner import straddle_signal
+
+    signal = straddle_signal("NIFTY", _chain(), _prices(0.0009), cfg, spot=24_810.0)
+    assert signal["entry_ok"] is True
+    assert signal["edge_ratio"] > 1.0
+    assert signal["structure"] == "STRADDLE"
+
+
+def test_a_quiet_tape_against_the_same_straddle_is_refused(cfg):
+    """The comparison is the strategy: movement has to be cheaper than it is
+    likely, and on a quiet tape it is not."""
+    from app.services.adaptive_edge_scanner import straddle_signal
+
+    signal = straddle_signal("NIFTY", _chain(), _prices(0.00008), cfg, spot=24_810.0)
+    assert signal["entry_ok"] is False
+    assert "already prices more movement" in signal["reason"]
+
+
+def test_an_expensive_straddle_is_refused_on_the_same_tape(cfg):
+    from app.services.adaptive_edge_scanner import straddle_signal
+
+    dear = [_leg(24_800, "CE", 180.0), _leg(24_800, "PE", 175.0)]
+    signal = straddle_signal("NIFTY", dear, _prices(0.0009), cfg, spot=24_810.0)
+    assert signal["entry_ok"] is False
+
+
+def test_too_little_history_is_no_signal_rather_than_a_refusal(cfg):
+    """None is the engine unable to ask. An ineligible signal would say it
+    asked and the answer was no."""
+    from app.services.adaptive_edge_scanner import straddle_signal
+    assert straddle_signal("NIFTY", _chain(), [24_800.0] * 5, cfg, spot=24_810.0) is None
+
+
+def test_an_unpriceable_chain_is_no_signal(cfg):
+    from app.services.adaptive_edge_scanner import straddle_signal
+    assert straddle_signal("NIFTY", [], _prices(0.0009), cfg, spot=24_810.0) is None
+
+
+def test_the_signal_shows_both_sides_of_the_comparison(cfg):
+    """An operator needs what the market asked and what the engine expected."""
+    from app.services.adaptive_edge_scanner import straddle_signal
+
+    signal = straddle_signal("NIFTY", _chain(), _prices(0.0009), cfg, spot=24_810.0)
+    assert signal["forecast_bps"] > 0
+    assert signal["breakeven_bps"] > 0
+    assert signal["realised_vol_bps"] > 0
+    assert 0.0 < signal["vol_percentile"] <= 1.0
