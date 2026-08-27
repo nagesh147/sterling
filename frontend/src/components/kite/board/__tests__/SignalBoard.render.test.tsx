@@ -93,9 +93,42 @@ describe('SignalBoard rendering', () => {
   });
 
   it('does not say "all live" in the live bucket', () => {
-    show([sig({ id: '1' }), sig({ id: '2' })]);
+    // The live bucket now holds only open rows from an EARLIER day — today's
+    // sit under "Today", where the live count is informative rather than
+    // tautological. So this needs a stale open row to have a live bucket at all.
+    const DAY = 86_400_000;
+    show([
+      sig({ id: '1', status: 'running', atMs: NOW - DAY }),
+      sig({ id: '2', status: 'running', atMs: NOW - 2 * DAY }),
+    ]);
+    expect(screen.getByText('Live now')).toBeInTheDocument();
     expect(screen.getByText('2 signals')).toBeInTheDocument();
     expect(screen.queryByText(/2 signals · 2 live/)).not.toBeInTheDocument();
+  });
+
+  it('does count the live rows inside a dated group, where it is not redundant', () => {
+    show([sig({ id: '1', status: 'running' }), sig({ id: '2', status: 'ended' })]);
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getByText(/2 signals · 1 live/)).toBeInTheDocument();
+  });
+
+  it("keeps today's open rows under Today rather than hoisting them", () => {
+    // Hoisting a row that is already in the first section gains no visibility
+    // and costs it a date heading.
+    show([sig({ status: 'running', atMs: NOW })]);
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.queryByText('Live now')).not.toBeInTheDocument();
+  });
+
+  it('still hoists an open row from an earlier day, which day grouping would bury', () => {
+    show([
+      sig({ id: 'stale', status: 'running', atMs: NOW - 3 * 86_400_000 }),
+      sig({ id: 'closed', status: 'ended', atMs: NOW }),
+    ]);
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('Live now');
+    // and it floats above the dated sections
+    expect(body.indexOf('Live now')).toBeLessThan(body.indexOf('Today'));
   });
 
   it('shows the engine tag only when engines are mixed', () => {

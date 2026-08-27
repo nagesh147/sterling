@@ -267,15 +267,23 @@ export function sessionDayLabel(key: string, nowMs: number): string {
  * Undated rows sort last rather than being dropped — an engine that failed to
  * stamp a signal still has something to say.
  *
- * With `liveFirst`, anything still open floats into one bucket ahead of every
- * dated one. Without it a position entered last Tuesday and still running sits
- * under "Tue 12 Aug", below three days of closed history, and the top of the
- * board reads as though nothing is on. The date buckets are then what they
- * should be: the log of entries whose trade has ended.
+ * With `liveFirst` and a `nowMs`, an open position floats into one bucket ahead
+ * of every dated one **only when its day is not today**. That is the case the
+ * bucket exists for: a position entered last Tuesday and still running would
+ * otherwise sit under "Tue 12 Aug" below three days of closed history, and the
+ * top of the board would read as though nothing were on.
+ *
+ * Today's live rows stay under "Today", which is the first section anyway, so
+ * hoisting them gains no visibility and costs them a date heading. Day grouping
+ * is then the board's primary organisation — what an operator scanning a log
+ * asks for — without letting a stale open position hide in it.
+ *
+ * With no `nowMs` every live row is hoisted, preserving the older behaviour for
+ * callers that cannot supply a clock.
  */
 export function groupByDay(
   signals: readonly BoardSignal[],
-  { liveFirst = false }: { liveFirst?: boolean } = {},
+  { liveFirst = false, nowMs }: { liveFirst?: boolean; nowMs?: number } = {},
 ): Array<{ key: string; signals: BoardSignal[] }> {
   const buckets = new Map<string, BoardSignal[]>();
   const push = (key: string, s: BoardSignal) => {
@@ -283,8 +291,16 @@ export function groupByDay(
     if (list) list.push(s);
     else buckets.set(key, [s]);
   };
+  const todayKey = nowMs == null ? null : sessionDayKey(nowMs);
   for (const s of signals) {
-    push(liveFirst && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : sessionDayKey(s.atMs), s);
+    const day = sessionDayKey(s.atMs);
+    // Hoist only what day grouping would actually bury. A live row from today
+    // is already in the first section, so lifting it out gains nothing and
+    // costs it its date heading; a live row from last Tuesday would otherwise
+    // sit below days of closed history, which is the case the bucket exists
+    // for. Without a clock, fall back to hoisting every live row.
+    const buried = todayKey == null || day !== todayKey;
+    push(liveFirst && buried && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
   }
   const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
   return [...buckets.entries()]

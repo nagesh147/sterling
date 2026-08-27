@@ -206,7 +206,7 @@ describe('dates and day order', () => {
 
   it("shows a bare time for today, so a live board is not noisy", () => {
     render(<SignalBoard signals={[dated('a', NOW - 3_600_000, 'running')]}
-      requested={['instrument', 'time']} nowMs={NOW} />);
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     expect(screen.getByText('09:30')).toBeTruthy();
   });
 
@@ -214,13 +214,13 @@ describe('dates and day order', () => {
     // A running row from yesterday sits in "Live now", which names no date, so
     // the cell has to.
     render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
-      requested={['instrument', 'time']} nowMs={NOW} />);
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     expect(screen.getByText(/Yesterday 10:30/)).toBeTruthy();
   });
 
   it('words an older date the same way its day header would', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
-      requested={['instrument', 'time']} nowMs={NOW} />);
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     // sessionDayLabel's own format, reused rather than a second formatter.
     expect(screen.getByText(/1[0-9] Aug 10:30/)).toBeTruthy();
   });
@@ -235,6 +235,8 @@ describe('dates and day order', () => {
         ]}
         requested={['instrument', 'time']}
         nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
       />,
     );
     const heads = [...container.querySelectorAll('*')]
@@ -254,6 +256,8 @@ describe('dates and day order', () => {
         ]}
         requested={['instrument', 'time']}
         nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
       />,
     );
     const body = document.body.textContent ?? '';
