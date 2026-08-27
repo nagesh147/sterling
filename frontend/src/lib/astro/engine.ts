@@ -22,6 +22,7 @@ import {
   type DayPlaybook,
   type GapCall,
   type HoraInfo,
+  type IndexPlay,
   type KalamFlag,
   type LiveNow,
   type MonthDay,
@@ -1044,4 +1045,12 @@ export function liveNow(now: Date, underlying: Underlying): LiveNow {
     bellMs: utcAtMin(sessionIso, MARKET_OPEN_MIN).getTime(),
     closeMs: utcAtMin(inCash ? todayIso : sessionIso, MARKET_CLOSE_MIN).getTime(),
   };
+}
+
+/** Current play on every index from the same clock — Nifty vs Bank split is the tell. */
+export function liveBoard(now: Date): IndexPlay[] {
+  return UNDERLYINGS.map((u) => {
+    const s = liveNow(now, u.id);
+    return { id: u.id, play: s.play, side: s.side, thesis: s.thesis };
+  });
 }

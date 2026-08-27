@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { forecastDay, forecastMonth, liveNow } from "./engine";
+import { forecastDay, forecastMonth, liveBoard, liveNow } from "./engine";
 import { lastCompletedSessionIso, nearestOpenIso, nextSessionIso, shiftSessionIso } from "./holidays";
 import { utcFromIstParts } from "./time";
 
@@ -179,5 +179,13 @@ describe("financial astrology engine", () => {
     const closed = liveNow(utcFromIstParts(2026, 8, 29, 11, 0, 0), "NIFTY");
     assert.equal(closed.phase, "closed");
     assert.equal(closed.sessionIso, "2026-08-31");
+
+    const board = liveBoard(utcFromIstParts(2026, 8, 26, 10, 22, 0));
+    assert.equal(board.length, 5);
+    const niftyPlay = board.find((x) => x.id === "NIFTY");
+    const bankPlay = board.find((x) => x.id === "BANKNIFTY");
+    assert.ok(niftyPlay && bankPlay);
+    assert.equal(niftyPlay.side, "PE");
+    assert.equal(bankPlay.side, "CE");
   });
 });

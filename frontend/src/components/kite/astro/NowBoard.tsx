@@ -1,6 +1,6 @@
 import type { SlotGrade } from "../../../lib/astro/tape";
 import { formatIstDate, getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
-import type { LiveNow, WindowSlot } from "../../../lib/astro/types";
+import type { IndexPlay, LiveNow, WindowSlot } from "../../../lib/astro/types";
 import { actionTone, gapTone } from "./palette";
 
 const THESIS: Record<LiveNow["thesis"], string> = {
@@ -8,6 +8,14 @@ const THESIS: Record<LiveNow["thesis"], string> = {
   "trend-down": "Trend down",
   fade: "Fade",
   chop: "Chop",
+};
+
+const SHORT: Record<IndexPlay["id"], string> = {
+  NIFTY: "Nifty",
+  BANKNIFTY: "Bank",
+  FINNIFTY: "Fin",
+  SENSEX: "Sensex",
+  MIDCPNIFTY: "Midcap",
 };
 
 function pad(n: number): string {
@@ -56,11 +64,19 @@ function windowEndMs(status: LiveNow): number | null {
   return utcFromIstParts(y, m, d, Math.floor(status.window.toMin / 60), status.window.toMin % 60, 0).getTime();
 }
 
+function sideMark(side: IndexPlay["side"]): string {
+  if (side === "CE") return "CE";
+  if (side === "PE") return "PE";
+  if (side === "BOTH") return "BOTH";
+  return "—";
+}
+
 export function NowBoard({
   status,
   now,
   grade,
   viewingIso,
+  board,
   onOpenSession,
   onOpenWindow,
 }: {
@@ -68,6 +84,7 @@ export function NowBoard({
   now: Date;
   grade?: SlotGrade;
   viewingIso: string;
+  board: IndexPlay[];
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -83,6 +100,9 @@ export function NowBoard({
     status.phase === "live" && status.window && status.window.toMin > status.window.fromMin
       ? Math.min(1, Math.max(0, (nowFrac - status.window.fromMin) / (status.window.toMin - status.window.fromMin)))
       : null;
+  const nifty = board.find((x) => x.id === "NIFTY");
+  const bank = board.find((x) => x.id === "BANKNIFTY");
+  const split = Boolean(nifty && bank && nifty.side !== bank.side);
 
   return (
     <div className="ko-now">
@@ -123,6 +143,12 @@ export function NowBoard({
       </p>
       <p className="ko-now-copy">{status.suggestion}</p>
 
+      {split && nifty && bank ? (
+        <p className="ko-now-copy">
+          Sector split · Nifty {sideMark(nifty.side)} vs Bank {sideMark(bank.side)}
+        </p>
+      ) : null}
+
       <div className="ko-now-meta">
         <span>
           {status.hora.lord} hora · {horaLeft} left
@@ -145,6 +171,16 @@ export function NowBoard({
         ) : null}
       </div>
 
+      {board.length ? (
+        <div className="ko-now-board" aria-label="Index plays">
+          {board.map((row) => (
+            <span key={row.id} className={actionTone(row.play, row.side)}>
+              {SHORT[row.id]} {sideMark(row.side)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {progress !== null ? (
         <div className="ko-now-bar" aria-hidden="true">
           <span style={{ width: `${Math.round(progress * 100)}%` }} />
@@ -162,7 +198,13 @@ export function NowBoard({
           </button>
         )}
         {viewingIso !== status.sessionIso ? (
-          <span className="text-muted">Timings below are {sessionLabel(viewingIso)}</span>
+          status.phase === "live" ? (
+            <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
+              Switch to live session
+            </button>
+          ) : (
+            <span className="text-muted">Timings below are {sessionLabel(viewingIso)}</span>
+          )
         ) : null}
       </div>
     </div>

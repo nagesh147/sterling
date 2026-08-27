@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { forecastDay, forecastMonth, liveNow } from '../../lib/astro/engine';
+import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso } from '../../lib/astro/holidays';
 import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
 import { formatIstDate, formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
-import { UNDERLYINGS, WEEKDAYS, type GapKind, type LiveNow, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
+import { UNDERLYINGS, WEEKDAYS, type GapKind, type IndexPlay, type LiveNow, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
 import { useCandles } from '../../hooks/useCandles';
 import { MonthHeat } from './astro/MonthHeat';
 import { NowBoard } from './astro/NowBoard';
@@ -106,6 +106,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-ins button{border:0;background:none;padding:0;font-size:13px;color:var(--k-text);white-space:nowrap;cursor:pointer;font-family:inherit}
 .ko-ins button:hover{color:var(--k-orange)}
 .ko-ins button[data-on="true"]{color:var(--k-orange);font-weight:500}
+.ko-ins-side{margin-left:5px;font-size:10px;font-weight:500}
+.ko-now-board{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12px}
+.ko-table tbody tr[data-live="true"]{box-shadow:inset 2px 0 0 var(--k-orange)}
 .ko-body{flex:1;overflow:auto;padding:20px 32px 40px}
 .ko-sub{margin:0 0 16px;font-size:13px;color:var(--k-dim);line-height:1.5}
 .ko-notes{margin:0 0 16px;padding:0 0 0 18px;font-size:13px;line-height:1.55;color:var(--k-text)}
@@ -223,6 +226,7 @@ export function AstroPane() {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [notes, setNotes] = useState(false);
   const [status, setStatus] = useState<LiveNow | null>(null);
+  const [board, setBoard] = useState<IndexPlay[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => {
     const p = getIstParts(new Date());
     return { year: p.year, month: p.month };
@@ -239,7 +243,9 @@ export function AstroPane() {
   }, []);
 
   useEffect(() => {
-    setStatus(liveNow(new Date(), underlying));
+    const t = new Date();
+    setStatus(liveNow(t, underlying));
+    setBoard(liveBoard(t));
   }, [nowKey, underlying]);
 
   const candles = useCandles(underlying, '5m', 400);
@@ -275,6 +281,21 @@ export function AstroPane() {
     if (!status?.window || !now || iso !== status.sessionIso) return undefined;
     return gradeSlot(status.window, tape, nowMin, sameDay);
   }, [status, now, iso, tape, nowMin, sameDay]);
+  const liveKey =
+    status?.window && iso === status.sessionIso && tab !== 'month'
+      ? `${status.window.from}-${status.window.to}`
+      : null;
+  const chipPlay = (id: Underlying) => board.find((row) => row.id === id);
+
+  useEffect(() => {
+    if (!liveKey) return;
+    setOpenKey(liveKey);
+  }, [liveKey]);
+
+  useEffect(() => {
+    if (!liveKey || tab === 'month') return;
+    document.getElementById('ko-live-row')?.scrollIntoView({ block: 'nearest' });
+  }, [liveKey, tab]);
 
   const applyIso = (next: string) => {
     const snapped = nearestOpenIso(next);
@@ -354,11 +375,19 @@ export function AstroPane() {
             <button type="button" role="tab" data-on={tab === 'thirty'} aria-selected={tab === 'thirty'} onClick={() => setTab('thirty')}>30 min</button>
           </div>
           <div className="ko-ins" role="tablist" aria-label="Underlying">
-            {UNDER_SHORT.map((u) => (
-              <button key={u.id} type="button" role="tab" data-on={underlying === u.id} aria-selected={underlying === u.id} onClick={() => setUnderlying(u.id)}>
-                {u.short}
-              </button>
-            ))}
+            {UNDER_SHORT.map((u) => {
+              const play = chipPlay(u.id);
+              return (
+                <button key={u.id} type="button" role="tab" data-on={underlying === u.id} aria-selected={underlying === u.id} onClick={() => setUnderlying(u.id)}>
+                  {u.short}
+                  {play ? (
+                    <span className={`ko-ins-side ${play.side === 'CE' ? 'text-ce' : play.side === 'PE' ? 'text-pe' : 'text-muted'}`}>
+                      {play.side === 'WAIT' ? '—' : play.side === 'BOTH' ? 'BOTH' : play.side}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -370,6 +399,7 @@ export function AstroPane() {
             now={now}
             grade={liveGrade}
             viewingIso={iso}
+            board={board}
             onOpenSession={(date) => {
               applyIso(date);
               setTab('timings');
@@ -460,7 +490,7 @@ export function AstroPane() {
                     const open = openKey === key;
                     return (
                       <React.Fragment key={key}>
-                        <tr data-on={open} onClick={() => setOpenKey(open ? null : key)}>
+                        <tr data-on={open} data-live={slot.isLive} id={slot.isLive ? 'ko-live-row' : undefined} onClick={() => setOpenKey(open ? null : key)}>
                           <td>
                             {slot.from} – {slot.to}
                             {slot.isLive ? <span className="ko-tag">LIVE</span> : null}
