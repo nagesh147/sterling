@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { clockFromMinutes, getIstParts, minutesOfDay } from "../../../lib/astro/time";
 import type { DayForecast, DignityKind, WindowSlot } from "../../../lib/astro/types";
+import { buyContract, type SessionTape } from "../../../lib/astro/tape";
 import { actionTone } from "./palette";
 
 function istClock(iso: string): string {
@@ -64,10 +65,12 @@ export function PlaybookStrip({
   book,
   onPick,
   nowMin,
+  tape,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
   nowMin?: number | null;
+  tape?: SessionTape | null;
 }) {
   const pb = book.playbook;
   const avoid = mergeWindows(pb.avoid)[0] ?? null;
@@ -117,7 +120,7 @@ export function PlaybookStrip({
       fireNotify(
         `${book.date}-${r.id}-${when}`,
         `${r.label} window ${when}`,
-        `${r.slot.action} · ${r.from}–${r.to}`,
+        `${r.slot.action} · ${buyContract(r.slot, tape ?? null).short}`,
       );
     }
   }, [active, book.date]);
@@ -146,6 +149,7 @@ export function PlaybookStrip({
       {active.length
         ? active.map((r) => {
             const mins = Math.max(1, r.fromMin - (nowMin ?? 0));
+            const buy = r.slot ? buyContract(r.slot, tape ?? null) : null;
             return (
               <button
                 key={r.id}
@@ -159,15 +163,14 @@ export function PlaybookStrip({
                 </span>
                 <span className="ko-alert-body">
                   <b className={r.slot ? actionTone(r.slot.action, r.slot.side) : ""}>{r.slot?.action}</b>
-                  <span className="text-muted">
-                    {" "}
-                    {r.from}–{r.to}
-                  </span>
+                  <span className="text-muted"> {buy && buy.verb !== "SIT" ? buy.short : `${r.from}–${r.to}`}</span>
                 </span>
               </button>
             );
           })
-        : roles.map((r) => (
+        : roles.map((r) => {
+            const buy = buyContract(r.slot, tape ?? null);
+            return (
             <button
               key={r.id}
               type="button"
@@ -177,13 +180,16 @@ export function PlaybookStrip({
             >
               <span className="ko-plan-kicker">{r.label}</span>
               {r.id === "avoid" ? null : (
-                <span className={`ko-plan-play ${actionTone(r.slot.action, r.slot.side)}`}>{r.slot.action}</span>
+                <span className={`ko-plan-play ${actionTone(r.slot.action, r.slot.side)}`}>
+                  {buy.verb !== "SIT" ? buy.label : r.slot.action}
+                </span>
               )}
               <span className="text-muted">
                 {r.from}–{r.to}
               </span>
             </button>
-          ))}
+            );
+          })}
       {perm === "default" ? (
         <button type="button" className="ko-link ko-alert-enable" onClick={ask}>
           Notify me

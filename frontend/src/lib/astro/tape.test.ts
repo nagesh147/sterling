@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gradeSlot, parseYahooChart, summariseTape, windowOhlc } from "./tape";
+import { buyContract, gradeSlot, parseYahooChart, roundStrike, summariseTape, windowOhlc } from "./tape";
 import { utcFromIstParts } from "./time";
 import type { WindowSlot } from "./types";
 
@@ -95,5 +95,44 @@ describe("tape overlay", () => {
     expect(sum.hits).toBe(1);
     expect(sum.gapActual).toBe("flat");
     expect(sum.gapHit).toBe(true);
+  });
+
+  it("names the Nifty buy strike from window-open spot", () => {
+    expect(roundStrike(24763, 50)).toBe(24750);
+    const pe = buyContract(
+      { fromMin: 555, toMin: 585, side: "PE", action: "SCALP PE", product: "NIFTY ATM PE" },
+      tape,
+    );
+    expect(pe.verb).toBe("BUY");
+    expect(pe.strike).toBe(24350);
+    expect(pe.short).toBe("24,350 PE");
+    expect(pe.label).toBe("BUY 24,350 PE");
+
+    const otm = buyContract(
+      { fromMin: 555, toMin: 585, side: "PE", action: "SCALP PE", product: "NIFTY 100 pts OTM PE" },
+      tape,
+    );
+    expect(otm.strike).toBe(24250);
+
+    const ce = buyContract(
+      { fromMin: 555, toMin: 585, side: "CE", action: "BUY CE", product: "NIFTY 50 pts OTM CE" },
+      tape,
+    );
+    expect(ce.strike).toBe(24400);
+    expect(ce.label).toBe("BUY 24,400 CE");
+
+    const sit = buyContract(
+      { fromMin: 555, toMin: 585, side: "WAIT", action: "WAIT", product: "No contract" },
+      tape,
+    );
+    expect(sit.verb).toBe("SIT");
+    expect(sit.label).toBe("—");
+
+    const book = buyContract(
+      { fromMin: 555, toMin: 585, side: "PE", action: "BOOK PE", product: "NIFTY ATM PE" },
+      tape,
+    );
+    expect(book.verb).toBe("BOOK");
+    expect(book.label.startsWith("BOOK ")).toBe(true);
   });
 });

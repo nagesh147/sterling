@@ -1,4 +1,4 @@
-import type { SlotGrade } from "../../../lib/astro/tape";
+import type { BuyContract, SlotGrade } from "../../../lib/astro/tape";
 import { getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
 import { WEEKDAYS, type DayThesis, type LiveNow, type WindowSlot } from "../../../lib/astro/types";
 import { actionTone, gapTone } from "./palette";
@@ -59,6 +59,8 @@ export function NowBoard({
   grade,
   viewingIso,
   sessionPnl,
+  buy,
+  nextBuy,
   onOpenSession,
   onOpenWindow,
 }: {
@@ -67,6 +69,8 @@ export function NowBoard({
   grade?: SlotGrade;
   viewingIso: string;
   sessionPnl?: number | null;
+  buy?: BuyContract;
+  nextBuy?: BuyContract;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -106,7 +110,7 @@ export function NowBoard({
 
   const nextLine =
     status.phase === "live" && status.next
-      ? `Then ${status.next.action} at ${status.next.from}`
+      ? `Then ${status.next.action}${nextBuy && nextBuy.verb !== "SIT" ? ` ${nextBuy.short}` : ""} at ${status.next.from}`
       : null;
 
   return (
@@ -127,7 +131,10 @@ export function NowBoard({
         </span>
       </div>
 
-      <div className={`ko-now-play ${recap ? gtone.fg : playTone}`}>{play}</div>
+      <div className={`ko-now-play ${recap ? gtone.fg : playTone}`}>
+        {play}
+        {!recap && buy && buy.verb !== "SIT" ? <span className="ko-now-strike">{buy.short}</span> : null}
+      </div>
       <div className="ko-now-sub">{when}</div>
 
       {status.phase === "live" || status.phase === "pre" ? <p className="ko-now-copy">{status.suggestion}</p> : null}
