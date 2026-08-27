@@ -1,7 +1,7 @@
 import type { SlotGrade } from "../../../lib/astro/tape";
 import { formatIstDate, getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
 import type { IndexPlay, LiveNow, WindowSlot } from "../../../lib/astro/types";
-import { actionTone, gapTone } from "./palette";
+import { actionTone, gapTone, REGIME_SHORT, regimeTone } from "./palette";
 
 const SHORT: Record<IndexPlay["id"], string> = {
   NIFTY: "Nifty",
@@ -111,12 +111,14 @@ export function NowBoard({
       ? grade.delta
       : null;
 
+  const playLabel =
+    status.phase === "post" && status.regime ? REGIME_SHORT[status.regime] : status.play;
   const when =
     status.phase === "live" && windowLeft
       ? [windowLeft, kalam, status.window ? `${status.window.from}–${status.window.to}` : null].filter(Boolean).join(" · ")
       : status.phase === "pre"
         ? "at 09:15 IST"
-        : `next ${sessionLabel(status.sessionIso)}`;
+        : `next ${sessionLabel(status.nextOpenIso)}`;
 
   return (
     <div className="ko-now">
@@ -136,8 +138,12 @@ export function NowBoard({
         </span>
       </div>
 
-      <div className={`ko-now-play ${playTone}`}>
-        <span>{status.play}</span>
+      <div
+        className={`ko-now-play ${
+          status.phase === "post" && status.regime ? regimeTone(status.regime).fg : playTone
+        }`}
+      >
+        <span>{playLabel}</span>
         <span className="ko-now-sub">{when}</span>
       </div>
 

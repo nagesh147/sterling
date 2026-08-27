@@ -194,12 +194,17 @@ describe("financial astrology engine", () => {
 
     const post = liveNow(utcFromIstParts(2026, 8, 26, 16, 5, 0), "NIFTY");
     expectIs(post.phase, "post");
-    expectIs(post.sessionIso, "2026-08-27");
+    expectIs(post.sessionIso, "2026-08-26");
+    expectIs(post.nextOpenIso, "2026-08-27");
     expectIs(post.window, null);
+    expectIs(post.play, "SCALP PE");
+    expectOk(post.next);
+    expectIs(post.next?.from, "9:15 AM");
 
     const closed = liveNow(utcFromIstParts(2026, 8, 29, 11, 0, 0), "NIFTY");
     expectIs(closed.phase, "closed");
     expectIs(closed.sessionIso, "2026-08-31");
+    expectIs(closed.nextOpenIso, "2026-08-31");
 
     const board = liveBoard(utcFromIstParts(2026, 8, 26, 10, 22, 0));
     expectIs(board.length, 5);

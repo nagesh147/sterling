@@ -56,18 +56,36 @@ function openSide(action: string): WindowSlot["side"] {
   return "WAIT";
 }
 
+function windowState(fromMin: number, toMin: number, nowMin: number | null): "done" | "now" | "next" | null {
+  if (nowMin == null) return null;
+  if (nowMin < fromMin) return "next";
+  if (nowMin < toMin) return "now";
+  return "done";
+}
+
+function stateMark(state: "done" | "now" | "next" | null): string {
+  if (state === "done") return " · done";
+  if (state === "now") return " · now";
+  return "";
+}
+
 export function PlaybookStrip({
   book,
   onPick,
   live,
+  nowMin,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
   live?: boolean;
+  nowMin?: number | null;
 }) {
   const pb = book.playbook;
   const gtone = gapTone(book.gap.kind);
   const avoid = mergeWindows(pb.avoid)[0] ?? null;
+  const ceState = pb.bestCe ? windowState(pb.bestCe.fromMin, pb.bestCe.toMin, nowMin ?? null) : null;
+  const peState = pb.bestPe ? windowState(pb.bestPe.fromMin, pb.bestPe.toMin, nowMin ?? null) : null;
+  const avoidState = avoid ? windowState(avoid.fromMin, avoid.toMin, nowMin ?? null) : null;
 
   return (
     <div className="ko-play">
@@ -91,8 +109,8 @@ export function PlaybookStrip({
         </span>
       </div>
       <div className="ko-play-roles">
-        <button type="button" disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
-          <span className="lbl">Best CE</span>
+        <button type="button" data-state={ceState ?? undefined} disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
+          <span className="lbl">Best CE{stateMark(ceState)}</span>
           {pb.bestCe ? (
             <>
               <span className={sideClass(pb.bestCe.side)}>CE</span>
@@ -103,8 +121,8 @@ export function PlaybookStrip({
             <span className="text-muted">None today</span>
           )}
         </button>
-        <button type="button" disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
-          <span className="lbl">Best PE</span>
+        <button type="button" data-state={peState ?? undefined} disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
+          <span className="lbl">Best PE{stateMark(peState)}</span>
           {pb.bestPe ? (
             <>
               <span className={sideClass(pb.bestPe.side)}>PE</span>
@@ -115,8 +133,8 @@ export function PlaybookStrip({
             <span className="text-muted">None today</span>
           )}
         </button>
-        <button type="button" disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
-          <span className="lbl">Avoid</span>
+        <button type="button" data-state={avoidState ?? undefined} disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
+          <span className="lbl">Avoid{stateMark(avoidState)}</span>
           {avoid ? (
             <>
               {avoid.from}–{avoid.to}
