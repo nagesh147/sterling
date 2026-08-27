@@ -356,6 +356,8 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   gap: 8px 12px;
 }
 .ko-now-close { margin-left: auto; }
+.ko-clock tbody tr[data-run="PE"]:not([data-live]) td:first-child { box-shadow: inset 2px 0 0 var(--k-red-strong, #df514c); }
+.ko-clock tbody tr[data-run="CE"]:not([data-live]) td:first-child { box-shadow: inset 2px 0 0 var(--ko-ce); }
 .ko-now-clock {
   font-size: 13px;
 }
@@ -1059,6 +1061,7 @@ function TimingRow({
         data-on={open || undefined}
         data-live={slot.isLive || undefined}
         data-dim={dim || undefined}
+        data-run={slot.side === "CE" || slot.side === "PE" ? slot.side : undefined}
         tabIndex={0}
         aria-expanded={open}
         onClick={onToggle}

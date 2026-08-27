@@ -147,6 +147,8 @@ export function matchHeldOption(
   return preferred ?? any;
 }
 
+export type ContinueKind = "buy" | "trail" | "book" | "lock" | "close" | "sit";
+
 export function roundTick(price: number, tick = 0.05): number {
   if (!(price > 0)) return 0;
   return Math.round(price / tick) * tick;
@@ -177,9 +179,39 @@ export function ratchetProtection(
   if (sl >= last) sl = oldSl ?? roundTick(Math.max(0.05, last - 0.05));
   let tgt = proposed.tgt;
   if (tgt != null && oldTgt != null) tgt = Math.max(oldTgt, tgt);
-  if (tgt == null && oldTgt != null) tgt = oldTgt;
+  if (tgt == null && oldTgt != null && proposed.tgt != null) tgt = oldTgt;
   const changed = sl !== oldSl || tgt !== oldTgt;
   return { sl, tgt, changed };
+}
+
+/** Lock to cost when the lot is in profit; otherwise the window's %. */
+export function proposedProtect(
+  last: number,
+  slPct: number,
+  tgtPct: number | null,
+  avg = 0,
+  kind: ContinueKind = "trail",
+): { sl: number; tgt: number | null } {
+  const pct = protectionPrices(last, slPct, tgtPct);
+  if (kind === "lock" && avg > 0 && last > avg) {
+    let sl = roundTick(avg);
+    if (sl >= last) sl = pct.sl;
+    return { sl, tgt: null };
+  }
+  return pct;
+}
+
+export function bookQty(quantity: number, lotSize = 1): number {
+  const lot = lotSize > 0 ? lotSize : 1;
+  const abs = Math.abs(quantity);
+  const snapped = Math.floor(abs / 2 / lot) * lot;
+  return snapped > 0 ? snapped : abs;
+}
+
+export function optionPnl(pos: { last_price: number; average_price?: number; quantity: number }): number | null {
+  const avg = pos.average_price ?? 0;
+  if (!(avg > 0) || !Number.isFinite(pos.last_price)) return null;
+  return (pos.last_price - avg) * pos.quantity;
 }
 
 function inrPx(n: number): string {
@@ -187,14 +219,20 @@ function inrPx(n: number): string {
   return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
-function manageLabel(verb: string, mark: string, last: number, slPct: number | null, tgtPct: number | null): string {
+function manageLabel(
+  verb: string,
+  mark: string,
+  last: number,
+  slPct: number | null,
+  tgtPct: number | null,
+  avg = 0,
+  kind: ContinueKind = "trail",
+): string {
   const head = mark ? `${verb} ${mark}` : verb;
   if (!(last > 0) || slPct == null) return head;
-  const px = protectionPrices(last, slPct, tgtPct);
+  const px = proposedProtect(last, slPct, tgtPct, avg, kind);
   return `${head} · SL ${inrPx(px.sl)}${px.tgt != null ? ` · TGT ${inrPx(px.tgt)}` : ""}`;
 }
-
-export type ContinueKind = "buy" | "trail" | "book" | "lock" | "close" | "sit";
 
 export interface WindowPlan {
   kind: ContinueKind;
@@ -208,11 +246,12 @@ export interface WindowPlan {
 export function planWindow(
   action: string,
   windowSide: "CE" | "PE" | "BOTH" | "WAIT",
-  held: { optionSide: "CE" | "PE"; last_price?: number } | null,
+  held: { optionSide: "CE" | "PE"; last_price?: number; average_price?: number } | null,
   mark: string,
 ): WindowPlan {
   const sit: WindowPlan = { kind: "sit", label: "—", slPct: null, tgtPct: null, note: "" };
   const last = held?.last_price ?? 0;
+  const avg = held?.average_price ?? 0;
   if (!held) {
     if (windowSide === "WAIT" || windowSide === "BOTH" || action === "WAIT" || action === "AVOID" || action.startsWith("BOOK")) {
       return sit;
@@ -233,29 +272,30 @@ export function planWindow(
   if (action.startsWith("BOOK")) {
     return {
       kind: "book",
-      label: manageLabel("Book", tag, last, -10, 15),
+      label: manageLabel("Book", tag, last, -10, 15, avg, "book"),
       slPct: -10,
       tgtPct: 15,
-      note: "Book half. Trail the rest — do not add.",
+      note: "Book half (one lot if that's all you have). Trail the rest.",
     };
   }
   if (action === "AVOID" || action === "WAIT") {
+    const inProfit = avg > 0 && last > avg;
     return {
       kind: "lock",
-      label: manageLabel("Lock", tag, last, -12, null),
+      label: manageLabel("Lock", tag, last, -12, null, avg, "lock"),
       slPct: -12,
       tgtPct: null,
-      note: "No fresh lots. Stop only ratchets tighter.",
+      note: inProfit ? "In profit — stop to cost. No add." : "Stop tightens. No add.",
     };
   }
   const slPct = action.startsWith("HOLD") ? -15 : action.startsWith("SCALP") ? -20 : -25;
   const tgtPct = action.startsWith("HOLD") ? 80 : action.startsWith("SCALP") ? 30 : 50;
   return {
     kind: "trail",
-    label: manageLabel("Trail", tag, last, slPct, tgtPct),
+    label: manageLabel("Trail", tag, last, slPct, tgtPct, avg, "trail"),
     slPct,
     tgtPct,
-    note: "Same side — upgrade SL/TGT, do not add.",
+    note: "Same side — trail SL/TGT, do not add.",
   };
 }
 

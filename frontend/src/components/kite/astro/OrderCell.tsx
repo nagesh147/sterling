@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import type { BuyContract } from "../../../lib/astro/tape";
 import {
+  bookQty,
   heldStrikeLabel,
   matchHeldOption,
   optionExchange,
@@ -162,7 +163,7 @@ export function OrderCell({
             {pending === "buy"
               ? `BUY ${hit?.lot_size ?? 1} ${hit?.tradingsymbol}`
               : pending === "book"
-                ? `SELL ${Math.max(1, Math.floor(Math.abs(held!.quantity) / 2))} ${held!.tradingsymbol}`
+                ? `SELL ${bookQty(held!.quantity)} ${held!.tradingsymbol}`
                 : pending === "close"
                   ? `SELL ${Math.abs(held!.quantity)} ${held!.tradingsymbol}`
                   : `GTT ${held?.tradingsymbol} · SL ${Math.abs(plan.slPct ?? 0)}%${plan.tgtPct ? ` · TGT ${plan.tgtPct}%` : ""}`}
@@ -190,7 +191,8 @@ export function OrderCell({
                 } else if (pending === "close" && held) {
                   saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
                 } else if (pending === "book" && held) {
-                  const left = Math.abs(held.quantity) - Math.max(1, Math.floor(Math.abs(held.quantity) / 2));
+                  const sold = bookQty(held.quantity);
+                  const left = Math.abs(held.quantity) - sold;
                   if (left <= 0) saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
                   else {
                     saveDemo(loadDemo().map((r) => (r.tradingsymbol === held.tradingsymbol ? { ...r, quantity: left } : r)));

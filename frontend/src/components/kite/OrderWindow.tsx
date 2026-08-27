@@ -254,7 +254,8 @@ export function OrderWindow({ options, onClose }: Props) {
         // Carry positions can attach a protective GTT — queued until the
         // order actually fills (see PendingGttProtectionWatcher), not fired
         // on mere submission-acceptance.
-        if (product !== 'MIS' && (slOn || tgtOn)) {
+        // Carry + Astro MIS lots attach a protective GTT once the order fills.
+        if ((product !== 'MIS' || options.tag === 'ASTRO') && (slOn || tgtOn)) {
           const base = needsPrice(orderType) ? price : instr.lastPrice;
           const gtt = buildProtectionGtt({
             tradingsymbol: instr.symbol, exchange: instr.exchange, entrySide: side, quantity: qty,

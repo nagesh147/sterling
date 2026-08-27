@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt } from "../../../hooks/useKite";
-import { useOrderWindowStore } from "../../../store/useOrderWindowStore";
+import { notifyOrder } from "../../../store/useKiteNotifications";
 import {
+  bookQty,
   findGtt,
   gttBody,
   heldStrikeLabel,
   matchHeldOption,
+  optionPnl,
   pickNearestOption,
   planWindow,
-  protectionPrices,
+  proposedProtect,
   ratchetProtection,
   searchQuery,
   type OpenPos,
@@ -56,7 +58,7 @@ export function KiteOrderCell({
 
   const upsertTrail = (row: OpenPos, plan: WindowPlan) => {
     if (!(row.last_price > 0) || plan.slPct == null) return;
-    const proposed = protectionPrices(row.last_price, plan.slPct, plan.tgtPct);
+    const proposed = proposedProtect(row.last_price, plan.slPct, plan.tgtPct, row.average_price, plan.kind);
     const next = ratchetProtection(row.last_price, proposed, findGtt(gtts.data, row.tradingsymbol)?.triggers ?? []);
     if (!next.changed && findGtt(gtts.data, row.tradingsymbol)) return;
     const body = gttBody(row, row.last_price, next.sl, next.tgt);
@@ -93,7 +95,7 @@ export function KiteOrderCell({
   };
 
   const onBook = (p: OpenPos) => {
-    const half = Math.max(1, Math.floor(Math.abs(p.quantity) / 2));
+    const half = bookQty(p.quantity);
     openOrderWindow({
       symbol: p.tradingsymbol,
       exchange: p.exchange,
@@ -144,6 +146,7 @@ export function useAstroHolding(
     return {
       mark,
       plan,
+      pnl: optionPnl(held),
       onClose: () =>
         openOrderWindow({
           symbol: held.tradingsymbol,
@@ -186,7 +189,7 @@ export function AstroTrailWatcher({
     const plan = planWindow(live.action, live.side, held, mark);
     if (plan.kind !== "trail" && plan.kind !== "lock" && plan.kind !== "book") return;
     if (!(held.last_price > 0) || plan.slPct == null) return;
-    const proposed = protectionPrices(held.last_price, plan.slPct, plan.tgtPct);
+    const proposed = proposedProtect(held.last_price, plan.slPct, plan.tgtPct, held.average_price, plan.kind);
     const existing = findGtt(gtts.data, held.tradingsymbol);
     const next = ratchetProtection(held.last_price, proposed, existing?.triggers ?? []);
     if (existing && !next.changed) return;
@@ -194,8 +197,14 @@ export function AstroTrailWatcher({
     if (applied.current === key) return;
     const body = gttBody(held, held.last_price, next.sl, next.tgt);
     applied.current = key;
-    if (existing) modifyGtt.mutate({ id: existing.id, ...body });
-    else placeGtt.mutate(body);
+    const onOk = () =>
+      notifyOrder({
+        kind: "info",
+        title: existing ? "Astro trail" : "Astro stop",
+        message: `${held.tradingsymbol} SL ₹${next.sl}${next.tgt != null ? ` · TGT ₹${next.tgt}` : ""}`,
+      });
+    if (existing) modifyGtt.mutate({ id: existing.id, ...body }, { onSuccess: onOk });
+    else placeGtt.mutate(body, { onSuccess: onOk });
   }, [connected, live, held, gtts.isFetched, gtts.data, modifyGtt, placeGtt]);
 
   return null;
