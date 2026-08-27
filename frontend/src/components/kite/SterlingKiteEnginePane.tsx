@@ -6,7 +6,7 @@ import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './bo
 import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
-import { LEG_BG,
+import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG,
   ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   type SignalColVisibility,
 } from './board/signalRowSpec';
@@ -88,7 +88,11 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
   const isActive = sort.key === sortKey && sort.dir !== '';
   return (
     <div 
-      style={{ ...style, cursor: 'pointer', userSelect: 'none' }} 
+      // The active column's heading brightens, as it does on the shared board:
+      // the sort arrow alone is a 8x4 glyph, which is not enough to say which
+      // column the table is ordered by. Everything else about the type is
+      // inherited from the header strip.
+      style={{ ...style, color: isActive ? k.text : undefined, cursor: 'pointer', userSelect: 'none' }} 
       onClick={() => handleSort(sortKey)}
       className={sortKey ? "sort-header-div" : ""}
       title={`Sort by ${label}`}
@@ -968,7 +972,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                                <span style={{ fontSize: ROW_METRICS.cellFontSize, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {entryPx != null ? entryPx.toFixed(2) : '—'}
                                  {entryDiff != null && (
-                                   <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
+                                   <span style={{ fontSize: ROW_METRICS.cellFontSize, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
                                      ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
                                    </span>
                                  )}
@@ -984,7 +988,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={row.source === 'navigator'
                                ? 'Stop from the AVWAP proposal that originated this signal'
                                : 'Initial stop at entry (fast SuperTrend line)'}>
-                               <span data-testid="leg-sl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-sl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                                </span>
                              </Tip>
@@ -1000,7 +1004,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={isNav
                                ? 'Navigator signals do not trail — the single stop is in the SL column'
                                : 'Trailing stop — ratchets tighter as SuperTrend lines flip red'}>
-                               <span data-testid="leg-tsl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-tsl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {isNav ? '—' : (slPx != null ? slPx.toFixed(1) : '—')}
                                </span>
                              </Tip>
@@ -1010,7 +1014,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // Red-counter progress toward the auto-exit rule (row-level).
                            return (
                              <Tip text="Red-counter progress toward the auto-exit rule (exit_mode)">
-                               <span style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
                                  {legExitState ?? '—'}
                                </span>
                              </Tip>
@@ -1022,13 +1026,13 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // R-multiple of the accepted stop and rejects the signal without it.
                            return targetPx != null ? (
                              <Tip text={`Target ₹${targetPx.toFixed(2)} — Navigator's AVWAP stop/target proposal (an R-multiple of its accepted stop)`}>
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {targetPx.toFixed(1)}
                                </span>
                              </Tip>
                            ) : (
                              <Tip text="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)">
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
                                  —
                                </span>
                              </Tip>
@@ -1041,7 +1045,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                        const col = SIGNAL_LEFT_COLUMNS[key];
                        if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                        return (
-                         <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                         <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                            {renderLeftCell(col.key)}
                          </div>
                        );
@@ -1106,7 +1110,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                               );
                             case 'ltp':
                               return (
-                                <span style={{ color: color, fontWeight: 500, fontSize: ROW_METRICS.instrumentFontSize, width: '100%', textAlign: 'right' }}>
+                                <span style={{ color: color, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>
                                   {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                                 </span>
                               );
@@ -1118,7 +1122,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           const col = SIGNAL_RIGHT_COLUMNS[key];
                           if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                           return (
-                            <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                            <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                               {renderRightCell(col.key)}
                             </div>
                           );
@@ -2221,8 +2225,22 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           </div>
           {viewLayout === 'list' && (
             <div className="st-header-row" onScroll={syncHscroll} style={{
-              display: 'flex', alignItems: 'center', gap: 16,
-              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`,
+              display: 'flex', alignItems: 'center', gap: ROW_METRICS.gap,
+              // Headings, not content. This strip used to be 12px regular
+              // sentence-case, which made it read as one more row of data and
+              // was the single biggest reason this table looked unrelated to
+              // the shared board. The type is set on the container so both
+              // SortHeaderDiv and DraggableColHeader inherit it -- neither sets
+              // a font of its own, so there is nothing to override per cell.
+              padding: HEAD_METRICS.padding,
+              fontSize: HEAD_METRICS.fontSize,
+              fontWeight: HEAD_METRICS.fontWeight,
+              letterSpacing: HEAD_METRICS.letterSpacing,
+              textTransform: HEAD_METRICS.textTransform,
+              color: k.dim, borderBottom: `1px solid ${k.border}`,
+              // Matches the shared header's reserved accent gutter, so the
+              // headings sit over the cells they name rather than 3px left.
+              borderLeft: '3px solid transparent',
               overflowX: 'auto', overflowY: 'hidden',
             }}>
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: '1 1 150px', minWidth: 150 }} />
@@ -2460,16 +2478,29 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   className="st-group-header"
                   style={{ 
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 16px', background: k.bg, borderBottom: `1px solid ${k.border}`,
+                    padding: DAY_HEAD_METRICS.padding, background: k.surface,
+                    borderBottom: `1px solid ${k.border}`,
                     cursor: 'pointer', userSelect: 'none'
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 600, color: group.active ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    fontSize: DAY_HEAD_METRICS.fontSize,
+                    fontWeight: DAY_HEAD_METRICS.fontWeight,
+                    letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+                    textTransform: DAY_HEAD_METRICS.textTransform,
+                    // Quiet baseline like the shared band, but an active group
+                    // keeps its green: that is real state, not decoration, and
+                    // the dot beside it would otherwise be the only sign of it.
+                    color: group.active ? k.green : k.dim,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
                     {group.active && <span style={{ width: 7, height: 7, borderRadius: 4, background: k.green }} />}
                     {group.label}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: k.dim }}>{group.rows.length} signals</span>
+                    {/* Inherits the band's micro-type; lighter than the label,
+                        as in the shared board's count. */}
+                    <span style={{ fontWeight: 500, color: k.dim }}>{group.rows.length} signals</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>

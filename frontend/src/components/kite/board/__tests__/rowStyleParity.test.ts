@@ -12,12 +12,13 @@
  * parity is a literal creeping back in, so that is what is checked.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-const read = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
-const superTrend = read('../../SterlingKiteEnginePane.tsx');
-const sharedBoard = read('../SignalBoard.tsx');
+// `?raw` rather than node:fs — Vite's own mechanism, typed by the `vite/client`
+// reference in `src/vite-env.d.ts`. Reading through node:fs works at runtime but
+// needs @types/node, which this tsconfig does not pull in.
+import superTrend from '../../SterlingKiteEnginePane.tsx?raw';
+import sharedBoard from '../SignalBoard.tsx?raw';
+import rowSpec from '../signalRowSpec.ts?raw';
 
 /**
  * The leg-row CSS block, which is where the geometry lives.
@@ -56,7 +57,7 @@ describe('SuperTrend reads the shared row spec', () => {
 
 describe('both tables share one leg shade', () => {
   it('is defined once and imported by both', () => {
-    expect(read('../signalRowSpec.ts')).toContain("LEG_BG = 'var(--k-surface-2)'");
+    expect(rowSpec).toContain("LEG_BG = 'var(--k-surface-2)'");
     // Neither file may hold its own copy of the string.
     for (const [name, src] of [['SuperTrend', superTrend], ['SignalBoard', sharedBoard]] as const) {
       expect(src, `${name} imports LEG_BG`).toContain('LEG_BG');
@@ -73,5 +74,89 @@ describe('both tables share one leg shade', () => {
 
   it('reserves the accent gutter so cells never shift sideways', () => {
     expect(legRowCss).toContain('border-left: 3px solid transparent');
+  });
+});
+
+/**
+ * The header strips.
+ *
+ * These were the real gap, and the first pass at this file missed them entirely
+ * because it only ever looked at the row. SuperTrend's column headings were 12px
+ * regular sentence-case against the shared board's 8.5px bold uppercase, so the
+ * two tables could share every row token and still look nothing alike — the
+ * heading strip is the first thing you read.
+ */
+describe('both tables share one heading scale', () => {
+  it('defines the column-heading type once', () => {
+    expect(rowSpec).toContain('HEAD_METRICS');
+    expect(rowSpec).toContain("fontSize: 8.5");
+    for (const [name, src] of [['SuperTrend', superTrend], ['SignalBoard', sharedBoard]] as const) {
+      expect(src, `${name} reads HEAD_METRICS`).toContain('HEAD_METRICS.fontSize');
+      expect(src, `${name} reads the heading transform`).toContain('HEAD_METRICS.textTransform');
+    }
+  });
+
+  it('leaves no sentence-case heading strip behind in SuperTrend', () => {
+    // The exact literals the old strip used. Their return means somebody set a
+    // heading font locally instead of reading the spec.
+    expect(superTrend).not.toContain("padding: '12px 16px', fontSize: 12");
+    expect(superTrend).not.toMatch(/fontSize: 12, fontWeight: 400, color: k\.dim/);
+  });
+
+  it('defines the group band once, and both read it', () => {
+    expect(rowSpec).toContain('DAY_HEAD_METRICS');
+    for (const [name, src] of [['SuperTrend', superTrend], ['SignalBoard', sharedBoard]] as const) {
+      expect(src, `${name} reads DAY_HEAD_METRICS`).toContain('DAY_HEAD_METRICS.padding');
+      expect(src, `${name} reads the band transform`).toContain('DAY_HEAD_METRICS.textTransform');
+    }
+  });
+
+  it('puts the group band on the surface shade, not the row background', () => {
+    // Scoped to the band itself. Searching the whole file for `background: k.bg`
+    // also hits the trade-rules panel, which legitimately sits on the row
+    // background -- the first version of this assertion did exactly that.
+    const start = superTrend.indexOf('className="st-group-header"');
+    expect(start).toBeGreaterThan(-1);
+    const band = superTrend.slice(start, start + 600);
+    // A band drawn on k.bg is invisible against the rows it separates, which is
+    // what SuperTrend's was.
+    expect(band).toContain('background: k.surface');
+    expect(band).not.toContain('background: k.bg');
+  });
+});
+
+/**
+ * The cells.
+ *
+ * The shared board gives every non-instrument cell one size (11px) and tabular
+ * figures. SuperTrend's cells ran at 10, 11 and 13 — the stop and trail columns
+ * a size smaller, LTP a size larger and semibold — and none of them asked for
+ * tabular figures, so columns of prices came out ragged where the shared board's
+ * line up.
+ */
+describe('both tables share one cell scale', () => {
+  /** The leg row's cell renderers. */
+  const legCells = (() => {
+    const start = superTrend.indexOf('const renderLeftCell');
+    expect(start).toBeGreaterThan(-1);
+    const end = superTrend.indexOf('const renderRightCell', start);
+    expect(end).toBeGreaterThan(start);
+    return superTrend.slice(start, superTrend.indexOf('</div>', end));
+  })();
+
+  it('sizes every cell from ROW_METRICS', () => {
+    expect(legCells).toContain('ROW_METRICS.cellFontSize');
+    // 10 and 13 were the two off-scale sizes. A bare `fontSize: 10` or 13 back
+    // in the cells means somebody sized text rather than a glyph.
+    expect(legCells).not.toMatch(/fontSize: 10[,}]/);
+    expect(legCells).not.toMatch(/fontSize: 13[,}]/);
+  });
+
+  it('renders figures tabular so columns of prices line up', () => {
+    // On the wrapper, not per cell: nine spans each remembering it is nine
+    // chances to forget.
+    const wrappers = superTrend.match(/fontVariantNumeric: 'tabular-nums'/g) ?? [];
+    expect(wrappers.length).toBeGreaterThanOrEqual(2);
+    expect(sharedBoard).toContain("fontVariantNumeric: 'tabular-nums'");
   });
 });

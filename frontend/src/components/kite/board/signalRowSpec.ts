@@ -80,3 +80,43 @@ export const ROW_METRICS = {
  * files that can disagree.
  */
 export const LEG_BG = 'var(--k-surface-2)';
+
+/**
+ * The column-heading type scale.
+ *
+ * Headings are deliberately much smaller than the data they label — 8.5px bold
+ * uppercase with open letter-spacing — because a heading competing with its own
+ * column for attention is what makes a dense table hard to scan. This is the
+ * single largest thing that made the two signal tables look unrelated:
+ * SuperTrend's headings were 12px regular sentence-case, so its header read as
+ * another row of content rather than as a label strip.
+ *
+ * `textTransform` is typed as a literal so it satisfies React's CSSProperties
+ * without a cast at each use.
+ */
+export const HEAD_METRICS = {
+  padding: '7px 16px',
+  fontSize: 8.5,
+  fontWeight: 700,
+  letterSpacing: '.06em',
+  textTransform: 'uppercase' as const,
+} as const;
+
+/**
+ * The band that separates one group of rows from the next.
+ *
+ * The shared board groups by trading day; SuperTrend groups by underlying. The
+ * grouping key differs but the band is the same furniture, so it gets the same
+ * treatment: a quiet `surface` strip in the same micro-type as the headings,
+ * slightly wider letter-spacing because it sits alone on its line.
+ *
+ * It stays quiet on purpose. Anything the group needs to shout — an active
+ * marker, a count — carries its own colour on top of this baseline.
+ */
+export const DAY_HEAD_METRICS = {
+  padding: '4px 12px',
+  fontSize: 8.5,
+  fontWeight: 700,
+  letterSpacing: '.07em',
+  textTransform: 'uppercase' as const,
+} as const;

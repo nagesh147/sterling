@@ -19,7 +19,7 @@ import {
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
-import { LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -847,7 +847,7 @@ export function SignalBoard({
           display: 'flex',
           alignItems: 'center',
           gap: ROW_METRICS.gap,
-          padding: '7px 16px',
+          padding: HEAD_METRICS.padding,
           borderBottom: `1px solid ${k.border}`,
           borderLeft: '3px solid transparent',
           position: 'sticky',
@@ -880,9 +880,12 @@ export function SignalBoard({
                   flex: col.id === 'instrument' ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
                   width: col.id === 'instrument' ? undefined : col.width,
                   minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
-                  fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em',
+                  fontSize: HEAD_METRICS.fontSize,
+                  fontWeight: HEAD_METRICS.fontWeight,
+                  letterSpacing: HEAD_METRICS.letterSpacing,
+                  textTransform: HEAD_METRICS.textTransform,
                   color: active ? k.text : k.dim,
-                  textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap',
                   overflow: 'hidden', textOverflow: 'ellipsis',
                   cursor: onSortChange ? 'pointer' : 'default',
                   outlineOffset: 2,
@@ -902,8 +905,13 @@ export function SignalBoard({
         <section key={key}>
           <h3 style={{
             margin: 0, position: 'sticky', top: 28, zIndex: 1,
-            padding: '4px 12px', background: k.surface, borderBottom: `1px solid ${k.border}`,
-            fontSize: 8.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: k.dim,
+            padding: DAY_HEAD_METRICS.padding, background: k.surface,
+            borderBottom: `1px solid ${k.border}`,
+            fontSize: DAY_HEAD_METRICS.fontSize,
+            fontWeight: DAY_HEAD_METRICS.fontWeight,
+            letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+            textTransform: DAY_HEAD_METRICS.textTransform,
+            color: k.dim,
             display: 'flex', justifyContent: 'space-between',
           }}>
             <span>{sessionDayLabel(key, nowMs)}</span>
