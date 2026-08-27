@@ -73,7 +73,7 @@ export function NowBoard({
   sessionPnl?: number | null;
   buy?: BuyContract;
   nextBuy?: BuyContract;
-  holding?: { mark: string; plan: WindowPlan; onClose?: () => void } | null;
+  holding?: { mark: string; plan: WindowPlan; onClose?: () => void; pnl?: number | null } | null;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -95,12 +95,19 @@ export function NowBoard({
     grade && (grade.kind === "LIVE" || grade.kind === "HIT" || grade.kind === "MISS") && grade.delta !== null
       ? grade.delta
       : null;
-  const tape = liveTape !== null ? liveTape : recap && sessionPnl != null ? sessionPnl : null;
+  const holdingNow = Boolean(holding && holding.plan.kind !== "sit");
+  const tape =
+    holdingNow && holding?.pnl != null
+      ? holding.pnl
+      : liveTape !== null
+        ? liveTape
+        : recap && sessionPnl != null
+          ? sessionPnl
+          : null;
 
   const kicker =
     status.phase === "live" ? "NOW" : status.phase === "pre" ? "OPENS" : "CLOSED";
 
-  const holdingNow = Boolean(holding && holding.plan.kind !== "sit");
   const play = holdingNow
     ? `HOLDING ${holding!.mark}`
     : recap
@@ -153,7 +160,7 @@ export function NowBoard({
         ) : null}
       </div>
 
-      {status.phase === "live" || status.phase === "pre" ? <p className="ko-now-copy">{status.suggestion}</p> : null}
+      {holdingNow ? null : status.phase === "live" || status.phase === "pre" ? <p className="ko-now-copy">{status.suggestion}</p> : null}
       {nextLine ? <p className="ko-now-next">{nextLine}</p> : null}
 
       {progress !== null ? (
