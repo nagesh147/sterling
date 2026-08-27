@@ -26,10 +26,13 @@ from typing import Any, Optional
 
 from app.core.logging import get_logger
 from app.engines.adaptive_edge import AdaptiveEdgeConfig
+from app.engines.adaptive_edge.state_machine import Event
+from app.engines.adaptive_edge.execution import align_to_tick, exit_order_price, stop_from_entry
 from app.services.adaptive_edge import get_config, ist_now_ms, ist_today
 from app.services.adaptive_edge_positions import (
     AdaptiveEdgePosition,
     close as close_position,
+    get as get_position,
     mark_filled,
     mark_rejected,
     open_positions,
@@ -128,6 +131,103 @@ def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
         return False, f"safety check unavailable: {exc}"
 
 
+
+
+_OWNER = "adaptive_edge"
+
+
+async def _subscribe_watched(uid: str) -> None:
+    """Full-mode ticks for everything held.
+
+    MODE_FULL rather than quote: the options-state fields the strategy reads
+    (§16) only appear in full packets, and the stop needs a live premium rather
+    than a delayed one.
+
+    Subscriptions are refcounted and owner-tagged, so releasing here cannot take
+    ticks away from another engine watching the same contract.
+    """
+    session = _sessions.get(uid)
+    if session is None:
+        return
+    tokens = {int(p.token) for p in open_positions(uid) if int(p.token or 0) > 0}
+    new = tokens - session.watched
+    stale = session.watched - tokens
+    if new:
+        try:
+            from app.services.exchanges.kite import constants as K
+            from app.services.exchanges.kite import ticker_manager
+            await ticker_manager.subscribe(uid, sorted(new), K.MODE_FULL, owner=_OWNER)
+            session.watched |= new
+        except Exception as exc:                                   # noqa: BLE001
+            log.warning("adaptive_edge subscribe failed for %s: %s", uid, exc)
+    if stale:
+        try:
+            from app.services.exchanges.kite import ticker_manager
+            await ticker_manager.release(uid, sorted(stale), owner=_OWNER)
+        except Exception as exc:                                   # noqa: BLE001
+            log.debug("adaptive_edge release failed for %s: %s", uid, exc)
+        session.watched -= stale
+
+
+async def _client(uid: str):
+    from app.services.exchanges.kite import accounts
+    acct = accounts.get_active(uid)
+    if not acct:
+        raise RuntimeError("No active Kite account")
+    return await accounts.acquire_client(acct)
+
+
+async def _confirm_fill(client, order_id: str) -> tuple[str, float]:
+    """(status, average_price) for an order, from the broker.
+
+    A position is not open because we sent an order. Assuming the limit price
+    was the fill is how a stop ends up sized against a price nobody traded at.
+    """
+    if str(order_id).startswith("PAPER-"):
+        return "COMPLETE", 0.0          # simulated; the caller keeps its own price
+    try:
+        history = await client.get_order_history(order_id)
+    except Exception as exc:                                       # noqa: BLE001
+        log.warning("adaptive_edge: order status unavailable for %s: %s", order_id, exc)
+        return "UNKNOWN", 0.0
+    if not history:
+        return "UNKNOWN", 0.0
+    last = history[-1] if isinstance(history, list) else history
+    status = str((last or {}).get("status") or "").upper()
+    try:
+        average = float((last or {}).get("average_price") or 0.0)
+    except (TypeError, ValueError):
+        average = 0.0
+    return status, average
+
+
+def realised_pnl_today(uid: str) -> float:
+    """Realised rupees on positions this engine closed today."""
+    from app.services.adaptive_edge_positions import load
+    total = 0.0
+    for pos in load(uid).values():
+        if pos.is_open or pos.exit_price <= 0 or pos.entry_price <= 0:
+            continue
+        total += (pos.exit_price - pos.entry_price) * pos.quantity
+    return total
+
+
+def daily_loss_breached(uid: str, cfg: AdaptiveEdgeConfig) -> tuple[bool, str]:
+    """Whether today's realised loss has reached the configured cap.
+
+    Denominated in rupees against this engine's own closed positions, not the
+    shared USD crypto breaker — that one reads zero for an INR book, so relying
+    on it would be a gate that always passes.
+    """
+    if cfg.max_daily_loss <= 0:
+        return False, ""
+    realised = realised_pnl_today(uid)
+    if realised <= -abs(cfg.max_daily_loss):
+        return True, (f"daily loss cap reached: {realised:,.0f} "
+                      f"against a limit of {-abs(cfg.max_daily_loss):,.0f}")
+    return False, ""
+
+
 # ------------------------------------------------------------- session
 
 @dataclass
@@ -138,6 +238,7 @@ class Session:
     scans: int = 0
     signals: int = 0
     armed: int = 0
+    exits: int = 0
     observations: int = 0
     blocked: dict[str, int] = field(default_factory=dict)
     watched: set = field(default_factory=set)
@@ -180,6 +281,7 @@ def session_status(uid: str) -> Optional[dict[str, Any]]:
         "scans": session.scans,
         "signals": session.signals,
         "armed": session.armed,
+        "exits": session.exits,
         "observations": session.observations,
         "blocked": dict(session.blocked),
         "open_positions": len(open_positions(uid)),
@@ -272,79 +374,432 @@ def _signals_from(candidates: list[dict], cfg: AdaptiveEdgeConfig) -> list[dict]
 # ----------------------------------------------------------------- arm
 
 async def arm(uid: str, signal_id: str) -> dict[str, Any]:
-    """Open a position for a signal, subject to every gate.
+    """Enter one signal, end to end, with the broker as the authority.
 
-    Order matters. Promotion is checked before anything is placed, because a
-    refusal that arrives after the order does is not a gate.
+    The order is deliberate: refuse early and cheaply, send once under an
+    idempotency key, persist before confirming, confirm the real fill, re-anchor
+    the stop to it, and only then put protection at the broker. Every step
+    before the last is recoverable; the last is what makes the position safe to
+    walk away from.
+
+    A previous version recorded the position without sending anything, which is
+    worse than not trading: the board shows a position that does not exist, with
+    a stop nothing enforces.
     """
     cfg = get_config()
-    session = session_for(uid, cfg)
 
-    blocked, reason = promotion_blocked()
-    paper = is_paper(uid)
-    if blocked and not paper:
-        session.note_block(reason)
-        return {"ok": False, "reason": reason,
-                "detail": "This strategy is not promoted for live execution. Switch the account to paper to run it."}
+    async with _lock_for(uid):
+        session = session_for(uid, cfg)
 
-    allowed, safety_reason = _safety(uid, idempotency_key=f"adaptive_edge:{uid}:{signal_id}")
-    if not allowed:
-        session.note_block(safety_reason or "safety")
-        return {"ok": False, "reason": safety_reason or "blocked by safety"}
+        blocked, reason = promotion_blocked()
+        paper = is_paper(uid)
+        if blocked and not paper:
+            session.note_block(reason)
+            return {"ok": False, "reason": reason,
+                    "detail": "This strategy is not promoted for live execution. "
+                              "Switch the account to paper to run it."}
 
-    if len(open_positions(uid)) >= cfg.max_positions:
-        session.note_block("max positions")
-        return {"ok": False, "reason": f"already holding {cfg.max_positions} position(s)"}
+        breached, why = daily_loss_breached(uid, cfg)
+        if breached:
+            session.note_block("daily loss cap")
+            return {"ok": False, "reason": why}
 
-    state = scan_state(uid)
-    signal = next((s for s in state.get("signals") or [] if s.get("signal_id") == signal_id), None)
-    if signal is None:
-        return {"ok": False, "reason": "signal not found in the current scan"}
+        if len(open_positions(uid)) >= cfg.max_positions:
+            session.note_block("max positions")
+            return {"ok": False, "reason": f"already holding {cfg.max_positions} position(s)"}
 
-    lot_size = int(signal.get("lot_size") or 0)
-    if lot_size <= 0:
-        return {"ok": False, "reason": "lot size unknown for this contract"}
-    quantity = lot_size * max(1, cfg.lots)
-    entry = float(signal.get("last_price") or 0.0)
-    if entry <= 0:
-        return {"ok": False, "reason": "no tradeable price for this contract"}
+        state = scan_state(uid)
+        signal = next((s for s in state.get("signals") or []
+                       if s.get("signal_id") == signal_id), None)
+        if signal is None:
+            return {"ok": False, "reason": "signal not found in the current scan"}
 
-    stop = round(entry * (1.0 - cfg.stop_percent / 100.0), 2)
-    target = round(entry * cfg.target_multiple, 2) if cfg.target_multiple > 0 else None
+        symbol = str(signal.get("symbol") or "")
+        existing = get_position(uid, symbol)
+        if existing is not None and existing.is_open:
+            return {"ok": False, "reason": f"already holding {symbol}"}
 
-    position = AdaptiveEdgePosition(
-        symbol=str(signal.get("symbol")),
-        token=int(signal.get("token") or 0),
-        underlying=str(signal.get("underlying") or ""),
-        direction=str(signal.get("option_type") or "CE"),
-        quantity=quantity,
-        lot_size=lot_size,
-        entry_price=entry,
-        stop_price=stop,
-        target_price=target,
-        opened_ms=ist_now_ms(),
-        peak_price=entry,
-        signal_id=signal_id,
-        idempotency_key=f"adaptive_edge:{uid}:{signal_id}:{ist_today()}",
-    )
+        lot_size = int(signal.get("lot_size") or 0)
+        if lot_size <= 0:
+            return {"ok": False, "reason": "lot size unknown for this contract"}
+        quantity = lot_size * max(1, cfg.lots)
+        last_price = float(signal.get("last_price") or 0.0)
+        if last_price <= 0:
+            return {"ok": False, "reason": "no tradeable price for this contract"}
+
+        # One key per (signal, session day). A retry after a timeout re-uses it
+        # and is refused, which is the difference between a retry and a second
+        # position.
+        idem = f"adaptive_edge:{uid}:{signal_id}:{ist_today()}"
+        allowed, safety_reason = _safety(uid, idem)
+        if not allowed:
+            session.note_block(safety_reason or "safety")
+            return {"ok": False, "reason": safety_reason or "blocked by safety"}
+
+        limit = align_to_tick(last_price)
+        try:
+            client = await _client(uid)
+        except Exception as exc:                                   # noqa: BLE001
+            return {"ok": False, "reason": str(exc)}
+
+        try:
+            result = await client.place_order(
+                f"NFO:{symbol}", "buy", float(quantity),
+                order_type="limit_order", limit_price=float(limit),
+                tag="adaptive_edge")
+        except Exception as exc:                                   # noqa: BLE001
+            session.note_block("entry rejected")
+            return {"ok": False, "reason": f"entry rejected: {exc}"}
+
+        order_id = str((result or {}).get("order_id")
+                       or ((result or {}).get("data") or {}).get("order_id") or "")
+        if not order_id:
+            # No id and no exception is the dangerous case: an order may exist.
+            session.note_block("no order id")
+            return {"ok": False,
+                    "reason": "broker returned no order id — check positions before retrying"}
+
+        # Persist BEFORE confirming. If this process dies in the next second, the
+        # position that may exist at the broker is one we can find again.
+        position = AdaptiveEdgePosition(
+            symbol=symbol,
+            token=int(signal.get("token") or 0),
+            underlying=str(signal.get("underlying") or ""),
+            direction=str(signal.get("option_type") or "CE"),
+            quantity=quantity,
+            lot_size=lot_size,
+            entry_price=limit,
+            stop_price=stop_from_entry(limit, cfg.stop_percent),
+            target_price=align_to_tick(limit * cfg.target_multiple) if cfg.target_multiple > 0 else None,
+            opened_ms=ist_now_ms(),
+            peak_price=limit,
+            signal_id=signal_id,
+            idempotency_key=idem,
+            order_id=order_id,
+            stop_mode=cfg.stop_mode,
+        )
+        position.apply(Event.ORDER_SUBMITTED)
+        put(uid, position)
+
+        status, average = await _confirm_fill(client, order_id)
+        if status in ("REJECTED", "CANCELLED"):
+            mark_rejected(uid, symbol, status)
+            session.note_block(f"order {status.lower()}")
+            return {"ok": False, "reason": f"order {status.lower()} at the broker"}
+
+        fill = average if average > 0 else limit
+        filled = mark_filled(uid, symbol, fill, order_id=order_id)
+        if filled is not None:
+            # Re-anchor to what actually traded, not to what we asked for.
+            filled.stop_price = stop_from_entry(fill, cfg.stop_percent)
+            filled.target_price = (align_to_tick(fill * cfg.target_multiple)
+                                   if cfg.target_multiple > 0 else None)
+            put(uid, filled)
+            position = filled
+
+        gtt_id = await _place_protection(uid, client, position, cfg)
+        await _subscribe_watched(uid)
+        session.armed += 1
+        return {"ok": True, "order_id": order_id, "symbol": symbol,
+                "quantity": quantity, "entry": position.entry_price,
+                "stop": position.stop_price, "target": position.target_price,
+                "gtt_id": gtt_id, "paper": paper, "state": position.state}
+
+
+async def _place_protection(uid: str, client, position: AdaptiveEdgePosition,
+                            cfg: AdaptiveEdgeConfig) -> int:
+    """Broker-side stop for an open position, or 0.
+
+    A failed GTT is logged, never fatal: the tick monitor is still watching. But
+    it is not silent either — "protected" and "protected only while this process
+    lives" are different states and the operator must be able to tell which one
+    they are in.
+    """
+    if cfg.stop_mode == "monitor" or position.stop_price <= 0 or position.quantity <= 0:
+        return 0
+    try:
+        from app.services.kite_engine.protective_stop import place_stop
+        gtt_id = await place_stop(
+            client, tradingsymbol=position.symbol, exchange=position.exchange,
+            qty=int(position.quantity), trigger_premium=float(position.stop_price),
+            last_price=float(position.entry_price),
+            # Every option here is BOUGHT, so the protective exit is always a
+            # SELL on the downside. "PE" is the contract type, not the side.
+            direction="long",
+            target_premium=float(position.target_price or 0.0))
+    except Exception as exc:                                       # noqa: BLE001
+        log.warning("adaptive_edge: protective GTT failed for %s: %s", position.symbol, exc)
+        gtt_id = None
+
+    if gtt_id:
+        position.gtt_id = int(gtt_id)
+        position.gtt_at = float(position.stop_price)
+        put(uid, position)
+        return int(gtt_id)
+
+    session = _sessions.get(uid)
+    if session:
+        session.note_block(f"{position.symbol}: no broker stop")
+    return 0
+
+
+async def _cancel_protection(uid: str, client, position: AdaptiveEdgePosition) -> None:
+    """Take the broker stop down before selling.
+
+    Selling while a GTT is still armed is how one position gets sold twice.
+    """
+    if not position.gtt_id:
+        return
+    try:
+        from app.services.kite_engine.protective_stop import cancel_stop
+        await cancel_stop(client, int(position.gtt_id))
+    except Exception as exc:                                       # noqa: BLE001
+        log.warning("adaptive_edge: could not cancel GTT %s for %s: %s",
+                    position.gtt_id, position.symbol, exc)
+    position.gtt_id = 0
+    position.gtt_at = 0.0
     put(uid, position)
-    session.armed += 1
-    return {"ok": True, "symbol": position.symbol, "quantity": quantity,
-            "paper": paper, "state": position.state}
 
 
-# ---------------------------------------------------------- maintenance
+async def _sync_trail(uid: str, client, position: AdaptiveEdgePosition,
+                      cfg: AdaptiveEdgeConfig) -> None:
+    """Move the broker stop up to match a ratcheted trail.
+
+    Without this the GTT stays at the original stop and the ratchet is cosmetic:
+    the number on the screen moves and the thing protecting the money does not.
+    """
+    if not position.gtt_id or position.stop_price <= 0:
+        return
+    if abs(position.stop_price - position.gtt_at) < 0.05:
+        return
+    await _cancel_protection(uid, client, position)
+    await _place_protection(uid, client, position, cfg)
+
+
+async def _exit_position(uid: str, client, position: AdaptiveEdgePosition,
+                         cfg: AdaptiveEdgeConfig, *, price: float, reason: str) -> bool:
+    """The single exit path. Every caller goes through here.
+
+    Takes the position's `exiting` claim for the duration, so the tick monitor
+    and the square-off cannot both sell the same position. A caller that finds
+    the claim already taken does nothing and says so by returning False.
+
+    `reason` is a parameter rather than something inferred from the price: a
+    stop and a square-off can happen at the same number, and recording the wrong
+    one makes the exit ledger useless for calibration.
+    """
+    if position.exiting:
+        return False
+    position.exiting = True
+    put(uid, position)
+
+    # Cancel the broker stop FIRST — see _cancel_protection.
+    await _cancel_protection(uid, client, position)
+
+    limit = exit_order_price(price, position.tick_size)
+    try:
+        result = await client.place_order(
+            f"{position.exchange}:{position.symbol}", "sell", float(position.quantity),
+            order_type="limit_order", limit_price=float(limit), tag="adaptive_edge-exit")
+        order_id = str((result or {}).get("order_id")
+                       or ((result or {}).get("data") or {}).get("order_id") or "")
+    except Exception as exc:                                       # noqa: BLE001
+        order_id, failure = "", str(exc)
+        position.exiting = False
+        put(uid, position)
+        # Re-arm what we cancelled. Leaving it down would turn a failed exit
+        # into an unprotected position.
+        await _place_protection(uid, client, position, cfg)
+        log.error("adaptive_edge: exit rejected for %s: %s", position.symbol, failure)
+        return False
+
+    if not order_id:
+        position.exiting = False
+        put(uid, position)
+        await _place_protection(uid, client, position, cfg)
+        log.error("adaptive_edge: exit for %s returned no order id", position.symbol)
+        return False
+
+    close_position(uid, position.symbol, limit, reason, closed_ms=ist_now_ms())
+    await _subscribe_watched(uid)          # drops the token we no longer hold
+    session = _sessions.get(uid)
+    if session:
+        session.exits += 1
+    return True
+
+
+async def on_ticks(uid: str, ticks: list) -> str:
+    """Drive open positions from live prices. Returns a short status word."""
+    cfg = get_config()
+    holdings = open_positions(uid)
+    if not holdings:
+        return "idle"
+
+    by_token = {int(t.get("instrument_token") or 0): t for t in ticks or []}
+    session_over = not _is_market_open(cfg)
+    client = None
+    acted = "watching"
+
+    for position in holdings:
+        tick = by_token.get(int(position.token or 0))
+        if not tick:
+            continue
+        ltp = float(tick.get("last_price") or 0.0)
+        if ltp <= 0:
+            continue
+
+        # Ratchet the trail on the way up before deciding anything.
+        if ltp > position.peak_price:
+            position.peak_price = ltp
+            if cfg.profit_lock_fraction > 0:
+                locked = position.entry_price + (
+                    (position.peak_price - position.entry_price) * cfg.profit_lock_fraction)
+                # A stop only ever moves up. Widening it would be an expansion of
+                # risk the position was never authorized to take.
+                position.stop_price = max(position.stop_price, align_to_tick(locked))
+            put(uid, position)
+
+        reason = ""
+        if ltp <= position.stop_price:
+            reason = "stop"
+        elif position.target_price and ltp >= position.target_price:
+            reason = "target"
+        elif session_over:
+            reason = "session_end"
+
+        if not reason:
+            client = client or await _client(uid)
+            await _sync_trail(uid, client, position, cfg)
+            continue
+
+        client = client or await _client(uid)
+        if await _exit_position(uid, client, position, cfg, price=ltp, reason=reason):
+            acted = "exited"
+
+    return acted
+
+
+async def square_off_all(uid: str) -> dict[str, Any]:
+    """Flatten everything this engine holds. Used at the session boundary.
+
+    Runs regardless of manual/auto: auto gates opening, and a position that is
+    already open must be closed either way.
+    """
+    cfg = get_config()
+    holdings = open_positions(uid)
+    out: dict[str, Any] = {"closed": 0, "failed": 0, "errors": []}
+    if not holdings:
+        return out
+    try:
+        client = await _client(uid)
+    except Exception as exc:                                       # noqa: BLE001
+        out["errors"].append(str(exc))
+        return out
+
+    for position in holdings:
+        price = position.peak_price or position.entry_price
+        try:
+            quote = await client.quote([f"{position.exchange}:{position.symbol}"])
+            live = float((quote or {}).get(f"{position.exchange}:{position.symbol}", {})
+                         .get("last_price") or 0.0)
+            if live > 0:
+                price = live
+        except Exception:                                          # noqa: BLE001
+            pass
+        if await _exit_position(uid, client, position, cfg, price=price, reason="square_off"):
+            out["closed"] += 1
+        else:
+            out["failed"] += 1
+    return out
+
+
+async def adopt(uid: str, symbol: str, quantity: int, entry_price: float) -> dict[str, Any]:
+    """Take responsibility for a position this engine did not open.
+
+    Protection is placed immediately. A hand-placed position that this engine is
+    now managing but has not protected is the worst of both worlds — nobody is
+    watching it and everybody assumes somebody is.
+    """
+    cfg = get_config()
+    async with _lock_for(uid):
+        if quantity <= 0 or entry_price <= 0:
+            return {"ok": False, "reason": "quantity and entry_price must be positive"}
+        existing = get_position(uid, symbol)
+        if existing is not None and existing.is_open:
+            return {"ok": False, "reason": f"already managing {symbol}"}
+
+        position = AdaptiveEdgePosition(
+            symbol=symbol, token=0, underlying="", direction="CE",
+            quantity=int(quantity), lot_size=int(quantity),
+            entry_price=float(entry_price),
+            stop_price=stop_from_entry(float(entry_price), cfg.stop_percent),
+            target_price=align_to_tick(float(entry_price) * cfg.target_multiple)
+            if cfg.target_multiple > 0 else None,
+            opened_ms=ist_now_ms(), peak_price=float(entry_price),
+            stop_mode=cfg.stop_mode, notes=("adopted",),
+        )
+        position.apply(Event.ORDER_SUBMITTED)
+        position.apply(Event.FILL)
+        put(uid, position)
+
+        gtt_id = 0
+        try:
+            client = await _client(uid)
+            gtt_id = await _place_protection(uid, client, position, cfg)
+        except Exception as exc:                                   # noqa: BLE001
+            log.warning("adaptive_edge: could not protect adopted %s: %s", symbol, exc)
+        return {"ok": True, "symbol": symbol, "quantity": quantity,
+                "stop": position.stop_price, "gtt_id": gtt_id}
+
 
 async def reconcile(uid: str) -> dict[str, Any]:
     """Bring our view of positions back in line with the broker's.
 
-    Runs regardless of manual/auto. Auto gates *opening*; a position that is
+    Runs regardless of manual/auto: auto gates opening, and a position that is
     already open must be managed either way.
+
+    Two divergences matter. A position we think is open but the broker does not
+    hold was closed behind our back — by a GTT, by hand, or by the exchange — and
+    leaving it open in our ledger blocks the next entry and reports a P&L that
+    is not real. A position we hold with no broker stop is unprotected, and
+    re-arming it is the whole point of running this on a restart.
     """
     cfg = get_config()
-    out: dict[str, Any] = {"checked": 0, "closed": 0, "errors": []}
-    for position in open_positions(uid):
+    out: dict[str, Any] = {"checked": 0, "closed": 0, "reprotected": 0, "errors": []}
+    holdings = open_positions(uid)
+    if not holdings:
+        return out
+
+    try:
+        client = await _client(uid)
+        broker = await client.get_positions()
+    except Exception as exc:                                       # noqa: BLE001
+        # Unknown broker state is not an empty one. Closing our records here
+        # would abandon real positions on a transient API failure.
+        out["errors"].append(f"broker positions unavailable: {exc}")
+        return out
+
+    held: dict[str, int] = {}
+    for row in (broker or {}).get("net", []) if isinstance(broker, dict) else (broker or []):
+        symbol = str((row or {}).get("tradingsymbol") or "")
+        try:
+            qty = int((row or {}).get("quantity") or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if symbol:
+            held[symbol] = qty
+
+    for position in holdings:
         out["checked"] += 1
+        broker_qty = held.get(position.symbol, 0)
+        if broker_qty <= 0:
+            close_position(uid, position.symbol, position.peak_price or position.entry_price,
+                           "closed_at_broker", closed_ms=ist_now_ms())
+            out["closed"] += 1
+            continue
+        if not position.gtt_id and cfg.stop_mode != "monitor":
+            if await _place_protection(uid, client, position, cfg):
+                out["reprotected"] += 1
     return out
 
 
@@ -373,10 +828,30 @@ def _kite_user_ids() -> list[str]:
         return []
 
 
+def past_square_off(cfg: AdaptiveEdgeConfig) -> bool:
+    return _hhmm_now() >= cfg.square_off_time
+
+
 async def scan_all_once() -> dict[str, str]:
+    """One pass for every connected account.
+
+    Maintenance first, then scanning. Reconcile before opening anything so a
+    restart cannot open a second position in a contract the broker already
+    holds, and square off before scanning so the last minutes of the session
+    cannot arm something that is about to be flattened anyway.
+    """
+    cfg = get_config()
     out: dict[str, str] = {}
     for uid in _kite_user_ids():
         try:
+            await reconcile(uid)
+
+            if past_square_off(cfg):
+                result = await square_off_all(uid)
+                out[uid] = (f"squared off {result['closed']}"
+                            if result["closed"] or result["failed"] else "flat")
+                continue
+
             state = await scan_once(uid)
             await _auto_enter(uid)
             out[uid] = f"{len(state.get('signals') or [])} signal(s)"

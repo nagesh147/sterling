@@ -836,3 +836,75 @@ async def adaptive_edge_arm(body: dict = Body(...),
         raise HTTPException(status_code=422, detail="signal_id is required")
     from app.services.adaptive_edge_runner import arm
     return await arm(uid, signal_id)
+
+
+@router.post("/adaptive-edge/adopt")
+async def adaptive_edge_adopt(body: dict = Body(...),
+                              user: UserContext = Depends(get_current_user)) -> dict:
+    """Take responsibility for a position this engine did not open.
+
+    Protection is placed as part of adopting. A hand-placed position the engine
+    is managing but has not protected is the worst of both worlds.
+    """
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    data = dict(body)
+    symbol = str(data.get("symbol") or "").strip()
+    try:
+        quantity = int(data.get("quantity") or 0)
+        entry_price = float(data.get("entry_price") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422,
+                            detail="quantity and entry_price must be numbers") from exc
+    if not symbol or quantity <= 0 or entry_price <= 0:
+        raise HTTPException(status_code=422,
+                            detail="symbol, a positive quantity and entry_price are required")
+    from app.services.adaptive_edge_runner import adopt
+    return await adopt(uid, symbol, quantity, entry_price)
+
+
+@router.post("/adaptive-edge/square-off")
+async def adaptive_edge_square_off(user: UserContext = Depends(get_current_user)) -> dict:
+    """Flatten everything this engine holds, now.
+
+    Deliberately available whatever the manual/auto setting says: auto gates
+    opening, and an operator must always be able to close.
+    """
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge_runner import square_off_all
+    return await square_off_all(uid)
+
+
+@router.post("/adaptive-edge/reconcile")
+async def adaptive_edge_reconcile(user: UserContext = Depends(get_current_user)) -> dict:
+    """Re-sync against the broker: close what it no longer holds, re-protect the rest."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge_runner import reconcile
+    return await reconcile(uid)
+
+
+@router.get("/adaptive-edge/positions")
+async def adaptive_edge_positions(user: UserContext = Depends(get_current_user)) -> dict:
+    """What this engine is holding, and whether each position has a broker stop."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge_positions import load
+    from app.services.adaptive_edge_runner import realised_pnl_today
+    rows = []
+    for pos in load(uid).values():
+        rows.append({
+            "symbol": pos.symbol, "underlying": pos.underlying, "type": pos.direction,
+            "quantity": pos.quantity, "entry": pos.entry_price, "stop": pos.stop_price,
+            "target": pos.target_price, "peak": pos.peak_price, "state": pos.state,
+            "open": pos.is_open, "exit_price": pos.exit_price,
+            "exit_reason": pos.exit_reason,
+            # The difference between protected and protected-only-while-we-live.
+            "broker_stop": bool(pos.gtt_id), "stop_mode": pos.stop_mode,
+        })
+    return {"positions": rows, "realised_pnl_today": realised_pnl_today(uid)}

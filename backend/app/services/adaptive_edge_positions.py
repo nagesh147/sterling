@@ -48,6 +48,20 @@ class AdaptiveEdgePosition:
     signal_id: str = ""
     idempotency_key: str = ""
     notes: tuple[str, ...] = ()
+    exchange: str = "NFO"
+    tick_size: float = 0.05
+    stop_mode: str = "both"
+    #: Broker-side trigger id, 0 when there is no broker stop. The difference
+    #: between "protected" and "protected only while this process lives".
+    gtt_id: int = 0
+    #: The stop the broker trigger is actually sitting at. A ratcheted trail that
+    #: is not pushed to the broker leaves the GTT at the original stop, so the
+    #: ratchet is cosmetic; this is what makes that detectable.
+    gtt_at: float = 0.0
+    #: Claimed by _exit_position for the duration of an exit. Every exit path
+    #: takes this claim, so the tick monitor and the square-off cannot both sell
+    #: the same position.
+    exiting: bool = False
 
     @property
     def is_open(self) -> bool:

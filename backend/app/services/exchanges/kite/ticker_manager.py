@@ -70,6 +70,16 @@ def _make_broadcaster(user_id: str):
                     )
         except Exception as exc:  # never let this kill the tick loop
             log.debug("ATM PI on_ticks failed for %s: %s", user_id, exc)
+        # Then Adaptive Edge, for the same reason: its stop and trail are
+        # enforced on ticks, and a protective stop that only runs while a UI is
+        # open is not a protective stop.
+        try:
+            from app.services import adaptive_edge_positions as ae_positions
+            from app.services import adaptive_edge_runner as ae_runner
+            if ae_positions.open_positions(user_id):
+                await ae_runner.on_ticks(user_id, ticks)
+        except Exception as exc:  # never let this kill the tick loop
+            log.debug("Adaptive Edge on_ticks failed for %s: %s", user_id, exc)
         try:
             from app.api.v1.endpoints.stream import stream_manager
             await stream_manager.broadcast_to_channel(
