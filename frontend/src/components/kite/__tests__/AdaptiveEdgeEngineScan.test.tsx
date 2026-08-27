@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { AdaptiveEdgeEngineScan } from '../AdaptiveEdgeEngineScan';
 
-const { configQuery, snapshotResult } = vi.hoisted(() => ({
+const { configQuery, snapshotResult, positionsResult, squareOff } = vi.hoisted(() => ({
   configQuery: {
     data: {
       strategy: {
@@ -17,6 +17,8 @@ const { configQuery, snapshotResult } = vi.hoisted(() => ({
     },
   },
   snapshotResult: { current: {} as Record<string, unknown> },
+  positionsResult: { current: { positions: [], realised_pnl_today: 0 } as Record<string, unknown> },
+  squareOff: vi.fn(),
 }));
 
 vi.mock('../../../hooks/useAdaptiveEdge', () => ({
@@ -25,11 +27,23 @@ vi.mock('../../../hooks/useAdaptiveEdge', () => ({
 
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
-  return { ...actual, useQuery: () => ({ data: snapshotResult.current }) };
+  return {
+    ...actual,
+    /* Dispatch on the key: the component runs two queries and returning the same
+       payload for both would let a wrong key pass unnoticed. */
+    useQuery: ({ queryKey }: { queryKey: unknown[] }) => ({
+      data: String(queryKey[0]).includes('positions')
+        ? positionsResult.current
+        : snapshotResult.current,
+    }),
+    useMutation: () => ({ mutate: squareOff, isPending: false }),
+  };
 });
 
-function renderScan(snapshot: Record<string, unknown>) {
+function renderScan(snapshot: Record<string, unknown>,
+                    positions: Record<string, unknown> = { positions: [], realised_pnl_today: 0 }) {
   snapshotResult.current = snapshot;
+  positionsResult.current = positions;
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -76,5 +90,58 @@ describe('AdaptiveEdgeEngineScan', () => {
   it('surfaces scan errors instead of rendering an innocent empty table', () => {
     renderScan({ scan: { candidates: [], errors: ['no active Kite account'] } });
     expect(screen.getByText('no active Kite account')).toBeInTheDocument();
+  });
+});
+
+const position = (over: Record<string, unknown> = {}) => ({
+  symbol: 'SYM', underlying: 'NIFTY', type: 'CE', quantity: 50, entry: 100,
+  stop: 70, target: 200, state: 'open', open: true, exit_price: 0,
+  exit_reason: '', broker_stop: true, stop_mode: 'both', ...over,
+});
+
+describe('AdaptiveEdgeEngineScan — open positions', () => {
+  it('shows nothing about positions when flat', () => {
+    renderScan({ scan: { candidates: [] } });
+    expect(screen.queryByText('Open positions')).toBeNull();
+  });
+
+  it('lists what is held with its stop and target', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position()], realised_pnl_today: 0 });
+    expect(screen.getByText('Open positions')).toBeInTheDocument();
+    expect(screen.getByText('SYM')).toBeInTheDocument();
+    expect(screen.getByText('Broker stop')).toBeInTheDocument();
+  });
+
+  it('names an unprotected position rather than leaving it to a missing badge', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position({ broker_stop: false })], realised_pnl_today: 0 });
+    expect(screen.getByText(/no broker stop/)).toBeInTheDocument();
+    expect(screen.getByText('This process only')).toBeInTheDocument();
+  });
+
+  it('does not warn when the stop is deliberately monitor-only', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position({ broker_stop: false, stop_mode: 'monitor' })],
+                 realised_pnl_today: 0 });
+    expect(screen.queryByText(/no broker stop/)).toBeNull();
+  });
+
+  it('shows realised P&L for the day, signed', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position()], realised_pnl_today: -1250 });
+    expect(screen.getByText(/realised today -1,250/)).toBeInTheDocument();
+  });
+
+  it('ignores closed positions in the open list', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position({ open: false })], realised_pnl_today: 0 });
+    expect(screen.queryByText('Open positions')).toBeNull();
+  });
+
+  it('offers a square off that an operator can always reach', () => {
+    renderScan({ scan: { candidates: [] } },
+               { positions: [position()], realised_pnl_today: 0 });
+    expect(screen.getByText('Square off all')).toBeInTheDocument();
   });
 });
