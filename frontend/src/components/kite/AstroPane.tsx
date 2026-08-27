@@ -35,7 +35,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-tools select,.ko-tools input[type=date]{height:32px;border:1px solid var(--k-border);background:var(--k-bg);color:var(--k-text);font-size:13px;padding:0 8px;border-radius:2px;font-family:inherit}
 .ko-link{border:0;background:none;color:var(--k-blue-kite);font-size:13px;padding:0;cursor:pointer;font-family:inherit}
 .ko-link:hover{text-decoration:underline}
-.ko-tabs-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:-1px}
+.ko-tabs-row{display:flex;align-items:flex-end;gap:16px;margin-bottom:-1px}
 .ko-tabs{display:flex;gap:32px;overflow-x:auto;min-width:0}
 .ko-tabs button{padding:0 0 12px;border:0;background:none;color:var(--k-text);font-size:14px;font-weight:400;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;font-family:inherit;transition:color .2s}
 .ko-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange)}
@@ -156,8 +156,12 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 
 .kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
-.ko-desk{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:28px;align-items:start}
-.ko-rail{position:sticky;top:8px;min-width:0}
+.ko-desk{display:block}
+.ko-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin:0 0 12px}
+.ko-toolbar .ko-ins{padding-bottom:0}
+.ko-cal-wrap{margin:0 0 20px}
+.ko-cal-wrap .ko-cal-cell{min-height:48px}
+.ko-rail{display:none}
 .ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
 .ko-rail-head span{flex:1;text-align:center;font-weight:500}
 .ko-tally{margin-left:14px;font-size:12px;color:var(--k-dim)}
@@ -178,7 +182,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-side{fill:#fff;font-size:9px;font-family:inherit;font-weight:500;pointer-events:none}
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
 .ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
-.ko-desk[data-tab="month"]{display:block;grid-template-columns:none}
+.ko-desk[data-tab="month"]{display:block}
 .ko-desk[data-tab="month"] .ko-main{display:block;max-width:none}
 .ko-cal-wrap{margin:0 0 22px}
 .ko-cal-wrap .ko-cal-cell{min-height:48px}
@@ -839,29 +843,6 @@ export function AstroPane() {
       <div className="ko-head">
         <div className="ko-title-row">
           <h2>Astrology</h2>
-          <div className="ko-date" role="group" aria-label="Session date">
-            <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
-              ‹
-            </button>
-            <label className="ko-date-value">
-              {fmtNavDay(iso)}
-              <input
-                aria-label="Session date"
-                type="date"
-                value={iso}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  applyIso(e.target.value);
-                }}
-              />
-            </label>
-            <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>
-              ›
-            </button>
-            <button type="button" className="ko-link" onClick={goToday}>
-              Today
-            </button>
-          </div>
         </div>
         <div className="ko-tabs-row">
           <div className="ko-tabs" role="tablist" aria-label="View">
@@ -875,34 +856,71 @@ export function AstroPane() {
               Month
             </button>
           </div>
-          <div className="ko-ins" role="tablist" aria-label="Underlying">
-            {UNDER_SHORT.map((u) => {
-              const play = chipPlay(u.id);
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  role="tab"
-                  data-on={underlying === u.id}
-                  aria-selected={underlying === u.id}
-                  onClick={() => setUnderlying(u.id)}
-                >
-                  {u.short}
-                  {play && play.side !== "WAIT" ? (
-                    <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
-                      {play.side === "BOTH" ? "BOTH" : play.side}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
 
       <div className="ko-body">
         <div className="ko-desk" data-tab={tab}>
           <div className="ko-main">
+            <div className="ko-toolbar">
+              <div className="ko-date" role="group" aria-label="Session date">
+                <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
+                  ‹
+                </button>
+                <label className="ko-date-value">
+                  {fmtNavDay(iso)}
+                  <input
+                    aria-label="Session date"
+                    type="date"
+                    value={iso}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      applyIso(e.target.value);
+                    }}
+                  />
+                </label>
+                <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>
+                  ›
+                </button>
+                <button type="button" className="ko-link" onClick={goToday}>
+                  Today
+                </button>
+              </div>
+              <div className="ko-ins" role="tablist" aria-label="Underlying">
+                {UNDER_SHORT.map((u) => {
+                  const play = chipPlay(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      role="tab"
+                      data-on={underlying === u.id}
+                      aria-selected={underlying === u.id}
+                      onClick={() => setUnderlying(u.id)}
+                    >
+                      {u.short}
+                      {play && play.side !== "WAIT" ? (
+                        <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
+                          {play.side === "BOTH" ? "BOTH" : play.side}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="ko-cal-wrap">
+              <div className="ko-rail-head">
+                <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                  ‹
+                </button>
+                <span>{month.label}</span>
+                <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                  ›
+                </button>
+              </div>
+              <MonthHeat month={month} iso={iso} onPick={pickDay} />
+            </div>
             {now && status ? (
               <NowBoard
                 status={status}
@@ -925,23 +943,7 @@ export function AstroPane() {
               />
             ) : null}
 
-            {tab === "month" ? (
-              <>
-                <div className="ko-cal-wrap">
-                  <div className="ko-rail-head">
-                    <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                      ‹
-                    </button>
-                    <span>{month.label}</span>
-                    <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                      ›
-                    </button>
-                  </div>
-                  <MonthHeat month={month} iso={iso} onPick={pickDay} />
-                </div>
-                <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
-              </>
-            ) : null}
+            {tab === "month" ? <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} /> : null}
             {tab !== "month" ? (
               <div className="ko-session">
                 <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
@@ -989,24 +991,8 @@ export function AstroPane() {
               </div>
             ) : null}
           </div>
-
-          {tab !== "month" ? (
-            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
-              <div className="ko-rail-head">
-                <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                  ‹
-                </button>
-                <span>{month.label}</span>
-                <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                  ›
-                </button>
-              </div>
-              <MonthHeat month={month} iso={iso} onPick={pickDay} />
-            </aside>
-          ) : null}
         </div>
       </div>
-    </div>
     </div>
   );
 }
