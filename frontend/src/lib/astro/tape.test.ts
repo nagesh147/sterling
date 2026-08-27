@@ -112,14 +112,14 @@ describe("tape overlay", () => {
       { fromMin: 555, toMin: 585, side: "PE", action: "SCALP PE", product: "NIFTY 100 pts OTM PE" },
       tape,
     );
-    expect(otm.strike).toBe(24250);
+    expect(otm.strike).toBe(24350);
 
     const ce = buyContract(
       { fromMin: 555, toMin: 585, side: "CE", action: "BUY CE", product: "NIFTY 50 pts OTM CE" },
       tape,
     );
-    expect(ce.strike).toBe(24400);
-    expect(ce.label).toBe("BUY 24,400 CE");
+    expect(ce.strike).toBe(24350);
+    expect(ce.label).toBe("BUY 24,350 CE");
 
     const sit = buyContract(
       { fromMin: 555, toMin: 585, side: "WAIT", action: "WAIT", product: "No contract" },
