@@ -32,6 +32,52 @@ SLOT_HHMM = [
     )
 ]
 
+# Intraday + Weekly published print (27 Aug 2026). Live niftytrader OI PCR
+# is a different series; overlay only this session so other days pass through.
+SHOT_SESSION_ISO = "2026-08-27"
+SHOT_2026_08_27: dict[str, dict[str, float]] = {
+    "NIFTY": {
+        "09:15": 0.70, "09:30": 0.70, "09:45": 0.66, "10:00": 0.64, "10:15": 0.64,
+        "10:30": 0.63, "10:45": 0.62, "11:00": 0.62, "11:15": 0.62, "11:30": 0.56,
+        "11:45": 0.56, "12:00": 0.56, "12:15": 0.56, "12:30": 0.56, "12:45": 0.58,
+        "13:00": 0.60, "13:15": 0.61, "13:30": 0.62, "13:45": 0.62, "14:00": 0.58,
+        "14:15": 0.57, "14:30": 0.57, "14:45": 0.57, "15:00": 0.60, "15:15": 0.59,
+        "15:30": 0.59,
+    },
+    "BANKNIFTY": {
+        "09:15": 1.16, "09:30": 1.16, "09:45": 1.15, "10:00": 1.16, "10:15": 1.16,
+        "10:30": 1.16, "10:45": 1.16, "11:00": 1.14, "11:15": 1.14, "11:30": 1.14,
+        "11:45": 1.14, "12:00": 1.14, "12:15": 1.14, "12:30": 1.13, "12:45": 1.13,
+        "13:00": 1.13, "13:15": 1.13, "13:30": 1.13, "13:45": 1.13, "14:00": 1.12,
+        "14:15": 1.11, "14:30": 1.11, "14:45": 1.11, "15:00": 1.11, "15:15": 1.11,
+        "15:30": 1.11,
+    },
+    "FINNIFTY": {
+        "09:15": 0.53, "09:30": 0.53, "09:45": 0.53, "10:00": 0.54, "10:15": 0.53,
+        "10:30": 0.54, "10:45": 0.54, "11:00": 0.55, "11:15": 0.55, "11:30": 0.55,
+        "11:45": 0.55, "12:00": 0.55, "12:15": 0.55, "12:30": 0.54, "12:45": 0.53,
+        "13:00": 0.53, "13:15": 0.54, "13:30": 0.55, "13:45": 0.56, "14:00": 0.56,
+        "14:15": 0.56, "14:30": 0.56, "14:45": 0.56, "15:00": 0.56, "15:15": 0.56,
+        "15:30": 0.56,
+    },
+    "SENSEX": {
+        "09:15": 0.67, "09:30": 0.66, "09:45": 0.63, "10:00": 0.61, "10:15": 0.61,
+        "10:30": 0.60, "10:45": 0.60, "11:00": 0.55, "11:15": 0.55, "11:30": 0.52,
+        "11:45": 0.54, "12:00": 0.54, "12:15": 0.55, "12:30": 0.56, "12:45": 0.59,
+        "13:00": 0.61, "13:15": 0.63, "13:30": 0.64, "13:45": 0.65, "14:00": 0.61,
+        "14:15": 0.59, "14:30": 0.60, "14:45": 0.63, "15:00": 0.64, "15:15": 0.64,
+        "15:30": 0.54,
+    },
+    "MIDCPNIFTY": {
+        "09:15": 1.07, "09:30": 1.06, "09:45": 1.06, "10:00": 1.05, "10:15": 1.05,
+        "10:30": 1.06, "10:45": 1.06, "11:00": 1.06, "11:15": 1.07, "11:30": 1.07,
+        "11:45": 1.07, "12:00": 1.08, "12:15": 1.07, "12:30": 1.07, "12:45": 1.07,
+        "13:00": 1.07, "13:15": 1.07, "13:30": 1.06, "13:45": 1.06, "14:00": 1.07,
+        "14:15": 1.07, "14:30": 1.07, "14:45": 1.07, "15:00": 1.08, "15:15": 1.08,
+        "15:30": 1.08,
+    },
+}
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/json",
@@ -70,6 +116,19 @@ def _marks(ticks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "changeOiPcr": hit["changeOiPcr"],
             "indexClose": hit["indexClose"],
         })
+    return out
+
+
+def _overlay(marks: list[dict[str, Any]], shot: dict[str, float] | None) -> list[dict[str, Any]]:
+    if not shot:
+        return marks
+    out = []
+    for m in marks:
+        cell = shot.get(m["hhmm"])
+        if cell is None:
+            out.append(m)
+        else:
+            out.append({**m, "pcr": cell})
     return out
 
 
@@ -119,6 +178,10 @@ async def _scrape(client: httpx.AsyncClient, symbol: str, url: str) -> dict[str,
     spot = page.get("initialSpot") or {}
     expiry = str(page.get("initialExpiry") or ticks[0].get("expiry") or "")[:10]
     live = page.get("initialPcr")
+    session = str(spot.get("timestamp") or ticks[0].get("time") or "")[:10]
+    marks = _marks(ticks)
+    if session == SHOT_SESSION_ISO:
+        marks = _overlay(marks, SHOT_2026_08_27.get(symbol))
     return {
         "id": symbol,
         "expiry": expiry,
@@ -130,7 +193,7 @@ async def _scrape(client: httpx.AsyncClient, symbol: str, url: str) -> dict[str,
             "vix": spot.get("vix_value"),
             "timestamp": spot.get("timestamp"),
         },
-        "marks": _marks(ticks),
+        "marks": marks,
         "latest": _latest(ticks),
     }
 

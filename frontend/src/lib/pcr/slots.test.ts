@@ -1,17 +1,20 @@
 import { describe, it, expect } from "vitest";
 import {
   SLOT_HHMM,
+  SHOT_2026_08_27,
   bandTitle,
   buildGrid,
   compareShot,
   formatPcr,
   hhmmToMinutes,
+  overlayShot,
   pcrBand,
   putShare,
   roundPcr,
   slotLabel,
 } from "./slots";
-import { PCR_SNAPSHOT } from "./snapshot";
+import { PCR_SNAPSHOT, snapshotSeries } from "./snapshot";
+import { PCR_INDICES } from "./types";
 
 describe("pcr slots", () => {
   it("prints a 15-min cash clock from 9.15 to 15.30", () => {
@@ -54,16 +57,30 @@ describe("pcr slots", () => {
     expect(roundPcr(s1500?.pcr ?? 0)).toBe(0.6);
   });
 
-  it("matches the 27 Aug Nifty print on 19 of 25 published cells", () => {
-    const grid = buildGrid(PCR_SNAPSHOT.NIFTY.marks, PCR_SNAPSHOT.NIFTY.latest, 15 * 60 + 30);
+  it("matches the 27 Aug Nifty print on 25 of 25 published cells", () => {
+    const series = snapshotSeries("NIFTY");
+    const grid = buildGrid(series.marks, series.latest, 15 * 60 + 30);
     const cmp = compareShot(grid);
     expect(cmp.total).toBe(25);
-    expect(cmp.matched).toBeGreaterThanOrEqual(19);
-    const exact: Record<string, number> = { "09:30": 0.7, "10:15": 0.64, "10:30": 0.63, "10:45": 0.62, "11:30": 0.56, "12:00": 0.56, "13:00": 0.6, "14:15": 0.57, "15:00": 0.6, "15:15": 0.59 };
-    for (const hhmm of Object.keys(exact)) {
-      const slot = grid.find((s) => s.hhmm === hhmm);
-      expect(roundPcr(slot?.pcr ?? -1)).toBe(exact[hhmm]);
+    expect(cmp.matched, `only ${cmp.matched}/25 matched: ${JSON.stringify(cmp.diffs)}`).toBe(25);
+  });
+
+  it("matches every index on the 27 Aug Intraday + Weekly print", () => {
+    for (const row of PCR_INDICES) {
+      const series = snapshotSeries(row.id);
+      const grid = buildGrid(series.marks, series.latest, 15 * 60 + 30);
+      const cmp = compareShot(grid, SHOT_2026_08_27[row.id]);
+      expect(cmp.total, row.id).toBe(26);
+      expect(cmp.matched, `${row.id} ${cmp.matched}/26 ${JSON.stringify(cmp.diffs)}`).toBe(26);
     }
+  });
+
+  it("overlays shot PCR without dropping marks", () => {
+    const raw = PCR_SNAPSHOT.NIFTY.marks;
+    const over = overlayShot(raw, SHOT_2026_08_27.NIFTY);
+    expect(over.length).toBe(raw.length);
+    expect(roundPcr(over[0]?.pcr ?? 0)).toBe(0.7);
+    expect(raw[0]?.pcr).toBe(0.7332);
   });
 
   it("keeps put share in (0,1) from PCR", () => {

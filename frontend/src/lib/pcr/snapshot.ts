@@ -1,4 +1,5 @@
 import type { PcrIndex, PcrSeries } from "./types";
+import { overlayShot, SHOT_2026_08_27 } from "./slots";
 
 /** Last completed cash session (27 Aug 2026) — used if the live PCR feed is down. */
 export const PCR_SNAPSHOT_ISO = "2026-08-27";
@@ -177,5 +178,6 @@ export const PCR_SNAPSHOT: Record<PcrIndex, Omit<PcrSeries, "id">> = {
 };
 
 export function snapshotSeries(id: PcrIndex): PcrSeries {
-  return { id, ...PCR_SNAPSHOT[id] };
+  const raw = PCR_SNAPSHOT[id];
+  return { id, ...raw, marks: overlayShot(raw.marks, SHOT_2026_08_27[id]) };
 }
