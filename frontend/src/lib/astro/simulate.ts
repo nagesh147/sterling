@@ -3,6 +3,18 @@
 import { runAhead, sameSidePlay } from "./kiteContract";
 import { istMinOf, windowOhlc, type SessionTape, type TapeBar } from "./tape";
 import type { Underlying, WindowSlot } from "./types";
+import { UNDERLYINGS } from "./types";
+
+/** ATM option ≈ 0.5 delta. One index point in favor ≈ 0.5 × lot in rupees. */
+export const ATM_DELTA = 0.5;
+
+export function lotOf(underlying: Underlying): number {
+  return UNDERLYINGS.find((u) => u.id === underlying)?.lot ?? 65;
+}
+
+export function rupees(pts: number, underlying: Underlying): number {
+  return Math.round(pts * lotOf(underlying) * ATM_DELTA);
+}
 
 export interface SimTrade {
   iso: string;
@@ -41,6 +53,10 @@ export interface SimMonth {
   pts: number;
   pePts: number;
   cePts: number;
+  inr: number;
+  peInr: number;
+  ceInr: number;
+  lot: number;
   best: SimTrade | null;
   worst: SimTrade | null;
   loaded: number;
@@ -185,6 +201,10 @@ export function rollMonth(
     pts: trades.reduce((a, t) => a + t.pts, 0),
     pePts: trades.filter((t) => t.side === "PE").reduce((a, t) => a + t.pts, 0),
     cePts: trades.filter((t) => t.side === "CE").reduce((a, t) => a + t.pts, 0),
+    inr: rupees(trades.reduce((a, t) => a + t.pts, 0), underlying),
+    peInr: rupees(trades.filter((t) => t.side === "PE").reduce((a, t) => a + t.pts, 0), underlying),
+    ceInr: rupees(trades.filter((t) => t.side === "CE").reduce((a, t) => a + t.pts, 0), underlying),
+    lot: lotOf(underlying),
     best: ranked[0] ?? null,
     worst: ranked.length ? ranked[ranked.length - 1] : null,
     loaded: done.length,

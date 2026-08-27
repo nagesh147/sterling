@@ -1,10 +1,12 @@
 import type { SimMonth } from "../../../lib/astro/simulate";
+import { rupees } from "../../../lib/astro/simulate";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-function pts(n: number) {
+function inr(n: number) {
   const v = Math.round(n);
-  return `${v > 0 ? "+" : ""}${v}`;
+  const body = new Intl.NumberFormat("en-IN").format(Math.abs(v));
+  return `${v > 0 ? "+" : v < 0 ? "−" : ""}₹${body}`;
 }
 
 export function SimBoard({
@@ -24,7 +26,7 @@ export function SimBoard({
   return (
     <div className="ko-sim">
       <p className="ko-sim-lead">
-        One lot. Enter the first CE/PE play, hold the same side, exit when the run ends. Index points in the option’s favor. {MONTHS[sim.month - 1]} {sim.year} · {sim.underlying}.
+        One lot ATM. Enter the first CE/PE play, hold the same side, stop / trail / target. P&L is rupees: index points × {sim.lot} lot × 0.5 delta. Before brokerage. {MONTHS[sim.month - 1]} {sim.year} · {sim.underlying}.
       </p>
       <div className="ko-sim-kpis">
         <div>
@@ -38,23 +40,23 @@ export function SimBoard({
           </strong>
         </div>
         <div>
-          <span className="lbl">Net</span>
-          <strong className={sim.pts >= 0 ? "text-up" : "text-down"}>{pts(sim.pts)}</strong>
+          <span className="lbl">P&L</span>
+          <strong className={sim.inr >= 0 ? "text-up" : "text-down"}>{inr(sim.inr)}</strong>
         </div>
         <div>
           <span className="lbl">PE / CE</span>
           <strong>
-            <span className={sim.pePts >= 0 ? "text-up" : "text-down"}>{pts(sim.pePts)} PE</span>
+            <span className={sim.peInr >= 0 ? "text-up" : "text-down"}>{inr(sim.peInr)} PE</span>
             {" · "}
-            <span className={sim.cePts >= 0 ? "text-up" : "text-down"}>{pts(sim.cePts)} CE</span>
+            <span className={sim.ceInr >= 0 ? "text-up" : "text-down"}>{inr(sim.ceInr)} CE</span>
           </strong>
         </div>
       </div>
       {sim.best || sim.worst ? (
         <p className="ko-sim-ext text-muted">
-          {sim.best ? `Best ${pts(sim.best.pts)} ${sim.best.side} ${sim.best.iso.slice(8)} ${sim.best.from}–${sim.best.to}` : ""}
+          {sim.best ? `Best ${inr(rupees(sim.best.pts, sim.underlying))} ${sim.best.side} ${sim.best.iso.slice(8)} ${sim.best.from}–${sim.best.to}` : ""}
           {sim.best && sim.worst ? " · " : ""}
-          {sim.worst ? `Worst ${pts(sim.worst.pts)} ${sim.worst.side} ${sim.worst.iso.slice(8)} ${sim.worst.from}–${sim.worst.to}` : ""}
+          {sim.worst ? `Worst ${inr(rupees(sim.worst.pts, sim.underlying))} ${sim.worst.side} ${sim.worst.iso.slice(8)} ${sim.worst.from}–${sim.worst.to}` : ""}
           {sim.missing ? ` · ${sim.missing} days without tape` : ""}
         </p>
       ) : null}
@@ -65,7 +67,7 @@ export function SimBoard({
               <th>Day</th>
               <th>Run</th>
               <th>Side</th>
-              <th className="ko-num">Pts</th>
+              <th className="ko-num">P&L</th>
             </tr>
           </thead>
           <tbody>
@@ -99,7 +101,7 @@ export function SimBoard({
                     <td>
                       <span className={t.side === "CE" ? "ko-pill ko-pill-ce" : "ko-pill ko-pill-pe"}>{t.side}</span>
                     </td>
-                    <td className={`ko-num ${t.pts >= 0 ? "text-up" : "text-down"}`}>{pts(t.pts)}</td>
+                    <td className={`ko-num ${t.pts >= 0 ? "text-up" : "text-down"}`}>{inr(rupees(t.pts, sim.underlying))}</td>
                   </tr>
                 ))
               ),
