@@ -742,7 +742,7 @@ export function AstroPane() {
     if (!status?.window || !now || iso !== status.sessionIso) return undefined;
     return gradeSlot(status.window, tape, nowMin, sameDay);
   }, [status, now, iso, tape, nowMin, sameDay]);
-  const holding = useAstroHolding(underlying, status?.play ?? "WAIT", status?.side ?? "WAIT");
+  const holding = useAstroHolding(underlying, status?.play ?? "WAIT", status?.side ?? "WAIT", clockRows, nowMin);
   const liveSlot = clockRows.find((s) => s.isLive) ?? null;
   const chipPlay = (id: Underlying) => board.find((row) => row.id === id);
 
@@ -887,7 +887,7 @@ export function AstroPane() {
 
             {tab !== "month" ? (
               <div className="ko-session">
-                <AstroTrailWatcher live={liveSlot} underlying={underlying} />
+                <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
                 <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
                 <p className="ko-sub">
                   <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>

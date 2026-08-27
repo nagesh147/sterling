@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bookQty, matchHeldOption, pickNearestOption, planWindow, productForAction, proposedProtect, protectionPrices, ratchetProtection, searchQuery } from "./kiteContract";
+import { bookQty, matchHeldOption, pickNearestOption, planWindow, productForAction, proposedProtect, protectionPrices, ratchetProtection, runAhead, searchQuery } from "./kiteContract";
 
 describe("astro kite contract", () => {
   const rows = [
@@ -20,6 +20,13 @@ describe("astro kite contract", () => {
     expect(planWindow("SCALP PE", "PE", held, "24,100 PE").kind).toBe("trail");
     expect(planWindow("BUY CE", "CE", held, "24,100 PE").kind).toBe("close");
     expect(planWindow("AVOID", "WAIT", held, "24,100 PE").kind).toBe("lock");
+    expect(planWindow("AVOID", "WAIT", held, "24,100 PE", false).kind).toBe("close");
+    expect(runAhead(
+      [{ toMin: 630, side: "PE", action: "SCALP PE" }, { toMin: 900, side: "WAIT", action: "AVOID" }],
+      "PE",
+      555,
+    )).toBe(true);
+    expect(runAhead([{ toMin: 900, side: "WAIT", action: "AVOID" }], "PE", 890)).toBe(false);
   });
 
   it("locks a winner to cost", () => {

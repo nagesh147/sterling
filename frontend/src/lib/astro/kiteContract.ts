@@ -244,12 +244,27 @@ export interface WindowPlan {
   note: string;
 }
 
-/** Same side = trail the open lot. Flip / avoid = close. Never a second Buy. */
+/** Same-side run: SCALP PE then SCALP PE is one lot. WAIT in the middle still counts if PE returns. */
+export function sameSidePlay(side: string, action: string, held: "CE" | "PE"): boolean {
+  if (side === held) return true;
+  return action.toUpperCase().includes(held);
+}
+
+export function runAhead(
+  slots: Array<{ toMin: number; side: string; action: string }>,
+  held: "CE" | "PE",
+  nowMin: number,
+): boolean {
+  return slots.some((s) => s.toMin > nowMin && sameSidePlay(s.side, s.action, held));
+}
+
+/** Same side = trail the open lot. Flip / run-over = close. Never a second Buy. */
 export function planWindow(
   action: string,
   windowSide: "CE" | "PE" | "BOTH" | "WAIT",
   held: { optionSide: "CE" | "PE"; last_price?: number; average_price?: number } | null,
   mark: string,
+  moreSameSide = true,
 ): WindowPlan {
   const sit: WindowPlan = { kind: "sit", label: "—", slPct: null, tgtPct: null, note: "" };
   const last = held?.last_price ?? 0;
@@ -263,15 +278,15 @@ export function planWindow(
       label: mark && mark !== "—" ? mark : "—",
       slPct: action.startsWith("SCALP") ? -20 : action.startsWith("HOLD") ? -15 : -25,
       tgtPct: action.startsWith("SCALP") ? 30 : action.startsWith("HOLD") ? 80 : 50,
-      note: "First lot. Same-side windows trail this — they do not add.",
+      note: "One click. Same-side windows keep this lot and trail it.",
     };
   }
 
   const tag = mark || held.optionSide;
   if ((windowSide === "CE" || windowSide === "PE") && windowSide !== held.optionSide) {
-    return { kind: "close", label: `Close ${tag}`, slPct: null, tgtPct: null, note: "Side flipped — square off, do not reverse from here." };
+    return { kind: "close", label: `Exit ${tag}`, slPct: null, tgtPct: null, note: "Side flipped — auto-exit, do not reverse from here." };
   }
-  if (action.startsWith("BOOK")) {
+  if (action.startsWith("BOOK") && sameSidePlay(windowSide, action, held.optionSide)) {
     return {
       kind: "book",
       label: manageLabel("Book", tag, last, -10, 15, avg, "book"),
@@ -280,24 +295,33 @@ export function planWindow(
       note: "Book half (one lot if that's all you have). Trail the rest.",
     };
   }
-  if (action === "AVOID" || action === "WAIT") {
-    const inProfit = avg > 0 && last > avg;
+  if (action === "AVOID" || action === "WAIT" || windowSide === "WAIT" || windowSide === "BOTH") {
+    if (moreSameSide) {
+      const inProfit = avg > 0 && last > avg;
+      return {
+        kind: "lock",
+        label: manageLabel("Wait", tag, last, -12, null, avg, "lock"),
+        slPct: -12,
+        tgtPct: null,
+        note: inProfit ? "Same side still ahead — wait, stop at cost." : "Same side still ahead — wait, stop tightens.",
+      };
+    }
     return {
-      kind: "lock",
-      label: manageLabel("Lock", tag, last, -12, null, avg, "lock"),
-      slPct: -12,
+      kind: "close",
+      label: `Exit ${tag}`,
+      slPct: null,
       tgtPct: null,
-      note: inProfit ? "In profit — stop to cost. No add." : "Stop tightens. No add.",
+      note: "Run over — auto-exit.",
     };
   }
   const slPct = action.startsWith("HOLD") ? -15 : action.startsWith("SCALP") ? -20 : -25;
   const tgtPct = action.startsWith("HOLD") ? 80 : action.startsWith("SCALP") ? 30 : 50;
   return {
     kind: "trail",
-    label: manageLabel("Trail", tag, last, slPct, tgtPct, avg, "trail"),
+    label: manageLabel("On", tag, last, slPct, tgtPct, avg, "trail"),
     slPct,
     tgtPct,
-    note: "Same side — trail SL/TGT, do not add.",
+    note: "Same play — holding, trailing SL/TGT. No add.",
   };
 }
 
