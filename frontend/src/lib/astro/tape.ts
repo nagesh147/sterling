@@ -74,7 +74,7 @@ export interface BuyContract {
   short: string;
 }
 
-function istMinOf(unixSec: number): { iso: string; min: number } {
+export function istMinOf(unixSec: number): { iso: string; min: number } {
   const d = new Date(unixSec * 1000);
   const p = getIstParts(d);
   return { iso: formatIstIsoDate(d), min: minutesOfDay(p.hour, p.minute) };
