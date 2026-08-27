@@ -24,6 +24,14 @@ export const CANDLE_SYMBOL: Record<Underlying, string> = {
   MIDCPNIFTY: "NSE:NIFTY MID SELECT",
 };
 
+export const INDEX_TOKEN: Record<Underlying, number> = {
+  NIFTY: 256265,
+  BANKNIFTY: 260105,
+  FINNIFTY: 257801,
+  SENSEX: 265,
+  MIDCPNIFTY: 288009,
+};
+
 export const FLAT_PTS: Record<Underlying, number> = {
   NIFTY: 8,
   BANKNIFTY: 20,
@@ -162,14 +170,16 @@ function familyOf(slot: Pick<WindowSlot, "side" | "action" | "product">):
 export function buyContract(
   slot: Pick<WindowSlot, "fromMin" | "toMin" | "side" | "action" | "product">,
   tape: SessionTape | null,
+  spotHint?: number | null,
+  underlying: Underlying = tape?.underlying ?? "NIFTY",
 ): BuyContract {
   const sit: BuyContract = { verb: "SIT", strike: null, strikeHi: null, side: "WAIT", label: "—", short: "—" };
   const family = familyOf(slot);
   if (family.kind === "sit") return sit;
 
   const verb = verbOf(slot.action);
-  const spot = spotForSlot(tape, slot.fromMin, slot.toMin);
-  const step = tape ? stepOf(tape.underlying) : 50;
+  const spot = spotForSlot(tape, slot.fromMin, slot.toMin) ?? (spotHint && spotHint > 0 ? spotHint : null);
+  const step = stepOf(underlying);
   const atm = spot != null ? roundStrike(spot, step) : null;
 
   if (family.kind === "straddle") {
@@ -373,4 +383,71 @@ export function barsFromOhlcv(
     sessionOpen: bars[0]?.o ?? null,
     source: "candles",
   };
+}
+
+function kiteUnix(date: string | number): number {
+  if (typeof date === "number") return date > 1e12 ? Math.floor(date / 1000) : date;
+  const ms = Date.parse(date);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
+}
+
+function kiteRows(raw: unknown): Array<{ date: string | number; open: number; high: number; low: number; close: number }> {
+  const root = raw as Record<string, unknown> | unknown[] | null;
+  const pack = Array.isArray(root)
+    ? root
+    : Array.isArray((root as { data?: { candles?: unknown } })?.data?.candles)
+      ? ((root as { data: { candles: unknown[] } }).data.candles)
+      : Array.isArray((root as { candles?: unknown })?.candles)
+        ? ((root as { candles: unknown[] }).candles)
+        : Array.isArray((root as { data?: unknown })?.data)
+          ? ((root as { data: unknown[] }).data)
+          : [];
+  const out: Array<{ date: string | number; open: number; high: number; low: number; close: number }> = [];
+  for (const row of pack) {
+    if (Array.isArray(row) && row.length >= 5) {
+      out.push({ date: row[0] as string | number, open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]) });
+      continue;
+    }
+    if (row && typeof row === "object") {
+      const r = row as Record<string, unknown>;
+      const date = (r.date ?? r.time ?? r.datetime) as string | number;
+      const open = Number(r.open);
+      const high = Number(r.high);
+      const low = Number(r.low);
+      const close = Number(r.close);
+      if (date != null && Number.isFinite(open) && Number.isFinite(close)) out.push({ date, open, high, low, close });
+    }
+  }
+  return out;
+}
+
+export function barsFromKiteHistorical(raw: unknown, iso: string, underlying: Underlying): SessionTape {
+  const rows = kiteRows(raw);
+  const bars: TapeBar[] = [];
+  let prevClose: number | null = null;
+  for (const r of rows) {
+    if (![r.open, r.high, r.low, r.close].every(Number.isFinite)) continue;
+    const t = kiteUnix(r.date);
+    if (!t) continue;
+    const p = istMinOf(t);
+    if (p.iso < iso) prevClose = r.close;
+    if (p.iso !== iso) continue;
+    bars.push({ t, o: r.open, h: r.high, l: r.low, c: r.close });
+  }
+  return {
+    iso,
+    underlying,
+    symbol: CANDLE_SYMBOL[underlying],
+    bars,
+    prevClose,
+    sessionOpen: bars[0]?.o ?? null,
+    source: "kite",
+  };
+}
+
+export function quoteLast(quotes: Record<string, { last_price?: number; ohlc?: { close?: number; open?: number } }> | null | undefined, symbol: string): number | null {
+  if (!quotes) return null;
+  const row = quotes[symbol] ?? Object.values(quotes)[0];
+  const n = Number(row?.last_price ?? row?.ohlc?.close ?? row?.ohlc?.open);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
