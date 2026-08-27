@@ -195,7 +195,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 .ko-clock {
   width: 100%;
-  min-width: 760px;
+  min-width: 640px;
 }
 .ko-clock thead th {
   position: sticky;
@@ -244,24 +244,25 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  min-height: 32px;
 }
 .ko-btn-buy,
 .ko-btn-close {
   border: 0;
-  border-radius: 2px;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 12px;
+  background: transparent;
+  height: 32px;
+  padding: 0;
+  font-size: 13px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
-  color: #fff;
+  white-space: nowrap;
 }
-.ko-btn-buy { background: var(--k-blue, #4184f3); }
-.ko-btn-buy:hover { filter: brightness(0.95); }
-.ko-btn-buy:disabled { opacity: 0.45; cursor: not-allowed; }
-.ko-btn-close { background: var(--k-red-strong, #df514c); }
-.ko-btn-close:hover { filter: brightness(0.95); }
+.ko-btn-buy { color: var(--k-blue, #4184f3); }
+.ko-btn-buy:hover { text-decoration: underline; }
+.ko-btn-buy:disabled { opacity: 0.45; cursor: not-allowed; text-decoration: none; }
+.ko-btn-close { color: var(--k-red-strong, #df514c); }
+.ko-btn-close:hover { text-decoration: underline; }
 .ko-ticket {
   position: absolute;
   z-index: 8;
@@ -276,6 +277,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 .ko-ticket p { margin: 0 0 6px; }
 .ko-ticket-act { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.ko-ticket-act .ko-btn-buy, .ko-ticket-act .ko-btn-close { height: 26px; padding: 0 12px; color: #fff; text-decoration: none; }
+.ko-ticket-act .ko-btn-buy { background: var(--k-blue, #4184f3); }
+.ko-ticket-act .ko-btn-close { background: var(--k-red-strong, #df514c); }
 
 .ko-buy {
   font-variant-numeric: tabular-nums;
@@ -965,7 +969,6 @@ function ClockTable({
             <th>Side</th>
             <th>Play</th>
             <th>Buy</th>
-            <th>Order</th>
             <th className="ko-num">Result</th>
           </tr>
         </thead>
@@ -1058,13 +1061,6 @@ function TimingRow({
         </td>
         <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
         <td className="ko-buy">
-          {buy && buy.verb !== "SIT" ? (
-            <span className={buy.side === "CE" ? "text-ce" : buy.side === "PE" ? "text-pe" : "text-muted"}>{buy.label}</span>
-          ) : (
-            <span className="text-muted">—</span>
-          )}
-        </td>
-        <td>
           <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} />
         </td>
         <td className="ko-num">
@@ -1073,7 +1069,7 @@ function TimingRow({
       </tr>
       {open ? (
         <tr className="ko-expand">
-          <td colSpan={6}>
+          <td colSpan={5}>
             {slot.isLive ? null : <p>{slot.suggestion}</p>}
             <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
           </td>
