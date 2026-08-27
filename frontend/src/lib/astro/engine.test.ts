@@ -3,7 +3,7 @@
    the vitest runner cannot collect — so the file failed to load and the whole
    suite was red. Same assertions, vitest's API. */
 import { describe, it, expect } from "vitest";
-import { forecastDay, forecastMonth, liveNow } from "./engine";
+import { forecastDay, forecastMonth, liveBoard, liveNow } from "./engine";
 import { lastCompletedSessionIso, nearestOpenIso, nextSessionIso, shiftSessionIso } from "./holidays";
 import { utcFromIstParts } from "./time";
 
@@ -200,5 +200,14 @@ describe("financial astrology engine", () => {
     const closed = liveNow(utcFromIstParts(2026, 8, 29, 11, 0, 0), "NIFTY");
     expectIs(closed.phase, "closed");
     expectIs(closed.sessionIso, "2026-08-31");
+
+    const board = liveBoard(utcFromIstParts(2026, 8, 26, 10, 22, 0));
+    expectIs(board.length, 5);
+    const niftyPlay = board.find((x) => x.id === "NIFTY");
+    const bankPlay = board.find((x) => x.id === "BANKNIFTY");
+    expectOk(niftyPlay);
+    expectOk(bankPlay);
+    expectIs(niftyPlay.side, "PE");
+    expectIs(bankPlay.side, "CE");
   });
 });

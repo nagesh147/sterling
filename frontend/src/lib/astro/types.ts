@@ -240,6 +240,13 @@ export interface LiveNow {
   closeMs: number;
 }
 
+export interface IndexPlay {
+  id: Underlying;
+  play: TradeAction;
+  side: TradeSide;
+  thesis: DayThesis;
+}
+
 export const UNDERLYINGS: { id: Underlying; label: string; step: number }[] = [
   { id: "NIFTY", label: "Nifty 50", step: 50 },
   { id: "BANKNIFTY", label: "Bank Nifty", step: 100 },
