@@ -13,6 +13,7 @@ import {
 import { AdaptiveEdgeMetricsStrip } from './AdaptiveEdgeMetricsStrip';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { AdaptiveEdgeDashboard } from './AdaptiveEdgeDashboard';
+import { AdaptiveEdgeEngineScan } from './AdaptiveEdgeEngineScan';
 import { AdaptiveEdgeVisualizerHub } from './profile/AdaptiveEdgeVisualizerHub';
 import { openSettingsSection } from './config/registry';
 import type { InstrumentTab } from './InstrumentPane';
@@ -509,7 +510,10 @@ export function AdaptiveEdgePane({
           />
         </div>
       ) : viewMode === 'dashboard' ? (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* The Master Specification engine's own scan. Separate from the board
+              below, whose row model belongs to the strategy this one replaced. */}
+          <AdaptiveEdgeEngineScan />
           <AdaptiveEdgeDashboard snapshot={data} onOpenSettings={() => openSettingsSection('adaptiveEdge')} />
         </div>
       ) : (
