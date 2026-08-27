@@ -26,7 +26,7 @@ from numpy.typing import NDArray
 
 from app.engines.sterling_engine.config import ScalpingProfile as ScalpingConfig
 from app.engines.sterling_engine.levels import Level, price_near_level, nearest_level, detect_levels
-from app.engines.sterling_engine.risk import atr, resolve_trade_risk
+from app.engines.risk.trade_risk import atr, resolve_trade_risk
 
 
 @dataclass

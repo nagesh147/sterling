@@ -64,7 +64,7 @@ def solve_futures(
             risk_pct=stop_dist / entry * 100.0, reason="ok",
         )
 
-    from app.engines.sterling_engine.risk import resolve_trade_risk
+    from app.engines.risk.trade_risk import resolve_trade_risk
     from dataclasses import dataclass as _dc
 
     @_dc
