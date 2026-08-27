@@ -6,7 +6,7 @@ import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './bo
 import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
-import {
+import { LEG_BG,
   ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   type SignalColVisibility,
 } from './board/signalRowSpec';
@@ -925,7 +925,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 className="st-leg-row"
                 onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: k.bg }}
+                style={{ cursor: 'pointer', background: LEG_BG }}
               >
                    <span style={{ color: color, fontWeight: 700, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -2294,7 +2294,15 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           min-height: ${ROW_METRICS.legHeight}px;
           padding: ${ROW_METRICS.legPadding};
           box-sizing: border-box;
-          border-bottom: 1px solid ${k.border};
+          /* The shade above separates one row from the next, so the per-row line
+             that this table used to draw is now redundant - and drawing both
+             gives a heavier grid than the shared board. Kept as a transparent
+             edge rather than deleted so the row keeps its box height. */
+          border-bottom: 1px solid transparent;
+          /* Reserved, not decorative: the shared board turns this gutter blue on
+             the open row, and a border that appears later would shift every cell
+             3px sideways. Holding the space means it never does. */
+          border-left: 3px solid transparent;
           overflow-x: auto;
           overflow-y: hidden;
           scrollbar-width: none;

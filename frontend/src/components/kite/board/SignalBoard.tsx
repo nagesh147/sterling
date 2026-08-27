@@ -19,7 +19,7 @@ import {
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
-import { ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import { LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -701,7 +701,7 @@ function Row({
           // Alternating shade separates rows the way the old Adaptive Edge
           // table did, without a coloured edge on each one. Legs share one
           // shade so a group reads as a block rather than a stripe pattern.
-          background: open ? k.surfaceHover : isLeg ? 'var(--k-surface-2)' : striped ? 'var(--k-surface-2)' : k.bg,
+          background: open ? k.surfaceHover : isLeg ? LEG_BG : striped ? LEG_BG : k.bg,
           fontWeight: isParent ? 600 : 400,
           // An ended row is a record, not a live position. Dimming and striking
           // it keeps it readable without letting it read as actionable.

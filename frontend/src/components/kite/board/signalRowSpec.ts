@@ -66,3 +66,17 @@ export const ROW_METRICS = {
   parentGap: 6,
   parentFontSize: 12,
 } as const;
+
+/**
+ * The shade a leg row sits on.
+ *
+ * A leg is recessed one surface below the idea it belongs to. That shade is what
+ * separates one row from the next and what makes a group of legs read as a single
+ * block, which is why neither table draws a line under a leg as well — the two
+ * together give a heavier grid than either alone.
+ *
+ * It lives here because SuperTrend's bespoke table and the shared `SignalBoard`
+ * both need it, and two files each holding the string `var(--k-surface-2)` is two
+ * files that can disagree.
+ */
+export const LEG_BG = 'var(--k-surface-2)';
