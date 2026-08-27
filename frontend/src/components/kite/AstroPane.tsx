@@ -1,85 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { k } from '../../styles/kiteUI';
+import React, { useEffect, useMemo, useState } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
+import { useCandles } from '../../hooks/useCandles';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso } from '../../lib/astro/holidays';
 import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
-import { formatIstDate, formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
-import { UNDERLYINGS, WEEKDAYS, type GapKind, type IndexPlay, type LiveNow, type TradeAction, type TradeSide, type Underlying, type WindowSlot } from '../../lib/astro/types';
-import { useCandles } from '../../hooks/useCandles';
+import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
+import { WEEKDAYS, type IndexPlay, type LiveNow, type Underlying, type WindowSlot } from '../../lib/astro/types';
+import { k } from '../../styles/kiteUI';
+import { actionTone } from './astro/palette';
 import { MonthHeat } from './astro/MonthHeat';
 import { NowBoard } from './astro/NowBoard';
 import { PlaybookNotes, PlaybookStrip } from './astro/PlaybookBoard';
 import { SessionStrip } from './astro/SessionStrip';
 
-type Tab = 'timings' | 'thirty' | 'month';
-
-function sessionIso(): string {
-  return lastCompletedSessionIso(new Date());
-}
-
-function isoToDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return utcFromIstParts(y, m, d, 9, 0, 0);
-}
-
-function gapColor(kind: GapKind): string {
-  if (kind === 'up') return 'var(--ko-ce)';
-  if (kind === 'down') return 'var(--ko-pe)';
-  return 'var(--k-amber)';
-}
-
-function actionColor(action: TradeAction, side: TradeSide): string {
-  if (action === 'AVOID' || action === 'WAIT') return 'var(--k-dim)';
-  if (side === 'CE') return 'var(--ko-ce)';
-  if (side === 'PE') return 'var(--ko-pe)';
-  return 'var(--k-amber)';
-}
-
-function underlyingLabel(id: Underlying): string {
-  return UNDERLYINGS.find((u) => u.id === id)?.label ?? id;
-}
-
-const UNDER_SHORT: { id: Underlying; short: string }[] = [
-  { id: 'NIFTY', short: 'Nifty' },
-  { id: 'BANKNIFTY', short: 'Bank' },
-  { id: 'FINNIFTY', short: 'Fin' },
-  { id: 'SENSEX', short: 'Sensex' },
-  { id: 'MIDCPNIFTY', short: 'Midcap' },
-];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function fmtNavDay(iso: string): string {
-  const p = getIstParts(isoToDate(iso));
-  return `${WEEKDAYS[p.weekday].slice(0, 3)}, ${p.day} ${MONTHS[p.month - 1]}`;
-}
-
-function sideClass(side: WindowSlot['side']): string {
-  if (side === 'CE') return 'ko-pill ko-pill-ce';
-  if (side === 'PE') return 'ko-pill ko-pill-pe';
-  return 'ko-pill ko-pill-wait';
-}
-
-function sideLabel(side: WindowSlot['side']): string {
-  if (side === 'CE') return 'CE';
-  if (side === 'PE') return 'PE';
-  if (side === 'BOTH') return 'BOTH';
-  return 'WAIT';
-}
-
-function productClass(product: string): string {
-  if (product === 'MIS') return 'ko-prod ko-prod-mis';
-  if (product === 'NRML') return 'ko-prod ko-prod-nrml';
-  return 'ko-prod ko-prod-other';
-}
-
-function gradeClass(kind: SlotGrade['kind']): string {
-  if (kind === 'HIT') return 'ko-st ko-st-hit';
-  if (kind === 'MISS') return 'ko-st ko-st-miss';
-  if (kind === 'LIVE') return 'ko-st ko-st-live';
-  return 'ko-st ko-st-sit';
-}
-
 const CSS = `
+
 .kite-astro{--ko-ce:#26a69a;--ko-pe:#ef5350;display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:${k.fontFamily};font-size:14px}
 html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-astro{--ko-ce:#089981;--ko-pe:#f23645}
 .kite-astro *{box-sizing:border-box}
@@ -106,7 +40,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-ins button{border:0;background:none;padding:0;font-size:13px;color:var(--k-text);white-space:nowrap;cursor:pointer;font-family:inherit}
 .ko-ins button:hover{color:var(--k-orange)}
 .ko-ins button[data-on="true"]{color:var(--k-orange);font-weight:500}
-.ko-ins-side{margin-left:5px;font-size:10px;font-weight:500}
+.ko-ins-side{margin-left:5px;font-size:12px;font-weight:500}
 .ko-now-board{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12px}
 .ko-table tbody tr[data-live="true"]{box-shadow:inset 2px 0 0 var(--k-orange)}
 .ko-body{flex:1;overflow:auto;padding:20px 32px 40px}
@@ -144,7 +78,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip svg{width:100%;height:auto;display:block}
 .ko-strip g{cursor:pointer}
 .ko-strip-tapebg{fill:var(--k-surface-2)}
-.ko-strip-ce{fill:var(--ko-ce)}.ko-strip-pe{fill:var(--ko-pe)}.ko-strip-both{fill:var(--k-amber)}.ko-strip-wait{fill:#d6d6d6}.ko-strip-avoid{fill:#bdbdbd}
+.ko-strip-ce{fill:var(--ko-ce)}.ko-strip-pe{fill:var(--ko-pe)}.ko-strip-both{fill:#bdbdbd}.ko-strip-wait{fill:#d6d6d6}.ko-strip-avoid{fill:#bdbdbd}
 .ko-strip-upline{stroke:var(--ko-ce);fill:none}.ko-strip-downline{stroke:var(--ko-pe);fill:none}
 .ko-strip-tick{stroke:var(--k-border);stroke-width:1}
 .ko-strip-now{stroke:var(--k-orange);stroke-width:1.2}
@@ -152,9 +86,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-hora{font-size:9px}
 .ko-strip-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--k-dim);margin-top:8px;align-items:center}
 .ko-strip-leg i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:1px}
-.ko-swatch-ce{background:var(--ko-ce)}.ko-swatch-pe{background:var(--ko-pe)}.ko-swatch-both{background:var(--k-amber)}.ko-swatch-wait{background:#d6d6d6}
+.ko-swatch-ce{background:var(--ko-ce)}.ko-swatch-pe{background:var(--ko-pe)}.ko-swatch-both{background:#bdbdbd}.ko-swatch-wait{background:#d6d6d6}
 .ko-mix{display:flex;height:4px;margin-top:8px;background:var(--k-surface-hover)}
-.ko-mix-ce{background:var(--ko-ce)}.ko-mix-pe{background:var(--ko-pe)}.ko-mix-both{background:var(--k-amber)}.ko-mix-wait{background:#d6d6d6}
+.ko-mix-ce{background:var(--ko-ce)}.ko-mix-pe{background:var(--ko-pe)}.ko-mix-both{background:#bdbdbd}.ko-mix-wait{background:#d6d6d6}
 .ko-kv{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--k-border);margin:0 0 16px}
 .ko-kv>div{padding:10px 14px;border-right:1px solid var(--k-surface-hover);border-bottom:1px solid var(--k-surface-hover)}
 .ko-kv>div:nth-child(4n){border-right:0}
@@ -174,7 +108,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-cal-cell .bar{display:block;height:3px;width:100%;background:var(--k-border)}
 .ko-cal-cell[data-gap=up] .bar{background:var(--ko-ce)}
 .ko-cal-cell[data-gap=down] .bar{background:var(--ko-pe)}
-.ko-cal-cell[data-gap=flat] .bar{background:var(--k-amber)}
+.ko-cal-cell[data-gap=flat] .bar{background:#d6d6d6}
 .ko-cal-cell[data-gap=closed] .bar{background:var(--k-surface-hover)}
 .ko-cal-cell[data-on=true]{box-shadow:inset 0 -2px 0 var(--k-orange)}
 .ko-cal-cell:disabled,.ko-cal-empty{opacity:.4;cursor:default}
@@ -183,8 +117,8 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-now-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
 .ko-now-phase{font-size:11px;color:var(--k-dim);font-weight:500;letter-spacing:.04em}
 .ko-now-phase[data-live="true"]{color:#f57c00}
-.ko-now-clock{font-size:12px;color:var(--k-dim);font-variant-numeric:tabular-nums}
-.ko-now-play{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:22px;font-weight:400;letter-spacing:-.2px;line-height:1.15;margin:0 0 6px}
+.ko-now-clock{font-size:13px;color:var(--k-dim);font-variant-numeric:tabular-nums}
+.ko-now-play{display:block;font-size:20px;font-weight:400;letter-spacing:-.2px;line-height:1.2;margin:0 0 4px}
 .ko-now-sub{font-size:13px;color:var(--k-dim);margin-left:0;letter-spacing:0;font-weight:400}
 .ko-now-copy{margin:0 0 4px;font-size:13px;line-height:1.45;color:var(--k-text)}
 .ko-now-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--k-dim);margin-top:6px}
@@ -217,15 +151,332 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   .ko-split{grid-template-columns:1fr}
   .ko-cal-cell{min-height:44px;padding:4px 4px 6px}
 }
+
+.kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
+.ko-desk{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:28px;align-items:start}
+.ko-rail{position:sticky;top:8px;min-width:0}
+.ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
+.ko-rail-head span{flex:1;text-align:center;font-weight:500}
+.ko-tally{margin-left:14px;font-size:12px;color:var(--k-dim)}
+.ko-sub{display:flex;flex-wrap:wrap;align-items:center}
+.ko-clock{min-width:0}
+.ko-clock td,.ko-clock th{padding:10px 12px}
+.ko-time{white-space:nowrap}
+.ko-time-meta{display:block;color:var(--k-dim);font-size:11px;margin-top:2px}
+.ko-play-roles button[data-state="now"]{box-shadow:inset 2px 0 var(--k-orange);padding-left:10px}
+.ko-cal-top{display:flex;justify-content:space-between;align-items:baseline;gap:4px}
+.ko-cal-act{font-size:10px;font-weight:500}
+.ko-cal-cell[data-today="true"] .n{color:var(--k-orange);font-weight:500}
+.ko-cal-leg{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0 4px;font-size:11px;color:var(--k-dim)}
+.ko-cal-leg i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:1px}
+.ko-cal-sum{margin:0 0 4px;font-size:11px;color:var(--k-dim);line-height:1.4}
+.ko-strip-upfill{fill:color-mix(in srgb,var(--ko-ce) 14%,transparent)}
+.ko-strip-downfill{fill:color-mix(in srgb,var(--ko-pe) 14%,transparent)}
+.ko-strip-side{fill:#fff;font-size:9px;font-family:inherit;font-weight:500;pointer-events:none}
+.ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
+.ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
+.ko-desk[data-tab="month"]{grid-template-columns:minmax(0,640px)}
+.ko-desk[data-tab="month"] .ko-main{display:none}
+@media(max-width:1099px){
+  .ko-desk{display:block}
+  .ko-rail{display:none;position:static}
+  .ko-desk[data-tab="month"] .ko-main{display:none}
+  .ko-desk[data-tab="month"] .ko-rail{display:block}
+}
+.ko-ins-side {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.ko-now-play {
+  display: block;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+.ko-now-clock {
+  font-size: 13px;
+}
+.ko-now-next {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--k-dim);
+  line-height: 1.4;
+}
+.ko-now-copy {
+  text-wrap: pretty;
+}
+.ko-strip-both,
+.ko-swatch-both,
+.ko-mix-both {
+  background: #bdbdbd;
+  fill: #bdbdbd;
+}
+.ko-cal-cell[data-gap="flat"] .bar {
+  background: #d6d6d6;
+}
+.ko-tag-now {
+  color: var(--k-orange);
+  background: var(--k-orange)1a;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-left: 0;
+}
+
+.ko-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.ko-alert {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--k-border);
+  background: var(--k-bg);
+  font: inherit;
+  color: var(--k-text);
+}
+.ko-alert[data-kind="now"] {
+  box-shadow: inset 2px 0 var(--k-orange);
+}
+.ko-alert-kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--k-dim);
+}
+.ko-alert-body {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ko-alert-body b {
+  font-weight: 500;
+}
+.ko-alert-enable {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.ko-acc {
+  border-top: 1px solid var(--k-surface-hover);
+  margin: 0 0 8px;
+}
+.ko-acc-sum,
+.ko-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 4px 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--k-surface-hover);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--k-text);
+}
+.ko-acc-sum {
+  color: var(--k-dim);
+  font-size: 13px;
+}
+.ko-acc-item[data-live="true"] .ko-acc-head {
+  box-shadow: inset 2px 0 var(--k-orange);
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-acc-item[data-on="true"] .ko-acc-head {
+  background: var(--k-surface-2);
+}
+.ko-acc-item[data-live="true"][data-on="true"] .ko-acc-head {
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-acc-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 6.6rem;
+}
+.ko-acc-play {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+.ko-acc-result {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.ko-acc-chev {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--k-dim);
+  font-size: 11px;
+  width: 1em;
+  text-align: center;
+}
+.ko-acc-body {
+  padding: 8px 12px 14px 12px;
+  border-bottom: 1px solid var(--k-surface-hover);
+  background: var(--k-surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--k-text);
+  text-wrap: pretty;
+}
+.ko-acc-body p {
+  margin: 0 0 6px;
+}
+.ko-acc-body p:last-child {
+  margin-bottom: 0;
+}
+.ko-acc-meta {
+  color: var(--k-dim);
+  font-size: 11px;
+}
+.ko-acc-item[data-live="true"] .ko-acc-body {
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+
+@media (width <= 1099px) {
+  .ko-desk {
+    display: block;
+  }
+  .ko-rail {
+    display: none;
+    position: static;
+  }
+  .ko-desk[data-tab="month"] .ko-main {
+    display: none;
+  }
+  .ko-desk[data-tab="month"] .ko-rail {
+    display: block;
+  }
+}
+@media (width <= 800px) {
+  .ko-acc-time {
+    min-width: 0;
+  }
+  .ko-acc-head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .ko-acc-play {
+    flex-basis: 100%;
+    order: 5;
+  }
+  .ko-acc-chev {
+    order: 6;
+  }
+}@media (width<=800px){.ko-head,.ko-body{padding-left:16px;padding-right:16px}.ko-title-row{flex-wrap:wrap;gap:8px;margin-bottom:4px}.ko-title-row h2{width:auto;font-size:20px}.ko-date-value{min-width:96px;font-size:13px}.ko-tabs-row{flex-wrap:wrap;align-items:flex-start;gap:0}.ko-tabs{gap:20px;width:100%}.ko-ins{gap:14px;width:100%;padding-top:4px;padding-bottom:10px}.kd-shell{padding:20px 16px}.kd-margins{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-top:1px solid var(--k-border);border-left:0;margin-top:24px;padding:24px 0 0}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%;min-width:0}.ko-kv{grid-template-columns:1fr 1fr}.ko-kv>div:nth-child(4n){border-right:1px solid var(--k-surface-hover)}.ko-kv>div:nth-child(2n){border-right:0}.ko-split{grid-template-columns:1fr}.ko-cal-cell{min-height:44px;padding:4px 4px 6px}}
 `;
+
+
+type Tab = "session" | "thirty" | "month";
+
+function sessionIso(): string {
+  return lastCompletedSessionIso(new Date());
+}
+
+function isoToDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return utcFromIstParts(y, m, d, 9, 0, 0);
+}
+
+const UNDER_SHORT: { id: Underlying; short: string }[] = [
+  { id: "NIFTY", short: "Nifty" },
+  { id: "BANKNIFTY", short: "Bank" },
+  { id: "FINNIFTY", short: "Fin" },
+  { id: "SENSEX", short: "Sensex" },
+  { id: "MIDCPNIFTY", short: "Midcap" },
+];
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtNavDay(iso: string): string {
+  const p = getIstParts(isoToDate(iso));
+  return `${WEEKDAYS[p.weekday].slice(0, 3)}, ${p.day} ${MONTHS[p.month - 1]}`;
+}
+
+function slotKey(slot: WindowSlot): string {
+  return `${slot.from}-${slot.to}`;
+}
+
+function sideClass(side: WindowSlot["side"]): string {
+  if (side === "CE") return "ko-pill ko-pill-ce";
+  if (side === "PE") return "ko-pill ko-pill-pe";
+  return "ko-pill ko-pill-wait";
+}
+
+function sideLabel(side: WindowSlot["side"]): string {
+  if (side === "CE") return "CE";
+  if (side === "PE") return "PE";
+  if (side === "BOTH") return "BOTH";
+  return "WAIT";
+}
+
+function gradeClass(kind: SlotGrade["kind"]): string {
+  if (kind === "HIT") return "ko-st ko-st-hit";
+  if (kind === "MISS") return "ko-st ko-st-miss";
+  if (kind === "LIVE") return "ko-st ko-st-live";
+  if (kind === "SIT") return "ko-st ko-st-sit";
+  return "ko-st ko-st-sit";
+}
+
+function stampLive(slots: WindowSlot[], nowMin: number | null, sameDay: boolean): WindowSlot[] {
+  if (!sameDay || nowMin == null) {
+    return slots.map((s) => ({ ...s, isLive: false }));
+  }
+  return slots.map((s) => ({
+    ...s,
+    isLive: nowMin >= s.fromMin && nowMin < s.toMin,
+    isPast: nowMin >= s.toMin,
+  }));
+}
+
+function GradeMark({ grade, loading }: { grade: SlotGrade | undefined; loading: boolean }) {
+  if (loading && (!grade || grade.kind === "NONE")) {
+    return <span className="text-muted">…</span>;
+  }
+  if (!grade || grade.kind === "NONE") {
+    return <span className="text-muted">—</span>;
+  }
+  if (grade.kind === "PENDING") {
+    return <span className="text-muted">—</span>;
+  }
+  return (
+    <span>
+      <span className={gradeClass(grade.kind)}>{grade.label}</span>
+      {grade.delta !== null && (
+        <span className="text-muted">
+          {" "}
+          {grade.delta >= 0 ? "+" : ""}
+          {grade.delta.toFixed(0)}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function AstroPane() {
   const [iso, setIso] = useState(sessionIso);
-  const [underlying, setUnderlying] = useState<Underlying>('NIFTY');
-  const [tab, setTab] = useState<Tab>('timings');
+  const [underlying, setUnderlying] = useState<Underlying>("NIFTY");
+  const [tab, setTab] = useState<Tab>("session");
   const [now, setNow] = useState<Date | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [earlierOpen, setEarlierOpen] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
   const [notes, setNotes] = useState(false);
+  const candles = useCandles(underlying, '5m', 400);
   const [status, setStatus] = useState<LiveNow | null>(null);
   const [board, setBoard] = useState<IndexPlay[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -233,9 +484,9 @@ export function AstroPane() {
     return { year: p.year, month: p.month };
   });
 
-  const nowKey = now
-    ? `${formatIstIsoDate(now)}-${getIstParts(now).hour}-${getIstParts(now).minute}-${underlying}`
-    : '';
+  const nowParts = now ? getIstParts(now) : null;
+  const minuteKey = nowParts ? `${nowParts.year}-${nowParts.month}-${nowParts.day}-${nowParts.hour}-${nowParts.minute}-${underlying}` : "";
+  const todayIso = now ? formatIstIsoDate(now) : "";
 
   useEffect(() => {
     setNow(new Date());
@@ -244,105 +495,110 @@ export function AstroPane() {
   }, []);
 
   useEffect(() => {
+    if (!minuteKey) return;
     const t = new Date();
     setStatus(liveNow(t, underlying));
     setBoard(liveBoard(t));
-  }, [nowKey, underlying]);
+  }, [minuteKey, underlying]);
 
-  const candles = useCandles(underlying, '5m', 400);
   const dayDate = useMemo(() => isoToDate(iso), [iso]);
-  const book = useMemo(() => forecastDay(dayDate, underlying, now ?? dayDate), [dayDate, underlying, now]);
-  const month = useMemo(
-    () => forecastMonth(monthCursor.year, monthCursor.month, underlying, now ?? dayDate),
-    [monthCursor, underlying, now, dayDate],
-  );
-
-  const clockRows = tab === 'thirty' ? book.slots : book.netResults;
-  const live = book.slots.find((s) => s.isLive) ?? null;
-  const nowParts = now ? getIstParts(now) : null;
-  const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
-  const sameDay = Boolean(now && nowParts && formatIstIsoDate(now) === iso);
   const tape = useMemo(
     () => (candles.data?.length ? barsFromOhlcv(candles.data, iso, underlying) : null),
     [candles.data, iso, underlying],
   );
   const tapeLoading = candles.isLoading && !tape;
+  const tapeError = tape && tape.bars.length ? null : candles.isLoading ? null : "No tape";
+  const book = useMemo(() => forecastDay(dayDate, underlying, dayDate), [dayDate, underlying]);
+  const month = useMemo(() => {
+    const stamp = todayIso || formatIstIsoDate(dayDate);
+    const [y, m, d] = stamp.split("-").map(Number);
+    return forecastMonth(monthCursor.year, monthCursor.month, underlying, utcFromIstParts(y, m, d, 9, 0, 0));
+  }, [monthCursor.year, monthCursor.month, underlying, todayIso, dayDate]);
+
+  const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
+  const sameDay = Boolean(now && todayIso === iso);
+  const rawRows = tab === "thirty" ? book.slots : book.netResults;
+  const clockRows = useMemo(() => stampLive(rawRows, nowMin, sameDay), [rawRows, nowMin, sameDay]);
   const grades = useMemo(() => {
     const map = new Map<string, SlotGrade>();
-    for (const s of clockRows) map.set(`${s.from}-${s.to}`, gradeSlot(s, tape, nowMin, sameDay));
+    for (const s of clockRows) map.set(slotKey(s), gradeSlot(s, tape, nowMin, sameDay));
     return map;
   }, [clockRows, tape, nowMin, sameDay]);
   const tally = useMemo(
     () => summariseTape(clockRows, tape, nowMin, sameDay, book.gap.kind),
     [clockRows, tape, nowMin, sameDay, book.gap.kind],
   );
-  const instrument = underlyingLabel(underlying);
-  const stripSlots = tab === 'thirty' ? book.slots : book.netResults;
   const liveGrade = useMemo(() => {
     if (!status?.window || !now || iso !== status.sessionIso) return undefined;
     return gradeSlot(status.window, tape, nowMin, sameDay);
   }, [status, now, iso, tape, nowMin, sameDay]);
-  const liveKey =
-    status?.window && iso === status.sessionIso && tab !== 'month'
-      ? `${status.window.from}-${status.window.to}`
-      : null;
   const chipPlay = (id: Underlying) => board.find((row) => row.id === id);
+
+  const liveKey = useMemo(() => {
+    const live = clockRows.find((s) => s.isLive);
+    return live ? slotKey(live) : "";
+  }, [clockRows]);
 
   useEffect(() => {
     if (!liveKey) return;
     setOpenKey(liveKey);
+    setEarlierOpen(false);
+    setLaterOpen(false);
   }, [liveKey]);
-
-  useEffect(() => {
-    if (!liveKey || tab === 'month') return;
-    document.getElementById('ko-live-row')?.scrollIntoView({ block: 'nearest' });
-  }, [liveKey, tab]);
 
   const applyIso = (next: string) => {
     const snapped = nearestOpenIso(next);
     setIso(snapped);
-    const [y, m] = snapped.split('-').map(Number);
+    const [y, m] = snapped.split("-").map(Number);
     setMonthCursor({ year: y, month: m });
   };
 
-  const goToday = () => {
-    applyIso(sessionIso());
-    if (tab === 'month') setTab('timings');
-  };
-
-  const shiftDay = (dir: 1 | -1) => {
-    applyIso(shiftSessionIso(iso, dir));
-    if (tab === 'month') setTab('timings');
-  };
+  const goToday = () => applyIso(sessionIso());
+  const shiftDay = (dir: 1 | -1) => applyIso(shiftSessionIso(iso, dir));
 
   const shiftMonth = (delta: number) => {
     setMonthCursor((c) => {
       let month = c.month + delta;
       let year = c.year;
-      if (month < 1) { month = 12; year -= 1; }
-      if (month > 12) { month = 1; year += 1; }
+      if (month < 1) {
+        month = 12;
+        year -= 1;
+      }
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
       return { year, month };
     });
   };
 
   const pickSlot = (slot: WindowSlot) => {
-    if (tab === 'month') setTab('timings');
-    setOpenKey(`${slot.from}-${slot.to}`);
+    if (tab === "month") setTab("session");
+    const key = slotKey(slot);
+    setOpenKey(key);
+    if (sameDay && nowMin != null && nowMin >= slot.toMin) setEarlierOpen(true);
+    if (sameDay && nowMin != null && nowMin < slot.fromMin) {
+      const upcoming = clockRows.filter((s) => !s.isPast && !s.isLive);
+      if (upcoming[0] && slotKey(upcoming[0]) !== key) setLaterOpen(true);
+    }
   };
 
   const pickDay = (date: string) => {
     applyIso(date);
-    setTab('timings');
+    setTab("session");
   };
 
   return (
     <div className="kite-astro">
       <style>{CSS}</style>
+      <div className="ko">
       <div className="ko-head">
         <div className="ko-title-row">
           <h2>Astrology</h2>
           <div className="ko-date" role="group" aria-label="Session date">
-            <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>‹</button>
+            <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
+              ‹
+            </button>
             <label className="ko-date-value">
               {fmtNavDay(iso)}
               <input
@@ -352,38 +608,45 @@ export function AstroPane() {
                 onChange={(e) => {
                   if (!e.target.value) return;
                   applyIso(e.target.value);
-                  if (tab === 'month') setTab('timings');
                 }}
               />
             </label>
-            <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>›</button>
-            <button
-              type="button"
-              className="ko-link"
-              data-on={tab === 'month'}
-              aria-label={month.label}
-              aria-pressed={tab === 'month'}
-              onClick={() => setTab((t) => (t === 'month' ? 'timings' : 'month'))}
-            >
-              {MONTHS[monthCursor.month - 1]}
+            <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>
+              ›
             </button>
-            <button type="button" className="ko-link" onClick={goToday}>Today</button>
+            <button type="button" className="ko-link" onClick={goToday}>
+              Today
+            </button>
           </div>
         </div>
         <div className="ko-tabs-row">
           <div className="ko-tabs" role="tablist" aria-label="View">
-            <button type="button" role="tab" data-on={tab === 'timings'} aria-selected={tab === 'timings'} onClick={() => setTab('timings')}>Timings</button>
-            <button type="button" role="tab" data-on={tab === 'thirty'} aria-selected={tab === 'thirty'} onClick={() => setTab('thirty')}>30 min</button>
+            <button type="button" role="tab" data-on={tab === "session"} aria-selected={tab === "session"} onClick={() => setTab("session")}>
+              Session
+            </button>
+            <button type="button" role="tab" data-on={tab === "thirty"} aria-selected={tab === "thirty"} onClick={() => setTab("thirty")}>
+              30 min
+            </button>
+            <button type="button" role="tab" data-on={tab === "month"} aria-selected={tab === "month"} onClick={() => setTab("month")}>
+              Month
+            </button>
           </div>
           <div className="ko-ins" role="tablist" aria-label="Underlying">
             {UNDER_SHORT.map((u) => {
               const play = chipPlay(u.id);
               return (
-                <button key={u.id} type="button" role="tab" data-on={underlying === u.id} aria-selected={underlying === u.id} onClick={() => setUnderlying(u.id)}>
+                <button
+                  key={u.id}
+                  type="button"
+                  role="tab"
+                  data-on={underlying === u.id}
+                  aria-selected={underlying === u.id}
+                  onClick={() => setUnderlying(u.id)}
+                >
                   {u.short}
                   {play ? (
-                    <span className={`ko-ins-side ${play.side === 'CE' ? 'text-ce' : play.side === 'PE' ? 'text-pe' : 'text-muted'}`}>
-                      {play.side === 'WAIT' ? '—' : play.side === 'BOTH' ? 'BOTH' : play.side}
+                    <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
+                      {play.side === "WAIT" ? "—" : play.side === "BOTH" ? "BOTH" : play.side}
                     </span>
                   ) : null}
                 </button>
@@ -394,170 +657,207 @@ export function AstroPane() {
       </div>
 
       <div className="ko-body">
-        {now && status ? (
-          <NowBoard
-            status={status}
-            now={now}
-            grade={liveGrade}
-            viewingIso={iso}
-            board={board}
-            sessionPnl={tally.directional ? tally.pnl : null}
-            onOpenSession={(date) => {
-              applyIso(date);
-              setTab('timings');
-            }}
-            onOpenWindow={(slot) => {
-              applyIso(status.sessionIso);
-              setTab('timings');
-              setOpenKey(`${slot.from}-${slot.to}`);
-            }}
-          />
-        ) : null}
+        <div className="ko-desk" data-tab={tab}>
+          <div className="ko-main">
+            {now && status ? (
+              <NowBoard
+                status={status}
+                now={now}
+                grade={liveGrade}
+                viewingIso={iso}
+                sessionPnl={tally.directional ? tally.pnl : null}
+                onOpenSession={(date) => {
+                  applyIso(date);
+                  setTab("session");
+                }}
+                onOpenWindow={(slot) => {
+                  applyIso(status.sessionIso);
+                  setTab("session");
+                  setOpenKey(slotKey(slot));
+                }}
+              />
+            ) : null}
 
-        {tab !== 'month' ? (
-          <PlaybookStrip
-            book={book}
-            onPick={pickSlot}
-            live={(status?.phase === 'live' || status?.phase === 'post') && iso === status.sessionIso}
-            nowMin={sameDay ? nowMin : null}
-          />
-        ) : null}
+            {tab !== "month" ? (
+              <div className="ko-session">
+                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} />
+                <p className="ko-sub">
+                  <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
+                    {notes ? "Hide notes" : "Notes"}
+                  </button>
+                  {tally.directional ? (
+                    <span className="ko-tally">
+                      {tally.hits}/{tally.directional} hit
+                      {tally.sits ? ` · ${tally.sits} sit` : ""}
+                      {" · "}
+                      <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
+                        {tally.pnl >= 0 ? "+" : ""}
+                        {tally.pnl.toFixed(0)}
+                      </span>
+                    </span>
+                  ) : tapeLoading ? (
+                    <span className="ko-tally text-muted">Tape…</span>
+                  ) : tapeError ? (
+                    <span className="ko-tally text-muted">{tapeError}</span>
+                  ) : null}
+                </p>
+                {notes ? <PlaybookNotes book={book} /> : null}
+                <SessionStrip
+                  slots={clockRows}
+                  iso={iso}
+                  tape={tape}
+                  nowMin={nowMin}
+                  sameDay={sameDay}
+                  grades={grades}
+                  onPick={pickSlot}
+                />
+                <ClockList
+                  rows={clockRows}
+                  grades={grades}
+                  loading={tapeLoading}
+                  openKey={openKey}
+                  earlierOpen={earlierOpen}
+                  laterOpen={laterOpen}
+                  onEarlier={() => setEarlierOpen((v) => !v)}
+                  onLater={() => setLaterOpen((v) => !v)}
+                  onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
+                />
+              </div>
+            ) : null}
+          </div>
 
-        <p className="ko-sub">
-          <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>{notes ? 'Hide notes' : 'View notes'}</button>
-        </p>
-        {notes ? <PlaybookNotes book={book} /> : null}
-
-        {tab === 'month' ? (
-          <>
-            <div className="ko-month-nav">
-              <button type="button" className="ko-link" onClick={() => shiftMonth(-1)}>Prev</button>
+          <aside className="ko-rail" aria-label={`${month.label} calendar`}>
+            <div className="ko-rail-head">
+              <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                ‹
+              </button>
               <span>{month.label}</span>
-              <button type="button" className="ko-link" onClick={() => shiftMonth(1)}>Next</button>
+              <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                ›
+              </button>
             </div>
             <MonthHeat month={month} iso={iso} onPick={pickDay} />
-            <div className="ko-scroll">
-              <table className="ko-table ko-wide">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Gap</th>
-                    <th>Open</th>
-                    <th>Bias</th>
-                    <th>Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {month.days.map((day) => {
-                    const closed = day.isWeekend || day.isHoliday;
-                    const color = day.gap === 'up' ? 'var(--ko-ce)' : day.gap === 'down' ? 'var(--ko-pe)' : 'var(--k-amber)';
-                    return (
-                      <tr
-                        key={day.date}
-                        data-on={day.date === iso}
-                        onClick={() => {
-                          if (closed) return;
-                          pickDay(day.date);
-                        }}
-                        style={{ cursor: closed ? 'default' : 'pointer', opacity: closed ? 0.45 : 1 }}
-                      >
-                        <td>{formatIstDate(isoToDate(day.date))}{day.isToday ? ' · today' : ''}</td>
-                        <td style={{ color: closed ? 'var(--k-dim)' : color }}>
-                          {closed ? (day.isHoliday ? day.holidayName || 'Holiday' : 'Weekend') : day.gapLabel}
-                        </td>
-                        <td>{closed ? '—' : day.openAction}</td>
-                        <td>{closed ? '—' : day.bias}</td>
-                        <td style={{ color: 'var(--k-dim)' }}>{day.note}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <>
-            <SessionStrip slots={stripSlots} iso={iso} tape={tape} nowMin={nowMin} sameDay={sameDay} onPick={pickSlot} />
-            <div className="ko-scroll">
-              <table className="ko-table ko-wide">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Type</th>
-                    <th>Instrument</th>
-                    <th>Product</th>
-                    <th>Net results</th>
-                    <th>Play</th>
-                    <th>Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clockRows.map((slot) => {
-                    const key = `${slot.from}-${slot.to}`;
-                    const grade = grades.get(key);
-                    const open = openKey === key;
-                    return (
-                      <React.Fragment key={key}>
-                        <tr data-on={open} data-live={slot.isLive} id={slot.isLive ? 'ko-live-row' : undefined} onClick={() => setOpenKey(open ? null : key)}>
-                          <td>
-                            {slot.from} – {slot.to}
-                            {slot.isLive ? <span className="ko-tag">LIVE</span> : null}
-                          </td>
-                          <td><span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span></td>
-                          <td style={{ whiteSpace: 'nowrap' }}>{instrument}<span className="ko-tag">NSE</span></td>
-                          <td><span className={productClass(slot.product)}>{slot.product}</span></td>
-                          <td>
-                            {slot.regime}
-                            <span style={{ color: 'var(--k-dim)' }}>
-                              {' '}· {slot.toMin - slot.fromMin}m · {slot.hora}
-                              {slot.kalam.rahu ? ' · Rahu' : ''}
-                              {slot.kalam.yamagandam ? ' · Yama' : ''}
-                            </span>
-                          </td>
-                          <td style={{ color: actionColor(slot.action, slot.side) }}>{slot.action}</td>
-                          <td>
-                            {!grade || grade.kind === 'NONE' ? (
-                              <span style={{ color: 'var(--k-dim)' }}>{tapeLoading ? '…' : '—'}</span>
-                            ) : grade.kind === 'PENDING' ? (
-                              <span style={{ color: 'var(--k-dim)' }}>Pending</span>
-                            ) : (
-                              <span>
-                                <span className={gradeClass(grade.kind)}>{grade.label}</span>
-                                {grade.delta !== null && (
-                                  <span style={{ color: 'var(--k-dim)' }}> {grade.delta >= 0 ? '+' : ''}{grade.delta.toFixed(0)}</span>
-                                )}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                        {open && (
-                          <tr className="ko-expand">
-                            <td colSpan={7}>
-                              {slot.suggestion}
-                              <div style={{ color: 'var(--k-dim)', marginTop: 4 }}>{slot.why}</div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="ko-foot">
-              <span><span className="lbl">Gap</span><span style={{ color: gapColor(book.gap.kind) }}>{book.gap.label}</span></span>
-              <span><span className="lbl">Open</span>{book.gap.openAction}</span>
-              <span><span className="lbl">Window</span>{live ? live.action : 'Outside cash'}</span>
-              <span>
-                <span className="lbl">Tape</span>
-                {tally.directional
-                  ? `${tally.hits}/${tally.directional} HIT${tally.sits ? ` · ${tally.sits} sit` : ''} · ${tally.pnl >= 0 ? '+' : ''}${tally.pnl.toFixed(0)}`
-                  : candles.isLoading ? 'Loading…' : '—'}
-              </span>
-            </div>
-          </>
-        )}
+          </aside>
+        </div>
       </div>
+    </div>
+    </div>
+  );
+}
+
+function ClockList({
+  rows,
+  grades,
+  loading,
+  openKey,
+  earlierOpen,
+  laterOpen,
+  onEarlier,
+  onLater,
+  onToggle,
+}: {
+  rows: WindowSlot[];
+  grades: Map<string, SlotGrade>;
+  loading: boolean;
+  openKey: string | null;
+  earlierOpen: boolean;
+  laterOpen: boolean;
+  onEarlier: () => void;
+  onLater: () => void;
+  onToggle: (key: string) => void;
+}) {
+  const spent = rows.filter((s) => s.isPast && !s.isLive);
+  const live = rows.filter((s) => s.isLive);
+  const upcoming = rows.filter((s) => !s.isPast && !s.isLive);
+  const next = upcoming[0] ? [upcoming[0]] : [];
+  const later = upcoming.slice(1);
+  const spentLabel = live.length === 0 && upcoming.length === 0 ? `Session · ${spent.length}` : `Earlier · ${spent.length}`;
+
+  const renderItem = (slot: WindowSlot) => (
+    <ClockItem
+      key={slotKey(slot)}
+      slot={slot}
+      grade={grades.get(slotKey(slot))}
+      loading={loading}
+      open={openKey === slotKey(slot)}
+      onToggle={() => onToggle(slotKey(slot))}
+    />
+  );
+
+  return (
+    <div className="ko-acc">
+      {spent.length > 0 ? (
+        <div className="ko-acc-group">
+          <button type="button" className="ko-acc-sum" aria-expanded={earlierOpen} onClick={onEarlier}>
+            {spentLabel}
+            <span className="ko-acc-chev" aria-hidden>
+              {earlierOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {earlierOpen ? spent.map(renderItem) : null}
+        </div>
+      ) : null}
+      {live.map(renderItem)}
+      {next.map(renderItem)}
+      {later.length > 0 ? (
+        <div className="ko-acc-group">
+          <button type="button" className="ko-acc-sum" aria-expanded={laterOpen} onClick={onLater}>
+            Later · {later.length}
+            <span className="ko-acc-chev" aria-hidden>
+              {laterOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {laterOpen ? later.map(renderItem) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClockItem({
+  slot,
+  grade,
+  loading,
+  open,
+  onToggle,
+}: {
+  slot: WindowSlot;
+  grade?: SlotGrade;
+  loading: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const tone = actionTone(slot.action, slot.side);
+  const mins = slot.toMin - slot.fromMin;
+  const kalam = [slot.kalam.rahu ? "Rahu" : null, slot.kalam.yamagandam ? "Yama" : null, slot.kalam.gulika ? "Gulika" : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="ko-acc-item" data-live={slot.isLive} data-on={open}>
+      <button type="button" className="ko-acc-head" aria-expanded={open} onClick={onToggle}>
+        <span className="ko-acc-time">
+          {slot.from}–{slot.to}
+        </span>
+        {slot.isLive ? <span className="ko-tag ko-tag-now">NOW</span> : null}
+        <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
+        <span className={`ko-acc-play ${tone}`}>{slot.action}</span>
+        <span className="ko-acc-result">
+          <GradeMark grade={grade} loading={loading} />
+        </span>
+        <span className="ko-acc-chev" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open ? (
+        <div className="ko-acc-body">
+          {slot.isLive ? null : <p>{slot.suggestion}</p>}
+          <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
+          <p className="ko-acc-meta">
+            {mins}m · {slot.hora} hora
+            {kalam ? ` · ${kalam}` : ""}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
