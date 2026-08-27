@@ -127,9 +127,40 @@ def test_get_publishes_protection_modes_and_live_requirements():
     assert payload["defaults"]["expiry_policy"] == "NEAREST"  # corrected 2026-08-21
 
     # The UI must be able to state live's requirements before the operator tries.
-    req = payload["live_requires"]
-    assert "NONE" not in req["protection_mode"]
-    assert req["quote_mode"] == ["EXECUTABLE"]
+    # This used to be a hand-written `live_requires` dict and it had already
+    # drifted -- it named protection, quote mode and the session-origin gate while
+    # silently omitting the size and the stop, so a config could look live-ready
+    # and still be refused. It is now computed from the engine's own gate.
+    blockers = payload["live_blockers"]
+    assert isinstance(blockers, list) and blockers, "defaults are not live-ready"
+    joined = " | ".join(blockers)
+    for expected in ("quote_mode=EXECUTABLE", "positive size", "broker-side protection",
+                     "requires a stop"):
+        assert expected in joined, f"{expected!r} missing from live_blockers: {joined}"
+
+
+def test_live_blockers_cannot_drift_from_the_engine_gate():
+    """The property the static dict could not have: it IS the gate.
+
+    Whatever `live_blockers()` reports is exactly what refuses a live config, so
+    an empty list must mean a live config validates and a non-empty one must mean
+    it does not.
+    """
+    from dataclasses import replace
+    from app.engines.atm_premium_imbalance import ATMPremiumImbalanceConfig
+    import pytest as _pytest
+
+    default = ATMPremiumImbalanceConfig()
+    assert default.live_blockers()
+    with _pytest.raises(ValueError):
+        replace(default, execution_mode="live").validate()
+
+    ready = ATMPremiumImbalanceConfig(
+        quantity=100, quote_mode="EXECUTABLE", protection_mode="GTT",
+        stop_enabled=True, stop_basis="PERCENT", stop_percent=20.0,
+    )
+    assert ready.live_blockers() == []
+    assert replace(ready, execution_mode="live").validate().execution_mode == "live"
 
 
 def test_put_rejects_live_without_broker_side_protection():

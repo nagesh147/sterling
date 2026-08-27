@@ -81,6 +81,7 @@ const STRATEGY: AtmPremiumImbalanceResponse['strategy'] = {
 
 const setConfig = vi.fn();
 let serverConfig: AtmPremiumImbalanceConfig;
+let liveBlockers: string[] = [];
 
 vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../hooks/useAtmPremiumImbalance')>();
@@ -101,6 +102,7 @@ vi.mock('../../hooks/useAtmPremiumImbalance', async (importOriginal) => {
           entry_price_policy: ['FIRST_TICK_PLUS_BUFFER'],
           exit_policy: ['PREMIUM_CONVERGENCE'],
         },
+        live_blockers: liveBlockers,
       },
       isLoading: false,
       error: null,
@@ -313,5 +315,51 @@ describe('AtmPremiumImbalanceSettings — shared contract settings', () => {
     expect(instruments).toBeGreaterThan(-1);
     expect(contracts).toBeGreaterThan(instruments);
     expect(text).not.toContain('Universe');
+  });
+});
+
+
+/**
+ * Live readiness.
+ *
+ * The blockers come from the engine's own gate. A previous hand-written
+ * `live_requires` mirror had already drifted — it named protection, quote mode
+ * and the session-origin gate while silently omitting the size and the stop — so
+ * the property worth asserting is that this panel renders what the server sent
+ * and computes nothing itself.
+ */
+describe('live readiness', () => {
+  beforeEach(() => { liveBlockers = []; });
+
+  it('says live is withheld by the engine, not by the panel', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    fireEvent.click(screen.getByText('Live readiness'));
+    expect(screen.getByText(/withheld by the engine/i)).toBeTruthy();
+    expect(screen.getByText(/live_ready: false/)).toBeTruthy();
+  });
+
+  it('renders every blocker the server reports, verbatim', () => {
+    liveBlockers = [
+      'live mode requires an explicit positive size',
+      'live mode requires a stop: set stop_enabled with a positive stop_percent.',
+    ];
+    render(<AtmPremiumImbalanceSettings />);
+    fireEvent.click(screen.getByText('Live readiness'));
+    expect(screen.getByText(/2 reasons/)).toBeTruthy();
+    for (const b of liveBlockers) expect(screen.getByText(b)).toBeTruthy();
+  });
+
+  it('does not offer an execution-mode switch while the gate is shut', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    fireEvent.click(screen.getByText('Live readiness'));
+    // The mode is shown for orientation, never as a control.
+    expect(screen.getByText('paper')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^live$/i })).toBeNull();
+  });
+
+  it('confirms readiness when the server reports no blockers', () => {
+    render(<AtmPremiumImbalanceSettings />);
+    fireEvent.click(screen.getByText('Live readiness'));
+    expect(screen.getByText(/satisfies every live requirement/i)).toBeTruthy();
   });
 });
