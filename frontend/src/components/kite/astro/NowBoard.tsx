@@ -1,4 +1,5 @@
 import type { BuyContract, SlotGrade } from "../../../lib/astro/tape";
+import type { WindowPlan } from "../../../lib/astro/kiteContract";
 import { getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
 import { WEEKDAYS, type DayThesis, type LiveNow, type WindowSlot } from "../../../lib/astro/types";
 import { actionTone, gapTone } from "./palette";
@@ -61,6 +62,7 @@ export function NowBoard({
   sessionPnl,
   buy,
   nextBuy,
+  holding,
   onOpenSession,
   onOpenWindow,
 }: {
@@ -71,6 +73,7 @@ export function NowBoard({
   sessionPnl?: number | null;
   buy?: BuyContract;
   nextBuy?: BuyContract;
+  holding?: { mark: string; plan: WindowPlan } | null;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -97,7 +100,12 @@ export function NowBoard({
   const kicker =
     status.phase === "live" ? "NOW" : status.phase === "pre" ? "OPENS" : "CLOSED";
 
-  const play = recap ? `${status.gap.label} · ${THESIS[status.thesis]}` : status.play;
+  const holdingNow = Boolean(holding && holding.plan.kind !== "sit" && !recap);
+  const play = recap
+    ? `${status.gap.label} · ${THESIS[status.thesis]}`
+    : holdingNow
+      ? `HOLDING ${holding!.mark}`
+      : status.play;
 
   const when =
     status.phase === "live" && windowLeft
@@ -108,8 +116,9 @@ export function NowBoard({
         ? "09:15 IST"
         : `Next ${sessionLabel(status.nextOpenIso)}`;
 
-  const nextLine =
-    status.phase === "live" && status.next
+  const nextLine = holdingNow
+    ? holding!.plan.note
+    : status.phase === "live" && status.next
       ? `Then ${status.next.action}${nextBuy && nextBuy.verb !== "SIT" ? ` ${nextBuy.short}` : ""} at ${status.next.from}`
       : null;
 
@@ -133,7 +142,8 @@ export function NowBoard({
 
       <div className={`ko-now-play ${recap ? gtone.fg : playTone}`}>
         {play}
-        {!recap && buy && buy.verb !== "SIT" ? <span className="ko-now-strike">{buy.short}</span> : null}
+        {!recap && !holdingNow && buy && buy.verb !== "SIT" ? <span className="ko-now-strike">{buy.short}</span> : null}
+        {holdingNow ? <span className="ko-now-strike">{holding!.plan.label}</span> : null}
       </div>
       <div className="ko-now-sub">{when}</div>
 

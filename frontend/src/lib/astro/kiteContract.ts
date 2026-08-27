@@ -94,30 +94,225 @@ export function pickNearestOption(
   return hits[0] ?? null;
 }
 
-export function matchOpenPosition(
+export function optionSideOf(tradingsymbol: string): "CE" | "PE" | null {
+  const s = tradingsymbol.toUpperCase();
+  if (s.endsWith("PE")) return "PE";
+  if (s.endsWith("CE")) return "CE";
+  return null;
+}
+
+export function heldStrikeLabel(pos: OpenPos): string {
+  const side = optionSideOf(pos.tradingsymbol);
+  const m = pos.tradingsymbol.toUpperCase().match(/(\d+)(CE|PE)$/);
+  if (!m || !side) return pos.tradingsymbol;
+  return `${new Intl.NumberFormat("en-IN").format(Number(m[1]))} ${side}`;
+}
+
+function underMatches(sym: string, underlying: Underlying): boolean {
+  if (underlying === "NIFTY") return /^NIFTY(?!BANK|FIN|MID)/.test(sym);
+  return sym.startsWith(underlying);
+}
+
+/** Any open CE/PE on this index — not a second lot at a new strike. */
+export function matchHeldOption(
   positions: Array<Partial<OpenPos> & { tradingsymbol?: string; quantity?: number }>,
   underlying: Underlying,
-  strike: number,
-  side: "CE" | "PE",
-): OpenPos | null {
-  const needle = `${strike}${side}`;
+  prefer?: "CE" | "PE" | null,
+): (OpenPos & { optionSide: "CE" | "PE" }) | null {
+  let preferred: (OpenPos & { optionSide: "CE" | "PE" }) | null = null;
+  let any: (OpenPos & { optionSide: "CE" | "PE" }) | null = null;
   for (const p of positions) {
     const qty = Number(p.quantity) || 0;
     if (!qty) continue;
-    const sym = String(p.tradingsymbol ?? "").toUpperCase();
-    if (!sym.endsWith(needle)) continue;
-    if (underlying === "NIFTY") {
-      if (!/^NIFTY(?!BANK|FIN|MID)/.test(sym)) continue;
-    } else if (!sym.startsWith(underlying)) {
-      continue;
-    }
-    return {
-      tradingsymbol: String(p.tradingsymbol),
+    const raw = String(p.tradingsymbol ?? "");
+    const sym = raw.toUpperCase();
+    if (!underMatches(sym, underlying)) continue;
+    const optionSide = optionSideOf(sym);
+    if (!optionSide) continue;
+    const row: OpenPos & { optionSide: "CE" | "PE" } = {
+      tradingsymbol: raw,
       exchange: String(p.exchange ?? optionExchange(underlying)),
       quantity: qty,
       product: String(p.product ?? "MIS"),
       last_price: Number(p.last_price) || 0,
+      optionSide,
+    };
+    if (!any || Math.abs(row.quantity) > Math.abs(any.quantity)) any = row;
+    if (prefer && optionSide === prefer) {
+      if (!preferred || Math.abs(row.quantity) > Math.abs(preferred.quantity)) preferred = row;
+    }
+  }
+  return preferred ?? any;
+}
+
+export function roundTick(price: number, tick = 0.05): number {
+  if (!(price > 0)) return 0;
+  return Math.round(price / tick) * tick;
+}
+
+export function protectionPrices(
+  last: number,
+  slPct: number,
+  tgtPct: number | null,
+): { sl: number; tgt: number | null } {
+  let sl = roundTick(last * (1 + slPct / 100));
+  let tgt = tgtPct != null ? roundTick(last * (1 + tgtPct / 100)) : null;
+  if (sl >= last) sl = roundTick(Math.max(0.05, last - 0.05));
+  if (tgt != null && tgt <= last) tgt = roundTick(last + 0.05);
+  return { sl, tgt };
+}
+
+/** Long option: SL only climbs, target only runs up. Never loosen. */
+export function ratchetProtection(
+  last: number,
+  proposed: { sl: number; tgt: number | null },
+  existing: number[],
+): { sl: number; tgt: number | null; changed: boolean } {
+  const oldSl = existing.filter((t) => t < last).sort((a, b) => b - a)[0];
+  const oldTgt = existing.filter((t) => t > last).sort((a, b) => a - b)[0];
+  let sl = proposed.sl;
+  if (oldSl != null) sl = Math.max(oldSl, proposed.sl);
+  if (sl >= last) sl = oldSl ?? roundTick(Math.max(0.05, last - 0.05));
+  let tgt = proposed.tgt;
+  if (tgt != null && oldTgt != null) tgt = Math.max(oldTgt, tgt);
+  if (tgt == null && oldTgt != null) tgt = oldTgt;
+  const changed = sl !== oldSl || tgt !== oldTgt;
+  return { sl, tgt, changed };
+}
+
+function inrPx(n: number): string {
+  const digits = n >= 20 ? 0 : 1;
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+}
+
+function manageLabel(verb: string, mark: string, last: number, slPct: number | null, tgtPct: number | null): string {
+  const head = mark ? `${verb} ${mark}` : verb;
+  if (!(last > 0) || slPct == null) return head;
+  const px = protectionPrices(last, slPct, tgtPct);
+  return `${head} · SL ${inrPx(px.sl)}${px.tgt != null ? ` · TGT ${inrPx(px.tgt)}` : ""}`;
+}
+
+export type ContinueKind = "buy" | "trail" | "book" | "lock" | "close" | "sit";
+
+export interface WindowPlan {
+  kind: ContinueKind;
+  label: string;
+  slPct: number | null;
+  tgtPct: number | null;
+  note: string;
+}
+
+/** Same side = trail the open lot. Flip / avoid = close. Never a second Buy. */
+export function planWindow(
+  action: string,
+  windowSide: "CE" | "PE" | "BOTH" | "WAIT",
+  held: { optionSide: "CE" | "PE"; last_price?: number } | null,
+  mark: string,
+): WindowPlan {
+  const sit: WindowPlan = { kind: "sit", label: "—", slPct: null, tgtPct: null, note: "" };
+  const last = held?.last_price ?? 0;
+  if (!held) {
+    if (windowSide === "WAIT" || windowSide === "BOTH" || action === "WAIT" || action === "AVOID" || action.startsWith("BOOK")) {
+      return sit;
+    }
+    return {
+      kind: "buy",
+      label: mark ? `Buy ${mark}` : "Buy",
+      slPct: action.startsWith("SCALP") ? -20 : action.startsWith("HOLD") ? -15 : -25,
+      tgtPct: action.startsWith("SCALP") ? 30 : action.startsWith("HOLD") ? 80 : 50,
+      note: "First lot. Same-side windows trail this — they do not add.",
     };
   }
+
+  const tag = mark || held.optionSide;
+  if ((windowSide === "CE" || windowSide === "PE") && windowSide !== held.optionSide) {
+    return { kind: "close", label: `Close ${tag}`, slPct: null, tgtPct: null, note: "Side flipped — square off, do not reverse from here." };
+  }
+  if (action.startsWith("BOOK")) {
+    return {
+      kind: "book",
+      label: manageLabel("Book", tag, last, -10, 15),
+      slPct: -10,
+      tgtPct: 15,
+      note: "Book half. Trail the rest — do not add.",
+    };
+  }
+  if (action === "AVOID" || action === "WAIT") {
+    return {
+      kind: "lock",
+      label: manageLabel("Lock", tag, last, -12, null),
+      slPct: -12,
+      tgtPct: null,
+      note: "No fresh lots. Stop only ratchets tighter.",
+    };
+  }
+  const slPct = action.startsWith("HOLD") ? -15 : action.startsWith("SCALP") ? -20 : -25;
+  const tgtPct = action.startsWith("HOLD") ? 80 : action.startsWith("SCALP") ? 30 : 50;
+  return {
+    kind: "trail",
+    label: manageLabel("Trail", tag, last, slPct, tgtPct),
+    slPct,
+    tgtPct,
+    note: "Same side — upgrade SL/TGT, do not add.",
+  };
+}
+
+export function findGtt(
+  list: unknown,
+  tradingsymbol: string,
+): { id: number; triggers: number[] } | null {
+  if (!Array.isArray(list)) return null;
+  const want = tradingsymbol.toUpperCase();
+  for (const raw of list) {
+    const g = raw as {
+      id?: number;
+      trigger_id?: number;
+      status?: string;
+      tradingsymbol?: string;
+      trigger_values?: number[];
+      condition?: { tradingsymbol?: string; trigger_values?: number[] };
+    };
+    const status = String(g.status ?? "active").toLowerCase();
+    if (status && status !== "active") continue;
+    const sym = String(g.tradingsymbol ?? g.condition?.tradingsymbol ?? "").toUpperCase();
+    if (sym !== want) continue;
+    const id = Number(g.id ?? g.trigger_id);
+    if (!id) continue;
+    const triggers = (g.condition?.trigger_values ?? g.trigger_values ?? []).map(Number).filter((n) => n > 0);
+    return { id, triggers };
+  }
   return null;
+}
+
+export function gttBody(pos: OpenPos, last: number, sl: number, tgt: number | null) {
+  const qty = Math.abs(pos.quantity);
+  const product = pos.product || "MIS";
+  const leg = (price: number) => ({
+    tradingsymbol: pos.tradingsymbol,
+    exchange: pos.exchange,
+    transaction_type: "SELL" as const,
+    quantity: qty,
+    order_type: "LIMIT",
+    product,
+    price,
+  });
+  if (tgt != null) {
+    const pair = [sl, tgt].sort((a, b) => a - b);
+    return {
+      trigger_type: "two-leg" as const,
+      tradingsymbol: pos.tradingsymbol,
+      exchange: pos.exchange,
+      last_price: last,
+      trigger_values: pair,
+      orders: pair.map(leg),
+    };
+  }
+  return {
+    trigger_type: "single" as const,
+    tradingsymbol: pos.tradingsymbol,
+    exchange: pos.exchange,
+    last_price: last,
+    trigger_values: [sl],
+    orders: [leg(sl)],
+  };
 }

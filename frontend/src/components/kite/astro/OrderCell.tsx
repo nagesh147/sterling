@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import type { BuyContract } from "../../../lib/astro/tape";
 import {
-  matchOpenPosition,
+  heldStrikeLabel,
+  matchHeldOption,
   optionExchange,
+  optionSideOf,
+  planWindow,
   productForAction,
+  type ContinueKind,
   type OpenPos,
   type OptionHit,
+  type WindowPlan,
 } from "../../../lib/astro/kiteContract";
 import type { Underlying } from "../../../lib/astro/types";
 
@@ -25,37 +30,53 @@ function saveDemo(rows: OpenPos[]) {
   window.dispatchEvent(new Event("astro-demo-pos"));
 }
 
-export type PlaceFn = (hit: OptionHit, product: "MIS" | "NRML") => void;
+export function useDemoHeld(underlying: Underlying, prefer?: "CE" | "PE" | null) {
+  const [rows, setRows] = useState(loadDemo);
+  useEffect(() => {
+    const on = () => setRows(loadDemo());
+    window.addEventListener("astro-demo-pos", on);
+    return () => window.removeEventListener("astro-demo-pos", on);
+  }, []);
+  return matchHeldOption(rows, underlying, prefer);
+}
+
+export type PlaceFn = (hit: OptionHit, product: "MIS" | "NRML", plan: WindowPlan) => void;
 export type CloseFn = (pos: OpenPos) => void;
+export type TrailFn = (pos: OpenPos, plan: WindowPlan) => void;
 
 export function OrderCell({
   buy,
   action,
   underlying,
   asOfIso,
+  live = false,
   instrument,
   resolving,
   connected = true,
   position,
   onBuy,
   onClose,
+  onTrail,
+  onBook,
 }: {
   buy?: BuyContract;
   action: string;
   underlying: Underlying;
   asOfIso: string;
+  live?: boolean;
   instrument?: OptionHit | null;
   resolving?: boolean;
   connected?: boolean;
-  position?: OpenPos | null;
+  position?: (OpenPos & { optionSide?: "CE" | "PE" }) | null;
   onBuy?: PlaceFn;
   onClose?: CloseFn;
+  onTrail?: TrailFn;
+  onBook?: CloseFn;
 }) {
   const side = buy?.side === "CE" || buy?.side === "PE" ? buy.side : null;
   const strike = buy?.strike ?? null;
-  const canBuy = Boolean(side && strike && buy?.verb !== "SIT" && buy?.verb !== "BOOK");
   const [demoRows, setDemoRows] = useState(loadDemo);
-  const [pending, setPending] = useState<"buy" | "close" | null>(null);
+  const [pending, setPending] = useState<ContinueKind | null>(null);
 
   useEffect(() => {
     const on = () => setDemoRows(loadDemo());
@@ -66,7 +87,7 @@ export function OrderCell({
   const hit = useMemo<OptionHit | null>(() => {
     if (instrument) return instrument;
     if (onBuy) return null;
-    if (!canBuy || !side || strike == null) return null;
+    if (!side || strike == null) return null;
     return {
       tradingsymbol: `${underlying}${strike}${side}`,
       exchange: optionExchange(underlying),
@@ -76,78 +97,87 @@ export function OrderCell({
       last_price: 0,
       instrument_type: side,
     };
-  }, [instrument, onBuy, canBuy, side, strike, underlying, asOfIso]);
+  }, [instrument, onBuy, side, strike, underlying, asOfIso]);
 
-  const open =
-    position ?? (side && strike != null ? matchOpenPosition(demoRows, underlying, strike, side) : null);
+  const heldRaw = position ?? matchHeldOption(demoRows, underlying, side);
+  const heldSide = heldRaw ? heldRaw.optionSide ?? optionSideOf(heldRaw.tradingsymbol) : null;
+  const held = heldRaw && heldSide ? { ...heldRaw, optionSide: heldSide } : null;
+  const mark = held ? heldStrikeLabel(held) : buy?.short && buy.short !== "—" ? buy.short : "";
+  const plan = planWindow(action, buy?.side ?? "WAIT", held, mark);
   const product = productForAction(action);
   const stop = (e: MouseEvent) => e.stopPropagation();
 
-  const goBuy = (e: MouseEvent) => {
+  const go = (kind: ContinueKind) => (e: MouseEvent) => {
     stop(e);
-    if (!hit) return;
-    if (onBuy) {
-      onBuy(hit, product);
+    if (kind === "buy") {
+      if (!hit) return;
+      if (onBuy) {
+        onBuy(hit, product, plan);
+        return;
+      }
+      setPending("buy");
       return;
     }
-    setPending("buy");
-  };
-
-  const goClose = (e: MouseEvent) => {
-    stop(e);
-    if (!open) return;
-    if (onClose) {
-      onClose(open);
+    if (!held) return;
+    if (kind === "close" && onClose) {
+      onClose(held);
       return;
     }
-    setPending("close");
+    if (kind === "book" && onBook) {
+      onBook(held);
+      return;
+    }
+    if ((kind === "trail" || kind === "lock") && onTrail) {
+      onTrail(held, plan);
+      return;
+    }
+    setPending(kind);
   };
 
-  if (!canBuy && !open) {
-    if (buy && buy.verb !== "SIT" && buy.short && buy.short !== "—") {
-      return <span className="text-muted">{buy.short}</span>;
-    }
-    return <span className="text-muted">—</span>;
+  if (plan.kind === "sit") return <span className="text-muted">—</span>;
+
+  const dormant = held && (plan.kind === "trail" || plan.kind === "lock") && !live;
+  if (dormant) {
+    return (
+      <button type="button" className="ko-held" title="Close this lot" onClick={go("close")}>
+        Held {mark}
+      </button>
+    );
   }
 
-  const mark = buy?.short && buy.short !== "—" ? buy.short : side && strike != null ? `${strike} ${side}` : "";
-  const buyLabel = mark ? `Buy ${mark}` : "Buy";
-  const closeLabel = mark ? `Close ${mark}` : "Close";
+  const cls =
+    plan.kind === "close" || plan.kind === "book"
+      ? "ko-btn-close"
+      : plan.kind === "trail" || plan.kind === "lock"
+        ? "ko-btn-trail"
+        : "ko-btn-buy";
+  const disabled = plan.kind === "buy" && (resolving || (Boolean(onBuy) && (!connected || !hit)));
 
   return (
     <div className="ko-ord" onClick={stop}>
-      {open ? (
-        <button type="button" className="ko-btn-close" onClick={goClose} aria-label={closeLabel}>
-          {closeLabel}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="ko-btn-buy"
-          onClick={goBuy}
-          disabled={resolving || (Boolean(onBuy) && (!connected || !hit))}
-          aria-label={buyLabel}
-        >
-          {resolving ? "…" : buyLabel}
-        </button>
-      )}
-      {pending && hit ? (
-        <div className="ko-ticket" role="dialog" aria-label="Place order">
+      <button type="button" className={cls} onClick={go(plan.kind)} disabled={disabled} title={plan.note} aria-label={plan.label}>
+        {resolving && plan.kind === "buy" ? "…" : plan.label}
+      </button>
+      {pending && (hit || held) ? (
+        <div className="ko-ticket" role="dialog" aria-label={plan.label}>
           <p>
-            {pending === "close" ? "SELL" : "BUY"} {pending === "close" ? Math.abs(open?.quantity ?? hit.lot_size) : hit.lot_size}{" "}
-            {pending === "close" ? open?.tradingsymbol : hit.tradingsymbol}
-            <span className="text-muted">
-              {" "}
-              · {pending === "close" ? open?.product ?? product : product} · {hit.exchange}
-            </span>
+            {pending === "buy"
+              ? `BUY ${hit?.lot_size ?? 1} ${hit?.tradingsymbol}`
+              : pending === "book"
+                ? `SELL ${Math.max(1, Math.floor(Math.abs(held!.quantity) / 2))} ${held!.tradingsymbol}`
+                : pending === "close"
+                  ? `SELL ${Math.abs(held!.quantity)} ${held!.tradingsymbol}`
+                  : `GTT ${held?.tradingsymbol} · SL ${Math.abs(plan.slPct ?? 0)}%${plan.tgtPct ? ` · TGT ${plan.tgtPct}%` : ""}`}
+            <span className="text-muted"> · {product}</span>
           </p>
+          <p className="text-muted">{plan.note}</p>
           <div className="ko-ticket-act">
             <button
               type="button"
-              className={pending === "close" ? "ko-btn-close" : "ko-btn-buy"}
+              className={pending === "close" || pending === "book" ? "ko-btn-close" : "ko-btn-buy"}
               onClick={(e) => {
                 stop(e);
-                if (pending === "buy") {
+                if (pending === "buy" && hit) {
                   saveDemo([
                     ...loadDemo().filter((r) => r.tradingsymbol !== hit.tradingsymbol),
                     {
@@ -155,11 +185,17 @@ export function OrderCell({
                       exchange: hit.exchange,
                       quantity: hit.lot_size,
                       product,
-                      last_price: hit.last_price,
+                      last_price: hit.last_price || 42,
                     },
                   ]);
-                } else if (open) {
-                  saveDemo(loadDemo().filter((r) => r.tradingsymbol !== open.tradingsymbol));
+                } else if (pending === "close" && held) {
+                  saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
+                } else if (pending === "book" && held) {
+                  const left = Math.abs(held.quantity) - Math.max(1, Math.floor(Math.abs(held.quantity) / 2));
+                  if (left <= 0) saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
+                  else {
+                    saveDemo(loadDemo().map((r) => (r.tradingsymbol === held.tradingsymbol ? { ...r, quantity: left } : r)));
+                  }
                 }
                 setPending(null);
               }}
