@@ -44,12 +44,6 @@ function mergeWindows(slots: WindowSlot[]) {
   return rows;
 }
 
-function sideClass(side: WindowSlot["side"]): string {
-  if (side === "CE") return "ko-pill ko-pill-ce";
-  if (side === "PE") return "ko-pill ko-pill-pe";
-  return "ko-pill ko-pill-wait";
-}
-
 function openSide(action: string): WindowSlot["side"] {
   if (action.includes("CE")) return "CE";
   if (action.includes("PE")) return "PE";
@@ -66,6 +60,7 @@ function windowState(fromMin: number, toMin: number, nowMin: number | null): "do
 function stateMark(state: "done" | "now" | "next" | null): string {
   if (state === "done") return " · done";
   if (state === "now") return " · now";
+  if (state === "next") return " · next";
   return "";
 }
 
@@ -89,48 +84,36 @@ export function PlaybookStrip({
 
   return (
     <div className="ko-play">
-      {live ? null : <p className="ko-play-head">{pb.headline}</p>}
-      <div className="ko-play-meta">
-        <span>
-          <span className="lbl">Gap</span>
-          <b className={gtone.fg}>{book.gap.label}</b>
-        </span>
-        <span>
-          <span className="lbl">Thesis</span>
-          <b>{THESIS[pb.thesis]}</b>
-        </span>
-        <span>
-          <span className="lbl">Open</span>
+      {live ? null : (
+        <p className="ko-play-head">
+          <span className={gtone.fg}>{book.gap.label}</span>
+          {" · "}
+          {THESIS[pb.thesis]}
+          {" · open "}
           <b className={actionTone(book.gap.openAction, openSide(book.gap.openAction))}>{book.gap.openAction}</b>
-        </span>
-        <span>
-          <span className="lbl">Conf</span>
-          <b>{book.gap.confidence}%</b>
-        </span>
-      </div>
+        </p>
+      )}
       <div className="ko-play-roles">
         <button type="button" data-state={ceState ?? undefined} disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
           <span className="lbl">Best CE{stateMark(ceState)}</span>
           {pb.bestCe ? (
             <>
-              <span className={sideClass(pb.bestCe.side)}>CE</span>
               {pb.bestCe.from}–{pb.bestCe.to}{" "}
               <b className={actionTone(pb.bestCe.action, pb.bestCe.side)}>{pb.bestCe.action}</b>
             </>
           ) : (
-            <span className="text-muted">None today</span>
+            <span className="text-muted">None</span>
           )}
         </button>
         <button type="button" data-state={peState ?? undefined} disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
           <span className="lbl">Best PE{stateMark(peState)}</span>
           {pb.bestPe ? (
             <>
-              <span className={sideClass(pb.bestPe.side)}>PE</span>
               {pb.bestPe.from}–{pb.bestPe.to}{" "}
               <b className={actionTone(pb.bestPe.action, pb.bestPe.side)}>{pb.bestPe.action}</b>
             </>
           ) : (
-            <span className="text-muted">None today</span>
+            <span className="text-muted">None</span>
           )}
         </button>
         <button type="button" data-state={avoidState ?? undefined} disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
@@ -140,7 +123,7 @@ export function PlaybookStrip({
               {avoid.from}–{avoid.to}
             </>
           ) : (
-            <span className="text-muted">No Rahu / AVOID block</span>
+            <span className="text-muted">—</span>
           )}
         </button>
       </div>

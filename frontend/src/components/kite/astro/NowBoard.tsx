@@ -1,6 +1,6 @@
 import type { SlotGrade } from "../../../lib/astro/tape";
-import { formatIstDate, getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
-import type { IndexPlay, LiveNow, WindowSlot } from "../../../lib/astro/types";
+import { getIstParts, minutesOfDay, utcFromIstParts } from "../../../lib/astro/time";
+import { WEEKDAYS, type DayThesis, type IndexPlay, type LiveNow, type WindowSlot } from "../../../lib/astro/types";
 import { actionTone, gapTone, REGIME_SHORT, regimeTone } from "./palette";
 
 const SHORT: Record<IndexPlay["id"], string> = {
@@ -9,6 +9,13 @@ const SHORT: Record<IndexPlay["id"], string> = {
   FINNIFTY: "Fin",
   SENSEX: "Sensex",
   MIDCPNIFTY: "Midcap",
+};
+
+const THESIS: Record<DayThesis, string> = {
+  "trend-up": "Trend up",
+  "trend-down": "Trend down",
+  fade: "Fade",
+  chop: "Chop",
 };
 
 function pad(n: number): string {
@@ -47,9 +54,12 @@ function phaseLabel(status: LiveNow, now: Date): string {
   return "MARKET CLOSED";
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function sessionLabel(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return formatIstDate(utcFromIstParts(y, m, d, 9, 0, 0));
+  const p = getIstParts(utcFromIstParts(y, m, d, 9, 0, 0));
+  return `${WEEKDAYS[p.weekday].slice(0, 3)}, ${p.day} ${MONTHS[p.month - 1]}`;
 }
 
 function windowEndMs(status: LiveNow): number | null {
@@ -71,7 +81,7 @@ export function NowBoard({
   grade,
   viewingIso,
   board,
-  bellTithi,
+  sessionPnl,
   onOpenSession,
   onOpenWindow,
 }: {
@@ -80,14 +90,14 @@ export function NowBoard({
   grade?: SlotGrade;
   viewingIso: string;
   board: IndexPlay[];
-  bellTithi?: string;
+  sessionPnl?: number | null;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
   const gtone = gapTone(status.gap.kind);
   const playTone = actionTone(status.play, status.side);
   const kalam = kalamLine(status.kalam);
-  const horaLeft = fmtRemain(new Date(status.hora.endsAt).getTime() - now.getTime());
+  const recap = status.phase === "post" || status.phase === "closed";
   const endMs = windowEndMs(status);
   const windowLeft = status.phase === "live" && endMs !== null ? fmtRemain(endMs - now.getTime()) : null;
   const p = getIstParts(now);
@@ -100,25 +110,33 @@ export function NowBoard({
   const nifty = board.find((x) => x.id === "NIFTY");
   const bank = board.find((x) => x.id === "BANKNIFTY");
   const split = Boolean(nifty && bank && nifty.side !== bank.side && directional.length >= 2);
-  const tithi =
-    bellTithi && bellTithi !== status.tithiName
-      ? `${status.tithiName} (bell ${bellTithi})`
-      : status.tithiName;
   const wrongSession = viewingIso !== status.sessionIso;
   const showJump = Boolean(status.window) && wrongSession;
-  const tape =
+  const liveTape =
     grade && (grade.kind === "LIVE" || grade.kind === "HIT" || grade.kind === "MISS") && grade.delta !== null
       ? grade.delta
       : null;
+  const tape = liveTape !== null ? liveTape : recap && sessionPnl != null ? sessionPnl : null;
 
-  const playLabel =
-    status.phase === "post" && status.regime ? REGIME_SHORT[status.regime] : status.play;
   const when =
     status.phase === "live" && windowLeft
-      ? [windowLeft, kalam, status.window ? `${status.window.from}–${status.window.to}` : null].filter(Boolean).join(" · ")
+      ? [`${windowLeft} left`, kalam, status.window ? `${status.window.from}–${status.window.to}` : null]
+          .filter(Boolean)
+          .join(" · ")
       : status.phase === "pre"
         ? "at 09:15 IST"
         : `next ${sessionLabel(status.nextOpenIso)}`;
+
+  const sky = status.phase === "live"
+    ? [
+        `${status.hora.lord} hora`,
+        status.nakshatra,
+        status.choghadiyaKind === "bad" ? `${status.choghadiya} sit` : null,
+        status.next && status.next.action !== status.play ? `then ${status.next.action} ${status.next.from}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
 
   return (
     <div className="ko-now">
@@ -138,24 +156,35 @@ export function NowBoard({
         </span>
       </div>
 
-      <div
-        className={`ko-now-play ${
-          status.phase === "post" && status.regime ? regimeTone(status.regime).fg : playTone
-        }`}
-      >
-        <span>{playLabel}</span>
-        <span className="ko-now-sub">{when}</span>
-      </div>
+      {recap ? (
+        <div className="ko-now-play">
+          <span>
+            <span className={gtone.fg}>{status.gap.label}</span>
+            {" · "}
+            {THESIS[status.thesis]}
+            {status.regime ? (
+              <>
+                {" · "}
+                <span className={regimeTone(status.regime).fg}>{REGIME_SHORT[status.regime]}</span>
+              </>
+            ) : null}
+          </span>
+          <span className="ko-now-sub">{when}</span>
+        </div>
+      ) : (
+        <div className={`ko-now-play ${playTone}`}>
+          <span>{status.play}</span>
+          <span className="ko-now-sub">{when}</span>
+        </div>
+      )}
 
-      <p className="ko-now-copy">{status.suggestion}</p>
+      {status.phase === "live" || status.phase === "pre" ? <p className="ko-now-copy">{status.suggestion}</p> : null}
 
       {split && nifty && bank ? (
         <p className="ko-now-copy">
-          <span className={gtone.fg}>{status.gap.label}</span>
-          {" · "}
           {SHORT.NIFTY} {sideMark(nifty.side)} vs {SHORT.BANKNIFTY} {sideMark(bank.side)}
         </p>
-      ) : directional.length > 0 ? (
+      ) : status.phase === "live" && directional.length > 0 ? (
         <div className="ko-now-board" aria-label="Index plays">
           {directional.map((row) => (
             <span key={row.id} className={actionTone(row.play, row.side)}>
@@ -165,23 +194,7 @@ export function NowBoard({
         </div>
       ) : null}
 
-      <div className="ko-now-meta">
-        <span>
-          {status.hora.lord} {horaLeft}
-        </span>
-        <span>
-          {status.lagnaSign} {status.lagnaDegree.toFixed(0)}°
-        </span>
-        <span>
-          {tithi} · {status.nakshatra}
-        </span>
-        {status.choghadiyaKind === "bad" ? <span>{status.choghadiya} · sit</span> : null}
-        {status.next && status.phase === "live" && status.next.action !== status.play ? (
-          <span>
-            then {status.next.action} {status.next.from}
-          </span>
-        ) : null}
-      </div>
+      {sky ? <div className="ko-now-meta">{sky}</div> : null}
 
       {progress !== null ? (
         <div className="ko-now-bar" aria-hidden="true">
