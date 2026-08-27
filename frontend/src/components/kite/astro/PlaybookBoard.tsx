@@ -1,6 +1,6 @@
 import { clockFromMinutes, getIstParts, minutesOfDay } from "../../../lib/astro/time";
 import type { DayForecast, DignityKind, WindowSlot } from "../../../lib/astro/types";
-import { actionTone, gapTone, REGIME_SHORT } from "./palette";
+import { actionTone, gapTone } from "./palette";
 
 const THESIS: Record<DayForecast["playbook"]["thesis"], string> = {
   "trend-up": "Trend up",
@@ -56,20 +56,40 @@ function openSide(action: string): WindowSlot["side"] {
   return "WAIT";
 }
 
+function windowState(fromMin: number, toMin: number, nowMin: number | null): "done" | "now" | "next" | null {
+  if (nowMin == null) return null;
+  if (nowMin < fromMin) return "next";
+  if (nowMin < toMin) return "now";
+  return "done";
+}
+
+function stateMark(state: "done" | "now" | "next" | null): string {
+  if (state === "done") return " · done";
+  if (state === "now") return " · now";
+  return "";
+}
+
 export function PlaybookStrip({
   book,
   onPick,
+  live,
+  nowMin,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
+  live?: boolean;
+  nowMin?: number | null;
 }) {
   const pb = book.playbook;
   const gtone = gapTone(book.gap.kind);
   const avoid = mergeWindows(pb.avoid)[0] ?? null;
+  const ceState = pb.bestCe ? windowState(pb.bestCe.fromMin, pb.bestCe.toMin, nowMin ?? null) : null;
+  const peState = pb.bestPe ? windowState(pb.bestPe.fromMin, pb.bestPe.toMin, nowMin ?? null) : null;
+  const avoidState = avoid ? windowState(avoid.fromMin, avoid.toMin, nowMin ?? null) : null;
 
   return (
     <div className="ko-play">
-      <p className="ko-play-head">{pb.headline}</p>
+      {live ? null : <p className="ko-play-head">{pb.headline}</p>}
       <div className="ko-play-meta">
         <span>
           <span className="lbl">Gap</span>
@@ -84,21 +104,13 @@ export function PlaybookStrip({
           <b className={actionTone(book.gap.openAction, openSide(book.gap.openAction))}>{book.gap.openAction}</b>
         </span>
         <span>
-          <span className="lbl">Hora</span>
-          <b>{pb.horaAtOpen}</b>
-        </span>
-        <span>
-          <span className="lbl">Close</span>
-          <b>{REGIME_SHORT[pb.closeBias]}</b>
-        </span>
-        <span>
           <span className="lbl">Conf</span>
           <b>{book.gap.confidence}%</b>
         </span>
       </div>
       <div className="ko-play-roles">
-        <button type="button" disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
-          <span className="lbl">Best CE</span>
+        <button type="button" data-state={ceState ?? undefined} disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
+          <span className="lbl">Best CE{stateMark(ceState)}</span>
           {pb.bestCe ? (
             <>
               <span className={sideClass(pb.bestCe.side)}>CE</span>
@@ -106,11 +118,11 @@ export function PlaybookStrip({
               <b className={actionTone(pb.bestCe.action, pb.bestCe.side)}>{pb.bestCe.action}</b>
             </>
           ) : (
-            <span className="text-muted">No CE window</span>
+            <span className="text-muted">None today</span>
           )}
         </button>
-        <button type="button" disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
-          <span className="lbl">Best PE</span>
+        <button type="button" data-state={peState ?? undefined} disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
+          <span className="lbl">Best PE{stateMark(peState)}</span>
           {pb.bestPe ? (
             <>
               <span className={sideClass(pb.bestPe.side)}>PE</span>
@@ -118,15 +130,14 @@ export function PlaybookStrip({
               <b className={actionTone(pb.bestPe.action, pb.bestPe.side)}>{pb.bestPe.action}</b>
             </>
           ) : (
-            <span className="text-muted">No PE window</span>
+            <span className="text-muted">None today</span>
           )}
         </button>
-        <button type="button" disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
-          <span className="lbl">Avoid</span>
+        <button type="button" data-state={avoidState ?? undefined} disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
+          <span className="lbl">Avoid{stateMark(avoidState)}</span>
           {avoid ? (
             <>
-              <span className={sideClass(avoid.side)}>{avoid.side}</span>
-              {avoid.from}–{avoid.to} <span className="text-muted">{avoid.action}</span>
+              {avoid.from}–{avoid.to}
             </>
           ) : (
             <span className="text-muted">No Rahu / AVOID block</span>

@@ -56,7 +56,7 @@ import {
   snapshot,
   sunRiseSetIst,
 } from "./ephemeris";
-import { holidayName, isMuhurat, isNseClosed, isNseHoliday, nextSessionIso } from "./holidays";
+import { holidayName, isMuhurat, isNseClosed, isNseHoliday, lastCompletedSessionIso, nextSessionIso } from "./holidays";
 import {
   aspectScore,
   choghadiyaAt,
@@ -991,7 +991,8 @@ export function liveNow(now: Date, underlying: Underlying): LiveNow {
   const inCash = !todayClosed && nowMin >= MARKET_OPEN_MIN && nowMin < MARKET_CLOSE_MIN;
   const preOpen = !todayClosed && nowMin < MARKET_OPEN_MIN;
   const phase: LiveNow["phase"] = inCash ? "live" : preOpen ? "pre" : todayClosed ? "closed" : "post";
-  const sessionIso = nextSessionIso(now);
+  const nextOpenIso = nextSessionIso(now);
+  const sessionIso = phase === "post" ? lastCompletedSessionIso(now) : nextOpenIso;
   const { y, m, d } = isoParts(sessionIso);
   const sessionDate = utcFromIstParts(y, m, d, 9, 0, 0);
   const book = forecastDay(sessionDate, underlying, now);
@@ -1011,12 +1012,17 @@ export function liveNow(now: Date, underlying: Underlying): LiveNow {
     const i = book.netResults.findIndex((s) => s.isLive);
     window = i >= 0 ? book.netResults[i] : book.slots.find((s) => s.isLive) ?? null;
     next = i >= 0 ? (book.netResults[i + 1] ?? null) : book.netResults[0] ?? null;
+  } else if (phase === "post") {
+    const { y: ny, m: nm, d: nd } = isoParts(nextOpenIso);
+    next = forecastDay(utcFromIstParts(ny, nm, nd, 9, 0, 0), underlying, now).netResults[0] ?? null;
   } else {
     next = book.netResults[0] ?? null;
   }
 
-  const play = window ? window.action : book.gap.openAction;
-  const suggestion = window ? window.suggestion : book.gap.summary;
+  const last = book.netResults[book.netResults.length - 1] ?? null;
+  const play = window ? window.action : phase === "post" ? (last?.action ?? "WAIT") : book.gap.openAction;
+  const suggestion = window ? window.suggestion : phase === "post" ? book.playbook.headline : book.gap.summary;
+  const side = window ? window.side : phase === "post" ? (last?.side ?? "WAIT") : sideOf(play);
 
   return {
     iso: todayIso,
@@ -1037,13 +1043,14 @@ export function liveNow(now: Date, underlying: Underlying): LiveNow {
     window,
     next,
     play,
-    side: window ? window.side : sideOf(play),
+    side,
     suggestion,
     regime: window ? window.regime : book.playbook.closeBias,
     gap: book.gap,
     thesis: book.gap.thesis,
-    bellMs: utcAtMin(sessionIso, MARKET_OPEN_MIN).getTime(),
-    closeMs: utcAtMin(inCash ? todayIso : sessionIso, MARKET_CLOSE_MIN).getTime(),
+    bellMs: utcAtMin(nextOpenIso, MARKET_OPEN_MIN).getTime(),
+    closeMs: utcAtMin(inCash || phase === "post" ? todayIso : sessionIso, MARKET_CLOSE_MIN).getTime(),
+    nextOpenIso,
   };
 }
 

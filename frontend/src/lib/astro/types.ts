@@ -238,6 +238,7 @@ export interface LiveNow {
   thesis: DayThesis;
   bellMs: number;
   closeMs: number;
+  nextOpenIso: string;
 }
 
 export interface IndexPlay {
