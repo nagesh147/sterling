@@ -25,6 +25,12 @@ from typing import Any, Optional
 
 from app.core.logging import get_logger
 from app.engines.adaptive_edge import AdaptiveEdgeConfig
+from app.engines.adaptive_edge.f103_opportunity import (
+    OpportunityAction,
+    OpportunityCandidate,
+    evaluate_opportunity,
+)
+from app.engines.adaptive_edge.f109_option_selection import F109Candidate, select_f109
 from app.services.adaptive_edge import ist_today, nfo_dump, underlyings
 from app.services.adaptive_edge_strategy import (
     MIN_BARS,
@@ -181,6 +187,84 @@ def tradeable_contracts(
     return kept, dropped
 
 
+
+
+def _f103_eligibility(row: dict, decision_direction: str, expected_ev: float | None,
+                      conservative_ev: float | None):
+    """F-103, the candidate eligibility boundary, run for real.
+
+    The same conjunction F-110 applies at entry, applied here at the candidate
+    stage — §30 rather than §35. Both belong: a candidate that cannot clear the
+    boundary should not become a trade candidate at all, and the final gate is
+    still checked before anything is armed.
+
+    It refuses on the same term F-110 does. `conservative_expected_value` is
+    LowerConfidenceBound(EV) and the model that would bound it has no
+    directional signal (see docs/strategy/adaptive-edge/F102_CALIBRATION_RESULT.md),
+    so it is passed absent and the reason comes from the formula rather than
+    from prose written here.
+    """
+    action = (OpportunityAction.BUY_CE if decision_direction == "BULLISH"
+              else OpportunityAction.BUY_PE if decision_direction == "BEARISH"
+              else OpportunityAction.NO_TRADE)
+    return evaluate_opportunity(OpportunityCandidate(
+        action=action,
+        data_ok=True,
+        directional_edge_ok=action is not OpportunityAction.NO_TRADE,
+        expected_value=expected_ev,
+        conservative_expected_value=conservative_ev,
+        # Already applied in reaching this list: OI and volume floors, the spread
+        # ceiling, the strike and expiry windows.
+        liquidity_ok=True,
+        slippage_ok=True,
+        risk_ok=True,
+    ))
+
+
+def rank_contracts(rows: list[dict], cfg: AdaptiveEdgeConfig,
+                   *, expected_ev: float | None) -> list[dict]:
+    """Order contracts by F-109, the canonical selector, when it can decide.
+
+    F-109 picks the eligible candidate with maximum ExpectedNetEV under
+    liquidity, slippage, risk and data-quality constraints, and fails closed on
+    a missing input. Expected value per contract needs the probability model, so
+    today it returns nothing and the fallback ordering applies — open interest
+    first, then distance from spot, which is a liquidity heuristic and is
+    labelled as one rather than dressed up as the formula.
+
+    Contracts are still returned when F-109 declines, because they are what the
+    observation recorder needs. Being surfaced is not being armable; the entry
+    gate decides that.
+    """
+    if expected_ev is not None:
+        candidates = [
+            F109Candidate(
+                option_symbol=str(r.get("symbol") or ""),
+                option_type=str(r.get("option_type") or ""),
+                strike=_num(r.get("strike")),
+                moneyness="ATM",
+                expected_gross_ev=expected_ev,
+                execution_cost=max(0.0, (_num(r.get("ask")) - _num(r.get("bid"))) / 2.0),
+                risk=_num(r.get("last_price")) * max(1, int(_num(r.get("lot_size")))),
+                liquidity=_num(r.get("oi")),
+                expected_slippage=max(0.0, (_num(r.get("ask")) - _num(r.get("bid"))) / 2.0),
+                data_quality=1.0,
+                required_liquidity=float(cfg.min_option_oi),
+                allowable_slippage=_num(r.get("last_price")) * cfg.max_spread_pct / 100.0,
+                max_risk=float(cfg.max_daily_loss) if cfg.max_daily_loss > 0 else float("inf"),
+                required_data_quality=cfg.min_chain_completeness,
+            )
+            for r in rows
+        ]
+        chosen = select_f109(candidates)
+        if chosen is not None:
+            head = [r for r in rows if str(r.get("symbol")) == chosen.option_symbol]
+            return head + [r for r in rows if str(r.get("symbol")) != chosen.option_symbol]
+
+    # Liquidity heuristic, not F-109. Named so nobody reads it as the formula.
+    return sorted(rows, key=lambda r: (-_num(r.get("oi")), abs(_num(r.get("strike")) - _num(r.get("spot")))))
+
+
 async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
     """Run the funnel and return what each stage produced.
 
@@ -320,10 +404,17 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
                 state["skipped"][name] = "no contract passed the liquidity filters"
                 continue
 
-            for row in tradeable:
+            ranked = rank_contracts(tradeable, cfg, expected_ev=decision.expected_net_value)
+            for row in ranked:
+                eligibility = _f103_eligibility(
+                    row, decision.direction, decision.expected_net_value,
+                    None)   # conservative EV: see F102_CALIBRATION_RESULT.md
                 candidates.append({
                     **row,
                     "underlying": name,
+                    "f103_eligible": eligibility.eligible,
+                    "f103_action": eligibility.action.value,
+                    "f103_reason": eligibility.reason,
                     "direction": decision.direction,
                     "horizon": decision.horizon,
                     "reason": decision.reason,
