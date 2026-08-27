@@ -11,6 +11,7 @@ import { MonthHeat } from './astro/MonthHeat';
 import { NowBoard } from './astro/NowBoard';
 import { PlaybookNotes, PlaybookStrip } from './astro/PlaybookBoard';
 import { SessionStrip } from './astro/SessionStrip';
+import { KiteOrderCell } from './astro/KiteOrderCell';
 
 const CSS = `
 
@@ -194,7 +195,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 .ko-clock {
   width: 100%;
-  min-width: 640px;
+  min-width: 760px;
 }
 .ko-clock thead th {
   position: sticky;
@@ -238,6 +239,44 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-clock-play {
   font-weight: 500;
 }
+
+.ko-ord {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ko-btn-buy,
+.ko-btn-close {
+  border: 0;
+  border-radius: 2px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #fff;
+}
+.ko-btn-buy { background: var(--k-blue, #4184f3); }
+.ko-btn-buy:hover { filter: brightness(0.95); }
+.ko-btn-buy:disabled { opacity: 0.45; cursor: not-allowed; }
+.ko-btn-close { background: var(--k-red-strong, #df514c); }
+.ko-btn-close:hover { filter: brightness(0.95); }
+.ko-ticket {
+  position: absolute;
+  z-index: 8;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  padding: 10px 12px;
+  background: var(--k-bg);
+  border: 1px solid var(--k-surface-hover);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  font-size: 13px;
+}
+.ko-ticket p { margin: 0 0 6px; }
+.ko-ticket-act { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+
 .ko-buy {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -860,6 +899,8 @@ export function AstroPane() {
                   contracts={contracts}
                   loading={tapeLoading}
                   openKey={openKey}
+                  underlying={underlying}
+                  asOfIso={iso}
                   onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
                 />
               </div>
@@ -891,6 +932,8 @@ function ClockTable({
   contracts,
   loading,
   openKey,
+  underlying,
+  asOfIso,
   onToggle,
 }: {
   rows: WindowSlot[];
@@ -898,6 +941,8 @@ function ClockTable({
   contracts: Map<string, BuyContract>;
   loading: boolean;
   openKey: string | null;
+  underlying: Underlying;
+  asOfIso: string;
   onToggle: (key: string) => void;
 }) {
   const liveRef = useRef<HTMLTableRowElement>(null);
@@ -920,6 +965,7 @@ function ClockTable({
             <th>Side</th>
             <th>Play</th>
             <th>Buy</th>
+            <th>Order</th>
             <th className="ko-num">Result</th>
           </tr>
         </thead>
@@ -937,6 +983,8 @@ function ClockTable({
                 dim={dimSpent && slot.isPast}
                 next={key === nextKey}
                 rowRef={slot.isLive ? liveRef : undefined}
+                underlying={underlying}
+                asOfIso={asOfIso}
                 onToggle={() => onToggle(key)}
               />
             );
@@ -956,6 +1004,8 @@ function TimingRow({
   dim,
   next,
   rowRef,
+  underlying,
+  asOfIso,
   onToggle,
 }: {
   slot: WindowSlot;
@@ -966,6 +1016,8 @@ function TimingRow({
   dim: boolean;
   next: boolean;
   rowRef?: Ref<HTMLTableRowElement>;
+  underlying: Underlying;
+  asOfIso: string;
   onToggle: () => void;
 }) {
   const tone = actionTone(slot.action, slot.side);
@@ -1012,13 +1064,16 @@ function TimingRow({
             <span className="text-muted">—</span>
           )}
         </td>
+        <td>
+          <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} />
+        </td>
         <td className="ko-num">
           <GradeMark grade={grade} loading={loading} />
         </td>
       </tr>
       {open ? (
         <tr className="ko-expand">
-          <td colSpan={5}>
+          <td colSpan={6}>
             {slot.isLive ? null : <p>{slot.suggestion}</p>}
             <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
           </td>
