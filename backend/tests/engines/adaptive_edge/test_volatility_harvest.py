@@ -150,3 +150,50 @@ def test_the_structure_reports_what_an_operator_needs_to_size():
     assert 0 < result.credit_to_risk
     assert result.forecast_bps > 0
     assert result.realised_vol_bps > 0
+
+
+# ------------------------------------- the payoff assumption, and its limits
+
+def test_the_module_does_not_claim_to_be_validated():
+    """The study's expectancy measured options expiring at the horizon.
+
+    `P&L = credit - |move|` is a held-to-expiry payoff. A thirty-minute-to-expiry
+    NIFTY option mostly is not listed, so a t-statistic of 10.9 built from 585
+    such windows is answering a question about contracts that do not exist. On
+    the tradeable subset — expiry sessions held to the close — the result is
+    +0.09 bps at t=0.02 over 27 sessions.
+
+    Anyone reaching for this module must meet that in the first paragraph.
+    """
+    from app.engines.adaptive_edge import volatility_harvest as module
+
+    doc = module.__doc__ or ""
+    assert "NOT a validated strategy" in doc
+    assert "expires at the end of the horizon" in doc
+    assert "27" in doc, "the tradeable-subset sample size must be stated"
+
+
+def test_a_short_hold_on_a_dated_option_is_not_the_modelled_payoff():
+    """Guards the arithmetic behind the correction.
+
+    A seven-day straddle decays a fraction of a percent of its premium over
+    thirty minutes while carrying the whole move. Premium collection and
+    gamma exposure are different trades, and conflating them is what made the
+    study look conclusive.
+    """
+    minutes_per_year = 375 * 250
+
+    def straddle(iv: float, years: float) -> float:
+        return ATM_STRADDLE_COEFFICIENT * iv * math.sqrt(years) * 10_000
+
+    seven_day = 7 / 250
+    full = straddle(0.12, seven_day)
+    after_30_min = straddle(0.12, seven_day - 30 / minutes_per_year)
+    decay_fraction = (full - after_30_min) / full
+    assert decay_fraction < 0.02, (
+        "a 30-minute hold on a 7-day option collects almost no premium; if this "
+        "ever exceeds a couple of percent the correction above needs revisiting")
+
+    # Whereas an option expiring at the horizon surrenders essentially all of it.
+    expiring = straddle(0.12, 30 / minutes_per_year)
+    assert expiring > 0

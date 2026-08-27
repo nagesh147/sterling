@@ -1,43 +1,46 @@
-"""Sell volatility when the tape is already moving — defined risk only.
+"""Short-volatility structures — and why this is NOT a validated strategy.
 
-The long side does not work. A long straddle needs implied below realised, and
-index options carry the variance risk premium the other way, so that gate
-refuses almost always (see VOLATILITY_EDGE.md). The short side is where the
-premium is. This module is that side, and it is deliberately narrow about how.
+**Read this before using anything here.** The expectancy figures that motivated
+this module do not survive contact with the instruments that actually exist.
 
-**Three findings shape it, and two of them invert the usual intuition.**
+The study measured `P&L = credit - |move|`. That is the payoff of an option
+which **expires at the end of the horizon**. It gave a non-overlapping
+t-statistic of 10.9 and a bootstrap interval of [+12.0, +16.0] bps, and both
+numbers are answering a question about a contract that mostly is not listed: a
+thirty-minute-to-expiry NIFTY option on a Tuesday.
 
-*Sell into movement, not into calm.* Sorting decisions by forecast volatility
-and selling only the top 40% roughly doubles the expectancy against selling
-everything (+13.8 bps against +6.0), while selling only the quietest 40% earns
-+0.18 bps — nothing. The reason is that the collected premium scales with
-volatility but the tail barely does: measured by forecast quintile, a 1-in-100
-move costs 7.1 times the premium in the quietest quintile and 1.8 times in the
-most active. Selling into calm is *more* dangerous per rupee earned, which is
-the opposite of how it is usually described.
+Selling a real option and holding thirty minutes is a different trade. At 12%
+implied, a seven-day straddle decays 0.6% of its premium over thirty minutes
+while the position carries the whole move. The premium-collection payoff the
+study measured only exists on expiry day, near the close.
 
-*The forecaster predicts the body, not the tail.* Median forward excursion rises
-2.4x from the lowest forecast quintile to the highest; the maximum does not move
-at all, and the single largest excursion in the sample came from the quietest
-quintile. So the forecast may size the premium. It may never be used to argue
-that a tail will not arrive.
+Re-run on that subset — expiry sessions, sold before the close and held to it,
+which is the tradeable version — the edge is not there:
 
-*Which is why nothing here sells naked.* A 6% intraday move costs a naked seller
-18.8 times the credit and a 13% move costs 42 times — and a stop does not help,
-because a gap opens through it. Wings at 1.5 standard deviations keep 89% of the
-expectancy and cap that same 6% move at 1.0 times the credit. Every structure
-this module produces is defined-risk. There is no flag to turn that off.
+    horizon      n    mean P&L @ IV/RV 1.2    t
+    last 30m    27           +0.09          0.02
+    last 60m    27           +2.36          0.72
+    last 90m    27           -2.34         -0.66
 
-Evidence, all of it out of sample: non-overlapping t-statistic 10.9, a
-session-block bootstrap over 118 sessions giving a 95% interval of [+12.0,
-+16.0] bps with none of 2000 draws below zero, and 37 of 37 NSE indices
-profitable on the same rule.
+Twenty-seven sessions, nothing significant. The direction of the quintile effect
+does persist (active half +9.15 against quiet half -4.95) but on samples of
+thirteen and fourteen, which is an anecdote.
 
-**What is assumed and not measured:** the implied-to-realised ratio. There is no
-option price history in any store here, so the expectancy above assumes the
-market charges 1.2x realised. If the real premium is thinner the edge scales
-down with it. The engine computes the ratio from live quotes at decision time,
-so this assumption never reaches a trading decision — it only sizes the research.
+**What still stands** is the forecaster in `volatility_forecast.py`. That
+measures a property of the price series — how far it travels given how far it
+has been travelling — and it holds on 119 of 120 instruments out of sample. It
+does not depend on any payoff assumption. What does not stand is the claim that
+selling volatility against it is profitable.
+
+**So what is this module for.** It prices a defined-risk short-volatility
+structure correctly, refuses to produce a naked one, and requires a live
+implied-to-realised ratio rather than theresearch  assumption. It is the correct
+machinery for a trade that has not been shown to work. Wire it to paper, record
+what the gate would have done against real quoted premiums, and decide from that
+— which is the evidence the study could not supply because no store here holds
+option price history.
+
+Full working, including the correction: docs/strategy/adaptive-edge/VOLATILITY_SELLING.md
 """
 from __future__ import annotations
 

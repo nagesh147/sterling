@@ -1,5 +1,39 @@
 # Selling volatility — the study, artifact by artifact
 
+> ## Correction, before anything else
+>
+> **The headline expectancy in this study is not tradeable, and the artifacts
+> below overstate the case.** They were kept rather than deleted because the
+> reasoning is sound and the correction is more instructive than a rewrite.
+>
+> Every P&L figure uses `P&L = credit - |move|`. That is the payoff of an option
+> **expiring at the end of the horizon**. A thirty-minute-to-expiry NIFTY option
+> mostly is not listed, so the t-statistic of 10.9 in Artifact 7 is answering a
+> question about contracts that do not exist. Selling a real seven-day straddle
+> and holding thirty minutes collects 0.6% of its premium in decay while
+> carrying the entire move — a different trade.
+>
+> Re-run on the tradeable subset — expiry sessions, sold before the close and
+> held to it:
+>
+> | horizon | n | mean P&L @ IV/RV 1.2 | t |
+> |---|---|---|---|
+> | last 30 min | 27 | +0.09 | **0.02** |
+> | last 60 min | 27 | +2.36 | **0.72** |
+> | last 90 min | 27 | −2.34 | **−0.66** |
+>
+> Nothing significant. The quintile effect still points the right way (active
+> half +9.15 against quiet half −4.95) but on thirteen and fourteen observations,
+> which is an anecdote.
+>
+> **What survives:** the forecaster in `volatility_forecast.py`. It measures a
+> property of the price series and holds on 119 of 120 instruments out of
+> sample, independent of any payoff assumption. **What does not survive:** the
+> claim that selling volatility against it is profitable.
+>
+> Read the artifacts below as a correct analysis of a payoff that is largely
+> unavailable, not as a validated strategy.
+
 Long volatility does not work here: a long straddle needs implied below
 realised, and index options carry the variance risk premium the other way
 (`VOLATILITY_EDGE.md`). This is the short side, examined properly.
@@ -140,3 +174,20 @@ so the research number can never reach a trade.
 **And the window has no shock.** The defined-risk structure is what makes this
 shippable in spite of that: the cap holds whatever the move, which is precisely
 the property a benign sample cannot verify and a bounded payoff does not need to.
+
+---
+
+## The error, and how it was caught
+
+The study never checked what it was selling. `credit - |move|` is a natural way
+to write a short-straddle payoff and it is exactly right — for an option that
+expires when the horizon does. Every figure followed from that line, and none of
+them prompted the question, because the arithmetic downstream was sound and the
+statistics were strong.
+
+It surfaced only when the module was about to be wired to the engine and the
+runtime needed an expiry date. There was no expiry date in the study.
+
+The generalisable form: a backtest that never names the instrument it trades has
+not been checked, however careful the statistics on top of it are. A t-statistic
+of 10.9 measured the model faithfully. The model was of something not for sale.
