@@ -200,6 +200,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 @media(min-width:801px){.ko-play-roles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 24px}}
 .ko-play-roles button,.ko-play-roles>div{border:0;background:none;text-align:left;padding:0;font-size:13px;color:var(--k-text);font-family:inherit;cursor:pointer}
 .ko-play-roles button:disabled{cursor:default;opacity:1}
+.ko-play-roles button[data-state="done"]{opacity:.45}
 .ko-play-roles .lbl{display:block;font-size:11px;color:var(--k-dim);margin-bottom:3px}
 .ko-play-roles .ko-pill{margin-right:6px}
 @media(max-width:800px){
@@ -413,7 +414,14 @@ export function AstroPane() {
           />
         ) : null}
 
-        {tab !== 'month' ? <PlaybookStrip book={book} onPick={pickSlot} live={status?.phase === 'live'} /> : null}
+        {tab !== 'month' ? (
+          <PlaybookStrip
+            book={book}
+            onPick={pickSlot}
+            live={status?.phase === 'live' || status?.phase === 'post'}
+            nowMin={nowMin}
+          />
+        ) : null}
 
         <p className="ko-sub">
           {status && status.tithiName !== book.panchang.tithiName
