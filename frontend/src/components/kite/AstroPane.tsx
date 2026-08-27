@@ -349,6 +349,13 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   line-height: 1.2;
   margin: 0 0 4px;
 }
+.ko-now-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ko-now-close { margin-left: auto; }
 .ko-now-clock {
   font-size: 13px;
 }
@@ -874,7 +881,7 @@ export function AstroPane() {
             {tab !== "month" ? (
               <div className="ko-session">
                 <AstroTrailWatcher live={liveSlot} underlying={underlying} />
-                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} />
+                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
                 <p className="ko-sub">
                   <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
                     {notes ? "Hide notes" : "Notes"}
@@ -963,6 +970,12 @@ function ClockTable({
   const nextKey = live && next ? slotKey(next) : "";
   const dimSpent = Boolean(live);
   const liveId = live ? slotKey(live) : "";
+  const focusRow =
+    live ??
+    rows.find(
+      (s) => !s.isPast && (s.side === "CE" || s.side === "PE" || s.action === "AVOID" || s.action.startsWith("BOOK")),
+    );
+  const focusKey = focusRow ? slotKey(focusRow) : "";
 
   useEffect(() => {
     liveRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -996,6 +1009,7 @@ function ClockTable({
                 rowRef={slot.isLive ? liveRef : undefined}
                 underlying={underlying}
                 asOfIso={asOfIso}
+                focus={key === focusKey}
                 onToggle={() => onToggle(key)}
               />
             );
@@ -1017,6 +1031,7 @@ function TimingRow({
   rowRef,
   underlying,
   asOfIso,
+  focus,
   onToggle,
 }: {
   slot: WindowSlot;
@@ -1029,6 +1044,7 @@ function TimingRow({
   rowRef?: Ref<HTMLTableRowElement>;
   underlying: Underlying;
   asOfIso: string;
+  focus: boolean;
   onToggle: () => void;
 }) {
   const tone = actionTone(slot.action, slot.side);
@@ -1061,7 +1077,7 @@ function TimingRow({
           </span>
           <span className="ko-time-meta">
             {mins}m · {slot.hora}
-            {kalam ? ` · ${kalam}` : ""}
+            {slot.isLive && kalam ? ` · ${kalam}` : ""}
           </span>
         </td>
         <td>
@@ -1069,7 +1085,7 @@ function TimingRow({
         </td>
         <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
         <td className="ko-buy">
-          <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} live={slot.isLive} />
+          <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} live={slot.isLive} focus={focus} />
         </td>
         <td className="ko-num">
           <GradeMark grade={grade} loading={loading} />

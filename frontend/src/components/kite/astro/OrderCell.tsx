@@ -44,12 +44,17 @@ export type PlaceFn = (hit: OptionHit, product: "MIS" | "NRML", plan: WindowPlan
 export type CloseFn = (pos: OpenPos) => void;
 export type TrailFn = (pos: OpenPos, plan: WindowPlan) => void;
 
+export function squareDemo(tradingsymbol: string) {
+  saveDemo(loadDemo().filter((r) => r.tradingsymbol !== tradingsymbol));
+}
+
 export function OrderCell({
   buy,
   action,
   underlying,
   asOfIso,
   live = false,
+  focus = true,
   instrument,
   resolving,
   connected = true,
@@ -64,6 +69,7 @@ export function OrderCell({
   underlying: Underlying;
   asOfIso: string;
   live?: boolean;
+  focus?: boolean;
   instrument?: OptionHit | null;
   resolving?: boolean;
   connected?: boolean;
@@ -135,15 +141,7 @@ export function OrderCell({
   };
 
   if (plan.kind === "sit") return <span className="text-muted">—</span>;
-
-  const dormant = held && (plan.kind === "trail" || plan.kind === "lock") && !live;
-  if (dormant) {
-    return (
-      <button type="button" className="ko-held" title="Close this lot" onClick={go("close")}>
-        Held {mark}
-      </button>
-    );
-  }
+  if (!focus) return <span className="text-muted">—</span>;
 
   const cls =
     plan.kind === "close" || plan.kind === "book"
@@ -186,6 +184,7 @@ export function OrderCell({
                       quantity: hit.lot_size,
                       product,
                       last_price: hit.last_price || 42,
+                      average_price: hit.last_price || 42,
                     },
                   ]);
                 } else if (pending === "close" && held) {

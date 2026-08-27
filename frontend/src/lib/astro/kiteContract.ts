@@ -16,6 +16,7 @@ export interface OpenPos {
   quantity: number;
   product: string;
   last_price: number;
+  average_price: number;
 }
 
 export interface SearchRow {
@@ -135,6 +136,7 @@ export function matchHeldOption(
       quantity: qty,
       product: String(p.product ?? "MIS"),
       last_price: Number(p.last_price) || 0,
+      average_price: Number((p as OpenPos).average_price) || 0,
       optionSide,
     };
     if (!any || Math.abs(row.quantity) > Math.abs(any.quantity)) any = row;
