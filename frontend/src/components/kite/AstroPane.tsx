@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { useCandles } from '../../hooks/useCandles';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso } from '../../lib/astro/holidays';
-import { barsFromOhlcv, gradeSlot, summariseTape, type SlotGrade } from '../../lib/astro/tape';
+import { barsFromOhlcv, buyContract, gradeSlot, summariseTape, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
 import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { WEEKDAYS, type IndexPlay, type LiveNow, type Underlying, type WindowSlot } from '../../lib/astro/types';
 import { k } from '../../styles/kiteUI';
@@ -194,7 +194,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 .ko-clock {
   width: 100%;
-  min-width: 560px;
+  min-width: 640px;
 }
 .ko-clock thead th {
   position: sticky;
@@ -238,6 +238,20 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-clock-play {
   font-weight: 500;
 }
+.ko-buy {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 13px;
+}
+.ko-now-strike {
+  margin-left: 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0.9;
+}
+
 .ko-time-range {
   display: inline-flex;
   align-items: center;
@@ -278,7 +292,10 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   color: var(--k-orange);
 }
 .ko-now-play {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 10px;
   font-size: 20px;
   font-weight: 400;
   letter-spacing: -0.2px;
@@ -651,6 +668,11 @@ export function AstroPane() {
     for (const s of clockRows) map.set(slotKey(s), gradeSlot(s, tape, nowMin, sameDay));
     return map;
   }, [clockRows, tape, nowMin, sameDay]);
+  const contracts = useMemo(() => {
+    const map = new Map<string, BuyContract>();
+    for (const s of clockRows) map.set(slotKey(s), buyContract(s, tape));
+    return map;
+  }, [clockRows, tape]);
   const tally = useMemo(
     () => summariseTape(clockRows, tape, nowMin, sameDay, book.gap.kind),
     [clockRows, tape, nowMin, sameDay, book.gap.kind],
@@ -785,6 +807,8 @@ export function AstroPane() {
                 grade={liveGrade}
                 viewingIso={iso}
                 sessionPnl={tally.directional ? tally.pnl : null}
+                buy={status.window ? buyContract(status.window, tape) : undefined}
+                nextBuy={status.next ? buyContract(status.next, tape) : undefined}
                 onOpenSession={(date) => {
                   applyIso(date);
                   setTab("session");
@@ -799,7 +823,7 @@ export function AstroPane() {
 
             {tab !== "month" ? (
               <div className="ko-session">
-                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} />
+                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} />
                 <p className="ko-sub">
                   <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
                     {notes ? "Hide notes" : "Notes"}
@@ -833,6 +857,7 @@ export function AstroPane() {
                 <ClockTable
                   rows={clockRows}
                   grades={grades}
+                  contracts={contracts}
                   loading={tapeLoading}
                   openKey={openKey}
                   onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
@@ -863,12 +888,14 @@ export function AstroPane() {
 function ClockTable({
   rows,
   grades,
+  contracts,
   loading,
   openKey,
   onToggle,
 }: {
   rows: WindowSlot[];
   grades: Map<string, SlotGrade>;
+  contracts: Map<string, BuyContract>;
   loading: boolean;
   openKey: string | null;
   onToggle: (key: string) => void;
@@ -892,6 +919,7 @@ function ClockTable({
             <th>Time</th>
             <th>Side</th>
             <th>Play</th>
+            <th>Buy</th>
             <th className="ko-num">Result</th>
           </tr>
         </thead>
@@ -903,6 +931,7 @@ function ClockTable({
                 key={key}
                 slot={slot}
                 grade={grades.get(key)}
+                buy={contracts.get(key)}
                 loading={loading}
                 open={openKey === key}
                 dim={dimSpent && slot.isPast}
@@ -921,6 +950,7 @@ function ClockTable({
 function TimingRow({
   slot,
   grade,
+  buy,
   loading,
   open,
   dim,
@@ -930,6 +960,7 @@ function TimingRow({
 }: {
   slot: WindowSlot;
   grade?: SlotGrade;
+  buy?: BuyContract;
   loading: boolean;
   open: boolean;
   dim: boolean;
@@ -974,13 +1005,20 @@ function TimingRow({
           <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
         </td>
         <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
+        <td className="ko-buy">
+          {buy && buy.verb !== "SIT" ? (
+            <span className={buy.side === "CE" ? "text-ce" : buy.side === "PE" ? "text-pe" : "text-muted"}>{buy.label}</span>
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+        </td>
         <td className="ko-num">
           <GradeMark grade={grade} loading={loading} />
         </td>
       </tr>
       {open ? (
         <tr className="ko-expand">
-          <td colSpan={4}>
+          <td colSpan={5}>
             {slot.isLive ? null : <p>{slot.suggestion}</p>}
             <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
           </td>

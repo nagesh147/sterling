@@ -4,6 +4,7 @@
  */
 
 import type { TradeAction, TradeSide, Underlying, WindowSlot } from "./types";
+import { UNDERLYINGS } from "./types";
 import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from "./time";
 
 export const YF_SYMBOL: Record<Underlying, string> = {
@@ -63,6 +64,15 @@ export interface TapeSummary {
   gapHit: boolean | null;
 }
 
+export interface BuyContract {
+  verb: "BUY" | "HOLD" | "BOOK" | "SIT";
+  strike: number | null;
+  strikeHi: number | null;
+  side: TradeSide;
+  label: string;
+  short: string;
+}
+
 function istMinOf(unixSec: number): { iso: string; min: number } {
   const d = new Date(unixSec * 1000);
   const p = getIstParts(d);
@@ -89,6 +99,95 @@ export function windowOhlc(
     high: Math.max(...slice.map((b) => b.h)),
     low: Math.min(...slice.map((b) => b.l)),
     close: slice[slice.length - 1].c,
+  };
+}
+
+const STRIKE = new Intl.NumberFormat("en-IN");
+
+export function roundStrike(spot: number, step: number): number {
+  if (step <= 0) return Math.round(spot);
+  return Math.round(spot / step) * step;
+}
+
+export function spotForSlot(tape: SessionTape | null, fromMin: number, toMin: number): number | null {
+  if (!tape) return null;
+  const ohlc = windowOhlc(tape.bars, tape.iso, fromMin, toMin);
+  if (ohlc) return ohlc.open;
+  let last: number | null = null;
+  for (const b of tape.bars) {
+    const p = istMinOf(b.t);
+    if (p.iso !== tape.iso) continue;
+    if (p.min <= fromMin) last = b.c;
+  }
+  if (last != null) return last;
+  if (tape.bars.length) return tape.bars[tape.bars.length - 1].c;
+  return tape.sessionOpen ?? tape.prevClose;
+}
+
+function verbOf(action: TradeAction): BuyContract["verb"] {
+  if (action === "WAIT" || action === "AVOID") return "SIT";
+  if (action.startsWith("BOOK")) return "BOOK";
+  if (action.startsWith("HOLD")) return "HOLD";
+  return "BUY";
+}
+
+function stepOf(underlying: Underlying): number {
+  return UNDERLYINGS.find((u) => u.id === underlying)?.step ?? 50;
+}
+
+function familyOf(slot: Pick<WindowSlot, "side" | "action" | "product">):
+  | { kind: "sit" }
+  | { kind: "straddle"; wings: number }
+  | { kind: "single"; side: "CE" | "PE"; otm: number } {
+  if (slot.side === "WAIT" || slot.action === "WAIT" || slot.action === "AVOID" || slot.product === "No contract") {
+    return { kind: "sit" };
+  }
+  if (slot.side === "BOTH" || /straddle|IRON FLY|STRADDLE/i.test(slot.product)) {
+    const wings = Number(slot.product.match(/(\d+)\s*pt/i)?.[1] ?? stepOf("NIFTY"));
+    return { kind: "straddle", wings };
+  }
+  const otm = Number(slot.product.match(/(\d+)\s*pts OTM/i)?.[1] ?? 0);
+  const side: "CE" | "PE" = slot.side === "CE" ? "CE" : "PE";
+  return { kind: "single", side, otm };
+}
+
+/** ATM/OTM family from the book, priced off the tape at the window open. */
+export function buyContract(
+  slot: Pick<WindowSlot, "fromMin" | "toMin" | "side" | "action" | "product">,
+  tape: SessionTape | null,
+): BuyContract {
+  const sit: BuyContract = { verb: "SIT", strike: null, strikeHi: null, side: "WAIT", label: "—", short: "—" };
+  const family = familyOf(slot);
+  if (family.kind === "sit") return sit;
+
+  const verb = verbOf(slot.action);
+  const spot = spotForSlot(tape, slot.fromMin, slot.toMin);
+  const step = tape ? stepOf(tape.underlying) : 50;
+  const atm = spot != null ? roundStrike(spot, step) : null;
+
+  if (family.kind === "straddle") {
+    const lo = atm != null ? atm - family.wings : null;
+    const hi = atm != null ? atm + family.wings : null;
+    const short = lo != null && hi != null ? `${STRIKE.format(lo)} / ${STRIKE.format(hi)}` : "ATM straddle";
+    return {
+      verb: verb === "SIT" ? "BUY" : verb,
+      strike: lo,
+      strikeHi: hi,
+      side: "BOTH",
+      label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
+      short,
+    };
+  }
+
+  const strike = atm != null ? (family.side === "PE" ? atm - family.otm : atm + family.otm) : null;
+  const short = strike != null ? `${STRIKE.format(strike)} ${family.side}` : family.otm ? `${family.otm} OTM ${family.side}` : `ATM ${family.side}`;
+  return {
+    verb: verb === "SIT" ? "BUY" : verb,
+    strike,
+    strikeHi: null,
+    side: family.side,
+    label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
+    short,
   };
 }
 
