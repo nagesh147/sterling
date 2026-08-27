@@ -110,14 +110,22 @@ def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     anything and nothing reports that it stopped working.
     """
     try:
-        from app.services.kite_engine import safety
-        decision = safety.evaluate(uid, idempotency_key=idempotency_key)
-        allowed = bool(getattr(decision, "allowed"))
-        return allowed, ("" if allowed else str(getattr(decision, "reason", "blocked")))
-    except AttributeError:
-        return False, "safety decision missing 'allowed'"
+        from app.services.live_safety import assert_safe_to_trade
+        # check_daily_loss=False matches every other Kite path here: that breaker
+        # is denominated in USD against a crypto book and reads zero for an INR
+        # position, so including it would be a gate that always passes — worse
+        # than no gate, because it looks like one. uid= is what routes this at
+        # the right account; omitting it is how an engine escapes the check.
+        decision = assert_safe_to_trade([], idempotency_key,
+                                        check_daily_loss=False, uid=uid)
+        # `.allowed` by name, with no permissive default. The field is called
+        # allowed, so getattr(decision, "ok", True) takes the default every
+        # time and passes everything the gate was added to stop.
+        return bool(decision.allowed), str(decision.reason or "")
     except Exception as exc:                                       # noqa: BLE001
-        return False, f"safety unavailable: {exc}"
+        # Fail closed. An unavailable safety check is not a passed one.
+        log.error("adaptive_edge: safety check failed closed for %s: %s", uid, exc)
+        return False, f"safety check unavailable: {exc}"
 
 
 # ------------------------------------------------------------- session

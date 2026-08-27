@@ -30,42 +30,60 @@ See `ARTIFACT_RESOLUTION.md` for the governing recovery and resolution protocol.
 
 ## Strategy-specific formula resolution
 
-F-101..F-114 have been attacked as individual artifacts. The currently available repository/context evidence does not contain complete authoritative definitions for them.
+**Superseded 2026-08-27.** This section previously recorded F-101..F-114 as
+`RESOLVED-BLOCKED` on the finding that "the currently available
+repository/context evidence does not contain complete authoritative definitions
+for them". That finding was correct when written and is no longer true.
 
-They are therefore **RESOLVED-BLOCKED** rather than merely `LOCKED` or `PARTIAL`.
+The authoritative source is in the repository. `ORIGINAL_SOURCE_MANIFEST.md`
+names it: commit `38f44f09` ("adaptive edge files uploaded", 2026-08-11) added
+`adaptive-edge/`, 66 files, including
 
-`RESOLVED-BLOCKED` means:
+    adaptive-edge/Adaptive Order-Flow Options Scalping and Intraday Strategy.md
+
+the **Master Mathematical Specification, Version 1.0** — 2,052 lines across 58
+sections covering the event model, feature state, probability state, economic
+evaluation, option selection, risk, position management, walk-forward learning
+and validation. That directory is present in the working tree today.
+
+So unlock condition (1) below — "recovery of an authoritative original strategy
+artifact" — is **satisfied**. The blocked disposition is lifted.
+
+## What the source does and does not give
+
+This matters more than the unlock, because it is what still gates production.
+
+The specification defines **structure**: which gates exist, what must hold, the
+invariants, the state machine, and the causal rules. It deliberately does **not**
+define numeric thresholds. §19:
+
+    No fixed universal threshold ... is used unless that threshold survives
+    walk-forward validation and is demonstrably robust.
+
+and §51-§55 place every numeric parameter under walk-forward learning rather than
+under specification.
+
+The consequence:
 
 ```text
-investigation complete for currently available evidence
-        |
-        +--> source definition recovered? NO
-        |
-        +--> substitute permitted? NO
-        |
-        +--> implementation permitted? NO
+structure          -> RECOVERED from an authoritative source
+numeric parameters -> NOT SPECIFIED, by design; must be calibrated
 ```
 
-This is a terminal resolution of the current investigation, not a claim that the mathematics is complete.
+Implementing the structure is therefore authorized. Choosing the numbers is not
+something the source can authorize, and a plausible number remains exactly what
+the protocol has always said it is — not an unlock.
 
-## F-101..F-114 disposition
+## Current disposition
 
-| ID | Status |
-|---|---|
-| F-101 | RESOLVED-BLOCKED |
-| F-102 | RESOLVED-BLOCKED |
-| F-103 | RESOLVED-BLOCKED |
-| F-104 | RESOLVED-BLOCKED |
-| F-105 | RESOLVED-BLOCKED |
-| F-106 | RESOLVED-BLOCKED |
-| F-107 | RESOLVED-BLOCKED |
-| F-108 | RESOLVED-BLOCKED |
-| F-109 | RESOLVED-BLOCKED |
-| F-110 | RESOLVED-BLOCKED |
-| F-111 | RESOLVED-BLOCKED |
-| F-112 | RESOLVED-BLOCKED |
-| F-113 | RESOLVED-BLOCKED |
-| F-114 | RESOLVED-BLOCKED |
+| ID | Structure | Parameters | Production |
+|---|---|---|---|
+| F-101..F-114 | SOURCE-RECOVERED | UNCALIBRATED | LOCKED |
+
+`backend/app/engines/adaptive_edge/config.py` holds every parameter explicitly,
+with `CALIBRATED_FIELDS` empty and `PARAMETER_PROVENANCE` recording "research
+default" against each one. Nothing in the engine treats any of them as measured,
+and the API publishes that so the UI cannot present a placeholder as a finding.
 
 ## Risk blocker
 
@@ -84,19 +102,29 @@ A mathematically plausible implementation is never an unlock condition.
 
 `backend/app/engines/adaptive_edge/execution_gate.py` is the final machine-enforced boundary. It requires every F-101..F-114 formula to be explicitly `IMPLEMENTED` before execution can be authorized.
 
-Current expected state:
+Current expected state — two independent gates, both closed:
 
 ```text
-F-101..F-114
-      |
-      v
-RESOLVED-BLOCKED
-      |
-      v
-ExecutionGateStatus.BLOCKED
-      |
-      X
-Execution / broker boundary
+F-101..F-114                    strategy promotion
+      |                                |
+      v                                v
+   LOCKED                        RESEARCH_ONLY
+      |                                |
+      v                                v
+ExecutionGateStatus.BLOCKED    promotion gate BLOCKED
+      |                                |
+      +----------------+---------------+
+                       X
+          Execution / broker boundary
 ```
+
+The promotion gate is the one that matters now. Implementing the mathematics and
+being authorized to risk money on it are different claims, and the engine has
+only the first. A166 makes `research_validation_complete` a mandatory term for
+production readiness, and that is precisely the calibration §19 requires.
+
+The engine therefore ships **enabled, on auto, and paper-only**: it scans and
+paper-trades so the calibration can be collected, and cannot reach real money
+until somebody promotes it deliberately.
 
 No broker/execution adapter may bypass this gate as a workaround for missing strategy semantics.

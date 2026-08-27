@@ -1546,7 +1546,18 @@ async def lifespan(app: FastAPI):
     # cannot open a second position in a contract it already holds.
     from app.services.gamma_move_runner import auto_scan_loop as _gamma_move_scan
     gamma_move_task = asyncio.create_task(_gamma_move_scan(interval=300))
+
+    # Adaptive Edge: underlyings -> contracts -> candidates, on a faster cadence
+    # because the source is a scalping strategy. Safe to run unconditionally:
+    # the loop is a no-op outside the session window, and the strategy's
+    # promotion gate refuses live execution regardless of the account's
+    # paper/live setting, so this scans and paper-trades but cannot reach real
+    # money until somebody promotes it deliberately.
+    from app.services.adaptive_edge_runner import auto_scan_loop as _adaptive_edge_scan
+    adaptive_edge_task = asyncio.create_task(_adaptive_edge_scan(interval=60))
+
     log.info("ATM PI auto-arm loop started (every 30s)")
+    log.info("Adaptive Edge auto scan loop started (every 60s)")
 
     # Arbitrator fake log worker for UI parity — only runs when crypto is on
     if app.state.scalp_mode:

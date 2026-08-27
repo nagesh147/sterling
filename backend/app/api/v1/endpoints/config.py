@@ -730,3 +730,109 @@ async def gamma_move_simulate_stop(user: UserContext = Depends(get_current_user)
         raise HTTPException(status_code=401, detail="authenticated user is required")
     from app.services.gamma_move_sim import stop
     return await stop(uid)
+
+
+# ---------------------------------------------------------------- Adaptive Edge
+
+@router.get("/adaptive-edge")
+async def get_adaptive_edge_config() -> dict:
+    """Current config plus the engine's defaults, vocabularies and provenance.
+
+    Defaults and enums are published rather than mirrored in the client, so the
+    UI cannot drift from the engine — the recurring bug class here is a UI that
+    claims backend behaviour the backend does not honour.
+
+    ``calibration`` is published for the opposite reason to Gamma Move's. There
+    every threshold was measured; here none were, and ``calibrated_fields`` is
+    empty. The UI needs both facts to mark each number uncalibrated rather than
+    rendering a bare figure an operator may reasonably read as meaningful.
+    """
+    from app.engines.adaptive_edge.config import (
+        DATA_SOURCES, DECISION_TIMEFRAMES, EXIT_POLICIES, SIZING_MODES,
+        STOP_MODES, AdaptiveEdgeConfig,
+    )
+    from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES
+    from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
+    from app.services.adaptive_edge import descriptor, get_config
+    cfg = get_config()
+    return {
+        "strategy": {**descriptor(), "enabled": cfg.enabled},
+        "config": cfg.as_dict(),
+        "defaults": AdaptiveEdgeConfig().as_dict(),
+        "vocabularies": {
+            "decision_timeframe": sorted(DECISION_TIMEFRAMES),
+            "data_source": sorted(DATA_SOURCES),
+            "exit_policy": sorted(EXIT_POLICIES),
+            "sizing_mode": sorted(SIZING_MODES),
+            "stop_mode": sorted(STOP_MODES),
+            "expiry_selection": sorted(EXPIRY_SELECTIONS),
+            "expiry_series": sorted(EXPIRY_SERIES),
+            "stocks": sorted(HIGH_LIQUIDITY_STOCK_NAMES),
+        },
+        "warnings": cfg.warnings(),
+    }
+
+
+@router.put("/adaptive-edge")
+async def update_adaptive_edge_config(body: dict = Body(...)) -> dict:
+    """Apply a partial config change.
+
+    Only the keys present are changed. Unknown keys are refused rather than
+    ignored: a silently dropped setting is worse than a 422, because the UI has
+    no way to tell it did not take.
+    """
+    from app.services.adaptive_edge import set_config
+    values = {k: v for k, v in dict(body).items() if v is not None}
+    if not values:
+        raise HTTPException(status_code=422, detail="no settings to change")
+    try:
+        cfg = set_config(values)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"config": cfg.as_dict()}
+
+
+@router.get("/adaptive-edge/snapshot")
+async def adaptive_edge_snapshot(user: UserContext = Depends(get_current_user)) -> dict:
+    """Config, what the scan found, and every reason nothing is armed."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge import snapshot
+    try:
+        return await snapshot(uid)
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"Adaptive Edge snapshot failed: {exc}") from exc
+
+
+@router.post("/adaptive-edge/scan")
+async def adaptive_edge_scan(user: UserContext = Depends(get_current_user)) -> dict:
+    """Run one on-demand underlyings -> contracts -> candidates pass."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge_runner import scan_once
+    try:
+        return await scan_once(uid)
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"Adaptive Edge scan failed: {exc}") from exc
+
+
+@router.post("/adaptive-edge/arm")
+async def adaptive_edge_arm(body: dict = Body(...),
+                            user: UserContext = Depends(get_current_user)) -> dict:
+    """Enter one signal by id.
+
+    The runner refuses this outright while the account is live and the strategy
+    is unpromoted, so the gate is not something this route has to remember.
+    """
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    signal_id = str(dict(body).get("signal_id") or "").strip()
+    if not signal_id:
+        raise HTTPException(status_code=422, detail="signal_id is required")
+    from app.services.adaptive_edge_runner import arm
+    return await arm(uid, signal_id)
