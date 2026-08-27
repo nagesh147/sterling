@@ -19,18 +19,18 @@ def _bars(direction='LONG'):
 
 
 def test_long_signal_maps_to_ce_only():
-    cfg=StrategyConfig(opening_range_minutes=15,entry_start='09:30',entry_end='15:00',volume_multiplier=1.0)
+    cfg=StrategyConfig(opening_range_minutes=15,entry_start='09:30',entry_end='15:00',volume_multiplier=1.0,max_risk_inr=25000)
     signal=generate_signal(_bars('LONG'),cfg)
     assert signal.direction=='LONG'
     option=OptionContract('NIFTYCE',100,'2026-08-27','CE',100,99,101,75,0.5,5000,50000)
     plan=build_trade_plan(signal,option,cfg,spot=103)
     assert plan.option_type=='CE'
     assert plan.quantity % option.lot_size == 0
-    assert plan.quantity >= 0
+    assert plan.quantity > 0
 
 
 def test_short_signal_maps_to_pe_only():
-    cfg=StrategyConfig(opening_range_minutes=15,entry_start='09:30',entry_end='15:00',volume_multiplier=1.0)
+    cfg=StrategyConfig(opening_range_minutes=15,entry_start='09:30',entry_end='15:00',volume_multiplier=1.0,max_risk_inr=25000)
     signal=generate_signal(_bars('SHORT'),cfg)
     assert signal.direction=='SHORT'
     option=OptionContract('NIFTYPE',100,'2026-08-27','PE',100,99,101,75,0.5,5000,50000)

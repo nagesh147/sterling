@@ -155,6 +155,22 @@ class Signal:
     volume_ratio: float
     confidence: float
     reason: str
+    vwap_basis: Literal["volume", "time"] = "volume"
+    """How the ``vwap`` figure was actually computed.
+
+    ``volume`` is a true VWAP. ``time`` means the feed reported no volume for
+    this instrument -- every index -- so the line is the unweighted mean of
+    typical price. It is a defensible reference either way, but it is a
+    different line, and a board that labels a TWAP as a VWAP is lying about
+    what the trade was taken against.
+    """
+    volume_confirmed: bool = True
+    """Whether the participation gate was actually evaluated.
+
+    False on any instrument whose feed carries no volume. The signal is then
+    resting on one fewer confirmation than a stock signal with the same score,
+    which is why :func:`_confidence` withholds the volume term for it.
+    """
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -272,10 +288,37 @@ def _typical_price(b: Bar) -> float:
     return (b.high + b.low + b.close) / 3.0
 
 
+def has_traded_volume(bars: Sequence[Bar]) -> bool:
+    """Whether this feed reports volume at all for these bars.
+
+    An index reports none -- NSE/BSE INDEX candles always carry ``volume=0``
+    because an index has no traded volume of its own. That is categorically
+    different from a stock whose volume is merely *low*, and the two must not
+    share a code path: one means "this confirmation is unavailable", the other
+    means "this confirmation failed".
+    """
+    return any(b.volume > 0 for b in bars)
+
+
 def vwap(bars: Sequence[Bar]) -> float:
+    """Volume-weighted average typical price, degrading to a time-weighted one.
+
+    With no volume in the window this falls back to the *unweighted* mean of
+    typical price, which is exactly the equal-weighted-volume case. The previous
+    fallback returned ``bars[-1].close``, which put the line precisely on the
+    current price -- and since the location gates test ``close <= vwap`` and
+    ``close >= vwap``, equality made both of them true. Every index breakout was
+    rejected for being on the wrong side of a line drawn through itself, so no
+    index could ever signal.
+
+    ``app/engines/navigator/avwap.py`` already resolved the identical problem
+    the identical way; this keeps the two engines drawing the same line.
+    """
     pv = sum(_typical_price(b) * max(b.volume, 0.0) for b in bars)
     vol = sum(max(b.volume, 0.0) for b in bars)
-    return pv / vol if vol > 0 else (bars[-1].close if bars else 0.0)
+    if vol > 0:
+        return pv / vol
+    return mean([_typical_price(b) for b in bars]) if bars else 0.0
 
 
 def atr(bars: Sequence[Bar], period: int = 14) -> float:
@@ -403,24 +446,31 @@ def generate_signal(
     slope = _vwap_slope(session_bars, cfg.vwap_slope_lookback)
     current_atr = atr(normalized, cfg.atr_period)
     vol_ratio = _volume_ratio(session_bars)
+    # An index reports no volume at all, so its participation gate cannot be
+    # evaluated -- as opposed to a stock whose volume simply came in light.
+    # Treating the two alike made every index unpassable; see `has_traded_volume`.
+    volume_available = has_traded_volume(session_bars)
+    basis: Literal["volume", "time"] = "volume" if volume_available else "time"
     # Regime describes *today's* character. Measuring it across the session
     # boundary let yesterday's path decide whether today was trending.
     regime = _regime(session_bars, cfg, current_vwap, current_atr)
     t = _as_ist(current.timestamp).time()
 
     if not (_parse_time(cfg.entry_start) <= t <= _parse_time(cfg.entry_end)):
-        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "outside entry window")
+        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "outside entry window", basis, volume_available)
     if current_atr <= 0:
-        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "ATR unavailable")
+        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, 0.0, vol_ratio, 0.0, "ATR unavailable", basis, volume_available)
 
     long_break = current.close - or_high
     short_break = or_low - current.close
     threshold = cfg.min_breakout_atr * current_atr
     breakout_distance = max(long_break, short_break, 0.0)
-    volume_ok = vol_ratio >= cfg.volume_multiplier
+    volume_ok = vol_ratio >= cfg.volume_multiplier if volume_available else True
+
+    basis_label = "VWAP" if volume_available else "TWAP"
 
     def none(reason: str) -> Signal:
-        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, breakout_distance, vol_ratio, 0.0, reason)
+        return Signal("NONE", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, breakout_distance, vol_ratio, 0.0, reason, basis, volume_available)
 
     # Gate order is the diagnostic order: the first unmet prerequisite is the
     # reported reason, so a rejected bar says which filter stopped it. It runs
@@ -434,22 +484,26 @@ def generate_signal(
     if distance < threshold:
         return none("breakout below ATR threshold")
     if side == "LONG" and current.close <= current_vwap:
-        return none("close is not above VWAP")
+        return none(f"close is not above {basis_label}")
     if side == "SHORT" and current.close >= current_vwap:
-        return none("close is not below VWAP")
+        return none(f"close is not below {basis_label}")
     if side == "LONG" and slope <= 0:
-        return none("VWAP slope is not positive")
+        return none(f"{basis_label} slope is not positive")
     if side == "SHORT" and slope >= 0:
-        return none("VWAP slope is not negative")
+        return none(f"{basis_label} slope is not negative")
     if not volume_ok:
         return none("volume below confirmation threshold")
     if regime not in ("EXPANSION", "TREND"):
         return none(f"regime is {regime}")
 
-    confidence = _confidence(distance, current_atr, vol_ratio, cfg)
+    confidence = _confidence(distance, current_atr, vol_ratio, cfg, volume_confirmed=volume_available)
+    line = "VWAP" if volume_available else "TWAP"
+    tail = "volume" if volume_available else "(no volume feed)"
     if side == "LONG":
-        return Signal("LONG", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, long_break, vol_ratio, confidence, "ORB high break + VWAP + positive VWAP slope + momentum + volume")
-    return Signal("SHORT", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, short_break, vol_ratio, confidence, "ORB low break + VWAP + negative VWAP slope + momentum + volume")
+        reason = f"ORB high break + {line} + positive {line} slope + momentum + {tail}"
+        return Signal("LONG", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, long_break, vol_ratio, confidence, reason, basis, volume_available)
+    reason = f"ORB low break + {line} + negative {line} slope + momentum + {tail}"
+    return Signal("SHORT", regime, current.timestamp, or_high, or_low, current_vwap, current_atr, short_break, vol_ratio, confidence, reason, basis, volume_available)
 
 
 def is_monthly_expiry(expiry: date, *, monthly_expiries: frozenset[date] | None = None) -> bool:
@@ -466,13 +520,22 @@ def is_monthly_expiry(expiry: date, *, monthly_expiries: frozenset[date] | None 
     return (expiry + timedelta(days=7)).month != expiry.month
 
 
-def _confidence(distance: float, current_atr: float, vol_ratio: float, cfg: StrategyConfig) -> float:
+def _confidence(distance: float, current_atr: float, vol_ratio: float, cfg: StrategyConfig,
+                *, volume_confirmed: bool = True) -> float:
     """Blend breakout strength and volume expansion into a bounded score.
 
     Both terms are ratios against a configured reference, so both denominators
     are guaranteed positive by :meth:`StrategyConfig.validate`.
+
+    On a feed that carries no volume the volume term is withheld rather than
+    scored from the neutral 1.0 placeholder. Scoring it would pay an index for
+    passing a gate that was never evaluated, and rank it alongside a stock that
+    actually cleared one -- the score has to mean the same thing on every row of
+    the board.
     """
     breakout_term = 0.15 * min(distance / current_atr, 2.0)
+    if not volume_confirmed:
+        return min(0.99, 0.50 + breakout_term)
     volume_term = 0.10 * min(vol_ratio / cfg.volume_multiplier, 2.0)
     return min(0.99, 0.50 + breakout_term + volume_term)
 
@@ -640,8 +703,21 @@ def build_trade_plan(
     # stop let a modest breakout produce 2400 units of an 18-rupee option --
     # 43,200 rupees of premium -- while reporting "risk 3,000" and while the
     # executor would in fact buy 150.
-    lots = int(cfg.max_risk_inr // (entry_premium * option.lot_size))
-    quantity = max(0, lots * option.lot_size)
+    lot_cost = entry_premium * option.lot_size
+    lots = int(cfg.max_risk_inr // lot_cost)
+    # Zero lots is a refusal, not a size. Emitting the plan anyway produced a row
+    # that read as a live setup -- direction, strike, entry, stop, target all
+    # populated -- carrying quantity 0, risk 0 and max-loss 0, which no operator
+    # can act on and no executor can fill. Since sizing is against the full
+    # outlay, one lot has to fit inside the cap or nothing can be bought at all;
+    # saying so with both numbers turns a dud row into a decision.
+    if lots < 1:
+        raise ValueError(
+            f"One lot of {option.symbol} costs {lot_cost:,.0f} "
+            f"({entry_premium:g} x {option.lot_size}), above the "
+            f"max_risk_inr cap of {cfg.max_risk_inr:,.0f}"
+        )
+    quantity = lots * option.lot_size
     risk = quantity * premium_risk_per_share
     max_loss = quantity * entry_premium
     return TradePlan(signal.direction, option.option_type, option, spot, stop, risk_points, abs(target - spot), entry_premium, stop_premium, target_premium, premium_risk_per_share, quantity, risk, signal.reason, max_loss_inr=max_loss, delta_is_estimated=delta_source != "broker", delta_source=delta_source, delta=delta,

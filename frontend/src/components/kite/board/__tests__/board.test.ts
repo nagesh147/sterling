@@ -166,7 +166,8 @@ describe('ORB adapter', () => {
     deltaSource: 'implied', delta: 0.56, impliedVol: 0.11, gamma: 0.0009,
     thetaPerDay: -10, vegaPerPoint: 16.9, exchange: 'NFO', lotSize: 75,
     underlyingEntry: 24120, underlyingStop: 24030, dataSource: 'kite',
-    quoteAgeS: 3, reason: null, timestamp: new Date(NOW).toISOString(), ...over,
+    quoteAgeS: 3, reason: null, timestamp: new Date(NOW).toISOString(),
+    vwapBasis: 'volume', volumeConfirmed: true, ...over,
   });
 
   it('reports no trailing stop, because ORB does not produce one', () => {

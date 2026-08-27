@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time as _time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -12,6 +13,39 @@ from app.services.providers.truedata.orb_provider import TrueDataOrbProvider
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 _BAR_CACHE_TTL_S = 4.0
+#: Instruments per `/quote` request. Kite caps a quote call at 500; staying
+#: under it keeps a full option chain to one or two round trips without ever
+#: silently dropping the tail of a large chain.
+_QUOTE_BATCH = 250
+
+
+class _MinSpacing:
+    """Enforce a minimum interval between calls, across all concurrent callers.
+
+    Deliberately not a token bucket. A bucket with capacity N lets N callers
+    fire simultaneously, and Kite counts that burst against the same per-second
+    ceiling -- which is exactly what happened here: `scan_user` gathers every
+    configured underlying at once, so eight live signals meant eight concurrent
+    quote requests and five came back "Too many requests". Holding the lock
+    across the sleep is what makes the spacing strict rather than advisory.
+    """
+
+    def __init__(self, interval_s: float) -> None:
+        self._interval = interval_s
+        self._lock = asyncio.Lock()
+        self._next = 0.0
+
+    async def wait(self) -> None:
+        async with self._lock:
+            now = _time.monotonic()
+            if now < self._next:
+                await asyncio.sleep(self._next - now)
+            self._next = max(now, self._next) + self._interval
+
+
+#: Kite allows 3 quote requests a second. One batched call per chain means this
+#: costs a single interval per firing signal, not one per strike.
+_QUOTE_PACER = _MinSpacing(1.0 / 3.0)
 #: Instrument metadata is stable for a session; re-searching it every tick would
 #: spend the broker's rate limit on an answer that does not change.
 _META_CACHE_TTL_S = 900.0
@@ -212,6 +246,7 @@ async def _kite_option_contracts(uid: str, underlying: str, direction: str, cfg:
             continue
     today = datetime.now(_IST).date()
     eligible = []
+    listed_dtes: list[int] = []
     for row in rows:
         if str(row.get("name") or "").upper() != underlying.upper() or str(row.get("instrument_type") or "").upper() != wanted:
             continue
@@ -220,31 +255,86 @@ async def _kite_option_contracts(uid: str, underlying: str, direction: str, cfg:
         except (TypeError, ValueError):
             continue
         dte = (exp - today).days
+        listed_dtes.append(dte)
         if dte < cfg.expiry_dte_min or dte > cfg.expiry_dte_max or (cfg.avoid_expiry_day and dte == 0):
             continue
         eligible.append((exp, row))
+
+    # An unreachable DTE window and an unlisted underlying both end with no
+    # contracts, but only one of them is a setting the trader can fix. Returning
+    # [] for both pushed the explanation down to `select_option`, which reports
+    # it as a *liquidity* failure -- so a window of 0-0 on a non-expiry day read
+    # as "the chain is illiquid" instead of "you asked for today's expiry and
+    # there isn't one". Single stocks make it chronic: they are monthly-only, so
+    # their nearest expiry can sit ~30 days out and no ceiling of 7 reaches it.
+    if not eligible and listed_dtes:
+        nearest = min(listed_dtes, key=lambda d: (d < cfg.expiry_dte_min, abs(d)))
+        raise ValueError(
+            f"No {underlying} {wanted} expiry within DTE {cfg.expiry_dte_min}-{cfg.expiry_dte_max}"
+            f"{' (expiry day excluded)' if cfg.avoid_expiry_day else ''}"
+            f" -- nearest listed expiry is {nearest} days out"
+        )
+
     selected_expiry = _expiry_for_mode(eligible, cfg.expiry_selection)
     if selected_expiry is None:
+        if eligible:
+            raise ValueError(
+                f"No {underlying} {wanted} expiry in the DTE window matches "
+                f"expiry_selection={cfg.expiry_selection!r}"
+            )
         return []
 
-    contracts: list[OptionContract] = []
+    # One batched quote request per chain, not one per strike.
+    #
+    # `/quote` has always taken a list. Calling it per contract and awaiting each
+    # one made a ~100-strike NIFTY chain cost ~100 sequential round trips, so a
+    # scan with eight live signals ran 65 seconds against a board that refetches
+    # every 5 — the queue grew faster than it drained. Same data, same fields;
+    # only the request count changes.
+    wanted_rows: list[tuple[str, str, dict]] = []
     for exp, row in eligible:
         if exp != selected_expiry:
             continue
         symbol = str(row.get("tradingsymbol") or "")
-        exchange = str(row.get("exchange") or "NFO").upper()
         if not symbol:
             continue
+        exchange = str(row.get("exchange") or "NFO").upper()
+        wanted_rows.append((f"{exchange}:{symbol}", symbol, row))
+
+    # A batch that raises is a transport failure -- a throttle, a dropped
+    # connection -- not a statement about the chain. Swallowing it left the
+    # chain empty, which `select_option` then reports as "no liquid contracts
+    # satisfy expiry and liquidity settings": a sentence that sends you to the
+    # liquidity settings to debug a rate limit. Worse, the empty result was
+    # cached, so one throttled call blinded every scan for the next few seconds.
+    quotes: dict[str, dict] = {}
+    for i in range(0, len(wanted_rows), _QUOTE_BATCH):
+        chunk = [key for key, _, _ in wanted_rows[i:i + _QUOTE_BATCH]]
         try:
-            key = f"{exchange}:{symbol}"
-            q = (await client.get_quote([key]) or {}).get(key, {}) or {}
+            await _QUOTE_PACER.wait()
+            quotes.update(await client.get_quote(chunk) or {})
+        except Exception as exc:
+            raise ValueError(
+                f"{underlying} {wanted} quote request failed "
+                f"({len(chunk)} contracts): {exc}"
+            ) from exc
+
+    contracts: list[OptionContract] = []
+    for key, symbol, row in wanted_rows:
+        # A strike the batch did not return has no price. Defaulting it to zero
+        # would invent a contract that `select_option` then ranks on fabricated
+        # liquidity, so an unquoted strike is dropped instead.
+        q = quotes.get(key)
+        if not q:
+            continue
+        try:
             depth = q.get("depth") or {}
             bid = (depth.get("buy") or [{}])[0]
             ask = (depth.get("sell") or [{}])[0]
             contracts.append(OptionContract(
                 symbol=symbol,
                 strike=float(row.get("strike") or 0),
-                expiry=exp.isoformat(),
+                expiry=selected_expiry.isoformat(),
                 option_type=wanted,
                 ltp=float(q.get("last_price") or 0),
                 bid=float(bid.get("price") or 0),

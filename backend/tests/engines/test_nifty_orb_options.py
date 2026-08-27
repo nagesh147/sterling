@@ -297,9 +297,11 @@ def test_trade_plan_respects_risk_cap():
     signal = generate_signal(orb_session("LONG"), StrategyConfig())
     assert signal.direction == "LONG"
     option = liquid_contract("NIFTY", 24000, NEAR_EXPIRY, "CE", delta=0.5)
-    plan = build_trade_plan(signal, option, StrategyConfig(max_risk_inr=3000), spot=24050)
-    assert plan.quantity % 65 == 0
-    assert plan.risk_inr <= 3000
+    # 110.5 x 65 = 7,183 a lot, so the budget has to clear one for this to be
+    # a test of the cap rather than of the zero-lot refusal.
+    plan = build_trade_plan(signal, option, StrategyConfig(max_risk_inr=25000), spot=24050)
+    assert plan.quantity == 3 * 65
+    assert plan.risk_inr <= 25000
     assert plan.option_type == "CE"
 
 

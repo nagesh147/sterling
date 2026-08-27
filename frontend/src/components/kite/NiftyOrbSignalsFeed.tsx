@@ -21,9 +21,15 @@ import { k, tint } from '../../styles/kiteUI';
  * the adapter, which decides what each column means for a bought option, and
  * `OrbTicket` below, which is the order surface.
  *
- * Candidates that did not fire sit behind one disclosure. They are real
- * information — a scan that refuses to trade must say why — but they are not a
- * call to action, and putting them in the main list buries the ones that are.
+ * Rows split by whether they want a decision. The board carries setups you can
+ * act on *and* signals that fired but could not be filled; candidates that
+ * simply did not fire sit behind one disclosure. They are real information — a
+ * scan that refuses to trade must say why — but they are not a call to action,
+ * and putting them in the main list buries the ones that are.
+ *
+ * That disclosure opens by default when the board is empty. Closed-by-default
+ * plus an empty board meant a healthy scan of eighteen underlyings rendered as
+ * one line of grey text, which is indistinguishable from a broken engine.
  */
 function QuietRow({ entry }: { entry: OrbFeedEntry }) {
   const color = entry.state === 'ERROR' ? k.red : k.dim;
@@ -58,19 +64,36 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
   const { signals, isLoading, error } = useOrbSignals(enabled !== false);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
-  const [showQuiet, setShowQuiet] = React.useState(false);
+  // `null` means "nobody has chosen yet", which is not the same as "closed".
+  // The default is derived below: when the board has nothing to promote, the
+  // scan detail is the only content on the panel and hiding it behind a
+  // disclosure is what made a working scan look like a dead one.
+  const [quietOverride, setQuietOverride] = React.useState<boolean | null>(null);
   // Read once per render rather than per row, so every day label in one paint
   // agrees about when "today" is.
   const nowMs = Date.now();
 
-  // Every hook runs before the first early return. Putting useBoardView after
-  // the loading guard would change the hook count between renders — the exact
-  // crash this panel already shipped once.
-  const tradable = React.useMemo(
-    () => signals.map(orbToBoard).filter((s) => ACTIONABLE.includes(s.status)),
-    [signals],
+  // Every hook below runs before the first early return. Putting useBoardView
+  // after the loading guard would change the hook count between renders — the
+  // exact crash this panel already shipped once.
+  //
+  // Two groups, split by whether the row wants a decision from you.
+  //
+  // `promoted` is the board: setups you can act on, plus signals that fired and
+  // could not be filled. The second kind used to be filtered out with the quiet
+  // rows, so a real breakout blocked by a bad expiry window looked exactly like
+  // a market with no setups — the failure mode this panel is named for.
+  const rows = React.useMemo(() => signals.map(orbToBoard), [signals]);
+  const promoted = React.useMemo(
+    () => rows.filter((s) => ACTIONABLE.includes(s.status) || s.status === 'error'),
+    [rows],
   );
-  const view = useBoardView(tradable, { storageKey: 'orb' });
+  const tradable = React.useMemo(
+    () => promoted.filter((s) => ACTIONABLE.includes(s.status)),
+    [promoted],
+  );
+  const blocked = promoted.length - tradable.length;
+  const view = useBoardView(promoted, { storageKey: 'orb' });
 
   if (config.isLoading) return <p style={{ padding: 12, margin: 0, fontSize: 11, color: k.dim }}>Loading ORB configuration…</p>;
 
@@ -101,8 +124,12 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
     );
   }
 
-  const quiet = signals.filter((s) => s.state !== 'SIGNAL');
-  const failed = quiet.filter((s) => s.state === 'ERROR');
+  // Whatever the board did not promote. Keyed off the same mapping the board
+  // used, so a row can never appear in both lists.
+  const promotedIds = new Set(promoted.map((s) => s.id));
+  const quiet = signals.filter((s) => !promotedIds.has(s.id));
+  const failed = signals.filter((s) => s.state === 'ERROR');
+  const showQuiet = quietOverride ?? promoted.length === 0;
 
   return (
     <div>
@@ -115,7 +142,9 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
       <div style={{ padding: '7px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim }}>BUY-ONLY · CE / PE</span>
         <span style={{ marginLeft: 'auto', fontSize: 10, color: k.dim }}>
-          <b style={{ color: tradable.length ? k.green : k.dim }}>{tradable.length}</b> tradable · {signals.length} scanned
+          <b style={{ color: tradable.length ? k.green : k.dim }}>{tradable.length}</b> tradable
+          {blocked > 0 && <> · <b style={{ color: k.red }}>{blocked}</b> blocked</>}
+          {' '}· {signals.length} scanned
         </span>
       </div>
 
@@ -139,7 +168,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
         <>
           <button
             type="button"
-            onClick={() => setShowQuiet((v) => !v)}
+            onClick={() => setQuietOverride(!showQuiet)}
             aria-expanded={showQuiet}
             style={{
               width: '100%', textAlign: 'left', padding: '7px 12px', cursor: 'pointer',
@@ -150,7 +179,6 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
           >
             <Chevron open={showQuiet} />
             {quiet.length} not signalling
-            {failed.length > 0 && <span style={{ color: k.red }}>· {failed.length} errored</span>}
           </button>
           {showQuiet && quiet.map((entry) => <QuietRow key={entry.id} entry={entry} />)}
         </>

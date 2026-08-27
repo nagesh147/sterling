@@ -34,8 +34,19 @@ function originOf(entry: OrbFeedEntry): BoardOrigin | undefined {
   return undefined;
 }
 
+/**
+ * `SIGNAL_UNRESOLVED` is an error, not a quiet row.
+ *
+ * It means the strategy fired and then could not resolve a contract to express
+ * it — an expiry window that reaches no listed expiry, a chain that fails the
+ * liquidity floor. Mapping it to `watching` filed a live breakout alongside
+ * underlyings that had no setup at all, and since the board only promotes
+ * ACTIONABLE rows, the one row that needed attention was the one collapsed out
+ * of sight. The reason string already says what blocked it; this makes sure
+ * somebody sees it.
+ */
 function status(entry: OrbFeedEntry): BoardStatus {
-  if (entry.state === 'ERROR') return 'error';
+  if (entry.state === 'ERROR' || entry.state === 'SIGNAL_UNRESOLVED') return 'error';
   if (entry.state === 'SIGNAL') return 'armed';
   return 'watching';
 }
@@ -46,19 +57,44 @@ function atMs(entry: OrbFeedEntry): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-/** The underlying thesis: the levels the option was chosen to express. */
+/**
+ * The underlying thesis: the levels the option was chosen to express.
+ *
+ * An index carries no traded volume of its own, so its average-price line is a
+ * time-weighted mean, not a volume-weighted one. They are different lines and
+ * the tile is named for whichever one the signal was actually measured against
+ * — printing "VWAP" over a TWAP would misdescribe the level the trade was taken
+ * from. The volume tile says "no feed" for the same reason: on an index the
+ * 1.00× ratio is a placeholder for a gate that never ran, not a measurement.
+ */
 function setupSection(entry: OrbFeedEntry): BoardSection {
+  const line = entry.vwapBasis === 'time' ? 'TWAP' : 'VWAP';
   return {
-    title: 'Opening range & VWAP',
+    title: `Opening range & ${line}`,
     layout: 'tiles',
     summary: entry.dataSource ?? undefined,
     stats: [
       { label: 'Spot', value: entry.spot?.toFixed(2), hint: 'Underlying last price at scan' },
       { label: 'ORB high', value: entry.orbHigh?.toFixed(2), hint: 'High of the opening range' },
       { label: 'ORB low', value: entry.orbLow?.toFixed(2), hint: 'Low of the opening range' },
-      { label: 'VWAP', value: entry.vwap?.toFixed(2), hint: 'Session volume-weighted average price' },
+      {
+        label: line,
+        value: entry.vwap?.toFixed(2),
+        estimated: entry.vwapBasis === 'time',
+        hint: entry.vwapBasis === 'time'
+          ? 'Time-weighted average typical price. This feed reports no volume, so a volume-weighted line is not available.'
+          : 'Session volume-weighted average price',
+      },
       { label: 'ATR', value: entry.atr?.toFixed(2), hint: 'Average true range, session-scoped' },
-      { label: 'Volume', value: entry.volumeRatio == null ? undefined : `${entry.volumeRatio.toFixed(2)}×`, hint: 'Bar volume against this session’s baseline' },
+      {
+        label: 'Volume',
+        value: !entry.volumeConfirmed ? 'no feed'
+          : entry.volumeRatio == null ? undefined : `${entry.volumeRatio.toFixed(2)}×`,
+        estimated: !entry.volumeConfirmed,
+        hint: !entry.volumeConfirmed
+          ? 'This instrument reports no traded volume, so the participation gate was not evaluated.'
+          : 'Bar volume against this session’s baseline',
+      },
       { label: 'U. entry', value: entry.underlyingEntry?.toFixed(2), hint: 'Underlying level the breakout triggers at' },
       { label: 'U. stop', value: entry.underlyingStop?.toFixed(2), hint: 'Underlying stop the premium stop is derived from' },
     ],

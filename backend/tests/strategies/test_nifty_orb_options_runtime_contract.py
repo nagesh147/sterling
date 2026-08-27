@@ -62,7 +62,9 @@ def test_option_liquidity_gate_rejects_wide_or_thin_contracts():
 
 
 def test_trade_plan_uses_ask_and_creates_premium_protection():
-    cfg = StrategyConfig(max_risk_inr=3000, min_option_volume=0, min_open_interest=0)
+    # 101 x 75 = 7,575 a lot; below that the plan is refused outright and the
+    # premium-protection assertions below never run.
+    cfg = StrategyConfig(max_risk_inr=25000, min_option_volume=0, min_open_interest=0)
     option = OptionContract("NIFTYCE", 25000, "2026-08-20", "CE", ltp=100, bid=99, ask=101, lot_size=75, delta=0.5, volume=5000, open_interest=50000)
     signal = Signal("LONG", "TREND", datetime(2026, 8, 19, 9, 45), 25000, 24900, 24980, 100, 20, 1.5, 0.8, "test")
     plan = build_trade_plan(signal, option, cfg, spot=25020)

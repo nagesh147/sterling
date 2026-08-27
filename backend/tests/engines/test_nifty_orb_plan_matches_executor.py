@@ -55,11 +55,21 @@ def test_the_modelled_stop_loss_cannot_exceed_the_premium_paid():
     assert plan.stop_premium >= 0.05
 
 
-def test_a_budget_below_one_lot_yields_no_quantity():
-    plan = build_trade_plan(_signal(), _option(premium=100.0, lot_size=75),
-                            StrategyConfig(max_risk_inr=3000), spot=24017)
-    assert plan.quantity == 0
-    assert plan.max_loss_inr == 0.0
+def test_a_budget_below_one_lot_is_refused_rather_than_sized_to_zero():
+    """Parity is about the outcome, and both sides refuse.
+
+    This used to assert a ``quantity=0`` plan. The executor never filled one --
+    `execute_scan` blocks at ``quantity<=0`` with "one option lot exceeds
+    conservative premium risk budget" -- so the plan was a row that looked live,
+    priced, and actionable while being none of those things. The planner raises
+    the same refusal at scan time instead, carrying the two numbers that decide
+    it, and `_conservative_quantity` still agrees there is nothing to buy.
+    """
+    with pytest.raises(ValueError, match="above the max_risk_inr cap"):
+        build_trade_plan(_signal(), _option(premium=100.0, lot_size=75),
+                         StrategyConfig(max_risk_inr=3000), spot=24017)
+
+    assert _conservative_quantity(75, 75, 100.0, 3000.0) == 0
 
 
 def test_quantity_stays_lot_aligned():

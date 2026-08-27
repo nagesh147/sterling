@@ -43,6 +43,7 @@ const entry = (over: Partial<OrbFeedEntry> = {}): OrbFeedEntry => ({
   delta: 0.577, gamma: 0.00088, thetaPerDay: -10.0, vegaPerPoint: 16.9, exchange: 'NFO', lotSize: 75,
   underlyingEntry: 24050, underlyingStop: 24040,
   timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: true, deltaSource: 'implied', impliedVol: 0.224,
+  vwapBasis: 'volume', volumeConfirmed: true,
   ...over,
 });
 
@@ -130,9 +131,22 @@ describe('ORB feed — tradable setups', () => {
     expect(screen.getByText(/No tradable ORB setup right now/)).toBeInTheDocument();
   });
 
-  it('counts errored underlyings separately in the disclosure', () => {
+  it('promotes an errored underlying to the board instead of burying it', () => {
+    // An underlying that could not be evaluated is a call to action; only rows
+    // that were evaluated and simply had no setup belong in the disclosure.
     show({ rows: [entry({ underlying: 'NIFTY', state: 'WATCHING', reason: 'regime is RANGE' }), entry({ underlying: 'SBIN', state: 'ERROR', reason: 'no instrument' })] });
-    expect(screen.getByRole('button', { name: /2 not signalling.*1 errored/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1 not signalling/ })).toBeInTheDocument();
+    // The count sits in its own <b>, so match on the assembled line.
+    expect(screen.getByText((_t, el) => /^0 tradable · 1 blocked · 2 scanned$/
+      .test((el?.textContent ?? '').replace(/\s+/g, ' ').trim()))).toBeTruthy();
+  });
+
+  it('opens the disclosure by default when the board has nothing to show', () => {
+    // Closed-by-default plus an empty board rendered a healthy scan as one line
+    // of grey text, which reads exactly like a dead engine.
+    show({ rows: [entry({ state: 'WATCHING', reason: 'outside entry window' })] });
+    expect(screen.getByText('outside entry window')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1 not signalling/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('calls out a scan that failed for everything', () => {

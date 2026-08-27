@@ -51,6 +51,7 @@ const orbEntry: OrbFeedEntry = {
   thetaPerDay: -10, vegaPerPoint: 16.9, exchange: 'NFO', lotSize: 75,
   underlyingEntry: 24120, underlyingStop: 24030, dataSource: 'kite',
   quoteAgeS: 3, reason: null, timestamp: new Date(NOW).toISOString(),
+  vwapBasis: 'volume', volumeConfirmed: true,
 };
 
 const aeRow: AdaptiveEdgeRow = {
