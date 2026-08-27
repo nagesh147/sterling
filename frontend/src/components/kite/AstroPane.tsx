@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { useCandles } from '../../hooks/useCandles';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso, isNseClosed } from '../../lib/astro/holidays';
-import { barsFromOhlcv, buyContract, gradeSlot, summariseTape, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
+import { barsFromOhlcv, buyContract, gradeSlot, summariseTape, CANDLE_SYMBOL, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
 import { rollMonth, simulateDay } from '../../lib/astro/simulate';
 import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { WEEKDAYS, type IndexPlay, type LiveNow, type Underlying, type WindowSlot } from '../../lib/astro/types';
@@ -690,7 +690,7 @@ export function AstroPane() {
   const [notes, setNotes] = useState(false);
   const [calOpen, setCalOpen] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
-  const candles = useCandles(underlying, '5m', 2000);
+  const candles = useCandles(CANDLE_SYMBOL[underlying], '5m', 2000);
   const [status, setStatus] = useState<LiveNow | null>(null);
   const [board, setBoard] = useState<IndexPlay[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => {

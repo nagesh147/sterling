@@ -200,7 +200,12 @@ export function OrderCell({
   }
 
   if (side) {
-    const label = buy?.short && buy.short !== "—" ? buy.short : strike != null ? `${strike} ${side}` : side;
+    const label =
+      buy?.short && buy.short !== "—"
+        ? buy.short
+        : strike != null
+          ? `${new Intl.NumberFormat("en-IN").format(strike)} ${side}`
+          : "…";
     return (
       <div className="ko-ord" onClick={stop} onPointerDown={stop}>
         <button type="button" className="ko-btn-buy" onClick={fireBuy} title="Buy 1 lot">
