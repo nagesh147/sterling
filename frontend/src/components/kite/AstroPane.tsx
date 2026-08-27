@@ -11,7 +11,7 @@ import { MonthHeat } from './astro/MonthHeat';
 import { NowBoard } from './astro/NowBoard';
 import { PlaybookNotes, PlaybookStrip } from './astro/PlaybookBoard';
 import { SessionStrip } from './astro/SessionStrip';
-import { KiteOrderCell } from './astro/KiteOrderCell';
+import { AstroTrailWatcher, KiteOrderCell, useAstroHolding } from './astro/KiteOrderCell';
 
 const CSS = `
 
@@ -263,6 +263,10 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-btn-buy:disabled { opacity: 0.45; cursor: not-allowed; text-decoration: none; }
 .ko-btn-close { color: var(--k-red-strong, #df514c); }
 .ko-btn-close:hover { text-decoration: underline; }
+.ko-btn-trail { color: var(--k-text, #444); }
+.ko-btn-trail:hover { text-decoration: underline; }
+.ko-held { color: var(--k-dim, #888); font-size: 13px; font-variant-numeric: tabular-nums; border:0; background:transparent; padding:0; height:32px; cursor:pointer; }
+.ko-held:hover { color: var(--k-red-strong, #df514c); text-decoration: underline; }
 .ko-ticket {
   position: absolute;
   z-index: 8;
@@ -724,6 +728,8 @@ export function AstroPane() {
     if (!status?.window || !now || iso !== status.sessionIso) return undefined;
     return gradeSlot(status.window, tape, nowMin, sameDay);
   }, [status, now, iso, tape, nowMin, sameDay]);
+  const holding = useAstroHolding(underlying, status?.play ?? "WAIT", status?.side ?? "WAIT");
+  const liveSlot = clockRows.find((s) => s.isLive) ?? null;
   const chipPlay = (id: Underlying) => board.find((row) => row.id === id);
 
   const liveKey = useMemo(() => {
@@ -852,6 +858,7 @@ export function AstroPane() {
                 sessionPnl={tally.directional ? tally.pnl : null}
                 buy={status.window ? buyContract(status.window, tape) : undefined}
                 nextBuy={status.next ? buyContract(status.next, tape) : undefined}
+                holding={holding}
                 onOpenSession={(date) => {
                   applyIso(date);
                   setTab("session");
@@ -866,6 +873,7 @@ export function AstroPane() {
 
             {tab !== "month" ? (
               <div className="ko-session">
+                <AstroTrailWatcher live={liveSlot} underlying={underlying} />
                 <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} />
                 <p className="ko-sub">
                   <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
@@ -1061,7 +1069,7 @@ function TimingRow({
         </td>
         <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
         <td className="ko-buy">
-          <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} />
+          <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} live={slot.isLive} />
         </td>
         <td className="ko-num">
           <GradeMark grade={grade} loading={loading} />
