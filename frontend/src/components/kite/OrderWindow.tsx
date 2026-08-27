@@ -106,6 +106,13 @@ export function OrderWindow({ options, onClose }: Props) {
   const [amoConfirmed, setAmoConfirmed] = useState(false);
 
   const fullSym = `${instr.exchange}:${instr.symbol}`;
+  const { data: liveQuotes } = useKiteQuote([fullSym], true, 3_000);
+  useEffect(() => {
+    const lp = Number((liveQuotes as any)?.[fullSym]?.last_price);
+    if (!(lp > 0)) return;
+    setInstr((p) => (p.lastPrice === lp ? p : { ...p, lastPrice: lp }));
+    setPrice((p) => (p > 0 ? p : lp));
+  }, [liveQuotes, fullSym]);
   // Depth ladder needs to feel live; subscribe full mode so the 5-level depth streams
   // over the WS (quote-mode ticks omit depth). The 5s REST poll is a cold-start/fallback.
   const { data: depthQuotes } = useKiteQuote([fullSym], depthOpen, 5_000, 'full');
@@ -372,8 +379,8 @@ export function OrderWindow({ options, onClose }: Props) {
                   <span style={{ fontSize: 12, color: k.dim }}>{qtySub}</span>
                 </div>
 
-                {/* Protective GTT on Quick tab */}
-                {product !== 'MIS' && (
+                {/* Protective GTT — carry always; Astro MIS lots too */}
+                {(product !== 'MIS' || options.tag === 'ASTRO') && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: `1px solid ${k.border}`, paddingTop: 12, fontSize: 12 }}>
                     <GttIcon />
                     <PctToggle accent={accent} label="Stoploss" on={slOn} setOn={setSlOn} pct={slPct} setPct={setSlPct} defaultPct={-5} />
@@ -447,8 +454,8 @@ export function OrderWindow({ options, onClose }: Props) {
                   </div>
                 )}
 
-                {/* Protective GTT — carry positions only (Overnight/Delivery), never Intraday */}
-                {product !== 'MIS' && (
+                {/* Protective GTT — carry always; Astro MIS lots too */}
+                {(product !== 'MIS' || options.tag === 'ASTRO') && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, borderTop: `1px solid ${k.border}`, paddingTop: 14 }}>
                     <GttIcon />
                     <PctToggle accent={accent} label="Stoploss" on={slOn} setOn={setSlOn} pct={slPct} setPct={setSlPct} defaultPct={-5} />
