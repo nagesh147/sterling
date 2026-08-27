@@ -39,7 +39,17 @@ from typing import Sequence
 #: ratio across 48,174 observations. A pure random walk would give sqrt(30) =
 #: 5.477; the measured 4.68 is below that, which is the damping a mean-reverting
 #: tape produces and is the reason this is fitted rather than assumed.
+#:
+#: Cross-validated on 120 instruments from the offline lake — 130 NSE indices and
+#: 4,354 cash names, none of them fitted on. 119 of 120 gave a positive rank
+#: correlation, median +0.365, and the per-instrument multiple ranged 2.96 to
+#: 5.03 with this value inside it. Pass `multiple=` to use an instrument's own.
 EXCURSION_MULTIPLE = 4.6775
+
+#: Black-Scholes at the money: a straddle costs about this fraction of
+#: `sigma * sqrt(T) * S`. Used to state the gate as a volatility condition
+#: rather than only as a rupee comparison.
+ATM_STRADDLE_COEFFICIENT = 0.7979
 
 #: The horizon the multiple was measured over. Changing one without re-measuring
 #: the other silently rescales every forecast.
@@ -103,7 +113,32 @@ def _percentile(value: float) -> float:
     return 1.0
 
 
-def forecast(closes: Sequence[float], *, horizon_bars: int = HORIZON_BARS) -> VolatilityForecast | None:
+def max_implied_vol_ratio(margin: float = 1.25, *, multiple: float = EXCURSION_MULTIPLE,
+                          horizon_bars: int = HORIZON_BARS) -> float:
+    """The implied-to-realised volatility ratio above which the gate refuses.
+
+    The whole long-straddle decision collapses to this one number, and it is
+    worth seeing why. The forecast is `multiple * realised_vol`. The breakeven is
+    `0.7979 * implied_vol * sqrt(horizon)`, and implied is some ratio of
+    realised. Both sides scale with realised volatility, so it cancels:
+
+        clears  <=>  multiple  >  0.7979 * sqrt(horizon) * margin * (IV / RV)
+
+    At the fitted multiple and a 1.25 margin that threshold is 0.856. **Index
+    options normally trade at IV above RV** — the variance risk premium — so a
+    long straddle gate will refuse most of the time. That is the gate working,
+    not failing: buying volatility that is already dearer than the tape delivers
+    is a structurally losing trade, and the engine declining it is the point.
+
+    Exposed so an operator can see the condition instead of inferring it from
+    two rupee figures.
+    """
+    denominator = ATM_STRADDLE_COEFFICIENT * math.sqrt(max(1, horizon_bars)) * max(margin, 1e-9)
+    return multiple / denominator if denominator > 0 else 0.0
+
+
+def forecast(closes: Sequence[float], *, horizon_bars: int = HORIZON_BARS,
+             multiple: float = EXCURSION_MULTIPLE) -> VolatilityForecast | None:
     """Forecast the maximum excursion over `horizon_bars`.
 
     Scaled by sqrt(horizon / fitted horizon) when asked for a different window,
@@ -116,7 +151,7 @@ def forecast(closes: Sequence[float], *, horizon_bars: int = HORIZON_BARS) -> Vo
     if vol is None:
         return None
     scale = math.sqrt(max(1, horizon_bars) / HORIZON_BARS)
-    excursion = EXCURSION_MULTIPLE * vol * scale
+    excursion = multiple * vol * scale
     return VolatilityForecast(
         excursion_bps=excursion,
         realised_vol_bps=vol,
@@ -146,6 +181,11 @@ class StraddleGate:
     margin: float
     eligible: bool
     reason: str
+    #: What the quoted straddle implies about volatility relative to what the
+    #: tape has realised. Above `max_iv_ratio` the trade is structurally against
+    #: the variance risk premium, and this is the number that says so.
+    implied_vol_ratio: float = 0.0
+    max_iv_ratio: float = 0.0
 
     @property
     def edge_ratio(self) -> float:
@@ -173,19 +213,29 @@ def evaluate_straddle(
     is not a breakeven.
     """
     if spot <= 0:
-        return StraddleGate(forecast_bps, 0.0, margin, False, "no spot price")
+        return StraddleGate(forecast_bps, 0.0, margin, False, "no spot price", 0.0, 0.0)
     if call_premium <= 0 or put_premium <= 0:
-        return StraddleGate(forecast_bps, 0.0, margin, False, "straddle not priced")
+        return StraddleGate(forecast_bps, 0.0, margin, False, "straddle not priced", 0.0, 0.0)
 
     premium = call_premium + put_premium
     with_costs = premium * (1.0 + max(0.0, round_trip_cost_pct) / 100.0)
     breakeven_bps = (with_costs / spot) * 10_000.0
 
+    # The same comparison expressed as volatility, which is the language the
+    # decision is actually in.
+    ceiling = max_implied_vol_ratio(margin)
+    implied_ratio = (breakeven_bps / forecast_bps) * (EXCURSION_MULTIPLE / (
+        ATM_STRADDLE_COEFFICIENT * math.sqrt(HORIZON_BARS))) if forecast_bps > 0 else 0.0
+
     if forecast_bps <= 0:
-        return StraddleGate(forecast_bps, breakeven_bps, margin, False, "no forecast")
+        return StraddleGate(forecast_bps, breakeven_bps, margin, False, "no forecast", 0.0, ceiling)
     if forecast_bps < breakeven_bps * margin:
         return StraddleGate(
             forecast_bps, breakeven_bps, margin, False,
             f"forecast {forecast_bps:.1f}bps below {margin:.2f}x breakeven "
-            f"{breakeven_bps:.1f}bps — the premium already prices more movement than expected")
-    return StraddleGate(forecast_bps, breakeven_bps, margin, True, "forecast clears breakeven")
+            f"{breakeven_bps:.1f}bps — the premium already prices more movement "
+            f"than expected (implied/realised {implied_ratio:.2f}, needs < {ceiling:.2f})",
+            implied_ratio, ceiling)
+    return StraddleGate(forecast_bps, breakeven_bps, margin, True,
+                        f"forecast clears breakeven (implied/realised {implied_ratio:.2f} "
+                        f"< {ceiling:.2f})", implied_ratio, ceiling)

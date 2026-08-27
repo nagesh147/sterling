@@ -108,3 +108,77 @@ flip on an estimate.
 * The forecast predicts *maximum excursion within* the horizon, not the move at
   the end of it. That is what a target captures, and it is what the multiple was
   fitted against — using it as an end-of-horizon estimate would overstate it.
+
+---
+
+# Cross-validation and the paper run — 2026-08-27
+
+## The forecaster holds across 120 instruments
+
+Re-run against the offline lake on the pendrive (`SterlingLake`, 12,250 parquet
+files, 1.9 GB) — 130 NSE indices and 4,354 cash names, minute bars, Feb to Aug
+2026. 120 instruments sampled at random, **none of them fitted on**.
+
+| | |
+|---|---|
+| Positive rank correlation | **119 / 120 (99.2%)** |
+| Mean / median rank corr | +0.343 / +0.365 |
+| Per-instrument multiple | 2.96 – 5.03 (p10–p90), NIFTY's 4.68 inside |
+| Top/bottom decile ratio | **2.22x** median |
+
+The single negative is an illiquid SME with 267 observations. The median rank
+correlation is *higher* than the NIFTY-only figure it was fitted from, which is
+the opposite of what an overfitted signal does out of sample.
+
+The multiple varies enough by instrument to be worth measuring per name;
+`forecast(..., multiple=)` takes one.
+
+## The paper run, and what it found
+
+The gate was run over 8,772 decision points on NIFTY 50. The result is a step
+function — the gate clears 100% of the time below a threshold and 0% above it —
+and the reason is worth stating, because it turns the whole strategy into one
+number.
+
+The forecast is `multiple * realised_vol`. An at-the-money straddle costs about
+`0.7979 * implied_vol * sqrt(horizon)`. Both sides scale with volatility, so
+realised volatility cancels:
+
+```text
+clears  <=>  multiple  >  0.7979 * sqrt(horizon) * margin * (IV / RV)
+```
+
+| Margin | Gate refuses above IV/RV |
+|---|---|
+| 1.00 | 1.070 |
+| **1.25** | **0.856** |
+| 1.50 | 0.714 |
+
+**A long straddle needs implied volatility below realised.** Index options
+normally carry the opposite — the variance risk premium — so at the shipped
+margin this gate will refuse most of the time.
+
+That is the gate working. Buying volatility that is already dearer than the tape
+delivers is a structurally losing trade, and an engine that declines it is doing
+its job. The 100%-clearing rows in the sweep sit at IV/RV of 0.7 and 0.8, and in
+those the forecast beat realised movement 84% and 77% of the time — so when
+options *are* that cheap the trade is good. They are rarely that cheap.
+
+## What this means to run
+
+* Run it. It will decline most sessions, and the reason it gives is now the
+  volatility ratio rather than two rupee figures, so "declining" is legible.
+* The regimes to watch for are the ones where implied collapses below realised:
+  after an event passes, or into a post-shock volatility crush.
+* **The obvious inversion is deliberately not implemented.** If IV exceeds RV
+  systematically, the profitable side is selling volatility — and that carries
+  unbounded risk on a strategy whose directional model has no edge to hedge
+  with. That is a different product and a different risk conversation, not a
+  sign flip.
+
+## Still not answered
+
+Whether NIFTY options actually trade below 0.856 IV/RV often enough to be a
+business. That needs an option price history, and neither the local stores nor
+the pendrive lake has one — the lake holds index and cash-equity bars only. Live
+paper sessions record it, which is what the observation recorder is for.

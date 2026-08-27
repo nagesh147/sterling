@@ -157,11 +157,57 @@ def test_the_gate_carries_both_numbers_it_compared():
     assert gate.edge_ratio == pytest.approx(gate.forecast_bps / gate.breakeven_bps)
 
 
-def test_nothing_hardcodes_an_implied_volatility():
-    """The comparison can only be settled live. A fitted IV baked in here would
-    be answering with history a question that is about the current quote."""
+def test_the_gate_needs_live_premiums_and_assumes_no_volatility_level():
+    """No fitted implied volatility may be baked in.
+
+    An earlier version of this test string-matched "implied_vol" in the source,
+    which broke the moment the gate started *reporting* an implied/realised
+    ratio — a computed number from live quotes, which is the opposite of a
+    hardcoded one. The property that matters is that the decision cannot be made
+    without a current premium.
+    """
     import inspect
     from app.engines.adaptive_edge import volatility_forecast as module
-    source = inspect.getsource(module)
-    assert "implied_vol" not in source.lower().replace(" ", "")
-    assert "call_premium" in inspect.signature(evaluate_straddle).parameters
+
+    params = inspect.signature(evaluate_straddle).parameters
+    assert "call_premium" in params and "put_premium" in params
+    for name in ("call_premium", "put_premium", "spot"):
+        assert params[name].default is inspect.Parameter.empty, (
+            f"{name} must be supplied from a live quote, not defaulted")
+    # No module constant looks like an annualised volatility level.
+    for key, value in vars(module).items():
+        if key.isupper() and isinstance(value, float):
+            assert not (0.05 <= value <= 0.60) or key == "ATM_STRADDLE_COEFFICIENT", (
+                f"{key}={value} looks like a hardcoded volatility level")
+
+
+def test_the_gate_reports_the_volatility_condition_it_applied():
+    """The whole decision collapses to one ratio, and an operator should see it
+    rather than infer it from two rupee figures."""
+    dear = evaluate_straddle(forecast_bps=46.0, call_premium=95.0, put_premium=90.0, spot=24_800.0)
+    cheap = evaluate_straddle(forecast_bps=46.0, call_premium=25.0, put_premium=22.0, spot=24_800.0)
+    assert dear.implied_vol_ratio > dear.max_iv_ratio
+    assert cheap.implied_vol_ratio < cheap.max_iv_ratio
+    assert "implied/realised" in dear.reason
+
+
+def test_the_threshold_tightens_as_the_margin_rises():
+    from app.engines.adaptive_edge.volatility_forecast import max_implied_vol_ratio
+    assert max_implied_vol_ratio(1.0) > max_implied_vol_ratio(1.25) > max_implied_vol_ratio(1.5)
+
+
+def test_a_long_straddle_needs_options_cheaper_than_the_tape():
+    """At the fitted multiple and a 1.25 margin the ceiling is ~0.86, so implied
+    has to sit BELOW realised. Index options normally carry the opposite — the
+    variance risk premium — which is why this gate refuses most of the time.
+    That is the strategy declining a structurally losing trade, by design."""
+    from app.engines.adaptive_edge.volatility_forecast import max_implied_vol_ratio
+    assert max_implied_vol_ratio(1.25) < 1.0
+
+
+def test_a_per_instrument_multiple_is_honoured():
+    """Cross-validation put the multiple between 2.96 and 5.03 across 120
+    instruments, so a caller with its own measurement must be able to use it."""
+    lively = forecast(_series(0.0005), multiple=5.03)
+    damped = forecast(_series(0.0005), multiple=2.96)
+    assert lively.excursion_bps > damped.excursion_bps
