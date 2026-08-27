@@ -15,6 +15,15 @@ export const YF_SYMBOL: Record<Underlying, string> = {
   MIDCPNIFTY: "NIFTY_MID_SELECT.NS",
 };
 
+/** Kite candle symbols. Bare `NIFTY` 404s the candles endpoint. */
+export const CANDLE_SYMBOL: Record<Underlying, string> = {
+  NIFTY: "NSE:NIFTY 50",
+  BANKNIFTY: "NSE:NIFTY BANK",
+  FINNIFTY: "NSE:NIFTY FIN SERVICE",
+  SENSEX: "BSE:SENSEX",
+  MIDCPNIFTY: "NSE:NIFTY MID SELECT",
+};
+
 export const FLAT_PTS: Record<Underlying, number> = {
   NIFTY: 8,
   BANKNIFTY: 20,
