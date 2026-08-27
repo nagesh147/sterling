@@ -103,13 +103,22 @@ export function OrderCell({
     setPending("close");
   };
 
-  if (!canBuy && !open) return <span className="text-muted">—</span>;
+  if (!canBuy && !open) {
+    if (buy && buy.verb !== "SIT" && buy.short && buy.short !== "—") {
+      return <span className="text-muted">{buy.short}</span>;
+    }
+    return <span className="text-muted">—</span>;
+  }
+
+  const mark = buy?.short && buy.short !== "—" ? buy.short : side && strike != null ? `${strike} ${side}` : "";
+  const buyLabel = mark ? `Buy ${mark}` : "Buy";
+  const closeLabel = mark ? `Close ${mark}` : "Close";
 
   return (
     <div className="ko-ord" onClick={stop}>
       {open ? (
-        <button type="button" className="ko-btn-close" onClick={goClose} aria-label={`Close ${open.tradingsymbol}`}>
-          Close
+        <button type="button" className="ko-btn-close" onClick={goClose} aria-label={closeLabel}>
+          {closeLabel}
         </button>
       ) : (
         <button
@@ -117,9 +126,9 @@ export function OrderCell({
           className="ko-btn-buy"
           onClick={goBuy}
           disabled={resolving || (Boolean(onBuy) && (!connected || !hit))}
-          aria-label={hit ? `Buy ${hit.tradingsymbol}` : "Buy"}
+          aria-label={buyLabel}
         >
-          {resolving ? "…" : "Buy"}
+          {resolving ? "…" : buyLabel}
         </button>
       )}
       {pending && hit ? (
