@@ -243,7 +243,18 @@ export function sessionDayKey(atMs: number | null): string {
 export const LIVE_BUCKET = 'live';
 
 /**
- * "Today" / "Yesterday" / "Thu 14 Aug" — relative to the IST trading day.
+ * "Today" / "Thu 14 Aug" / "Thu 14 Aug 2025" — on the IST trading day.
+ *
+ * Only today is named in words. Everything else gets a real date, because
+ * relative wording stops being an answer almost immediately: "Yesterday" is
+ * useful for exactly one day and then becomes a thing the reader has to convert,
+ * and on a board that keeps history most rows are not from either of the two
+ * days it can describe.
+ *
+ * The year appears only when it is not the current one. "Thu 14 Aug" is
+ * unambiguous within a year and adding 2026 to every row of a board someone is
+ * watching live is noise; leaving it off a row from last year is a real
+ * ambiguity, so that case says it.
  *
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
@@ -253,11 +264,11 @@ export function sessionDayLabel(key: string, nowMs: number): string {
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
   if (key === today) return 'Today';
-  const yesterday = sessionDayKey(nowMs - 86_400_000);
-  if (key === yesterday) return 'Yesterday';
   const [y, m, d] = key.split('-').map(Number);
+  const thisYear = Number(today.slice(0, 4));
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
     weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+    ...(y === thisYear ? {} : { year: 'numeric' }),
   });
 }
 

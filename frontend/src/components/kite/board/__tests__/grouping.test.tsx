@@ -215,7 +215,7 @@ describe('dates and day order', () => {
     // the cell has to.
     render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
       requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    expect(screen.getByText(/Yesterday 10:30/)).toBeTruthy();
+    expect(screen.getByText(/^\w{3},? \d+ \w{3} 10:30$/)).toBeTruthy();
   });
 
   it('words an older date the same way its day header would', () => {
@@ -241,10 +241,10 @@ describe('dates and day order', () => {
     );
     const heads = [...container.querySelectorAll('*')]
       .map((e) => e.textContent ?? '')
-      .filter((s) => s === 'Today' || s === 'Yesterday' || /^\w{3} \d+ \w{3}$/.test(s));
+      .filter((s) => s === 'Today' || /^\w{3},? \d+ \w{3}$/.test(s));
     // Today must precede Yesterday, which must precede the older date.
     expect(heads.indexOf('Today')).toBeGreaterThanOrEqual(0);
-    expect(heads.indexOf('Today')).toBeLessThan(heads.indexOf('Yesterday'));
+    expect(heads.indexOf('Today')).toBeLessThan(heads.findIndex((h) => /^\w{3},? \d+ \w{3}$/.test(h)));
   });
 
   it('sorts rows newest first inside one day', () => {

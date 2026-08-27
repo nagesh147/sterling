@@ -39,7 +39,11 @@ describe('trading-day grouping', () => {
 
   it('labels today, yesterday and older days', () => {
     expect(sessionDayLabel(sessionDayKey(NOW), NOW)).toBe('Today');
-    expect(sessionDayLabel(sessionDayKey(NOW - 86_400_000), NOW)).toBe('Yesterday');
+    // Only today is named in words; every other day gets a real date, because
+    // "Yesterday" is useful for one day and then has to be converted by the reader.
+    expect(sessionDayLabel(sessionDayKey(NOW - 86_400_000), NOW)).toMatch(/^\w{3},? \d+ \w{3}$/);
+    // ...and a day from another year says so, which "20 Aug" would not.
+    expect(sessionDayLabel(sessionDayKey(NOW - 400 * 86_400_000), NOW)).toMatch(/\d{4}$/);
     expect(sessionDayLabel('2026-08-13', NOW)).toMatch(/13 Aug/);
   });
 

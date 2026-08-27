@@ -127,7 +127,10 @@ describe('sorting on the rendered board', () => {
       />,
     );
     const text = document.body.textContent ?? '';
-    expect(text.indexOf('Today')).toBeLessThan(text.indexOf('Yesterday'));
+    // Yesterday is now a real date, so match the dated header rather than a word.
+    const dated = text.match(/\w{3},? \d+ \w{3}/);
+    expect(dated).not.toBeNull();
+    expect(text.indexOf('Today')).toBeLessThan(text.indexOf(dated![0]));
     expect(text.indexOf('1.00')).toBeLessThan(text.indexOf('999.00'));
   });
 });

@@ -71,7 +71,7 @@ describe('SignalBoard rendering', () => {
     // open rows would both float into "Live now".
     show([sig({ id: 'today' }), sig({ id: 'old', atMs: NOW - 86_400_000 })], { liveFirst: false });
     expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.getByText('Yesterday')).toBeInTheDocument();
+    expect(screen.getByText(/^\w{3},? \d+ \w{3}$/)).toBeInTheDocument();
   });
 
   it('floats open positions above the dated history', () => {

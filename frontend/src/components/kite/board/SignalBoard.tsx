@@ -217,8 +217,8 @@ const stamp = (ms: number | null, nowMs: number) => {
   const time = hhmm(ms);
   if (sessionDayKey(ms) === sessionDayKey(nowMs)) return time;
   // Reuses sessionDayLabel so a row's date is worded exactly like the header it
-  // would have sat under — "Yesterday 09:20", "Thu 14 Aug 09:20". Two date
-  // formatters on one board is how they end up disagreeing.
+  // would have sat under — "Thu 14 Aug 09:20". Two date formatters on one board
+  // is how they end up disagreeing.
   return `${sessionDayLabel(sessionDayKey(ms), nowMs)} ${time}`;
 };
 
