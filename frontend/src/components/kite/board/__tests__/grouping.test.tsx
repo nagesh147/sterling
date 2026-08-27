@@ -204,25 +204,42 @@ describe('dates and day order', () => {
     score: null, reason: null, sections: [],
   });
 
-  it("shows a bare time for today, so a live board is not noisy", () => {
+  it('stamps today with a date and seconds, not a bare minute', () => {
+    // Minute precision hid what the row exists to report: Adaptive Edge scalps
+    // order flow, and the recorded ATM bot opened and closed inside 3 seconds.
     render(<SignalBoard signals={[dated('a', NOW - 3_600_000, 'running')]}
       requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    expect(screen.getByText('09:30')).toBeTruthy();
+    expect(screen.getByText('21 Aug 09:30:00')).toBeTruthy();
   });
 
-  it('carries the date when the row is not from today — the actual bug', () => {
-    // A running row from yesterday sits in "Live now", which names no date, so
-    // the cell has to.
+  it('carries the date when the row is not from today — the original bug', () => {
+    // A running row from an earlier day sits in "Live now", which names no date,
+    // so the cell has to.
     render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
       requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    expect(screen.getByText(/^\w{3},? \d+ \w{3} 10:30$/)).toBeTruthy();
+    expect(screen.getByText('20 Aug 10:30:00')).toBeTruthy();
   });
 
-  it('words an older date the same way its day header would', () => {
+  it('renders a dash for an unusable timestamp instead of throwing', () => {
+    // Date.parse returns NaN for any format it does not know, and `??` does not
+    // catch NaN. sessionDayKey(NaN) used to throw RangeError, which took the
+    // whole board down rather than spoiling one cell.
+    expect(() => render(
+      <SignalBoard signals={[dated('a', NaN, 'running')]}
+        requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />,
+    )).not.toThrow();
+    // The cell says so with a dash. Other empty columns render one too, so this
+    // only checks one exists — not throwing is the assertion that matters here.
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    // sessionDayLabel's own format, reused rather than a second formatter.
-    expect(screen.getByText(/1[0-9] Aug 10:30/)).toBeTruthy();
+    // Row says "17 Aug 10:30:00"; the header above it says "Mon, 17 Aug". Both
+    // date texts come from sessionDayDate so they cannot drift apart.
+    expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
+    expect(screen.getByText(/^\w{3},? 17 Aug$/)).toBeTruthy();
   });
 
   it('orders day sections latest to oldest', () => {

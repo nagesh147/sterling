@@ -13,6 +13,20 @@ import type {
   AdaptiveEdgeOverlay,
 } from '../../types/adaptiveEdge';
 
+/**
+ * Epoch ms from a timestamp, or null — never NaN.
+ *
+ * `Date.parse` returns NaN for any format it does not recognise, and `??` does
+ * not catch NaN, so the old `entry_time ? Date.parse(...) : Date.now()` let a
+ * NaN through to the board as a real value. Downstream that meant an "Invalid
+ * Date" cell at best and a thrown RangeError at worst.
+ */
+const parsedMs = (iso: string | null | undefined): number | null => {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+};
+
 export type AdaptiveEdgeThesis = string;
 
 const C = {
@@ -437,7 +451,7 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     cvd: signal.cvd,
     whyClosed: why,
     resolutionReason: leg.resolution_reason ?? null,
-    observationTime: signal.entry_time ? Date.parse(signal.entry_time) : Date.now(),
+    observationTime: parsedMs(signal.entry_time) ?? Date.now(),
     featureQuality: open ? 'OPEN' : 'FLAT',
     decision: open ? 'HOLD' : 'EXIT',
     entryMode: signal.entry_mode ?? 'MICRO',
@@ -489,7 +503,7 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
     cvd: leg.entry_cvd ?? null,
     whyClosed: whyClosed(leg),
     resolutionReason: null,
-    observationTime: leg.entry_time ? Date.parse(leg.entry_time) : Date.now(),
+    observationTime: parsedMs(leg.entry_time) ?? Date.now(),
     featureQuality: open ? 'OPEN' : 'FLAT',
     decision: open ? 'HOLD' : 'EXIT',
     entryMode: eMode,

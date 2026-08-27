@@ -234,9 +234,34 @@ export const STATUS_RANK: Record<BoardStatus, number> = {
 
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
 export function sessionDayKey(atMs: number | null): string {
-  if (atMs == null) return 'unknown';
+  // Non-finite as well as null. `Date.parse` returns NaN for any format it does
+  // not recognise, `??` does not catch NaN, and `new Date(NaN).toISOString()`
+  // throws RangeError — so one unparseable timestamp upstream would take the
+  // whole board down rather than render one bad cell.
+  if (atMs == null || !Number.isFinite(atMs)) return 'unknown';
   const ist = new Date(atMs + (5 * 60 + 30) * 60_000);
   return ist.toISOString().slice(0, 10);
+}
+
+/**
+ * The date text for a day key — "28 Aug", "24 Jul 2025" — with no relative
+ * wording at all.
+ *
+ * Split out so the day header and a row's own stamp cannot disagree about what a
+ * date looks like. The header adds "Today" and a weekday on top of this; a row
+ * needs the bare date because it is a precise stamp, not a friendly heading.
+ *
+ * The year appears only when it is not the current one: unambiguous within a
+ * year, and a real ambiguity across one.
+ */
+export function sessionDayDate(key: string, nowMs: number): string {
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const thisYear = Number(sessionDayKey(nowMs).slice(0, 4));
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', timeZone: 'UTC',
+    ...(y === thisYear ? {} : { year: 'numeric' }),
+  });
 }
 
 /** The bucket live positions float into, ahead of every dated one. */
@@ -265,11 +290,9 @@ export function sessionDayLabel(key: string, nowMs: number): string {
   const today = sessionDayKey(nowMs);
   if (key === today) return 'Today';
   const [y, m, d] = key.split('-').map(Number);
-  const thisYear = Number(today.slice(0, 4));
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-    ...(y === thisYear ? {} : { year: 'numeric' }),
-  });
+  const weekday = new Date(Date.UTC(y, m - 1, d))
+    .toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+  return `${weekday}, ${sessionDayDate(key, nowMs)}`;
 }
 
 /**

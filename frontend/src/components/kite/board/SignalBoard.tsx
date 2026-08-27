@@ -15,7 +15,7 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayKey, sessionDayLabel, trailBreached,
+  sessionDayDate, sessionDayKey, sessionDayLabel, trailBreached,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -198,7 +198,13 @@ export const inr = (v: number | null | undefined) =>
 const STALE_AFTER_S = 15;
 
 const hhmm = (ms: number | null) =>
-  ms == null ? '—' : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  ms == null || !Number.isFinite(ms) ? '—'
+    : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+const hhmmss = (ms: number) =>
+  new Date(ms).toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
 
 /**
  * The time a signal fired, carrying its date whenever that is not today.
@@ -213,13 +219,18 @@ const hhmm = (ms: number | null) =>
  * operator is watching live is noise.
  */
 const stamp = (ms: number | null, nowMs: number) => {
-  if (ms == null) return '—';
-  const time = hhmm(ms);
-  if (sessionDayKey(ms) === sessionDayKey(nowMs)) return time;
-  // Reuses sessionDayLabel so a row's date is worded exactly like the header it
-  // would have sat under — "Thu 14 Aug 09:20". Two date formatters on one board
-  // is how they end up disagreeing.
-  return `${sessionDayLabel(sessionDayKey(ms), nowMs)} ${time}`;
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  // A complete stamp: the date always, and seconds.
+  //
+  // Today used to render bare on the grounds that repeating today's date is
+  // noise. It is not, for these engines — Adaptive Edge scalps order flow and
+  // the recorded ATM bot opened and closed a position inside three seconds, so
+  // "10:30" is not a time you can reason about. Minute precision hid the thing
+  // the row exists to report.
+  //
+  // The date text comes from sessionDayDate, the same helper the day header
+  // uses, so the two cannot disagree about what a date looks like.
+  return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
 };
 
 function Chevron({ open }: { open: boolean }) {
