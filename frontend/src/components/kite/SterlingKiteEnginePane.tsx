@@ -491,12 +491,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: k.bg }}
+      style={{ padding: ROW_METRICS.parentPadding, borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: k.bg }}
     >
       <div 
         className="st-parent-header" 
         onClick={onClick}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: ROW_METRICS.parentPadding }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           <SourceBadge source={row.source} />
@@ -927,11 +927,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
                 style={{ cursor: 'pointer', background: k.bg }}
               >
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
+                   <span style={{ color: color, fontWeight: 700, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
-                         <span style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
+                         <span style={{ fontSize: ROW_METRICS.instrumentFontSize, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                        </Tip>
                      )}
                      {bestDeltaSyms.has(leg.option_symbol) && (
@@ -951,10 +951,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      const renderLeftCell = (key: string) => {
                        switch (key) {
                          case 'exc':
-                           return <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>{row.exchange}</span>;
+                           return <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', flexShrink: 0 }}>{row.exchange}</span>;
                          case 'leg':
                            return (
-                             <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>
+                             <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', flexShrink: 0 }}>
                                {leg.moneyness}
                                {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
                              </span>
@@ -965,7 +965,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // spot-source row (no per-leg premium) so the column stays aligned.
                            return (
                              <Tip text={snapTitle}>
-                               <span style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {entryPx != null ? entryPx.toFixed(2) : '—'}
                                  {entryDiff != null && (
                                    <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
@@ -1094,9 +1094,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
-                              return <span style={{ color: k.dim, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
+                              return <span style={{ color: k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
                             case 'chgPct':
-                              return <span style={{ color: k.text, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
+                              return <span style={{ color: k.text, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
                             case 'dir':
                               return (
                                 <span style={{ color: color, display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
@@ -1106,7 +1106,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                               );
                             case 'ltp':
                               return (
-                                <span style={{ color: color, fontWeight: 500, fontSize: 13, width: '100%', textAlign: 'right' }}>
+                                <span style={{ color: color, fontWeight: 500, fontSize: ROW_METRICS.instrumentFontSize, width: '100%', textAlign: 'right' }}>
                                   {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                                 </span>
                               );
@@ -2285,9 +2285,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           position: relative;
           display: flex;
           align-items: center;
-          gap: 16px;
-          height: 41px;
-          padding: 0 16px;
+          /* Geometry from ROW_METRICS, the spec the shared board renders against,
+             rather than the literals this table was built with. A minimum height
+             rather than a fixed one: a fixed height clips a cell that wraps, and
+             the shared row has always used a minimum. No backticks in here - this
+             block is a template literal and one would close it. */
+          gap: ${ROW_METRICS.gap}px;
+          min-height: ${ROW_METRICS.legHeight}px;
+          padding: ${ROW_METRICS.legPadding};
           box-sizing: border-box;
           border-bottom: 1px solid ${k.border};
           overflow-x: auto;

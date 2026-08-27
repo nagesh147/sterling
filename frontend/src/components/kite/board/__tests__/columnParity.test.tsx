@@ -11,6 +11,7 @@
  * engine quietly starts asking for its own set again.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { ROW_METRICS } from '../signalRowSpec';
 
 // BoardTicket pulls a live quote; the parity being tested is structural.
 vi.mock('../../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
@@ -206,5 +207,30 @@ describe('each engine states its own provenance', () => {
 
   it('reads Adaptive Edge’s as which model produced it', () => {
     expect(boards.adaptive_edge[0].origin!.label).toBe('SPOT SCAN');
+  });
+});
+
+/**
+ * The two tables' shared presentation tokens.
+ *
+ * SuperTrend's table is a bespoke implementation and Adaptive Edge's is the
+ * shared `SignalBoard`. They already render against one column spec and one set
+ * of geometry — `ROW_METRICS` — but SuperTrend held the numbers as literals, so
+ * they agreed by coincidence rather than by construction and could drift on the
+ * next edit to either.
+ */
+describe('ROW_METRICS is the single type and geometry scale', () => {
+  it('carries the type scale both tables use', () => {
+    // If a value moves here it moves in both tables. That is the point.
+    expect(ROW_METRICS.instrumentFontSize).toBe(13);
+    expect(ROW_METRICS.cellFontSize).toBe(11);
+    expect(ROW_METRICS.parentFontSize).toBe(12);
+  });
+
+  it('carries the row geometry both tables use', () => {
+    expect(ROW_METRICS.legHeight).toBe(41);
+    expect(ROW_METRICS.gap).toBe(16);
+    expect(ROW_METRICS.legPadding).toBe('0 16px');
+    expect(ROW_METRICS.parentPadding).toBe('10px 12px');
   });
 });
