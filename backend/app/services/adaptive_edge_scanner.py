@@ -33,7 +33,10 @@ from app.engines.adaptive_edge.f103_opportunity import (
 from app.engines.adaptive_edge.f109_option_selection import F109Candidate, select_f109
 from app.engines.adaptive_edge.implied_vol import read as read_implied
 from app.engines.adaptive_edge.volatility_forecast import evaluate_straddle, forecast
-from app.engines.adaptive_edge.volatility_harvest import evaluate as price_harvest
+from app.engines.adaptive_edge.volatility_harvest import (
+    VolatilityHarvestError,
+    from_quotes as price_harvest_from_quotes,
+)
 from app.services.adaptive_edge import ist_today, nfo_dump, underlyings
 from app.services.adaptive_edge_strategy import (
     MIN_BARS,
@@ -335,8 +338,22 @@ def volatility_reading(name: str, rows: list[dict], closes: list[float],
     if reading is None:
         return None
 
-    structure = price_harvest(closes, implied_vol_ratio=reading.ratio,
-                              horizon_bars=cfg.horizon_bars)
+    # Price from the quoted premium, not from a ratio. And let the module refuse
+    # a contract whose life outlasts the hold: premium collection is only the
+    # payoff when the option settles at the end of it.
+    structure = None
+    structure_error = ""
+    try:
+        structure = price_harvest_from_quotes(
+            closes,
+            call_premium=_num(call.get("last_price")),
+            put_premium=_num(put.get("last_price")),
+            spot=spot,
+            minutes_to_expiry=expiry_minutes,
+            horizon_bars=cfg.horizon_bars,
+        )
+    except VolatilityHarvestError as exc:
+        structure_error = str(exc)
     return {
         "underlying": name,
         "strike": _num(call.get("strike")),
@@ -358,7 +375,7 @@ def volatility_reading(name: str, rows: list[dict], closes: list[float],
         "credit_bps": round(structure.net_credit_bps, 2) if structure else None,
         "max_loss_bps": round(structure.max_loss_bps, 2) if structure else None,
         "structure_eligible": bool(structure and structure.eligible),
-        "structure_reason": structure.reason if structure else "not priceable",
+        "structure_reason": (structure.reason if structure else structure_error or "not priceable"),
     }
 
 

@@ -12,6 +12,7 @@ import random
 import pytest
 
 from app.engines.adaptive_edge.volatility_harvest import (
+    from_quotes,
     ATM_STRADDLE_COEFFICIENT,
     MIN_FORECAST_PERCENTILE,
     WING_DISTANCE_SD,
@@ -197,3 +198,64 @@ def test_a_short_hold_on_a_dated_option_is_not_the_modelled_payoff():
     # Whereas an option expiring at the horizon surrenders essentially all of it.
     expiring = straddle(0.12, 30 / minutes_per_year)
     assert expiring > 0
+
+
+# ------------------------------------------------- pricing from live quotes
+
+def _quoted(**over):
+    kwargs = dict(call_premium=21.0, put_premium=19.0, spot=24_800.0,
+                  minutes_to_expiry=30.0, horizon_bars=30)
+    kwargs.update(over)
+    return from_quotes(_series(ACTIVE), **kwargs)
+
+
+def test_the_runtime_path_prices_from_the_quoted_premium():
+    """No assumed ratio reaches a trade: the credit is what the market shows."""
+    result = _quoted()
+    assert result is not None and result.eligible is True
+    # 40 points on 24,800 is ~16.1 bps gross; net is that minus the wings.
+    assert 0 < result.net_credit_bps < 16.2
+
+
+def test_a_dearer_quote_gives_a_larger_credit():
+    assert _quoted(call_premium=40, put_premium=38).net_credit_bps > _quoted().net_credit_bps
+
+
+def test_a_contract_outliving_the_hold_is_refused():
+    """`credit - |move|` is only the payoff when the option settles at the end
+    of the hold. A 3-day option held 30 minutes is a mark-to-market on gamma and
+    theta — a different trade with a different sign, and pricing it as premium
+    collection is the error that made the offline study look conclusive."""
+    with pytest.raises(VolatilityHarvestError, match="holding to expiry"):
+        _quoted(minutes_to_expiry=3 * 375)
+
+
+def test_a_hold_matching_expiry_is_accepted():
+    assert _quoted(minutes_to_expiry=30.0) is not None
+    assert _quoted(minutes_to_expiry=29.0) is not None
+
+
+def test_an_expired_or_unpriced_contract_gives_nothing():
+    assert _quoted(minutes_to_expiry=0.0) is None
+    assert _quoted(call_premium=0.0) is None
+    assert _quoted(spot=0.0) is None
+
+
+def test_the_runtime_path_still_refuses_to_sell_naked():
+    with pytest.raises(VolatilityHarvestError, match="does not sell naked"):
+        _quoted(wing_sd=0.0)
+
+
+def test_the_runtime_path_still_applies_the_percentile_floor():
+    quiet = from_quotes(_series(QUIET), call_premium=21.0, put_premium=19.0,
+                        spot=24_800.0, minutes_to_expiry=30.0, horizon_bars=30)
+    assert quiet.eligible is False
+    assert "does not cover the tail" in quiet.reason
+
+
+def test_the_research_path_is_labelled_as_such():
+    """evaluate() still derives the credit from sqrt(horizon), which models an
+    option expiring at the horizon. That is fine for uniform study work and is
+    not what should price a trade."""
+    assert "expiring at the horizon" in (evaluate.__doc__ or "")
+    assert "from_quotes" in (evaluate.__doc__ or "")

@@ -127,14 +127,17 @@ def evaluate(
     min_percentile: float = MIN_FORECAST_PERCENTILE,
     multiple: float | None = None,
 ) -> HarvestStructure | None:
-    """Price a defined-risk short-volatility structure, or decline.
+    """Research pricing: derive a structure from an implied-to-realised ratio.
 
-    `implied_vol_ratio` is implied divided by realised, taken from live quotes.
-    It is required rather than defaulted: the entire expectancy is proportional
-    to it, and a default would let a research assumption reach a trade.
+    **This models an option expiring at the horizon.** The credit comes from
+    `sqrt(horizon_bars)`, which is the terminal standard deviation of a contract
+    that settles when the hold ends. Real options mostly do not, and holding a
+    dated one for thirty minutes collects a fraction of a percent of its premium
+    rather than all of it.
 
-    Returns None when there is not enough history to forecast — that is the
-    engine unable to ask, which is different from declining.
+    Keep using this for study work, where the assumption is stated and uniform.
+    For anything that trades, use :func:`from_quotes`, which takes the premium
+    the market is actually showing and needs no assumption at all.
     """
     if implied_vol_ratio <= 0:
         raise VolatilityHarvestError("implied_vol_ratio must be positive and measured from live quotes")
@@ -149,12 +152,69 @@ def evaluate(
     if view is None:
         return None
 
-    # Standard deviation of the terminal move the market is charging for.
     sd_bps = implied_vol_ratio * view.realised_vol_bps * math.sqrt(max(1, horizon_bars))
     if sd_bps <= 0:
         return None
+    return _build(sd_bps, ATM_STRADDLE_COEFFICIENT * sd_bps, wing_sd, view, min_percentile)
 
-    gross_credit = ATM_STRADDLE_COEFFICIENT * sd_bps
+
+def from_quotes(
+    closes: Sequence[float],
+    *,
+    call_premium: float,
+    put_premium: float,
+    spot: float,
+    minutes_to_expiry: float,
+    horizon_bars: int = 30,
+    wing_sd: float = WING_DISTANCE_SD,
+    min_percentile: float = MIN_FORECAST_PERCENTILE,
+    multiple: float | None = None,
+) -> HarvestStructure | None:
+    """Price the structure from the premium the market is actually showing.
+
+    This is the runtime path, and it removes the assumption rather than
+    parameterising it: the credit is the quoted straddle, not a number derived
+    from a volatility ratio someone chose.
+
+    It also enforces the thing the research could not. The payoff
+    `credit - |move|` is only the truth when the contract **settles at the end of
+    the hold**. So the hold is required to reach expiry, within a bar's
+    tolerance. A dated option held for part of its life is a
+    mark-to-market on gamma and theta, which is a different trade with a
+    different sign, and pricing it as premium collection is precisely the error
+    that made the offline study look conclusive.
+    """
+    if wing_sd <= 0:
+        raise VolatilityHarvestError("wing distance must be positive — this module does not sell naked")
+    if call_premium <= 0 or put_premium <= 0 or spot <= 0:
+        return None
+    if minutes_to_expiry <= 0:
+        return None
+
+    # The hold must run to settlement, or the payoff below is not this payoff.
+    if minutes_to_expiry > horizon_bars + 1:
+        raise VolatilityHarvestError(
+            f"contract has {minutes_to_expiry:.0f} minutes left but the hold is "
+            f"{horizon_bars} bars — premium collection requires holding to expiry; "
+            f"select a nearer expiry or lengthen the horizon")
+
+    view: VolatilityForecast | None = (
+        forecast(closes, horizon_bars=horizon_bars, multiple=multiple)
+        if multiple is not None
+        else forecast(closes, horizon_bars=horizon_bars)
+    )
+    if view is None:
+        return None
+
+    gross_credit = ((call_premium + put_premium) / spot) * 10_000.0
+    # Back out the standard deviation the quoted straddle implies, so the wings
+    # are priced against the market's own view rather than against ours.
+    sd_bps = gross_credit / ATM_STRADDLE_COEFFICIENT
+    return _build(sd_bps, gross_credit, wing_sd, view, min_percentile)
+
+
+def _build(sd_bps: float, gross_credit: float, wing_sd: float,
+           view: VolatilityForecast, min_percentile: float) -> HarvestStructure:
     wing_bps = wing_sd * sd_bps
     net_credit = gross_credit - strangle_value(sd_bps, wing_bps)
     max_loss = wing_bps - net_credit
@@ -165,24 +225,18 @@ def evaluate(
             view.excursion_bps, view.realised_vol_bps, view.percentile,
             False, "wings cost more than the body collects at this width")
 
-    structure = HarvestStructure(
-        net_credit_bps=net_credit,
-        wing_bps=wing_bps,
-        max_loss_bps=max_loss,
-        breakeven_bps=net_credit,
-        forecast_bps=view.excursion_bps,
-        realised_vol_bps=view.realised_vol_bps,
-        forecast_percentile=view.percentile,
-        eligible=False,
-        reason="",
-    )
+    base = HarvestStructure(
+        net_credit_bps=net_credit, wing_bps=wing_bps, max_loss_bps=max_loss,
+        breakeven_bps=net_credit, forecast_bps=view.excursion_bps,
+        realised_vol_bps=view.realised_vol_bps, forecast_percentile=view.percentile,
+        eligible=False, reason="")
 
     if view.percentile < min_percentile:
-        return _with(structure, False,
+        return _with(base, False,
                      f"forecast in the {view.percentile:.0%} percentile, below the "
                      f"{min_percentile:.0%} floor — the premium does not cover the tail "
                      f"in quiet tape")
-    return _with(structure, True,
+    return _with(base, True,
                  f"selling into the {view.percentile:.0%} percentile of forecast movement, "
                  f"risk capped at {max_loss:.1f}bps for {net_credit:.1f}bps of credit")
 
