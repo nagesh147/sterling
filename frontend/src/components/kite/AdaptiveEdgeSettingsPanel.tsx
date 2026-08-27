@@ -1,3 +1,73 @@
+
+/* The risk controls the engine actually reads.
+   The legacy sections above (Trail tightness, Exit rule, Structure, Mode rungs)
+   belong to an earlier moving-average scalper and reach no engine; the API lists
+   them in `inert_fields`. These are the ones that decide what a live position
+   would cost, so they get their own section rather than being buried behind an
+   API call an operator would have to know about. */
+function EngineRiskSection() {
+  const { data } = useAdaptiveEdgeEngineConfig();
+  const save = useSetAdaptiveEdgeEngineConfig();
+  const [draft, setDraft] = React.useState<Record<string, unknown> | null>(null);
+
+  React.useEffect(() => {
+    if (data?.config && draft === null) setDraft({ ...data.config });
+  }, [data, draft]);
+
+  if (!data || !draft) return null;
+
+  const value = (key: string) => Number(draft[key] ?? 0);
+  const patch = (next: Record<string, unknown>) => setDraft({ ...draft, ...next });
+  const dirty = JSON.stringify(draft) !== JSON.stringify(data.config);
+  const num = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    patch({ [key]: Number(e.target.value) });
+
+  return (
+    <Section
+      title="Risk and session"
+      description="What a position costs, how many run at once, and when the day ends. These reach the engine."
+      summary={`${value('lots')} lot · ${value('stop_percent')}% stop · max ${value('max_positions')} · flat ${String(draft.square_off_time)}`}
+      defaultOpen
+      persistKey="ae-engine-risk"
+    >
+      <Field label="Lots" hint="Contracts per entry, in exchange lots.">
+        <input style={inputStyle} type="number" min={1} value={value('lots')} onChange={num('lots')} />
+      </Field>
+      <Field label="Stop (% of premium)" hint="Distance from entry at which the position is closed.">
+        <input style={inputStyle} type="number" min={1} max={100} value={value('stop_percent')} onChange={num('stop_percent')} />
+      </Field>
+      <Field label="Target multiple" hint="Exit target as a multiple of entry premium.">
+        <input style={inputStyle} type="number" step="0.1" min={0.1} value={value('target_multiple')} onChange={num('target_multiple')} />
+      </Field>
+      <Field label="Max positions" hint="Open at once. Risk adds up across them.">
+        <input style={inputStyle} type="number" min={1} value={value('max_positions')} onChange={num('max_positions')} />
+      </Field>
+      <Field label="Max daily loss" hint="0 means no cap: a losing day is bounded only by per-trade stops.">
+        <input style={inputStyle} type="number" min={0} value={value('max_daily_loss')} onChange={num('max_daily_loss')} />
+      </Field>
+      <Field label="Square off" hint="IST. The position is flat before the close rather than carried into settlement.">
+        <input style={inputStyle} type="text" value={String(draft.square_off_time ?? '')} onChange={(e) => patch({ square_off_time: e.target.value })} />
+      </Field>
+
+      {data.warnings.map((warning) => (
+        <ConfigNote key={warning}>{warning}</ConfigNote>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, paddingTop: 10 }}>
+        <button
+          type="button"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(draft, { onSuccess: () => setDraft(null) })}
+          style={{ ...inputStyle, cursor: dirty ? 'pointer' : 'default', opacity: dirty ? 1 : 0.5, width: 'auto', padding: '6px 14px' }}
+        >
+          {save.isPending ? 'Saving…' : 'Apply'}
+        </button>
+        {dirty ? <span style={{ color: MUTED, fontSize: 11.5, alignSelf: 'center' }}>Unsaved changes</span> : null}
+      </div>
+    </Section>
+  );
+}
+
 import React from 'react';
 import {
   Field, MUTED, Section, Switch, TEXT, inputStyle,
@@ -6,7 +76,10 @@ import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitiv
 import { EnginePowerHeader } from './config/EnginePowerHeader';
 import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
 import { scanSourceLabel } from './config/registry';
-import { useAdaptiveEdgeSettings, useAdaptiveEdgeSnapshot, useSetAdaptiveEdgeSettings } from '../../hooks/useAdaptiveEdge';
+import {
+  useAdaptiveEdgeEngineConfig, useAdaptiveEdgeSettings, useAdaptiveEdgeSnapshot,
+  useSetAdaptiveEdgeEngineConfig, useSetAdaptiveEdgeSettings,
+} from '../../hooks/useAdaptiveEdge';
 import type { AdaptiveEdgeSettings } from '../../types/adaptiveEdge';
 import type { Moneyness, ScanExpiry, ScanSource } from '../../types/kiteEngine';
 
@@ -217,6 +290,8 @@ export function AdaptiveEdgeSettingsPanel() {
             Kite orders stay blocked.
           </ConfigNote>
         </Section>
+
+        <EngineRiskSection />
 
         <Section
           title="Daily drawdown circuit breaker"

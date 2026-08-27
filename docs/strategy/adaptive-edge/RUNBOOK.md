@@ -1,0 +1,104 @@
+# Adaptive Edge — operator runbook
+
+What this engine does at the open, what it will and will not do with money, and
+how to tell the difference between "no setup" and "broken".
+
+## What it is today
+
+`PAPER_READY` in A166 terms. It scans, ranks contracts, and paper-trades. It
+cannot reach real money, and that is enforced in code rather than by convention.
+
+| Gate | State | Effect |
+|---|---|---|
+| Formula gate | BLOCKED (`required_strategy_formula_not_implemented`) | F-101..F-114 are LOCKED in the registry |
+| Promotion gate | BLOCKED (`strategy_promotion_required`) | Refuses live regardless of the account setting |
+| Account paper/live | Yours | Paper is simulated inside KiteClient |
+| Account manual/auto | Yours | Gates opening only, never exits |
+
+Verify all four at any time:
+
+```bash
+curl -s localhost:8000/api/v1/config/adaptive-edge/snapshot | jq .readiness
+```
+
+## Why it is not live
+
+The mathematics comes from an authoritative source — the Master Mathematical
+Specification v1.0 in `adaptive-edge/`. The *numbers* do not, and cannot yet:
+§19 forbids using any threshold that has not survived walk-forward validation,
+and §51–§55 place every parameter under learning rather than specification.
+
+So every value in `backend/app/engines/adaptive_edge/config.py` is a research
+default. `CALIBRATED_FIELDS` is empty and the API publishes that, so the settings
+page marks them rather than showing bare numbers an operator could reasonably
+read as measured.
+
+**Do not promote the strategy to clear the gate.** Promotion without the
+calibration is just putting money on placeholder numbers with an extra step.
+
+## At the open
+
+Nothing to do. The scan loop starts with the server and runs every 60s, and is a
+no-op outside `session_start`–`session_end` (09:20–15:10 IST by default).
+
+Watch the board. Candidates will appear; none will be armable, and each says why:
+
+    Uncalibrated: the entry gate needs a directional probability,
+    and that model has not been fitted yet.
+
+That is the expected state, not a fault.
+
+## Reading an empty board
+
+The scan reports per-stage counts precisely so "nothing found" is diagnosable:
+
+```bash
+curl -s localhost:8000/api/v1/config/adaptive-edge/scan -X POST | jq '{underlyings, chains_read, listed, tradeable, skipped, dropped, errors}'
+```
+
+| Symptom | Meaning |
+|---|---|
+| `underlyings: 0` | No index or stock selected |
+| `listed: 0` | Every contract fell outside the expiry or strike window |
+| `tradeable: 0` with `dropped` populated | Contracts existed but failed liquidity — the tally says which filter |
+| `errors` populated | Instrument dump, quotes, or the account is unavailable |
+
+The classic misconfiguration is an expiry window that excludes everything, which
+otherwise looks identical to a quiet market. `validate()` rejects the worst case
+(`avoid_expiry_day` with `expiry_dte_max = 0`) outright.
+
+## Settings
+
+Two surfaces, one source of truth.
+
+* `/api/v1/config/adaptive-edge` — the engine configuration the scanner and
+  runner read. Authoritative.
+* `/api/v1/adaptive-edge/settings` — the legacy page. Fields it shares with the
+  engine config are mirrored on write; the rest belong to an earlier
+  moving-average scalper and reach no engine. Those are listed in
+  `inert_fields`, and the UI marks them.
+
+The risk controls that matter — lots, stop, target, max positions, daily loss
+cap, square-off — are in the **Risk and session** section, which writes to the
+engine config directly.
+
+## What would make it live
+
+All of A166's conjunctive terms, but the one actually outstanding is
+`research_validation_complete`:
+
+1. Collect sessions on paper.
+2. Walk-forward calibrate the parameters per §51–§55, honouring the purge and
+   embargo boundaries (`walk_forward.build_folds`).
+3. Validate out of sample; record the report.
+4. Only then promote, by changing `CURRENT_STRATEGY_PROMOTION` deliberately.
+
+Step 4 is one constant. Steps 1–3 are the work, and skipping them is the failure
+mode this whole gate exists to prevent.
+
+## Known limitation: order flow
+
+The strategy's §8–§11 features want aggressor-classified trade prints. Kite ticks
+carry no aggressor flag, so with `data_source = "kite"` those features run in a
+degraded, quote-derived form. The config warns about this on every read.
+`data_source = "truedata"` is the path to the real thing.

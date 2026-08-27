@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { AdaptiveEdgeSettingsPanel } from '../AdaptiveEdgeSettingsPanel';
 
-const { settingsQuery, snapshotQuery } = vi.hoisted(() => {
+const { settingsQuery, snapshotQuery, engineConfigQuery, engineSave } = vi.hoisted(() => {
   const settings = {
     enabled: true,
     symbol: 'NIFTY-I',
@@ -33,6 +33,27 @@ const { settingsQuery, snapshotQuery } = vi.hoisted(() => {
   return {
     settingsQuery: { data: { settings, live_trading: false }, isLoading: false, error: null },
     snapshotQuery: { data: { software_complete: true, readiness: [] } },
+    /* The engine configuration the scanner and runner actually read, as opposed
+       to the legacy settings above. Kept minimal but real: the section renders
+       straight off `config`, so a wrong key here shows up as a missing field. */
+    engineConfigQuery: {
+      data: {
+        strategy: {
+          id: 'adaptive_edge', name: 'Adaptive Edge', validated: false,
+          calibrated_fields: [], calibration: { status: 'UNCALIBRATED — research defaults' },
+          headline_finding: 'has no demonstrated edge', what_to_do: 'Run it on paper',
+        },
+        config: {
+          lots: 1, stop_percent: 30, target_multiple: 2, max_positions: 1,
+          max_daily_loss: 0, square_off_time: '15:15',
+        },
+        defaults: {},
+        vocabularies: {},
+        warnings: ['No parameter in this configuration has been walk-forward calibrated.'],
+      },
+      isLoading: false, error: null,
+    },
+    engineSave: vi.fn(),
   };
 });
 
@@ -40,6 +61,8 @@ vi.mock('../../../hooks/useAdaptiveEdge', () => ({
   useAdaptiveEdgeSettings: () => settingsQuery,
   useAdaptiveEdgeSnapshot: () => snapshotQuery,
   useSetAdaptiveEdgeSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  useAdaptiveEdgeEngineConfig: () => engineConfigQuery,
+  useSetAdaptiveEdgeEngineConfig: () => ({ mutate: engineSave, isPending: false }),
 }));
 
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
@@ -70,5 +93,36 @@ describe('AdaptiveEdgeSettingsPanel', () => {
     expect(screen.getByText('Daily drawdown circuit breaker')).toBeInTheDocument();
     expect(screen.getByLabelText('Enable daily drawdown circuit breaker')).toBeInTheDocument();
     expect(screen.getByLabelText('Flatten at 14:45 IST')).toBeDisabled();
+  });
+});
+
+describe('AdaptiveEdgeSettingsPanel — engine risk section', () => {
+  it('exposes the risk controls that actually reach the engine', () => {
+    renderPanel();
+    expect(screen.getByText('Risk and session')).toBeInTheDocument();
+    for (const label of ['Lots', 'Stop (% of premium)', 'Target multiple',
+                         'Max positions', 'Max daily loss', 'Square off']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it('opens by default, so the risk numbers are not hidden behind a disclosure', () => {
+    renderPanel();
+    // Section renders a <details>; children sit in the DOM either way, so the
+    // open flag is the only thing that proves an operator can see these.
+    const heading = screen.getByText('Risk and session');
+    const details = heading.closest('details');
+    expect(details).not.toBeNull();
+    expect((details as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('states that nothing is calibrated rather than showing bare numbers', () => {
+    renderPanel();
+    expect(screen.getByText(/walk-forward calibrated/i)).toBeInTheDocument();
+  });
+
+  it('summarises the configured risk without opening the section', () => {
+    renderPanel();
+    expect(screen.getByText(/1 lot · 30% stop · max 1 · flat 15:15/)).toBeInTheDocument();
   });
 });
