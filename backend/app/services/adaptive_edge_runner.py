@@ -853,7 +853,7 @@ async def square_off_all(uid: str) -> dict[str, Any]:
     for position in holdings:
         price = position.peak_price or position.entry_price
         try:
-            quote = await client.quote([f"{position.exchange}:{position.symbol}"])
+            quote = await client.get_quote([f"{position.exchange}:{position.symbol}"])
             live = float((quote or {}).get(f"{position.exchange}:{position.symbol}", {})
                          .get("last_price") or 0.0)
             if live > 0:
@@ -975,10 +975,23 @@ async def _auto_enter(uid: str) -> int:
 
 
 def _kite_user_ids() -> list[str]:
+    """Every connected account the loop should scan.
+
+    `bootstrap()` first: accounts are loaded lazily, so without it a freshly
+    started process sees none and the loop quietly does nothing.
+
+    This previously called a function that does not exist on the accounts module,
+    inside a bare except that returned an empty list — so the scan loop
+    enumerated nobody every sixty seconds and logged nothing. A no-op that
+    reports success is worse than a crash, and the except is narrowed here so the
+    next one is visible.
+    """
     try:
         from app.services.exchanges.kite import accounts
-        return list(accounts.active_user_ids())
-    except Exception:                                              # noqa: BLE001
+        accounts.bootstrap()
+        return sorted({a.user_id for a in accounts.all_accounts() if a.is_active})
+    except Exception as exc:                                       # noqa: BLE001
+        log.error("adaptive_edge: could not enumerate Kite accounts (%s)", exc)
         return []
 
 

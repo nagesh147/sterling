@@ -486,7 +486,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             spot = 0.0
             spot_token = 0
             try:
-                quotes = await client.quote([spot_key])
+                quotes = await client.get_quote([spot_key])
                 spot = _num((quotes or {}).get(spot_key, {}).get("last_price"))
                 spot_token = int(_num((quotes or {}).get(spot_key, {}).get("instrument_token")))
             except Exception as exc:                               # noqa: BLE001
@@ -557,7 +557,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             await pacer.wait()
             keys = [f"NFO:{r.get('instrument_name')}" for r in listed if r.get("instrument_name")]
             try:
-                chain_quotes = await client.quote(keys) or {}
+                chain_quotes = await client.get_quote(keys) or {}
             except Exception as exc:                               # noqa: BLE001
                 state["skipped"][name] = f"chain quotes unavailable: {exc}"
                 continue

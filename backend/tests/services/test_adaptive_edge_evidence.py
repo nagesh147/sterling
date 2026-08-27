@@ -7,6 +7,8 @@ of readings can actually get them.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app.services import adaptive_edge_evidence as evidence
@@ -132,3 +134,43 @@ def test_arming_is_blocked_by_the_gate(store, monkeypatch):
     assert result["ok"] is False
     assert "evidence gate" in result["reason"]
     runner.clear("u1")
+
+
+# ------------------------------------------- the client API these paths use
+
+def test_the_scanner_and_runner_call_methods_the_client_actually_has():
+    """Both bugs found the moment a live Kite session existed.
+
+    The scanner called `client.quote(...)`, which does not exist — the method is
+    `get_quote`. Every call sat inside a try/except, so a real scan reported
+    "quotes unavailable" and carried on: the engine could never have worked, and
+    nothing failed loudly enough to say so.
+
+    A name checked against the real class is worth more than a mock that agrees
+    with whatever it is told.
+    """
+    import inspect
+    from app.services.exchanges.kite.client import KiteClient
+    from app.services import adaptive_edge_runner, adaptive_edge_scanner
+
+    available = {n for n in dir(KiteClient) if not n.startswith("_")}
+    for module in (adaptive_edge_scanner, adaptive_edge_runner):
+        source = inspect.getsource(module)
+        for call in re.findall(r"\bclient\.(\w+)\s*\(", source):
+            assert call in available, (
+                f"{module.__name__} calls client.{call}(), which KiteClient does "
+                f"not have — this fails only at runtime, inside an except")
+
+
+def test_account_enumeration_uses_the_real_accounts_api():
+    """`_kite_user_ids` called `accounts.active_user_ids()`, which does not
+    exist, inside a bare except returning []. The 60-second scan loop therefore
+    enumerated nobody and logged nothing — a no-op reporting success."""
+    import inspect
+    from app.services.exchanges.kite import accounts
+    from app.services import adaptive_edge_runner
+
+    source = inspect.getsource(adaptive_edge_runner._kite_user_ids)
+    available = {n for n in dir(accounts) if not n.startswith("_")}
+    for call in re.findall(r"\baccounts\.(\w+)\s*\(", source):
+        assert call in available, f"accounts.{call}() does not exist"
