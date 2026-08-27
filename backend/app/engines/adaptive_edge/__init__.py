@@ -9,6 +9,25 @@ ENGINE_NAME = "Adaptive Edge"
 ENGINE_ID = "adaptive_edge"
 ENGINE_VERSION = "0.1.0"
 
+#: Shared strategy vocabulary, identical in shape to every other engine here so
+#: the settings hub, the board and the config API address this engine the same
+#: way they address the others.
+STRATEGY_ID = ENGINE_ID
+STRATEGY_NAME = ENGINE_NAME
+#: The authoritative source artifact this engine implements.
+CONTRACT_VERSION = "MS-1.0"
+
+from .config import (
+    AdaptiveEdgeConfig,
+    CALIBRATED_FIELDS,
+    DATA_SOURCES,
+    DECISION_TIMEFRAMES,
+    EXIT_POLICIES,
+    PARAMETER_PROVENANCE,
+    SIZING_MODES,
+    STOP_MODES,
+)
+
 from .execution_ordering import (
     DeterministicExecutionSequencer,
     ExecutionConflictError,

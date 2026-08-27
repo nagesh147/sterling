@@ -183,6 +183,19 @@ class AdaptiveEdgeConfig:
     session_end: str = "15:10"
     square_off_time: str = "15:15"
 
+    @classmethod
+    def field_names(cls) -> frozenset[str]:
+        return frozenset(f.name for f in fields(cls))
+
+    def as_dict(self) -> dict[str, Any]:
+        """JSON-round-trippable form. Tuples become lists; ``get_config`` puts
+        them back, so a stored config compares equal to the one that wrote it."""
+        out: dict[str, Any] = {}
+        for f in fields(self):
+            value = getattr(self, f.name)
+            out[f.name] = list(value) if isinstance(value, tuple) else value
+        return out
+
     def validate(self) -> "AdaptiveEdgeConfig":
         """Reject a configuration the engine cannot honestly run.
 
