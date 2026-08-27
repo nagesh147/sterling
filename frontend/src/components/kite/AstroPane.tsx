@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { useCandles } from '../../hooks/useCandles';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso } from '../../lib/astro/holidays';
@@ -187,6 +187,89 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   margin-left: 5px;
   font-size: 12px;
   font-weight: 500;
+}
+.ko-clock-wrap {
+  border-top: 1px solid var(--k-surface-hover);
+  margin: 0 0 8px;
+}
+.ko-clock {
+  width: 100%;
+  min-width: 560px;
+}
+.ko-clock thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--k-bg);
+  color: var(--k-dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+}
+.ko-clock td {
+  padding: 11px 12px;
+  font-size: 13px;
+  vertical-align: middle;
+}
+.ko-clock tbody tr {
+  cursor: pointer;
+}
+.ko-clock tbody tr:focus-visible {
+  outline: 2px solid var(--k-orange);
+  outline-offset: -2px;
+}
+.ko-clock tbody tr[data-dim] {
+  opacity: 0.5;
+}
+.ko-clock tbody tr[data-live] {
+  box-shadow: inset 2px 0 var(--k-orange);
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-clock tbody tr[data-on]:not([data-live]),
+.ko-clock tbody tr:hover:not([data-live]) {
+  background: var(--k-surface-2);
+}
+.ko-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ko-clock-play {
+  font-weight: 500;
+}
+.ko-time-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ko-tag-next {
+  color: var(--k-dim);
+  background: var(--k-surface-hover);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-left: 0;
+}
+.ko-expand td {
+  padding: 8px 12px 14px;
+  background: var(--k-surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: default;
+  white-space: normal;
+}
+.ko-expand p { margin: 0 0 6px; }
+.ko-expand p:last-child { margin: 0; }
+.ko-clock tbody tr[data-live] + .ko-expand td {
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-time { white-space: nowrap; }
+.ko-time-meta {
+  display: block;
+  color: var(--k-dim);
+  font-size: 11px;
+  margin-top: 2px;
 }
 .ko-title-row h2 {
   font-size: 20px;
@@ -518,8 +601,6 @@ export function AstroPane() {
   const [tab, setTab] = useState<Tab>("session");
   const [now, setNow] = useState<Date | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [earlierOpen, setEarlierOpen] = useState(false);
-  const [laterOpen, setLaterOpen] = useState(false);
   const [notes, setNotes] = useState(false);
   const candles = useCandles(underlying, '5m', 400);
   const [status, setStatus] = useState<LiveNow | null>(null);
@@ -588,8 +669,6 @@ export function AstroPane() {
   useEffect(() => {
     if (!liveKey) return;
     setOpenKey(liveKey);
-    setEarlierOpen(false);
-    setLaterOpen(false);
   }, [liveKey]);
 
   const applyIso = (next: string) => {
@@ -620,14 +699,7 @@ export function AstroPane() {
 
   const pickSlot = (slot: WindowSlot) => {
     if (tab === "month") setTab("session");
-    const key = slotKey(slot);
-    setOpenKey(key);
-    const row = clockRows.find((s) => slotKey(s) === key);
-    if (row?.isPast) setEarlierOpen(true);
-    if (row && !row.isPast && !row.isLive) {
-      const upcoming = clockRows.filter((s) => !s.isPast && !s.isLive);
-      if (upcoming[0] && slotKey(upcoming[0]) !== key) setLaterOpen(true);
-    }
+    setOpenKey(slotKey(slot));
   };
 
   const pickDay = (date: string) => {
@@ -758,15 +830,11 @@ export function AstroPane() {
                   grades={grades}
                   onPick={pickSlot}
                 />
-                <ClockList
+                <ClockTable
                   rows={clockRows}
                   grades={grades}
                   loading={tapeLoading}
                   openKey={openKey}
-                  earlierOpen={earlierOpen}
-                  laterOpen={laterOpen}
-                  onEarlier={() => setEarlierOpen((v) => !v)}
-                  onLater={() => setLaterOpen((v) => !v)}
                   onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
                 />
               </div>
@@ -792,86 +860,81 @@ export function AstroPane() {
   );
 }
 
-function ClockList({
+function ClockTable({
   rows,
   grades,
   loading,
   openKey,
-  earlierOpen,
-  laterOpen,
-  onEarlier,
-  onLater,
   onToggle,
 }: {
   rows: WindowSlot[];
   grades: Map<string, SlotGrade>;
   loading: boolean;
   openKey: string | null;
-  earlierOpen: boolean;
-  laterOpen: boolean;
-  onEarlier: () => void;
-  onLater: () => void;
   onToggle: (key: string) => void;
 }) {
-  const spent = rows.filter((s) => s.isPast && !s.isLive);
-  const live = rows.filter((s) => s.isLive);
-  const upcoming = rows.filter((s) => !s.isPast && !s.isLive);
-  const next = upcoming[0] ? [upcoming[0]] : [];
-  const later = upcoming.slice(1);
-  const spentLabel = live.length === 0 && upcoming.length === 0 ? `Session · ${spent.length}` : `Earlier · ${spent.length}`;
+  const liveRef = useRef<HTMLTableRowElement>(null);
+  const live = rows.find((s) => s.isLive);
+  const next = rows.find((s) => !s.isPast && !s.isLive);
+  const nextKey = live && next ? slotKey(next) : "";
+  const dimSpent = Boolean(live);
+  const liveId = live ? slotKey(live) : "";
 
-  const renderItem = (slot: WindowSlot) => (
-    <ClockItem
-      key={slotKey(slot)}
-      slot={slot}
-      grade={grades.get(slotKey(slot))}
-      loading={loading}
-      open={openKey === slotKey(slot)}
-      onToggle={() => onToggle(slotKey(slot))}
-    />
-  );
+  useEffect(() => {
+    liveRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [liveId]);
 
   return (
-    <div className="ko-acc">
-      {spent.length > 0 ? (
-        <div className="ko-acc-group">
-          <button type="button" className="ko-acc-sum" aria-expanded={earlierOpen} onClick={onEarlier}>
-            {spentLabel}
-            <span className="ko-acc-chev" aria-hidden>
-              {earlierOpen ? "▾" : "▸"}
-            </span>
-          </button>
-          {earlierOpen ? spent.map(renderItem) : null}
-        </div>
-      ) : null}
-      {live.map(renderItem)}
-      {next.map(renderItem)}
-      {later.length > 0 ? (
-        <div className="ko-acc-group">
-          <button type="button" className="ko-acc-sum" aria-expanded={laterOpen} onClick={onLater}>
-            Later · {later.length}
-            <span className="ko-acc-chev" aria-hidden>
-              {laterOpen ? "▾" : "▸"}
-            </span>
-          </button>
-          {laterOpen ? later.map(renderItem) : null}
-        </div>
-      ) : null}
+    <div className="ko-scroll ko-clock-wrap">
+      <table className="ko-table ko-clock">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Side</th>
+            <th>Play</th>
+            <th className="ko-num">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((slot) => {
+            const key = slotKey(slot);
+            return (
+              <TimingRow
+                key={key}
+                slot={slot}
+                grade={grades.get(key)}
+                loading={loading}
+                open={openKey === key}
+                dim={dimSpent && slot.isPast}
+                next={key === nextKey}
+                rowRef={slot.isLive ? liveRef : undefined}
+                onToggle={() => onToggle(key)}
+              />
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function ClockItem({
+function TimingRow({
   slot,
   grade,
   loading,
   open,
+  dim,
+  next,
+  rowRef,
   onToggle,
 }: {
   slot: WindowSlot;
   grade?: SlotGrade;
   loading: boolean;
   open: boolean;
+  dim: boolean;
+  next: boolean;
+  rowRef?: Ref<HTMLTableRowElement>;
   onToggle: () => void;
 }) {
   const tone = actionTone(slot.action, slot.side);
@@ -880,31 +943,50 @@ function ClockItem({
     .filter(Boolean)
     .join(" · ");
   return (
-    <div className="ko-acc-item" data-live={slot.isLive} data-on={open}>
-      <button type="button" className="ko-acc-head" aria-expanded={open} onClick={onToggle}>
-        <span className="ko-acc-time">
-          {slot.from}–{slot.to}
-        </span>
-        {slot.isLive ? <span className="ko-tag ko-tag-now">NOW</span> : null}
-        <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
-        <span className={`ko-acc-play ${tone}`}>{slot.action}</span>
-        <span className="ko-acc-result">
-          <GradeMark grade={grade} loading={loading} />
-        </span>
-        <span className="ko-acc-chev" aria-hidden>
-          {open ? "▾" : "▸"}
-        </span>
-      </button>
-      {open ? (
-        <div className="ko-acc-body">
-          {slot.isLive ? null : <p>{slot.suggestion}</p>}
-          <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
-          <p className="ko-acc-meta">
-            {mins}m · {slot.hora} hora
+    <>
+      <tr
+        ref={rowRef}
+        data-on={open || undefined}
+        data-live={slot.isLive || undefined}
+        data-dim={dim || undefined}
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        <td className="ko-time">
+          <span className="ko-time-range">
+            {slot.from}–{slot.to}
+            {slot.isLive ? <span className="ko-tag ko-tag-now">NOW</span> : null}
+            {next ? <span className="ko-tag ko-tag-next">NEXT</span> : null}
+          </span>
+          <span className="ko-time-meta">
+            {mins}m · {slot.hora}
             {kalam ? ` · ${kalam}` : ""}
-          </p>
-        </div>
+          </span>
+        </td>
+        <td>
+          <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
+        </td>
+        <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
+        <td className="ko-num">
+          <GradeMark grade={grade} loading={loading} />
+        </td>
+      </tr>
+      {open ? (
+        <tr className="ko-expand">
+          <td colSpan={4}>
+            {slot.isLive ? null : <p>{slot.suggestion}</p>}
+            <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
+          </td>
+        </tr>
       ) : null}
-    </div>
+    </>
   );
 }
+
