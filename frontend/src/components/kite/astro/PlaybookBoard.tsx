@@ -95,7 +95,7 @@ export function PlaybookStrip({
       )}
       <div className="ko-play-roles">
         <button type="button" data-state={ceState ?? undefined} disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
-          <span className="lbl">Best CE{stateMark(ceState)}</span>
+          <span className="lbl">CE{stateMark(ceState)}</span>
           {pb.bestCe ? (
             <>
               {pb.bestCe.from}–{pb.bestCe.to}{" "}
@@ -106,7 +106,7 @@ export function PlaybookStrip({
           )}
         </button>
         <button type="button" data-state={peState ?? undefined} disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
-          <span className="lbl">Best PE{stateMark(peState)}</span>
+          <span className="lbl">PE{stateMark(peState)}</span>
           {pb.bestPe ? (
             <>
               {pb.bestPe.from}–{pb.bestPe.to}{" "}

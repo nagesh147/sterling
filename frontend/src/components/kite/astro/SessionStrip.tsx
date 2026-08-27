@@ -1,14 +1,22 @@
-import { clockFromMinutes, formatIstIsoDate, getIstParts, MARKET_CLOSE_MIN, MARKET_OPEN_MIN, minutesOfDay } from "../../../lib/astro/time";
-import type { SessionTape } from "../../../lib/astro/tape";
+import {
+  clockFromMinutes,
+  formatIstIsoDate,
+  getIstParts,
+  MARKET_CLOSE_MIN,
+  MARKET_OPEN_MIN,
+  minutesOfDay,
+} from "../../../lib/astro/time";
+import type { SessionTape, SlotGrade } from "../../../lib/astro/tape";
 import type { WindowSlot } from "../../../lib/astro/types";
 
-const W = 750;
-const TAPE_TOP = 6;
-const TAPE_H = 32;
-const BAR_Y = 42;
-const BAR_H = 16;
-const HORA_Y = 72;
-const H = 86;
+const W = 800;
+const TAPE_TOP = 10;
+const TAPE_H = 52;
+const BAR_Y = 70;
+const BAR_H = 22;
+const HORA_Y = 106;
+const AXIS_Y = 122;
+const H = 132;
 const SPAN = MARKET_CLOSE_MIN - MARKET_OPEN_MIN;
 
 const TICKS = [MARKET_OPEN_MIN, 600, 660, 720, 780, 840, 900, MARKET_CLOSE_MIN];
@@ -59,12 +67,13 @@ function mixMinutes(slots: WindowSlot[]) {
   return { ce, pe, both, wait, total: ce + pe + both + wait || 1 };
 }
 
-function tapePoints(tape: SessionTape | null, iso: string): { d: string; up: boolean } | null {
+function tapeShape(tape: SessionTape | null, iso: string): { line: string; area: string; up: boolean } | null {
   if (!tape || tape.iso !== iso || !tape.bars.length) return null;
   const pts: { min: number; c: number }[] = [];
   for (const b of tape.bars) {
-    const p = getIstParts(new Date(b.t * 1000));
-    if (formatIstIsoDate(new Date(b.t * 1000)) !== iso) continue;
+    const t = new Date(b.t * 1000);
+    if (formatIstIsoDate(t) !== iso) continue;
+    const p = getIstParts(t);
     const min = minutesOfDay(p.hour, p.minute);
     if (min < MARKET_OPEN_MIN || min > MARKET_CLOSE_MIN) continue;
     pts.push({ min, c: b.c });
@@ -73,14 +82,17 @@ function tapePoints(tape: SessionTape | null, iso: string): { d: string; up: boo
   const lo = Math.min(...pts.map((p) => p.c));
   const hi = Math.max(...pts.map((p) => p.c));
   const span = hi - lo || 1;
-  const d = pts
-    .map((p, i) => {
-      const x = xOf(p.min).toFixed(1);
-      const y = (TAPE_TOP + TAPE_H - ((p.c - lo) / span) * TAPE_H).toFixed(1);
-      return `${i === 0 ? "M" : "L"}${x} ${y}`;
-    })
-    .join(" ");
-  return { d, up: pts[pts.length - 1].c >= pts[0].c };
+  const coords = pts.map((p) => {
+    const x = xOf(p.min).toFixed(1);
+    const y = (TAPE_TOP + TAPE_H - ((p.c - lo) / span) * TAPE_H).toFixed(1);
+    return { x, y };
+  });
+  const line = coords.map((p, i) => `${i === 0 ? "M" : "L"}${p.x} ${p.y}`).join(" ");
+  const last = coords[coords.length - 1];
+  const first = coords[0];
+  const base = TAPE_TOP + TAPE_H;
+  const area = `${line} L${last.x} ${base} L${first.x} ${base} Z`;
+  return { line, area, up: pts[pts.length - 1].c >= pts[0].c };
 }
 
 function tickLabel(min: number): string {
@@ -90,12 +102,20 @@ function tickLabel(min: number): string {
   return m === 0 ? `${h > 12 ? h - 12 : h}` : clockFromMinutes(min).replace(" ", "");
 }
 
+function gradeClass(kind: SlotGrade["kind"] | undefined): string {
+  if (kind === "HIT") return "ko-strip-hit";
+  if (kind === "MISS") return "ko-strip-miss";
+  if (kind === "LIVE") return "ko-strip-live";
+  return "";
+}
+
 export function SessionStrip({
   slots,
   iso,
   tape,
   nowMin,
   sameDay,
+  grades,
   onPick,
 }: {
   slots: WindowSlot[];
@@ -103,16 +123,17 @@ export function SessionStrip({
   tape: SessionTape | null;
   nowMin: number | null;
   sameDay: boolean;
+  grades?: Map<string, SlotGrade>;
   onPick?: (slot: WindowSlot) => void;
 }) {
-  const spark = tapePoints(tape, iso);
+  const spark = tapeShape(tape, iso);
   const mix = mixMinutes(slots);
   const live =
     sameDay && nowMin !== null && nowMin >= MARKET_OPEN_MIN && nowMin <= MARKET_CLOSE_MIN ? nowMin : null;
 
   return (
     <div className="ko-strip">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Cash session 09:15 to 15:30">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Session tape 09:15 to 15:30 IST">
         <defs>
           <pattern id="ko-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" stroke="#9b9b9b" strokeWidth="1" />
@@ -120,16 +141,21 @@ export function SessionStrip({
         </defs>
         <rect x="0" y={TAPE_TOP} width={W} height={TAPE_H} className="ko-strip-tapebg" />
         {spark ? (
-          <path d={spark.d} fill="none" className={spark.up ? "ko-strip-upline" : "ko-strip-downline"} strokeWidth="1.4" />
+          <>
+            <path d={spark.area} className={spark.up ? "ko-strip-upfill" : "ko-strip-downfill"} />
+            <path d={spark.line} fill="none" className={spark.up ? "ko-strip-upline" : "ko-strip-downline"} strokeWidth="1.6" />
+          </>
         ) : (
-          <text x="8" y={TAPE_TOP + 20} className="ko-strip-empty">
-            {tape && tape.bars.length ? "Tape outside this session" : "Tape —"}
+          <text x="10" y={TAPE_TOP + 30} className="ko-strip-empty">
+            {tape && tape.bars.length ? "Tape is for another session" : "Tape loading"}
           </text>
         )}
         {slots.map((s) => {
           const x = xOf(s.fromMin);
           const w = Math.max(1, xOf(s.toMin) - x);
-          const label = `${s.from}–${s.to} · ${s.action} · ${s.regime} · ${s.hora} hora${s.kalam.rahu ? " · Rahu" : ""}${s.kalam.yamagandam ? " · Yamagandam" : ""}`;
+          const label = `${s.from}–${s.to} · ${s.action} · ${s.hora} hora${s.kalam.rahu ? " · Rahu" : ""}${s.kalam.yamagandam ? " · Yama" : ""}`;
+          const g = grades?.get(`${s.from}-${s.to}`);
+          const mark = w >= 28 ? (s.side === "WAIT" ? "" : s.side === "BOTH" ? "±" : s.side) : "";
           return (
             <g key={`${s.from}-${s.to}`}>
               <title>{label}</title>
@@ -141,7 +167,13 @@ export function SessionStrip({
                 className={stripClass(s)}
                 onClick={() => onPick?.(s)}
               />
-              {s.kalam.rahu ? <rect x={x} y={BAR_Y} width={w} height={BAR_H} fill="url(#ko-hatch)" opacity="0.45" /> : null}
+              {s.kalam.rahu ? <rect x={x} y={BAR_Y} width={w} height={BAR_H} fill="url(#ko-hatch)" opacity="0.4" /> : null}
+              {g ? <rect x={x} y={BAR_Y} width={w} height="2.5" className={gradeClass(g.kind)} /> : null}
+              {mark && w >= 28 ? (
+                <text x={x + w / 2} y={BAR_Y + 15} textAnchor="middle" className="ko-strip-side">
+                  {mark}
+                </text>
+              ) : null}
             </g>
           );
         })}
@@ -158,8 +190,13 @@ export function SessionStrip({
         })}
         {TICKS.map((t) => (
           <g key={t}>
-            <line x1={xOf(t)} y1={BAR_Y + BAR_H} x2={xOf(t)} y2={BAR_Y + BAR_H + 4} className="ko-strip-tick" />
-            <text x={xOf(t)} y={84} textAnchor={t === MARKET_OPEN_MIN ? "start" : t === MARKET_CLOSE_MIN ? "end" : "middle"} className="ko-strip-lbl">
+            <line x1={xOf(t)} y1={BAR_Y + BAR_H} x2={xOf(t)} y2={BAR_Y + BAR_H + 5} className="ko-strip-tick" />
+            <text
+              x={xOf(t)}
+              y={AXIS_Y}
+              textAnchor={t === MARKET_OPEN_MIN ? "start" : t === MARKET_CLOSE_MIN ? "end" : "middle"}
+              className="ko-strip-lbl"
+            >
               {tickLabel(t)}
             </text>
           </g>
@@ -185,7 +222,7 @@ export function SessionStrip({
         ) : null}
         <span>
           <i className="ko-swatch-wait" />
-          WAIT {mix.wait}m
+          Sit {mix.wait}m
         </span>
         <span className="text-muted">09:15–15:30 IST</span>
       </div>

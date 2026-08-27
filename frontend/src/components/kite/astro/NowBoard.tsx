@@ -49,9 +49,9 @@ function kalamLine(k: LiveNow["kalam"]): string | null {
 
 function phaseLabel(status: LiveNow, now: Date): string {
   if (status.phase === "live") return "LIVE";
-  if (status.phase === "pre") return `OPENS IN ${fmtRemain(status.bellMs - now.getTime())}`;
-  if (status.phase === "post") return "CASH CLOSED";
-  return "MARKET CLOSED";
+  if (status.phase === "pre") return `Opens in ${fmtRemain(status.bellMs - now.getTime())}`;
+  if (status.phase === "post") return "Closed";
+  return "Market closed";
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -124,19 +124,20 @@ export function NowBoard({
           .filter(Boolean)
           .join(" · ")
       : status.phase === "pre"
-        ? "at 09:15 IST"
-        : `next ${sessionLabel(status.nextOpenIso)}`;
+        ? "09:15 IST"
+        : `Next ${sessionLabel(status.nextOpenIso)}`;
 
-  const sky = status.phase === "live"
-    ? [
-        `${status.hora.lord} hora`,
-        status.nakshatra,
-        status.choghadiyaKind === "bad" ? `${status.choghadiya} sit` : null,
-        status.next && status.next.action !== status.play ? `then ${status.next.action} ${status.next.from}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const sky =
+    status.phase === "live"
+      ? [
+          `${status.hora.lord} hora`,
+          status.nakshatra,
+          status.choghadiyaKind === "bad" ? `${status.choghadiya} sit` : null,
+          status.next && status.next.action !== status.play ? `then ${status.next.action} ${status.next.from}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
 
   return (
     <div className="ko-now">
@@ -206,16 +207,16 @@ export function NowBoard({
         <div className="ko-now-actions">
           {showJump ? (
             <button type="button" className="ko-link" onClick={() => onOpenWindow(status.window as WindowSlot)}>
-              Jump to this window
+              This window
             </button>
           ) : null}
           {wrongSession ? (
             status.phase === "live" ? (
               <button type="button" className="ko-link" onClick={() => onOpenSession(status.sessionIso)}>
-                Switch to live session
+                Live session
               </button>
             ) : (
-              <span className="text-muted">Timings below are {sessionLabel(viewingIso)}</span>
+              <span className="text-muted">Showing {sessionLabel(viewingIso)}</span>
             )
           ) : null}
         </div>
