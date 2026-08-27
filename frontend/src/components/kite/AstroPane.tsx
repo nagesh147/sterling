@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { useCandles } from '../../hooks/useCandles';
-import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso } from '../../lib/astro/holidays';
+import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso, isNseClosed } from '../../lib/astro/holidays';
 import { barsFromOhlcv, buyContract, gradeSlot, summariseTape, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
+import { rollMonth, simulateDay } from '../../lib/astro/simulate';
 import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { WEEKDAYS, type IndexPlay, type LiveNow, type Underlying, type WindowSlot } from '../../lib/astro/types';
 import { k } from '../../styles/kiteUI';
@@ -11,6 +12,7 @@ import { MonthHeat } from './astro/MonthHeat';
 import { NowBoard } from './astro/NowBoard';
 import { PlaybookNotes, PlaybookStrip } from './astro/PlaybookBoard';
 import { SessionStrip } from './astro/SessionStrip';
+import { SimBoard } from './astro/SimBoard';
 import { AstroTrailWatcher, KiteOrderCell, useAstroHolding } from './astro/KiteOrderCell';
 
 const CSS = `
@@ -176,12 +178,12 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-side{fill:#fff;font-size:9px;font-family:inherit;font-weight:500;pointer-events:none}
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
 .ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
-.ko-desk[data-tab="month"]{grid-template-columns:minmax(0,640px)}
-.ko-desk[data-tab="month"] .ko-main{display:none}
+.ko-desk[data-tab="month"]{grid-template-columns:minmax(0,1fr) 272px}
+.ko-desk[data-tab="month"] .ko-main{display:block}
 @media(max-width:1099px){
   .ko-desk{display:block}
   .ko-rail{display:none;position:static}
-  .ko-desk[data-tab="month"] .ko-main{display:none}
+  .ko-desk[data-tab="month"] .ko-main{display:block}
   .ko-desk[data-tab="month"] .ko-rail{display:block}
 }
 .ko-ins-side {
@@ -422,6 +424,15 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   color: var(--k-dim);
   line-height: 1.4;
 }
+.ko-sim { margin: 0 0 16px; }
+.ko-sim-lead { margin: 0 0 14px; font-size: 13px; color: var(--k-dim); max-width: 52em; }
+.ko-sim-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 10px; }
+.ko-sim-kpis .lbl { display: block; font-size: 11px; color: var(--k-dim); margin-bottom: 2px; }
+.ko-sim-kpis strong { font-size: 18px; font-weight: 500; }
+.ko-sim-ext { margin: 0 0 12px; font-size: 12px; }
+.ko-sim-empty { margin: 8px 0 16px; }
+.ko-pts-up { color: var(--k-up, #1e7a46); }
+.ko-pts-down { color: var(--k-down, #c0392b); }
 .ko-now-copy {
   text-wrap: pretty;
 }
@@ -573,7 +584,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
     position: static;
   }
   .ko-desk[data-tab="month"] .ko-main {
-    display: none;
+    display: block;
   }
   .ko-desk[data-tab="month"] .ko-rail {
     display: block;
@@ -689,7 +700,7 @@ export function AstroPane() {
   const [now, setNow] = useState<Date | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [notes, setNotes] = useState(false);
-  const candles = useCandles(underlying, '5m', 400);
+  const candles = useCandles(underlying, '5m', 2000);
   const [status, setStatus] = useState<LiveNow | null>(null);
   const [board, setBoard] = useState<IndexPlay[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -727,6 +738,24 @@ export function AstroPane() {
     const [y, m, d] = stamp.split("-").map(Number);
     return forecastMonth(monthCursor.year, monthCursor.month, underlying, utcFromIstParts(y, m, d, 9, 0, 0));
   }, [monthCursor.year, monthCursor.month, underlying, todayIso, dayDate]);
+
+  const monthSim = useMemo(() => {
+    if (!candles.data?.length) return null;
+    const y = monthCursor.year;
+    const m = monthCursor.month;
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const cap = todayIso || iso;
+    const days = [];
+    for (let d = 1; d <= last; d++) {
+      const dayIso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      if (isNseClosed(dayIso) || dayIso > cap) continue;
+      const dt = utcFromIstParts(y, m, d, 9, 0, 0);
+      const dayTape = barsFromOhlcv(candles.data, dayIso, underlying);
+      const dayBook = forecastDay(dt, underlying, dt);
+      days.push(simulateDay(dayBook.netResults, dayTape.bars.length ? dayTape : null, WEEKDAYS[getIstParts(dt).weekday]));
+    }
+    return rollMonth(y, m, underlying, days);
+  }, [candles.data, monthCursor.year, monthCursor.month, underlying, todayIso, iso]);
 
   const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
   const sameDay = Boolean(now && todayIso === iso);
@@ -894,6 +923,9 @@ export function AstroPane() {
               />
             ) : null}
 
+            {tab === "month" ? (
+              <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
+            ) : null}
             {tab !== "month" ? (
               <div className="ko-session">
                 <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
