@@ -399,14 +399,61 @@ def test_auto_enter_does_nothing_on_manual(monkeypatch):
     assert asyncio.run(runner._auto_enter("u1")) == 0
 
 
-def test_signals_are_not_armable_while_uncalibrated():
-    """Nothing invents a score to rank by: the entry gate needs a fitted
-    directional probability, and that model does not exist yet."""
+def test_a_signal_with_no_direction_is_refused_by_the_entry_gate():
+    """F-110 is the mandatory §35 conjunction and it now actually runs."""
     cfg = AdaptiveEdgeConfig().validate()
-    signals = runner._signals_from([{"symbol": "X", "expiry": "2026-09-03"}], cfg)
-    assert len(signals) == 1
+    signals = runner._signals_from(
+        [{"symbol": "X", "expiry": "2026-09-03", "option_type": "CE",
+          "direction": "NEUTRAL", "actionable": False}], cfg)
     assert signals[0]["entry_ok"] is False
-    assert "Uncalibrated" in signals[0]["reason"]
+    assert signals[0]["entry_decision"] == "NO_TRADE"
+    assert signals[0]["reason"] == "no directional edge"
+
+
+def test_conservative_ev_is_what_refuses_a_directional_signal_today():
+    """The engine declines at the gate the source names, not at a flag.
+
+    §35 requires ConservativeEV > 0, which is LowerConfidenceBound(EV) and needs
+    the fitted probability model. The reason names exactly that, so the thing
+    calibration has to supply is legible from the board.
+    """
+    cfg = AdaptiveEdgeConfig().validate()
+    signals = runner._signals_from(
+        [{"symbol": "X", "expiry": "2026-09-03", "option_type": "CE",
+          "direction": "BULLISH", "actionable": True,
+          "expected_net_value": 500.0}], cfg)
+    assert signals[0]["entry_ok"] is False
+    assert "conservative EV unavailable" in signals[0]["reason"]
+
+
+def test_the_gate_opens_once_a_conservative_ev_exists():
+    """Proves the refusal is the missing quantity, not a disabled code path."""
+    cfg = AdaptiveEdgeConfig().validate()
+    signals = runner._signals_from(
+        [{"symbol": "X", "expiry": "2026-09-03", "option_type": "CE",
+          "direction": "BULLISH", "actionable": True,
+          "expected_net_value": 500.0, "conservative_ev": 120.0}], cfg)
+    assert signals[0]["entry_ok"] is True
+    assert signals[0]["entry_decision"] == "BUY_CE"
+
+
+def test_a_bearish_decision_buys_a_put():
+    cfg = AdaptiveEdgeConfig().validate()
+    signals = runner._signals_from(
+        [{"symbol": "X", "expiry": "2026-09-03", "option_type": "PE",
+          "direction": "BEARISH", "actionable": True,
+          "expected_net_value": 500.0, "conservative_ev": 90.0}], cfg)
+    assert signals[0]["entry_decision"] == "BUY_PE"
+
+
+def test_a_non_positive_conservative_ev_is_refused():
+    cfg = AdaptiveEdgeConfig().validate()
+    signals = runner._signals_from(
+        [{"symbol": "X", "expiry": "2026-09-03", "option_type": "CE",
+          "direction": "BULLISH", "actionable": True,
+          "expected_net_value": 500.0, "conservative_ev": 0.0}], cfg)
+    assert signals[0]["entry_ok"] is False
+    assert "conservative expected value not positive" in signals[0]["reason"]
 
 
 def test_session_status_reports_the_live_block():

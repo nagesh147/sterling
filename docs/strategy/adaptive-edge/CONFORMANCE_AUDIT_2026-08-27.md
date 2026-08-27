@@ -14,9 +14,10 @@ in `backend/app/engines/adaptive_edge/`, 5 services, 10 routes.
 | Code paths named by docs that exist | 52 / 52 |
 | IMPLEMENTATION_ORDER items with a named implementation | 32 / 32 |
 | Formula registry owners resolving to real code | 18 / 22 → **fixed, now 22 / 22** |
-| Engine modules reachable from the running system | **11 / 147** |
+| Engine modules reachable from the running system | 11 / 147 → **37 / 148 after wiring** |
 
-The first three look like a clean bill of health. The fourth is the finding.
+The first three look like a clean bill of health. The fourth was the finding,
+and the pipeline has since been wired — see *Resolution* at the end.
 
 ## The finding: the strategy is implemented and not connected
 
@@ -115,3 +116,75 @@ Semantic conformance of each formula against its specification section — wheth
 of 58 spec sections against 147 modules and is the work A167 actually asks for.
 This audit establishes reachability and ownership, which is the layer beneath it:
 there is no value in verifying the semantics of code the engine never calls.
+
+---
+
+# Resolution — pipeline wired, same day
+
+## What was blocking it
+
+`run_strategy_semantics_pipeline` consumes `CanonicalMarketEvent`, and the only
+producer in the repository was the TrueData adapter. The running engine is on
+Kite. That is the mechanical reason the pipeline was never called: there was no
+way to hand it the data the engine actually has.
+
+`app/engines/adaptive_edge/kite_events.py` is the missing side. The load-bearing
+decision in it is `available_at`: a Kite candle is timestamped at its **start**,
+so an event whose availability is its own timestamp claims the close was known a
+full interval before it existed. Bars are now available at their close.
+
+## What is wired
+
+```text
+scanner  -> fetch_bars -> kite_events.bar_events -> run_strategy_semantics_pipeline
+         -> PipelineDecision (direction, horizon, EV, eligibility)
+         -> contracts filtered to the side the strategy actually called
+runner   -> f110_entry_gate.evaluate_entry  (the mandatory §35 conjunction)
+```
+
+Reachability went from 11 to 37 of 148. `strategy_pipeline`, `feature_engine`,
+`structure`, `lifecycle_engine`, `risk_sizing`, `option_ladder` and
+`f110_entry_gate` are now on the live path.
+
+Two things are deliberately kept apart. The pipeline decides **direction and
+economics**; the scanner decides the **instrument**. `select_option_contract`
+inside the pipeline builds a tradingsymbol by string formatting — hardcoded
+NIFTY prefix, 50-point strike step, guessed expiry code — which is fine as a
+research label and unusable as an order. It is carried as
+`reference_instrument` and never reaches anything that places an order.
+
+## The engine still does not enter, and now says exactly why
+
+F-110 is the mandatory gate and it refuses, on one term: `ConservativeEV`.
+
+The source defines it as `LowerConfidenceBound(EV)`, which needs a fitted
+distribution over outcomes. The probability model (F-102) is unfitted, and the
+only dispersion figure available is a hardcoded constant per decision branch —
+so `EV * (1 - uncertainty)` would be expected value scaled by an invented number
+rather than a bound on anything. It is passed as absent.
+
+This is the same outcome as before and a materially different statement. Before,
+`entry_ok` was a hardcoded `False` with a vague reason. Now the engine declines
+at the gate the specification names, and the reason names the one quantity
+calibration has to supply. A test proves the gate opens the moment a
+conservative EV exists, so the refusal is the missing input and not a disabled
+code path.
+
+## Still not wired, and why it is a separate decision
+
+Thirteen of eighteen formula-owner modules remain unreached, because
+`strategy_pipeline` implements the decision inline rather than calling
+`f101_normalization`, `f102_prediction`, `f103_opportunity`, `f104_horizon`,
+`f105_economics`, the F-106/F-109 selectors, `f111_exit_gate`, `management` or
+`strategy_v21`.
+
+There is also a parallel family — `canonical_math`, `economic_engine`,
+`risk_engine`, `protection_engine`, `master_spec_edge`, `decision_pipeline`,
+`probability_engine` — that no formula owns and nothing calls. The registry
+points at the *other* implementation of each pair (`economic`, `risk_sizing`,
+`protection`), which are the ones now live.
+
+That is duplicate authority, which A167 names as one of the things it exists to
+prevent. Resolving it means choosing which implementation is canonical per
+formula and retiring the other, and that is a decision about the strategy rather
+than a wiring defect — so it is recorded here rather than settled unilaterally.

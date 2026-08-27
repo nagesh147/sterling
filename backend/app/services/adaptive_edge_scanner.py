@@ -26,6 +26,11 @@ from typing import Any, Optional
 from app.core.logging import get_logger
 from app.engines.adaptive_edge import AdaptiveEdgeConfig
 from app.services.adaptive_edge import ist_today, nfo_dump, underlyings
+from app.services.adaptive_edge_strategy import (
+    MIN_BARS,
+    decide_from_candles,
+    fetch_bars,
+)
 from app.services.kite_engine.strikes import (
     chain_rows_for,
     expiry_window_of,
@@ -194,6 +199,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
         "listed": 0,
         "tradeable": 0,
         "candidates": [],
+        "decisions": [],
         "skipped": {},
         "dropped": {},
         "errors": [],
@@ -229,9 +235,11 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             await pacer.wait()
             spot_key = f"NSE:{name} 50" if name == "NIFTY" else f"NSE:{name}"
             spot = 0.0
+            spot_token = 0
             try:
                 quotes = await client.quote([spot_key])
                 spot = _num((quotes or {}).get(spot_key, {}).get("last_price"))
+                spot_token = int(_num((quotes or {}).get(spot_key, {}).get("instrument_token")))
             except Exception as exc:                               # noqa: BLE001
                 state["skipped"][name] = f"spot unavailable: {exc}"
                 continue
@@ -243,6 +251,57 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             state["listed"] += len(listed)
             if not listed:
                 state["skipped"][name] = "no contract inside the expiry and strike windows"
+                continue
+
+            # The canonical pipeline decides direction and economics. Ask it
+            # before quoting a chain: a NEUTRAL underlying needs no quotes, and
+            # a direction halves the contracts worth pricing.
+            expiry = str(listed[0].get("expiry_date") or "")
+            token = int(_num(next((r.get("token") for r in rows if r.get("token")), 0)))
+            decision = None
+            try:
+                await pacer.wait()
+                candles = await fetch_bars(client, spot_token or token,
+                                           interval=cfg.decision_timeframe,
+                                           lookback_bars=cfg.feature_lookback_bars)
+                if len(candles) < MIN_BARS:
+                    state["skipped"][name] = (
+                        f"only {len(candles)} bars of history; the pipeline needs "
+                        f"{MIN_BARS} before a decision means anything")
+                    continue
+                decision = decide_from_candles(name, candles, cfg, expiry=expiry, spot=spot)
+            except Exception as exc:                               # noqa: BLE001
+                state["errors"].append(f"{name}: history unavailable: {exc}")
+                continue
+
+            if decision is None:
+                state["skipped"][name] = "pipeline returned no decision"
+                continue
+
+            state["decisions"].append({
+                "underlying": name, "direction": decision.direction,
+                "horizon": decision.horizon, "reason": decision.reason,
+                "eligible": decision.eligible,
+                "expected_net_value": decision.expected_net_value,
+                "uncertainty": decision.uncertainty, "bars": decision.bars,
+                "trace_hash": decision.trace_hash,
+            })
+
+            if not decision.actionable:
+                state["skipped"][name] = (
+                    f"{decision.direction.lower()}: {decision.reason}"
+                    if decision.direction == "NEUTRAL"
+                    else f"expected value not positive: {decision.reason}")
+                continue
+
+            # Only the side the strategy actually called. Surfacing both CE and
+            # PE would mean the board showing two contradictory trades for one
+            # decision.
+            wanted = decision.option_type
+            listed = [r for r in listed
+                      if ("call" if wanted == "CE" else "put") == str(r.get("option_type"))]
+            if not listed:
+                state["skipped"][name] = f"no listed {wanted} inside the windows"
                 continue
 
             await pacer.wait()
@@ -262,7 +321,17 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
                 continue
 
             for row in tradeable:
-                candidates.append({**row, "underlying": name})
+                candidates.append({
+                    **row,
+                    "underlying": name,
+                    "direction": decision.direction,
+                    "horizon": decision.horizon,
+                    "reason": decision.reason,
+                    "expected_net_value": decision.expected_net_value,
+                    "uncertainty": decision.uncertainty,
+                    "trace_hash": decision.trace_hash,
+                    "actionable": True,
+                })
         except Exception as exc:                                   # noqa: BLE001
             state["errors"].append(f"{name}: {exc}")
 

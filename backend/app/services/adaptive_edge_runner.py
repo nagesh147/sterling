@@ -28,6 +28,7 @@ from app.core.logging import get_logger
 from app.engines.adaptive_edge import AdaptiveEdgeConfig
 from app.engines.adaptive_edge.state_machine import Event
 from app.engines.adaptive_edge.execution import align_to_tick, exit_order_price, stop_from_entry
+from app.engines.adaptive_edge.f110_entry_gate import EntryDecision, F110Evidence, evaluate_entry
 from app.services.adaptive_edge import get_config, ist_now_ms, ist_today
 from app.services.adaptive_edge_positions import (
     AdaptiveEdgePosition,
@@ -344,30 +345,77 @@ async def scan_once(uid: str) -> dict[str, Any]:
         return state
 
 
+def _entry_gate(candidate: dict) -> tuple[EntryDecision, str]:
+    """F-110, the mandatory entry gate, run for real.
+
+    §35 permits BUY_CE / BUY_PE only when data, directional edge, expected value,
+    conservative expected value, liquidity, slippage and risk all pass.
+    `f110_entry_gate` has implemented that conjunction all along and nothing
+    called it, so the gate the specification calls mandatory was not gating
+    anything.
+
+    `conservative_ev` is passed as None on purpose, and it is what refuses every
+    entry today. The source defines it as LowerConfidenceBound(EV), which needs a
+    fitted distribution over outcomes; the probability model (F-102) is
+    unfitted, and the only dispersion figure available is a hardcoded constant
+    per decision branch, so `EV * (1 - uncertainty)` would be expected value
+    scaled by an invented number rather than a bound on anything.
+
+    So the engine still does not enter. The difference is that it now declines at
+    the gate the specification names, for a stated reason, instead of at a
+    hardcoded flag — and the reason names exactly what calibration has to supply.
+    """
+    option_type = str(candidate.get("option_type") or "")
+    expected_ev = candidate.get("expected_net_value")
+    conservative_ev = candidate.get("conservative_ev")   # absent until F-102 is fitted
+
+    evidence = F110Evidence(
+        data_ok=bool(candidate.get("actionable")),
+        directional_edge_ok=str(candidate.get("direction") or "NEUTRAL") in ("BULLISH", "BEARISH"),
+        expected_ev=None if expected_ev is None else float(expected_ev),
+        conservative_ev=None if conservative_ev is None else float(conservative_ev),
+        # The scanner already applied these three in reaching this list: OI and
+        # volume floors, the spread ceiling, and the strike/expiry windows.
+        liquidity_ok=True,
+        slippage_ok=True,
+        risk_ok=True,
+    )
+    decision = evaluate_entry(option_type, evidence)
+    if decision is not EntryDecision.NO_TRADE:
+        return decision, str(candidate.get("reason") or "")
+
+    if not evidence.directional_edge_ok:
+        return decision, "no directional edge"
+    if evidence.expected_ev is None or evidence.expected_ev <= 0:
+        return decision, "expected value not positive"
+    if evidence.conservative_ev is None:
+        return decision, ("conservative EV unavailable: it is "
+                          "LowerConfidenceBound(EV) and the probability model is unfitted")
+    if evidence.conservative_ev <= 0:
+        return decision, "conservative expected value not positive"
+    return decision, "entry gate refused"
+
+
 def _signals_from(candidates: list[dict], cfg: AdaptiveEdgeConfig) -> list[dict]:
     """Turn scored candidates into armable signals.
 
-    Deliberately conservative while the strategy is uncalibrated: a candidate
-    becomes a signal only when the structural gates the source *does* fix are
-    satisfied (§35 requires both expected value and conservative expected value
-    strictly positive). The probability model that would rank them is exactly
-    what calibration has to supply, so nothing here invents a score to sort by.
+    Two gates in sequence, both the source's. The pipeline supplies direction and
+    economics; F-110 is the mandatory conjunction that decides BUY_CE / BUY_PE /
+    NO_TRADE. `entry_ok` is that decision and nothing else — it used to be a
+    hardcoded false, because the engine reached no decision at all.
     """
     signals: list[dict] = []
     for candidate in candidates:
-        signal_id = f"{candidate.get('symbol')}:{candidate.get('expiry')}"
-        signals.append(
-            {
-                **candidate,
-                "signal_id": signal_id,
-                "state": "CANDIDATE",
-                "entry_ok": False,
-                "reason": (
-                    "Uncalibrated: the entry gate needs a directional probability, "
-                    "and that model has not been fitted yet."
-                ),
-            }
-        )
+        decision, reason = _entry_gate(candidate)
+        armable = decision is not EntryDecision.NO_TRADE
+        signals.append({
+            **candidate,
+            "signal_id": f"{candidate.get('symbol')}:{candidate.get('expiry')}",
+            "state": decision.value,
+            "entry_ok": armable,
+            "entry_decision": decision.value,
+            "reason": reason,
+        })
     return signals
 
 
