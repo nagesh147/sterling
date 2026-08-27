@@ -87,7 +87,6 @@ export function OptionContractsPicker({ config, onSave, saving, title }: {
           <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
           Live Kite dates
         </span>
-        <span style={{ fontSize: 10.5, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>{selection.summary}</span>
         {saveState && (
           <span aria-live="polite" style={{ fontSize: 9.5, fontWeight: 700, color: setConfig.isError ? k.red : k.dim }}>
             {saveState}

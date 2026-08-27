@@ -318,7 +318,11 @@ export function selectedEntries(
 
 
 export interface ContractSelection {
-  /** "12 of 18 expiry sets · 5 live dates", or why it cannot say. */
+  /** "12 of 18 expiry sets · 5 live dates", or why it cannot say.
+   *
+   * No longer rendered — the picker header showed it and it was asked to go.
+   * Kept because `selected`/`dates` below are the same computation and callers
+   * still read them; the string is the cheap part. */
   summary: string;
   /** Expiry sets currently switched on. */
   selected: number;

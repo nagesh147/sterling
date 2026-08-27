@@ -218,8 +218,12 @@ const hhmmss = (ms: number) =>
  * Today stays bare, because repeating today's date on every row of a board an
  * operator is watching live is noise.
  */
-const stamp = (ms: number | null, nowMs: number) => {
+const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
   if (ms == null || !Number.isFinite(ms)) return '—';
+  // A leg shows the time only. The parent above it already names the day, and a
+  // group's legs share it by construction — repeating the date on every one of
+  // NIFTY's eighteen strikes is the noise the grouping exists to remove.
+  if (isLeg) return hhmmss(ms);
   // A complete stamp: the date always, and seconds.
   //
   // Today used to render bare on the grounds that repeating today's date is
@@ -475,8 +479,8 @@ function cellContent(
       const stale = signal.quoteAgeS != null && signal.quoteAgeS > STALE_AFTER_S;
       return {
         node: stale
-          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{stamp(signal.atMs, nowMs)} · stale</span>
-          : stamp(signal.atMs, nowMs),
+          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{stamp(signal.atMs, nowMs, isLeg)} · stale</span>
+          : stamp(signal.atMs, nowMs, isLeg),
         color: stale ? k.red : k.dim,
       };
     }
