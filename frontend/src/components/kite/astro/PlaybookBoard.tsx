@@ -1,6 +1,6 @@
 import { clockFromMinutes, getIstParts, minutesOfDay } from "../../../lib/astro/time";
 import type { DayForecast, DignityKind, WindowSlot } from "../../../lib/astro/types";
-import { actionTone, gapTone, REGIME_SHORT } from "./palette";
+import { actionTone, gapTone } from "./palette";
 
 const THESIS: Record<DayForecast["playbook"]["thesis"], string> = {
   "trend-up": "Trend up",
@@ -59,9 +59,11 @@ function openSide(action: string): WindowSlot["side"] {
 export function PlaybookStrip({
   book,
   onPick,
+  live,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
+  live?: boolean;
 }) {
   const pb = book.playbook;
   const gtone = gapTone(book.gap.kind);
@@ -69,7 +71,7 @@ export function PlaybookStrip({
 
   return (
     <div className="ko-play">
-      <p className="ko-play-head">{pb.headline}</p>
+      {live ? null : <p className="ko-play-head">{pb.headline}</p>}
       <div className="ko-play-meta">
         <span>
           <span className="lbl">Gap</span>
@@ -82,14 +84,6 @@ export function PlaybookStrip({
         <span>
           <span className="lbl">Open</span>
           <b className={actionTone(book.gap.openAction, openSide(book.gap.openAction))}>{book.gap.openAction}</b>
-        </span>
-        <span>
-          <span className="lbl">Hora</span>
-          <b>{pb.horaAtOpen}</b>
-        </span>
-        <span>
-          <span className="lbl">Close</span>
-          <b>{REGIME_SHORT[pb.closeBias]}</b>
         </span>
         <span>
           <span className="lbl">Conf</span>
@@ -106,7 +100,7 @@ export function PlaybookStrip({
               <b className={actionTone(pb.bestCe.action, pb.bestCe.side)}>{pb.bestCe.action}</b>
             </>
           ) : (
-            <span className="text-muted">No CE window</span>
+            <span className="text-muted">None today</span>
           )}
         </button>
         <button type="button" disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
@@ -118,15 +112,14 @@ export function PlaybookStrip({
               <b className={actionTone(pb.bestPe.action, pb.bestPe.side)}>{pb.bestPe.action}</b>
             </>
           ) : (
-            <span className="text-muted">No PE window</span>
+            <span className="text-muted">None today</span>
           )}
         </button>
         <button type="button" disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
           <span className="lbl">Avoid</span>
           {avoid ? (
             <>
-              <span className={sideClass(avoid.side)}>{avoid.side}</span>
-              {avoid.from}–{avoid.to} <span className="text-muted">{avoid.action}</span>
+              {avoid.from}–{avoid.to}
             </>
           ) : (
             <span className="text-muted">No Rahu / AVOID block</span>

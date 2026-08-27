@@ -179,19 +179,19 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-cal-cell[data-on=true]{box-shadow:inset 0 -2px 0 var(--k-orange)}
 .ko-cal-cell:disabled,.ko-cal-empty{opacity:.4;cursor:default}
 .ko-cal-empty{min-height:52px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border)}
-.ko-now{border:1px solid var(--k-border);margin:0 0 16px;padding:12px 16px 14px;background:var(--k-bg)}
-.ko-now-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px}
-.ko-now-phase{font-size:11px;color:var(--k-dim);font-weight:500}
+.ko-now{border:1px solid var(--k-border);margin:0 0 12px;padding:10px 16px 12px;background:var(--k-bg)}
+.ko-now-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
+.ko-now-phase{font-size:11px;color:var(--k-dim);font-weight:500;letter-spacing:.04em}
 .ko-now-phase[data-live="true"]{color:#f57c00}
 .ko-now-clock{font-size:12px;color:var(--k-dim);font-variant-numeric:tabular-nums}
-.ko-now-play{font-size:20px;font-weight:400;letter-spacing:-.2px;line-height:1.2;margin:0 0 6px}
-.ko-now-sub{font-size:13px;color:var(--k-dim);margin-left:10px;letter-spacing:0;font-weight:400}
-.ko-now-copy{margin:0 0 6px;font-size:13px;line-height:1.45;color:var(--k-text)}
-.ko-now-meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--k-dim);margin-top:8px}
-.ko-now-bar{height:3px;background:var(--k-surface-hover);margin-top:10px}
-.ko-now-bar>span{display:block;height:3px;background:var(--k-orange)}
-.ko-now-actions{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;margin-top:10px;font-size:13px}
-.ko-play{margin:0 0 16px;padding:0 0 14px;border-bottom:1px solid var(--k-surface-hover)}
+.ko-now-play{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:22px;font-weight:400;letter-spacing:-.2px;line-height:1.15;margin:0 0 6px}
+.ko-now-sub{font-size:13px;color:var(--k-dim);margin-left:0;letter-spacing:0;font-weight:400}
+.ko-now-copy{margin:0 0 4px;font-size:13px;line-height:1.45;color:var(--k-text)}
+.ko-now-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--k-dim);margin-top:6px}
+.ko-now-bar{height:2px;background:var(--k-surface-hover);margin-top:8px}
+.ko-now-bar>span{display:block;height:2px;background:var(--k-orange)}
+.ko-now-actions{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;margin-top:8px;font-size:13px}
+.ko-play{margin:0 0 12px;padding:0 0 12px;border-bottom:1px solid var(--k-surface-hover)}
 .ko-play-head{margin:0 0 8px;font-size:13px;color:var(--k-text);line-height:1.45}
 .ko-play-meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:13px;color:var(--k-text)}
 .ko-play-meta .lbl{color:var(--k-dim);margin-right:7px;font-size:12px}
@@ -400,6 +400,7 @@ export function AstroPane() {
             grade={liveGrade}
             viewingIso={iso}
             board={board}
+            bellTithi={book.panchang.tithiName}
             onOpenSession={(date) => {
               applyIso(date);
               setTab('timings');
@@ -412,10 +413,12 @@ export function AstroPane() {
           />
         ) : null}
 
-        {tab !== 'month' ? <PlaybookStrip book={book} onPick={pickSlot} /> : null}
+        {tab !== 'month' ? <PlaybookStrip book={book} onPick={pickSlot} live={status?.phase === 'live'} /> : null}
 
         <p className="ko-sub">
-          {book.panchang.weekday} · {book.panchang.tithiName} {book.panchang.paksha} · {book.panchang.nakshatra} · {book.gap.firstHourNote}{' '}
+          {status && status.tithiName !== book.panchang.tithiName
+            ? `Tithi now ${status.tithiName} · bell was ${book.panchang.tithiName}. `
+            : null}
           <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>{notes ? 'Hide notes' : 'View notes'}</button>
         </p>
         {notes ? <PlaybookNotes book={book} /> : null}
