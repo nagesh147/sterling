@@ -178,13 +178,15 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-side{fill:#fff;font-size:9px;font-family:inherit;font-weight:500;pointer-events:none}
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
 .ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
-.ko-desk[data-tab="month"]{grid-template-columns:minmax(0,1fr) 272px}
-.ko-desk[data-tab="month"] .ko-main{display:block}
+.ko-desk[data-tab="month"]{display:block;grid-template-columns:none}
+.ko-desk[data-tab="month"] .ko-main{display:block;max-width:none}
+.ko-cal-wrap{margin:0 0 22px}
+.ko-cal-wrap .ko-cal-cell{min-height:48px}
 @media(max-width:1099px){
   .ko-desk{display:block}
   .ko-rail{display:none;position:static}
   .ko-desk[data-tab="month"] .ko-main{display:block}
-  .ko-desk[data-tab="month"] .ko-rail{display:block}
+  .ko-desk[data-tab="month"] .ko-rail{display:none}
 }
 .ko-ins-side {
   margin-left: 5px;
@@ -587,7 +589,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
     display: block;
   }
   .ko-desk[data-tab="month"] .ko-rail {
-    display: block;
+    display: none;
   }
 }
 @media (width <= 800px) {
@@ -924,7 +926,21 @@ export function AstroPane() {
             ) : null}
 
             {tab === "month" ? (
-              <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
+              <>
+                <div className="ko-cal-wrap">
+                  <div className="ko-rail-head">
+                    <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                      ‹
+                    </button>
+                    <span>{month.label}</span>
+                    <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                      ›
+                    </button>
+                  </div>
+                  <MonthHeat month={month} iso={iso} onPick={pickDay} />
+                </div>
+                <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
+              </>
             ) : null}
             {tab !== "month" ? (
               <div className="ko-session">
@@ -974,18 +990,20 @@ export function AstroPane() {
             ) : null}
           </div>
 
-          <aside className="ko-rail" aria-label={`${month.label} calendar`}>
-            <div className="ko-rail-head">
-              <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                ‹
-              </button>
-              <span>{month.label}</span>
-              <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                ›
-              </button>
-            </div>
-            <MonthHeat month={month} iso={iso} onPick={pickDay} />
-          </aside>
+          {tab !== "month" ? (
+            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
+              <div className="ko-rail-head">
+                <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                  ‹
+                </button>
+                <span>{month.label}</span>
+                <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                  ›
+                </button>
+              </div>
+              <MonthHeat month={month} iso={iso} onPick={pickDay} />
+            </aside>
+          ) : null}
         </div>
       </div>
     </div>
