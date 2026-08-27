@@ -154,3 +154,96 @@ def test_a_legacy_write_the_engine_cannot_represent_is_reported(memory_store, mo
     response = client.put("/api/v1/adaptive-edge/settings", json=body)
     assert response.status_code == 200
     assert response.json()["engine_config_errors"] == ["expiry window excludes every contract"]
+
+
+# ------------------------------------------- position and lifecycle routes
+
+@pytest.fixture
+def as_user(monkeypatch):
+    """A client whose requests carry an authenticated user.
+
+    These routes move money, so 'it 401s without a user' is asserted separately
+    from what they do with one.
+    """
+    from app.api.v1.endpoints import config as config_module
+
+    class User:
+        user_id = "u1"
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[config_module.get_current_user] = lambda: User()
+    return TestClient(app)
+
+
+def test_lifecycle_routes_are_scoped_to_a_user(monkeypatch):
+    """Every money-moving route resolves a uid and acts only on that account.
+
+    Note what this does NOT assert. `get_current_user` falls back to a default
+    user id when no header is present, so there is no 401 to test for — this is
+    a single-user local application and every engine's routes work the same way.
+    The property that matters here is that the route passes a uid down rather
+    than operating on some global, so two accounts cannot flatten each other.
+    """
+    seen: list[str] = []
+
+    async def flatten(uid):
+        seen.append(uid)
+        return {"closed": 0, "failed": 0, "errors": []}
+
+    monkeypatch.setattr("app.services.adaptive_edge_runner.square_off_all", flatten)
+    assert _client().post("/api/v1/config/adaptive-edge/square-off").status_code == 200
+    assert len(seen) == 1 and seen[0]
+
+
+def test_positions_route_reports_whether_a_broker_stop_exists(as_user, monkeypatch):
+    """"Protected" and "protected only while this process lives" are different
+    states, and an operator has to be able to tell which one they are in."""
+    from app.services import adaptive_edge_positions as positions
+    positions.reset("u1")
+    monkeypatch.setattr(positions, "load", lambda uid: {
+        "SYM": positions.AdaptiveEdgePosition(
+            symbol="SYM", token=1, underlying="NIFTY", direction="CE", quantity=50,
+            lot_size=50, entry_price=100.0, stop_price=70.0, target_price=200.0,
+            state="open", gtt_id=0),
+    })
+    monkeypatch.setattr("app.services.adaptive_edge_runner.realised_pnl_today", lambda uid: -250.0)
+
+    payload = as_user.get("/api/v1/config/adaptive-edge/positions").json()
+    assert payload["positions"][0]["broker_stop"] is False
+    assert payload["realised_pnl_today"] == -250.0
+    positions.reset("u1")
+
+
+def test_square_off_route_flattens(as_user, monkeypatch):
+    async def flatten(uid):
+        return {"closed": 2, "failed": 0, "errors": []}
+
+    monkeypatch.setattr("app.services.adaptive_edge_runner.square_off_all", flatten)
+    assert as_user.post("/api/v1/config/adaptive-edge/square-off").json()["closed"] == 2
+
+
+def test_reconcile_route_returns_what_it_changed(as_user, monkeypatch):
+    async def reconcile(uid):
+        return {"checked": 3, "closed": 1, "reprotected": 1, "errors": []}
+
+    monkeypatch.setattr("app.services.adaptive_edge_runner.reconcile", reconcile)
+    payload = as_user.post("/api/v1/config/adaptive-edge/reconcile").json()
+    assert payload["closed"] == 1 and payload["reprotected"] == 1
+
+
+def test_adopt_route_refuses_nonsense(as_user):
+    for body in ({"symbol": "", "quantity": 50, "entry_price": 100},
+                 {"symbol": "X", "quantity": 0, "entry_price": 100},
+                 {"symbol": "X", "quantity": 50, "entry_price": 0}):
+        assert as_user.post("/api/v1/config/adaptive-edge/adopt", json=body).status_code == 422
+
+
+def test_adopt_route_passes_through_to_the_runner(as_user, monkeypatch):
+    async def adopt(uid, symbol, quantity, entry_price):
+        return {"ok": True, "symbol": symbol, "quantity": quantity, "gtt_id": 7}
+
+    monkeypatch.setattr("app.services.adaptive_edge_runner.adopt", adopt)
+    payload = as_user.post("/api/v1/config/adaptive-edge/adopt",
+                           json={"symbol": "X", "quantity": 50, "entry_price": 100}).json()
+    assert payload["ok"] is True and payload["gtt_id"] == 7

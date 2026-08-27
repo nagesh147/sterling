@@ -48,6 +48,45 @@ Watch the board. Candidates will appear; none will be armable, and each says why
 
 That is the expected state, not a fault.
 
+## If you arm something
+
+Entering is manual. `entry_ok` is false on every candidate — the entry gate
+needs a fitted directional probability and that model does not exist yet — so
+the loop will never open a position on its own. An operator can still arm one
+deliberately, and that path is real:
+
+1. Refuses early: promotion (live), daily loss cap, max positions, already held.
+2. Places a limit buy under an idempotency key, so a retry after a timeout is
+   refused rather than becoming a second position.
+3. Persists the position **before** confirming the fill, so a crash in between
+   leaves something findable.
+4. Re-anchors the stop to the price that actually traded, not the limit.
+5. Places a broker-side stop (GTT) unless `stop_mode` is `monitor`.
+
+Once open it is managed without you: the tick monitor ratchets the trail up
+(never down), exits on stop, target or the session boundary, and the loop
+reconciles against the broker before every scan.
+
+    POST /api/v1/config/adaptive-edge/square-off   # flatten everything, now
+    POST /api/v1/config/adaptive-edge/reconcile    # re-sync against the broker
+    GET  /api/v1/config/adaptive-edge/positions    # incl. broker_stop per row
+
+`broker_stop: false` on an open row means this process is the only thing
+watching it. That is survivable but you should know you are in it.
+
+### The exit invariants
+
+Worth knowing because they are the ones that cost money when wrong:
+
+* The broker stop is cancelled **before** the sell goes out. Selling into an
+  armed GTT is how one position gets sold twice.
+* If the sell fails, the stop is re-armed. A failed exit must not quietly become
+  an unprotected position.
+* One exit path, one claim. The tick monitor and the square-off cannot both sell
+  the same position.
+* The exit reason is recorded as given, never inferred from the price — a stop
+  and a square-off happen at the same number.
+
 ## Reading an empty board
 
 The scan reports per-stage counts precisely so "nothing found" is diagnosable:
