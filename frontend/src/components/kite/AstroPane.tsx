@@ -104,9 +104,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-table-kv tbody tr,.ko-book tbody tr{cursor:default}
 .ko-table-kv tbody tr:hover,.ko-book tbody tr:hover{background:transparent}
 .ko-month-nav{display:flex;align-items:center;gap:16px;margin:0 0 12px;font-size:13px}
-.ko-cal{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--k-border);border-left:1px solid var(--k-border);margin:0 0 12px}
-.ko-cal-hd{font-size:11px;color:var(--k-dim);padding:8px 8px 6px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border)}
-.ko-cal-cell{min-height:52px;padding:6px 8px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border);background:var(--k-bg);text-align:left;display:flex;flex-direction:column;justify-content:space-between;gap:8px;color:var(--k-text);font-family:inherit;cursor:pointer}
+.ko-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--k-border);border-left:1px solid var(--k-border);margin:0 0 12px}
+.ko-cal-hd{font-size:11px;color:var(--k-dim);padding:6px 4px 4px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border);text-align:center}
+.ko-cal-cell{min-height:0;padding:4px 6px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border);background:var(--k-bg);text-align:left;display:flex;flex-direction:column;justify-content:space-between;gap:4px;color:var(--k-text);font-family:inherit;cursor:pointer}
 .ko-cal-cell .n{font-size:13px}
 .ko-cal-cell .bar{display:block;height:3px;width:100%;background:var(--k-border)}
 .ko-cal-cell[data-gap=up] .bar{background:var(--ko-ce)}
@@ -115,7 +115,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-cal-cell[data-gap=closed] .bar{background:var(--k-surface-hover)}
 .ko-cal-cell[data-on=true]{box-shadow:inset 0 -2px 0 var(--k-orange)}
 .ko-cal-cell:disabled,.ko-cal-empty{opacity:.4;cursor:default}
-.ko-cal-empty{min-height:52px;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border)}
+.ko-cal-empty{min-height:0;border-right:1px solid var(--k-border);border-bottom:1px solid var(--k-border)}
 .ko-now{border:1px solid var(--k-border);margin:0 0 12px;padding:10px 16px 12px;background:var(--k-bg)}
 .ko-now-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
 .ko-now-phase{font-size:11px;color:var(--k-dim);font-weight:500;letter-spacing:.04em}
@@ -152,16 +152,16 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   .ko-kv>div:nth-child(4n){border-right:1px solid var(--k-surface-hover)}
   .ko-kv>div:nth-child(2n){border-right:0}
   .ko-split{grid-template-columns:1fr}
-  .ko-cal-cell{min-height:44px;padding:4px 4px 6px}
+  .ko-cal-cell{min-height:0;padding:4px}
 }
 
 .kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
 .ko-desk{display:block}
-.ko-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin:0 0 12px}
-.ko-toolbar .ko-ins{padding-bottom:0}
-.ko-split-tape{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:28px;align-items:start}
-.ko-rail{display:block;width:272px;min-width:272px;position:static}
-.ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
+.ko-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,max-content);gap:8px 24px;align-items:start;margin:0 0 8px}
+.ko-hero-main{min-width:0}
+.ko-rail{display:block;min-width:0;width:auto;max-width:100%;position:static}
+.ko-rail .ko-date{width:100%;justify-content:center;margin:0 0 2px}
+.ko-rail .ko-ins{width:100%;justify-content:center;gap:10px;padding:0 0 8px}
 .ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
 .ko-rail-head span{flex:1;text-align:center;font-weight:500}
 .ko-tally{margin-left:14px;font-size:12px;color:var(--k-dim)}
@@ -181,13 +181,10 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-downfill{fill:color-mix(in srgb,var(--ko-pe) 14%,transparent)}
 .ko-strip-side{fill:#fff;font-size:9px;font-family:inherit;font-weight:500;pointer-events:none}
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
-.ko-rail .ko-cal-cell{min-height:42px;padding:5px 6px}
 .ko-desk[data-tab="month"]{display:block}
-.ko-desk[data-tab="month"] .ko-main{display:block;max-width:none}
 @media(max-width:1099px){
-  .ko-desk{display:block}
-  .ko-split-tape{grid-template-columns:1fr}
-  .ko-rail{width:auto;min-width:0}
+  .ko-hero{grid-template-columns:1fr}
+  .ko-rail{width:auto;max-width:none}
 }
 .ko-ins-side {
   margin-left: 5px;
@@ -579,15 +576,12 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 
 @media (width <= 1099px) {
-  .ko-desk {
-    display: block;
-  }
-  .ko-split-tape {
+  .ko-hero {
     grid-template-columns: 1fr;
   }
   .ko-rail {
     width: auto;
-    min-width: 0;
+    max-width: none;
   }
 }
 @media (width <= 800px) {
@@ -605,7 +599,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   .ko-acc-chev {
     order: 6;
   }
-}@media (width<=800px){.ko-head,.ko-body{padding-left:16px;padding-right:16px}.ko-title-row{flex-wrap:wrap;gap:8px;margin-bottom:4px}.ko-title-row h2{width:auto;font-size:20px}.ko-date-value{min-width:96px;font-size:13px}.ko-tabs-row{flex-wrap:wrap;align-items:flex-start;gap:0}.ko-tabs{gap:20px;width:100%}.ko-ins{gap:14px;width:100%;padding-top:4px;padding-bottom:10px}.kd-shell{padding:20px 16px}.kd-margins{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-top:1px solid var(--k-border);border-left:0;margin-top:24px;padding:24px 0 0}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%;min-width:0}.ko-kv{grid-template-columns:1fr 1fr}.ko-kv>div:nth-child(4n){border-right:1px solid var(--k-surface-hover)}.ko-kv>div:nth-child(2n){border-right:0}.ko-split{grid-template-columns:1fr}.ko-cal-cell{min-height:44px;padding:4px 4px 6px}}
+}@media (width<=800px){.ko-head,.ko-body{padding-left:16px;padding-right:16px}.ko-title-row{flex-wrap:wrap;gap:8px;margin-bottom:4px}.ko-title-row h2{width:auto;font-size:20px}.ko-date-value{min-width:96px;font-size:13px}.ko-tabs-row{flex-wrap:wrap;align-items:flex-start;gap:0}.ko-tabs{gap:20px;width:100%}.ko-ins{gap:14px;width:100%;padding-top:4px;padding-bottom:10px}.kd-shell{padding:20px 16px}.kd-margins{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-top:1px solid var(--k-border);border-left:0;margin-top:24px;padding:24px 0 0}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%;min-width:0}.ko-kv{grid-template-columns:1fr 1fr}.ko-kv>div:nth-child(4n){border-right:1px solid var(--k-surface-hover)}.ko-kv>div:nth-child(2n){border-right:0}.ko-split{grid-template-columns:1fr}.ko-cal-cell{min-height:0;padding:4px}}
 `;
 
 
@@ -855,8 +849,60 @@ export function AstroPane() {
 
       <div className="ko-body">
         <div className="ko-desk" data-tab={tab}>
-          <div className="ko-main">
-            <div className="ko-toolbar">
+          {tab !== "month" ? (
+            <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
+          ) : null}
+          <div className="ko-hero">
+            <div className="ko-hero-main">
+              {now && status ? (
+                <NowBoard
+                  status={status}
+                  now={now}
+                  grade={liveGrade}
+                  viewingIso={iso}
+                  sessionPnl={tally.directional ? tally.pnl : null}
+                  buy={status.window ? buyContract(status.window, tape) : undefined}
+                  nextBuy={status.next ? buyContract(status.next, tape) : undefined}
+                  holding={holding}
+                  onOpenSession={(date) => {
+                    applyIso(date);
+                    setTab("session");
+                  }}
+                  onOpenWindow={(slot) => {
+                    applyIso(status.sessionIso);
+                    setTab("session");
+                    setOpenKey(slotKey(slot));
+                  }}
+                />
+              ) : null}
+              {tab !== "month" ? (
+                <>
+                  <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
+                  <p className="ko-sub">
+                    <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
+                      {notes ? "Hide notes" : "Notes"}
+                    </button>
+                    {tally.directional ? (
+                      <span className="ko-tally">
+                        {tally.hits}/{tally.directional} hit
+                        {tally.sits ? ` · ${tally.sits} sit` : ""}
+                        {" · "}
+                        <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
+                          {tally.pnl >= 0 ? "+" : ""}
+                          {tally.pnl.toFixed(0)}
+                        </span>
+                      </span>
+                    ) : tapeLoading ? (
+                      <span className="ko-tally text-muted">Tape…</span>
+                    ) : tapeError ? (
+                      <span className="ko-tally text-muted">{tapeError}</span>
+                    ) : null}
+                  </p>
+                  {notes ? <PlaybookNotes book={book} /> : null}
+                </>
+              ) : null}
+            </div>
+            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
               <div className="ko-date" role="group" aria-label="Session date">
                 <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
                   ‹
@@ -902,110 +948,46 @@ export function AstroPane() {
                   );
                 })}
               </div>
-            </div>
-            {now && status ? (
-              <NowBoard
-                status={status}
-                now={now}
-                grade={liveGrade}
-                viewingIso={iso}
-                sessionPnl={tally.directional ? tally.pnl : null}
-                buy={status.window ? buyContract(status.window, tape) : undefined}
-                nextBuy={status.next ? buyContract(status.next, tape) : undefined}
-                holding={holding}
-                onOpenSession={(date) => {
-                  applyIso(date);
-                  setTab("session");
-                }}
-                onOpenWindow={(slot) => {
-                  applyIso(status.sessionIso);
-                  setTab("session");
-                  setOpenKey(slotKey(slot));
-                }}
-              />
-            ) : null}
-
-            {tab === "month" ? (
-              <div className="ko-split-tape">
-                <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
-                <aside className="ko-rail" aria-label={`${month.label} calendar`}>
-                  <div className="ko-rail-head">
-                    <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                      ‹
-                    </button>
-                    <span>{month.label}</span>
-                    <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                      ›
-                    </button>
-                  </div>
-                  <MonthHeat month={month} iso={iso} onPick={pickDay} />
-                </aside>
+              <div className="ko-rail-head">
+                <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                  ‹
+                </button>
+                <span>{month.label}</span>
+                <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                  ›
+                </button>
               </div>
-            ) : (
-              <div className="ko-session">
-                <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
-                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
-                <p className="ko-sub">
-                  <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
-                    {notes ? "Hide notes" : "Notes"}
-                  </button>
-                  {tally.directional ? (
-                    <span className="ko-tally">
-                      {tally.hits}/{tally.directional} hit
-                      {tally.sits ? ` · ${tally.sits} sit` : ""}
-                      {" · "}
-                      <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
-                        {tally.pnl >= 0 ? "+" : ""}
-                        {tally.pnl.toFixed(0)}
-                      </span>
-                    </span>
-                  ) : tapeLoading ? (
-                    <span className="ko-tally text-muted">Tape…</span>
-                  ) : tapeError ? (
-                    <span className="ko-tally text-muted">{tapeError}</span>
-                  ) : null}
-                </p>
-                {notes ? <PlaybookNotes book={book} /> : null}
-                <div className="ko-split-tape">
-                  <div>
-                    <SessionStrip
-                      slots={clockRows}
-                      iso={iso}
-                      tape={tape}
-                      nowMin={nowMin}
-                      sameDay={sameDay}
-                      grades={grades}
-                      onPick={pickSlot}
-                    />
-                    <ClockTable
-                      rows={clockRows}
-                      grades={grades}
-                      contracts={contracts}
-                      loading={tapeLoading}
-                      openKey={openKey}
-                      underlying={underlying}
-                      asOfIso={iso}
-                      onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
-                    />
-                  </div>
-                  <aside className="ko-rail" aria-label={`${month.label} calendar`}>
-                    <div className="ko-rail-head">
-                      <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                        ‹
-                      </button>
-                      <span>{month.label}</span>
-                      <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                        ›
-                      </button>
-                    </div>
-                    <MonthHeat month={month} iso={iso} onPick={pickDay} />
-                  </aside>
-                </div>
-              </div>
-            )}
+              <MonthHeat month={month} iso={iso} onPick={pickDay} />
+            </aside>
           </div>
+
+          {tab === "month" ? <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} /> : null}
+          {tab !== "month" ? (
+            <div className="ko-session">
+              <SessionStrip
+                slots={clockRows}
+                iso={iso}
+                tape={tape}
+                nowMin={nowMin}
+                sameDay={sameDay}
+                grades={grades}
+                onPick={pickSlot}
+              />
+              <ClockTable
+                rows={clockRows}
+                grades={grades}
+                contracts={contracts}
+                loading={tapeLoading}
+                openKey={openKey}
+                underlying={underlying}
+                asOfIso={iso}
+                onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
+    </div>
     </div>
   );
 }
