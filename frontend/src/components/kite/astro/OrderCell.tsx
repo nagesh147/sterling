@@ -93,7 +93,6 @@ export function OrderCell({
 
   const hit = useMemo<OptionHit | null>(() => {
     if (instrument) return instrument;
-    if (onBuy) return null;
     if (!side || strike == null) return null;
     return {
       tradingsymbol: `${underlying}${strike}${side}`,
@@ -104,7 +103,7 @@ export function OrderCell({
       last_price: 0,
       instrument_type: side,
     };
-  }, [instrument, onBuy, side, strike, underlying, asOfIso]);
+  }, [instrument, side, strike, underlying, asOfIso]);
 
   const heldRaw = position ?? matchHeldOption(demoRows, underlying, side);
   const heldSide = heldRaw ? heldRaw.optionSide ?? optionSideOf(heldRaw.tradingsymbol) : null;
@@ -117,11 +116,11 @@ export function OrderCell({
   const go = (kind: ContinueKind) => (e: MouseEvent) => {
     stop(e);
     if (kind === "buy") {
-      if (!hit) return;
       if (onBuy) {
-        onBuy(hit, product, plan);
+        if (hit) onBuy(hit, product, plan);
         return;
       }
+      if (!hit) return;
       setPending("buy");
       return;
     }
@@ -155,7 +154,7 @@ export function OrderCell({
       : plan.kind === "trail" || plan.kind === "lock"
         ? "ko-btn-trail"
         : "ko-btn-buy";
-  const disabled = plan.kind === "buy" && (resolving || (Boolean(onBuy) && (!connected || !hit)));
+  const disabled = plan.kind === "buy" && !hit;
 
   return (
     <div className="ko-ord" onClick={stop}>

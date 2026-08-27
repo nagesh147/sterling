@@ -92,7 +92,9 @@ export function pickNearestOption(
     });
   }
   hits.sort((a, b) => a.expiry.localeCompare(b.expiry) || a.tradingsymbol.localeCompare(b.tradingsymbol));
-  return hits[0] ?? null;
+  if (hits[0]) return hits[0];
+  if (asOfIso !== "0000-01-01") return pickNearestOption(rows, underlying, strike, side, "0000-01-01");
+  return null;
 }
 
 export function optionSideOf(tradingsymbol: string): "CE" | "PE" | null {
