@@ -3,7 +3,7 @@ import { sessionDayKey, sessionDayLabel } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
-import { FilterToggle } from './board/BoardFilters';
+import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
 import {
@@ -32,6 +32,7 @@ import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
+import { PaneHeaderActions } from './PaneHeaderActions';
 
 interface Props {
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -1628,9 +1629,28 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     // Navigator half of the board stays stale until its own 5-minute loop.
     // Sequential on purpose: both draw on the same Kite ~3 req/s historical
     // budget, and firing them together would double the effective concurrency.
+    //
+    // The table being looked at goes first. Sequencing means the second engine
+    // finishes materially later, so a fixed order made one lens always wait for
+    // the other's full scan — under the Navigator lens you pressed rescan and
+    // watched SuperTrend refresh while the rows in front of you sat stale. The
+    // rest follow; nothing is skipped, only reordered.
+    const navigatorFirst = signalMode === 'navigator';
+    const steps: Array<() => Promise<unknown>> = navigatorFirst
+      ? [
+          ...(navigatorEnabled ? [() => navigatorScan.mutateAsync()] : []),
+          ...(scanRunsSupertrend ? [() => scan.mutateAsync()] : []),
+        ]
+      : [
+          ...(scanRunsSupertrend ? [() => scan.mutateAsync()] : []),
+          ...(navigatorEnabled ? [() => navigatorScan.mutateAsync()] : []),
+        ];
     (async () => {
-      if (scanRunsSupertrend) await scan.mutateAsync();
-      if (navigatorEnabled) await navigatorScan.mutateAsync();
+      for (const step of steps) {
+        // One engine failing must not cost the others their refresh — the whole
+        // point is that the table in front of you gets rescanned.
+        try { await step(); } catch { /* each mutation surfaces its own toast */ }
+      }
     })()
       .catch(() => { /* each mutation surfaces its own error toast */ })
       .finally(() => { scanLock.current = false; });
@@ -2064,24 +2084,32 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
           <span style={{ flex: 1 }} />
 
-          {scanning ? (
-            <ToolbarButton
-              title="Stop scan"
-              onClick={doCancelScan}
-              disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-            </ToolbarButton>
-          ) : (
-            <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
-              <RefreshIcon spinning={scanPending} />
-            </ToolbarButton>
-          )}
-          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
-            <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </ToolbarButton>
-          </span>
+          {/* Rescan and table settings live in the pane's title bar, beside
+              minimize. They used to sit here, at the right edge of this row —
+              directly beneath the window controls, so the screen carried two
+              stacked rows of right-aligned icons and the pair you reach for
+              during a session was the lower one. PaneHeaderActions falls back to
+              rendering in place when no title bar exists. */}
+          <PaneHeaderActions pane="signals">
+            {scanning ? (
+              <ToolbarButton
+                title="Stop scan"
+                onClick={doCancelScan}
+                disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+              </ToolbarButton>
+            ) : (
+              <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
+                <RefreshIcon spinning={scanPending} />
+              </ToolbarButton>
+            )}
+            <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+              <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+                <Icons.Settings />
+              </ToolbarButton>
+            </span>
+          </PaneHeaderActions>
         </EngineToolbar>
 
         <ScanProgressBar signals={signals} />
@@ -2096,9 +2124,35 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 searchSettingsOpen={searchSettingsOpen}
                 setSearchSettingsOpen={setSearchSettingsOpen}
                 height={35}
+                // Its panel is the watchlist's, and the only part that governed
+                // this table was the column list — now a labelled COLUMNS button
+                // beside the filters, where the other boards keep theirs.
+                showSettings={false}
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              {/* The columns control this table never had. Its toggles used to
+                  live in an unlabelled gear inside the search bar — a panel that
+                  also carried watchlist-only settings like Change type, so the
+                  five options that actually governed these columns were buried
+                  among options that did nothing here. Same control the other
+                  boards use, driven by this table's own row spec. */}
+              <ColumnsMenu
+                items={[
+                  { id: 'exchange', label: 'Exchange', on: s.showExchange, toggle: () => s.toggleShow('showExchange') },
+                  { id: 'leg', label: 'Leg', on: s.showLeg, toggle: () => s.toggleShow('showLeg') },
+                  { id: 'chg', label: 'Change', on: s.showPriceChange, toggle: () => s.toggleShow('showPriceChange') },
+                  { id: 'chgPct', label: 'Change %', on: s.showPriceChangePct, toggle: () => s.toggleShow('showPriceChangePct') },
+                  { id: 'dir', label: 'Direction', on: s.showPriceDirection, toggle: () => s.toggleShow('showPriceDirection') },
+                ]}
+                onShowAll={() => {
+                  if (!s.showExchange) s.toggleShow('showExchange');
+                  if (!s.showLeg) s.toggleShow('showLeg');
+                  if (!s.showPriceChange) s.toggleShow('showPriceChange');
+                  if (!s.showPriceChangePct) s.toggleShow('showPriceChangePct');
+                  if (!s.showPriceDirection) s.toggleShow('showPriceDirection');
+                }}
+              />
               <FilterToggle
                 on={bestOnly}
                 label="BEST LEG"

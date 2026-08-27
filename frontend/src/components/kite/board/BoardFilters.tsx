@@ -62,10 +62,33 @@ export function FilterToggle({ on, label, hint, onChange }: {
  */
 const LOCKED: readonly ColumnId[] = ['instrument', 'status'];
 
-function ColumnPicker({ view, available }: { view: BoardView; available: readonly ColumnId[] }) {
+export interface ColumnChoice {
+  id: string;
+  label: string;
+  on: boolean;
+  toggle: () => void;
+}
+
+/**
+ * The COLUMNS button and its menu, driven by a plain list of choices.
+ *
+ * Presentational on purpose. Two boards keep their visible columns in
+ * completely different places — the shared board in a `BoardView`, SuperTrend in
+ * the Kite settings store, keyed by its own row spec rather than by `ColumnId` —
+ * and mapping one onto the other would be lossy in the direction that silently
+ * drops a column. So the control takes choices and reports toggles, and each
+ * caller keeps its own model.
+ *
+ * That is what let SuperTrend finally have this button. It had none: its column
+ * toggles were buried in an unlabelled gear inside the search bar, next to BEST
+ * LEG, in a panel that also carried watchlist-only settings like Change type.
+ */
+export function ColumnsMenu({ items, onShowAll }: {
+  items: readonly ColumnChoice[];
+  onShowAll?: () => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
-  const offered = COLUMNS.filter((c) => available.includes(c.id) && !LOCKED.includes(c.id));
 
   React.useEffect(() => {
     if (!open) return;
@@ -81,8 +104,8 @@ function ColumnPicker({ view, available }: { view: BoardView; available: readonl
     };
   }, [open]);
 
-  if (!offered.length) return null;
-  const hiddenCount = offered.filter((c) => view.hidden.has(c.id)).length;
+  if (!items.length) return null;
+  const hiddenCount = items.filter((c) => !c.on).length;
 
   return (
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
@@ -91,7 +114,7 @@ function ColumnPicker({ view, available }: { view: BoardView; available: readonl
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={hiddenCount ? `Columns, ${hiddenCount} hidden` : 'Columns'}
-        title="Choose which columns this board shows"
+        title="Choose which columns this table shows"
         onClick={() => setOpen((v) => !v)}
         className="sb-tool"
         style={{
@@ -105,7 +128,7 @@ function ColumnPicker({ view, available }: { view: BoardView; available: readonl
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
           <path d="M4 5h16M4 12h16M4 19h16" strokeLinecap="round" />
         </svg>
-        COLUMNS{hiddenCount ? ` ${offered.length - hiddenCount}/${offered.length}` : ''}
+        COLUMNS{hiddenCount ? ` ${items.length - hiddenCount}/${items.length}` : ''}
       </button>
 
       {open && (
@@ -118,30 +141,27 @@ function ColumnPicker({ view, available }: { view: BoardView; available: readonl
             boxShadow: '0 10px 26px rgba(0, 0, 0, .26)', padding: 6,
           }}
         >
-          {offered.map((col) => {
-            const on = !view.hidden.has(col.id);
-            return (
-              <label
-                key={col.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7, padding: '4px 5px', borderRadius: 3,
-                  fontSize: 10.5, color: k.text, cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={() => view.toggleColumn(col.id)}
-                  style={{ width: 13, height: 13, margin: 0, accentColor: k.orange }}
-                />
-                {col.label}
-              </label>
-            );
-          })}
-          {hiddenCount > 0 && (
+          {items.map((col) => (
+            <label
+              key={col.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '4px 5px', borderRadius: 3,
+                fontSize: 10.5, color: k.text, cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={col.on}
+                onChange={col.toggle}
+                style={{ width: 13, height: 13, margin: 0, accentColor: k.orange }}
+              />
+              {col.label}
+            </label>
+          ))}
+          {hiddenCount > 0 && onShowAll && (
             <button
               type="button"
-              onClick={view.showAllColumns}
+              onClick={onShowAll}
               style={{
                 width: '100%', marginTop: 4, padding: '4px 5px', border: 'none', borderTop: `1px solid ${k.border}`,
                 background: 'transparent', color: k.blue, fontFamily: 'inherit', fontSize: 9.5, fontWeight: 600,
@@ -155,6 +175,19 @@ function ColumnPicker({ view, available }: { view: BoardView; available: readonl
       )}
     </div>
   );
+}
+
+/** The shared board's columns, expressed as choices for {@link ColumnsMenu}. */
+function ColumnPicker({ view, available }: { view: BoardView; available: readonly ColumnId[] }) {
+  const items = COLUMNS
+    .filter((c) => available.includes(c.id) && !LOCKED.includes(c.id))
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      on: !view.hidden.has(c.id),
+      toggle: () => view.toggleColumn(c.id),
+    }));
+  return <ColumnsMenu items={items} onShowAll={view.showAllColumns} />;
 }
 
 export function BoardFilters({ view, columns, children }: {
