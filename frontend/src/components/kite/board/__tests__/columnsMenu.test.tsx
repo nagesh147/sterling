@@ -60,3 +60,58 @@ describe('ColumnsMenu', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+/**
+ * SuperTrend's real column set.
+ *
+ * The first version of this menu offered the six `visibleWhen` groups —
+ * exchange, leg, premium, chg, chgPct, dir — which is not what the table shows.
+ * Four columns (Entry, SL, TSL, Target) hid behind `premium` together, and Exit
+ * and LTP were `always` with no way to switch them off at all. So the menu named
+ * groups while the header named columns, and they did not correspond.
+ */
+describe('SuperTrend column choices', () => {
+  // Mirrors the pane's construction: real columns, capability-filtered.
+  const build = (premiumAvailable: boolean, hidden: string[] = []) => {
+    const LEFT = ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'];
+    const RIGHT = ['chg', 'chgPct', 'dir', 'ltp'];
+    const premiumCols = new Set(['entry', 'sl', 'tsl', 'target']);
+    return [...LEFT, ...RIGHT]
+      .filter((key) => (premiumCols.has(key) ? premiumAvailable : true))
+      .map((key) => ({ id: key, label: key, on: !hidden.includes(key), toggle: vi.fn() }));
+  };
+
+  it('offers every column the table renders, not visibility groups', () => {
+    render(<ColumnsMenu items={build(true)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+    for (const key of ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target', 'chg', 'chgPct', 'dir', 'ltp']) {
+      expect(screen.getByLabelText(key)).toBeInTheDocument();
+    }
+    expect(screen.queryByLabelText('premium')).not.toBeInTheDocument();
+  });
+
+  it('drops the premium columns when the scan cannot fill them', () => {
+    // A spot scan produces no premium, so Entry/SL/TSL/Target are unavailable
+    // rather than hidden — offering them would invite switching on a column that
+    // then does not appear.
+    render(<ColumnsMenu items={build(false)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+    for (const key of ['entry', 'sl', 'tsl', 'target']) {
+      expect(screen.queryByLabelText(key)).not.toBeInTheDocument();
+    }
+    expect(screen.getByLabelText('exc')).toBeInTheDocument();
+    expect(screen.getByLabelText('ltp')).toBeInTheDocument();
+  });
+
+  it('lets Exit and LTP be switched off, which the group model could not', () => {
+    const items = build(true, ['exit', 'ltp']);
+    render(<ColumnsMenu items={items} />);
+    expect(screen.getByRole('button', { name: /2 hidden/ })).toBeInTheDocument();
+  });
+
+  it('counts hidden columns against the real total', () => {
+    render(<ColumnsMenu items={build(true, ['chg'])} />);
+    // 11 real columns, one off.
+    expect(screen.getByText(/10\/11/)).toBeInTheDocument();
+  });
+});

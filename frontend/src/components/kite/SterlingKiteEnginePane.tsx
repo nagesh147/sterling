@@ -274,6 +274,34 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
+/**
+ * Whether a signal-table column is rendered.
+ *
+ * Two separate questions, which the old single map conflated.
+ *
+ * **Capability** — can the column be filled at all? `premium` is the only real
+ * one: Entry, SL, TSL and Target need a scan source that produces premiums, and
+ * a spot scan has none. That is not a preference and must not appear in a menu.
+ *
+ * **Preference** — does the operator want it? Per column, by key.
+ *
+ * Before this, `visibleWhen` did both, so four columns hid behind one `premium`
+ * flag and Exit and LTP were `always` with no way to switch them off. A COLUMNS
+ * menu built on that could only offer six abstract groups, which is why it did
+ * not list the columns the table actually shows.
+ */
+function signalColCapable(visibleWhen: SignalColVisibility, premiumAvailable: boolean): boolean {
+  return visibleWhen === 'premium' ? premiumAvailable : true;
+}
+
+function signalColShown(
+  col: { key: string; visibleWhen: SignalColVisibility },
+  premiumAvailable: boolean,
+  hidden: readonly string[],
+): boolean {
+  return signalColCapable(col.visibleWhen, premiumAvailable) && !hidden.includes(col.key);
+}
+
 function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs }: {
   row: EngineSignalRow; onClick: () => void;
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -917,11 +945,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      )}
                    </span>
                    {(() => {
-                     const colVisible: Record<SignalColVisibility, boolean> = {
-                       always: true, exchange: s.showExchange, leg: s.showLeg,
-                       premium: showPremiumCols, chg: s.showPriceChange,
-                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                     };
                      const renderLeftCell = (key: string) => {
                        switch (key) {
                          case 'exc':
@@ -1013,7 +1036,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      };
                      return s.signalLeftColumnOrder.map((key) => {
                        const col = SIGNAL_LEFT_COLUMNS[key];
-                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                        return (
                          <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
                            {renderLeftCell(col.key)}
@@ -1065,11 +1088,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       {(() => {
-                        const colVisible: Record<SignalColVisibility, boolean> = {
-                          always: true, exchange: s.showExchange, leg: s.showLeg,
-                          premium: showPremiumCols, chg: s.showPriceChange,
-                          chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                        };
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
@@ -1095,7 +1113,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         };
                         return s.signalRightColumnOrder.map((key) => {
                           const col = SIGNAL_RIGHT_COLUMNS[key];
-                          if (!col || !colVisible[col.visibleWhen]) return null;
+                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                           return (
                             <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
                               {renderRightCell(col.key)}
@@ -2137,21 +2155,28 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   five options that actually governed these columns were buried
                   among options that did nothing here. Same control the other
                   boards use, driven by this table's own row spec. */}
+              {/* The columns this table actually renders, in the order it
+                  renders them — not the six abstract visibility groups the old
+                  gear exposed. `premium` is filtered out rather than offered:
+                  Entry, SL, TSL and Target need a scan source that produces
+                  premiums, so on a spot scan they are unavailable, not hidden. */}
               <ColumnsMenu
                 items={[
-                  { id: 'exchange', label: 'Exchange', on: s.showExchange, toggle: () => s.toggleShow('showExchange') },
-                  { id: 'leg', label: 'Leg', on: s.showLeg, toggle: () => s.toggleShow('showLeg') },
-                  { id: 'chg', label: 'Change', on: s.showPriceChange, toggle: () => s.toggleShow('showPriceChange') },
-                  { id: 'chgPct', label: 'Change %', on: s.showPriceChangePct, toggle: () => s.toggleShow('showPriceChangePct') },
-                  { id: 'dir', label: 'Direction', on: s.showPriceDirection, toggle: () => s.toggleShow('showPriceDirection') },
-                ]}
-                onShowAll={() => {
-                  if (!s.showExchange) s.toggleShow('showExchange');
-                  if (!s.showLeg) s.toggleShow('showLeg');
-                  if (!s.showPriceChange) s.toggleShow('showPriceChange');
-                  if (!s.showPriceChangePct) s.toggleShow('showPriceChangePct');
-                  if (!s.showPriceDirection) s.toggleShow('showPriceDirection');
-                }}
+                  ...s.signalLeftColumnOrder
+                    .map((key) => SIGNAL_LEFT_COLUMNS[key])
+                    .filter((col) => col && signalColCapable(col.visibleWhen, showSignalPremiumColumns)),
+                  ...s.signalRightColumnOrder
+                    .map((key) => SIGNAL_RIGHT_COLUMNS[key])
+                    .filter((col) => col && signalColCapable(col.visibleWhen, showSignalPremiumColumns)),
+                ].map((col) => ({
+                  id: col.key,
+                  // `dir` is an unlabelled arrow in the header, so the menu has to
+                  // name it — an unnamed checkbox is not a choice.
+                  label: col.label || 'Direction',
+                  on: !s.hiddenSignalCols.includes(col.key),
+                  toggle: () => s.toggleSignalCol(col.key),
+                }))}
+                onShowAll={s.showAllSignalCols}
               />
               <FilterToggle
                 on={bestOnly}
@@ -2175,14 +2200,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             }}>
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: '1 1 150px', minWidth: 150 }} />
                  {(() => {
-                   const colVisible: Record<SignalColVisibility, boolean> = {
-                     always: true, exchange: s.showExchange, leg: s.showLeg,
-                     premium: showSignalPremiumColumns, chg: s.showPriceChange,
-                     chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                   };
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];
-                     if (!col || !colVisible[col.visibleWhen]) return null;
+                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                      return (
                        <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn}>
                          {col.sortKey
@@ -2200,14 +2220,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  <div style={{ width: 150 }}></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                    {(() => {
-                     const colVisible: Record<SignalColVisibility, boolean> = {
-                       always: true, exchange: s.showExchange, leg: s.showLeg,
-                       premium: showSignalPremiumColumns, chg: s.showPriceChange,
-                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                     };
                      return s.signalRightColumnOrder.map((key) => {
                        const col = SIGNAL_RIGHT_COLUMNS[key];
-                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                        return (
                          <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn}>
                            {col.sortKey
