@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useDeleteKiteGtt, useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteQuote, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt, usePlaceKiteOrder } from "../../../hooks/useKite";
+import { useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteQuote, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt } from "../../../hooks/useKite";
 import { useOrderWindowStore } from "../../../store/useOrderWindowStore";
 import { notifyOrder } from "../../../store/useKiteNotifications";
 import {
-  bookQty,
   findGtt,
   gttBody,
   heldStrikeLabel,
@@ -22,7 +21,34 @@ import {
 import type { BuyContract } from "../../../lib/astro/tape";
 import type { Underlying, WindowSlot } from "../../../lib/astro/types";
 import { OrderCell } from "./OrderCell";
-import { buildOrderBody, type Product } from "../orderTicket";
+import type { Product } from "../orderTicket";
+
+const ASTRO_LOT = "astro-managed-lot";
+const gttOnce = new Set<string>();
+
+export function rememberAstroLot(tradingsymbol: string) {
+  try {
+    sessionStorage.setItem(ASTRO_LOT, tradingsymbol);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function forgetAstroLot(tradingsymbol?: string) {
+  try {
+    if (!tradingsymbol || sessionStorage.getItem(ASTRO_LOT) === tradingsymbol) sessionStorage.removeItem(ASTRO_LOT);
+  } catch {
+    /* ignore */
+  }
+}
+
+function astroLot(): string | null {
+  try {
+    return sessionStorage.getItem(ASTRO_LOT);
+  } catch {
+    return null;
+  }
+}
 
 export function KiteOrderCell({
   buy,
@@ -56,7 +82,15 @@ export function KiteOrderCell({
     return pickNearestOption(search.data.instruments, underlying, strike, side, asOfIso);
   }, [search.data, underlying, strike, side, asOfIso]);
 
-  const held = useMemo(() => matchHeldOption(pos?.net ?? [], underlying, side), [pos, underlying, side]);
+  const held = useMemo(() => {
+    const mine = astroLot();
+    if (!mine) return null;
+    return matchHeldOption(
+      (pos?.net ?? []).filter((p) => String(p.tradingsymbol ?? "").toUpperCase() === mine.toUpperCase()),
+      underlying,
+      side,
+    );
+  }, [pos, underlying, side]);
 
   const upsertTrail = (row: OpenPos, plan: WindowPlan) => {
     if (!(row.last_price > 0) || plan.slPct == null) return;
@@ -70,7 +104,8 @@ export function KiteOrderCell({
   };
 
   const onBuy = (hit: OptionHit, product: "MIS" | "NRML", plan: WindowPlan) => {
-    const open = (use: OptionHit) =>
+    const open = (use: OptionHit) => {
+      rememberAstroLot(use.tradingsymbol);
       openOrderWindow({
         symbol: use.tradingsymbol,
         exchange: use.exchange,
@@ -83,6 +118,7 @@ export function KiteOrderCell({
         initialTgtPct: plan.tgtPct ?? 30,
         tag: "ASTRO",
       });
+    };
     if (instrument) {
       open(instrument);
       return;
@@ -103,6 +139,7 @@ export function KiteOrderCell({
   };
 
   const onClose = (p: OpenPos) => {
+    forgetAstroLot(p.tradingsymbol);
     openOrderWindow({
       symbol: p.tradingsymbol,
       exchange: p.exchange,
@@ -159,7 +196,15 @@ export function useAstroHolding(
   const { data: pos } = useKitePositions(connected);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const prefer = side === "CE" || side === "PE" ? side : null;
-  const held = useMemo(() => matchHeldOption(pos?.net ?? [], underlying, prefer), [pos, underlying, prefer]);
+  const held = useMemo(() => {
+    const mine = astroLot();
+    if (!mine) return null;
+    return matchHeldOption(
+      (pos?.net ?? []).filter((p) => String(p.tradingsymbol ?? "").toUpperCase() === mine.toUpperCase()),
+      underlying,
+      prefer,
+    );
+  }, [pos, underlying, prefer]);
   return useMemo(() => {
     if (!held) return null;
     const mark = heldStrikeLabel(held);
@@ -170,7 +215,8 @@ export function useAstroHolding(
       mark,
       plan,
       pnl: optionPnl(held),
-      onClose: () =>
+      onClose: () => {
+        forgetAstroLot(held.tradingsymbol);
         openOrderWindow({
           symbol: held.tradingsymbol,
           exchange: held.exchange,
@@ -179,12 +225,13 @@ export function useAstroHolding(
           lastPrice: held.last_price,
           product: (held.product as Product) || "MIS",
           tag: "ASTRO",
-        }),
+        });
+      },
     };
   }, [held, play, side, rows, nowMin, openOrderWindow]);
 }
 
-/** One lot: trail while the same play continues, wait through a gap, auto-exit when the run ends. */
+/** Trail GTT on the lot THIS desk bought. Never places orders — auto-order loops were a bug. */
 export function AstroTrailWatcher({
   live,
   rows = [],
@@ -204,24 +251,28 @@ export function AstroTrailWatcher({
   const gtts = useKiteGtts(connected);
   const placeGtt = usePlaceKiteGtt();
   const modifyGtt = useModifyKiteGtt();
-  const deleteGtt = useDeleteKiteGtt();
-  const placeOrder = usePlaceKiteOrder();
-  const applied = useRef("");
   const high = useRef({ sym: "", px: 0 });
+  const lot = astroLot();
 
-  const held = useMemo(() => matchHeldOption(pos?.net ?? [], underlying, null), [pos, underlying]);
+  const held = useMemo(() => {
+    if (!lot) return null;
+    const mine = (pos?.net ?? []).filter((p) => String(p.tradingsymbol ?? "").toUpperCase() === lot.toUpperCase());
+    return matchHeldOption(mine, underlying, null);
+  }, [pos, underlying, lot]);
+
   const qsym = held ? [`${held.exchange}:${held.tradingsymbol}`] : [];
   const quote = useKiteQuote(qsym, connected && Boolean(held), 2_000);
   const livePx = Number((quote.data && Object.values(quote.data)[0] as { last_price?: number } | undefined)?.last_price) || 0;
 
   useEffect(() => {
-    if (!armed || !connected || !held) return;
-    const inCash = nowMin != null && nowMin >= 555 && nowMin < 930;
+    if (!armed || !connected || !held || !lot) return;
+    if (held.tradingsymbol.toUpperCase() !== lot.toUpperCase()) return;
+    if (Math.abs(held.quantity) <= 0) return;
+
     const more = runAhead(rows, held.optionSide, nowMin ?? 0);
     const action = live?.action ?? (more ? "WAIT" : "AVOID");
     const side = live?.side ?? "WAIT";
-    const mark = heldStrikeLabel(held);
-    const plan = planWindow(action, side, held, mark, more);
+    const plan = planWindow(action, side, held, heldStrikeLabel(held), more);
 
     const raw = Math.max(livePx, held.last_price || 0);
     if (high.current.sym !== held.tradingsymbol) high.current = { sym: held.tradingsymbol, px: raw };
@@ -229,59 +280,15 @@ export function AstroTrailWatcher({
     const water = high.current.px;
 
     if (plan.kind === "close") {
-      if (!inCash || !live) return;
-      const key = `exit-${held.tradingsymbol}`;
-      if (applied.current === key || placeOrder.isPending) return;
-      applied.current = key;
-      const gtt = findGtt(gtts.data, held.tradingsymbol);
-      placeOrder.mutate(
-        buildOrderBody({
-          tradingsymbol: held.tradingsymbol,
-          exchange: held.exchange,
-          side: held.quantity > 0 ? "SELL" : "BUY",
-          quantity: Math.abs(held.quantity),
-          product: (held.product as Product) || "MIS",
-          orderType: "MARKET",
-          tag: "ASTRO",
-        }),
-        {
-          onSuccess: () => {
-            notifyOrder({ kind: "complete", title: "Astro exit", message: `${held.tradingsymbol} — run over` });
-            if (gtt) deleteGtt.mutate(gtt.id);
-          },
-          onError: () => {
-            applied.current = "";
-          },
-        },
-      );
+      const note = `exit-note-${held.tradingsymbol}`;
+      if (gttOnce.has(note)) return;
+      gttOnce.add(note);
+      notifyOrder({
+        kind: "info",
+        title: "Astro run over",
+        message: `Close ${held.tradingsymbol} — same-side play ended. No auto order.`,
+      });
       return;
-    }
-
-    if (plan.kind === "book") {
-      const half = bookQty(held.quantity);
-      if (half > 0 && half < Math.abs(held.quantity)) {
-        const key = `book-${live?.from ?? "x"}-${held.tradingsymbol}`;
-        if (applied.current !== key && !placeOrder.isPending) {
-          applied.current = key;
-          placeOrder.mutate(
-            buildOrderBody({
-              tradingsymbol: held.tradingsymbol,
-              exchange: held.exchange,
-              side: held.quantity > 0 ? "SELL" : "BUY",
-              quantity: half,
-              product: (held.product as Product) || "MIS",
-              orderType: "MARKET",
-              tag: "ASTRO",
-            }),
-            {
-              onSuccess: () => notifyOrder({ kind: "complete", title: "Astro book", message: `Sold ${half} ${held.tradingsymbol}` }),
-              onError: () => {
-                applied.current = "";
-              },
-            },
-          );
-        }
-      }
     }
 
     if (plan.kind !== "trail" && plan.kind !== "lock" && plan.kind !== "book") return;
@@ -291,10 +298,10 @@ export function AstroTrailWatcher({
     const existing = findGtt(gtts.data, held.tradingsymbol);
     const next = ratchetProtection(water, proposed, existing?.triggers ?? []);
     if (existing && !next.changed) return;
-    const key = `trail-${held.tradingsymbol}-${next.sl}-${next.tgt ?? 0}`;
-    if (applied.current === key) return;
+    const key = `gtt-${held.tradingsymbol}-${next.sl}-${next.tgt ?? 0}`;
+    if (gttOnce.has(key)) return;
+    gttOnce.add(key);
     const body = gttBody(held, water, next.sl, next.tgt);
-    applied.current = key;
     const onOk = () =>
       notifyOrder({
         kind: "info",
@@ -303,7 +310,7 @@ export function AstroTrailWatcher({
       });
     if (existing) modifyGtt.mutate({ id: existing.id, ...body }, { onSuccess: onOk });
     else placeGtt.mutate(body, { onSuccess: onOk });
-  }, [armed, connected, live, held, livePx, rows, nowMin, gtts.isFetched, gtts.data, modifyGtt, placeGtt, placeOrder, deleteGtt]);
+  }, [armed, connected, live, held, livePx, lot, rows, nowMin, gtts.isFetched, gtts.data, modifyGtt, placeGtt]);
 
   return null;
 }
