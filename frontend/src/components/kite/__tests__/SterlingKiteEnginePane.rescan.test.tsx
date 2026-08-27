@@ -90,7 +90,10 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
     // The label used to be "Re-scan both engines" whenever both were on and
     // "Re-scan now" otherwise, so a press that scanned only SuperTrend looked
     // identical to one that scanned both. It now names what will run.
-    const button = screen.getByRole('button', { name: 'Re-scan SuperTrend, then Navigator' });
+    // Matched loosely: the label names every strategy it will scan, so pinning
+    // the full string would break each time another engine gains a scan. What
+    // matters is that it names the two on this pane and their order.
+    const button = screen.getByRole('button', { name: /^Re-scan SuperTrend, Navigator/ });
     fireEvent.click(button);
     await waitFor(() => expect(navigatorScan).toHaveBeenCalledTimes(1));
     expect(supertrendScan).toHaveBeenCalledTimes(1);
@@ -99,7 +102,9 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
   it('runs only Navigator when SuperTrend is off', async () => {
     cfg.engine_enabled = false;
     renderPane();
-    fireEvent.click(screen.getByRole('button', { name: 'Run Navigator scan' }));
+    // No longer a special case: with SuperTrend off, the general label simply
+    // starts with Navigator.
+    fireEvent.click(screen.getByRole('button', { name: /^Re-scan Navigator/ }));
     await waitFor(() => expect(navigatorScan).toHaveBeenCalledTimes(1));
     expect(supertrendScan).not.toHaveBeenCalled();
   });
@@ -110,7 +115,7 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
     // This is the case that read as a bug: the button appeared to promise both
     // engines and only one ran. Skipping a disabled engine is correct; being
     // silent about it was not.
-    fireEvent.click(screen.getByRole('button', { name: 'Re-scan SuperTrend · Navigator is off' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Re-scan SuperTrend.*Navigator is off$/ }));
     await waitFor(() => expect(supertrendScan).toHaveBeenCalledTimes(1));
     expect(navigatorScan).not.toHaveBeenCalled();
   });

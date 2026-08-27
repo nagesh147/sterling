@@ -33,6 +33,9 @@ import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 import { PaneHeaderActions } from './PaneHeaderActions';
+import {
+  SCANNABLE_ENGINE_LABEL, useScanAllStrategies, type ScannableEngine,
+} from '../../hooks/useScanAllStrategies';
 
 interface Props {
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -1635,39 +1638,41 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // too, so the button is never a no-op.
   const scanRunsSupertrend = supertrendEnabled || !navigatorEnabled;
   const scanPending = scan.isPending || navigatorScan.isPending;
+  const { scanAll } = useScanAllStrategies();
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scanPending) return;
     scanLock.current = true;
-    // The two engines are peers with separate scan endpoints, so a manual
-    // re-scan has to refresh whichever ones are actually on — otherwise the
-    // Navigator half of the board stays stale until its own 5-minute loop.
-    // Sequential on purpose: both draw on the same Kite ~3 req/s historical
-    // budget, and firing them together would double the effective concurrency.
+    // Every strategy that has a scan, not just the two whose rows share this
+    // pane. Gamma Move, ORB and Adaptive Edge all have scan endpoints and this
+    // button never reached them, so pressing it refreshed part of the platform
+    // and left the rest on its own background loop.
     //
-    // The table being looked at goes first. Sequencing means the second engine
-    // finishes materially later, so a fixed order made one lens always wait for
-    // the other's full scan — under the Navigator lens you pressed rescan and
-    // watched SuperTrend refresh while the rows in front of you sat stale. The
-    // rest follow; nothing is skipped, only reordered.
-    const navigatorFirst = signalMode === 'navigator';
-    const steps: Array<() => Promise<unknown>> = navigatorFirst
-      ? [
-          ...(navigatorEnabled ? [() => navigatorScan.mutateAsync()] : []),
-          ...(scanRunsSupertrend ? [() => scan.mutateAsync()] : []),
-        ]
-      : [
-          ...(scanRunsSupertrend ? [() => scan.mutateAsync()] : []),
-          ...(navigatorEnabled ? [() => navigatorScan.mutateAsync()] : []),
-        ];
-    (async () => {
-      for (const step of steps) {
-        // One engine failing must not cost the others their refresh — the whole
-        // point is that the table in front of you gets rescanned.
-        try { await step(); } catch { /* each mutation surfaces its own toast */ }
-      }
-    })()
-      .catch(() => { /* each mutation surfaces its own error toast */ })
+    // Sequential and lens-first. They all draw on the same Kite ~3 req/s
+    // historical budget, so firing them together makes each slower rather than
+    // the set faster — and the table being looked at should not wait behind four
+    // others. The fan-out itself lives in useScanAllStrategies.
+    const lensFirst: ScannableEngine[] = signalMode === 'navigator'
+      ? ['navigator', 'supertrend']
+      : ['supertrend', 'navigator'];
+    const order: ScannableEngine[] = [
+      ...lensFirst.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled)),
+      'orb', 'gamma_move', 'adaptive_edge',
+    ];
+    scanAll(order)
+      .then((results) => {
+        const failed = results.filter((r) => !r.ok);
+        // Said once, naming the engines. A button that claims to scan everything
+        // has to report the ones it could not, or "all strategies" is a promise
+        // nobody can check.
+        if (failed.length) {
+          notifyOrder({
+            kind: 'error',
+            title: 'Re-scan',
+            message: `Could not scan ${failed.map((f) => SCANNABLE_ENGINE_LABEL[f.engine]).join(', ')}.`,
+          });
+        }
+      })
       .finally(() => { scanLock.current = false; });
   };
   const doCancelScan = () => {
@@ -1684,22 +1689,25 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
   );
-  // Name the engines this will actually run, in the order it will run them.
-  // "Re-scan both engines" was shown whenever both were on and "Re-scan now"
-  // otherwise, so a press that scanned only SuperTrend — because Navigator is
-  // disabled in its own config — looked identical to one that scanned both. The
-  // button now says which, and says when one is off rather than quietly skipping
-  // it.
+  // Name what this will actually run, in the order it will run it.
+  //
+  // The label said "Re-scan both engines" whenever SuperTrend and Navigator were
+  // both on, and "Re-scan now" otherwise — so a press that scanned one looked
+  // identical to a press that scanned two, and it never mentioned the three other
+  // strategies it now also refreshes.
   const scanTitle = (() => {
-    if (navigatorOnlyRuntime) return 'Run Navigator scan';
-    const order = signalMode === 'navigator'
-      ? [navigatorEnabled && 'Navigator', scanRunsSupertrend && 'SuperTrend']
-      : [scanRunsSupertrend && 'SuperTrend', navigatorEnabled && 'Navigator'];
-    const running = order.filter(Boolean) as string[];
-    if (!running.length) return 'Nothing to re-scan — both engines are off';
-    const suffix = navigatorEnabled ? '' : ' · Navigator is off';
-    return `Re-scan ${running.join(', then ')}${suffix}`;
+    const lens: ScannableEngine[] = signalMode === 'navigator'
+      ? ['navigator', 'supertrend']
+      : ['supertrend', 'navigator'];
+    const onPane = lens.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled));
+    const rest: ScannableEngine[] = ['orb', 'gamma_move', 'adaptive_edge'];
+    const names = [...onPane, ...rest].map((e) => SCANNABLE_ENGINE_LABEL[e]);
+    const off = !navigatorEnabled ? ' · Navigator is off' : '';
+    // ATM Premium Imbalance is deliberately unlisted: it has no scan, it arms one
+    // resolved pair. Naming it would promise something the platform cannot do.
+    return `Re-scan ${names.join(', ')}${off}`;
   })();
+
   const changeSignalMode = (next: SignalMode) => {
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
