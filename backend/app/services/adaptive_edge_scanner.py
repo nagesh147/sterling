@@ -32,6 +32,7 @@ from app.engines.adaptive_edge.f103_opportunity import (
 )
 from app.engines.adaptive_edge.f109_option_selection import F109Candidate, select_f109
 from app.engines.adaptive_edge.implied_vol import read as read_implied
+from app.engines.adaptive_edge.option_ladder import INDEX_TO_TAPE, TAPE_TO_OPTION_NAME
 from app.engines.adaptive_edge.volatility_forecast import evaluate_straddle, forecast
 from app.engines.adaptive_edge.volatility_harvest import (
     VolatilityHarvestError,
@@ -50,6 +51,9 @@ from app.services.kite_engine.strikes import (
 )
 
 log = get_logger(__name__)
+
+#: NSE trades on IST; a naive clock here would put the session window in UTC.
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 #: Minimum spacing between historical requests. A token bucket cannot hold a
 #: 3 rq/s limit — it lets a burst through and then the API rejects the tail —
@@ -82,6 +86,25 @@ def _num(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+#: Option-chain names to the NSE quote key for their underlying index. Built
+#: from the engine's own INDEX_TO_TAPE rather than by formatting, because the
+#: index is not named after its options: BANKNIFTY options track "NIFTY BANK",
+#: and "NSE:BANKNIFTY" simply does not resolve. That mismatch cost a whole
+#: underlying every scan, reported only as "spot unavailable".
+_OPTION_NAME_TO_INDEX: dict[str, str] = {
+    option: index
+    for index, tape in INDEX_TO_TAPE.items()
+    for option in (TAPE_TO_OPTION_NAME.get(tape),)
+    if option
+}
+
+
+def spot_quote_key(option_name: str) -> str:
+    """The NSE quote key for an option chain's underlying."""
+    index = _OPTION_NAME_TO_INDEX.get(str(option_name).upper())
+    return f"NSE:{index}" if index else f"NSE:{option_name}"
 
 
 def listed_contracts(
@@ -482,7 +505,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             state["chains_read"] += 1
 
             await pacer.wait()
-            spot_key = f"NSE:{name} 50" if name == "NIFTY" else f"NSE:{name}"
+            spot_key = spot_quote_key(name)
             spot = 0.0
             spot_token = 0
             try:
@@ -499,7 +522,21 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             listed = listed_contracts(rows, cfg, spot=spot)
             state["listed"] += len(listed)
             if not listed:
-                state["skipped"][name] = "no contract inside the expiry and strike windows"
+                # Say WHICH window missed and by how much. "no contract inside
+                # the windows" reads like a transient condition; for an
+                # underlying with no weekly expiry it is permanent, and an
+                # operator watching the scan deserves to see the difference.
+                dtes = sorted({int(r["dte"]) for r in rows if "dte" in r})
+                nearest = dtes[0] if dtes else None
+                window = expiry_window_of(cfg)
+                if nearest is not None and nearest > int(window.get("max_dte", 0)):
+                    state["skipped"][name] = (
+                        f"nearest expiry is {nearest} days out but the window "
+                        f"ends at {window.get('max_dte')} — this underlying has "
+                        f"no expiry this strategy can hold")
+                else:
+                    state["skipped"][name] = (
+                        "no contract inside the expiry and strike windows")
                 continue
 
             # The canonical pipeline decides direction and economics. Ask it
@@ -544,16 +581,11 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
                     else f"expected value not positive: {decision.reason}")
                 continue
 
-            # Only the side the strategy actually called. Surfacing both CE and
-            # PE would mean the board showing two contradictory trades for one
-            # decision.
-            wanted = decision.option_type
-            listed = [r for r in listed
-                      if ("call" if wanted == "CE" else "put") == str(r.get("option_type"))]
-            if not listed:
-                state["skipped"][name] = f"no listed {wanted} inside the windows"
-                continue
-
+            # Quote the WHOLE chain, both sides, before narrowing to the side
+            # the strategy called. The implied-vol reading prices an ATM
+            # straddle, so it needs the CE and the PE at the same strike;
+            # filtering by direction first left one leg of every pair missing
+            # and the reading silently returned None on every scan.
             await pacer.wait()
             keys = [f"NFO:{r.get('instrument_name')}" for r in listed if r.get("instrument_name")]
             try:
@@ -562,23 +594,34 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
                 state["skipped"][name] = f"chain quotes unavailable: {exc}"
                 continue
 
-            tradeable, dropped = tradeable_contracts(listed, chain_quotes, cfg, spot=spot)
+            both_sides, dropped = tradeable_contracts(listed, chain_quotes, cfg, spot=spot)
             for reason, count in dropped.items():
                 state["dropped"][reason] = state["dropped"].get(reason, 0) + count
-            state["tradeable"] += len(tradeable)
-            if not tradeable:
-                state["skipped"][name] = "no contract passed the liquidity filters"
-                continue
 
             # Measure implied against realised before anything else. This runs
             # whether or not a trade follows, because it is the record the
             # evidence gate opens on and it exists nowhere but live quotes.
             try:
-                reading = volatility_reading(name, tradeable, candles_closes, cfg, spot=spot)
+                reading = volatility_reading(name, both_sides, candles_closes, cfg, spot=spot)
                 if reading is not None:
                     state["volatility"].append(reading)
             except Exception as exc:                               # noqa: BLE001
                 state["errors"].append(f"{name}: volatility reading failed: {exc}")
+
+            # Only the side the strategy actually called. Surfacing both CE and
+            # PE would mean the board showing two contradictory trades for one
+            # decision.
+            # tradeable_contracts() normalises option_type to CE/PE, so match
+            # on that spelling — comparing against the chain's raw "call"/"put"
+            # here matched nothing and dropped every contract.
+            wanted = decision.option_type
+            tradeable = [r for r in both_sides if str(r.get("option_type")) == wanted]
+            state["tradeable"] += len(tradeable)
+            if not tradeable:
+                state["skipped"][name] = (
+                    f"no {wanted} passed the liquidity filters" if both_sides
+                    else "no contract passed the liquidity filters")
+                continue
 
             ranked = rank_contracts(tradeable, cfg, expected_ev=decision.expected_net_value)
             for row in ranked:

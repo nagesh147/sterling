@@ -128,7 +128,12 @@ async def fetch_bars(client, token: int, *, interval: str, lookback_bars: int) -
         start.strftime("%Y-%m-%d %H:%M:%S"),
         now.strftime("%Y-%m-%d %H:%M:%S"),
     )
-    rows = ((payload or {}).get("data") or {}).get("candles") or []
+    # The client returns {"candles": [...]} at the top level; some Kite paths
+    # nest it under "data". Read both. Reading only the nested form returned
+    # zero every time, so the pipeline never saw a bar and silently made no
+    # decision — the scan reported "not enough history" on a full session of it.
+    payload = payload or {}
+    rows = payload.get("candles") or (payload.get("data") or {}).get("candles") or []
     out: list[dict] = []
     for row in rows:
         # Kite returns positional candles: [timestamp, o, h, l, c, volume, oi?]

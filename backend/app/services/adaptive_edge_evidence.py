@@ -36,6 +36,14 @@ class PendingReading:
     `realised_move_bps` is None until the horizon passes. None is not zero — a
     zero move is a real and informative outcome, and collapsing the two would
     tell the gate that nothing happened when it means nothing is known.
+
+    `credit_bps` and `max_loss_bps` are None when no tradeable structure existed
+    at the moment of measurement — which, with a 30-bar hold and a weekly
+    expiry, is nearly always. Such a row is still worth keeping: the
+    implied-versus-realised ratio is the fact every offline study of this
+    strategy lacked, and it is only observable live. It is NOT gate evidence,
+    because expectancy cannot be computed from a trade that was never priced.
+    `readings()` enforces that split.
     """
 
     session: str
@@ -45,14 +53,22 @@ class PendingReading:
     implied_ratio: float
     implied_vol: float
     realised_vol: float
-    credit_bps: float
-    max_loss_bps: float
+    credit_bps: Optional[float]
+    max_loss_bps: Optional[float]
     forecast_bps: float
     realised_move_bps: Optional[float] = None
 
     @property
     def key(self) -> str:
         return f"{self.underlying}:{self.strike:.0f}:{self.decided_ms}"
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(v for v in values if v)
+    if not ordered:
+        return 0.0
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
 
 
 def _key(uid: str) -> str:
@@ -116,7 +132,9 @@ def readings(uid: str) -> list[Reading]:
     for session, rows in _load(uid).items():
         for row in rows:
             move = row.get("realised_move_bps")
-            if move is None:
+            # Gate evidence needs an outcome AND a priced structure. A bare
+            # measurement is archived above but proves nothing about expectancy.
+            if move is None or row.get("credit_bps") is None:
                 continue
             try:
                 out.append(Reading(
@@ -154,6 +172,14 @@ def summary(uid: str) -> dict[str, Any]:
         "shortfall": v.shortfall,
         "pending": sum(1 for rows in data.values() for r in rows
                        if r.get("realised_move_bps") is None),
+        # Every implied-versus-realised measurement, priced or not. This is the
+        # number that grows every scan; `observations` only grows when a
+        # structure was actually tradeable, which is far rarer.
+        "measurements": sum(len(rows) for rows in data.values()),
+        "median_measured_ratio": round(_median([
+            float(r.get("implied_ratio") or 0.0)
+            for rows in data.values() for r in rows
+            if r.get("implied_ratio") is not None]), 3),
     }
 
 

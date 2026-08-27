@@ -174,3 +174,147 @@ def test_account_enumeration_uses_the_real_accounts_api():
     available = {n for n in dir(accounts) if not n.startswith("_")}
     for call in re.findall(r"\baccounts\.(\w+)\s*\(", source):
         assert call in available, f"accounts.{call}() does not exist"
+
+
+# ---------------------------------------------------------------------------
+# The four bugs a live Kite session exposed that no mock had caught. Every one
+# was a mismatch between what the code assumed a value looked like and what the
+# broker actually sends, and every one failed SILENTLY — the scan reported
+# "not enough history" or "spot unavailable" rather than an error, so the
+# engine looked like it was running while it made no decision at all.
+# ---------------------------------------------------------------------------
+
+def test_fetch_bars_reads_the_shape_kite_actually_returns():
+    """get_historical() returns {"candles": [...]} at the TOP level.
+
+    Reading only the nested data.candles returned zero rows every time, so the
+    strategy never saw a bar and every scan skipped with "only 0 bars of
+    history" — indistinguishable from a genuinely short history.
+    """
+    import asyncio
+    from app.services.adaptive_edge_strategy import fetch_bars
+
+    candles = [[f"2026-08-27T09:{m:02d}:00+0530", 100.0, 101.0, 99.0, 100.5, 0]
+               for m in range(15, 45)]
+
+    class TopLevel:
+        async def get_historical(self, *a, **k):
+            return {"candles": candles}
+
+    class Nested:
+        async def get_historical(self, *a, **k):
+            return {"data": {"candles": candles}}
+
+    for client in (TopLevel(), Nested()):
+        bars = asyncio.run(fetch_bars(client, 256265, interval="minute", lookback_bars=30))
+        assert len(bars) == 30, f"{type(client).__name__} returned {len(bars)} bars"
+
+
+def test_index_spot_keys_come_from_the_engine_map_not_string_formatting():
+    """BANKNIFTY options track an index named "NIFTY BANK".
+
+    "NSE:BANKNIFTY" does not resolve, so the underlying was dropped from every
+    scan with nothing but "spot unavailable" to show for it.
+    """
+    from app.services.adaptive_edge_scanner import spot_quote_key
+
+    assert spot_quote_key("NIFTY") == "NSE:NIFTY 50"
+    assert spot_quote_key("BANKNIFTY") == "NSE:NIFTY BANK"
+    assert spot_quote_key("FINNIFTY") == "NSE:NIFTY FIN SERVICE"
+    # A single stock is named after itself and must pass through untouched.
+    assert spot_quote_key("RELIANCE") == "NSE:RELIANCE"
+
+
+def test_the_liquidity_filter_normalises_option_type_to_the_traded_spelling():
+    """tradeable_contracts() emits CE/PE, not the chain's call/put.
+
+    The scan narrows the chain to the side the strategy called. Comparing that
+    against "call"/"put" after the filter had already normalised matched
+    nothing, so every contract was discarded after passing every check.
+    """
+    from app.services.adaptive_edge_scanner import tradeable_contracts
+    from app.engines.adaptive_edge.config import AdaptiveEdgeConfig
+
+    rows = [{"instrument_name": f"NIFTY{k}{s}", "strike": 24000.0,
+             "option_type": k, "lot_size": 75, "expiry": "2026-08-27"}
+            for k, s in (("call", "CE"), ("put", "PE"))]
+    quotes = {f"NFO:{r['instrument_name']}": {
+        "last_price": 100.0, "volume": 500000, "oi": 100000,
+        "depth": {"buy": [{"price": 99.5, "quantity": 1000}],
+                  "sell": [{"price": 100.5, "quantity": 1000}]},
+    } for r in rows}
+
+    kept, _ = tradeable_contracts(rows, quotes, AdaptiveEdgeConfig(), spot=24000.0)
+    assert kept, "fixture should survive the liquidity filter"
+    assert {str(r["option_type"]) for r in kept} <= {"CE", "PE"}
+    for side in ("CE", "PE"):
+        assert [r for r in kept if str(r.get("option_type")) == side], \
+            f"narrowing the chain to {side} must keep rows"
+
+
+def test_the_volatility_reading_sees_both_legs_of_the_straddle():
+    """The implied-vol reading prices an ATM straddle: it needs the CE AND the
+    PE at one strike. Quoting only the side the strategy called left one leg
+    missing, so the reading returned None on every scan and the evidence gate
+    could never open."""
+    import inspect
+    from app.services import adaptive_edge_scanner as scanner
+
+    src = inspect.getsource(scanner.scan)
+    reading_at = src.index("volatility_reading(")
+    narrow_at = src.index("wanted = decision.option_type")
+    assert reading_at < narrow_at, (
+        "the volatility reading must be taken from the full chain, before the "
+        "scan narrows to one side — otherwise the straddle has only one leg")
+
+
+def test_a_measurement_without_a_tradeable_structure_is_archived_but_not_evidence(store):
+    """The implied-versus-realised ratio is observable on every scan; a priced
+    structure almost never is (a 30-bar hold only fits inside the last half hour
+    of a weekly expiry). Discarding the unpriced rows kept the store empty and
+    threw away the one fact no offline study of this strategy had."""
+    from app.services import adaptive_edge_evidence as ev
+
+    bare = ev.PendingReading(
+        session="2026-08-27", decided_ms=1, underlying="NIFTY", strike=24100.0,
+        implied_ratio=1.9, implied_vol=0.12, realised_vol=0.06,
+        credit_bps=None, max_loss_bps=None, forecast_bps=40.0)
+    priced = ev.PendingReading(
+        session="2026-08-27", decided_ms=2, underlying="NIFTY", strike=24100.0,
+        implied_ratio=1.8, implied_vol=0.12, realised_vol=0.07,
+        credit_bps=55.0, max_loss_bps=200.0, forecast_bps=40.0)
+    assert ev.record("meas", bare)
+    assert ev.record("meas", priced)
+
+    # Both resolve — but only the priced one can speak to expectancy.
+    ev.resolve("meas", "2026-08-27", bare.key, 30.0)
+    ev.resolve("meas", "2026-08-27", priced.key, 30.0)
+
+    assert len(ev.readings("meas")) == 1, "an unpriced row is not gate evidence"
+    s = ev.summary("meas")
+    assert s["measurements"] == 2, "both measurements must be archived"
+    assert s["observations"] == 1
+    assert s["median_measured_ratio"] > 1.0
+
+
+def test_an_underlying_with_no_reachable_expiry_says_so():
+    """BANKNIFTY has no weekly expiry, so its nearest contract sits ~33 days out
+    while this strategy holds for minutes. Reporting that as "no contract inside
+    the expiry and strike windows" made a permanent mismatch look like a quiet
+    day, and it went unnoticed across every scan."""
+    import inspect
+    from app.services import adaptive_edge_scanner as scanner
+
+    src = inspect.getsource(scanner.scan)
+    assert "no expiry this strategy can hold" in src
+    assert "nearest expiry is" in src
+
+
+def test_the_default_universe_only_holds_what_the_horizon_can_trade():
+    from app.engines.adaptive_edge.config import AdaptiveEdgeConfig
+
+    cfg = AdaptiveEdgeConfig()
+    assert "BANKNIFTY" not in cfg.scan_indices, (
+        "BANKNIFTY cannot produce a candidate at this horizon — carrying it in "
+        "the default universe only manufactures a skip on every scan")
+    assert cfg.scan_indices, "the universe must not be empty"

@@ -469,8 +469,13 @@ def _record_volatility_readings(uid: str, state: dict[str, Any]) -> int:
     stamp = ist_now_ms()
     written = 0
     for row in rows:
-        if row.get("credit_bps") is None:
-            continue
+        # Record even when no structure could be priced. The ratio is the
+        # measurement; the structure is optional. Skipping unpriced rows meant
+        # the store stayed empty on every scan but the ~31 minutes a week when
+        # a weekly expiry sits inside the hold — so the gate could never open,
+        # and the one fact worth collecting was thrown away each time.
+        credit = row.get("credit_bps")
+        max_loss = row.get("max_loss_bps")
         try:
             written += bool(record(uid, PendingReading(
                 session=session, decided_ms=stamp,
@@ -479,8 +484,8 @@ def _record_volatility_readings(uid: str, state: dict[str, Any]) -> int:
                 implied_ratio=float(row.get("implied_ratio") or 0.0),
                 implied_vol=float(row.get("implied_vol") or 0.0),
                 realised_vol=float(row.get("realised_vol") or 0.0),
-                credit_bps=float(row.get("credit_bps") or 0.0),
-                max_loss_bps=float(row.get("max_loss_bps") or 0.0),
+                credit_bps=None if credit is None else float(credit),
+                max_loss_bps=None if max_loss is None else float(max_loss),
                 forecast_bps=float(row.get("forecast_bps") or 0.0))))
         except Exception:                                          # noqa: BLE001
             continue

@@ -101,7 +101,13 @@ class AdaptiveEdgeConfig:
     #: Same field names, semantics and curated-registry boundary as every other
     #: engine. The source is an index-and-liquid-stock options strategy; indices
     #: lead because their chains carry the depth the order-flow features need.
-    scan_indices: tuple[str, ...] = ("NIFTY", "BANKNIFTY")
+    #: NIFTY only, and that is a finding rather than a preference. BANKNIFTY
+    #: weeklies were discontinued, so its nearest expiry sits ~33 days out while
+    #: this strategy holds for `horizon_bars` minutes — it produced zero
+    #: candidates on every scan and only a generic "no contract in the windows"
+    #: to explain it. Widening `max_dte` to reach it would price a different
+    #: instrument than the one the volatility forecast is calibrated on.
+    scan_indices: tuple[str, ...] = ("NIFTY",)
     scan_stocks: tuple[str, ...] = ()
     scan_all_stocks: bool = False
     stock_contracts: bool = False
