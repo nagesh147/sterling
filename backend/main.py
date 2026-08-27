@@ -1872,6 +1872,9 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.datalake import router as datalake_router
     app.include_router(datalake_router, prefix="/api/v1")
 
+    from app.api.v1.endpoints.pcr import router as pcr_router
+    app.include_router(pcr_router, prefix="/api/v1")
+
     return app
 
 

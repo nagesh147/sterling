@@ -291,6 +291,7 @@ export function SimpleTerminal() {
                 {([
                   { id: 'dashboard' as const, label: 'Dashboard' },
                   { id: 'astro' as const, label: 'Astrology' },
+                  { id: 'pcr' as const, label: 'PCR' },
                   { id: 'orders' as const, label: 'Orders' },
                   { id: 'holdings' as const, label: 'Holdings' },
                   { id: 'positions' as const, label: 'Positions' },
