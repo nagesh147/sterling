@@ -77,3 +77,41 @@ python -m study.adaptive_edge.calibrate_f102_orderflow
 Both write JSON to `backend/study/adaptive_edge/out/`. Both use walk-forward
 folds with purge and embargo set to the label horizon, and report only holdout
 segments that no fitting or threshold search touched.
+
+---
+
+## A trap found while wiring F-105
+
+F-105 computes `conservative_ev = net_ev - z * standard_error` and is the module
+that owns the quantity everything is refusing on. Wiring it needs `p_target` and
+`p_stop`, and the obvious source is F-102's class probabilities.
+
+That mapping is wrong, and it fails in the dangerous direction.
+
+`P(UP)` is *the underlying moves more than 8 bps within 15 bars*. `target_price`
+is *the option premium doubles*. An at-the-money option needs a far larger
+underlying move than 8 bps to double, so `P(UP)` overstates `P(target)` by a
+large and unknown factor.
+
+The first wiring did exactly that. Fed the measured, no-edge probabilities —
+`P(UP) 0.185` against `P(DOWN) 0.207`, a **losing** hit rate — with a 2:1 payoff:
+
+```text
+gross EV = 0.185 * (+120) + 0.207 * (-36) = +14.75
+conservative_ev = +11.61      eligible = True
+```
+
+A model with no directional signal produced a positive expectancy purely from
+the asymmetry of the slots it was poured into. Nothing about that number was a
+rounding error, and nothing on the surface would have looked wrong.
+
+`conservative_ev` now takes `p_target` and `p_stop` directly and has no
+`direction` or `probabilities` argument, so the mapping cannot be reintroduced
+by accident. A test asserts that signature for the same reason.
+
+The probabilities it needs have to be **measured**: how often a contract like
+this one, entered in a state like this one, reaches its target before its stop.
+That is what the observation recorder collects, and
+`premium_excursion_probabilities` turns those recordings into the two numbers —
+returning None until at least 200 observations have resolved, because a bound
+computed on a handful of rows is a number rather than a bound.

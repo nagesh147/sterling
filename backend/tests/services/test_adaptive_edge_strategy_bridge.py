@@ -213,3 +213,92 @@ def test_ranking_never_drops_contracts_the_recorder_needs(cfg):
 
     rows = [_contract("X", 10, 25_000, premium=1.0)]   # fails every constraint
     assert len(rank_contracts(rows, cfg, expected_ev=5_000.0)) == 1
+
+
+# ------------------------------------------------ F-105 conservative EV
+
+def test_conservative_ev_is_a_real_lower_bound_not_a_scaled_guess():
+    """net_ev - z * standard_error, where the error is the finite-sample spread
+    of the payoff. Widening the sample must tighten the bound toward net EV."""
+    from app.services.adaptive_edge_strategy import conservative_ev
+
+    small = conservative_ev(premium=120.0, target_price=240.0, stop_price=84.0,
+                            p_target=0.30, p_stop=0.20, execution_cost=2.0, sample_size=50)
+    large = conservative_ev(premium=120.0, target_price=240.0, stop_price=84.0,
+                            p_target=0.30, p_stop=0.20, execution_cost=2.0, sample_size=50_000)
+    assert small.conservative_ev < large.conservative_ev
+    assert large.conservative_ev < large.net_ev
+
+
+def test_the_signature_cannot_take_directional_probabilities():
+    """The guard against a category error that manufactured positive expectancy.
+
+    An earlier version took F-102's class probabilities and mapped P(UP) to
+    p_target for a call. P(UP) is "the underlying moves 8 bps in 15 bars";
+    target_price is "the premium doubles". Those are different events, and with
+    the measured no-edge probabilities (P(UP) 0.185 against P(DOWN) 0.207 — a
+    losing hit rate) that mapping returned conservative_ev = +11.61, eligible.
+
+    Keeping the parameters explicit and unnamed-by-direction is what stops it
+    being made again by accident.
+    """
+    import inspect
+    from app.services.adaptive_edge_strategy import conservative_ev
+
+    params = set(inspect.signature(conservative_ev).parameters)
+    assert "p_target" in params and "p_stop" in params
+    assert "direction" not in params, "a direction argument invites the class-probability mapping"
+    assert "probabilities" not in params
+
+
+def test_a_losing_setup_is_refused():
+    from app.services.adaptive_edge_strategy import conservative_ev
+    result = conservative_ev(premium=120.0, target_price=240.0, stop_price=84.0,
+                             p_target=0.05, p_stop=0.60, execution_cost=2.0, sample_size=8_000)
+    assert result.eligible is False
+    assert result.conservative_ev < 0
+
+
+def test_probabilities_that_exceed_certainty_are_refused():
+    from app.services.adaptive_edge_strategy import conservative_ev
+    assert conservative_ev(premium=120.0, target_price=240.0, stop_price=84.0,
+                           p_target=0.7, p_stop=0.7, execution_cost=2.0,
+                           sample_size=8_000) is None
+
+
+def test_an_inverted_target_is_refused_rather_than_priced():
+    """A long option's target is above entry and its stop below. Anything else
+    is a different instrument being priced as this one."""
+    from app.services.adaptive_edge_strategy import conservative_ev
+    assert conservative_ev(premium=120.0, target_price=80.0, stop_price=84.0,
+                           p_target=0.3, p_stop=0.2, execution_cost=2.0,
+                           sample_size=8_000) is None
+
+
+def test_excursion_probabilities_need_enough_resolved_observations():
+    """A bound computed on a handful of rows is a number, not a bound."""
+    from app.services.adaptive_edge_strategy import premium_excursion_probabilities
+
+    thin = [{"forward_return_pct": 5.0, "max_favourable_pct": 5.0, "max_adverse_pct": -2.0}] * 10
+    assert premium_excursion_probabilities(thin, target_multiple=2.0, stop_percent=30.0) is None
+
+
+def test_excursion_probabilities_are_measured_from_what_happened():
+    from app.services.adaptive_edge_strategy import premium_excursion_probabilities
+
+    winners = [{"forward_return_pct": 120.0, "max_favourable_pct": 120.0, "max_adverse_pct": -5.0}] * 100
+    losers = [{"forward_return_pct": -40.0, "max_favourable_pct": 3.0, "max_adverse_pct": -40.0}] * 150
+    result = premium_excursion_probabilities(winners + losers, target_multiple=2.0, stop_percent=30.0)
+    assert result is not None
+    p_target, p_stop, n = result
+    assert n == 250
+    assert p_target == pytest.approx(100 / 250)
+    assert p_stop == pytest.approx(150 / 250)
+
+
+def test_unresolved_observations_are_excluded_from_the_estimate():
+    """An observation with no outcome yet says nothing about excursion."""
+    from app.services.adaptive_edge_strategy import premium_excursion_probabilities
+
+    pending = [{"forward_return_pct": None}] * 500
+    assert premium_excursion_probabilities(pending, target_multiple=2.0, stop_percent=30.0) is None

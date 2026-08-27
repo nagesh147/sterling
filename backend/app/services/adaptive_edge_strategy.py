@@ -21,9 +21,11 @@ never uses the synthesized symbol for anything an order touches.
 """
 from __future__ import annotations
 
+import json
+import pathlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from app.core.logging import get_logger
 from app.engines.adaptive_edge import AdaptiveEdgeConfig
@@ -184,3 +186,110 @@ def decide_from_candles(underlying: str, candles: list[dict], cfg: AdaptiveEdgeC
         trace_hash=str(result.trace_hash),
         reference_instrument=result.selected_instrument,
     )
+
+
+# --------------------------------------------------------- F-105 economics
+
+# There is no F-102 model loader here on purpose.
+#
+# One was written, and removed the same day. It would have fed F-102's class
+# probabilities into F-105's option-payoff slots — mapping P(UP) to p_target for
+# a call — and those are different events: P(UP) is "the underlying moves 8 bps
+# within 15 bars", target_price is "the premium doubles". With the measured
+# no-edge probabilities and a 2:1 payoff that mapping produced a positive,
+# eligible conservative EV out of a model with no directional signal.
+#
+# A loader with no valid consumer is the dead code this engine has already been
+# audited for once. The probabilities F-105 needs have to be measured from
+# premium excursions, which is what premium_excursion_probabilities below does
+# and what the observation recorder collects.
+
+def conservative_ev(
+    *,
+    premium: float,
+    target_price: float,
+    stop_price: float,
+    p_target: float,
+    p_stop: float,
+    execution_cost: float,
+    sample_size: int,
+    confidence: float = 0.95,
+):
+    """F-105: the conservative expected value, from premium-excursion probabilities.
+
+    This is the quantity §35 requires. F-105 computes it as
+    `net_ev - z * standard_error`, where the standard error is the finite-sample
+    spread of the three-outcome payoff — a genuine lower confidence bound.
+
+    **`p_target` and `p_stop` must be probabilities that the OPTION PREMIUM
+    reaches those levels.** They are not directional probabilities, and the
+    signature takes them separately for that reason.
+
+    An earlier version of this took F-102's class probabilities and mapped
+    P(UP) -> p_target for a call. That is a category error and it is not a
+    subtle one. P(UP) is "the underlying moves more than 8 bps within 15 bars";
+    `target_price` is "the premium doubles". An at-the-money option needs a far
+    larger underlying move than 8 bps to double, so P(UP) overstates P(target)
+    by a large and unknown factor.
+
+    The consequence was not a rounding error. With the measured, no-edge
+    probabilities (P(UP) 0.185 against P(DOWN) 0.207 — a losing hit rate) and a
+    2:1 payoff, that mapping produced `conservative_ev = +11.61, eligible=True`.
+    A model with no directional signal was manufacturing a positive expectancy
+    purely from the asymmetry of the payoff slots it was fed into.
+
+    The premium-excursion probabilities have to be measured: how often a
+    contract like this one, entered in a state like this one, actually reaches
+    its target before its stop. That is what the observation recorder collects,
+    and until it has, this returns None rather than a number.
+    """
+    from app.engines.adaptive_edge.f105_economics import F105Candidate, evaluate_candidate
+
+    p_target = float(p_target)
+    p_stop = float(p_stop)
+    if p_target < 0 or p_stop < 0 or (p_target + p_stop) > 1.0:
+        return None
+    p_neither = 1.0 - p_target - p_stop
+
+    try:
+        return evaluate_candidate(
+            F105Candidate(
+                entry_price=float(premium),
+                target_price=float(target_price),
+                stop_price=float(stop_price),
+                p_target=p_target,
+                p_stop=p_stop,
+                p_neither=p_neither,
+            ),
+            execution_cost=float(execution_cost),
+            sample_size=int(sample_size),
+            confidence=confidence,
+        )
+    except ValueError as exc:
+        log.debug("adaptive_edge: F-105 refused a candidate (%s)", exc)
+        return None
+
+
+def premium_excursion_probabilities(observations: Sequence[dict], *,
+                                    target_multiple: float,
+                                    stop_percent: float) -> Optional[tuple[float, float, int]]:
+    """(p_target, p_stop, sample_size) measured from recorded observations.
+
+    The honest source of F-105's probabilities: how often a recorded contract
+    actually reached its target before its stop. Returns None until enough
+    resolved observations exist, because a bound computed on a handful of rows
+    is a number rather than a bound.
+
+    Nothing calls this yet with real data — the recorder has collected no
+    resolved sessions. It is here so the path from observation to conservative
+    EV is complete and testable rather than described.
+    """
+    resolved = [o for o in observations or () if o.get("forward_return_pct") is not None]
+    if len(resolved) < 200:
+        return None
+    target_pct = (float(target_multiple) - 1.0) * 100.0
+    stop_pct = -abs(float(stop_percent))
+    hits = sum(1 for o in resolved if float(o.get("max_favourable_pct") or o["forward_return_pct"]) >= target_pct)
+    stops = sum(1 for o in resolved if float(o.get("max_adverse_pct") or o["forward_return_pct"]) <= stop_pct)
+    n = len(resolved)
+    return hits / n, stops / n, n
