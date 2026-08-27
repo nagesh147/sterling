@@ -1635,9 +1635,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // too, so the button is never a no-op.
   const scanRunsSupertrend = supertrendEnabled || !navigatorEnabled;
   const scanPending = scan.isPending || navigatorScan.isPending;
-  const scanTitle = navigatorOnlyRuntime
-    ? 'Run Navigator scan'
-    : (scanRunsSupertrend && navigatorEnabled ? 'Re-scan both engines' : 'Re-scan now');
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scanPending) return;
@@ -1687,6 +1684,22 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
   );
+  // Name the engines this will actually run, in the order it will run them.
+  // "Re-scan both engines" was shown whenever both were on and "Re-scan now"
+  // otherwise, so a press that scanned only SuperTrend — because Navigator is
+  // disabled in its own config — looked identical to one that scanned both. The
+  // button now says which, and says when one is off rather than quietly skipping
+  // it.
+  const scanTitle = (() => {
+    if (navigatorOnlyRuntime) return 'Run Navigator scan';
+    const order = signalMode === 'navigator'
+      ? [navigatorEnabled && 'Navigator', scanRunsSupertrend && 'SuperTrend']
+      : [scanRunsSupertrend && 'SuperTrend', navigatorEnabled && 'Navigator'];
+    const running = order.filter(Boolean) as string[];
+    if (!running.length) return 'Nothing to re-scan — both engines are off';
+    const suffix = navigatorEnabled ? '' : ' · Navigator is off';
+    return `Re-scan ${running.join(', then ')}${suffix}`;
+  })();
   const changeSignalMode = (next: SignalMode) => {
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
@@ -2021,6 +2034,99 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     );
   }
 
+  // The engine's own controls — timeframe, SOURCE, EXIT and the VIEW lens.
+  // They had a row of their own above the table; they now sit on the search row
+  // between the search box and COLUMNS, which is a row that already existed.
+  const engineControls = (
+    <>
+                <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <EngineMark />
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
+                </span>
+
+                {/* SuperTrend rules. Hidden under the Navigator lens because a
+                    Navigator row has no SuperTrend lines for them to govern. */}
+                {cfg && signalMode !== 'navigator' && (
+                  <>
+                    <ToolbarControl
+                      label="SOURCE"
+                      hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
+                      tone={k.orange}
+                    >
+                      <InlineDropdown
+                        value={cfg.scan_source}
+                        options={SCAN_SOURCE_OPTS}
+                        tone={k.orange}
+                        title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
+                        onChange={(next) => patch(
+                          { scan_source: next },
+                          `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
+                          needsRescan('scan_source'),
+                        )}
+                      />
+                    </ToolbarControl>
+                    <ToolbarControl
+                      label="EXIT"
+                      hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
+                      tone={k.blue}
+                    >
+                      <InlineDropdown
+                        value={cfg.exit_mode ?? 'one_red'}
+                        options={EXIT_MODE_OPTS}
+                        tone={k.blue}
+                        title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
+                        onChange={(next) => patch(
+                          { exit_mode: next },
+                          `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
+                          needsRescan('exit_mode'),
+                        )}
+                      />
+                    </ToolbarControl>
+                    <ScopeDivider />
+                  </>
+                )}
+
+                <ToolbarControl
+                  label="VIEW"
+                  hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
+                  tone={k.purple}
+                >
+                  <InlineDropdown
+                    value={signalMode}
+                    options={SIGNAL_MODE_OPTS}
+                    tone={k.purple}
+                    title="Signal lens — local only."
+                    onChange={changeSignalMode}
+                  />
+                </ToolbarControl>
+    </>
+  );
+
+  // Rescan and table settings. Portalled into the pane title bar beside
+  // minimize; renders here if no title bar exists.
+  const paneActions = (
+              <PaneHeaderActions pane="signals">
+                {scanning ? (
+                  <ToolbarButton
+                    title="Stop scan"
+                    onClick={doCancelScan}
+                    disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+                  </ToolbarButton>
+                ) : (
+                  <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
+                    <RefreshIcon spinning={scanPending} />
+                  </ToolbarButton>
+                )}
+                <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+                  <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+                    <Icons.Settings />
+                  </ToolbarButton>
+                </span>
+              </PaneHeaderActions>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/*
@@ -2038,105 +2144,19 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         before, which is a dangerous thing for a control that closes positions.
       */}
       <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
-        <EngineToolbar>
-          <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <EngineMark />
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
-          </span>
-
-          {/* SuperTrend rules. Hidden under the Navigator lens because a
-              Navigator row has no SuperTrend lines for them to govern. */}
-          {cfg && signalMode !== 'navigator' && (
-            <>
-              <ToolbarControl
-                label="SOURCE"
-                hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
-                tone={k.orange}
-              >
-                <InlineDropdown
-                  value={cfg.scan_source}
-                  options={SCAN_SOURCE_OPTS}
-                  tone={k.orange}
-                  title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
-                  onChange={(next) => patch(
-                    { scan_source: next },
-                    `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
-                    needsRescan('scan_source'),
-                  )}
-                />
-              </ToolbarControl>
-              <ToolbarControl
-                label="EXIT"
-                hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
-                tone={k.blue}
-              >
-                <InlineDropdown
-                  value={cfg.exit_mode ?? 'one_red'}
-                  options={EXIT_MODE_OPTS}
-                  tone={k.blue}
-                  title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
-                  onChange={(next) => patch(
-                    { exit_mode: next },
-                    `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
-                    needsRescan('exit_mode'),
-                  )}
-                />
-              </ToolbarControl>
-              <ScopeDivider />
-            </>
-          )}
-
-          <ToolbarControl
-            label="VIEW"
-            hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
-            tone={k.purple}
-          >
-            <InlineDropdown
-              value={signalMode}
-              options={SIGNAL_MODE_OPTS}
-              tone={k.purple}
-              title="Signal lens — local only."
-              onChange={changeSignalMode}
-            />
-          </ToolbarControl>
-
-          <span style={{ flex: 1 }} />
-
-          {/* Rescan and table settings live in the pane's title bar, beside
-              minimize. They used to sit here, at the right edge of this row —
-              directly beneath the window controls, so the screen carried two
-              stacked rows of right-aligned icons and the pair you reach for
-              during a session was the lower one. PaneHeaderActions falls back to
-              rendering in place when no title bar exists. */}
-          <PaneHeaderActions pane="signals">
-            {scanning ? (
-              <ToolbarButton
-                title="Stop scan"
-                onClick={doCancelScan}
-                disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-              </ToolbarButton>
-            ) : (
-              <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
-                <RefreshIcon spinning={scanPending} />
-              </ToolbarButton>
-            )}
-            <span data-signal-table-settings style={{ display: 'inline-flex' }}>
-              <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-                <Icons.Settings />
-              </ToolbarButton>
-            </span>
-          </PaneHeaderActions>
-        </EngineToolbar>
 
         <ScanProgressBar signals={signals} />
       </div>
-      {rows.length > 0 && !settingsOpen && (
+      {/* Not gated on `rows.length` any more. This row now carries the engine
+          controls and the rescan button, and those are most needed when the table
+          is EMPTY — gating them on having rows meant the one press that could
+          fill it disappeared exactly when nothing was there. Only the search box
+          itself is pointless with no rows, so only it is gated. */}
+      {!settingsOpen && (
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
-              <KiteSearchBar
+              {rows.length > 0 && <KiteSearchBar
                 query={query}
                 setQuery={setQuery}
                 searchSettingsOpen={searchSettingsOpen}
@@ -2146,15 +2166,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 // this table was the column list — now a labelled COLUMNS button
                 // beside the filters, where the other boards keep theirs.
                 showSettings={false}
-              />
+              />}
+            </div>
+            {/* After search, before COLUMNS. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+              {engineControls}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              {/* The columns control this table never had. Its toggles used to
-                  live in an unlabelled gear inside the search bar — a panel that
-                  also carried watchlist-only settings like Change type, so the
-                  five options that actually governed these columns were buried
-                  among options that did nothing here. Same control the other
-                  boards use, driven by this table's own row spec. */}
+              {paneActions}
               {/* The columns this table actually renders, in the order it
                   renders them — not the six abstract visibility groups the old
                   gear exposed. `premium` is filtered out rather than offered:
