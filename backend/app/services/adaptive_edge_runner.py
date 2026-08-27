@@ -340,7 +340,17 @@ async def scan_once(uid: str) -> dict[str, Any]:
         except Exception:                                          # noqa: BLE001
             log.exception("adaptive_edge: could not record observations for %s", uid)
 
+        # The implied-versus-realised reading is the fact every offline study of
+        # this strategy was missing. Record it every scan, traded or not.
+        try:
+            state_for_evidence = {**result}
+            recorded = _record_volatility_readings(uid, state_for_evidence)
+        except Exception:                                          # noqa: BLE001
+            log.exception("adaptive_edge: could not record volatility readings for %s", uid)
+            recorded = 0
+
         state = {**result, "signals": signals, "observed": observed,
+                 "volatility_recorded": recorded,
                  "server_time_ms": ist_now_ms()}
         _scan_states[uid] = state
         return state
@@ -420,6 +430,63 @@ def _signals_from(candidates: list[dict], cfg: AdaptiveEdgeConfig) -> list[dict]
     return signals
 
 
+def evidence_permits_arming(uid: str) -> tuple[bool, str]:
+    """Whether the live record has earned the right to trade.
+
+    Not a config flag and not a judgement made offline. Every offline conclusion
+    about this strategy failed because the settling data — option prices — does
+    not exist in any store here. The engine measures it live, and this is the
+    gate that reads the accumulated result.
+
+    Failing closed on an unreadable store is deliberate: "cannot tell" must never
+    resolve to "go ahead".
+    """
+    try:
+        from app.services.adaptive_edge_evidence import verdict
+        v = verdict(uid)
+        return v.ready, v.reason
+    except Exception as exc:                                       # noqa: BLE001
+        log.error("adaptive_edge: evidence unreadable for %s (%s); refusing", uid, exc)
+        return False, f"evidence unavailable: {exc}"
+
+
+def _record_volatility_readings(uid: str, state: dict[str, Any]) -> int:
+    """Persist this scan's implied-versus-realised readings.
+
+    Recorded whether or not the engine intends to trade. That is the whole
+    mechanism by which the gate can ever open: it learns from decisions the
+    engine declined to act on.
+    """
+    rows = state.get("volatility") or []
+    if not rows:
+        return 0
+    try:
+        from app.services.adaptive_edge_evidence import PendingReading, record
+    except Exception:                                              # noqa: BLE001
+        return 0
+
+    session = str(ist_today())
+    stamp = ist_now_ms()
+    written = 0
+    for row in rows:
+        if row.get("credit_bps") is None:
+            continue
+        try:
+            written += bool(record(uid, PendingReading(
+                session=session, decided_ms=stamp,
+                underlying=str(row.get("underlying") or ""),
+                strike=float(row.get("strike") or 0.0),
+                implied_ratio=float(row.get("implied_ratio") or 0.0),
+                implied_vol=float(row.get("implied_vol") or 0.0),
+                realised_vol=float(row.get("realised_vol") or 0.0),
+                credit_bps=float(row.get("credit_bps") or 0.0),
+                max_loss_bps=float(row.get("max_loss_bps") or 0.0),
+                forecast_bps=float(row.get("forecast_bps") or 0.0))))
+        except Exception:                                          # noqa: BLE001
+            continue
+    return written
+
+
 # ----------------------------------------------------------------- arm
 
 async def arm(uid: str, signal_id: str) -> dict[str, Any]:
@@ -452,6 +519,14 @@ async def arm(uid: str, signal_id: str) -> dict[str, Any]:
         if breached:
             session.note_block("daily loss cap")
             return {"ok": False, "reason": why}
+
+        earned, evidence_reason = evidence_permits_arming(uid)
+        if not earned:
+            session.note_block("evidence gate")
+            return {"ok": False, "reason": "evidence gate: " + evidence_reason,
+                    "detail": "The strategy has not yet earned the right to trade from "
+                              "its own live readings. It records every scan; this opens "
+                              "when the record clears."}
 
         if len(open_positions(uid)) >= cfg.max_positions:
             session.note_block("max positions")

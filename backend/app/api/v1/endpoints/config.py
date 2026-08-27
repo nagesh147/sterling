@@ -908,3 +908,19 @@ async def adaptive_edge_positions(user: UserContext = Depends(get_current_user))
             "broker_stop": bool(pos.gtt_id), "stop_mode": pos.stop_mode,
         })
     return {"positions": rows, "realised_pnl_today": realised_pnl_today(uid)}
+
+
+@router.get("/adaptive-edge/evidence")
+async def adaptive_edge_evidence(user: UserContext = Depends(get_current_user)) -> dict:
+    """What the engine has measured live, and whether it has earned the right to trade.
+
+    The implied-to-realised ratio is the fact every offline study of this
+    strategy was missing — no store here holds option price history. The engine
+    records it every scan, traded or not, and this reports the accumulated
+    result plus what is still outstanding before the gate can open.
+    """
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.adaptive_edge_evidence import summary
+    return summary(uid)

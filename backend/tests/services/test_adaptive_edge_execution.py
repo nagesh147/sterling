@@ -35,11 +35,19 @@ def store(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def allow_everything(monkeypatch):
-    """Paper account, safety open, promotion irrelevant — so each test isolates
-    the behaviour it is actually about rather than re-testing the gates."""
+    """Paper account, safety open, evidence granted — so each test isolates the
+    behaviour it is actually about rather than re-testing the gates.
+
+    The evidence gate is stubbed here on purpose. It genuinely blocks arming
+    until the engine has earned the right to trade from its own live readings,
+    which is correct and is covered in test_adaptive_edge_evidence.py. These
+    tests are about what happens once that permission exists.
+    """
     monkeypatch.setattr(runner, "is_paper", lambda uid: True)
     monkeypatch.setattr(runner, "_safety", lambda uid, key: (True, ""))
     monkeypatch.setattr(runner, "_is_market_open", lambda cfg: True)
+    monkeypatch.setattr(runner, "evidence_permits_arming",
+                        lambda uid: (True, "granted for this test"))
 
 
 class FakeClient:

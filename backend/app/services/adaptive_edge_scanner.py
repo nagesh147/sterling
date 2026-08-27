@@ -31,7 +31,9 @@ from app.engines.adaptive_edge.f103_opportunity import (
     evaluate_opportunity,
 )
 from app.engines.adaptive_edge.f109_option_selection import F109Candidate, select_f109
+from app.engines.adaptive_edge.implied_vol import read as read_implied
 from app.engines.adaptive_edge.volatility_forecast import evaluate_straddle, forecast
+from app.engines.adaptive_edge.volatility_harvest import evaluate as price_harvest
 from app.services.adaptive_edge import ist_today, nfo_dump, underlyings
 from app.services.adaptive_edge_strategy import (
     MIN_BARS,
@@ -287,6 +289,79 @@ def atm_pair(rows: list[dict], spot: float) -> tuple[dict | None, dict | None]:
     return None, None
 
 
+def minutes_to_expiry(row: dict, now: datetime) -> float:
+    """Trading minutes left in a contract.
+
+    Days-to-expiry alone is too coarse: an option expiring today has between 375
+    and zero minutes left depending on the clock, and implied volatility read off
+    the wrong figure is wrong by the square root of the error.
+    """
+    dte = int(_num(row.get("dte")))
+    minutes_left_today = max(0.0, (15 * 60 + 30) - (now.hour * 60 + now.minute))
+    return max(1.0, dte * 375.0 + min(minutes_left_today, 375.0))
+
+
+def volatility_reading(name: str, rows: list[dict], closes: list[float],
+                       cfg: AdaptiveEdgeConfig, *, spot: float,
+                       now: Optional[datetime] = None) -> dict | None:
+    """What the market charges for movement, against what the tape delivers.
+
+    This is the fact every offline study of this strategy was missing. It is not
+    derivable from any store here — no option price history exists — and it is
+    trivially available live, which is why the engine measures it every scan
+    whether or not it intends to trade.
+
+    Returns both sides plus a defined-risk structure priced at the *measured*
+    ratio rather than an assumed one. Whether that structure may be armed is not
+    decided here; the evidence gate decides it from the accumulated record.
+    """
+    now = now or datetime.now(_IST)
+    view = forecast(closes, horizon_bars=cfg.horizon_bars)
+    if view is None:
+        return None
+    call, put = atm_pair(rows, spot)
+    if call is None or put is None:
+        return None
+
+    expiry_minutes = minutes_to_expiry(call, now)
+    reading = read_implied(
+        call_premium=_num(call.get("last_price")),
+        put_premium=_num(put.get("last_price")),
+        spot=spot,
+        strike=_num(call.get("strike")),
+        minutes_to_expiry=expiry_minutes,
+        realised_vol_bps_per_minute=view.realised_vol_bps,
+    )
+    if reading is None:
+        return None
+
+    structure = price_harvest(closes, implied_vol_ratio=reading.ratio,
+                              horizon_bars=cfg.horizon_bars)
+    return {
+        "underlying": name,
+        "strike": _num(call.get("strike")),
+        "expiry": str(call.get("expiry") or ""),
+        "call": call.get("symbol"),
+        "put": put.get("symbol"),
+        "lot_size": int(_num(call.get("lot_size"))),
+        "spot": spot,
+        "minutes_to_expiry": round(expiry_minutes, 1),
+        # The measurement, which is the point of running at all.
+        "implied_vol": round(reading.implied_vol, 5),
+        "realised_vol": round(reading.realised_vol, 5),
+        "implied_ratio": round(reading.ratio, 4),
+        "premium_rich": reading.premium_rich,
+        "straddle_bps": round(reading.straddle_bps, 2),
+        "forecast_bps": round(view.excursion_bps, 2),
+        "vol_percentile": view.percentile,
+        # The structure, priced at the measured ratio. Arming is the gate's call.
+        "credit_bps": round(structure.net_credit_bps, 2) if structure else None,
+        "max_loss_bps": round(structure.max_loss_bps, 2) if structure else None,
+        "structure_eligible": bool(structure and structure.eligible),
+        "structure_reason": structure.reason if structure else "not priceable",
+    }
+
+
 def straddle_signal(name: str, rows: list[dict], closes: list[float], cfg: AdaptiveEdgeConfig,
                     *, spot: float) -> dict | None:
     """The engine's actual trade decision: is movement cheaper than it is likely?
@@ -356,6 +431,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
         "tradeable": 0,
         "candidates": [],
         "decisions": [],
+        "volatility": [],
         "skipped": {},
         "dropped": {},
         "errors": [],
@@ -426,6 +502,7 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
                         f"{MIN_BARS} before a decision means anything")
                     continue
                 decision = decide_from_candles(name, candles, cfg, expiry=expiry, spot=spot)
+                candles_closes = [float(c.get("close") or 0.0) for c in candles]
             except Exception as exc:                               # noqa: BLE001
                 state["errors"].append(f"{name}: history unavailable: {exc}")
                 continue
@@ -475,6 +552,16 @@ async def scan(uid: str, cfg: AdaptiveEdgeConfig) -> dict[str, Any]:
             if not tradeable:
                 state["skipped"][name] = "no contract passed the liquidity filters"
                 continue
+
+            # Measure implied against realised before anything else. This runs
+            # whether or not a trade follows, because it is the record the
+            # evidence gate opens on and it exists nowhere but live quotes.
+            try:
+                reading = volatility_reading(name, tradeable, candles_closes, cfg, spot=spot)
+                if reading is not None:
+                    state["volatility"].append(reading)
+            except Exception as exc:                               # noqa: BLE001
+                state["errors"].append(f"{name}: volatility reading failed: {exc}")
 
             ranked = rank_contracts(tradeable, cfg, expected_ev=decision.expected_net_value)
             for row in ranked:
