@@ -26,12 +26,14 @@ export function KiteOrderCell({
   underlying,
   asOfIso,
   live = false,
+  focus = true,
 }: {
   buy?: BuyContract;
   action: string;
   underlying: Underlying;
   asOfIso: string;
   live?: boolean;
+  focus?: boolean;
 }) {
   const side = buy?.side === "CE" || buy?.side === "PE" ? buy.side : null;
   const strike = buy?.strike ?? null;
@@ -110,6 +112,7 @@ export function KiteOrderCell({
       underlying={underlying}
       asOfIso={asOfIso}
       live={live}
+      focus={focus}
       instrument={instrument}
       resolving={Boolean(q) && search.isFetching && !instrument}
       connected={connected}
@@ -130,6 +133,7 @@ export function useAstroHolding(
   const status = useKiteStatus();
   const connected = Boolean(status.data?.connected);
   const { data: pos } = useKitePositions(connected);
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const prefer = side === "CE" || side === "PE" ? side : null;
   const held = useMemo(() => matchHeldOption(pos?.net ?? [], underlying, prefer), [pos, underlying, prefer]);
   return useMemo(() => {
@@ -137,8 +141,21 @@ export function useAstroHolding(
     const mark = heldStrikeLabel(held);
     const plan = planWindow(play, side, held, mark);
     if (plan.kind === "sit" || plan.kind === "buy") return null;
-    return { mark, plan };
-  }, [held, play, side]);
+    return {
+      mark,
+      plan,
+      onClose: () =>
+        openOrderWindow({
+          symbol: held.tradingsymbol,
+          exchange: held.exchange,
+          initialSide: held.quantity > 0 ? "SELL" : "BUY",
+          initialQty: Math.abs(held.quantity),
+          lastPrice: held.last_price,
+          product: (held.product as Product) || "MIS",
+          tag: "ASTRO",
+        }),
+    };
+  }, [held, play, side, openOrderWindow]);
 }
 
 /** When the live window is still the same side, upgrade the GTT — do not add a lot. */

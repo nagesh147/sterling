@@ -66,11 +66,13 @@ export function PlaybookStrip({
   onPick,
   nowMin,
   tape,
+  holdingSide,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
   nowMin?: number | null;
   tape?: SessionTape | null;
+  holdingSide?: "CE" | "PE" | null;
 }) {
   const pb = book.playbook;
   const avoid = mergeWindows(pb.avoid)[0] ?? null;
@@ -179,9 +181,13 @@ export function PlaybookStrip({
               onClick={() => r.slot && onPick?.(r.slot)}
             >
               <span className="ko-plan-kicker">{r.label}</span>
-              {r.id === "avoid" ? null : (
+                  {r.id === "avoid" ? null : (
                 <span className={`ko-plan-play ${actionTone(r.slot.action, r.slot.side)}`}>
-                  {buy.verb !== "SIT" ? buy.label : r.slot.action}
+                  {holdingSide && r.slot.side === holdingSide
+                    ? `On ${buy.short}`
+                    : buy.verb !== "SIT"
+                      ? buy.label
+                      : r.slot.action}
                 </span>
               )}
               <span className="text-muted">

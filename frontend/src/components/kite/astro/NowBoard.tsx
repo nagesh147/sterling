@@ -73,7 +73,7 @@ export function NowBoard({
   sessionPnl?: number | null;
   buy?: BuyContract;
   nextBuy?: BuyContract;
-  holding?: { mark: string; plan: WindowPlan } | null;
+  holding?: { mark: string; plan: WindowPlan; onClose?: () => void } | null;
   onOpenSession: (iso: string) => void;
   onOpenWindow: (slot: WindowSlot) => void;
 }) {
@@ -100,11 +100,11 @@ export function NowBoard({
   const kicker =
     status.phase === "live" ? "NOW" : status.phase === "pre" ? "OPENS" : "CLOSED";
 
-  const holdingNow = Boolean(holding && holding.plan.kind !== "sit" && !recap);
-  const play = recap
-    ? `${status.gap.label} · ${THESIS[status.thesis]}`
-    : holdingNow
-      ? `HOLDING ${holding!.mark}`
+  const holdingNow = Boolean(holding && holding.plan.kind !== "sit");
+  const play = holdingNow
+    ? `HOLDING ${holding!.mark}`
+    : recap
+      ? `${status.gap.label} · ${THESIS[status.thesis]}`
       : status.play;
 
   const when =
@@ -140,12 +140,18 @@ export function NowBoard({
         </span>
       </div>
 
-      <div className={`ko-now-play ${recap ? gtone.fg : playTone}`}>
+      <div className={`ko-now-play ${recap && !holdingNow ? gtone.fg : playTone}`}>
         {play}
-        {!recap && !holdingNow && buy && buy.verb !== "SIT" ? <span className="ko-now-strike">{buy.short}</span> : null}
-        {holdingNow ? <span className="ko-now-strike">{holding!.plan.label}</span> : null}
+        {!holdingNow && !recap && buy && buy.verb !== "SIT" ? <span className="ko-now-strike">{buy.short}</span> : null}
       </div>
-      <div className="ko-now-sub">{when}</div>
+      <div className="ko-now-sub">
+        {holdingNow ? holding!.plan.label : when}
+        {holdingNow && holding!.onClose ? (
+          <button type="button" className="ko-btn-close ko-now-close" onClick={holding!.onClose}>
+            Close
+          </button>
+        ) : null}
+      </div>
 
       {status.phase === "live" || status.phase === "pre" ? <p className="ko-now-copy">{status.suggestion}</p> : null}
       {nextLine ? <p className="ko-now-next">{nextLine}</p> : null}
