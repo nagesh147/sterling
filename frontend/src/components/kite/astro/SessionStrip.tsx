@@ -1,12 +1,5 @@
-import {
-  clockFromMinutes,
-  formatIstIsoDate,
-  getIstParts,
-  MARKET_CLOSE_MIN,
-  MARKET_OPEN_MIN,
-  minutesOfDay,
-} from "../../../lib/astro/time";
-import type { SessionTape, SlotGrade } from "../../../lib/astro/tape";
+import { clockFromMinutes, MARKET_CLOSE_MIN, MARKET_OPEN_MIN } from "../../../lib/astro/time";
+import { istMinOf, type SessionTape, type SlotGrade } from "../../../lib/astro/tape";
 import type { WindowSlot } from "../../../lib/astro/types";
 
 const W = 800;
@@ -84,15 +77,20 @@ function mixMinutes(slots: WindowSlot[]) {
 }
 
 function tapeShape(tape: SessionTape | null, iso: string): { line: string; area: string; up: boolean } | null {
-  if (!tape || tape.iso !== iso || !tape.bars.length) return null;
+  if (!tape || !tape.bars.length) return null;
   const pts: { min: number; c: number }[] = [];
   for (const b of tape.bars) {
-    const t = new Date(b.t * 1000);
-    if (formatIstIsoDate(t) !== iso) continue;
-    const p = getIstParts(t);
-    const min = minutesOfDay(p.hour, p.minute);
-    if (min < MARKET_OPEN_MIN || min > MARKET_CLOSE_MIN) continue;
-    pts.push({ min, c: b.c });
+    const p = istMinOf(b.t);
+    if (p.iso !== iso && p.iso !== tape.iso) continue;
+    if (p.min < MARKET_OPEN_MIN || p.min > MARKET_CLOSE_MIN) continue;
+    pts.push({ min: p.min, c: b.c });
+  }
+  if (pts.length < 2) {
+    for (const b of tape.bars) {
+      const p = istMinOf(b.t);
+      if (p.min < MARKET_OPEN_MIN || p.min > MARKET_CLOSE_MIN) continue;
+      pts.push({ min: p.min, c: b.c });
+    }
   }
   if (pts.length < 2) return null;
   const lo = Math.min(...pts.map((p) => p.c));
@@ -161,11 +159,7 @@ export function SessionStrip({
             <path d={spark.area} className={spark.up ? "ko-strip-upfill" : "ko-strip-downfill"} />
             <path d={spark.line} fill="none" className={spark.up ? "ko-strip-upline" : "ko-strip-downline"} strokeWidth="1.6" />
           </>
-        ) : (
-          <text x="10" y={TAPE_TOP + 30} className="ko-strip-empty">
-            {tape && tape.bars.length ? "Tape is for another session" : "Tape loading"}
-          </text>
-        )}
+        ) : null}
         {slots.map((s) => {
           const x = xOf(s.fromMin);
           const w = Math.max(1, xOf(s.toMin) - x);
