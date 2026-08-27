@@ -5,6 +5,21 @@
    them in `inert_fields`. These are the ones that decide what a live position
    would cost, so they get their own section rather than being buried behind an
    API call an operator would have to know about. */
+
+/* Four sections below drive nothing. They configure the moving-average scalper
+   this strategy replaced, and the backend lists them in `inert_fields` for
+   exactly this purpose. Saying so beats letting an operator set a stop distance,
+   get a 200 back, and believe it took. */
+function InertNote({ replacement }: { replacement: string }) {
+  return (
+    <ConfigNote>
+      This section does not reach the engine. It configures the earlier
+      moving-average strategy, which the Master Specification engine replaced.
+      {replacement}
+    </ConfigNote>
+  );
+}
+
 function EngineRiskSection() {
   const { data } = useAdaptiveEdgeEngineConfig();
   const save = useSetAdaptiveEdgeEngineConfig();
@@ -268,7 +283,8 @@ export function AdaptiveEdgeSettingsPanel() {
           <Field label="Lock offset" hint="Kept off the extreme once the lock is armed.">
             <input style={inputStyle} type="number" value={draft.profit_lock_offset_points} onChange={(e) => patch({ profit_lock_offset_points: Number(e.target.value) })} />
           </Field>
-        </Section>
+        <InertNote replacement=" Use Risk and session for the live stop and target." />
+          </Section>
 
         <Section
           title="Exit rule"
@@ -289,7 +305,8 @@ export function AdaptiveEdgeSettingsPanel() {
             collapse, or the 14:45 IST session cutoff. Entry is still one position at a time. Automatic
             Kite orders stay blocked.
           </ConfigNote>
-        </Section>
+        <InertNote replacement=" Use Risk and session for the live stop and target." />
+          </Section>
 
         <EngineRiskSection />
 
@@ -339,6 +356,7 @@ export function AdaptiveEdgeSettingsPanel() {
             <input style={inputStyle} type="number" value={draft.ib_minutes} onChange={(e) => patch({ ib_minutes: Number(e.target.value) })} />
           </Field>
         </div>
+      <InertNote replacement="" />
       </Section>
 
       <Section title="Mode rungs" description="Open profit needed to step MICRO to SCALP to EXTENDED SCALP to INTRADAY." summary={`${draft.persistence_bars} bars · ${draft.scalp_favorable_points}/${draft.extended_favorable_points}/${draft.intraday_favorable_points}`} persistKey="ae-modes">
@@ -356,6 +374,7 @@ export function AdaptiveEdgeSettingsPanel() {
             <input style={inputStyle} type="number" value={draft.intraday_favorable_points} onChange={(e) => patch({ intraday_favorable_points: Number(e.target.value) })} />
           </Field>
         </div>
+      <InertNote replacement="" />
       </Section>
 
       <Section

@@ -126,3 +126,19 @@ describe('AdaptiveEdgeSettingsPanel — engine risk section', () => {
     expect(screen.getByText(/1 lot · 30% stop · max 1 · flat 15:15/)).toBeInTheDocument();
   });
 });
+
+describe('AdaptiveEdgeSettingsPanel — inert sections are declared', () => {
+  it('says which sections reach no engine instead of letting a save look real', () => {
+    renderPanel();
+    // Four legacy sections configure the moving-average strategy this engine
+    // replaced. An operator setting a stop there and getting a 200 back would
+    // reasonably believe it took effect.
+    const notes = screen.getAllByText(/does not reach the engine/);
+    expect(notes.length).toBe(4);
+  });
+
+  it('points at the section that does drive the live stop', () => {
+    renderPanel();
+    expect(screen.getAllByText(/Use Risk and session for the live stop/).length).toBeGreaterThan(0);
+  });
+});

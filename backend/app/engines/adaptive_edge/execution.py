@@ -18,10 +18,19 @@ def align_to_tick(price: float, tick: float = DEFAULT_TICK) -> float:
 
     Down, not nearest: on an entry this pays no more than intended, and a price
     off the grid is rejected outright.
+
+    The quotient is snapped before flooring. Ticks are not representable in
+    binary, so a price already exactly on the grid can divide to just under an
+    integer — 1234.55 / 0.05 is 24690.999999999996, and 3.00 * 0.70 / 0.05 is
+    41.99999999999999. Flooring those directly loses a whole tick from a price
+    that needed no adjustment at all, which on a cheap option is a percent or
+    more of the stop distance and is invisible at any price large enough to test
+    casually.
     """
     if tick <= 0:
         return round(float(price), 2)
-    return round(floor(float(price) / tick) * tick, 2)
+    quotient = float(price) / tick
+    return round(floor(round(quotient, 9)) * tick, 2)
 
 
 def exit_order_price(ltp: float, tick: float = DEFAULT_TICK, *, slip_ticks: int = 2) -> float:

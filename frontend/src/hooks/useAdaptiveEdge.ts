@@ -19,7 +19,14 @@ export function useAdaptiveEdgeSnapshot() {
 }
 
 export function useAdaptiveEdgeSettings() {
-  return useQuery<{ settings: AdaptiveEdgeSettings; live_trading: boolean }>({
+  return useQuery<{
+    settings: AdaptiveEdgeSettings;
+    live_trading: boolean;
+    /* Controls this surface still accepts that reach no engine. Published so
+       the UI can say so, rather than letting a save succeed silently. */
+    inert_fields?: string[];
+    engine_fields?: string[];
+  }>({
     queryKey: ['adaptive-edge-settings'],
     queryFn: () => api.get(`${ROOT}/settings`),
   });
