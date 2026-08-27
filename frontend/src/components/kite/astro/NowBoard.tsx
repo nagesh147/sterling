@@ -91,11 +91,9 @@ export function NowBoard({
   const tape = liveTape !== null ? liveTape : recap && sessionPnl != null ? sessionPnl : null;
 
   const kicker =
-    status.phase === "live" ? "NOW" : status.phase === "pre" ? "OPENS" : status.phase === "post" ? "CLOSED" : "CLOSED";
+    status.phase === "live" ? "NOW" : status.phase === "pre" ? "OPENS" : "CLOSED";
 
-  const play = recap
-    ? `${status.gap.label} · ${THESIS[status.thesis]}`
-    : status.play;
+  const play = recap ? `${status.gap.label} · ${THESIS[status.thesis]}` : status.play;
 
   const when =
     status.phase === "live" && windowLeft
@@ -107,7 +105,7 @@ export function NowBoard({
         : `Next ${sessionLabel(status.nextOpenIso)}`;
 
   const nextLine =
-    status.phase === "live" && status.next && status.next.action !== status.play
+    status.phase === "live" && status.next
       ? `Then ${status.next.action} at ${status.next.from}`
       : null;
 

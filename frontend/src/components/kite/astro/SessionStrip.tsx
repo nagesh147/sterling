@@ -42,6 +42,22 @@ function stripClass(slot: WindowSlot): string {
   return "ko-strip-wait";
 }
 
+function sideRuns(slots: WindowSlot[]) {
+  const runs: { side: WindowSlot["side"]; fromMin: number; toMin: number }[] = [];
+  for (const s of slots) {
+    const last = runs[runs.length - 1];
+    if (last && last.side === s.side) last.toMin = s.toMin;
+    else runs.push({ side: s.side, fromMin: s.fromMin, toMin: s.toMin });
+  }
+  return runs;
+}
+
+function sideMark(side: WindowSlot["side"]): string {
+  if (side === "WAIT") return "";
+  if (side === "BOTH") return "±";
+  return side;
+}
+
 function horaRuns(slots: WindowSlot[]) {
   const runs: { lord: string; fromMin: number; toMin: number }[] = [];
   for (const s of slots) {
@@ -155,7 +171,6 @@ export function SessionStrip({
           const w = Math.max(1, xOf(s.toMin) - x);
           const label = `${s.from}–${s.to} · ${s.action} · ${s.hora} hora${s.kalam.rahu ? " · Rahu" : ""}${s.kalam.yamagandam ? " · Yama" : ""}`;
           const g = grades?.get(`${s.from}-${s.to}`);
-          const mark = w >= 28 ? (s.side === "WAIT" ? "" : s.side === "BOTH" ? "±" : s.side) : "";
           return (
             <g key={`${s.from}-${s.to}`}>
               <rect
@@ -177,12 +192,24 @@ export function SessionStrip({
               />
               {s.kalam.rahu ? <rect x={x} y={BAR_Y} width={w} height={BAR_H} fill="url(#ko-hatch)" opacity="0.4" pointerEvents="none" /> : null}
               {g ? <rect x={x} y={BAR_Y} width={w} height="2.5" className={gradeClass(g.kind)} pointerEvents="none" /> : null}
-              {mark && w >= 28 ? (
-                <text x={x + w / 2} y={BAR_Y + 15} textAnchor="middle" className="ko-strip-side">
-                  {mark}
-                </text>
-              ) : null}
             </g>
+          );
+        })}
+        {sideRuns(slots).map((run) => {
+          const x = xOf(run.fromMin);
+          const w = xOf(run.toMin) - x;
+          const mark = sideMark(run.side);
+          if (!mark || w < 36) return null;
+          return (
+            <text
+              key={`side-${run.side}-${run.fromMin}`}
+              x={x + w / 2}
+              y={BAR_Y + 15}
+              textAnchor="middle"
+              className="ko-strip-side"
+            >
+              {mark}
+            </text>
           );
         })}
         {horaRuns(slots).map((run) => {
@@ -233,12 +260,6 @@ export function SessionStrip({
           Sit {mix.wait}m
         </span>
         <span className="text-muted">09:15–15:30 IST</span>
-      </div>
-      <div className="ko-mix" aria-hidden="true">
-        <span className="ko-mix-ce" style={{ width: `${(mix.ce / mix.total) * 100}%` }} />
-        <span className="ko-mix-pe" style={{ width: `${(mix.pe / mix.total) * 100}%` }} />
-        <span className="ko-mix-both" style={{ width: `${(mix.both / mix.total) * 100}%` }} />
-        <span className="ko-mix-wait" style={{ width: `${(mix.wait / mix.total) * 100}%` }} />
       </div>
     </div>
   );

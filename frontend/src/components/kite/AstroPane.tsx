@@ -188,6 +188,12 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   font-size: 12px;
   font-weight: 500;
 }
+.ko-title-row h2 {
+  font-size: 20px;
+}
+.ko-now-phase[data-live="true"] {
+  color: var(--k-orange);
+}
 .ko-now-play {
   display: block;
   font-size: 20px;
@@ -198,6 +204,40 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 .ko-now-clock {
   font-size: 13px;
+}
+.ko-st-live {
+  color: var(--k-orange);
+  background: color-mix(in srgb, var(--k-orange) 10%, transparent);
+}
+.ko-plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  text-align: left;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--k-border);
+  background: var(--k-bg);
+  font: inherit;
+  font-size: 13px;
+  color: var(--k-text);
+  cursor: pointer;
+}
+.ko-plan[data-state="now"] {
+  box-shadow: inset 2px 0 var(--k-orange);
+}
+.ko-plan[data-state="done"] {
+  opacity: 0.55;
+}
+.ko-plan-kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--k-dim);
+}
+.ko-plan-play {
+  font-weight: 500;
 }
 .ko-now-next {
   margin: 2px 0 0;
@@ -432,15 +472,20 @@ function gradeClass(kind: SlotGrade["kind"]): string {
   return "ko-st ko-st-sit";
 }
 
-function stampLive(slots: WindowSlot[], nowMin: number | null, sameDay: boolean): WindowSlot[] {
-  if (!sameDay || nowMin == null) {
-    return slots.map((s) => ({ ...s, isLive: false }));
+function stampLive(
+  slots: WindowSlot[],
+  nowMin: number | null,
+  mode: "live" | "past" | "future",
+): WindowSlot[] {
+  if (mode === "live" && nowMin != null) {
+    return slots.map((s) => ({
+      ...s,
+      isLive: nowMin >= s.fromMin && nowMin < s.toMin,
+      isPast: nowMin >= s.toMin,
+    }));
   }
-  return slots.map((s) => ({
-    ...s,
-    isLive: nowMin >= s.fromMin && nowMin < s.toMin,
-    isPast: nowMin >= s.toMin,
-  }));
+  const past = mode === "past";
+  return slots.map((s) => ({ ...s, isLive: false, isPast: past }));
 }
 
 function GradeMark({ grade, loading }: { grade: SlotGrade | undefined; loading: boolean }) {
@@ -517,8 +562,9 @@ export function AstroPane() {
 
   const nowMin = nowParts ? minutesOfDay(nowParts.hour, nowParts.minute) : null;
   const sameDay = Boolean(now && todayIso === iso);
+  const viewMode: "live" | "past" | "future" = !todayIso ? "future" : iso === todayIso ? "live" : iso < todayIso ? "past" : "future";
   const rawRows = tab === "thirty" ? book.slots : book.netResults;
-  const clockRows = useMemo(() => stampLive(rawRows, nowMin, sameDay), [rawRows, nowMin, sameDay]);
+  const clockRows = useMemo(() => stampLive(rawRows, nowMin, viewMode), [rawRows, nowMin, viewMode]);
   const grades = useMemo(() => {
     const map = new Map<string, SlotGrade>();
     for (const s of clockRows) map.set(slotKey(s), gradeSlot(s, tape, nowMin, sameDay));
@@ -576,8 +622,9 @@ export function AstroPane() {
     if (tab === "month") setTab("session");
     const key = slotKey(slot);
     setOpenKey(key);
-    if (sameDay && nowMin != null && nowMin >= slot.toMin) setEarlierOpen(true);
-    if (sameDay && nowMin != null && nowMin < slot.fromMin) {
+    const row = clockRows.find((s) => slotKey(s) === key);
+    if (row?.isPast) setEarlierOpen(true);
+    if (row && !row.isPast && !row.isLive) {
       const upcoming = clockRows.filter((s) => !s.isPast && !s.isLive);
       if (upcoming[0] && slotKey(upcoming[0]) !== key) setLaterOpen(true);
     }
@@ -644,9 +691,9 @@ export function AstroPane() {
                   onClick={() => setUnderlying(u.id)}
                 >
                   {u.short}
-                  {play ? (
+                  {play && play.side !== "WAIT" ? (
                     <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
-                      {play.side === "WAIT" ? "—" : play.side === "BOTH" ? "BOTH" : play.side}
+                      {play.side === "BOTH" ? "BOTH" : play.side}
                     </span>
                   ) : null}
                 </button>

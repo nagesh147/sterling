@@ -32,7 +32,7 @@ function mergeWindows(slots: WindowSlot[]) {
 function windowState(fromMin: number, toMin: number, nowMin: number | null): "done" | "now" | "soon" | "next" | null {
   if (nowMin == null) return null;
   if (nowMin < fromMin) return fromMin - nowMin <= 15 ? "soon" : "next";
-  if (nowMin < toMin) return "now";
+  if (nowMin <= toMin) return "now";
   return "done";
 }
 
@@ -139,33 +139,51 @@ export function PlaybookStrip({
     });
   };
 
-  if (active.length === 0 && perm !== "default") return null;
+  if (roles.length === 0 && perm !== "default") return null;
 
   return (
     <div className="ko-alerts" aria-live="polite">
-      {active.map((r) => {
-        const mins = Math.max(1, r.fromMin - (nowMin ?? 0));
-        return (
-          <button
-            key={r.id}
-            type="button"
-            className="ko-alert"
-            data-kind={r.state ?? undefined}
-            onClick={() => r.slot && onPick?.(r.slot)}
-          >
-            <span className="ko-alert-kicker">
-              {r.state === "now" ? `${r.label} now` : `${r.label} in ${mins}m`}
-            </span>
-            <span className="ko-alert-body">
-              <b className={r.slot ? actionTone(r.slot.action, r.slot.side) : ""}>{r.slot?.action}</b>
+      {active.length
+        ? active.map((r) => {
+            const mins = Math.max(1, r.fromMin - (nowMin ?? 0));
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className="ko-alert"
+                data-kind={r.state ?? undefined}
+                onClick={() => r.slot && onPick?.(r.slot)}
+              >
+                <span className="ko-alert-kicker">
+                  {r.state === "now" ? `${r.label} now` : `${r.label} in ${mins}m`}
+                </span>
+                <span className="ko-alert-body">
+                  <b className={r.slot ? actionTone(r.slot.action, r.slot.side) : ""}>{r.slot?.action}</b>
+                  <span className="text-muted">
+                    {" "}
+                    {r.from}–{r.to}
+                  </span>
+                </span>
+              </button>
+            );
+          })
+        : roles.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="ko-plan"
+              data-state={r.state ?? undefined}
+              onClick={() => r.slot && onPick?.(r.slot)}
+            >
+              <span className="ko-plan-kicker">{r.label}</span>
+              {r.id === "avoid" ? null : (
+                <span className={`ko-plan-play ${actionTone(r.slot.action, r.slot.side)}`}>{r.slot.action}</span>
+              )}
               <span className="text-muted">
-                {" "}
                 {r.from}–{r.to}
               </span>
-            </span>
-          </button>
-        );
-      })}
+            </button>
+          ))}
       {perm === "default" ? (
         <button type="button" className="ko-link ko-alert-enable" onClick={ask}>
           Notify me
