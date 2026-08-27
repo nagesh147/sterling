@@ -93,7 +93,7 @@ export function NowBoard({
   const showJump = Boolean(status.window) && wrongSession;
   const liveTape =
     grade && (grade.kind === "LIVE" || grade.kind === "HIT" || grade.kind === "MISS") && grade.delta !== null
-      ? grade.delta
+      ? grade.favor ?? grade.delta
       : null;
   const holdingNow = Boolean(holding && holding.plan.kind !== "sit");
   const tape =

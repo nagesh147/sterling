@@ -47,6 +47,7 @@ export interface SlotGrade {
   kind: GradeKind;
   label: string;
   delta: number | null;
+  favor: number | null;
   dir: "up" | "down" | "flat" | null;
   note: string;
 }
@@ -185,6 +186,12 @@ export function buyContract(
   };
 }
 
+function favorPts(side: string, delta: number): number {
+  if (side === "PE") return -delta;
+  if (side === "CE") return delta;
+  return delta;
+}
+
 export function gradeSlot(
   slot: Pick<WindowSlot, "fromMin" | "toMin" | "side" | "action">,
   tape: SessionTape | null,
@@ -192,17 +199,18 @@ export function gradeSlot(
   sameDay: boolean,
 ): SlotGrade {
   if (!tape || !tape.bars.length) {
-    return { kind: "NONE", label: "—", delta: null, dir: null, note: "No tape yet" };
+    return { kind: "NONE", label: "—", delta: null, favor: null, dir: null, note: "No tape yet" };
   }
   const live = sameDay && nowMin !== null && nowMin >= slot.fromMin && nowMin < slot.toMin;
   const pending = sameDay && nowMin !== null && nowMin < slot.fromMin;
-  if (pending) return { kind: "PENDING", label: "—", delta: null, dir: null, note: "Not started" };
+  if (pending) return { kind: "PENDING", label: "—", delta: null, favor: null, dir: null, note: "Not started" };
 
   const ohlc = windowOhlc(tape.bars, tape.iso, slot.fromMin, slot.toMin);
   if (!ohlc) {
-    return { kind: live ? "LIVE" : "NONE", label: live ? "LIVE" : "—", delta: null, dir: null, note: live ? "Waiting on first print" : "No bars" };
+    return { kind: live ? "LIVE" : "NONE", label: live ? "LIVE" : "—", delta: null, favor: null, dir: null, note: live ? "Waiting on first print" : "No bars" };
   }
   const delta = ohlc.close - ohlc.open;
+  const favor = favorPts(slot.side, delta);
   const flat = FLAT_PTS[tape.underlying] ?? 8;
   const dir: "up" | "down" | "flat" = Math.abs(delta) < flat ? "flat" : delta > 0 ? "up" : "down";
   const rangePct = ohlc.open ? ((ohlc.high - ohlc.low) / ohlc.open) * 100 : 0;
@@ -213,6 +221,7 @@ export function gradeSlot(
       kind,
       label: live ? "LIVE" : "SIT",
       delta,
+      favor,
       dir,
       note: dir === "flat" ? "Sat a quiet window" : `Sat a ${dir} ${Math.abs(delta).toFixed(0)}-pt window`,
     };
@@ -222,26 +231,28 @@ export function gradeSlot(
   if (slot.side === "BOTH" || slot.action === "STRADDLE" || slot.action === "IRON FLY") {
     hit = slot.action === "IRON FLY" ? rangePct < 0.12 : rangePct >= 0.12 || Math.abs(delta) >= flat * 2;
   } else if (slot.side === "CE") {
-    hit = delta > 0;
+    hit = favor > 0;
   } else {
-    hit = delta < 0;
+    hit = favor > 0;
   }
 
   if (live) {
     return {
       kind: "LIVE",
-      label: hit ? "LIVE HIT" : "LIVE",
+      label: "LIVE",
       delta,
+      favor,
       dir,
-      note: `Running ${delta >= 0 ? "+" : ""}${delta.toFixed(0)}`,
+      note: `Running ${favor >= 0 ? "+" : ""}${favor.toFixed(0)} for ${slot.side}`,
     };
   }
   return {
     kind: hit ? "HIT" : "MISS",
     label: hit ? "HIT" : "MISS",
     delta,
+    favor,
     dir,
-    note: `${dir.toUpperCase()} ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`,
+    note: `${favor >= 0 ? "+" : ""}${favor.toFixed(0)} for ${slot.side}`,
   };
 }
 
@@ -260,10 +271,10 @@ export function summariseTape(
     const g = gradeSlot(s, tape, nowMin, sameDay);
     if (g.kind === "HIT") {
       hits += 1;
-      if (g.delta !== null) pnl += s.side === "PE" ? -g.delta : s.side === "CE" ? g.delta : Math.abs(g.delta);
+      if (g.favor !== null) pnl += g.favor;
     } else if (g.kind === "MISS") {
       misses += 1;
-      if (g.delta !== null) pnl += s.side === "PE" ? -g.delta : s.side === "CE" ? g.delta : -Math.abs(g.delta);
+      if (g.favor !== null) pnl += g.favor;
     } else if (g.kind === "SIT") sits += 1;
   }
   const directional = hits + misses;
