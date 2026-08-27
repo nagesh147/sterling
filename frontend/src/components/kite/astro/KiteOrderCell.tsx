@@ -22,6 +22,7 @@ import type { BuyContract } from "../../../lib/astro/tape";
 import type { Underlying, WindowSlot } from "../../../lib/astro/types";
 import { OrderCell } from "./OrderCell";
 import type { Product } from "../orderTicket";
+import { api } from "../../../utils/api";
 
 const ASTRO_LOT = "astro-managed-lot";
 const gttOnce = new Set<string>();
@@ -104,7 +105,9 @@ export function KiteOrderCell({
   };
 
   const onBuy = (hit: OptionHit, product: "MIS" | "NRML", plan: WindowPlan) => {
-    const open = (use: OptionHit) => {
+    const sl = plan.slPct ?? (String(action).startsWith("HOLD") ? -15 : -20);
+    const tgt = plan.tgtPct ?? (String(action).startsWith("HOLD") ? 80 : 30);
+    const open = (use: OptionHit, last: number) => {
       rememberAstroLot(use.tradingsymbol);
       openOrderWindow({
         symbol: use.tradingsymbol,
@@ -112,26 +115,39 @@ export function KiteOrderCell({
         initialSide: "BUY",
         initialQty: use.lot_size,
         lotSize: use.lot_size,
-        lastPrice: use.last_price,
+        lastPrice: last,
         product: product as Product,
-        initialSlPct: plan.slPct ?? -20,
-        initialTgtPct: plan.tgtPct ?? 30,
+        initialSlPct: sl,
+        initialTgtPct: tgt,
         tag: "ASTRO",
       });
     };
+    const boot = (use: OptionHit) => {
+      if (use.last_price > 0) {
+        open(use, use.last_price);
+        return;
+      }
+      void api
+        .get<Record<string, { last_price?: number }>>(`/api/v1/kite/quote?i=${encodeURIComponent(`${use.exchange}:${use.tradingsymbol}`)}`)
+        .then((data) => {
+          const row = data?.[`${use.exchange}:${use.tradingsymbol}`] ?? Object.values(data ?? {})[0];
+          open(use, Number(row?.last_price) || 0);
+        })
+        .catch(() => open(use, 0));
+    };
     if (instrument) {
-      open(instrument);
+      boot(instrument);
       return;
     }
     const fromCache = pickNearestOption(search.data?.instruments ?? [], underlying, hit.strike, hit.instrument_type, "0000-01-01");
     if (fromCache) {
-      open(fromCache);
+      boot(fromCache);
       return;
     }
     void search.refetch().then((res) => {
       const picked = pickNearestOption(res.data?.instruments ?? [], underlying, hit.strike, hit.instrument_type, "0000-01-01");
       if (picked) {
-        open(picked);
+        boot(picked);
         return;
       }
       notifyOrder({ kind: "error", title: "Astro buy", message: "Could not resolve the option. Connect Kite and retry." });
