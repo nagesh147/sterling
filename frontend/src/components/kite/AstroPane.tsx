@@ -1092,7 +1092,7 @@ function TimingRow({
           <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
         </td>
         <td className={`ko-clock-play ${tone}`}>{slot.action}</td>
-        <td className="ko-buy">
+        <td className="ko-buy" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <KiteOrderCell buy={buy} action={slot.action} underlying={underlying} asOfIso={asOfIso} live={slot.isLive} focus={focus} />
         </td>
         <td className="ko-num">

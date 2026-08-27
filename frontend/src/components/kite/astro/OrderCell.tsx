@@ -111,108 +111,105 @@ export function OrderCell({
   const mark = held ? heldStrikeLabel(held) : buy?.short && buy.short !== "—" ? buy.short : "";
   const plan = planWindow(action, buy?.side ?? "WAIT", held, mark);
   const product = productForAction(action);
-  const stop = (e: MouseEvent) => e.stopPropagation();
-
-  const go = (kind: ContinueKind) => (e: MouseEvent) => {
-    stop(e);
-    if (kind === "buy") {
-      if (onBuy) {
-        if (hit) onBuy(hit, product, plan);
-        return;
-      }
-      if (!hit) return;
-      setPending("buy");
-      return;
-    }
-    if (!held) return;
-    if (kind === "close" && onClose) {
-      onClose(held);
-      return;
-    }
-    if (kind === "book" && onBook) {
-      onBook(held);
-      return;
-    }
-    if ((kind === "trail" || kind === "lock") && onTrail) {
-      onTrail(held, plan);
-      return;
-    }
-    setPending(kind);
+  const stop = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
-  if (plan.kind === "sit") {
-    return <span className="text-muted">—</span>;
-  }
-  if (plan.kind !== "buy" && !focus) {
-    const markText = buy?.short && buy.short !== "—" ? buy.short : "—";
-    return <span className={markText === "—" ? "text-muted" : "ko-buy-mark"}>{markText}</span>;
-  }
+  const fireBuy = (e: MouseEvent) => {
+    stop(e);
+    const use = hit;
+    if (onBuy) {
+      if (use) onBuy(use, product, plan.kind === "buy" ? plan : planWindow(action, side ?? "WAIT", null, mark));
+      return;
+    }
+    if (use) setPending("buy");
+  };
 
-  const cls =
-    plan.kind === "close" || plan.kind === "book"
-      ? "ko-btn-close"
-      : plan.kind === "trail" || plan.kind === "lock"
-        ? "ko-btn-trail"
-        : "ko-btn-buy";
-  const disabled = plan.kind === "buy" && !hit;
-
-  return (
-    <div className="ko-ord" onClick={stop}>
-      <button type="button" className={cls} onClick={go(plan.kind)} disabled={disabled} title={plan.note} aria-label={plan.kind === "buy" ? `Buy ${plan.label}` : plan.label}>
-        {resolving && plan.kind === "buy" ? "…" : plan.label}
-      </button>
-      {pending && (hit || held) ? (
-        <div className="ko-ticket" role="dialog" aria-label={plan.label}>
-          <p>
-            {pending === "buy"
-              ? `BUY ${hit?.lot_size ?? 1} ${hit?.tradingsymbol}`
-              : pending === "book"
-                ? `SELL ${bookQty(held!.quantity)} ${held!.tradingsymbol}`
-                : pending === "close"
-                  ? `SELL ${Math.abs(held!.quantity)} ${held!.tradingsymbol}`
-                  : `GTT ${held?.tradingsymbol} · SL ${Math.abs(plan.slPct ?? 0)}%${plan.tgtPct ? ` · TGT ${plan.tgtPct}%` : ""}`}
-            <span className="text-muted"> · {product}</span>
-          </p>
-          <p className="text-muted">{plan.note}</p>
-          <div className="ko-ticket-act">
-            <button
-              type="button"
-              className={pending === "close" || pending === "book" ? "ko-btn-close" : "ko-btn-buy"}
-              onClick={(e) => {
-                stop(e);
-                if (pending === "buy" && hit) {
-                  saveDemo([
-                    ...loadDemo().filter((r) => r.tradingsymbol !== hit.tradingsymbol),
-                    {
-                      tradingsymbol: hit.tradingsymbol,
-                      exchange: hit.exchange,
-                      quantity: hit.lot_size,
-                      product,
-                      last_price: hit.last_price || 42,
-                      average_price: hit.last_price || 42,
-                    },
-                  ]);
-                } else if (pending === "close" && held) {
-                  saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
-                } else if (pending === "book" && held) {
-                  const sold = bookQty(held.quantity);
-                  const left = Math.abs(held.quantity) - sold;
-                  if (left <= 0) saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
-                  else {
-                    saveDemo(loadDemo().map((r) => (r.tradingsymbol === held.tradingsymbol ? { ...r, quantity: left } : r)));
-                  }
+  const ticket =
+    pending && (hit || held) ? (
+      <div className="ko-ticket" role="dialog" aria-label={plan.label}>
+        <p>
+          {pending === "buy"
+            ? `BUY ${hit?.lot_size ?? 1} ${hit?.tradingsymbol}`
+            : pending === "book"
+              ? `SELL ${bookQty(held!.quantity)} ${held!.tradingsymbol}`
+              : pending === "close"
+                ? `SELL ${Math.abs(held!.quantity)} ${held!.tradingsymbol}`
+                : `GTT ${held?.tradingsymbol} · SL ${Math.abs(plan.slPct ?? 0)}%${plan.tgtPct ? ` · TGT ${plan.tgtPct}%` : ""}`}
+          <span className="text-muted"> · {product}</span>
+        </p>
+        <p className="text-muted">{plan.note}</p>
+        <div className="ko-ticket-act">
+          <button
+            type="button"
+            className={pending === "close" || pending === "book" ? "ko-btn-close" : "ko-btn-buy"}
+            onClick={(e) => {
+              stop(e);
+              if (pending === "buy" && hit) {
+                saveDemo([
+                  ...loadDemo().filter((r) => r.tradingsymbol !== hit.tradingsymbol),
+                  {
+                    tradingsymbol: hit.tradingsymbol,
+                    exchange: hit.exchange,
+                    quantity: hit.lot_size,
+                    product,
+                    last_price: hit.last_price || 42,
+                    average_price: hit.last_price || 42,
+                  },
+                ]);
+              } else if (pending === "close" && held) {
+                saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
+              } else if (pending === "book" && held) {
+                const sold = bookQty(held.quantity);
+                const left = Math.abs(held.quantity) - sold;
+                if (left <= 0) saveDemo(loadDemo().filter((r) => r.tradingsymbol !== held.tradingsymbol));
+                else {
+                  saveDemo(loadDemo().map((r) => (r.tradingsymbol === held.tradingsymbol ? { ...r, quantity: left } : r)));
                 }
-                setPending(null);
-              }}
-            >
-              Place
-            </button>
-            <button type="button" className="ko-link" onClick={(e) => { stop(e); setPending(null); }}>
-              Cancel
-            </button>
-          </div>
+              }
+              setPending(null);
+            }}
+          >
+            Place
+          </button>
+          <button type="button" className="ko-link" onClick={(e) => { stop(e); setPending(null); }}>
+            Cancel
+          </button>
         </div>
-      ) : null}
-    </div>
-  );
+      </div>
+    ) : null;
+
+  if (held && side && held.optionSide === side) {
+    return (
+      <div className="ko-ord" onClick={stop} onPointerDown={stop}>
+        <button
+          type="button"
+          className="ko-btn-close"
+          onClick={(e) => {
+            stop(e);
+            if (onClose) onClose(held);
+            else setPending("close");
+          }}
+        >
+          Close
+        </button>
+        {ticket}
+      </div>
+    );
+  }
+
+  if (side) {
+    const label = buy?.short && buy.short !== "—" ? buy.short : strike != null ? `${strike} ${side}` : side;
+    return (
+      <div className="ko-ord" onClick={stop} onPointerDown={stop}>
+        <button type="button" className="ko-btn-buy" onClick={fireBuy} title="Buy 1 lot">
+          {resolving ? "…" : label}
+        </button>
+        {ticket}
+      </div>
+    );
+  }
+
+  return <span className="text-muted">—</span>;
 }
