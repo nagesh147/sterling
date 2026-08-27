@@ -23,7 +23,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-head{padding:0 32px;border-bottom:1px solid var(--k-surface-hover);margin-top:12px}
 .ko-title-row{display:flex;align-items:center;gap:16px;margin:0 0 4px;min-height:32px}
 .ko-title-row h2{margin:0;font-size:24px;font-weight:400;color:var(--k-text);flex:1}
-.ko-date{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.ko-date{position:relative;display:flex;align-items:center;gap:4px;flex-shrink:0}
 .ko-date-btn{width:36px;height:36px;border:0;background:none;color:var(--k-text);font-size:22px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;font-family:inherit}
 .ko-date-btn:hover{color:var(--k-orange)}
 .ko-date-value{position:relative;min-width:118px;height:36px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;color:var(--k-text);cursor:pointer;font-variant-numeric:tabular-nums}
@@ -35,7 +35,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-tools select,.ko-tools input[type=date]{height:32px;border:1px solid var(--k-border);background:var(--k-bg);color:var(--k-text);font-size:13px;padding:0 8px;border-radius:2px;font-family:inherit}
 .ko-link{border:0;background:none;color:var(--k-blue-kite);font-size:13px;padding:0;cursor:pointer;font-family:inherit}
 .ko-link:hover{text-decoration:underline}
-.ko-tabs-row{display:flex;align-items:flex-end;gap:16px;margin-bottom:-1px}
+.ko-tabs-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:-1px}
 .ko-tabs{display:flex;gap:32px;overflow-x:auto;min-width:0}
 .ko-tabs button{padding:0 0 12px;border:0;background:none;color:var(--k-text);font-size:14px;font-weight:400;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;font-family:inherit;transition:color .2s}
 .ko-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange)}
@@ -157,14 +157,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 
 .kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
 .ko-desk{display:block}
-.ko-hero{display:grid;grid-template-columns:minmax(0,1fr) max-content;grid-template-areas:"now nav" "tape cal";gap:8px 24px;align-items:start;margin:0 0 12px}
-.ko-hero-main{grid-area:now;min-width:0}
-.ko-rail-nav{grid-area:nav}
-.ko-hero > .ko-strip{grid-area:tape;min-width:0;margin:0}
-.ko-rail{grid-area:cal;display:block;min-width:0;width:auto;max-width:100%;position:static}
-.ko-hero:not([data-has-tape="true"]){grid-template-areas:"now nav" "now cal"}
-.ko-rail-nav .ko-date{width:100%;justify-content:center;margin:0}
-.ko-rail-nav .ko-ins{width:100%;justify-content:center;gap:10px;padding:0 0 4px}
+.ko-date .ko-date-value{border:0;background:none;font:inherit}
+.ko-cal-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--k-bg);border:1px solid var(--k-border);padding:10px 12px 8px;min-width:260px;box-shadow:0 12px 32px rgba(0,0,0,.12)}
+.ko-cal-pop .ko-cal-cell{min-height:0;padding:4px 6px}
 .ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
 .ko-rail-head span{flex:1;text-align:center;font-weight:500}
 .ko-tally{margin-left:14px;font-size:12px;color:var(--k-dim)}
@@ -186,7 +181,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-hit{fill:var(--ko-ce)}.ko-strip-miss{fill:var(--ko-pe)}.ko-strip-live{fill:var(--k-orange)}
 .ko-desk[data-tab="month"]{display:block}
 @media(max-width:1099px){
-  .ko-hero,.ko-hero:not([data-has-tape="true"]){grid-template-columns:1fr;grid-template-areas:"nav" "cal" "now" "tape"}
+  .ko-cal-pop{right:auto;left:0}
 }
 .ko-ins-side {
   margin-left: 5px;
@@ -578,10 +573,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 }
 
 @media (width <= 1099px) {
-  .ko-hero,
-  .ko-hero:not([data-has-tape="true"]) {
-    grid-template-columns: 1fr;
-    grid-template-areas: "nav" "cal" "now" "tape";
+  .ko-cal-pop {
+    right: auto;
+    left: 0;
   }
 }
 @media (width <= 800px) {
@@ -694,6 +688,8 @@ export function AstroPane() {
   const [now, setNow] = useState<Date | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [notes, setNotes] = useState(false);
+  const [calOpen, setCalOpen] = useState(false);
+  const calRef = useRef<HTMLDivElement>(null);
   const candles = useCandles(underlying, '5m', 2000);
   const [status, setStatus] = useState<LiveNow | null>(null);
   const [board, setBoard] = useState<IndexPlay[]>([]);
@@ -788,6 +784,22 @@ export function AstroPane() {
     setOpenKey(liveKey);
   }, [liveKey]);
 
+  useEffect(() => {
+    if (!calOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (calRef.current && !calRef.current.contains(e.target as Node)) setCalOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCalOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [calOpen]);
+
   const applyIso = (next: string) => {
     const snapped = nearestOpenIso(next);
     setIso(snapped);
@@ -822,6 +834,7 @@ export function AstroPane() {
   const pickDay = (date: string) => {
     applyIso(date);
     setTab("session");
+    setCalOpen(false);
   };
 
   return (
@@ -831,6 +844,40 @@ export function AstroPane() {
       <div className="ko-head">
         <div className="ko-title-row">
           <h2>Astrology</h2>
+          <div className="ko-date" ref={calRef} role="group" aria-label="Session date">
+            <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
+              ‹
+            </button>
+            <button
+              type="button"
+              className="ko-date-value"
+              aria-expanded={calOpen}
+              aria-haspopup="dialog"
+              onClick={() => setCalOpen((v) => !v)}
+            >
+              {fmtNavDay(iso)}
+            </button>
+            <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>
+              ›
+            </button>
+            <button type="button" className="ko-link" onClick={goToday}>
+              Today
+            </button>
+            {calOpen ? (
+              <div className="ko-cal-pop" role="dialog" aria-label={`${month.label} calendar`}>
+                <div className="ko-rail-head">
+                  <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                    ‹
+                  </button>
+                  <span>{month.label}</span>
+                  <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
+                    ›
+                  </button>
+                </div>
+                <MonthHeat month={month} iso={iso} onPick={pickDay} />
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="ko-tabs-row">
           <div className="ko-tabs" role="tablist" aria-label="View">
@@ -844,137 +891,92 @@ export function AstroPane() {
               Month
             </button>
           </div>
+          <div className="ko-ins" role="tablist" aria-label="Underlying">
+            {UNDER_SHORT.map((u) => {
+              const play = chipPlay(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  role="tab"
+                  data-on={underlying === u.id}
+                  aria-selected={underlying === u.id}
+                  onClick={() => setUnderlying(u.id)}
+                >
+                  {u.short}
+                  {play && play.side !== "WAIT" ? (
+                    <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
+                      {play.side === "BOTH" ? "BOTH" : play.side}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <div className="ko-body">
-        <div className="ko-desk" data-tab={tab}>
-          {tab !== "month" ? (
-            <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
-          ) : null}
-          <div className="ko-hero" data-has-tape={tab !== "month"}>
-            <div className="ko-hero-main">
-              {now && status ? (
-                <NowBoard
-                  status={status}
-                  now={now}
-                  grade={liveGrade}
-                  viewingIso={iso}
-                  sessionPnl={tally.directional ? tally.pnl : null}
-                  buy={status.window ? buyContract(status.window, tape) : undefined}
-                  nextBuy={status.next ? buyContract(status.next, tape) : undefined}
-                  holding={holding}
-                  onOpenSession={(date) => {
-                    applyIso(date);
-                    setTab("session");
-                  }}
-                  onOpenWindow={(slot) => {
-                    applyIso(status.sessionIso);
-                    setTab("session");
-                    setOpenKey(slotKey(slot));
-                  }}
-                />
-              ) : null}
-              {tab !== "month" ? (
-                <>
-                  <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
-                  <p className="ko-sub">
-                    <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
-                      {notes ? "Hide notes" : "Notes"}
-                    </button>
-                    {tally.directional ? (
-                      <span className="ko-tally">
-                        {tally.hits}/{tally.directional} hit
-                        {tally.sits ? ` · ${tally.sits} sit` : ""}
-                        {" · "}
-                        <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
-                          {tally.pnl >= 0 ? "+" : ""}
-                          {tally.pnl.toFixed(0)}
-                        </span>
-                      </span>
-                    ) : tapeLoading ? (
-                      <span className="ko-tally text-muted">Tape…</span>
-                    ) : tapeError ? (
-                      <span className="ko-tally text-muted">{tapeError}</span>
-                    ) : null}
-                  </p>
-                  {notes ? <PlaybookNotes book={book} /> : null}
-                </>
-              ) : null}
-            </div>
-            <div className="ko-rail-nav">
-              <div className="ko-date" role="group" aria-label="Session date">
-                <button type="button" className="ko-date-btn" aria-label="Previous session" onClick={() => shiftDay(-1)}>
-                  ‹
-                </button>
-                <label className="ko-date-value">
-                  {fmtNavDay(iso)}
-                  <input
-                    aria-label="Session date"
-                    type="date"
-                    value={iso}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      applyIso(e.target.value);
-                    }}
-                  />
-                </label>
-                <button type="button" className="ko-date-btn" aria-label="Next session" onClick={() => shiftDay(1)}>
-                  ›
-                </button>
-                <button type="button" className="ko-link" onClick={goToday}>
-                  Today
-                </button>
-              </div>
-              <div className="ko-ins" role="tablist" aria-label="Underlying">
-                {UNDER_SHORT.map((u) => {
-                  const play = chipPlay(u.id);
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      role="tab"
-                      data-on={underlying === u.id}
-                      aria-selected={underlying === u.id}
-                      onClick={() => setUnderlying(u.id)}
-                    >
-                      {u.short}
-                      {play && play.side !== "WAIT" ? (
-                        <span className={`ko-ins-side ${play.side === "CE" ? "text-ce" : play.side === "PE" ? "text-pe" : "text-muted"}`}>
-                          {play.side === "BOTH" ? "BOTH" : play.side}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {tab !== "month" ? (
-              <SessionStrip
-                slots={clockRows}
-                iso={iso}
-                tape={tape}
-                nowMin={nowMin}
-                sameDay={sameDay}
-                grades={grades}
-                onPick={pickSlot}
-              />
-            ) : null}
-            <aside className="ko-rail" aria-label={`${month.label} calendar`}>
-              <div className="ko-rail-head">
-                <button type="button" className="ko-link" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-                  ‹
-                </button>
-                <span>{month.label}</span>
-                <button type="button" className="ko-link" onClick={() => shiftMonth(1)} aria-label="Next month">
-                  ›
-                </button>
-              </div>
-              <MonthHeat month={month} iso={iso} onPick={pickDay} />
-            </aside>
-          </div>
+        {tab !== "month" ? (
+          <AstroTrailWatcher armed={viewMode === "live"} live={liveSlot} rows={clockRows} underlying={underlying} nowMin={nowMin} />
+        ) : null}
+        {now && status ? (
+          <NowBoard
+            status={status}
+            now={now}
+            grade={liveGrade}
+            viewingIso={iso}
+            sessionPnl={tally.directional ? tally.pnl : null}
+            buy={status.window ? buyContract(status.window, tape) : undefined}
+            nextBuy={status.next ? buyContract(status.next, tape) : undefined}
+            holding={holding}
+            onOpenSession={(date) => {
+              applyIso(date);
+              setTab("session");
+            }}
+            onOpenWindow={(slot) => {
+              applyIso(status.sessionIso);
+              setTab("session");
+              setOpenKey(slotKey(slot));
+            }}
+          />
+        ) : null}
 
-          {tab === "month" ? <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} /> : (
+        {tab === "month" ? (
+          <SimBoard sim={monthSim} loading={candles.isLoading && !monthSim} error={candles.isError ? "Tape unavailable" : null} />
+        ) : (
+          <div className="ko-session">
+            <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} tape={tape} holdingSide={holding?.plan.kind && holding.plan.kind !== 'close' ? (holding.mark.endsWith('PE') ? 'PE' : holding.mark.endsWith('CE') ? 'CE' : null) : null} />
+            <p className="ko-sub">
+              <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
+                {notes ? "Hide notes" : "Notes"}
+              </button>
+              {tally.directional ? (
+                <span className="ko-tally">
+                  {tally.hits}/{tally.directional} hit
+                  {tally.sits ? ` · ${tally.sits} sit` : ""}
+                  {" · "}
+                  <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
+                    {tally.pnl >= 0 ? "+" : ""}
+                    {tally.pnl.toFixed(0)}
+                  </span>
+                </span>
+              ) : tapeLoading ? (
+                <span className="ko-tally text-muted">Tape…</span>
+              ) : tapeError ? (
+                <span className="ko-tally text-muted">{tapeError}</span>
+              ) : null}
+            </p>
+            {notes ? <PlaybookNotes book={book} /> : null}
+            <SessionStrip
+              slots={clockRows}
+              iso={iso}
+              tape={tape}
+              nowMin={nowMin}
+              sameDay={sameDay}
+              grades={grades}
+              onPick={pickSlot}
+            />
             <ClockTable
               rows={clockRows}
               grades={grades}
@@ -985,10 +987,10 @@ export function AstroPane() {
               asOfIso={iso}
               onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
+      </div>
     </div>
   );
 }
