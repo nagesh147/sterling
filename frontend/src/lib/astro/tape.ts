@@ -163,24 +163,24 @@ export function buyContract(
   const atm = spot != null ? roundStrike(spot, step) : null;
 
   if (family.kind === "straddle") {
-    const short = atm != null ? `${STRIKE.format(atm)} CE / ${STRIKE.format(atm)} PE` : "ATM straddle";
+    const short = atm != null ? `${STRIKE.format(atm)} CE / ${STRIKE.format(atm)} PE` : "—";
     return {
       verb: verb === "SIT" ? "BUY" : verb,
       strike: atm,
       strikeHi: atm,
       side: "BOTH",
-      label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
+      label: short,
       short,
     };
   }
 
-  const short = atm != null ? `${STRIKE.format(atm)} ${family.side}` : `ATM ${family.side}`;
+  const short = atm != null ? `${STRIKE.format(atm)} ${family.side}` : "—";
   return {
     verb: verb === "SIT" ? "BUY" : verb,
     strike: atm,
     strikeHi: null,
     side: family.side,
-    label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
+    label: short,
     short,
   };
 }

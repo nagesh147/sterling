@@ -16,6 +16,7 @@ describe("astro kite contract", () => {
   it("does not fire a second Buy when the next window is still PE", () => {
     const held = { optionSide: "PE" as const, last_price: 42 };
     expect(planWindow("SCALP PE", "PE", null, "24,100 PE").kind).toBe("buy");
+    expect(planWindow("SCALP PE", "PE", null, "24,100 PE").label).toBe("24,100 PE");
     expect(planWindow("SCALP PE", "PE", held, "24,100 PE").kind).toBe("trail");
     expect(planWindow("BUY CE", "CE", held, "24,100 PE").kind).toBe("close");
     expect(planWindow("AVOID", "WAIT", held, "24,100 PE").kind).toBe("lock");

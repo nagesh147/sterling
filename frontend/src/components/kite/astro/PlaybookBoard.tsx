@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { clockFromMinutes, getIstParts, minutesOfDay } from "../../../lib/astro/time";
+import { clockFromMinutes, getIstParts, minutesOfDay } from "@/lib/astro/time";
 import type { DayForecast, DignityKind, WindowSlot } from "../../../lib/astro/types";
 import { buyContract, type SessionTape } from "../../../lib/astro/tape";
 import { actionTone } from "./palette";
@@ -184,9 +184,9 @@ export function PlaybookStrip({
                   {r.id === "avoid" ? null : (
                 <span className={`ko-plan-play ${actionTone(r.slot.action, r.slot.side)}`}>
                   {holdingSide && r.slot.side === holdingSide
-                    ? `On ${buy.short}`
+                    ? buy.short
                     : buy.verb !== "SIT"
-                      ? buy.label
+                      ? buy.short
                       : r.slot.action}
                 </span>
               )}
