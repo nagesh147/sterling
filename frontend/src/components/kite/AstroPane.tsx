@@ -62,7 +62,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-pill-ce{color:var(--ko-ce);background:color-mix(in srgb,var(--ko-ce) 12%,transparent)}
 .ko-pill-pe{color:var(--ko-pe);background:color-mix(in srgb,var(--ko-pe) 12%,transparent)}
 .ko-pill-wait{color:var(--k-dim);background:rgba(155,155,155,.1)}
-.ko-st{display:inline-block;padding:2px 6px;border-radius:3px;font-size:11px}
+.ko-st{display:inline-block;min-width:40px;text-align:center;padding:2px 6px;border-radius:3px;font-size:11px}
 .ko-st-hit{color:var(--ko-ce);background:color-mix(in srgb,var(--ko-ce) 12%,transparent)}
 .ko-st-miss{color:var(--ko-pe);background:color-mix(in srgb,var(--ko-pe) 12%,transparent)}
 .ko-st-live{color:#f57c00;background:rgba(255,152,0,.1)}
@@ -236,6 +236,22 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.ko-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 92px;
+}
+.ko-pts {
+  min-width: 4.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  font-size: 13px;
+}
+.ko-pts-up { color: var(--k-up, #1e7a46); }
+.ko-pts-down { color: var(--k-down, #c0392b); }
 .ko-clock-play {
   font-weight: 500;
 }
@@ -651,24 +667,17 @@ function stampLive(
 
 function GradeMark({ grade, loading }: { grade: SlotGrade | undefined; loading: boolean }) {
   if (loading && (!grade || grade.kind === "NONE")) {
-    return <span className="text-muted">…</span>;
+    return <span className="ko-result text-muted">…</span>;
   }
-  if (!grade || grade.kind === "NONE") {
-    return <span className="text-muted">—</span>;
+  if (!grade || grade.kind === "NONE" || grade.kind === "PENDING") {
+    return <span className="ko-result text-muted">—</span>;
   }
-  if (grade.kind === "PENDING") {
-    return <span className="text-muted">—</span>;
-  }
+  const pts = grade.favor ?? grade.delta;
+  const ptsCls = pts == null ? "ko-pts text-muted" : pts > 0 ? "ko-pts ko-pts-up" : pts < 0 ? "ko-pts ko-pts-down" : "ko-pts text-muted";
   return (
-    <span>
+    <span className="ko-result">
       <span className={gradeClass(grade.kind)}>{grade.label}</span>
-      {grade.delta !== null && (
-        <span className="text-muted">
-          {" "}
-          {grade.delta >= 0 ? "+" : ""}
-          {grade.delta.toFixed(0)}
-        </span>
-      )}
+      <span className={ptsCls}>{pts == null ? "—" : `${pts > 0 ? "+" : ""}${Math.round(pts)}`}</span>
     </span>
   );
 }
