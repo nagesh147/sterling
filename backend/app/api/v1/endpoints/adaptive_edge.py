@@ -123,9 +123,75 @@ def _load_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+
+#: Legacy settings fields that map onto the real engine configuration. Anything
+#: written here is mirrored into AdaptiveEdgeConfig, which is what the scanner
+#: and runner actually read.
+_MIRRORED_TO_ENGINE: dict[str, str] = {
+    "enabled": "enabled",
+    "scan_indices": "scan_indices",
+    "scan_stocks": "scan_stocks",
+    "scan_all_stocks": "scan_all_stocks",
+    "scan_stock_contracts": "stock_contracts",
+    "scan_expiries_indices": "scan_expiries_indices",
+    "expiry_dte_min": "expiry_dte_min",
+    "expiry_dte_max": "expiry_dte_max",
+    "avoid_expiry_day": "avoid_expiry_day",
+}
+
+#: Fields this surface accepts and stores but which reach no engine. They belong
+#: to an earlier moving-average scalper, not to the Master Specification strategy
+#: this engine now implements. They are reported rather than quietly accepted,
+#: because a setting that saves successfully and changes nothing is the worst of
+#: both worlds — the operator believes they configured something.
+_INERT_FIELDS: tuple[str, ...] = (
+    "symbol", "symbols", "scan_source", "strike_moneyness", "scan_expiries",
+    "w_short", "w_long", "stop_points", "trail_points",
+    "profit_lock_activation_points", "profit_lock_offset_points",
+    "persistence_bars", "scalp_favorable_points", "extended_favorable_points",
+    "intraday_favorable_points", "tick_size", "ib_minutes",
+    "drawdown_circuit_breaker_enabled", "max_daily_drawdown_pct",
+)
+
+
+def _mirror_into_engine_config(settings: "AdaptiveEdgeSettings") -> list[str]:
+    """Push the mappable settings into the configuration the engine reads.
+
+    Returns any problems as strings rather than raising: a legacy write that
+    cannot be represented in the engine config must not 500 the settings page,
+    but it must not silently vanish either.
+    """
+    from app.services.adaptive_edge import set_config
+    payload: dict[str, Any] = {}
+    for legacy, engine in _MIRRORED_TO_ENGINE.items():
+        value = getattr(settings, legacy, None)
+        if value is None:
+            continue
+        payload[engine] = list(value) if isinstance(value, (list, tuple)) else value
+    if not payload:
+        return []
+    try:
+        set_config(payload)
+        return []
+    except (ValueError, TypeError) as exc:
+        return [str(exc)]
+
+
 @router.get("/settings")
 def get_settings() -> dict[str, Any]:
-    return {"settings": _load_settings().model_dump(), "live_trading": False}
+    """Legacy settings surface, now backed by the real engine configuration.
+
+    ``inert_fields`` is published so the UI can mark the controls that reach no
+    engine. They were accepted and stored here long after the strategy they
+    belonged to was replaced, which meant an operator could set a stop distance
+    that nothing would ever read.
+    """
+    return {
+        "settings": _load_settings().model_dump(),
+        "live_trading": False,
+        "inert_fields": list(_INERT_FIELDS),
+        "engine_fields": sorted(_MIRRORED_TO_ENGINE),
+    }
 
 
 @router.put("/settings")
@@ -139,7 +205,17 @@ def put_settings(body: AdaptiveEdgeSettings) -> dict[str, Any]:
     ):
         raise HTTPException(400, "mode rungs must be non-decreasing")
     db.set_config(CONFIG_KEY, json.dumps(body.model_dump()))
-    return {"settings": body.model_dump(), "live_trading": False}
+    # Mirror the mappable fields into the configuration the scanner and runner
+    # actually read. Without this the page saves successfully and the engine
+    # keeps running on whatever it had.
+    problems = _mirror_into_engine_config(body)
+    return {
+        "settings": body.model_dump(),
+        "live_trading": False,
+        "inert_fields": list(_INERT_FIELDS),
+        "engine_fields": sorted(_MIRRORED_TO_ENGINE),
+        "engine_config_errors": problems,
+    }
 
 
 @router.get("/snapshot")
