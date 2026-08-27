@@ -32,10 +32,18 @@ FORMULAS: dict[str, FormulaDefinition] = {
     "F-002": FormulaDefinition("F-002", "1.0", "Peak P&L", FormulaStatus.ANCHORED, "accounting currency", "accounting"),
     "F-003": FormulaDefinition("F-003", "1.0", "Profit giveback", FormulaStatus.ANCHORED, "accounting currency", "accounting"),
     "F-004": FormulaDefinition("F-004", "1.0", "Expected net value", FormulaStatus.IMPLEMENTED, "value", "economic"),
-    "F-005": FormulaDefinition("F-005", "1.0", "Risk authorization immutability", FormulaStatus.ANCHORED, "authorization state", "risk"),
-    "F-006": FormulaDefinition("F-006", "1.0", "Mode/risk independence", FormulaStatus.ANCHORED, "state invariant", "risk"),
-    "F-007": FormulaDefinition("F-007", "1.0", "Executable BUY reference", FormulaStatus.ANCHORED, "price", "execution"),
-    "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "execution"),
+    # Owners are module names in this package, checked by test_formula_registry_owners.
+    # These four were stale: "risk" and "execution" are not modules. F-005/F-006
+    # live in risk_engine (a frozen RiskAuthorization that only tightens, and a
+    # docstring stating risk is independent of DynamicMode); F-007/F-008 are
+    # produced by research_references. "execution" was dangling until an
+    # unrelated execution.py was added, at which point a wrong label started
+    # resolving to the wrong module — which is exactly the drift A167 exists to
+    # catch, and why the owner test now pins it.
+    "F-005": FormulaDefinition("F-005", "1.0", "Risk authorization immutability", FormulaStatus.ANCHORED, "authorization state", "risk_engine"),
+    "F-006": FormulaDefinition("F-006", "1.0", "Mode/risk independence", FormulaStatus.ANCHORED, "state invariant", "risk_engine"),
+    "F-007": FormulaDefinition("F-007", "1.0", "Executable BUY reference", FormulaStatus.ANCHORED, "price", "research_references"),
+    "F-008": FormulaDefinition("F-008", "1.0", "Executable SELL reference", FormulaStatus.ANCHORED, "price", "research_references"),
 }
 
 # Canonical F-101..F-114 roles are taken from docs/strategy/adaptive-edge/FORMULAS.md.
@@ -55,7 +63,8 @@ _FORMULA_METADATA: dict[str, tuple[str, str, str]] = {
     "F-110": ("BUY_CE / BUY_PE mandatory entry gate", "entry decision", "f110_entry_gate"),
     "F-111": ("Position-management exit state machine", "lifecycle state", "f111_exit_gate"),
     "F-112": ("Monotonic dynamic protection / profit floor", "protection state", "protection"),
-    "F-113": ("Post-exit / re-entry boundary", "re-entry state", "f113_reentry"),
+    # f113_reentry is a function in strategy_v21, not a module of its own.
+    "F-113": ("Post-exit / re-entry boundary", "re-entry state", "strategy_v21"),
     "F-114": ("Final decision interaction with PositionState and CapitalState", "portfolio state", "management"),
 }
 
