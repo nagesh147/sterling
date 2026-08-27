@@ -12,9 +12,8 @@ import { NowBoard } from './astro/NowBoard';
 import { PlaybookNotes, PlaybookStrip } from './astro/PlaybookBoard';
 import { SessionStrip } from './astro/SessionStrip';
 
-type Tab = "session" | "thirty" | "month";
-
 const CSS = `
+
 .kite-astro{--ko-ce:#26a69a;--ko-pe:#ef5350;display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:${k.fontFamily};font-size:14px}
 html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-astro{--ko-ce:#089981;--ko-pe:#f23645}
 .kite-astro *{box-sizing:border-box}
@@ -41,7 +40,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-ins button{border:0;background:none;padding:0;font-size:13px;color:var(--k-text);white-space:nowrap;cursor:pointer;font-family:inherit}
 .ko-ins button:hover{color:var(--k-orange)}
 .ko-ins button[data-on="true"]{color:var(--k-orange);font-weight:500}
-.ko-ins-side{margin-left:5px;font-size:10px;font-weight:500}
+.ko-ins-side{margin-left:5px;font-size:12px;font-weight:500}
 .ko-now-board{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12px}
 .ko-table tbody tr[data-live="true"]{box-shadow:inset 2px 0 0 var(--k-orange)}
 .ko-body{flex:1;overflow:auto;padding:20px 32px 40px}
@@ -79,7 +78,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip svg{width:100%;height:auto;display:block}
 .ko-strip g{cursor:pointer}
 .ko-strip-tapebg{fill:var(--k-surface-2)}
-.ko-strip-ce{fill:var(--ko-ce)}.ko-strip-pe{fill:var(--ko-pe)}.ko-strip-both{fill:var(--k-amber)}.ko-strip-wait{fill:#d6d6d6}.ko-strip-avoid{fill:#bdbdbd}
+.ko-strip-ce{fill:var(--ko-ce)}.ko-strip-pe{fill:var(--ko-pe)}.ko-strip-both{fill:#bdbdbd}.ko-strip-wait{fill:#d6d6d6}.ko-strip-avoid{fill:#bdbdbd}
 .ko-strip-upline{stroke:var(--ko-ce);fill:none}.ko-strip-downline{stroke:var(--ko-pe);fill:none}
 .ko-strip-tick{stroke:var(--k-border);stroke-width:1}
 .ko-strip-now{stroke:var(--k-orange);stroke-width:1.2}
@@ -87,9 +86,9 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-strip-hora{font-size:9px}
 .ko-strip-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--k-dim);margin-top:8px;align-items:center}
 .ko-strip-leg i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:1px}
-.ko-swatch-ce{background:var(--ko-ce)}.ko-swatch-pe{background:var(--ko-pe)}.ko-swatch-both{background:var(--k-amber)}.ko-swatch-wait{background:#d6d6d6}
+.ko-swatch-ce{background:var(--ko-ce)}.ko-swatch-pe{background:var(--ko-pe)}.ko-swatch-both{background:#bdbdbd}.ko-swatch-wait{background:#d6d6d6}
 .ko-mix{display:flex;height:4px;margin-top:8px;background:var(--k-surface-hover)}
-.ko-mix-ce{background:var(--ko-ce)}.ko-mix-pe{background:var(--ko-pe)}.ko-mix-both{background:var(--k-amber)}.ko-mix-wait{background:#d6d6d6}
+.ko-mix-ce{background:var(--ko-ce)}.ko-mix-pe{background:var(--ko-pe)}.ko-mix-both{background:#bdbdbd}.ko-mix-wait{background:#d6d6d6}
 .ko-kv{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--k-border);margin:0 0 16px}
 .ko-kv>div{padding:10px 14px;border-right:1px solid var(--k-surface-hover);border-bottom:1px solid var(--k-surface-hover)}
 .ko-kv>div:nth-child(4n){border-right:0}
@@ -109,7 +108,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-cal-cell .bar{display:block;height:3px;width:100%;background:var(--k-border)}
 .ko-cal-cell[data-gap=up] .bar{background:var(--ko-ce)}
 .ko-cal-cell[data-gap=down] .bar{background:var(--ko-pe)}
-.ko-cal-cell[data-gap=flat] .bar{background:var(--k-amber)}
+.ko-cal-cell[data-gap=flat] .bar{background:#d6d6d6}
 .ko-cal-cell[data-gap=closed] .bar{background:var(--k-surface-hover)}
 .ko-cal-cell[data-on=true]{box-shadow:inset 0 -2px 0 var(--k-orange)}
 .ko-cal-cell:disabled,.ko-cal-empty{opacity:.4;cursor:default}
@@ -118,8 +117,8 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .ko-now-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
 .ko-now-phase{font-size:11px;color:var(--k-dim);font-weight:500;letter-spacing:.04em}
 .ko-now-phase[data-live="true"]{color:#f57c00}
-.ko-now-clock{font-size:12px;color:var(--k-dim);font-variant-numeric:tabular-nums}
-.ko-now-play{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:22px;font-weight:400;letter-spacing:-.2px;line-height:1.15;margin:0 0 6px}
+.ko-now-clock{font-size:13px;color:var(--k-dim);font-variant-numeric:tabular-nums}
+.ko-now-play{display:block;font-size:20px;font-weight:400;letter-spacing:-.2px;line-height:1.2;margin:0 0 4px}
 .ko-now-sub{font-size:13px;color:var(--k-dim);margin-left:0;letter-spacing:0;font-weight:400}
 .ko-now-copy{margin:0 0 4px;font-size:13px;line-height:1.45;color:var(--k-text)}
 .ko-now-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--k-dim);margin-top:6px}
@@ -184,7 +183,205 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   .ko-desk[data-tab="month"] .ko-main{display:none}
   .ko-desk[data-tab="month"] .ko-rail{display:block}
 }
+.ko-ins-side {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.ko-now-play {
+  display: block;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+.ko-now-clock {
+  font-size: 13px;
+}
+.ko-now-next {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--k-dim);
+  line-height: 1.4;
+}
+.ko-now-copy {
+  text-wrap: pretty;
+}
+.ko-strip-both,
+.ko-swatch-both,
+.ko-mix-both {
+  background: #bdbdbd;
+  fill: #bdbdbd;
+}
+.ko-cal-cell[data-gap="flat"] .bar {
+  background: #d6d6d6;
+}
+.ko-tag-now {
+  color: var(--k-orange);
+  background: var(--k-orange)1a;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-left: 0;
+}
+
+.ko-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.ko-alert {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--k-border);
+  background: var(--k-bg);
+  font: inherit;
+  color: var(--k-text);
+}
+.ko-alert[data-kind="now"] {
+  box-shadow: inset 2px 0 var(--k-orange);
+}
+.ko-alert-kicker {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--k-dim);
+}
+.ko-alert-body {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ko-alert-body b {
+  font-weight: 500;
+}
+.ko-alert-enable {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.ko-acc {
+  border-top: 1px solid var(--k-surface-hover);
+  margin: 0 0 8px;
+}
+.ko-acc-sum,
+.ko-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 4px 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--k-surface-hover);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--k-text);
+}
+.ko-acc-sum {
+  color: var(--k-dim);
+  font-size: 13px;
+}
+.ko-acc-item[data-live="true"] .ko-acc-head {
+  box-shadow: inset 2px 0 var(--k-orange);
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-acc-item[data-on="true"] .ko-acc-head {
+  background: var(--k-surface-2);
+}
+.ko-acc-item[data-live="true"][data-on="true"] .ko-acc-head {
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+.ko-acc-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 6.6rem;
+}
+.ko-acc-play {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+.ko-acc-result {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.ko-acc-chev {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--k-dim);
+  font-size: 11px;
+  width: 1em;
+  text-align: center;
+}
+.ko-acc-body {
+  padding: 8px 12px 14px 12px;
+  border-bottom: 1px solid var(--k-surface-hover);
+  background: var(--k-surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--k-text);
+  text-wrap: pretty;
+}
+.ko-acc-body p {
+  margin: 0 0 6px;
+}
+.ko-acc-body p:last-child {
+  margin-bottom: 0;
+}
+.ko-acc-meta {
+  color: var(--k-dim);
+  font-size: 11px;
+}
+.ko-acc-item[data-live="true"] .ko-acc-body {
+  background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
+}
+
+@media (width <= 1099px) {
+  .ko-desk {
+    display: block;
+  }
+  .ko-rail {
+    display: none;
+    position: static;
+  }
+  .ko-desk[data-tab="month"] .ko-main {
+    display: none;
+  }
+  .ko-desk[data-tab="month"] .ko-rail {
+    display: block;
+  }
+}
+@media (width <= 800px) {
+  .ko-acc-time {
+    min-width: 0;
+  }
+  .ko-acc-head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .ko-acc-play {
+    flex-basis: 100%;
+    order: 5;
+  }
+  .ko-acc-chev {
+    order: 6;
+  }
+}@media (width<=800px){.ko-head,.ko-body{padding-left:16px;padding-right:16px}.ko-title-row{flex-wrap:wrap;gap:8px;margin-bottom:4px}.ko-title-row h2{width:auto;font-size:20px}.ko-date-value{min-width:96px;font-size:13px}.ko-tabs-row{flex-wrap:wrap;align-items:flex-start;gap:0}.ko-tabs{gap:20px;width:100%}.ko-ins{gap:14px;width:100%;padding-top:4px;padding-bottom:10px}.kd-shell{padding:20px 16px}.kd-margins{grid-template-columns:1fr}.kd-margin-card+.kd-margin-card{border-top:1px solid var(--k-border);border-left:0;margin-top:24px;padding:24px 0 0}.kd-margin-card{padding:0}.kd-margin-body{flex-direction:column}.kd-margin-meta{width:100%;min-width:0}.ko-kv{grid-template-columns:1fr 1fr}.ko-kv>div:nth-child(4n){border-right:1px solid var(--k-surface-hover)}.ko-kv>div:nth-child(2n){border-right:0}.ko-split{grid-template-columns:1fr}.ko-cal-cell{min-height:44px;padding:4px 4px 6px}}
 `;
+
+
+type Tab = "session" | "thirty" | "month";
 
 function sessionIso(): string {
   return lastCompletedSessionIso(new Date());
@@ -208,6 +405,10 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 function fmtNavDay(iso: string): string {
   const p = getIstParts(isoToDate(iso));
   return `${WEEKDAYS[p.weekday].slice(0, 3)}, ${p.day} ${MONTHS[p.month - 1]}`;
+}
+
+function slotKey(slot: WindowSlot): string {
+  return `${slot.from}-${slot.to}`;
 }
 
 function sideClass(side: WindowSlot["side"]): string {
@@ -272,6 +473,8 @@ export function AstroPane() {
   const [tab, setTab] = useState<Tab>("session");
   const [now, setNow] = useState<Date | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [earlierOpen, setEarlierOpen] = useState(false);
+  const [laterOpen, setLaterOpen] = useState(false);
   const [notes, setNotes] = useState(false);
   const candles = useCandles(underlying, '5m', 400);
   const [status, setStatus] = useState<LiveNow | null>(null);
@@ -305,7 +508,6 @@ export function AstroPane() {
   );
   const tapeLoading = candles.isLoading && !tape;
   const tapeError = tape && tape.bars.length ? null : candles.isLoading ? null : "No tape";
-
   const book = useMemo(() => forecastDay(dayDate, underlying, dayDate), [dayDate, underlying]);
   const month = useMemo(() => {
     const stamp = todayIso || formatIstIsoDate(dayDate);
@@ -319,7 +521,7 @@ export function AstroPane() {
   const clockRows = useMemo(() => stampLive(rawRows, nowMin, sameDay), [rawRows, nowMin, sameDay]);
   const grades = useMemo(() => {
     const map = new Map<string, SlotGrade>();
-    for (const s of clockRows) map.set(`${s.from}-${s.to}`, gradeSlot(s, tape, nowMin, sameDay));
+    for (const s of clockRows) map.set(slotKey(s), gradeSlot(s, tape, nowMin, sameDay));
     return map;
   }, [clockRows, tape, nowMin, sameDay]);
   const tally = useMemo(
@@ -331,6 +533,18 @@ export function AstroPane() {
     return gradeSlot(status.window, tape, nowMin, sameDay);
   }, [status, now, iso, tape, nowMin, sameDay]);
   const chipPlay = (id: Underlying) => board.find((row) => row.id === id);
+
+  const liveKey = useMemo(() => {
+    const live = clockRows.find((s) => s.isLive);
+    return live ? slotKey(live) : "";
+  }, [clockRows]);
+
+  useEffect(() => {
+    if (!liveKey) return;
+    setOpenKey(liveKey);
+    setEarlierOpen(false);
+    setLaterOpen(false);
+  }, [liveKey]);
 
   const applyIso = (next: string) => {
     const snapped = nearestOpenIso(next);
@@ -360,7 +574,13 @@ export function AstroPane() {
 
   const pickSlot = (slot: WindowSlot) => {
     if (tab === "month") setTab("session");
-    setOpenKey(`${slot.from}-${slot.to}`);
+    const key = slotKey(slot);
+    setOpenKey(key);
+    if (sameDay && nowMin != null && nowMin >= slot.toMin) setEarlierOpen(true);
+    if (sameDay && nowMin != null && nowMin < slot.fromMin) {
+      const upcoming = clockRows.filter((s) => !s.isPast && !s.isLive);
+      if (upcoming[0] && slotKey(upcoming[0]) !== key) setLaterOpen(true);
+    }
   };
 
   const pickDay = (date: string) => {
@@ -445,7 +665,6 @@ export function AstroPane() {
                 now={now}
                 grade={liveGrade}
                 viewingIso={iso}
-                board={board}
                 sessionPnl={tally.directional ? tally.pnl : null}
                 onOpenSession={(date) => {
                   applyIso(date);
@@ -454,19 +673,14 @@ export function AstroPane() {
                 onOpenWindow={(slot) => {
                   applyIso(status.sessionIso);
                   setTab("session");
-                  setOpenKey(`${slot.from}-${slot.to}`);
+                  setOpenKey(slotKey(slot));
                 }}
               />
             ) : null}
 
             {tab !== "month" ? (
               <div className="ko-session">
-                <PlaybookStrip
-                  book={book}
-                  onPick={pickSlot}
-                  live={(status?.phase === "live" || status?.phase === "post") && iso === status.sessionIso}
-                  nowMin={sameDay ? nowMin : null}
-                />
+                <PlaybookStrip book={book} onPick={pickSlot} nowMin={sameDay ? nowMin : null} />
                 <p className="ko-sub">
                   <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
                     {notes ? "Hide notes" : "Notes"}
@@ -497,32 +711,17 @@ export function AstroPane() {
                   grades={grades}
                   onPick={pickSlot}
                 />
-                <div className="ko-scroll">
-                  <table className="ko-table ko-clock">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Side</th>
-                        <th>Play</th>
-                        <th>Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {clockRows.map((slot) => (
-                        <TimingRow
-                          key={`${slot.from}-${slot.to}`}
-                          slot={slot}
-                          grade={grades.get(`${slot.from}-${slot.to}`)}
-                          loading={tapeLoading}
-                          open={openKey === `${slot.from}-${slot.to}`}
-                          onToggle={() =>
-                            setOpenKey((k) => (k === `${slot.from}-${slot.to}` ? null : `${slot.from}-${slot.to}`))
-                          }
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ClockList
+                  rows={clockRows}
+                  grades={grades}
+                  loading={tapeLoading}
+                  openKey={openKey}
+                  earlierOpen={earlierOpen}
+                  laterOpen={laterOpen}
+                  onEarlier={() => setEarlierOpen((v) => !v)}
+                  onLater={() => setLaterOpen((v) => !v)}
+                  onToggle={(key) => setOpenKey((k) => (k === key ? null : key))}
+                />
               </div>
             ) : null}
           </div>
@@ -546,7 +745,76 @@ export function AstroPane() {
   );
 }
 
-function TimingRow({
+function ClockList({
+  rows,
+  grades,
+  loading,
+  openKey,
+  earlierOpen,
+  laterOpen,
+  onEarlier,
+  onLater,
+  onToggle,
+}: {
+  rows: WindowSlot[];
+  grades: Map<string, SlotGrade>;
+  loading: boolean;
+  openKey: string | null;
+  earlierOpen: boolean;
+  laterOpen: boolean;
+  onEarlier: () => void;
+  onLater: () => void;
+  onToggle: (key: string) => void;
+}) {
+  const spent = rows.filter((s) => s.isPast && !s.isLive);
+  const live = rows.filter((s) => s.isLive);
+  const upcoming = rows.filter((s) => !s.isPast && !s.isLive);
+  const next = upcoming[0] ? [upcoming[0]] : [];
+  const later = upcoming.slice(1);
+  const spentLabel = live.length === 0 && upcoming.length === 0 ? `Session · ${spent.length}` : `Earlier · ${spent.length}`;
+
+  const renderItem = (slot: WindowSlot) => (
+    <ClockItem
+      key={slotKey(slot)}
+      slot={slot}
+      grade={grades.get(slotKey(slot))}
+      loading={loading}
+      open={openKey === slotKey(slot)}
+      onToggle={() => onToggle(slotKey(slot))}
+    />
+  );
+
+  return (
+    <div className="ko-acc">
+      {spent.length > 0 ? (
+        <div className="ko-acc-group">
+          <button type="button" className="ko-acc-sum" aria-expanded={earlierOpen} onClick={onEarlier}>
+            {spentLabel}
+            <span className="ko-acc-chev" aria-hidden>
+              {earlierOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {earlierOpen ? spent.map(renderItem) : null}
+        </div>
+      ) : null}
+      {live.map(renderItem)}
+      {next.map(renderItem)}
+      {later.length > 0 ? (
+        <div className="ko-acc-group">
+          <button type="button" className="ko-acc-sum" aria-expanded={laterOpen} onClick={onLater}>
+            Later · {later.length}
+            <span className="ko-acc-chev" aria-hidden>
+              {laterOpen ? "▾" : "▸"}
+            </span>
+          </button>
+          {laterOpen ? later.map(renderItem) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClockItem({
   slot,
   grade,
   loading,
@@ -561,36 +829,35 @@ function TimingRow({
 }) {
   const tone = actionTone(slot.action, slot.side);
   const mins = slot.toMin - slot.fromMin;
+  const kalam = [slot.kalam.rahu ? "Rahu" : null, slot.kalam.yamagandam ? "Yama" : null, slot.kalam.gulika ? "Gulika" : null]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <>
-      <tr data-on={open} data-live={slot.isLive} onClick={onToggle}>
-        <td className="ko-time">
+    <div className="ko-acc-item" data-live={slot.isLive} data-on={open}>
+      <button type="button" className="ko-acc-head" aria-expanded={open} onClick={onToggle}>
+        <span className="ko-acc-time">
           {slot.from}–{slot.to}
-          {slot.isLive ? <span className="ko-tag">LIVE</span> : null}
-          <span className="ko-time-meta">
-            {mins}m · {slot.hora}
-            {slot.kalam.rahu ? " · Rahu" : ""}
-            {slot.kalam.yamagandam ? " · Yama" : ""}
-          </span>
-        </td>
-        <td>
-          <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
-        </td>
-        <td className={tone}>{slot.action}</td>
-        <td>
+        </span>
+        {slot.isLive ? <span className="ko-tag ko-tag-now">NOW</span> : null}
+        <span className={sideClass(slot.side)}>{sideLabel(slot.side)}</span>
+        <span className={`ko-acc-play ${tone}`}>{slot.action}</span>
+        <span className="ko-acc-result">
           <GradeMark grade={grade} loading={loading} />
-        </td>
-      </tr>
-      {open && (
-        <tr className="ko-expand">
-          <td colSpan={4}>
-            {slot.suggestion}
-            <div className="text-muted" style={{ marginTop: 4 }}>
-              {slot.why}
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+        </span>
+        <span className="ko-acc-chev" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open ? (
+        <div className="ko-acc-body">
+          {slot.isLive ? null : <p>{slot.suggestion}</p>}
+          <p className={slot.isLive ? "" : "text-muted"}>{slot.why}</p>
+          <p className="ko-acc-meta">
+            {mins}m · {slot.hora} hora
+            {kalam ? ` · ${kalam}` : ""}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }

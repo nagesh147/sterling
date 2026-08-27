@@ -158,17 +158,25 @@ export function SessionStrip({
           const mark = w >= 28 ? (s.side === "WAIT" ? "" : s.side === "BOTH" ? "±" : s.side) : "";
           return (
             <g key={`${s.from}-${s.to}`}>
-              <title>{label}</title>
               <rect
                 x={x}
                 y={BAR_Y}
                 width={w}
                 height={BAR_H}
                 className={stripClass(s)}
+                role="button"
+                tabIndex={0}
+                aria-label={label}
                 onClick={() => onPick?.(s)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onPick?.(s);
+                  }
+                }}
               />
-              {s.kalam.rahu ? <rect x={x} y={BAR_Y} width={w} height={BAR_H} fill="url(#ko-hatch)" opacity="0.4" /> : null}
-              {g ? <rect x={x} y={BAR_Y} width={w} height="2.5" className={gradeClass(g.kind)} /> : null}
+              {s.kalam.rahu ? <rect x={x} y={BAR_Y} width={w} height={BAR_H} fill="url(#ko-hatch)" opacity="0.4" pointerEvents="none" /> : null}
+              {g ? <rect x={x} y={BAR_Y} width={w} height="2.5" className={gradeClass(g.kind)} pointerEvents="none" /> : null}
               {mark && w >= 28 ? (
                 <text x={x + w / 2} y={BAR_Y + 15} textAnchor="middle" className="ko-strip-side">
                   {mark}

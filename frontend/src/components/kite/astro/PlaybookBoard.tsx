@@ -1,13 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import { clockFromMinutes, getIstParts, minutesOfDay } from "../../../lib/astro/time";
 import type { DayForecast, DignityKind, WindowSlot } from "../../../lib/astro/types";
-import { actionTone, gapTone } from "./palette";
-
-const THESIS: Record<DayForecast["playbook"]["thesis"], string> = {
-  "trend-up": "Trend up",
-  "trend-down": "Trend down",
-  fade: "Fade",
-  chop: "Chop",
-};
+import { actionTone } from "./palette";
 
 function istClock(iso: string): string {
   const p = getIstParts(new Date(iso));
@@ -21,7 +15,7 @@ function dignityClass(d: DignityKind): string {
 }
 
 function mergeWindows(slots: WindowSlot[]) {
-  const rows: { from: string; to: string; fromMin: number; toMin: number; action: WindowSlot["action"]; side: WindowSlot["side"]; why: string; slot: WindowSlot }[] = [];
+  const rows: { from: string; to: string; fromMin: number; toMin: number; slot: WindowSlot }[] = [];
   const sorted = [...slots].sort((a, b) => a.fromMin - b.fromMin);
   for (const s of sorted) {
     const last = rows[rows.length - 1];
@@ -29,104 +23,154 @@ function mergeWindows(slots: WindowSlot[]) {
       last.toMin = Math.max(last.toMin, s.toMin);
       last.to = clockFromMinutes(last.toMin);
     } else {
-      rows.push({
-        from: s.from,
-        to: s.to,
-        fromMin: s.fromMin,
-        toMin: s.toMin,
-        action: s.action,
-        side: s.side,
-        why: s.why,
-        slot: s,
-      });
+      rows.push({ from: s.from, to: s.to, fromMin: s.fromMin, toMin: s.toMin, slot: s });
     }
   }
   return rows;
 }
 
-function openSide(action: string): WindowSlot["side"] {
-  if (action.includes("CE")) return "CE";
-  if (action.includes("PE")) return "PE";
-  return "WAIT";
-}
-
-function windowState(fromMin: number, toMin: number, nowMin: number | null): "done" | "now" | "next" | null {
+function windowState(fromMin: number, toMin: number, nowMin: number | null): "done" | "now" | "soon" | "next" | null {
   if (nowMin == null) return null;
-  if (nowMin < fromMin) return "next";
+  if (nowMin < fromMin) return fromMin - nowMin <= 15 ? "soon" : "next";
   if (nowMin < toMin) return "now";
   return "done";
 }
 
-function stateMark(state: "done" | "now" | "next" | null): string {
-  if (state === "done") return " · done";
-  if (state === "now") return " · now";
-  if (state === "next") return " · next";
-  return "";
+const pinged = new Set<string>();
+
+function fireNotify(tag: string, title: string, body: string) {
+  if (pinged.has(tag)) return;
+  pinged.add(tag);
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    new Notification(title, { body, tag });
+  } catch {
+    /* ignore */
+  }
 }
+
+type Role = {
+  id: string;
+  label: string;
+  slot: WindowSlot;
+  from: string;
+  to: string;
+  fromMin: number;
+  toMin: number;
+  state: "done" | "now" | "soon" | "next" | null;
+};
 
 export function PlaybookStrip({
   book,
   onPick,
-  live,
   nowMin,
 }: {
   book: DayForecast;
   onPick?: (slot: WindowSlot) => void;
-  live?: boolean;
   nowMin?: number | null;
 }) {
   const pb = book.playbook;
-  const gtone = gapTone(book.gap.kind);
   const avoid = mergeWindows(pb.avoid)[0] ?? null;
-  const ceState = pb.bestCe ? windowState(pb.bestCe.fromMin, pb.bestCe.toMin, nowMin ?? null) : null;
-  const peState = pb.bestPe ? windowState(pb.bestPe.fromMin, pb.bestPe.toMin, nowMin ?? null) : null;
-  const avoidState = avoid ? windowState(avoid.fromMin, avoid.toMin, nowMin ?? null) : null;
+  const roles = useMemo(() => {
+    const list: { id: string; label: string; slot: WindowSlot | null }[] = [
+      { id: "ce", label: "CE", slot: pb.bestCe },
+      { id: "pe", label: "PE", slot: pb.bestPe },
+      { id: "avoid", label: "Avoid", slot: avoid?.slot ?? null },
+    ];
+    const out: Role[] = [];
+    for (const row of list) {
+      const slot = row.slot;
+      if (!slot) continue;
+      const fromMin = row.id === "avoid" && avoid ? avoid.fromMin : slot.fromMin;
+      const toMin = row.id === "avoid" && avoid ? avoid.toMin : slot.toMin;
+      const from = row.id === "avoid" && avoid ? avoid.from : slot.from;
+      const to = row.id === "avoid" && avoid ? avoid.to : slot.to;
+      out.push({
+        id: row.id,
+        label: row.label,
+        slot,
+        from,
+        to,
+        fromMin,
+        toMin,
+        state: windowState(fromMin, toMin, nowMin ?? null),
+      });
+    }
+    return out;
+  }, [pb.bestCe, pb.bestPe, avoid, nowMin]);
+
+  const active = roles.filter((r) => r.state === "now" || r.state === "soon");
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">("default");
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") {
+      setPerm("unsupported");
+      return;
+    }
+    setPerm(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    for (const r of active) {
+      if (!r.slot || (r.state !== "now" && r.state !== "soon")) continue;
+      const when = r.state === "now" ? "now" : "soon";
+      fireNotify(
+        `${book.date}-${r.id}-${when}`,
+        `${r.label} window ${when}`,
+        `${r.slot.action} · ${r.from}–${r.to}`,
+      );
+    }
+  }, [active, book.date]);
+
+  const ask = () => {
+    if (typeof Notification === "undefined") return;
+    void Notification.requestPermission().then((p) => {
+      setPerm(p);
+      if (p === "granted") {
+        for (const r of active) {
+          if (!r.slot) continue;
+          fireNotify(
+            `${book.date}-${r.id}-${r.state}`,
+            `${r.label} ${r.state === "now" ? "now" : "soon"}`,
+            `${r.slot.action} · ${r.from}–${r.to}`,
+          );
+        }
+      }
+    });
+  };
+
+  if (active.length === 0 && perm !== "default") return null;
 
   return (
-    <div className="ko-play">
-      {live ? null : (
-        <p className="ko-play-head">
-          <span className={gtone.fg}>{book.gap.label}</span>
-          {" · "}
-          {THESIS[pb.thesis]}
-          {" · open "}
-          <b className={actionTone(book.gap.openAction, openSide(book.gap.openAction))}>{book.gap.openAction}</b>
-        </p>
-      )}
-      <div className="ko-play-roles">
-        <button type="button" data-state={ceState ?? undefined} disabled={!pb.bestCe} onClick={() => pb.bestCe && onPick?.(pb.bestCe)}>
-          <span className="lbl">CE{stateMark(ceState)}</span>
-          {pb.bestCe ? (
-            <>
-              {pb.bestCe.from}–{pb.bestCe.to}{" "}
-              <b className={actionTone(pb.bestCe.action, pb.bestCe.side)}>{pb.bestCe.action}</b>
-            </>
-          ) : (
-            <span className="text-muted">None</span>
-          )}
+    <div className="ko-alerts" aria-live="polite">
+      {active.map((r) => {
+        const mins = Math.max(1, r.fromMin - (nowMin ?? 0));
+        return (
+          <button
+            key={r.id}
+            type="button"
+            className="ko-alert"
+            data-kind={r.state ?? undefined}
+            onClick={() => r.slot && onPick?.(r.slot)}
+          >
+            <span className="ko-alert-kicker">
+              {r.state === "now" ? `${r.label} now` : `${r.label} in ${mins}m`}
+            </span>
+            <span className="ko-alert-body">
+              <b className={r.slot ? actionTone(r.slot.action, r.slot.side) : ""}>{r.slot?.action}</b>
+              <span className="text-muted">
+                {" "}
+                {r.from}–{r.to}
+              </span>
+            </span>
+          </button>
+        );
+      })}
+      {perm === "default" ? (
+        <button type="button" className="ko-link ko-alert-enable" onClick={ask}>
+          Notify me
         </button>
-        <button type="button" data-state={peState ?? undefined} disabled={!pb.bestPe} onClick={() => pb.bestPe && onPick?.(pb.bestPe)}>
-          <span className="lbl">PE{stateMark(peState)}</span>
-          {pb.bestPe ? (
-            <>
-              {pb.bestPe.from}–{pb.bestPe.to}{" "}
-              <b className={actionTone(pb.bestPe.action, pb.bestPe.side)}>{pb.bestPe.action}</b>
-            </>
-          ) : (
-            <span className="text-muted">None</span>
-          )}
-        </button>
-        <button type="button" data-state={avoidState ?? undefined} disabled={!avoid} onClick={() => avoid && onPick?.(avoid.slot)}>
-          <span className="lbl">Avoid{stateMark(avoidState)}</span>
-          {avoid ? (
-            <>
-              {avoid.from}–{avoid.to}
-            </>
-          ) : (
-            <span className="text-muted">—</span>
-          )}
-        </button>
-      </div>
+      ) : null}
     </div>
   );
 }

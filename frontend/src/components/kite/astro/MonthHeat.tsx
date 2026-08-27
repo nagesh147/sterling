@@ -5,17 +5,17 @@ const DOW_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 
 function cellSide(action: TradeAction | null): { mark: string; tone: string } | null {
   if (!action) return null;
-  if (action.includes("CE") && action.includes("PE")) return { mark: "±", tone: "text-warn" };
+  if (action.includes("CE") && action.includes("PE")) return { mark: "±", tone: "text-muted" };
   if (action.includes("CE")) return { mark: "CE", tone: "text-ce" };
   if (action.includes("PE")) return { mark: "PE", tone: "text-pe" };
   if (action === "WAIT" || action === "AVOID") return { mark: "W", tone: "text-muted" };
   return null;
 }
 
-function titleFor(day: MonthDay): string {
+function labelFor(day: MonthDay): string {
   if (day.isWeekend || day.isHoliday) return day.holidayName || day.note || "Closed";
   const bits = [day.gapLabel, day.openAction, day.bias].filter(Boolean);
-  return bits.join(" · ");
+  return bits.join(" · ") || day.date;
 }
 
 export function MonthHeat({
@@ -56,7 +56,7 @@ export function MonthHeat({
               data-on={day.date === iso}
               data-today={day.isToday}
               disabled={closed}
-              title={titleFor(day)}
+              aria-label={labelFor(day)}
               aria-current={day.date === iso ? "date" : undefined}
               onClick={() => onPick(day.date)}
             >
@@ -75,7 +75,7 @@ export function MonthHeat({
           Up {month.gapUp}
         </span>
         <span>
-          <i className="ko-swatch-both" />
+          <i className="ko-swatch-wait" />
           Flat {month.gapFlat}
         </span>
         <span>
