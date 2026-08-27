@@ -190,28 +190,35 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   font-weight: 500;
 }
 .ko-clock-wrap {
-  border-top: 1px solid var(--k-surface-hover);
+  border: 1px solid var(--k-border, #e0e0e0);
   margin: 0 0 8px;
+  overflow-x: auto;
 }
 .ko-clock {
   width: 100%;
   min-width: 640px;
+  border-collapse: collapse;
 }
 .ko-clock thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--k-bg);
+  background: var(--k-surface-2, #fafafa);
   color: var(--k-dim);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--k-border, #e0e0e0);
 }
 .ko-clock td {
-  padding: 11px 12px;
+  padding: 12px 16px;
   font-size: 13px;
   vertical-align: middle;
+  border-bottom: 1px solid var(--k-surface-hover, #f0f0f0);
+}
+.ko-clock tbody tr:last-child td {
+  border-bottom: 0;
 }
 .ko-clock tbody tr {
   cursor: pointer;
@@ -221,10 +228,10 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   outline-offset: -2px;
 }
 .ko-clock tbody tr[data-dim] {
-  opacity: 0.5;
+  opacity: 1;
 }
 .ko-clock tbody tr[data-live] {
-  box-shadow: inset 2px 0 var(--k-orange);
+  box-shadow: inset 2px 0 0 var(--k-orange);
   background: color-mix(in srgb, var(--k-orange) 6%, var(--k-bg));
 }
 .ko-clock tbody tr[data-on]:not([data-live]),
@@ -356,8 +363,8 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   gap: 8px 12px;
 }
 .ko-now-close { margin-left: auto; }
-.ko-clock tbody tr[data-run="PE"]:not([data-live]) td:first-child { box-shadow: inset 2px 0 0 var(--k-red-strong, #df514c); }
-.ko-clock tbody tr[data-run="CE"]:not([data-live]) td:first-child { box-shadow: inset 2px 0 0 var(--ko-ce); }
+.ko-clock tbody tr[data-run] td:first-child { box-shadow: none; }
+.ko-clock tbody tr[data-live] td:first-child { box-shadow: inset 2px 0 0 var(--k-orange); }
 .ko-now-clock {
   font-size: 13px;
 }
@@ -1006,7 +1013,7 @@ function ClockTable({
                 buy={contracts.get(key)}
                 loading={loading}
                 open={openKey === key}
-                dim={dimSpent && slot.isPast}
+                dim={false}
                 next={key === nextKey}
                 rowRef={slot.isLive ? liveRef : undefined}
                 underlying={underlying}
