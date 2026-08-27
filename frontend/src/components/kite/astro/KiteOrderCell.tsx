@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt } from "../../../hooks/useKite";
+import { useOrderWindowStore } from "../../../store/useOrderWindowStore";
 import { notifyOrder } from "../../../store/useKiteNotifications";
 import {
   bookQty,
