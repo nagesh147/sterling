@@ -71,7 +71,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       sortBy: 'Custom',
       legSort: { key: '', dir: '' },
       signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
+      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
       hiddenSignalCols: [],
       setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s === 'classic' ? 'material' : s === 'off' ? 'minimal' : s }),
@@ -109,19 +109,34 @@ export const useKiteSettings = create<KiteSettingsState>()(
         showLeg: true,
         legSort: { key: '', dir: '' },
         signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
+        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
         hiddenSignalCols: [],
       }),
     }),
     {
       name: 'kite-settings',
-      version: 3,
+      version: 4,
       migrate: (persisted: any) => {
-        const legacy = persisted?.loaderStyle;
-        if (legacy === 'classic') return { ...persisted, loaderStyle: 'material' };
-        if (legacy === 'off') return { ...persisted, loaderStyle: 'minimal' };
-        if (legacy === 'mac' || legacy === 'ubuntu' || legacy === 'material' || legacy === 'windows' || legacy === 'gnome' || legacy === 'kde' || legacy === 'minimal') return persisted;
-        return { ...persisted, loaderStyle: 'ubuntu' };
+        const loaderStyle = (() => {
+          const legacy = persisted?.loaderStyle;
+          if (legacy === 'classic') return 'material';
+          if (legacy === 'off') return 'minimal';
+          const known = ['mac', 'ubuntu', 'material', 'windows', 'gnome', 'kde', 'minimal'];
+          return known.includes(legacy) ? legacy : 'ubuntu';
+        })();
+        let next = { ...persisted, loaderStyle };
+
+        // v4 adds the Time column to the signal table's right group.
+        //
+        // Bumping the default array is not enough: this order is persisted, so
+        // anyone who has used the app already has a stored array without 'time'
+        // and would simply never see the column. Appended rather than inserted,
+        // so an operator's own column arrangement survives.
+        const right = next.signalRightColumnOrder;
+        if (Array.isArray(right) && !right.includes('time')) {
+          next = { ...next, signalRightColumnOrder: [...right, 'time'] };
+        }
+        return next;
       },
     },
   ),

@@ -40,6 +40,21 @@ export const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
   chgPct: { key: 'chgPct', label: 'Chg. %', width: 60, align: 'right', sortKey: 'chgPct', visibleWhen: 'chgPct' },
   dir: { key: 'dir', label: '', width: 14, align: 'right', visibleWhen: 'dir' },
   ltp: { key: 'ltp', label: 'LTP', width: 70, align: 'right', sortKey: 'ltp', visibleWhen: 'always' },
+  /**
+   * When the signal fired.
+   *
+   * A column, not a line of text on the row above. SuperTrend used to print it
+   * inline in the parent header at 14px weight 800 -- the loudest thing on the
+   * row -- while the shared board has always kept it as an ordinary
+   * right-aligned cell. Same signal, two presentations, and the louder one was
+   * shouting the least actionable number in the row.
+   */
+  // No `sortKey`, deliberately. In SuperTrend these cells sit on the LEGS of a
+  // signal, and every leg of one signal fired at the same moment -- there is
+  // nothing to order, and a heading that offers a sort it cannot perform is
+  // worse than one that does not offer it. The shared board sorts its own
+  // `time` column because there the rows are signals, which do differ.
+  time: { key: 'time', label: 'Time', width: 78, align: 'right', visibleWhen: 'always', tooltip: 'When the signal fired' },
 };
 
 /**

@@ -15,7 +15,7 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayDate, sessionDayKey, sessionDayLabel, trailBreached,
+  sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -68,7 +68,7 @@ export const COLUMNS: readonly ColumnDef[] = [
   { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
   { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
   { id: 'ltp', label: SIGNAL_RIGHT_COLUMNS.ltp.label, width: SIGNAL_RIGHT_COLUMNS.ltp.width, align: 'right', hint: 'Last traded price of the instrument' },
-  { id: 'time', label: 'Time', width: 78, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+  { id: 'time', label: SIGNAL_RIGHT_COLUMNS.time.label, width: SIGNAL_RIGHT_COLUMNS.time.width, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
 ];
 
 export interface SortState {
@@ -200,42 +200,6 @@ const STALE_AFTER_S = 15;
 const hhmm = (ms: number | null) =>
   ms == null || !Number.isFinite(ms) ? '—'
     : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-const hhmmss = (ms: number) =>
-  new Date(ms).toLocaleTimeString('en-IN', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  });
-
-/**
- * The time a signal fired, carrying its date whenever that is not today.
- *
- * The bare time was ambiguous in exactly the case that matters. Rows in the
- * "Live now" bucket are grouped by being live rather than by day, so an
- * actionable row from yesterday sat under a header that named no date beside a
- * cell that showed only `09:20` — indistinguishable from this morning. Ended
- * rows were fine because their day header named the date; live ones were not.
- *
- * Today stays bare, because repeating today's date on every row of a board an
- * operator is watching live is noise.
- */
-const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
-  if (ms == null || !Number.isFinite(ms)) return '—';
-  // A leg shows the time only. The parent above it already names the day, and a
-  // group's legs share it by construction — repeating the date on every one of
-  // NIFTY's eighteen strikes is the noise the grouping exists to remove.
-  if (isLeg) return hhmmss(ms);
-  // A complete stamp: the date always, and seconds.
-  //
-  // Today used to render bare on the grounds that repeating today's date is
-  // noise. It is not, for these engines — Adaptive Edge scalps order flow and
-  // the recorded ATM bot opened and closed a position inside three seconds, so
-  // "10:30" is not a time you can reason about. Minute precision hid the thing
-  // the row exists to report.
-  //
-  // The date text comes from sessionDayDate, the same helper the day header
-  // uses, so the two cannot disagree about what a date looks like.
-  return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
-};
 
 function Chevron({ open }: { open: boolean }) {
   return (

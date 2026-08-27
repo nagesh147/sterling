@@ -1,5 +1,5 @@
 import React from 'react';
-import { sessionDayKey, sessionDayLabel } from './board/boardTypes';
+import { stamp, sessionDayKey, sessionDayLabel } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
@@ -626,15 +626,18 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             );
           })()}
           {(() => {
-            const d = new Date(row.timestamp_ms);
-            const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const wday = d.toLocaleDateString('en-US', { weekday: 'short' });
-            const date = d.toLocaleDateString('en-US', { day: '2-digit' });
-            const month = d.toLocaleDateString('en-US', { month: 'short' });
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, paddingLeft: 4, whiteSpace: 'nowrap' }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: k.text, letterSpacing: 0.2 }}>{time}</span>
-                <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{wday} {date} {month}</span>
+              // One stamp in the shared board's cell type, from the shared
+              // helper. This was two spans -- the time at 14px weight 800, the
+              // loudest thing on the row, and the date at 10px beside it -- so
+              // the same signal read completely differently here and on every
+              // other board. The time it fired is context, not the headline.
+              <span style={{
+                fontSize: ROW_METRICS.cellFontSize, color: k.dim,
+                fontVariantNumeric: 'tabular-nums',
+                paddingLeft: 4, whiteSpace: 'nowrap',
+              }}>
+                {stamp(row.timestamp_ms, Date.now())}
               </span>
             );
           })()}
@@ -1112,6 +1115,18 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                               return (
                                 <span style={{ color: color, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>
                                   {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                                </span>
+                              );
+                            case 'time':
+                              // `isLeg` -> time only. The parent header above
+                              // already carries the date, exactly as on the
+                              // shared board, so repeating it on each of an
+                              // underlying's strikes is the noise the grouping
+                              // exists to remove. Same `stamp` helper both
+                              // tables use, so the format cannot diverge.
+                              return (
+                                <span style={{ color: k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>
+                                  {stamp(row.timestamp_ms, Date.now(), true)}
                                 </span>
                               );
                             default:
@@ -2166,14 +2181,17 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           itself is pointless with no rows, so only it is gated. */}
       {!settingsOpen && (
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
               {rows.length > 0 && <KiteSearchBar
                 query={query}
                 setQuery={setQuery}
                 searchSettingsOpen={searchSettingsOpen}
                 setSearchSettingsOpen={setSearchSettingsOpen}
-                height={35}
+                // 35 made this row half again as tall as the same row on
+                // every other board. 22 is the shared filter bar's field height.
+                height={22}
+                compact
                 // Its panel is the watchlist's, and the only part that governed
                 // this table was the column list — now a labelled COLUMNS button
                 // beside the filters, where the other boards keep theirs.

@@ -400,3 +400,49 @@ export function trailBreached(signal: BoardSignal): boolean {
   const { ltp, trail } = signal.levels;
   return signal.status !== 'ended' && ltp != null && trail != null && ltp <= trail;
 }
+
+
+/*
+ * Signal timestamps.
+ *
+ * These moved here from `SignalBoard` so SuperTrend's bespoke table can print
+ * the same stamp. They already depended on `sessionDayKey`/`sessionDayDate`,
+ * which live here, so this is where they belong: two tables formatting a time
+ * two ways is how one ends up saying "14:15" while the other says
+ * "Tue 25 Aug 14:15:03" for the same signal.
+ */
+export const hhmmss = (ms: number) =>
+  new Date(ms).toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+
+/**
+ * The time a signal fired, carrying its date whenever that is not today.
+ *
+ * The bare time was ambiguous in exactly the case that matters. Rows in the
+ * "Live now" bucket are grouped by being live rather than by day, so an
+ * actionable row from yesterday sat under a header that named no date beside a
+ * cell that showed only `09:20` — indistinguishable from this morning. Ended
+ * rows were fine because their day header named the date; live ones were not.
+ *
+ * Today stays bare, because repeating today's date on every row of a board an
+ * operator is watching live is noise.
+ */
+export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  // A leg shows the time only. The parent above it already names the day, and a
+  // group's legs share it by construction — repeating the date on every one of
+  // NIFTY's eighteen strikes is the noise the grouping exists to remove.
+  if (isLeg) return hhmmss(ms);
+  // A complete stamp: the date always, and seconds.
+  //
+  // Today used to render bare on the grounds that repeating today's date is
+  // noise. It is not, for these engines — Adaptive Edge scalps order flow and
+  // the recorded ATM bot opened and closed a position inside three seconds, so
+  // "10:30" is not a time you can reason about. Minute precision hid the thing
+  // the row exists to report.
+  //
+  // The date text comes from sessionDayDate, the same helper the day header
+  // uses, so the two cannot disagree about what a date looks like.
+  return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
+};

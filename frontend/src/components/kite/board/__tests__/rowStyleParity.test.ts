@@ -160,3 +160,42 @@ describe('both tables share one cell scale', () => {
     expect(sharedBoard).toContain("fontVariantNumeric: 'tabular-nums'");
   });
 });
+
+/**
+ * The timestamp, and the toolbar it sits under.
+ *
+ * SuperTrend printed the time inline on the parent row at 14px weight 800 — the
+ * loudest thing in the row — beside a 10px date, while the shared board has
+ * always kept it as an ordinary right-aligned cell in a Time column. Same
+ * signal, two presentations, and the louder one was shouting the least
+ * actionable number on the row.
+ */
+describe('both tables stamp a signal the same way', () => {
+  it('formats through one shared helper', () => {
+    // In boardTypes, beside the sessionDay helpers it already depended on.
+    expect(rowSpec).toContain("time: { key: 'time'");
+    for (const [name, src] of [['SuperTrend', superTrend], ['SignalBoard', sharedBoard]] as const) {
+      expect(src, `${name} uses stamp()`).toContain('stamp(');
+    }
+    // The hand-rolled parts SuperTrend used to build its own stamp from.
+    expect(superTrend).not.toContain("{ weekday: 'short' }");
+    expect(superTrend).not.toMatch(/fontSize: 14, fontWeight: 800/);
+  });
+
+  it('offers Time as a column, not as a line of header text', () => {
+    expect(superTrend).toContain("case 'time':");
+  });
+});
+
+describe('the toolbar row matches the shared filter bar', () => {
+  it('uses the shared bar height, not the watchlist’s', () => {
+    // 35 made this row half again as tall as the same row on every other board.
+    expect(superTrend).not.toContain('height={35}');
+    expect(superTrend).toContain('height={22}');
+    expect(superTrend).toContain('compact');
+  });
+
+  it('uses the shared filter bar’s inset', () => {
+    expect(superTrend).toContain("padding: '5px 10px'");
+  });
+});
