@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { forecastDay, forecastMonth, liveBoard, liveNow } from '../../lib/astro/engine';
 import { useCandles } from '../../hooks/useCandles';
+import { useKiteHistorical, useKiteQuote } from '../../hooks/useKite';
 import { lastCompletedSessionIso, nearestOpenIso, shiftSessionIso, isNseClosed } from '../../lib/astro/holidays';
-import { barsFromOhlcv, buyContract, gradeSlot, summariseTape, CANDLE_SYMBOL, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
+import { barsFromKiteHistorical, barsFromOhlcv, buyContract, gradeSlot, summariseTape, CANDLE_SYMBOL, INDEX_TOKEN, quoteLast, type BuyContract, type SlotGrade } from '../../lib/astro/tape';
 import { rollMonth, simulateDay } from '../../lib/astro/simulate';
 import { formatIstIsoDate, getIstParts, minutesOfDay, utcFromIstParts } from '../../lib/astro/time';
 import { WEEKDAYS, type IndexPlay, type LiveNow, type Underlying, type WindowSlot } from '../../lib/astro/types';
@@ -158,7 +159,7 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
 .kite-astro .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
 .ko-desk{display:block}
 .ko-date .ko-date-value{border:0;background:none;font:inherit}
-.ko-cal-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--k-bg);border:1px solid var(--k-border);padding:10px 12px 8px;min-width:260px;box-shadow:0 12px 32px rgba(0,0,0,.12)}
+.ko-cal-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;background:var(--k-bg);border:1px solid var(--k-border);padding:10px 12px 8px;min-width:350px;box-shadow:0 12px 32px rgba(0,0,0,.12)}
 .ko-cal-pop .ko-cal-cell{min-height:0;padding:4px 6px}
 .ko-rail-head{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13px;color:var(--k-text)}
 .ko-rail-head span{flex:1;text-align:center;font-weight:500}
@@ -691,6 +692,13 @@ export function AstroPane() {
   const [calOpen, setCalOpen] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
   const candles = useCandles(CANDLE_SYMBOL[underlying], '5m', 2000);
+  const hist = useKiteHistorical(
+    { token: INDEX_TOKEN[underlying], interval: "5minute", from: `${iso} 09:00:00`, to: `${iso} 15:40:00` },
+    true,
+  );
+  const qsym = CANDLE_SYMBOL[underlying];
+  const quote = useKiteQuote([qsym], true, 30_000);
+  const spotHint = useMemo(() => quoteLast(quote.data, qsym), [quote.data, qsym]);
   const [status, setStatus] = useState<LiveNow | null>(null);
   const [board, setBoard] = useState<IndexPlay[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -716,11 +724,27 @@ export function AstroPane() {
   }, [minuteKey, underlying]);
 
   const dayDate = useMemo(() => isoToDate(iso), [iso]);
-  const tape = useMemo(
-    () => (candles.data?.length ? barsFromOhlcv(candles.data, iso, underlying) : null),
-    [candles.data, iso, underlying],
-  );
-  const tapeLoading = candles.isLoading && !tape;
+  const tape = useMemo(() => {
+    const kite = hist.data ? barsFromKiteHistorical(hist.data, iso, underlying) : null;
+    if (kite?.bars.length) return kite;
+    const lake = candles.data?.length ? barsFromOhlcv(candles.data, iso, underlying) : null;
+    if (lake?.bars.length) return lake;
+    if (kite) return kite;
+    if (lake) return lake;
+    if (spotHint) {
+      return {
+        iso,
+        underlying,
+        symbol: qsym,
+        bars: [],
+        prevClose: spotHint,
+        sessionOpen: spotHint,
+        source: "quote",
+      };
+    }
+    return null;
+  }, [hist.data, candles.data, iso, underlying, spotHint, qsym]);
+  const tapeLoading = (hist.isLoading || candles.isLoading) && !tape?.bars.length;
   const book = useMemo(() => forecastDay(dayDate, underlying, dayDate), [dayDate, underlying]);
   const month = useMemo(() => {
     const stamp = todayIso || formatIstIsoDate(dayDate);
@@ -758,9 +782,9 @@ export function AstroPane() {
   }, [clockRows, tape, nowMin, sameDay]);
   const contracts = useMemo(() => {
     const map = new Map<string, BuyContract>();
-    for (const s of clockRows) map.set(slotKey(s), buyContract(s, tape));
+    for (const s of clockRows) map.set(slotKey(s), buyContract(s, tape, spotHint, underlying));
     return map;
-  }, [clockRows, tape]);
+  }, [clockRows, tape, spotHint, underlying]);
   const tally = useMemo(
     () => summariseTape(clockRows, tape, nowMin, sameDay, book.gap.kind),
     [clockRows, tape, nowMin, sameDay, book.gap.kind],
@@ -926,8 +950,8 @@ export function AstroPane() {
             grade={liveGrade}
             viewingIso={iso}
             sessionPnl={tally.directional ? tally.pnl : null}
-            buy={status.window ? buyContract(status.window, tape) : undefined}
-            nextBuy={status.next ? buyContract(status.next, tape) : undefined}
+            buy={status.window ? buyContract(status.window, tape, spotHint, underlying) : undefined}
+            nextBuy={status.next ? buyContract(status.next, tape, spotHint, underlying) : undefined}
             holding={holding}
             onOpenSession={(date) => {
               applyIso(date);
