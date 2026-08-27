@@ -298,6 +298,11 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   font-weight: 500;
   font-size: 13px;
 }
+.ko-buy-mark {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--k-text, #444);
+}
 .ko-now-strike {
   margin-left: 0;
   font-size: 13px;
