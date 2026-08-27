@@ -721,7 +721,6 @@ export function AstroPane() {
     [candles.data, iso, underlying],
   );
   const tapeLoading = candles.isLoading && !tape;
-  const tapeError = tape && tape.bars.length ? null : candles.isLoading ? null : "No tape";
   const book = useMemo(() => forecastDay(dayDate, underlying, dayDate), [dayDate, underlying]);
   const month = useMemo(() => {
     const stamp = todayIso || formatIstIsoDate(dayDate);
@@ -951,20 +950,20 @@ export function AstroPane() {
               <button type="button" className="ko-link" onClick={() => setNotes((v) => !v)}>
                 {notes ? "Hide notes" : "Notes"}
               </button>
-              {tally.directional ? (
+              {tally.directional || tally.sits ? (
                 <span className="ko-tally">
-                  {tally.hits}/{tally.directional} hit
-                  {tally.sits ? ` · ${tally.sits} sit` : ""}
-                  {" · "}
-                  <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
-                    {tally.pnl >= 0 ? "+" : ""}
-                    {tally.pnl.toFixed(0)}
-                  </span>
+                  {tally.directional ? `${tally.hits}/${tally.directional} hit` : null}
+                  {tally.sits ? `${tally.directional ? " · " : ""}${tally.sits} sit` : ""}
+                  {tally.directional ? (
+                    <>
+                      {" · "}
+                      <span className={tally.pnl >= 0 ? "text-up" : "text-down"}>
+                        {tally.pnl >= 0 ? "+" : ""}
+                        {tally.pnl.toFixed(0)}
+                      </span>
+                    </>
+                  ) : null}
                 </span>
-              ) : tapeLoading ? (
-                <span className="ko-tally text-muted">Tape…</span>
-              ) : tapeError ? (
-                <span className="ko-tally text-muted">{tapeError}</span>
               ) : null}
             </p>
             {notes ? <PlaybookNotes book={book} /> : null}
