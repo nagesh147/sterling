@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useDeleteKiteGtt, useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt, usePlaceKiteOrder } from "../../../hooks/useKite";
+import { useDeleteKiteGtt, useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteQuote, useKiteStatus, useModifyKiteGtt, usePlaceKiteGtt, usePlaceKiteOrder } from "../../../hooks/useKite";
 import { useOrderWindowStore } from "../../../store/useOrderWindowStore";
 import { notifyOrder } from "../../../store/useKiteNotifications";
 import {
@@ -70,17 +70,35 @@ export function KiteOrderCell({
   };
 
   const onBuy = (hit: OptionHit, product: "MIS" | "NRML", plan: WindowPlan) => {
-    openOrderWindow({
-      symbol: hit.tradingsymbol,
-      exchange: hit.exchange,
-      initialSide: "BUY",
-      initialQty: hit.lot_size,
-      lotSize: hit.lot_size,
-      lastPrice: hit.last_price,
-      product: product as Product,
-      initialSlPct: plan.slPct ?? undefined,
-      initialTgtPct: plan.tgtPct ?? undefined,
-      tag: "ASTRO",
+    const open = (use: OptionHit) =>
+      openOrderWindow({
+        symbol: use.tradingsymbol,
+        exchange: use.exchange,
+        initialSide: "BUY",
+        initialQty: use.lot_size,
+        lotSize: use.lot_size,
+        lastPrice: use.last_price,
+        product: product as Product,
+        initialSlPct: plan.slPct ?? -20,
+        initialTgtPct: plan.tgtPct ?? 30,
+        tag: "ASTRO",
+      });
+    if (instrument) {
+      open(instrument);
+      return;
+    }
+    const fromCache = pickNearestOption(search.data?.instruments ?? [], underlying, hit.strike, hit.instrument_type, "0000-01-01");
+    if (fromCache) {
+      open(fromCache);
+      return;
+    }
+    void search.refetch().then((res) => {
+      const picked = pickNearestOption(res.data?.instruments ?? [], underlying, hit.strike, hit.instrument_type, "0000-01-01");
+      if (picked) {
+        open(picked);
+        return;
+      }
+      notifyOrder({ kind: "error", title: "Astro buy", message: "Could not resolve the option. Connect Kite and retry." });
     });
   };
 
@@ -192,20 +210,26 @@ export function AstroTrailWatcher({
   const high = useRef({ sym: "", px: 0 });
 
   const held = useMemo(() => matchHeldOption(pos?.net ?? [], underlying, null), [pos, underlying]);
+  const qsym = held ? [`${held.exchange}:${held.tradingsymbol}`] : [];
+  const quote = useKiteQuote(qsym, connected && Boolean(held), 2_000);
+  const livePx = Number((quote.data && Object.values(quote.data)[0] as { last_price?: number } | undefined)?.last_price) || 0;
 
   useEffect(() => {
     if (!armed || !connected || !held) return;
+    const inCash = nowMin != null && nowMin >= 555 && nowMin < 930;
     const more = runAhead(rows, held.optionSide, nowMin ?? 0);
     const action = live?.action ?? (more ? "WAIT" : "AVOID");
     const side = live?.side ?? "WAIT";
     const mark = heldStrikeLabel(held);
     const plan = planWindow(action, side, held, mark, more);
 
-    if (high.current.sym !== held.tradingsymbol) high.current = { sym: held.tradingsymbol, px: held.last_price };
-    high.current.px = Math.max(high.current.px, held.last_price || 0);
+    const raw = Math.max(livePx, held.last_price || 0);
+    if (high.current.sym !== held.tradingsymbol) high.current = { sym: held.tradingsymbol, px: raw };
+    high.current.px = Math.max(high.current.px, raw);
     const water = high.current.px;
 
     if (plan.kind === "close") {
+      if (!inCash || !live) return;
       const key = `exit-${held.tradingsymbol}`;
       if (applied.current === key || placeOrder.isPending) return;
       applied.current = key;
@@ -279,7 +303,7 @@ export function AstroTrailWatcher({
       });
     if (existing) modifyGtt.mutate({ id: existing.id, ...body }, { onSuccess: onOk });
     else placeGtt.mutate(body, { onSuccess: onOk });
-  }, [armed, connected, live, held, rows, nowMin, gtts.isFetched, gtts.data, modifyGtt, placeGtt, placeOrder, deleteGtt]);
+  }, [armed, connected, live, held, livePx, rows, nowMin, gtts.isFetched, gtts.data, modifyGtt, placeGtt, placeOrder, deleteGtt]);
 
   return null;
 }
