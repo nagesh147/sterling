@@ -248,12 +248,12 @@ export interface IndexPlay {
   thesis: DayThesis;
 }
 
-export const UNDERLYINGS: { id: Underlying; label: string; step: number }[] = [
-  { id: "NIFTY", label: "Nifty 50", step: 50 },
-  { id: "BANKNIFTY", label: "Bank Nifty", step: 100 },
-  { id: "FINNIFTY", label: "Fin Nifty", step: 50 },
-  { id: "SENSEX", label: "Sensex", step: 100 },
-  { id: "MIDCPNIFTY", label: "Midcap Nifty", step: 25 },
+export const UNDERLYINGS: { id: Underlying; label: string; step: number; lot: number }[] = [
+  { id: "NIFTY", label: "Nifty 50", step: 50, lot: 65 },
+  { id: "BANKNIFTY", label: "Bank Nifty", step: 100, lot: 30 },
+  { id: "FINNIFTY", label: "Fin Nifty", step: 50, lot: 60 },
+  { id: "SENSEX", label: "Sensex", step: 100, lot: 10 },
+  { id: "MIDCPNIFTY", label: "Midcap Nifty", step: 25, lot: 120 },
 ];
 
 export const SIGNS = [
