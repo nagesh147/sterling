@@ -190,35 +190,28 @@ html[data-theme="dark"] .kite-astro,.dark .kite-astro,[data-theme="dark"] .kite-
   font-weight: 500;
 }
 .ko-clock-wrap {
-  border: 1px solid var(--k-border, #e0e0e0);
+  border-top: 1px solid var(--k-surface-hover);
   margin: 0 0 8px;
-  overflow-x: auto;
 }
 .ko-clock {
   width: 100%;
   min-width: 640px;
-  border-collapse: collapse;
 }
 .ko-clock thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--k-surface-2, #fafafa);
+  background: var(--k-bg);
   color: var(--k-dim);
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--k-border, #e0e0e0);
+  padding: 12px 16px;
 }
 .ko-clock td {
   padding: 12px 16px;
   font-size: 13px;
   vertical-align: middle;
-  border-bottom: 1px solid var(--k-surface-hover, #f0f0f0);
-}
-.ko-clock tbody tr:last-child td {
-  border-bottom: 0;
 }
 .ko-clock tbody tr {
   cursor: pointer;
