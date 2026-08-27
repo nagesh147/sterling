@@ -55,8 +55,8 @@ import {
   signName,
   snapshot,
   sunRiseSetIst,
-} from "./ephemeris";
-import { holidayName, isMuhurat, isNseClosed, isNseHoliday, lastCompletedSessionIso, nextSessionIso } from "./holidays";
+} from "./ephemeris.ts";
+import { holidayName, isMuhurat, isNseClosed, isNseHoliday, lastCompletedSessionIso, nextSessionIso } from "./holidays.ts";
 import {
   aspectScore,
   choghadiyaAt,
@@ -74,7 +74,7 @@ import {
   nodalAffliction,
   specialYogas,
   type Thesis,
-} from "./factors";
+} from "./factors.ts";
 
 const HORA_CYCLE: PlanetName[] = ["Sun", "Venus", "Mercury", "Moon", "Saturn", "Jupiter", "Mars"];
 
@@ -667,14 +667,10 @@ function actionFrom(
   return traded;
 }
 
-function productFor(underlying: Underlying, side: TradeSide, vol: number): string {
-  const meta = UNDERLYINGS.find((u) => u.id === underlying)!;
+function productFor(underlying: Underlying, side: TradeSide, _vol: number): string {
   if (side === "WAIT") return "No contract";
-  if (side === "BOTH") return `${underlying} ATM straddle · ${meta.step} pt wings`;
-  const otm = vol >= 2.6 ? meta.step * 2 : vol >= 1.6 ? meta.step : 0;
-  const which = side === "CE" ? "CE" : "PE";
-  if (otm === 0) return `${underlying} ATM ${which}`;
-  return `${underlying} ${otm} pts OTM ${which}`;
+  if (side === "BOTH") return `${underlying} ATM straddle`;
+  return `${underlying} ATM ${side === "CE" ? "CE" : "PE"}`;
 }
 
 function slotWhy(

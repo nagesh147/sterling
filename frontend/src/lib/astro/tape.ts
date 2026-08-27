@@ -137,21 +137,18 @@ function stepOf(underlying: Underlying): number {
 
 function familyOf(slot: Pick<WindowSlot, "side" | "action" | "product">):
   | { kind: "sit" }
-  | { kind: "straddle"; wings: number }
-  | { kind: "single"; side: "CE" | "PE"; otm: number } {
+  | { kind: "straddle" }
+  | { kind: "single"; side: "CE" | "PE" } {
   if (slot.side === "WAIT" || slot.action === "WAIT" || slot.action === "AVOID" || slot.product === "No contract") {
     return { kind: "sit" };
   }
   if (slot.side === "BOTH" || /straddle|IRON FLY|STRADDLE/i.test(slot.product)) {
-    const wings = Number(slot.product.match(/(\d+)\s*pt/i)?.[1] ?? stepOf("NIFTY"));
-    return { kind: "straddle", wings };
+    return { kind: "straddle" };
   }
-  const otm = Number(slot.product.match(/(\d+)\s*pts OTM/i)?.[1] ?? 0);
-  const side: "CE" | "PE" = slot.side === "CE" ? "CE" : "PE";
-  return { kind: "single", side, otm };
+  return { kind: "single", side: slot.side === "CE" ? "CE" : "PE" };
 }
 
-/** ATM/OTM family from the book, priced off the tape at the window open. */
+/** ATM family from the book, priced off the tape at the window open. */
 export function buyContract(
   slot: Pick<WindowSlot, "fromMin" | "toMin" | "side" | "action" | "product">,
   tape: SessionTape | null,
@@ -166,24 +163,21 @@ export function buyContract(
   const atm = spot != null ? roundStrike(spot, step) : null;
 
   if (family.kind === "straddle") {
-    const lo = atm != null ? atm - family.wings : null;
-    const hi = atm != null ? atm + family.wings : null;
-    const short = lo != null && hi != null ? `${STRIKE.format(lo)} / ${STRIKE.format(hi)}` : "ATM straddle";
+    const short = atm != null ? `${STRIKE.format(atm)} CE / ${STRIKE.format(atm)} PE` : "ATM straddle";
     return {
       verb: verb === "SIT" ? "BUY" : verb,
-      strike: lo,
-      strikeHi: hi,
+      strike: atm,
+      strikeHi: atm,
       side: "BOTH",
       label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
       short,
     };
   }
 
-  const strike = atm != null ? (family.side === "PE" ? atm - family.otm : atm + family.otm) : null;
-  const short = strike != null ? `${STRIKE.format(strike)} ${family.side}` : family.otm ? `${family.otm} OTM ${family.side}` : `ATM ${family.side}`;
+  const short = atm != null ? `${STRIKE.format(atm)} ${family.side}` : `ATM ${family.side}`;
   return {
     verb: verb === "SIT" ? "BUY" : verb,
-    strike,
+    strike: atm,
     strikeHi: null,
     side: family.side,
     label: `${verb === "SIT" ? "BUY" : verb} ${short}`,
