@@ -14,7 +14,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BOARD_COLUMNS_WITH_DAY_MOVE, COLUMNS, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
-import { LEG_INDENT, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
+import { LEG_INDENT, PARENT_METRICS, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
 
 /*
  * These tests write to the PERSISTED settings store, which means localStorage.
@@ -442,5 +442,71 @@ describe('tags come after the instrument label', () => {
     });
     const body = document.body.textContent ?? '';
     expect(body.indexOf('NIFTY26AUG24000CE')).toBeLessThan(body.indexOf('TSL exit'));
+  });
+});
+
+/**
+ * The parent row's columns.
+ *
+ * Laid out inline, every field sat at a different x on every row: one row's price
+ * began under the next row's name, and the badges landed wherever the contract
+ * count happened to end. Fixed tracks make each one a column.
+ *
+ * There is also a specific regression pinned here. An earlier pass at reordering
+ * these pieces left the badge markup nested INSIDE the count's `<span>` instead
+ * of beside it, which rendered as "6 contractsPREMIUM" with no gap and no track.
+ * A test on the DOM shape catches that; a test on the text does not.
+ */
+describe('parent row columns', () => {
+  const parent = (over: Partial<BoardSignal> = {}) => sig({
+    children: [sig({ id: 'leg' })],
+    underlying: 'AXISBANK',
+    underlyingPrice: 1261.3,
+    origin: { label: 'PREMIUM', tone: 'blue', hint: 'from the premium chart' },
+    marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+    ...over,
+  });
+
+  const parentRow = (container: HTMLElement) =>
+    container.querySelector('.sb-parent') as HTMLElement;
+
+  it('gives the price, the count and the badges fixed tracks', () => {
+    const { container } = board({ signals: [parent()] });
+    const widths = [...parentRow(container).querySelectorAll('span')]
+      .map((s) => (s as HTMLElement).style.width)
+      .filter(Boolean);
+    expect(widths).toContain(`${PARENT_METRICS.priceWidth}px`);
+    expect(widths).toContain(`${PARENT_METRICS.countWidth}px`);
+    expect(widths).toContain(`${PARENT_METRICS.badgeWidth}px`);
+  });
+
+  it('keeps the badges BESIDE the count, never inside it', () => {
+    // The regression: nested, they rendered jammed against the count with no
+    // track of their own.
+    const { container } = board({ signals: [parent()] });
+    const count = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => /\d+ contracts?$/.test(s.textContent ?? ''));
+    expect(count, 'the count cell exists').toBeTruthy();
+    expect(count!.textContent, 'and holds only the count').toMatch(/^\d+ contracts?$/);
+    expect(count!.querySelector('span'), 'no badge nested inside it').toBeNull();
+  });
+
+  it('right-aligns the price with tabular figures', () => {
+    // So the decimal points line up down the column, as the leg cells do.
+    const { container } = board({ signals: [parent()] });
+    const price = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => (s as HTMLElement).style.width === `${PARENT_METRICS.priceWidth}px`) as HTMLElement;
+    expect(price.style.textAlign).toBe('right');
+    expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('holds the price track open even with no price', () => {
+    // Otherwise a row without one pulls its count and badges left, which is the
+    // ragged look this exists to remove.
+    const { container } = board({ signals: [parent({ underlyingPrice: null })] });
+    const price = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => (s as HTMLElement).style.width === `${PARENT_METRICS.priceWidth}px`);
+    expect(price, 'the track is still there').toBeTruthy();
+    expect(price!.textContent).toBe('');
   });
 });

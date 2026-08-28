@@ -20,7 +20,7 @@ import {
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
-  HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
+  HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
   SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
 } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
@@ -669,55 +669,77 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
         background: k.bg, cursor: 'pointer', outlineOffset: -2,
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {/* The parent's own columns.
+          Laid out inline, every field sat at a different x on every row: one
+          row's price began under the next row's name, and the badges landed
+          wherever the count happened to end. Fixed tracks make each a column.
+          (An earlier pass at reordering these also left the badges nested INSIDE
+          the count's span, which is why they rendered jammed against it.) */}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
         <span style={{ color: k.dim, display: 'inline-flex', flexShrink: 0 }}><Chevron open={expanded} /></span>
-        {/* Name FIRST, then its price, then the tags.
 
-            The badges used to lead, so every instrument name started at a
-            different x depending on how many tags that row happened to
-            carry -- PREMIUM, or PREMIUM + TSL exit, or nothing -- and a
-            column of names came out ragged. A leg already puts its marks
-            after the symbol, so leading with them on the parent was also
-            inconsistent with the rows underneath it. */}
-        {onOpenDetail ? (
-          <button
-            type="button"
-            className="sb-name"
-            aria-label={`Open ${signal.underlying} detail`}
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
-            style={{
-              border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+        <span style={{ flex: instrumentFlex(), minWidth: 0, overflow: 'hidden' }}>
+          {onOpenDetail ? (
+            <button
+              type="button"
+              className="sb-name"
+              aria-label={`Open ${signal.underlying} detail`}
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
+              style={{
+                border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+                fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone,
+                cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden',
+                textOverflow: 'ellipsis', maxWidth: '100%',
+              }}
+            >
+              {signal.underlying}
+            </button>
+          ) : (
+            <span style={{
               fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone,
-              cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
-            }}
-          >
-            {signal.underlying}
-          </button>
-        ) : (
-          <span style={{ fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone, whiteSpace: 'nowrap' }}>
-            {signal.underlying}
-          </span>
-        )}
-        {signal.underlyingPrice != null && (
-          <span style={{ fontSize: 11, color: dirTone, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-            {signal.underlyingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        )}
-        <span style={{ fontSize: 10, color: k.dim, flexShrink: 0 }}>
-          {legCount} contract{legCount === 1 ? '' : 's'}
-        {signal.origin && (
-          <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
-            <span tabIndex={0} style={{
-              fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
-              color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
-              borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block',
             }}>
-              {signal.origin.label}
+              {signal.underlying}
             </span>
-          </Tip>
-        )}
-        {/* Whatever else this engine wants read without opening the row. */}
-        <Marks marks={signal.marks} />
+          )}
+        </span>
+
+        {/* Right-aligned and tabular so the decimal points line up down the
+            column, the same rule the leg cells follow. */}
+        <span style={{
+          width: PARENT_METRICS.priceWidth, flexShrink: 0, textAlign: 'right',
+          fontSize: 11, color: dirTone, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {signal.underlyingPrice != null
+            ? signal.underlyingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : ''}
+        </span>
+
+        <span style={{
+          width: PARENT_METRICS.countWidth, flexShrink: 0,
+          fontSize: 10, color: k.dim, whiteSpace: 'nowrap',
+        }}>
+          {legCount} contract{legCount === 1 ? '' : 's'}
+        </span>
+
+        {/* A real track for the badges, so they start at the same x on every
+            row instead of trailing whatever came before them. */}
+        <span style={{
+          width: PARENT_METRICS.badgeWidth, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden',
+        }}>
+          {signal.origin && (
+            <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
+              <span tabIndex={0} style={{
+                fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
+                color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
+                borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+              }}>
+                {signal.origin.label}
+              </span>
+            </Tip>
+          )}
+          <Marks marks={signal.marks} />
         </span>
       </span>
 

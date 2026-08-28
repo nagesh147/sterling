@@ -207,3 +207,23 @@ export function signalColGroup(key: string): 'left' | 'right' {
 export function instrumentFlex(isLeg = false): string {
   return `1 0 ${ROW_METRICS.instrumentMinWidth - (isLeg ? LEG_INDENT : 0)}px`;
 }
+
+/**
+ * The parent row's own columns.
+ *
+ * A parent used to lay its pieces out inline — name, then price, then the
+ * contract count, then the badges, each starting wherever the last one ended. So
+ * every field in the column was at a different x on every row: AXISBANK's price
+ * began under BAJFINANCE's name, and the badges landed anywhere at all. Fixed
+ * widths make each one a column that actually lines up.
+ *
+ * The badge track is wide enough for the two that appear together most often
+ * (an origin plus one mark, e.g. "PREMIUM" and "TSL exit") and clips beyond
+ * that: a row that grows a third badge must not shove the count and the price
+ * out of alignment on that row alone.
+ */
+export const PARENT_METRICS = {
+  priceWidth: 92,
+  countWidth: 78,
+  badgeWidth: 136,
+} as const;
