@@ -6,6 +6,7 @@ import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
+import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { MacStageLayout } from './mac/MacStageLayout';
@@ -624,7 +625,10 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     : null;
 
   const minimizedAvailable = layout.minimized.filter((id) => available.includes(id));
-  const scanning = !!activity?.scanning;
+  // Names the strategy before the contract, and names whichever strategy is
+  // actually running — not always SuperTrend, whose endpoint this label came from.
+  const scanStatus = useScanStatus();
+  const scanning = scanStatus.scanning;
   const autoScan = !!activity?.auto_scan;
   const marketClosed = autoScan && activity?.market_open === false;
 
@@ -740,7 +744,13 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
           {liveCount > 0 && <><span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 650, color: k.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green }} />{liveCount} live</span><span style={{ width: 1, height: 14, background: 'var(--k-border)' }} /></>}
           <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: '50%', background: scanning ? k.orange : marketClosed ? 'var(--k-faint-2)' : autoScan ? k.orange : 'var(--k-faint-2)' }} />
-          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : 'var(--k-ink-5)', fontWeight: scanning ? 650 : 400, textTransform: 'capitalize' }}>{scanning ? activity?.scanning_label || 'scanning…' : autoScan ? 'AUTO' : 'MANUAL'}</span>
+          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : 'var(--k-ink-5)', fontWeight: scanning ? 650 : 400 }}>{scanning ? (scanStatus.engineLabel ?? 'Scanning') : autoScan ? 'AUTO' : 'MANUAL'}</span>
+          {/* The item second, and only where the engine publishes one. `capitalize`
+              had to come off the span above: it was title-casing a contract, so
+              "TCS OCT 2300 PE" arrived as "Tcs Oct 2300 Pe". */}
+          {scanning && scanStatus.detail && (
+            <span style={{ opacity: .8 }} title={scanStatus.detail}>· {scanStatus.detail}</span>
+          )}
           {!scanning && (activity?.last_scan_ms ?? 0) > 0 && <span style={{ opacity: .7 }}>· {fmtAgo(activity?.last_scan_ms ?? 0)}</span>}
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
         </div>

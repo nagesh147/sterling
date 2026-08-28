@@ -3,6 +3,7 @@ import { api } from '../utils/api';
 import { useRunScan } from './useSterlingKiteEngine';
 import { useRunNavigatorScan } from './useNavigator';
 import { useGammaMoveScan } from './useGammaMove';
+import { useScanActivity } from '../store/useScanActivity';
 
 /**
  * One re-scan for every strategy that has one.
@@ -84,17 +85,29 @@ export function useScanAllStrategies() {
    */
   const scanAll = async (order: readonly ScannableEngine[]): Promise<EngineScanResult[]> => {
     const results: EngineScanResult[] = [];
-    for (const engine of order) {
-      try {
-        await runners[engine]();
-        results.push({ engine, ok: true });
-      } catch (err) {
-        results.push({
-          engine,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        });
+    const setCurrent = useScanActivity.getState().setCurrent;
+    try {
+      for (const engine of order) {
+        // Say which engine this is before running it. Four of the five publish no
+        // progress of their own, so without this the status line has nothing to
+        // report while they run and falls back to "AUTO" mid-sweep.
+        setCurrent(engine);
+        try {
+          await runners[engine]();
+          results.push({ engine, ok: true });
+        } catch (err) {
+          results.push({
+            engine,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
+    } finally {
+      // In a `finally` so an abandoned sweep cannot leave the status line
+      // claiming an engine is still scanning. A stuck "scanning" is worse than
+      // no label: it hides the next real one.
+      setCurrent(null);
     }
     return results;
   };

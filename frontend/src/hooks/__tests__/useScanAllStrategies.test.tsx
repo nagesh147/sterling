@@ -10,13 +10,33 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useScanActivity } from '../../store/useScanActivity';
 
 const calls: string[] = [];
 const fail = new Set<string>();
 
-const runner = (name: string) => () => {
+// Overlap counting lives HERE, in the one runner every mock shares, so every
+// engine is instrumented rather than one. The concurrency test used to install its
+// own timing runner with `vi.doMock` after this module had been imported, which
+// never reached the already-bound mutations: it measured maxActive = 0 against
+// `toBeLessThanOrEqual(1)` and passed while observing nothing at all.
+let active = 0;
+let maxActive = 0;
+
+const runner = (name: string) => async () => {
+  active += 1;
+  maxActive = Math.max(maxActive, active);
   calls.push(name);
-  return fail.has(name) ? Promise.reject(new Error(`${name} refused`)) : Promise.resolve({});
+  try {
+    // A real suspension point. Without one, every call completes before the next
+    // begins whatever the caller does, and overlap could not be detected even in
+    // a fan-out that genuinely fired them together.
+    await new Promise((r) => { setTimeout(r, 1); });
+    if (fail.has(name)) throw new Error(`${name} refused`);
+    return {};
+  } finally {
+    active -= 1;
+  }
 };
 
 vi.mock('../useSterlingKiteEngine', () => ({
@@ -45,7 +65,7 @@ function harness() {
   return renderHook(() => useScanAllStrategies(), { wrapper });
 }
 
-beforeEach(() => { calls.length = 0; fail.clear(); });
+beforeEach(() => { calls.length = 0; fail.clear(); active = 0; maxActive = 0; });
 
 describe('useScanAllStrategies', () => {
   it('runs every strategy given, in the order given', async () => {
@@ -68,23 +88,14 @@ describe('useScanAllStrategies', () => {
   it('runs them one at a time, never together', async () => {
     // They share the same Kite ~3 req/s historical budget, so firing them
     // together makes each slower rather than the set faster.
-    const order: string[] = [];
-    let active = 0;
-    let maxActive = 0;
-    const slow = (name: string) => async () => {
-      active += 1; maxActive = Math.max(maxActive, active);
-      await new Promise((r) => setTimeout(r, 1));
-      order.push(name); active -= 1;
-      return {};
-    };
-    vi.doMock('../useSterlingKiteEngine', () => ({
-      useRunScan: () => ({ mutateAsync: slow('supertrend'), isPending: false }),
-    }));
     const { result } = harness();
     await act(async () => {
       await result.current.scanAll(['supertrend', 'navigator', 'gamma_move']);
     });
-    expect(maxActive).toBeLessThanOrEqual(1);
+    expect(calls).toEqual(['supertrend', 'navigator', 'gamma_move']);
+    // Exactly one, not "at most one": at most one is also true of a run that
+    // never happened, which is what this assertion used to be.
+    expect(maxActive).toBe(1);
   });
 
   it('one engine failing does not stop the others', async () => {
@@ -106,6 +117,44 @@ describe('useScanAllStrategies', () => {
     let results: Awaited<ReturnType<typeof result.current.scanAll>> = [];
     await act(async () => { results = await result.current.scanAll(['gamma_move']); });
     expect(results[0].error).toContain('refused');
+  });
+
+  it('publishes which engine it is on, so the status line can name it', async () => {
+    // Four of the five publish no progress of their own. Without this the dock's
+    // status line has nothing to report while they run and falls back to "AUTO"
+    // in the middle of a sweep, which reads as nothing happening.
+    //
+    // Observed by SUBSCRIBING to the store rather than by instrumenting a runner:
+    // a `vi.doMock` after the module has been imported does not reach the already
+    // bound runner, so the first version of this test watched nothing and compared
+    // two empty arrays.
+    const seen: Array<string | null> = [];
+    const unsubscribe = useScanActivity.subscribe((s) => seen.push(s.current));
+    const { result } = harness();
+    await act(async () => {
+      await result.current.scanAll(['supertrend', 'gamma_move']);
+    });
+    unsubscribe();
+    expect(seen).toEqual(['supertrend', 'gamma_move', null]);
+  });
+
+  it('clears it when the sweep ends', async () => {
+    const { result } = harness();
+    await act(async () => {
+      await result.current.scanAll(['supertrend', 'gamma_move']);
+    });
+    expect(useScanActivity.getState().current).toBeNull();
+  });
+
+  it('clears it even when an engine throws', async () => {
+    // In a `finally`. A stuck "scanning" is worse than no label at all: it hides
+    // the next real one.
+    fail.add('gamma_move');
+    const { result } = harness();
+    await act(async () => {
+      await result.current.scanAll(['gamma_move', 'supertrend']);
+    });
+    expect(useScanActivity.getState().current).toBeNull();
   });
 
   it('does not list ATM Premium Imbalance, which has no scan', () => {
