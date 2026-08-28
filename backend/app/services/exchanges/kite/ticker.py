@@ -144,12 +144,34 @@ class KiteTicker:
         self._ticks: Dict[int, dict] = {}        # latest tick per token
         self._active = False
         self._connected = False
+        self._last_error: Optional[str] = None
         self._ws = None
         self._task: Optional[asyncio.Task] = None
 
     @property
     def is_active(self) -> bool:
-        return self._active
+        """Whether the stream is actually running.
+
+        "Someone called ``start()``" is not the same as "the stream is running",
+        and conflating them is how a dead feed stays dead. ``_active`` is only
+        cleared by :meth:`stop` and by cancellation, so a ``_run()`` task that
+        dies any other way leaves the flag set — and every caller then treats a
+        ticker that will never produce another tick as healthy. Downstream, that
+        showed up as every live price in the app quietly falling back to the
+        30-second REST heartbeat while ``/ticker/status`` reported
+        ``active: true``.
+        """
+        return self._active and self._task is not None and not self._task.done()
+
+    @property
+    def died(self) -> bool:
+        """Started, never stopped, and yet not running. Restartable."""
+        return self._active and self._task is not None and self._task.done()
+
+    @property
+    def last_error(self) -> Optional[str]:
+        """Why the stream last dropped, so a caller can say more than "off"."""
+        return self._last_error
 
     @property
     def connected(self) -> bool:
@@ -194,7 +216,13 @@ class KiteTicker:
 
     def status(self) -> dict:
         return {
-            "active": self._active,
+            # `active` now means running, not merely started. `started` keeps the
+            # raw flag so a dead task is visible rather than indistinguishable
+            # from a healthy one.
+            "active": self.is_active,
+            "started": self._active,
+            "died": self.died,
+            "last_error": self._last_error,
             "connected": self._connected,
             "subscribed": sorted(self._subscribed.keys()),
             "tick_count": len(self._ticks),
@@ -234,7 +262,11 @@ class KiteTicker:
                 self._connected = False
                 if not self._active:
                     break
-                log.debug("KiteTicker disconnected (%s) — reconnecting in %.0fs", exc, delay)
+                # WARNING, not debug. Every live price in the app degrades to the
+                # slow REST heartbeat while this is down, and at debug level that
+                # happened invisibly.
+                self._last_error = f"{type(exc).__name__}: {exc}"[:200]
+                log.warning("KiteTicker disconnected (%s) — reconnecting in %.0fs", exc, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 60.0)
         self._connected = False

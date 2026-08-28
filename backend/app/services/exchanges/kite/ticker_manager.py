@@ -126,9 +126,32 @@ async def ensure(user_id: str) -> Optional[KiteTicker]:
     existing = _tickers.get(user_id)
     if existing and existing.is_active:
         return existing
+
     acct = _accounts.get_active(user_id)
     if not acct or not acct.connected or acct.is_paper:
         return None
+
+    if existing is not None:
+        # The ticker exists but is not running -- its `_run()` task finished
+        # without `stop()` being called.
+        #
+        # Restart THIS one rather than building a fresh ticker. `start()` is
+        # already safe to call on a finished task (it guards on the task, not on
+        # the flag), and the existing object still holds `_subscribed`, which
+        # `_resubscribe_all()` replays the moment it reconnects. A new ticker
+        # would come up subscribed to nothing and every caller that had already
+        # registered its tokens would sit there waiting for ticks that were never
+        # coming.
+        #
+        # Before the liveness fix in ticker.py this branch was unreachable: a
+        # dead task left `is_active` True, so this function returned the corpse
+        # and the whole app silently ran on the 30-second REST heartbeat.
+        log.warning(
+            "KiteTicker for %s was not running (last error: %s) — restarting with %d instruments",
+            user_id, existing.last_error or "none recorded", len(existing.status().get("subscribed") or []),
+        )
+        await existing.start()
+        return existing
     ticker = KiteTicker(
         api_key=acct.api_key, access_token=acct.access_token,
         on_ticks=_make_broadcaster(user_id),

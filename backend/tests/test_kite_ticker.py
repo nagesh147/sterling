@@ -142,3 +142,103 @@ async def test_text_non_order_frames_ignored():
     await t._on_message(json.dumps({"type": "message", "data": "market open"}))
     await t._on_message("not json at all")
     assert orders == []
+
+
+# ─── Liveness: a dead stream must not report itself healthy ──────────────────
+#
+# `_active` is set by `start()` and cleared only by `stop()` and cancellation, so
+# a `_run()` task that dies any other way leaves the flag set. `is_active` used
+# to return that flag directly, and `ticker_manager.ensure()` short-circuits on
+# it — so a dead ticker was handed back forever, never restarted, while
+# `/ticker/status` reported `active: true`.
+#
+# Observed live: `{"active": true, "connected": false, "subscribed": [...397
+# tokens]}`. Every price in the app had silently fallen back to the 30-second
+# REST heartbeat, which is why it looked like "values are not updating" rather
+# than like a broken feed.
+
+import asyncio
+
+import pytest
+
+
+def _ticker() -> KiteTicker:
+    return KiteTicker(api_key="k", access_token="t", on_ticks=lambda *_: None)
+
+
+def test_is_active_is_false_before_start():
+    assert _ticker().is_active is False
+
+
+@pytest.mark.asyncio
+async def test_a_dead_task_is_not_active():
+    t = _ticker()
+    t._active = True
+    # A task that has finished, standing in for `_run()` having died.
+    t._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert t._task.done()
+
+    assert t.is_active is False, "a finished task must not read as active"
+    assert t.died is True, "and must be identifiable as restartable"
+
+
+@pytest.mark.asyncio
+async def test_a_running_task_is_active():
+    t = _ticker()
+    t._active = True
+    t._task = asyncio.create_task(asyncio.sleep(5))
+    try:
+        assert t.is_active is True
+        assert t.died is False, "a running stream is not a dead one"
+    finally:
+        t._task.cancel()
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_ticker_is_not_reported_as_died():
+    # `stop()` clears the flag, so a deliberate shutdown must not look like a
+    # crash — otherwise `ensure()` would fight the operator and restart it.
+    t = _ticker()
+    t._active = False
+    t._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert t.is_active is False
+    assert t.died is False
+
+
+@pytest.mark.asyncio
+async def test_status_distinguishes_started_from_running():
+    t = _ticker()
+    t._active = True
+    t._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+
+    s = t.status()
+    assert s["started"] is True, "the raw flag stays visible"
+    assert s["active"] is False, "but `active` means running"
+    assert s["died"] is True
+    # `last_error` is part of the contract even when nothing has failed yet, so a
+    # caller can always ask why rather than only whether.
+    assert "last_error" in s
+
+
+@pytest.mark.asyncio
+async def test_start_revives_a_finished_task_and_keeps_subscriptions():
+    # The subscription list is why `ensure()` restarts the existing ticker rather
+    # than building a fresh one: `_resubscribe_all()` replays it on connect, and a
+    # new ticker would come up subscribed to nothing while every caller sat
+    # waiting for ticks that were never coming.
+    t = _ticker()
+    t._subscribed = {123, 456}
+    t._active = True
+    t._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert t.died is True
+
+    await t.start()
+    try:
+        assert t.is_active is True, "start() revives a finished task"
+        assert t._subscribed == {123, 456}, "and the subscription list survives"
+    finally:
+        await t.stop()
