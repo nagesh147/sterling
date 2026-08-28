@@ -72,7 +72,11 @@ async function renderPane() {
 }
 
 function openSignalModeMenu() {
-  fireEvent.click(screen.getByTitle(/^Signal lens —/));
+  // Located by title, which now begins with the control's NAME. The name used to
+  // render outside the chip as separate coloured text; it moved inside, and the
+  // title became "<NAME> — <what it changes>" so hovering still explains the
+  // control rather than just repeating its value.
+  fireEvent.click(screen.getByTitle(/^VIEW —/));
 }
 
 describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {
@@ -156,7 +160,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
   });
 
   describe('SuperTrend-only controls hide when the lens shows no SuperTrend rows', () => {
-    const exitRuleTitle = /^Exit confirmation/;
+    const exitRuleTitle = /^EXIT —/;
 
     it('shows the exit-rule dropdown under Combined (SuperTrend rows are on screen)', async () => {
       mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
@@ -178,7 +182,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     // says so ("Always its own — SuperTrend's source never applied here"). The
     // header was the last surface still claiming otherwise, so it now hides on
     // the Navigator lens for exactly the reason the exit rule does.
-    const sourceTitle = /^SuperTrend's signal source/;
+    const sourceTitle = /^SOURCE —/;
 
     it('shows the source dropdown under Combined', async () => {
       mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);

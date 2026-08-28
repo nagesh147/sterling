@@ -83,6 +83,23 @@ async function store() {
   return (await import('../../../store/useKiteSettings')).useKiteSettings;
 }
 
+/**
+ * The settings drawer, rendered on its own.
+ *
+ * Its button moved to the pane's title bar, which the engine-tab shell owns —
+ * the drawer is common to every engine, so hunting the button from here would
+ * test the shell's plumbing instead of these settings.
+ */
+async function renderSettingsPanel() {
+  const { SignalTableSettingsPanel } = await import('../SterlingKiteEnginePane');
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <SignalTableSettingsPanel />
+    </QueryClientProvider>,
+  );
+}
+
 async function renderPane() {
   const { SterlingKiteEnginePane: Pane } = await import('../SterlingKiteEnginePane');
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -182,10 +199,7 @@ describe('the settings panel offers all three', () => {
 
   it('names each one in the board settings drawer, wired to the store', async () => {
     mockPane();
-    await renderPane();
-
-    // Open the drawer the way an operator does.
-    fireEvent.click(screen.getByTitle('Signal table settings'));
+    await renderSettingsPanel();
 
     const s = await store();
     for (const [label, key] of [
@@ -207,8 +221,7 @@ describe('the settings panel offers all three', () => {
   it('stops promising draggable columns once dragging is off', async () => {
     (await store()).setState({ boardDragColumns: false });
     mockPane();
-    await renderPane();
-    fireEvent.click(screen.getByTitle('Signal table settings'));
+    await renderSettingsPanel();
     // The footer hint used to state it unconditionally.
     expect(screen.queryByText(/drag column headers to reorder/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Column dragging is off/i)).toBeInTheDocument();
@@ -249,8 +262,7 @@ describe('the board renderer', () => {
 
   it('offers the choice in the settings drawer', async () => {
     mockPane();
-    await renderPane();
-    fireEvent.click(screen.getByTitle('Signal table settings'));
+    await renderSettingsPanel();
     const label = screen.getByText('Shared board renderer');
     const box = label.querySelector('input[type=checkbox]') as HTMLInputElement;
     expect(box.checked, 'off by default').toBe(false);

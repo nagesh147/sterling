@@ -279,6 +279,8 @@ export function supertrendLegToBoard(
     score: row.score ?? null,
     origin: originOf(row),
     marks: marksOf(row, opts),
+    // The red counter, e.g. "0/3 red". A count, not a price.
+    exitProgress: row.exit_state || null,
     flags: flagsFor(row, leg, opts),
     // Solved from the live quote, not replayed from the scan. Omitted rather
     // than guessed when the implied volatility has no solution — a delta the
@@ -342,6 +344,8 @@ function supertrendSignalToBoard(
     score: row.score ?? null,
     origin: originOf(row),
     marks: marksOf(row, opts),
+    // The red counter, e.g. "0/3 red". A count, not a price.
+    exitProgress: row.exit_state || null,
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections: [evidenceSection(row), navigatorSection(row)].filter(Boolean) as BoardSection[],
     children: legs,

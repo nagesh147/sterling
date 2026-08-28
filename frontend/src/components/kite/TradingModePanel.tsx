@@ -1,4 +1,5 @@
 import React from 'react';
+import { useKiteSettings } from '../../store/useKiteSettings';
 import { useEngineConfig, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives';
@@ -46,6 +47,21 @@ function RunningRow({ label, description, on, children }: {
   );
 }
 
+/**
+ * The strategies a re-scan can cover.
+ *
+ * ATM Premium Imbalance is deliberately absent: it has no scan. It resolves one
+ * option pair and arms it, so there is no universe to sweep and nothing for this
+ * button to do. Listing it would offer a choice that changes nothing.
+ */
+const RESCANNABLE: Array<{ engine: string; label: string; note: string }> = [
+  { engine: 'supertrend', label: 'SuperTrend', note: 'Triple SuperTrend across the configured universe' },
+  { engine: 'navigator', label: 'Value-Flow Navigator', note: 'AVWAP and flow evidence, its own source' },
+  { engine: 'orb', label: 'ORB + VWAP', note: 'Opening range breakout on the index options' },
+  { engine: 'gamma_move', label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
+  { engine: 'adaptive_edge', label: 'Adaptive Edge', note: 'Order-flow scalping' },
+];
+
 export function TradingModePanel() {
   const { data: cfg } = useEngineConfig();
   const setCfg = usePatchEngineConfig();
@@ -55,6 +71,8 @@ export function TradingModePanel() {
   const navigatorOn = !!navCfg?.enabled;
   const navigatorAuto = !!navCfg?.auto_execute_originated;
   const engineOn = !!cfg?.engine_enabled;
+  const rescanStrategies = useKiteSettings((s) => s.rescanStrategies);
+  const toggleRescanStrategy = useKiteSettings((s) => s.toggleRescanStrategy);
   const autoOn = !!cfg?.auto_execute;
 
   return (
@@ -123,6 +141,45 @@ export function TradingModePanel() {
         }}>
           Paper/live is set per account. Automatic execution is set once for your user and applies to
           whichever account is active.
+        </div>
+      </PanelCard>
+
+      <PanelCard>
+        <PanelSectionHeading
+          title="Included in re-scan"
+          description="Which strategies the re-scan button covers. They share one historical-data budget and run one at a time, so a scan of five costs five times a scan of one — an operator working a single strategy can stop paying for the other four without switching them off for everyone."
+        />
+        <div style={{ padding: '2px 18px 16px', display: 'grid', gap: 2 }}>
+          {RESCANNABLE.map(({ engine, label, note }) => {
+            // Absent means included: the map holds only exclusions, so a new
+            // engine is covered from the day it appears rather than silently
+            // missing from every saved map.
+            const on = rescanStrategies[engine] !== false;
+            return (
+              <label
+                key={engine}
+                title={note}
+                style={{
+                  minHeight: 30, display: 'flex', alignItems: 'center', gap: 8,
+                  color: 'var(--k-text)', fontSize: 11, cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => toggleRescanStrategy(engine)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--k-orange)' }}
+                />
+                <span style={{ fontWeight: 600 }}>{label}</span>
+                <span style={{ color: 'var(--k-dim)', fontSize: 10 }}>{note}</span>
+              </label>
+            );
+          })}
+          <div style={{ marginTop: 8, fontSize: 10, lineHeight: 1.5, color: 'var(--k-dim)' }}>
+            A strategy switched off above is skipped whatever is ticked here — the
+            running switch wins, because scanning a stopped engine is work you have
+            already declined.
+          </div>
         </div>
       </PanelCard>
     </>

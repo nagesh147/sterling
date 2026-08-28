@@ -10,6 +10,7 @@ import { useAdaptiveEdgeSnapshot } from '../../../hooks/useAdaptiveEdge';
 import { rowsFromSnapshot } from '../AdaptiveEdgePanel';
 import { adaptiveEdgeToBoard } from './adaptiveEdgeAdapter';
 import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './SignalBoard';
+import { useBoardRowActions } from './useBoardRowActions';
 import { BoardFilters } from './BoardFilters';
 import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
@@ -20,6 +21,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
+  // Buy/Sell and the chart, built from the signal alone — same on every board.
+  const rowActions = useBoardRowActions();
   const snapshot = useAdaptiveEdgeSnapshot();
   const signals = React.useMemo(
     () => (snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : []),
@@ -52,8 +55,10 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
     <div>
       <BoardFilters view={view} columns={BOARD_COLUMNS} />
       <SignalBoard
+        renderTrade={rowActions.renderTrade}
+        renderChart={rowActions.renderChart}
         signals={view.visible}
-        requested={BOARD_COLUMNS}
+        columns={BOARD_COLUMNS}
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}

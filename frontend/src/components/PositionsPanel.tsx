@@ -129,7 +129,7 @@ function NextExitPill({ pos, currentSpot }: { pos: PaperPosition; currentSpot: n
         background: guess.color + '18',
         border: `1px solid ${guess.color}44`,
         color: guess.color,
-        fontWeight: 700, letterSpacing: 0.5, cursor: 'help',
+        fontWeight: 700, letterSpacing: 0.5,
         whiteSpace: 'nowrap',
       }}
     >

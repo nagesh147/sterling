@@ -125,30 +125,17 @@ export function ToolbarButton({ title, onClick, active, disabled, children }: {
   );
 }
 
-/**
- * A labelled control.
+/*
+ * `ToolbarControl` lived here. It rendered a control's name as coloured text
+ * OUTSIDE the control, while COLUMNS and BEST LEG carried their names inside
+ * their own chips — two conventions on one row.
  *
- * The label is not decoration: an unlabelled pill reading "Derivatives" next to
- * one reading "1 Red" tells you nothing about which is the signal source and
- * which is the exit rule. Every control on this bar says what it governs.
+ * The name moved inside the chip (see `InlineDropdown`'s `label`), which left
+ * this as a bare tooltip wrapper around an interactive element — and that was
+ * actively worse: hovering the chip to click it painted the tooltip over the
+ * menu it had just opened. The explanation is now the chip's own `title`, which
+ * cannot overlap anything, and this component is gone rather than left dead.
  */
-export function ToolbarControl({ label, hint, tone = k.dim, children }: {
-  label: string;
-  hint: string;
-  tone?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-      <Tip text={`${label} — ${hint}`}>
-        <span tabIndex={0} style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.07em', color: tone, cursor: 'help', outlineOffset: 2 }}>
-          {label}
-        </span>
-      </Tip>
-      {children}
-    </span>
-  );
-}
 
 /**
  * Separates server-side settings from local view filters.
@@ -164,7 +151,7 @@ export function ScopeDivider() {
       <span
         tabIndex={0}
         aria-label="Scope divider between engine settings and local view filters"
-        style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 4px', cursor: 'help', outlineOffset: 3 }}
+        style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 4px', outlineOffset: 3 }}
       />
     </Tip>
   );

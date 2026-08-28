@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { underlyingSpotKey } from '../utils/computeGreeks';
@@ -205,36 +205,119 @@ export function useKiteAutoSession(enabled = true) {
   return { recovering: refresh.isPending, needsRecovery };
 }
 
-// Opens the Kite login in a new tab with a freshly minted signed state.
-//
-// Two things this handles that a plain <a href={login_url}> cannot. First, the
-// state inside a login URL is only valid for ~15 minutes, so a cached URL from
-// when the tab was opened may already be dead — this always fetches a new one.
-// Second, popup blockers only honour window.open() called synchronously inside the
-// click, so the tab is opened empty on the gesture and navigated once the URL
-// arrives.
+/**
+ * Opens the Kite login in a sized POPUP and reports the state of the handshake.
+ *
+ * Three things this handles that a plain `<a href={login_url}>` cannot.
+ *
+ * First, the signed state inside a login URL is valid for about 15 minutes, so a
+ * URL cached when the pane mounted may already be dead — this always fetches a
+ * fresh one. Second, popup blockers only honour `window.open()` called
+ * synchronously inside the click, so the window is opened EMPTY on the gesture
+ * and navigated once the URL arrives. Third, the caller needs to know the
+ * handshake is in flight so the app can say so instead of leaving the operator
+ * looking at an unchanged screen wondering whether anything happened.
+ *
+ * A sized popup rather than `_blank`: a full tab reads as leaving the app, and
+ * this is a thirty-second detour that ends by closing itself. `noopener` is
+ * deliberately NOT set — the callback page hands the session back through
+ * `window.opener.postMessage`, and `noopener` severs exactly that.
+ *
+ * `phase` is what the UI renders:
+ *   idle     – nothing in flight
+ *   opening  – fetching the URL, popup open and blank
+ *   waiting  – the operator is on Kite's page
+ *   done     – the callback handed the session over
+ *   failed   – could not start, or the window closed with nothing handed over
+ */
+export type KiteLoginPhase = 'idle' | 'opening' | 'waiting' | 'done' | 'failed';
+
 export function useOpenKiteLogin() {
-  const [opening, setOpening] = useState(false);
+  const [phase, setPhase] = useState<KiteLoginPhase>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const winRef = useRef<Window | null>(null);
+  const doneRef = useRef(false);
+
+  /** The handoff landed. Called by the listener below, and by the guard hook. */
+  const markDone = useCallback(() => {
+    doneRef.current = true;
+    setPhase('done');
+    try { winRef.current?.close(); } catch { /* already gone */ }
+    winRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const onConnected = () => markDone();
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('sterling-kite-auth');
+      channel.onmessage = (e) => { if (e.data?.type === 'kite-connected') onConnected(); };
+    } catch { /* postMessage below still covers it */ }
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type === 'kite-connected') onConnected();
+    };
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      try { channel?.close(); } catch { /* already closed */ }
+    };
+  }, [markDone]);
+
+  // The operator closed the popup without finishing. Without this the app would
+  // sit on "waiting" forever, which is indistinguishable from a hung login.
+  useEffect(() => {
+    if (phase !== 'waiting') return;
+    const poll = window.setInterval(() => {
+      const w = winRef.current;
+      if (w && w.closed && !doneRef.current) {
+        window.clearInterval(poll);
+        setError('The Kite window closed before the login finished.');
+        setPhase('failed');
+      }
+    }, 700);
+    return () => window.clearInterval(poll);
+  }, [phase]);
 
   const open = async () => {
-    const win = window.open('', '_blank');       // must happen on the user gesture
-    setOpening(true);
+    doneRef.current = false;
+    setError(null);
+    // Must happen on the user gesture, before any await.
+    const win = window.open(
+      '', 'sterling-kite-login',
+      'width=520,height=760,menubar=no,toolbar=no,location=yes,status=no',
+    );
+    winRef.current = win;
+    setPhase('opening');
     try {
       const d = await api.get<KiteLoginUrl>(`${K}/login-url`);
-      if (win) win.location.href = d.login_url;
-      else window.location.href = d.login_url;   // popup blocked → same-tab fallback
+      if (win) {
+        win.location.href = d.login_url;
+        setPhase('waiting');
+      } else {
+        // Popup blocked. Same-tab is worse but it is not nothing.
+        window.location.href = d.login_url;
+      }
     } catch (err) {
       if (win) win.close();
-      notifyOrder({
-        kind: 'error', title: 'Could not start Kite login',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setOpening(false);
+      winRef.current = null;
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setPhase('failed');
+      notifyOrder({ kind: 'error', title: 'Could not start Kite login', message });
     }
   };
 
-  return { open, opening };
+  const dismiss = () => { setPhase('idle'); setError(null); };
+
+  return {
+    open,
+    dismiss,
+    phase,
+    error,
+    /** Kept for callers that only ever needed the button's disabled state. */
+    opening: phase === 'opening' || phase === 'waiting',
+  };
 }
 
 // Flips the app to "connected" the instant the Kite callback tab finishes.

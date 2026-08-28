@@ -99,6 +99,13 @@ class KiteStatus(BaseModel):
     # Provenance of this answer: did we ask Kite, or trust the stored window?
     validated: bool = False
     auto_renewed: bool = False
+    # `connected: false` because we could not ASK, not because Kite refused.
+    #
+    # The stored token is untouched in this case. The UI must not call it an
+    # expiry or offer a re-login: nothing has expired, a request failed. Without
+    # this the two were one signal, and a dropped request produced a "Kite session
+    # expired" modal over a perfectly good session.
+    transient: bool = False
 
 
 # ─── Write request bodies ───────────────────────────────────────────────────

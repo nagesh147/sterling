@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useKiteSettings } from '../../../store/useKiteSettings';
-import { SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
+import { SignalTableSettingsPanel, SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
 
 const signalRows: any[] = [];
 
@@ -67,6 +67,15 @@ function renderPane() {
   );
 }
 
+function renderSettingsPanel() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <SignalTableSettingsPanel />
+    </QueryClientProvider>,
+  );
+}
+
 describe('SterlingKiteEnginePane — table-only settings', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -78,13 +87,13 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
   it('keeps table preferences exclusive and routes engine configuration to Connect', () => {
     const navListener = vi.fn();
     window.addEventListener('kite-nav-click', navListener);
-    renderPane();
+    // Rendered directly. The button that opens it lives in the pane's TITLE BAR
+    // now, which the engine-tab shell owns because the drawer is common to every
+    // engine — so hunting the button here would be testing the shell's plumbing
+    // rather than this drawer's contents.
+    renderSettingsPanel();
 
-    expect(screen.queryByText('SuperTrend board settings')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Scan report' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
-
-    expect(screen.getByText('SuperTrend board settings')).toBeInTheDocument();
+    expect(screen.getByText('Board settings')).toBeInTheDocument();
     expect(screen.getByText(/nothing here changes what is scanned/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
 
@@ -121,7 +130,6 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'BEST LEG' }));
     expect(localStorage.getItem('kite_st_best_only')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
     expect(screen.queryByRole('checkbox', { name: 'Best signal per instrument' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: 'Show ended setups' })).not.toBeInTheDocument();
   });

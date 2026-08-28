@@ -189,6 +189,21 @@ export interface BoardSignal {
    */
   dayMove?: BoardDayMove | null;
   /**
+   * How close the engine's own closing RULE is to firing — e.g. "0/3 red".
+   *
+   * Not the same thing as `levels.exit`, which is the price a position actually
+   * got out at. SuperTrend's exit is a counter, not a price: three SuperTrend
+   * lines must turn red before it closes, and the count in between is the single
+   * most useful number on the row. It is how you spot the gap where the premium
+   * is already through its trail while the engine has not closed yet — which is
+   * exactly where an open drawdown builds, and this board's history has an entry
+   * of 971 sitting beside an LTP of 193.
+   *
+   * The two shared one column id for a while, so moving SuperTrend onto this
+   * board silently replaced its counter with a realised price it does not have.
+   */
+  exitProgress?: string | null;
+  /**
    * Short inline badges an engine wants on the row itself.
    *
    * `origin` says where a signal came from and there is exactly one of those.
@@ -502,3 +517,76 @@ export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
   // uses, so the two cannot disagree about what a date looks like.
   return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
 };
+
+
+/**
+ * The quote key for a signal's UNDERLYING.
+ *
+ * Kite lists the indices under names no engine uses — "NIFTY 50" for NIFTY,
+ * "NIFTY BANK" for BANKNIFTY — and SENSEX and BANKEX are BSE while everything
+ * else is NSE. Getting any of that wrong yields a key nothing is subscribed to,
+ * which reads as "this instrument has no price" rather than as a lookup miss.
+ *
+ * It lives here rather than in the pane that first needed it: the shared board
+ * needs it too, and importing it from a component the board is rendered BY would
+ * be a cycle.
+ */
+export function underlyingQuoteKey(underlying: string): string {
+  const exch = (underlying === 'SENSEX' || underlying === 'BANKEX') ? 'BSE' : 'NSE';
+  const remap: Record<string, string> = {
+    NIFTY: 'NIFTY 50',
+    BANKNIFTY: 'NIFTY BANK',
+    FINNIFTY: 'NIFTY FIN SERVICE',
+    MIDCPNIFTY: 'NIFTY MID SELECT',
+  };
+  return `${exch}:${remap[underlying] ?? underlying}`;
+}
+
+
+/**
+ * A signal's time, as a parent row shows it: the moment, and how long ago.
+ *
+ * Both halves earn their place. The absolute stamp is the one you quote when
+ * reconciling against the broker's own log, so it carries the date and the year
+ * and is unambiguous on its own. The relative one is what you actually read while
+ * trading — "17 min ago" answers "is this still worth acting on" and a wall-clock
+ * time does not, at a glance.
+ *
+ * IST throughout, pinned rather than inherited: the machine's zone is not the
+ * market's, and a stamp that silently shifts by five and a half hours is worse
+ * than no stamp.
+ */
+export interface ParentStamp {
+  /** e.g. "21 Jul 2026 09:15 AM" */
+  absolute: string;
+  /** e.g. "17 min ago". Null when the time is unknown or in the future. */
+  relative: string | null;
+}
+
+export function parentStamp(atMs: number | null, nowMs: number): ParentStamp | null {
+  if (atMs == null || !Number.isFinite(atMs)) return null;
+
+  const absolute = new Date(atMs)
+    .toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+      timeZone: 'Asia/Kolkata',
+    })
+    // en-IN yields "21 Jul 2026, 09:15 am" — drop the comma and raise the marker,
+    // so it reads as one stamp rather than a date and a time bolted together.
+    .replace(',', '')
+    .replace(/\b(am|pm)\b/i, (m) => m.toUpperCase());
+
+  const deltaMs = nowMs - atMs;
+  // A signal stamped in the future is a clock problem, not an age. Saying
+  // "in 3 min" would present it as normal.
+  if (deltaMs < 0) return { absolute, relative: null };
+
+  const mins = Math.floor(deltaMs / 60_000);
+  if (mins < 1) return { absolute, relative: 'just now' };
+  if (mins < 60) return { absolute, relative: `${mins} min ago` };
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return { absolute, relative: `${hours} h ago` };
+  const days = Math.floor(hours / 24);
+  return { absolute, relative: `${days} d ago` };
+}

@@ -208,7 +208,7 @@ describe('dates and day order', () => {
     // Minute precision hid what the row exists to report: Adaptive Edge scalps
     // order flow, and the recorded ATM bot opened and closed inside 3 seconds.
     render(<SignalBoard signals={[dated('a', NOW - 3_600_000, 'running')]}
-      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+      columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     expect(screen.getByText('21 Aug 09:30:00')).toBeTruthy();
   });
 
@@ -216,7 +216,7 @@ describe('dates and day order', () => {
     // A running row from an earlier day sits in "Live now", which names no date,
     // so the cell has to.
     render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
-      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+      columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     expect(screen.getByText('20 Aug 10:30:00')).toBeTruthy();
   });
 
@@ -226,7 +226,7 @@ describe('dates and day order', () => {
     // whole board down rather than spoiling one cell.
     expect(() => render(
       <SignalBoard signals={[dated('a', NaN, 'running')]}
-        requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />,
+        columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />,
     )).not.toThrow();
     // The cell says so with a dash. Other empty columns render one too, so this
     // only checks one exists — not throwing is the assertion that matters here.
@@ -235,7 +235,7 @@ describe('dates and day order', () => {
 
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
-      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+      columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
     // The row carries its own date, and that is now the ONLY place it appears:
     // the day band that used to repeat it above each group is gone. The text
     // still comes from `sessionDayDate`, so a row and the day grouping cannot
@@ -255,7 +255,7 @@ describe('dates and day order', () => {
           dated('mid', NOW - 1 * DAY, 'ended'),
           dated('new', NOW, 'ended'),
         ]}
-        requested={['instrument', 'time']}
+        columns={['instrument', 'time']}
         nowMs={NOW}
         openId={null}
         onToggle={() => {}}
@@ -275,7 +275,7 @@ describe('dates and day order', () => {
           dated('early', NOW - 7_200_000, 'ended'),
           dated('late', NOW - 1_800_000, 'ended'),
         ]}
-        requested={['instrument', 'time']}
+        columns={['instrument', 'time']}
         nowMs={NOW}
         openId={null}
         onToggle={() => {}}

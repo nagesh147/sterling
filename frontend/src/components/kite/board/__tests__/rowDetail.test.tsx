@@ -32,7 +32,7 @@ function sig(over: Partial<BoardSignal> = {}): BoardSignal {
 
 const show = (signals: BoardSignal[], props: Partial<React.ComponentProps<typeof SignalBoard>> = {}) =>
   render(
-    <SignalBoard signals={signals} requested={BOARD_COLUMNS} openId={null} onToggle={() => {}} nowMs={NOW} {...props} />,
+    <SignalBoard signals={signals} columns={BOARD_COLUMNS} openId={null} onToggle={() => {}} nowMs={NOW} {...props} />,
   );
 
 describe('entry shows what the position has done', () => {

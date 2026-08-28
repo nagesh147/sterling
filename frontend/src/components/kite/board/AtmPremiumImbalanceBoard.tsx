@@ -21,6 +21,7 @@ import {
 } from '../../../hooks/useAtmPremiumImbalance';
 import { atmPremiumImbalanceToBoard } from './atmPremiumImbalanceAdapter';
 import { BOARD_COLUMNS, SignalBoard } from './SignalBoard';
+import { useBoardRowActions } from './useBoardRowActions';
 import { BoardFilters } from './BoardFilters';
 import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
@@ -96,6 +97,8 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
+  // Buy/Sell and the chart, built from the signal alone — same on every board.
+  const rowActions = useBoardRowActions();
   const config = useAtmPremiumImbalanceConfig();
   const enabled = config.data?.config?.enabled ?? false;
   const [armedOnce, setArmedOnce] = React.useState(false);
@@ -263,8 +266,10 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
 
       {signals.length > 0 && <BoardFilters view={view} columns={BOARD_COLUMNS} />}
       <SignalBoard
+        renderTrade={rowActions.renderTrade}
+        renderChart={rowActions.renderChart}
         signals={view.visible}
-        requested={BOARD_COLUMNS}
+        columns={BOARD_COLUMNS}
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
