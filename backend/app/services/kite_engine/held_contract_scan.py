@@ -147,6 +147,40 @@ async def _append_held_contract_signals(
 ) -> None:
     """Evaluate exact held contracts and merge them into the completed snapshot."""
 
+    # Claim `scanning` BEFORE the broker round-trip below, not after it.
+    #
+    # `original_scan` clears the flag in its own `finally`, and this phase used to
+    # re-raise it only once it knew there was work to do — which is after
+    # `get_positions_raw()`. That left a full network round-trip during which a
+    # scan was demonstrably running while the state said idle, so a status poll
+    # landing there reported "not scanning" with the previous phase's label still
+    # on screen. Wide enough to hit routinely, which is what made the footer look
+    # stuck on one symbol.
+    us = scanner_obj.snapshot(uid)
+    us.scanning = True
+    us.scanning_label = "Held contracts…"
+    try:
+        await _held_contract_body(
+            scanner_obj, uid=uid, client=client, cfg=cfg,
+            nfo_rows=nfo_rows, bfo_rows=bfo_rows, log_cb=log_cb, us=us,
+        )
+    finally:
+        us.scanning = False
+        us.scanning_label = ""
+
+
+async def _held_contract_body(
+    scanner_obj,
+    *,
+    uid: str,
+    client,
+    cfg: SterlingKiteEngineConfig,
+    nfo_rows: Sequence[Mapping],
+    bfo_rows: Sequence[Mapping],
+    log_cb,
+    us,
+) -> None:
+    """The work itself, split out so the flag above covers every exit path."""
     try:
         positions_raw = await client.get_positions_raw()
     except Exception:
@@ -164,7 +198,7 @@ async def _append_held_contract_signals(
         evaluate_derivative_contract,
     )
 
-    us = scanner_obj.snapshot(uid)
+    # `us` is passed in: the caller claims the flag before the round-trip below.
     existing = {
         leg.option_symbol
         for row in us.rows
@@ -176,48 +210,46 @@ async def _append_held_contract_signals(
     if not pending:
         return
 
-    us.scanning = True
     appended = []
     now_ms = int(time.time() * 1000)
-    try:
-        for spec in pending:
-            if us.cancelled:
-                break
-            pick = spec.pick
-            us.scanning_label = f"Held: {pick.option_symbol}"
-            if log_cb:
-                log_cb(f"Scanning held derivative: {pick.option_symbol}")
-            us.scanned_contract_symbols.add(pick.option_symbol)
-            us.diag.deriv_resolved += 1
-            try:
-                candles = drop_forming(await scanner_obj._fetch_candles(
-                    client, us, pick.token, pick.option_symbol))
-            except Exception:  # noqa: BLE001
-                us.diag.deriv_no_data += 1
-                continue
+    # No `try` here any more: it existed only for the `finally` that reset the
+    # scanning flag, and the caller owns that now — across every exit path,
+    # including the broker round-trip above.
+    for spec in pending:
+        if us.cancelled:
+            break
+        pick = spec.pick
+        us.scanning_label = f"Held: {pick.option_symbol}"
+        if log_cb:
+            log_cb(f"Scanning held derivative: {pick.option_symbol}")
+        us.scanned_contract_symbols.add(pick.option_symbol)
+        us.diag.deriv_resolved += 1
+        try:
+            candles = drop_forming(await scanner_obj._fetch_candles(
+                client, us, pick.token, pick.option_symbol))
+        except Exception:  # noqa: BLE001
+            us.diag.deriv_no_data += 1
+            continue
 
-            if not candles:
-                us.diag.deriv_no_data += 1
-                continue
+        if not candles:
+            us.diag.deriv_no_data += 1
+            continue
 
-            bars = len(candles)
-            us.diag.deriv_charts += 1
-            us.diag.deriv_min_bars = bars if us.diag.deriv_min_bars == 0 else min(us.diag.deriv_min_bars, bars)
-            us.diag.deriv_max_bars = max(us.diag.deriv_max_bars, bars)
-            rows = evaluate_derivative_contract(spec.item, spec.moneyness, pick, candles, cfg)
-            latest_ts = int(candles[-1].timestamp_ms)
-            fired = any(int(row.timestamp_ms) == latest_ts for row in rows)
-            if fired:
-                us.diag.deriv_fired += 1
-            appended.extend(_retain_signals(rows, now_ms))
+        bars = len(candles)
+        us.diag.deriv_charts += 1
+        us.diag.deriv_min_bars = bars if us.diag.deriv_min_bars == 0 else min(us.diag.deriv_min_bars, bars)
+        us.diag.deriv_max_bars = max(us.diag.deriv_max_bars, bars)
+        rows = evaluate_derivative_contract(spec.item, spec.moneyness, pick, candles, cfg)
+        latest_ts = int(candles[-1].timestamp_ms)
+        fired = any(int(row.timestamp_ms) == latest_ts for row in rows)
+        if fired:
+            us.diag.deriv_fired += 1
+        appended.extend(_retain_signals(rows, now_ms))
 
-        if appended:
-            us.rows = _compile_rows([*us.rows, *appended])
-            us.generated_ms = int(time.time() * 1000)
-            state.save_signal_cache(uid, [row.model_dump() for row in us.rows], us.generated_ms)
-    finally:
-        us.scanning = False
-        us.scanning_label = ""
+    if appended:
+        us.rows = _compile_rows([*us.rows, *appended])
+        us.generated_ms = int(time.time() * 1000)
+        state.save_signal_cache(uid, [row.model_dump() for row in us.rows], us.generated_ms)
 
 
 def install() -> None:
@@ -231,6 +263,14 @@ def install() -> None:
 
     @wraps(original_scan)
     async def scan_with_held_contracts(self, *args, **kwargs):
+        # One scan, two phases — and it must LOOK like one.
+        #
+        # `original_scan` clears `us.scanning` in its own `finally`, and the held
+        # pass below sets it straight back. So a poll landing between them saw
+        # `scanning: false` with the previous phase's label still on screen, and
+        # the footer flickered between "scanning <symbol>" and idle several times
+        # per scan. Holding the flag across both phases makes the state the
+        # operator sees match the work actually happening.
         await original_scan(self, *args, **kwargs)
         # ``None`` means the configured source is spot/confluence, where premium-only
         # derivative rows would violate the selected mode. An empty list still means

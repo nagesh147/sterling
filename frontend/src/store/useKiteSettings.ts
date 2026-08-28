@@ -94,6 +94,33 @@ export interface KiteSettingsState {
    */
   boardRenderer: 'shared' | 'classic';
   setBoardRenderer: (r: 'shared' | 'classic') => void;
+  /**
+   * List or cards, for the signal table.
+   *
+   * It lived as local state inside SuperTrend's pane, written straight to
+   * localStorage under `kite_st_view_layout`. That was fine while the settings
+   * drawer lived in the same component — but the drawer is common to every
+   * engine and now opens from the pane's own title bar, so the setting has to be
+   * somewhere both can read. Two copies of a persisted preference is one copy
+   * too many.
+   */
+  signalViewLayout: 'grid' | 'list';
+  setSignalViewLayout: (l: 'grid' | 'list') => void;
+  /**
+   * Which strategies the re-scan button includes.
+   *
+   * Distinct from whether a strategy is RUNNING, which is a server-side setting
+   * that decides whether it produces signals at all. This is local and only about
+   * one press: they share a single historical-data budget and run one at a time,
+   * so a scan of five engines costs five times a scan of one. An operator working
+   * a single strategy should be able to stop paying for the other four without
+   * switching them off for everyone.
+   *
+   * A switched-off engine is skipped regardless of what is ticked here — the
+   * server-side flag wins, and the two are ANDed, never ORed.
+   */
+  rescanStrategies: Record<string, boolean>;
+  toggleRescanStrategy: (engine: string) => void;
   toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
@@ -116,6 +143,10 @@ export const useKiteSettings = create<KiteSettingsState>()(
       boardRowScroll: true,
       boardRowActions: true,
       boardRenderer: 'classic',
+      signalViewLayout: 'list',
+      // Everything included by default: an operator who has never opened this
+      // should get the behaviour the button has always had.
+      rescanStrategies: {},
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -138,6 +169,16 @@ export const useKiteSettings = create<KiteSettingsState>()(
       toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
       toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
       setBoardRenderer: (r) => set({ boardRenderer: r }),
+      setSignalViewLayout: (l) => set({ signalViewLayout: l }),
+      // Absent means included, so the map only ever holds exclusions. That keeps
+      // a new engine included the day it appears, rather than silently missing
+      // from everyone's saved map.
+      toggleRescanStrategy: (engine) => set((state) => ({
+        rescanStrategies: {
+          ...state.rescanStrategies,
+          [engine]: state.rescanStrategies[engine] === false,
+        },
+      })),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -161,6 +202,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
         boardRowScroll: true,
         boardRowActions: true,
         boardRenderer: 'classic',
+        signalViewLayout: 'list',
+        rescanStrategies: {},
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
@@ -174,7 +217,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-      version: 6,
+      version: 7,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -215,6 +258,19 @@ export const useKiteSettings = create<KiteSettingsState>()(
         // update the tests and call the difference gone.
         if (next.boardRenderer !== 'shared' && next.boardRenderer !== 'classic') {
           next = { ...next, boardRenderer: 'classic' };
+        }
+
+        // v7 adopts the layout choice from the standalone key the pane used to
+        // write. Read it rather than resetting to the default: someone who chose
+        // cards should not silently be put back on the list because the setting
+        // moved house.
+        if (next.signalViewLayout !== 'grid' && next.signalViewLayout !== 'list') {
+          let adopted: 'grid' | 'list' = 'list';
+          try {
+            const legacy = localStorage.getItem('kite_st_view_layout');
+            if (legacy === 'grid' || legacy === 'list') adopted = legacy;
+          } catch { /* storage unavailable — the default stands */ }
+          next = { ...next, signalViewLayout: adopted };
         }
         return next;
       },

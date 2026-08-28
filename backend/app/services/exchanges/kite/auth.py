@@ -59,6 +59,21 @@ class SessionHealth:
     kite_user_id: str = ""
     user_name: str = ""
     expires_at_ms: Optional[int] = None
+    transient: bool = False
+    """The check failed, not the session.
+
+    `connected=False` has meant two completely different things: "Kite rejected
+    this token, log in again" and "we could not reach Kite to ask". The stored
+    token is deliberately kept in the second case — the comment on that branch
+    has said so for a long time — but the answer sent to the UI was identical, so
+    a dropped request surfaced as "Kite session expired" over a session that was
+    entirely fine. That is the modal appearing with a valid token, and the reason
+    a request_token then got pasted for no reason.
+
+    Only the network branch sets this. A token Kite has actually refused is not
+    transient, and treating it as one would leave the operator waiting for a
+    recovery that is never coming.
+    """
 
 
 # ─── Silent renewal ───────────────────────────────────────────────────────────
@@ -163,7 +178,11 @@ async def ensure_session(user_id: str, acct, *, force_validate: bool = False) ->
         )
     except Exception as exc:  # noqa: BLE001 — network/venue trouble, not auth
         # Do NOT clear the token: an unreachable Kite is not an invalid session.
-        return SessionHealth(False, str(exc), expires_at_ms=expires_at)
+        # And say which this was, so the UI stops calling it an expiry.
+        return SessionHealth(
+            False, f"Could not reach Kite to check the session: {exc}",
+            expires_at_ms=expires_at, transient=True,
+        )
 
     kite_accounts.mark_validated(acct.id)
     # Backfill identity for accounts that logged in before it was persisted, so

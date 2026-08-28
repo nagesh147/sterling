@@ -18,6 +18,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+
+from app.core.csp import csp_nonce
 from fastapi.responses import HTMLResponse
 
 from app.core.auth import UserContext, get_current_user
@@ -347,6 +349,12 @@ def _callback_page(
     Values reach here from Kite (an account name) and from exception text, so every
     one is escaped — this is HTML assembled from data we do not control.
     """
+    # The page's own inline style and script are allowed by nonce, not by
+    # `unsafe-inline` — see the CSP note in main.py. Without the attribute the
+    # browser blocks both and the page renders as user-agent defaults with a
+    # handoff that never fires.
+    _n = csp_nonce()
+    _nonce_attr = f' nonce="{html.escape(_n)}"' if _n else ""
     tone = "green" if ok else "red"
     badge = html.escape(_initials(who)) if (ok and who) else ("\u2713" if ok else "!")
     row_html = "".join(
@@ -388,7 +396,7 @@ def _callback_page(
 
     html_doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <title>Sterling \u00b7 Kite</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>
+<style{_nonce_attr}>
 :root {{ {_token_block(1)} }}
 @media (prefers-color-scheme:dark) {{ :root:not([data-theme="light"]) {{ {_token_block(2)} }} }}
 :root[data-theme="dark"] {{ {_token_block(2)} }}
@@ -446,7 +454,7 @@ dd.fix{{font-weight:400;font-size:12.5px;color:var(--k-ink-6);line-height:1.6}}
   <div class="foot">{foot}</div>
   {drain}
 </main>
-<script>{script}</script></body></html>"""
+<script{_nonce_attr}>{script}</script></body></html>"""
     return HTMLResponse(content=html_doc, status_code=200 if ok else 400)
 
 
@@ -586,6 +594,7 @@ async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
                       if expires_at and health.connected else None),
         validated=health.validated,
         auto_renewed=health.auto_renewed,
+        transient=health.transient,
     )
 
 

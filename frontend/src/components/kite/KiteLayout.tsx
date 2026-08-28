@@ -5,6 +5,8 @@ import { k, Icons } from '../../styles/kiteUI';
 import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
+import { KiteFooterStatus } from './KiteFooterStatus';
+import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { MacStageLayout } from './mac/MacStageLayout';
 import {
@@ -669,6 +671,11 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
       <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
+          {/* Broker state and every strategy, next to the watchlist end of the
+              footer. Clicking KITE opens the session panel either way — the
+              connected case is worth being able to check on purpose, not only
+              when something has broken. */}
+          <KiteFooterStatus onOpenSession={() => openSettingsSection('account')} />
           {onBasketClick && (
             <button type="button" className="kw-pane-control" onClick={onBasketClick} title="Basket" aria-label="Open basket" style={{ position: 'relative' }}>
               <Icons.Basket />

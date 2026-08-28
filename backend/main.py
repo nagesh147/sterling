@@ -38,6 +38,8 @@ from app.api.v1.endpoints.derivatives import router as derivatives_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
 from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backtest_router
+import secrets
+from app.core.csp import reset_csp_nonce, set_csp_nonce
 from app.api.v1.endpoints.sterling_v2 import router as sterling_v2_router
 from app.api.v1.endpoints.paper import router as paper_router
 from app.services import alert_store as _alert_store_svc
@@ -1811,18 +1813,45 @@ def create_app() -> FastAPI:
         # the request's logging context, and echo it back. (Phase 2 observability)
         cid = request.headers.get("X-Correlation-ID") or new_correlation_id()
         _cid_token = set_correlation_id(cid)
+        # Minted BEFORE the handler runs so the handler can stamp it on the tags
+        # it emits. A nonce the page never sees is a nonce that blocks the page.
+        nonce = secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
+        _nonce_token = set_csp_nonce(nonce)
         try:
             response = await call_next(request)
         finally:
             reset_correlation_id(_cid_token)
+            reset_csp_nonce(_nonce_token)
         response.headers["X-Correlation-ID"] = cid
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # CSP: API-only server — no scripts/styles served
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'none'; frame-ancestors 'none'"
-        )
+        # CSP.
+        #
+        # `default-src 'none'` is right for the API and wrong for the one route
+        # that serves a page: the Kite callback. That page is a self-contained
+        # HTML document with an inline stylesheet and an inline script, and this
+        # header silently blocked both — so it rendered as unstyled user-agent
+        # defaults, AND its handoff script never ran. That script is what tells
+        # the open Sterling tab the session arrived; without it the app looked
+        # like the login had failed, which is what sent people to copy the
+        # request_token out of the URL and paste it — a token already spent by
+        # the callback, so it could only ever be rejected. One header, the whole
+        # symptom.
+        #
+        # An HTML response therefore gets a nonce rather than `unsafe-inline`:
+        # the page's own style and script run, and injected ones still cannot.
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Content-Security-Policy"] = (
+                f"default-src 'none'; style-src 'nonce-{nonce}'; "
+                f"script-src 'nonce-{nonce}'; img-src data:; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
         return response
 
     app.include_router(health_router)

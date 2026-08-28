@@ -15,12 +15,12 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayDate, sessionDayKey, stamp, trailBreached,
+  parentStamp, sessionDayDate, sessionDayKey, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
-  HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
+  EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
   SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
 } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
@@ -35,7 +35,11 @@ export type ColumnId =
   | 'qty' | 'risk' | 'score' | 'time'
   // Today's move. SuperTrend has shown these three since long before this board
   // existed; they were the columns a swap onto it would silently have deleted.
-  | 'chg' | 'chgPct' | 'dir';
+  | 'chg' | 'chgPct' | 'dir'
+  // Actions, as columns the picker can switch off — see the note in signalRowSpec.
+  | 'trade' | 'chart'
+  // Progress toward the closing RULE, which is not the price it got out at.
+  | 'exitState';
 
 interface ColumnDef {
   id: ColumnId;
@@ -89,6 +93,10 @@ const COLUMNS: readonly ColumnDef[] = [
   { id: 'trail', label: SIGNAL_LEFT_COLUMNS.tsl.label, width: SIGNAL_LEFT_COLUMNS.tsl.width, align: 'right', hint: 'Where the trailing stop has ratcheted to' },
   { id: 'target', label: SIGNAL_LEFT_COLUMNS.target.label, width: 58, align: 'right', hint: 'Where the plan gets out, for an engine that quotes one' },
   { id: 'exit', label: 'Exited', width: 58, align: 'right', hint: 'Where it actually got out, once it has' },
+  // A counter, not a price. Kept apart from `exit` because they answer different
+  // questions and sharing one column made SuperTrend's counter vanish behind a
+  // realised price it does not have.
+  { id: 'exitState', label: SIGNAL_LEFT_COLUMNS.exit.label, width: SIGNAL_LEFT_COLUMNS.exit.width, align: 'right', hint: 'Progress toward the rule that closes the position' },
   { id: 'qty', label: 'Qty', width: 52, align: 'right', hint: 'Units, not lots' },
   { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
   { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
@@ -97,6 +105,8 @@ const COLUMNS: readonly ColumnDef[] = [
   { id: 'chgPct', label: SIGNAL_RIGHT_COLUMNS.chgPct.label, width: SIGNAL_RIGHT_COLUMNS.chgPct.width, align: 'right', hint: 'Percent the instrument has moved today' },
   { id: 'dir', label: SIGNAL_RIGHT_COLUMNS.dir.label || 'Direction', width: SIGNAL_RIGHT_COLUMNS.dir.width, align: 'right', hint: 'Which way today’s move is going' },
   { id: 'time', label: SIGNAL_RIGHT_COLUMNS.time.label, width: SIGNAL_RIGHT_COLUMNS.time.width, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+  { id: 'trade', label: SIGNAL_RIGHT_COLUMNS.trade.label, width: SIGNAL_RIGHT_COLUMNS.trade.width, align: 'right', hint: 'Buy and Sell this contract. Switch the column off to put the order buttons away' },
+  { id: 'chart', label: SIGNAL_RIGHT_COLUMNS.chart.label, width: SIGNAL_RIGHT_COLUMNS.chart.width, align: 'right', hint: "Open this instrument's chart" },
 ];
 
 export interface SortState {
@@ -127,6 +137,8 @@ function sortKey(signal: BoardSignal, column: ColumnId): string | number | null 
     case 'trail': return signal.levels.trail;
     case 'target': return signal.levels.target;
     case 'exit': return signal.levels.exit;
+    // Sorted as text: "0/3 red" has no numeric order worth inventing.
+    case 'exitState': return signal.exitProgress ?? null;
     case 'qty': return signal.sizing.quantity;
     case 'risk': return signal.sizing.atRiskInr;
     case 'score': return signal.score;
@@ -289,7 +301,7 @@ function Marks({ marks }: { marks?: readonly BoardOrigin[] }) {
         <Tip key={`${m.label}-${m.tone}`} text={m.hint ? `${m.label} — ${m.hint}` : m.label}>
           <span style={{
             flexShrink: 0, padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700,
-            letterSpacing: '.04em', whiteSpace: 'nowrap', cursor: 'help',
+            letterSpacing: '.04em', whiteSpace: 'nowrap',
             color: ORIGIN_TONE[m.tone], background: tint(ORIGIN_TONE[m.tone], 10),
             border: `1px solid ${tint(ORIGIN_TONE[m.tone], 30)}`,
           }}>
@@ -341,19 +353,19 @@ function cellContent(
               </span>
               {marks?.has('bestRR') && (
                 <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
-                  <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help', flexShrink: 0 }}>✝</span>
+                  <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                 </Tip>
               )}
               {marks?.has('bestDelta') && (
                 <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
-                  <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help', flexShrink: 0 }}>▲</span>
+                  <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, flexShrink: 0 }}>▲</span>
                 </Tip>
               )}
               {trailBreached(signal) && (
                 <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
                   <span tabIndex={0} style={{
                     fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
-                    borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', flexShrink: 0,
+                    borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', flexShrink: 0,
                   }}>
                     TSL HIT
                   </span>
@@ -401,7 +413,7 @@ function cellContent(
             {signal.origin && (
               <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
                 <span tabIndex={0} style={{
-                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em',
                   color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
                   borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
                 }}>
@@ -414,7 +426,7 @@ function cellContent(
             {signal.flags?.map((flag) => (
               <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
                 <span tabIndex={0} style={{
-                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em',
                   color: ORIGIN_TONE[flag.tone], background: tint(ORIGIN_TONE[flag.tone], 10),
                   border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
                   borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
@@ -425,19 +437,19 @@ function cellContent(
             ))}
             {marks?.has('bestRR') && (
               <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
-                <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help' }}>✝</span>
+                <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
               </Tip>
             )}
             {marks?.has('bestDelta') && (
               <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
-                <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help' }}>▲</span>
+                <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75 }}>▲</span>
               </Tip>
             )}
             {trailBreached(signal) && (
               <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
                 <span tabIndex={0} style={{
                   fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
-                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', outlineOffset: 2,
+                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
                 }}>
                   TSL HIT
                 </span>
@@ -523,6 +535,10 @@ function cellContent(
         color: stale ? k.red : k.dim,
       };
     }
+    case 'exitState':
+      // Plain ink: this is a state, and colouring it would compete with the
+      // status pill that already carries how the row is doing.
+      return { node: signal.exitProgress || '—', color: k.dim };
     case 'chg':
     case 'chgPct': {
       const move = signal.dayMove;
@@ -534,6 +550,12 @@ function cellContent(
       // the day has gone -- a rounded percent can read 0.00% on a real move.
       return { node: text, color: dayTone(move, showDayColour) };
     }
+    case 'trade':
+    case 'chart':
+      // Rendered by the caller: what an action DOES is engine business, and this
+      // function knows nothing about orders. Handled in `Row`, which has the
+      // render props; reaching here at all means neither was supplied.
+      return { node: null };
     case 'dir': {
       const abs = signal.dayMove?.abs;
       if (abs == null) return { node: '—' };
@@ -590,6 +612,12 @@ export const BOARD_COLUMNS: readonly ColumnId[] = [
   'instrument', 'engine', 'status', 'exchange', 'leg',
   'ltp', 'entry', 'stop', 'trail', 'target', 'exit',
   'qty', 'risk', 'score', 'time',
+  // Buy/Sell and the chart, on every board rather than only the one whose
+  // bespoke table happened to have them. `useBoardRowActions` builds both from a
+  // `BoardSignal` alone, so no engine needs its own order plumbing — and the
+  // picker can switch either off, because a board is read far more often than it
+  // is traded from.
+  'trade', 'chart',
 ];
 
 /**
@@ -643,12 +671,14 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
  * does have goes on two sides: what it is on the left, what you should know
  * about it on the right.
  */
-function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
+function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail, nowMs }: {
   signal: BoardSignal;
   legCount: number;
   expanded: boolean;
   onToggle: () => void;
   onOpenDetail?: (signal: BoardSignal) => void;
+  /** Passed in, not read from the clock, so the relative age is deterministic. */
+  nowMs: number;
 }) {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   const statusTone = STATUS_TONE[signal.status];
@@ -669,55 +699,116 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
         background: k.bg, cursor: 'pointer', outlineOffset: -2,
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {/* The parent's own columns.
+          Laid out inline, every field sat at a different x on every row: one
+          row's price began under the next row's name, and the badges landed
+          wherever the count happened to end. Fixed tracks make each a column.
+          (An earlier pass at reordering these also left the badges nested INSIDE
+          the count's span, which is why they rendered jammed against it.) */}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
         <span style={{ color: k.dim, display: 'inline-flex', flexShrink: 0 }}><Chevron open={expanded} /></span>
-        {signal.origin && (
-          <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
-            <span tabIndex={0} style={{
-              fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
-              color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
-              borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
-            }}>
-              {signal.origin.label}
-            </span>
-          </Tip>
-        )}
-        {/* Whatever else this engine wants read without opening the row. */}
-        <Marks marks={signal.marks} />
-        {onOpenDetail ? (
-          <button
-            type="button"
-            className="sb-name"
-            aria-label={`Open ${signal.underlying} detail`}
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
-            style={{
-              border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+
+        {/* A FIXED track, not a growing one. `instrumentFlex()` grows, which
+            pushed the price, the count and the badges to the far right of the
+            row and left a lake of white space after the name. Fixed, they sit
+            beside the label they describe — and at the same x on every row. */}
+        <span style={{
+          flex: `0 0 ${ROW_METRICS.instrumentMinWidth}px`,
+          minWidth: 0, overflow: 'hidden',
+        }}>
+          {onOpenDetail ? (
+            <button
+              type="button"
+              className="sb-name"
+              aria-label={`Open ${signal.underlying} detail`}
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(signal); }}
+              style={{
+                border: 'none', background: 'transparent', padding: 0, font: 'inherit',
+                fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone,
+                cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden',
+                textOverflow: 'ellipsis', maxWidth: '100%',
+              }}
+            >
+              {signal.underlying}
+            </button>
+          ) : (
+            <span style={{
               fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone,
-              cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
-            }}
-          >
-            {signal.underlying}
-          </button>
-        ) : (
-          <span style={{ fontSize: ROW_METRICS.parentFontSize, fontWeight: 600, color: dirTone, whiteSpace: 'nowrap' }}>
-            {signal.underlying}
-          </span>
-        )}
-        {signal.underlyingPrice != null && (
-          <span style={{ fontSize: 11, color: dirTone, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-            {signal.underlyingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        )}
-        <span style={{ fontSize: 10, color: k.dim, flexShrink: 0 }}>
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block',
+            }}>
+              {signal.underlying}
+            </span>
+          )}
+        </span>
+
+        {/* Right-aligned and tabular so the decimal points line up down the
+            column, the same rule the leg cells follow. */}
+        <span style={{
+          width: PARENT_METRICS.priceWidth, flexShrink: 0, textAlign: 'right',
+          fontSize: 11, color: dirTone, fontVariantNumeric: 'tabular-nums',
+        }}>
+          {signal.underlyingPrice != null
+            ? signal.underlyingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : ''}
+        </span>
+
+        <span style={{
+          width: PARENT_METRICS.countWidth, flexShrink: 0,
+          fontSize: 10, color: k.dim, whiteSpace: 'nowrap',
+        }}>
           {legCount} contract{legCount === 1 ? '' : 's'}
         </span>
+
+        {/* A real track for the badges, so they start at the same x on every
+            row instead of trailing whatever came before them. */}
+        <span style={{
+          width: PARENT_METRICS.badgeWidth, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden',
+        }}>
+          {signal.origin && (
+            <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
+              <span tabIndex={0} style={{
+                fontSize: 8, fontWeight: 700, letterSpacing: '.04em', flexShrink: 0,
+                color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
+                borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+              }}>
+                {signal.origin.label}
+              </span>
+            </Tip>
+          )}
+          <Marks marks={signal.marks} />
+        </span>
+
+        {/* When it fired, and how long ago.
+            The absolute stamp is what you quote when reconciling against the
+            broker's log; the relative one is what you read while trading, since
+            "17 min ago" answers "is this still worth acting on" and a wall-clock
+            time does not at a glance. */}
+        {(() => {
+          const at = parentStamp(signal.atMs, nowMs);
+          if (!at) return null;
+          return (
+            <span style={{
+              display: 'inline-flex', alignItems: 'baseline', gap: 6, flexShrink: 0,
+              fontSize: 10, color: k.dim, whiteSpace: 'nowrap',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              <span>{at.absolute}</span>
+              {at.relative && <span style={{ opacity: 0.8 }}>{at.relative}</span>}
+            </span>
+          );
+        })()}
+
+        {/* Absorbs the remaining width, so everything above keeps its own track
+            instead of being stretched across the row. */}
+        <span style={{ flex: 1, minWidth: 0 }} />
       </span>
 
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         {signal.flags?.map((flag) => (
           <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
             <span tabIndex={0} style={{
-              fontSize: 9, fontWeight: 700, cursor: 'help', color: ORIGIN_TONE[flag.tone],
+              fontSize: 9, fontWeight: 700, color: ORIGIN_TONE[flag.tone],
               background: tint(ORIGIN_TONE[flag.tone], 10), border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
               borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap', outlineOffset: 2,
             }}>
@@ -741,6 +832,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
 function Row({
   signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
   depth = 0, legCount, marks, nowMs, rowScroll = false, renderRowActions,
+  renderTrade, renderChart,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -762,6 +854,10 @@ function Row({
   rowScroll?: boolean;
   /** Controls belonging to this row, rendered before the right-hand cells. */
   renderRowActions?: (signal: BoardSignal) => React.ReactNode;
+  /** Buy/Sell for this row, as the `trade` column. */
+  renderTrade?: (signal: BoardSignal) => React.ReactNode;
+  /** The chart button, as the `chart` column. */
+  renderChart?: (signal: BoardSignal) => React.ReactNode;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
@@ -815,7 +911,12 @@ function Row({
           overflowY: 'hidden',
         }}
       >
-        <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+        {/* Fixed gutter. The header reserves the same, so the first column starts
+            at the same x in both. */}
+        <span style={{
+          color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3,
+          flexShrink: 0, width: EDGE_METRICS.chevronWidth,
+        }}>
           <Chevron open={open} />
           {isParent && (
             <span
@@ -827,7 +928,16 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
+          // The two action columns come from render props rather than from
+          // `cellContent`: what Buy does is engine business, and that function
+          // deliberately knows nothing about orders. They still travel through
+          // the column grid, so hiding them works exactly like hiding any other.
+          const action = col.id === 'trade' ? renderTrade?.(signal)
+            : col.id === 'chart' ? renderChart?.(signal)
+            : undefined;
+          const { node, color } = action !== undefined && action !== null
+            ? { node: action, color: undefined }
+            : cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
           const isName = col.id === 'instrument';
           return (
             <span
@@ -858,7 +968,10 @@ function Row({
             column and cannot be hidden by the column picker. */}
         {renderRowActions && (
           <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end',
+              gap: 8, flexShrink: 0, width: EDGE_METRICS.actionsWidth,
+            }}
             // The row is a button; a control inside it must not also toggle it.
             onClick={(e) => e.stopPropagation()}
           >
@@ -896,9 +1009,20 @@ export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
+  renderTrade, renderChart,
 }: {
   signals: readonly BoardSignal[];
-  requested?: readonly ColumnId[];
+  /**
+   * Which columns this board asks for, in `COLUMNS` order.
+   *
+   * There used to be a `requested?` here as well — the name this function
+   * destructures `columns` INTO. It was declared, never read, and four of the
+   * five boards passed it. They got away with it because they each passed
+   * exactly the default the fallback supplies, so the board looked correct while
+   * the prop did nothing; a per-engine list passed that way would have vanished
+   * silently, and six grouping tests were asking for two columns and rendering
+   * sixteen. Deleted so the compiler answers the question instead.
+   */
   columns?: readonly ColumnId[];
   openId: string | null;
   onToggle: (id: string) => void;
@@ -959,6 +1083,16 @@ export function SignalBoard({
    * and this component has no business knowing what an order is.
    */
   renderRowActions?: (signal: BoardSignal) => React.ReactNode;
+  /**
+   * Buy/Sell and the chart, as the `trade` and `chart` COLUMNS.
+   *
+   * Columns rather than a pinned strip, so the picker can switch them off — a
+   * board is read far more often than it is traded from. `useBoardRowActions`
+   * builds both from a `BoardSignal` alone, so every engine can pass them
+   * without growing its own order plumbing.
+   */
+  renderTrade?: (signal: BoardSignal) => React.ReactNode;
+  renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -1015,7 +1149,9 @@ export function SignalBoard({
           background: k.bg,
         }}
       >
-        <span />
+        {/* The chevron gutter, reserved so the first heading starts where the
+            first cell does. This was a zero-width `<span />`. */}
+        <span style={{ flexShrink: 0, width: EDGE_METRICS.chevronWidth }} />
         {cols.map((col) => {
           const active = sort.column === col.id;
           const direction = active ? sort.direction : null;
@@ -1080,6 +1216,11 @@ export function SignalBoard({
             </DraggableColHeader>
           );
         })}
+        {/* The actions track. Reserved only when the rows actually carry actions,
+            so a board without them does not grow a phantom column. */}
+        {renderRowActions && (
+          <span style={{ flexShrink: 0, width: EDGE_METRICS.actionsWidth }} />
+        )}
       </div>
 
       {days.map(({ key, signals: rows }) => (
@@ -1117,6 +1258,8 @@ export function SignalBoard({
                     striped={i % 2 === 1}
                     rowScroll={rowScroll}
                     renderRowActions={renderRowActions}
+                    renderTrade={renderTrade}
+                    renderChart={renderChart}
                   />
                   {/* The engine knows why it found nothing, so it says so in the
                       row rather than behind a click. A parent with nothing under
@@ -1155,6 +1298,7 @@ export function SignalBoard({
                   expanded={expanded}
                   onToggle={() => onToggleGroup?.(signal.id)}
                   onOpenDetail={onOpenDetail}
+                  nowMs={nowMs}
                 />
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
@@ -1171,6 +1315,8 @@ export function SignalBoard({
                     depth={1}
                     rowScroll={rowScroll}
                     renderRowActions={renderRowActions}
+                    renderTrade={renderTrade}
+                    renderChart={renderChart}
                   />
                 ))}
               </React.Fragment>

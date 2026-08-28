@@ -14,7 +14,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BOARD_COLUMNS_WITH_DAY_MOVE, COLUMNS, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
-import { LEG_INDENT, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
+import { EDGE_METRICS, LEG_INDENT, PARENT_METRICS, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
 
 /*
  * These tests write to the PERSISTED settings store, which means localStorage.
@@ -134,14 +134,22 @@ describe('row controls', () => {
     expect(onToggle, 'the row must not expand').not.toHaveBeenCalled();
   });
 
-  it('cannot be switched off by the column picker', () => {
-    // They are rendered outside the cell map on purpose: an engine's actions are
-    // not a column and must not disappear with one.
+  it('is not affected by hiding other columns', () => {
+    // `renderRowActions` remains a pinned strip outside the cell map. What
+    // CHANGED is that Buy/Sell and the chart are no longer delivered this way:
+    // they are the `trade` and `chart` columns now, and the picker can switch
+    // them off.
+    //
+    // I had argued the opposite here — that an engine's actions are not a column
+    // and must not disappear with one. The operator asked for the choice, and it
+    // is theirs to make: a board is read far more often than it is traded from,
+    // and someone reading one all day should be able to put the order buttons
+    // away. See `useBoardRowActions`.
     const { container } = board({
       hidden: new Set(['ltp', 'entry', 'stop', 'trail', 'target', 'time'] as never),
-      renderRowActions: () => <button type="button">Buy</button>,
+      renderRowActions: () => <button type="button">Pinned</button>,
     });
-    expect(container.querySelector('.sb-row')?.textContent).toContain('Buy');
+    expect(container.querySelector('.sb-row')?.textContent).toContain('Pinned');
   });
 });
 
@@ -383,5 +391,249 @@ describe('a dragged heading keeps its own size', () => {
     // catches the next one rather than waiting for it to smear on screen.
     const placeholders = COLUMNS.filter((c) => c.width === 0).map((c) => c.id);
     expect(placeholders).toEqual(['instrument']);
+  });
+});
+
+/**
+ * A parent row's price, and where its tags sit.
+ *
+ * Both were visible on screen at once: some parents showed a price and some did
+ * not, none of them updated, and the instrument names came out ragged.
+ */
+describe('a parent row prices from the live quote', () => {
+  const parent = (over: Partial<BoardSignal> = {}) => sig({
+    children: [sig({ id: 'leg' })],
+    ...over,
+  });
+
+  it('shows the underlying price when the adapter supplies one', () => {
+    board({ signals: [parent({ underlyingPrice: 1079.6 })] });
+    expect(screen.getByText('1,079.60')).toBeInTheDocument();
+  });
+
+  it('shows nothing rather than a zero when there is no price', () => {
+    // A PREMIUM-source signal is read from the option's own premium chart and
+    // carries no underlying spot at all — `row.spot` is 0. Printing that as
+    // "0.00" beside a live instrument is worse than printing nothing, which is
+    // why the field is nullable and the row omits it.
+    const { container } = board({ signals: [parent({ underlyingPrice: null })] });
+    expect(container.textContent).not.toContain('0.00');
+  });
+});
+
+describe('tags come after the instrument label', () => {
+  it('on a parent row', () => {
+    // Leading with the badges put every name at a different x depending on how
+    // many tags that row happened to carry — PREMIUM, or PREMIUM + TSL exit, or
+    // none — so a column of names came out ragged.
+    board({
+      signals: [sig({
+        children: [sig({ id: 'leg' })],
+        underlying: 'RELIANCE',
+        origin: { label: 'PREMIUM', tone: 'blue', hint: 'from the premium chart' },
+        marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+      })],
+    });
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('RELIANCE'), 'name before its origin badge')
+      .toBeLessThan(body.indexOf('PREMIUM'));
+    expect(body.indexOf('RELIANCE'), 'name before its marks')
+      .toBeLessThan(body.indexOf('TSL exit'));
+  });
+
+  it('and on a leg row, which already did', () => {
+    // The legs were always this way round; the parent is what disagreed.
+    board({
+      signals: [sig({
+        marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+      })],
+    });
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('NIFTY26AUG24000CE')).toBeLessThan(body.indexOf('TSL exit'));
+  });
+});
+
+/**
+ * The parent row's columns.
+ *
+ * Laid out inline, every field sat at a different x on every row: one row's price
+ * began under the next row's name, and the badges landed wherever the contract
+ * count happened to end. Fixed tracks make each one a column.
+ *
+ * There is also a specific regression pinned here. An earlier pass at reordering
+ * these pieces left the badge markup nested INSIDE the count's `<span>` instead
+ * of beside it, which rendered as "6 contractsPREMIUM" with no gap and no track.
+ * A test on the DOM shape catches that; a test on the text does not.
+ */
+describe('parent row columns', () => {
+  const parent = (over: Partial<BoardSignal> = {}) => sig({
+    children: [sig({ id: 'leg' })],
+    underlying: 'AXISBANK',
+    underlyingPrice: 1261.3,
+    origin: { label: 'PREMIUM', tone: 'blue', hint: 'from the premium chart' },
+    marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+    ...over,
+  });
+
+  const parentRow = (container: HTMLElement) =>
+    container.querySelector('.sb-parent') as HTMLElement;
+
+  it('gives the price, the count and the badges fixed tracks', () => {
+    const { container } = board({ signals: [parent()] });
+    const widths = [...parentRow(container).querySelectorAll('span')]
+      .map((s) => (s as HTMLElement).style.width)
+      .filter(Boolean);
+    expect(widths).toContain(`${PARENT_METRICS.priceWidth}px`);
+    expect(widths).toContain(`${PARENT_METRICS.countWidth}px`);
+    expect(widths).toContain(`${PARENT_METRICS.badgeWidth}px`);
+  });
+
+  it('keeps the badges BESIDE the count, never inside it', () => {
+    // The regression: nested, they rendered jammed against the count with no
+    // track of their own.
+    const { container } = board({ signals: [parent()] });
+    const count = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => /\d+ contracts?$/.test(s.textContent ?? ''));
+    expect(count, 'the count cell exists').toBeTruthy();
+    expect(count!.textContent, 'and holds only the count').toMatch(/^\d+ contracts?$/);
+    expect(count!.querySelector('span'), 'no badge nested inside it').toBeNull();
+  });
+
+  it('right-aligns the price with tabular figures', () => {
+    // So the decimal points line up down the column, as the leg cells do.
+    const { container } = board({ signals: [parent()] });
+    const price = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => (s as HTMLElement).style.width === `${PARENT_METRICS.priceWidth}px`) as HTMLElement;
+    expect(price.style.textAlign).toBe('right');
+    expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
+  it('holds the price track open even with no price', () => {
+    // Otherwise a row without one pulls its count and badges left, which is the
+    // ragged look this exists to remove.
+    const { container } = board({ signals: [parent({ underlyingPrice: null })] });
+    const price = [...parentRow(container).querySelectorAll('span')]
+      .find((s) => (s as HTMLElement).style.width === `${PARENT_METRICS.priceWidth}px`);
+    expect(price, 'the track is still there').toBeTruthy();
+    expect(price!.textContent).toBe('');
+  });
+});
+
+/**
+ * The header and the rows agree about where the columns are.
+ *
+ * They did not. A row spent width at BOTH ends that the header never reserved: a
+ * chevron gutter at the start, where the header rendered a zero-width
+ * `<span />`, and the engine's action buttons at the end, pinned with
+ * `margin-left: auto`. The instrument is the only flexible column, so it
+ * absorbed the entire shortfall and shrank — which pulled every cell left of the
+ * heading naming it. On screen, `SL` sat above the TSL value and everything after
+ * it was one column out.
+ */
+describe('column tracks line up end to end', () => {
+  it('reserves the chevron gutter in the header too', () => {
+    const { container } = board({ signals: [sig()] });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const first = head.firstElementChild as HTMLElement;
+    expect(first.style.width, 'not a zero-width spacer')
+      .toBe(`${EDGE_METRICS.chevronWidth}px`);
+  });
+
+  it('reserves the actions track in the header when the rows have actions', () => {
+    const { container } = board({
+      signals: [sig()],
+      renderRowActions: () => <button type="button">Buy</button>,
+    });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const last = head.lastElementChild as HTMLElement;
+    expect(last.style.width).toBe(`${EDGE_METRICS.actionsWidth}px`);
+  });
+
+  it('does not grow a phantom track when the rows have none', () => {
+    const { container } = board({ signals: [sig()] });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const last = head.lastElementChild as HTMLElement;
+    expect(last.style.width).not.toBe(`${EDGE_METRICS.actionsWidth}px`);
+  });
+
+  it('gives the actions a fixed width rather than an auto margin', () => {
+    // `margin-left: auto` ate whatever slack was going, which is precisely the
+    // width the instrument column needed to match its heading.
+    const { container } = board({
+      signals: [sig()],
+      renderRowActions: () => <button type="button">Buy</button>,
+    });
+    const actions = [...container.querySelectorAll('.sb-row span')]
+      .find((s) => (s as HTMLElement).style.width === `${EDGE_METRICS.actionsWidth}px`) as HTMLElement;
+    expect(actions, 'the actions track exists').toBeTruthy();
+    expect(actions.style.marginLeft).not.toBe('auto');
+  });
+});
+
+describe('a collapsed parent states its time', () => {
+  const parent = () => sig({ children: [sig({ id: 'leg' })], atMs: NOW });
+
+  it('shows the moment and how long ago', () => {
+    board({ signals: [parent()] });
+    // The absolute stamp is quotable against the broker's log; the relative one
+    // is what you read while trading.
+    expect(screen.getByText(/\d{2} \w{3} \d{4} \d{2}:\d{2} (AM|PM)/)).toBeInTheDocument();
+    expect(screen.getByText(/just now|min ago|h ago|d ago/)).toBeInTheDocument();
+  });
+
+  it('keeps the name on a fixed track so the group sits beside it', () => {
+    // A growing name cell shoved the price, count and badges to the far right and
+    // left a lake of white space after the label.
+    const { container } = board({ signals: [parent()] });
+    const name = [...container.querySelectorAll('.sb-parent span')]
+      .find((s) => (s as HTMLElement).style.flex?.startsWith('0 0 ')) as HTMLElement;
+    expect(name, 'the name track is fixed').toBeTruthy();
+    expect(name.style.flex).toBe(`0 0 ${ROW_METRICS.instrumentMinWidth}px`);
+  });
+});
+
+/**
+ * Buy/Sell and the chart, as columns on every board.
+ *
+ * They existed on SuperTrend and nowhere else, purely because SuperTrend's
+ * bespoke table is where they were written. `useBoardRowActions` builds both from
+ * a `BoardSignal` alone — which already carries the traded symbol, its exchange,
+ * the lot size and the last price — so every engine gets them without growing its
+ * own order plumbing.
+ */
+describe('trade and chart columns', () => {
+  // Labels chosen NOT to collide with the column headings, which are themselves
+  // buttons — "Chart" matched both the heading and the cell.
+  const trade = () => <button type="button">BuyHere</button>;
+  const chart = () => <button type="button">OpenChart</button>;
+
+  it('render in the row when supplied', () => {
+    board({ signals: [sig()], renderTrade: trade, renderChart: chart });
+    expect(screen.getByRole('button', { name: 'BuyHere' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'OpenChart' })).toBeInTheDocument();
+  });
+
+  it('can be switched off by the column picker, independently', () => {
+    // The whole reason they became columns.
+    board({
+      signals: [sig()],
+      hidden: new Set(['trade'] as never),
+      renderTrade: trade,
+      renderChart: chart,
+    });
+    expect(screen.queryByRole('button', { name: 'BuyHere' }), 'trade hidden').toBeNull();
+    expect(screen.getByRole('button', { name: 'OpenChart' }), 'chart still shown').toBeInTheDocument();
+  });
+
+  it('are offered to every board through the shared column list', () => {
+    expect(BOARD_COLUMNS_WITH_DAY_MOVE).toContain('trade');
+    expect(BOARD_COLUMNS_WITH_DAY_MOVE).toContain('chart');
+  });
+
+  it('leave the cell empty rather than crash when an engine supplies neither', () => {
+    // The columns are in the shared list, so a board that passes no render props
+    // still asks for them. They must render as nothing, not as an error.
+    const { container } = board({ signals: [sig()] });
+    expect(container.querySelector('.sb-row')).not.toBeNull();
   });
 });

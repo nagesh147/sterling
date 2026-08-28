@@ -55,6 +55,21 @@ export const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
   // worse than one that does not offer it. The shared board sorts its own
   // `time` column because there the rows are signals, which do differ.
   time: { key: 'time', label: 'Time', width: 78, align: 'right', visibleWhen: 'always', tooltip: 'When the signal fired' },
+  /**
+   * Buy and Sell, and the chart, as COLUMNS the picker can switch off.
+   *
+   * They were rendered outside the column grid so they could not be hidden — my
+   * reasoning was that losing a trade button by accident is worse than a busy
+   * row. The operator asked for the choice, and it is theirs: a board is read far
+   * more often than it is traded from, and someone reading one all day should be
+   * able to put the order buttons away.
+   *
+   * Wide enough for two 35px buttons and their gap, and for one icon
+   * respectively. They clip rather than push, so a row can never knock the
+   * columns beside it out of line.
+   */
+  trade: { key: 'trade', label: 'Trade', width: 92, align: 'right', visibleWhen: 'always', tooltip: 'Buy and Sell this contract' },
+  chart: { key: 'chart', label: 'Chart', width: 34, align: 'right', visibleWhen: 'always', tooltip: "Open this instrument's chart" },
 };
 
 /**
@@ -175,7 +190,10 @@ export const LEG_INDENT = 14;
  */
 export const SIGNAL_COL_TO_BOARD = {
   exc: 'exchange', leg: 'leg', entry: 'entry', sl: 'stop', tsl: 'trail',
-  exit: 'exit', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
+  // SuperTrend's `exit` is the red-counter PROGRESS, not a realised price, so it
+  // maps to `exitState`. Mapping it to `exit` put a counter under a heading that
+  // means "where it got out" and lost the counter entirely.
+  exit: 'exitState', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
   ltp: 'ltp', time: 'time',
 } as const satisfies Record<string, string>;
 
@@ -207,3 +225,42 @@ export function signalColGroup(key: string): 'left' | 'right' {
 export function instrumentFlex(isLeg = false): string {
   return `1 0 ${ROW_METRICS.instrumentMinWidth - (isLeg ? LEG_INDENT : 0)}px`;
 }
+
+/**
+ * The parent row's own columns.
+ *
+ * A parent used to lay its pieces out inline — name, then price, then the
+ * contract count, then the badges, each starting wherever the last one ended. So
+ * every field in the column was at a different x on every row: AXISBANK's price
+ * began under BAJFINANCE's name, and the badges landed anywhere at all. Fixed
+ * widths make each one a column that actually lines up.
+ *
+ * The badge track is wide enough for the two that appear together most often
+ * (an origin plus one mark, e.g. "PREMIUM" and "TSL exit") and clips beyond
+ * that: a row that grows a third badge must not shove the count and the price
+ * out of alignment on that row alone.
+ */
+/**
+ * The two tracks that bracket the columns.
+ *
+ * A row spent width at BOTH ends that the header never reserved: a chevron
+ * gutter at the start, where the header rendered a zero-width `<span />`, and the
+ * engine's action buttons at the end, pinned with `margin-left: auto`. The
+ * instrument is the only flexible column, so it absorbed the whole shortfall and
+ * shrank — which pulled every cell left of the heading naming it. `SL` sat above
+ * the TSL value, and so on all the way across.
+ *
+ * Fixed on both sides, so the header and the row agree about where the columns
+ * begin and end.
+ */
+export const EDGE_METRICS = {
+  chevronWidth: 15,
+  /** Buy + Sell + chart, with their gaps, and never narrower. */
+  actionsWidth: 132,
+} as const;
+
+export const PARENT_METRICS = {
+  priceWidth: 92,
+  countWidth: 78,
+  badgeWidth: 136,
+} as const;

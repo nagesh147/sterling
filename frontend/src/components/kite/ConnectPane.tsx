@@ -31,6 +31,7 @@ import { type SectionId, resolveSectionId, openSettingsSection } from './config/
 import { TrueDataCredentialsPanel } from '../truedata/TrueDataCredentialsPanel';
 import { SystemDiagnosticsChecklistPanel } from '../diagnostics/SystemDiagnosticsChecklistPanel';
 import { Icons } from '../../styles/kiteUI';
+import { KiteLoginModal } from './KiteLoginModal';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: 'var(--k-bg)', border: `1px solid var(--k-border)`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -345,6 +346,15 @@ function LoginFlow({ account }: { account: KiteAccount }) {
 
   return (
     <div style={S.card}>
+      {/* The handshake, shown in the app rather than only in the popup. There is
+          no token field: a request_token is single-use and already spent by the
+          time it is visible, so a paste box could only hand back a rejection. */}
+      <KiteLoginModal
+        phase={kiteLogin.phase}
+        error={kiteLogin.error}
+        onRetry={kiteLogin.open}
+        onDismiss={kiteLogin.dismiss}
+      />
       <div style={S.title}>KITE LOGIN — {account.label}</div>
       {!account.has_credentials && <div style={S.hint}>Add API key & secret first (below).</div>}
 

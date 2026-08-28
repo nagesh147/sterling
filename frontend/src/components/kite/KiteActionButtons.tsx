@@ -14,9 +14,20 @@ interface KiteActionButtonsProps {
   variant?: 'short' | 'long';
   buyLabel?: string;
   sellLabel?: string;
+  /**
+   * Draw the action but refuse the press.
+   *
+   * Pass the handler AND this, rather than dropping the handler: an absent
+   * button takes its slot with it, so the row's actions shift left and the
+   * column stops lining up — and the absence reads as "this row has no Buy"
+   * instead of "you cannot buy this one". Use `disabledHint` to say which.
+   */
+  buyDisabled?: boolean;
+  sellDisabled?: boolean;
+  disabledHint?: string;
 }
 
-export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, onAdd, onBasket, className, variant = 'short', buyLabel, sellLabel }: KiteActionButtonsProps) {
+export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, onAdd, onBasket, className, variant = 'short', buyLabel, sellLabel, buyDisabled, sellDisabled, disabledHint }: KiteActionButtonsProps) {
   const btnAction: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 28, height: 28, borderRadius: 2, cursor: 'pointer',
@@ -40,15 +51,46 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
     ...btnAction, background: 'transparent', color: k.dim, padding: 4
   };
 
+  /**
+   * A button that cannot be pressed, still drawn.
+   *
+   * Dropping the handler removed the button entirely, so an ended leg's row lost
+   * its Buy and every action after it shifted left — the column stopped lining
+   * up, and worse, the control's absence read as "this row has no Buy" rather
+   * than "you cannot buy this one, because it has ended". Disabled says which.
+   */
+  const disabledStyle = (base: string): React.CSSProperties => ({
+    ...buySellStyle,
+    // The action's OWN colour, faded — not grey.
+    //
+    // A grey box reads as an unknown control; a faded blue one reads as "Buy,
+    // not available here", which is the whole point of drawing it at all. The
+    // white-ish result of `background: k.border` lost the identity the button
+    // was being kept for.
+    background: base,
+    opacity: 0.38,
+    cursor: 'not-allowed',
+  });
+
   return (
     <div className={className} onClick={(e) => e.stopPropagation()}>
       {onBuy && (
-        <button style={{ ...buySellStyle, background: 'var(--k-blue)' }} title={buyLabel || "Buy"} onClick={onBuy}>
+        <button
+          style={buyDisabled ? disabledStyle('var(--k-blue)') : { ...buySellStyle, background: 'var(--k-blue)' }}
+          title={buyDisabled ? (disabledHint || 'Not available on this row') : (buyLabel || 'Buy')}
+          disabled={buyDisabled}
+          onClick={buyDisabled ? undefined : onBuy}
+        >
           {buyLabel || (variant === 'long' ? 'BUY' : 'B')}
         </button>
       )}
       {onSell && (
-        <button style={{ ...buySellStyle, background: 'var(--k-orange)' }} title={sellLabel || "Sell"} onClick={onSell}>
+        <button
+          style={sellDisabled ? disabledStyle('var(--k-orange)') : { ...buySellStyle, background: 'var(--k-orange)' }}
+          title={sellDisabled ? (disabledHint || 'Not available on this row') : (sellLabel || 'Sell')}
+          disabled={sellDisabled}
+          onClick={sellDisabled ? undefined : onSell}
+        >
           {sellLabel || (variant === 'long' ? 'SELL' : 'S')}
         </button>
       )}

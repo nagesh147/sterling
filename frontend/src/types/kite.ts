@@ -40,6 +40,17 @@ export interface KiteStatus {
   validated?: boolean;
   /** True when the backend silently minted a new token to answer this. */
   auto_renewed?: boolean;
+  /**
+   * `connected: false` because Sterling could not ASK Kite, not because Kite
+   * refused.
+   *
+   * The stored token is untouched in this case — nothing has expired, a request
+   * failed. It must never be presented as an expiry or answered with a
+   * re-login: doing so is what produced a "Kite session expired" modal over a
+   * good session, and sent the operator hunting a request_token they did not
+   * need.
+   */
+  transient?: boolean;
 }
 
 export interface KiteSessionResult {

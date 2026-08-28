@@ -1,14 +1,14 @@
 import React from 'react';
 import { SignalBoard, DEFAULT_SORT, type ColumnId, type SortState } from './board/SignalBoard';
 import { supertrendToBoard } from './board/supertrendAdapter';
-import type { BoardSignal } from './board/boardTypes';
+import { underlyingQuoteKey, type BoardSignal } from './board/boardTypes';
 import {
   BOARD_COL_TO_SIGNAL, SIGNAL_COL_TO_BOARD, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   signalColGroup, type SignalColKey,
 } from './board/signalRowSpec';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { KiteActionButtons } from './KiteActionButtons';
-import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { useBoardRowActions } from './board/useBoardRowActions';
 import type { EngineSignalRow } from '../../types/kiteEngine';
 
 /**
@@ -26,12 +26,11 @@ import type { EngineSignalRow } from '../../types/kiteEngine';
  * by moving and nobody had to decide for them which ones to drop.
  */
 export function SuperTrendSharedBoard({
-  rows, quotes, originalEntryMs, spotOf, onSelectSignal, onOpenChart, nowMs, signalMode,
+  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode,
 }: {
   rows: readonly EngineSignalRow[];
   quotes?: Record<string, any>;
   originalEntryMs?: Map<string, number>;
-  spotOf?: (underlying: string) => number | null;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   /** Tab is narrowed to what the host accepts; widening it here only moves the error. */
   /** Signature narrowed to the host's, so a mismatch surfaces here not there. */
@@ -41,10 +40,35 @@ export function SuperTrendSharedBoard({
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
 }) {
   const s = useKiteSettings();
-  const openOrderWindow = useOrderWindowStore((st) => st.openOrderWindow);
+  // The same builder every other board uses, so SuperTrend stops being the only
+  // engine with order buttons by accident of where they were written.
+  const rowActions = useBoardRowActions({
+    onOpenChart: onOpenChart ? (key) => onOpenChart(key, 'chart') : undefined,
+  });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState<SortState>(DEFAULT_SORT);
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
+
+  /**
+   * The underlying's LIVE price, for the parent row.
+   *
+   * Without this the adapter falls back to `row.spot`, which is a scan-time
+   * snapshot — so a parent row's price never moved between scans, and a
+   * PREMIUM-source signal had no price at all, because that signal was read from
+   * the option's own premium chart and carries no underlying spot. That is why
+   * some rows showed a price and some did not, and why none of them updated.
+   *
+   * The quotes are already subscribed: the pane adds every signal's underlying
+   * to its quote set alongside the option legs.
+   */
+  const spotOf = React.useCallback(
+    (underlying: string) => {
+      const q = quotes?.[underlyingQuoteKey(underlying)];
+      const last = q?.last_price;
+      return typeof last === 'number' && last > 0 ? last : null;
+    },
+    [quotes],
+  );
 
   const signals = React.useMemo<BoardSignal[]>(
     () => supertrendToBoard(rows, {
@@ -115,33 +139,11 @@ export function SuperTrendSharedBoard({
    * Only for legs: a parent stands for the idea, and its contracts are what get
    * bought. Offering Buy on the parent would leave the strike ambiguous.
    */
-  const renderRowActions = React.useCallback((sig: BoardSignal) => {
-    if (sig.children?.length) return null;
-    const symbol = sig.instrument.symbol;
-    const ended = sig.status === 'ended';
-    return (
-      <KiteActionButtons
-        className="st-actions-persistent"
-        onBuy={ended ? undefined : () => openOrderWindow({
-          symbol,
-          exchange: sig.instrument.exchange,
-          initialSide: 'BUY',
-          lotSize: sig.instrument.lotSize || 1,
-          lastPrice: sig.levels.ltp || 0,
-          tag: 'SUPERTREND',
-        })}
-        onSell={() => openOrderWindow({
-          symbol,
-          exchange: sig.instrument.exchange,
-          initialSide: 'SELL',
-          lotSize: sig.instrument.lotSize || 1,
-          lastPrice: sig.levels.ltp || 0,
-          tag: 'SUPERTREND',
-        })}
-        onChart={onOpenChart ? () => onOpenChart(sig.instrument.quoteKey ?? symbol, 'chart') : undefined}
-      />
-    );
-  }, [onOpenChart, openOrderWindow]);
+  /*
+   * `renderRowActions` lived here — a SuperTrend-only copy of Buy/Sell/chart.
+   * `useBoardRowActions` builds the same thing from a `BoardSignal` alone, so
+   * every engine has them now and this copy would only drift.
+   */
 
   const toggleGroup = React.useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -176,7 +178,12 @@ export function SuperTrendSharedBoard({
       // without this the shared board buries a running trade from Tuesday under
       // days of closed history.
       hoistLiveFromToday
-      renderRowActions={s.boardRowActions ? renderRowActions : undefined}
+      // Trade and chart are COLUMNS now, shared with every other board, so the
+      // picker can switch either off. `boardRowActions` still governs whether
+      // this table offers them at all — the setting is about this board's
+      // behaviour, the column is about this operator's current view.
+      renderTrade={s.boardRowActions ? rowActions.renderTrade : undefined}
+      renderChart={rowActions.renderChart}
       emptyLabel="No active or recent setups on the board yet."
     />
   );

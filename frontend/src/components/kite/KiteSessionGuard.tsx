@@ -33,6 +33,16 @@ export function KiteSessionGuard() {
 
   const connected = !!status?.connected;
   const hasAccount = !!status?.account_id;
+  /**
+   * Sterling could not ASK Kite, so it does not know. The stored token is
+   * intact.
+   *
+   * Treated as "still connected" for the purposes of this prompt: nothing has
+   * expired, a request failed, and the next poll will very likely answer. This
+   * is why the modal used to appear over a perfectly valid session — a dropped
+   * request and a refused token arrived as the same `connected: false`.
+   */
+  const unknown = !!status?.transient;
   const canAutoRecover = !!status?.has_refresh_token;
 
   const handleDismiss = () => {
@@ -59,7 +69,10 @@ export function KiteSessionGuard() {
     if (!status) return;
 
     const was = prevConnected.current;
-    prevConnected.current = connected;
+    // Do NOT record an unknown as a disconnect. Otherwise one dropped request
+    // rewrites `was` to false, and the genuine expiry that follows is no longer a
+    // true -> false transition, so it goes unannounced entirely.
+    if (!status?.transient) prevConnected.current = connected;
 
     if (connected) {
       // Session is healthy again — reset dismissal flag and state
@@ -92,6 +105,10 @@ export function KiteSessionGuard() {
       isDismissed = sessionStorage.getItem(DISMISS_KEY) === 'true';
     } catch {}
 
+    // A failed CHECK is not a lapsed session. Keep polling and say nothing: the
+    // token is still applied, and only Kite actually refusing it earns a prompt.
+    if (unknown) return;
+
     if (was === true && !connected && hasAccount && !isDismissed) {
       if (notifiedRef.current) return;
       notifiedRef.current = true;
@@ -113,7 +130,7 @@ export function KiteSessionGuard() {
     } else if (was === true) {
       authIdle();
     }
-  }, [status, connected, hasAccount, canAutoRecover]);
+  }, [status, connected, hasAccount, canAutoRecover, unknown]);
 
   useEffect(() => () => { if (graceTimer.current) window.clearTimeout(graceTimer.current); }, []);
 
