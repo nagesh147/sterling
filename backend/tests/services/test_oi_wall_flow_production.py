@@ -142,3 +142,33 @@ class TestDefaultsDoNotOverrideIntent:
         from app.services.oi_wall_flow import get_config
         db.set_config("oi_wall_flow_config", "")
         assert get_config().enabled is True
+
+
+class TestPowerSwitch:
+    """Settings say off means nothing is scanned and no order is placed."""
+
+    def test_scan_is_a_noop_when_disabled(self, monkeypatch):
+        import asyncio
+        from app.engines.oi_wall_flow import OIWallFlowConfig
+        from app.services import oi_wall_flow_runner as runner
+        monkeypatch.setattr(runner, "get_config",
+                            lambda: OIWallFlowConfig(enabled=False).validate())
+        called = []
+        async def boom(*a, **k):
+            called.append(1)
+            return []
+        monkeypatch.setattr("app.services.oi_wall_flow_scanner.scan_once", boom)
+        out = asyncio.run(runner.scan_once("u1"))
+        assert called == []
+        assert out["scanned"] == 0 and out["armed"] == 0
+        assert "switched off" in out["message"]
+
+    def test_arm_refuses_when_disabled(self, monkeypatch):
+        import asyncio
+        from app.engines.oi_wall_flow import OIWallFlowConfig
+        from app.services import oi_wall_flow_runner as runner
+        monkeypatch.setattr(runner, "get_config",
+                            lambda: OIWallFlowConfig(enabled=False).validate())
+        out = asyncio.run(runner.arm("u1", "BSE:2026-09-29"))
+        assert out["ok"] is False
+        assert "switched off" in out["message"]

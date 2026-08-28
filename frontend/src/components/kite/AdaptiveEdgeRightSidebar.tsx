@@ -156,8 +156,14 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     if (e === 'supertrend') return engineConfig.data?.engine_enabled !== false;
     if (e === 'navigator') return navigatorEnabled;
     if (e === 'orb') return orbEnabled !== false;
+    // Same contract as the three above: a switched-off engine is skipped
+    // whatever is ticked in Trading Mode. Absent config (snapshot still
+    // loading) means included, so a first press is not a no-op.
+    if (e === 'gamma_move') return gmSnapshot.data?.config?.enabled !== false;
+    if (e === 'oi_wall_flow') return owfSnapshot.data?.config?.enabled !== false;
     return true;
-  }), [scanOrder, rescanStrategies, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled]);
+  }), [scanOrder, rescanStrategies, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled,
+      gmSnapshot.data?.config?.enabled, owfSnapshot.data?.config?.enabled]);
 
   /**
    * Name what the press will actually run, in the order it will run it.

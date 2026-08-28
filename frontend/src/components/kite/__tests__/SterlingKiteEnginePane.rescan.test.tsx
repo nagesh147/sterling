@@ -127,6 +127,11 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
     expect(supertrendScan).toHaveBeenCalledTimes(1);
   });
 
+  it('names OI Wall Flow among the strategies a press will scan', () => {
+    renderPane();
+    expect(screen.getByRole('button', { name: /OI Wall Flow/ })).toBeInTheDocument();
+  });
+
   it('runs only Navigator when SuperTrend is off', async () => {
     cfg.engine_enabled = false;
     renderPane();

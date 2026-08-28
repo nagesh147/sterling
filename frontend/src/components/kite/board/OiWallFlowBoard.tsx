@@ -92,6 +92,7 @@ export function OiWallFlowBoard({ nowMs, onOpenDetail }: {
 
   const blockers = data?.blockers ?? [];
   const armedRows = signals.filter((s) => s.status === 'armed');
+  const engineOn = data?.config.enabled !== false;
 
   return (
     <div>
@@ -102,8 +103,10 @@ export function OiWallFlowBoard({ nowMs, onOpenDetail }: {
         <button
           type="button"
           onClick={() => scan.mutate()}
-          disabled={scan.isPending}
-          title="Run one universe → chain → classify pass"
+          disabled={scan.isPending || !engineOn}
+          title={engineOn
+            ? "Run one universe → chain → classify pass"
+            : "Engine is switched off — nothing is scanned"}
           style={{
             background: 'transparent', border: `1px solid ${k.border}`, color: k.text,
             borderRadius: 6, padding: '4px 10px', fontSize: 11,
@@ -182,7 +185,7 @@ export function OiWallFlowBoard({ nowMs, onOpenDetail }: {
         renderDetail={(sig) => (
           <div>
             <BoardTicket signal={sig} tag="OI_WALL_FLOW" />
-            {sig.status === 'armed' && (
+            {sig.status === 'armed' && engineOn && (
               <button
                 type="button"
                 onClick={() => arm.mutate(sig.id)}

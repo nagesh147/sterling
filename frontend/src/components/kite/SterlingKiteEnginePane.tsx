@@ -13,8 +13,8 @@ import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
 import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
 import { instrumentFlex } from './board/signalRowSpec';
 import { SuperTrendSharedBoard } from './SuperTrendSharedBoard';
-import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
-import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
+import { useEngineConfig, useEngineSignals, useRunScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
 import { useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -36,9 +36,6 @@ import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 import { PaneHeaderActions } from './PaneHeaderActions';
-import {
-  SCANNABLE_ENGINE_LABEL, useScanAllStrategies, type ScannableEngine,
-} from '../../hooks/useScanAllStrategies';
 
 interface Props {
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -981,7 +978,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={row.source === 'navigator'
                                ? 'Stop from the AVWAP proposal that originated this signal'
                                : 'Initial stop at entry (fast SuperTrend line)'}>
-                               <span data-testid="leg-sl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-sl" data-cell="stop" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                                </span>
                              </Tip>
@@ -997,7 +994,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={isNav
                                ? 'Navigator signals do not trail — the single stop is in the SL column'
                                : 'Trailing stop — ratchets tighter as SuperTrend lines flip red'}>
-                               <span data-testid="leg-tsl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-tsl" data-cell="trail" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {isNav ? '—' : (slPx != null ? slPx.toFixed(1) : '—')}
                                </span>
                              </Tip>
@@ -1093,6 +1090,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         });
                       }}
                       onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
+                      // The Trade and Chart COLUMNS govern these. LAST, because a
+                      // later JSX prop wins over an earlier one — placed above the
+                      // handlers these spreads would simply be overwritten. Uses the
+                      // component's own contract: a button with no handler is not
+                      // rendered, so hiding one column removes exactly its own
+                      // buttons rather than the whole cluster.
+                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
+                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -1138,6 +1143,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
+                          // Trade and Chart are columns in the picker, but they are
+                          // DRAWN by the action buttons beside this map, not as price
+                          // cells. The wrapper below applies `col.width` whatever the
+                          // cell returns, so letting them through here would add 126px
+                          // of empty width to every row.
+                          if (key === 'trade' || key === 'chart') return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
                           if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                           return (
@@ -1199,6 +1210,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         setLegMenu({ symbol: sym, label: leg.option_symbol, top: r.bottom + 4, left: r.left - 150 });
                       }}
+                      // The Trade and Chart COLUMNS govern these. LAST, because a
+                      // later JSX prop wins over an earlier one — placed above the
+                      // handlers these spreads would simply be overwritten. Uses the
+                      // component's own contract: a button with no handler is not
+                      // rendered, so hiding one column removes exactly its own
+                      // buttons rather than the whole cluster.
+                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
+                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
                   </div>
                 )}
@@ -1775,9 +1794,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const { data: navigatorConfig } = useNavigatorConfig();
   const setCfg = usePatchEngineConfig();
   const scan = useRunScan();
-  const cancelScan = useCancelScan();
   const navigatorScan = useRunNavigatorScan();
-  const cancelNavigatorScan = useCancelNavigatorScan();
   const navigatorEnabled = navigatorConfig?.record.config.enabled ?? false;
   const supertrendEnabled = cfg?.engine_enabled ?? true;
   const navigatorOnlyRuntime = Boolean(cfg && !cfg.engine_enabled && navigatorEnabled);
@@ -1785,47 +1802,27 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // too, so the button is never a no-op.
   const scanRunsSupertrend = supertrendEnabled || !navigatorEnabled;
   const scanPending = scan.isPending || navigatorScan.isPending;
-  const { scanAll } = useScanAllStrategies();
-  const scanLock = React.useRef(false);
-  const doScan = () => {
-    if (scanLock.current || scanPending) return;
-    scanLock.current = true;
-    // Every strategy that has a scan, not just the two whose rows share this
-    // pane. Gamma Move, ORB and Adaptive Edge all have scan endpoints and this
-    // button never reached them, so pressing it refreshed part of the platform
-    // and left the rest on its own background loop.
-    //
-    // Sequential and lens-first. They all draw on the same Kite ~3 req/s
-    // historical budget, so firing them together makes each slower rather than
-    // the set faster — and the table being looked at should not wait behind four
-    // others. The fan-out itself lives in useScanAllStrategies.
-    const lensFirst: ScannableEngine[] = signalMode === 'navigator'
-      ? ['navigator', 'supertrend']
-      : ['supertrend', 'navigator'];
-    const order: ScannableEngine[] = [
-      ...lensFirst.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled)),
-      'orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow',
-    ];
-    scanAll(order)
-      .then((results) => {
-        const failed = results.filter((r) => !r.ok);
-        // Said once, naming the engines. A button that claims to scan everything
-        // has to report the ones it could not, or "all strategies" is a promise
-        // nobody can check.
-        if (failed.length) {
-          notifyOrder({
-            kind: 'error',
-            title: 'Re-scan',
-            message: `Could not scan ${failed.map((f) => SCANNABLE_ENGINE_LABEL[f.engine]).join(', ')}.`,
-          });
-        }
-      })
-      .finally(() => { scanLock.current = false; });
+  /**
+   * Re-scan after the operator switches SuperTrend back on.
+   *
+   * This used to fan out to all five engines through `scanAll`, with its own copy
+   * of the engine list — and that copy predated the re-scan selection, so it
+   * ignored both the operator's exclusions and whether the other engines were
+   * even running. The dock's re-scan button reads `enabledToScan`, which ANDs the
+   * selection with the running switch; this path read neither, so the same
+   * platform honoured the setting from one control and not the other.
+   *
+   * It is now what it always meant: the engine you just turned on gets scanned.
+   * There is no list to keep in step, and nothing to exclude — the operator has
+   * just explicitly asked for this one.
+   */
+  const rescanSupertrend = () => {
+    if (scanPending) return;
+    scan.mutate();
   };
-  const doCancelScan = () => {
-    if (scanRunsSupertrend) cancelScan.mutate();
-    if (navigatorEnabled) cancelNavigatorScan.mutate();
-  };
+  // `doCancelScan` lived here and was never called — cancel moved to the dock
+  // sidebar with the re-scan button it belongs beside. It stopped SuperTrend and
+  // Navigator only, which is the bug the shared control exists to fix.
 
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
@@ -1881,25 +1878,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
   );
-  // Name what this will actually run, in the order it will run it.
-  //
-  // The label said "Re-scan both engines" whenever SuperTrend and Navigator were
-  // both on, and "Re-scan now" otherwise — so a press that scanned one looked
-  // identical to a press that scanned two, and it never mentioned the three other
-  // strategies it now also refreshes.
-  const scanTitle = (() => {
-    const lens: ScannableEngine[] = signalMode === 'navigator'
-      ? ['navigator', 'supertrend']
-      : ['supertrend', 'navigator'];
-    const onPane = lens.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled));
-    const rest: ScannableEngine[] = ['orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow'];
-    const names = [...onPane, ...rest].map((e) => SCANNABLE_ENGINE_LABEL[e]);
-    const off = !navigatorEnabled ? ' · Navigator is off' : '';
-    // ATM Premium Imbalance is deliberately unlisted: it has no scan, it arms one
-    // resolved pair. Naming it would promise something the platform cannot do.
-    return `Re-scan ${names.join(', ')}${off}`;
-  })();
-
+  // `scanTitle` lived here — a second, unfiltered copy of "what will this press
+  // run". It was already unreferenced: the re-scan button moved to the dock
+  // sidebar, which builds the name from `enabledToScan` so the tooltip and the
+  // press cannot disagree. Left in place it would have kept naming strategies the
+  // operator had excluded, which is worse than saying nothing.
   const changeSignalMode = (next: SignalMode) => {
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
@@ -1932,7 +1915,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     setCfg.mutate(values, {
       onSuccess: () => {
         if (message) notifyOrder({ kind: 'info', title: 'Settings updated', message });
-        if (rescan) doScan();
+        if (rescan) rescanSupertrend();
       },
     });
   };

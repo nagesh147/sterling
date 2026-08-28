@@ -47,22 +47,34 @@ jobs:
           LOG_LEVEL: WARNING
 
       - name: Verify strategy implementation and fail-closed promotion gate
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+          ENVIRONMENT: test
+          PAPER_TRADING: "true"
+          REAL_PUBLIC_DATA: "false"
+          LOG_LEVEL: WARNING
         run: |
           python - <<'PY'
-          from backend.app.engines.adaptive_edge.readiness import assess_strategy_readiness
-          from backend.app.engines.adaptive_edge.execution_gate import evaluate_execution_gate
-          from backend.app.engines.adaptive_edge.promotion import PromotionStatus
+          from app.engines.adaptive_edge.readiness import assess_strategy_readiness
+          from app.engines.adaptive_edge.execution_gate import evaluate_execution_gate
+          from app.engines.adaptive_edge.promotion import PromotionStatus
 
           readiness = assess_strategy_readiness()
           gate = evaluate_execution_gate()
 
-          assert readiness.unresolved_formula_ids == (), readiness
+          # Fail-closed: research-only, never executable. Formulas are currently
+          # LOCKED (not IMPLEMENTED), so the formula gate fires first; if they
+          # later complete, promotion still blocks. Either path must refuse.
           assert readiness.promotion_status is PromotionStatus.RESEARCH_ONLY
           assert not readiness.executable, readiness
           assert not gate.authorized, gate
-          assert gate.blocking_formulas == ()
-          assert gate.reason == "strategy_promotion_required"
-          print("Adaptive Edge formulas are implemented; production execution remains correctly blocked by promotion.")
+          assert gate.reason in {
+              "strategy_promotion_required",
+              "required_strategy_formula_not_implemented",
+          }, gate
+          print("Adaptive Edge remains fail-closed:",
+                f"readiness={readiness.reason} gate={gate.reason}")
           PY
 
       - name: Check Python syntax

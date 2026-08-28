@@ -148,6 +148,14 @@ describe('OiWallFlowBoard', () => {
     expect(armState.mutate).toHaveBeenCalledWith('BSE:2026-09-29');
   });
 
+  it('does not scan or buy while the engine is switched off', () => {
+    snap.data = data({ config: { ...CONFIG, enabled: false }, candidates: [row()] });
+    render(<OiWallFlowBoard nowMs={Date.now()} />);
+    expect(screen.getByRole('button', { name: /scan now/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /BSE CE Armed/i }));
+    expect(screen.queryByRole('button', { name: /Buy 200 BSE26SEP3500CE/i })).toBeNull();
+  });
+
   it('surfaces a refused entry instead of failing quietly', () => {
     armState.data = { ok: false, message: 'daily trade limit of 1 reached' };
     render(<OiWallFlowBoard nowMs={Date.now()} />);

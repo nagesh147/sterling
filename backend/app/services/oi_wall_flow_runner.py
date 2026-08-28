@@ -151,6 +151,9 @@ def clear(uid: Optional[str] = None) -> None:
 
 async def scan_once(uid: str) -> dict:
     cfg = get_config()
+    if not cfg.enabled:
+        return {"scanned": 0, "armed": 0, "signals": [],
+                "message": "this engine is switched off"}
     async with _lock_for(uid):
         session = session_for(uid, cfg)
         from app.services.oi_wall_flow_scanner import last_spot_tokens, last_spots, scan_once as _scan
@@ -224,6 +227,8 @@ def _instrument_of(signal):
 
 async def arm(uid: str, signal_id: str) -> dict:
     cfg = get_config()
+    if not cfg.enabled:
+        return {"ok": False, "message": "this engine is switched off"}
     async with _lock_for(uid):
         session = session_for(uid, cfg)
         signal = session.signals.get(signal_id)
