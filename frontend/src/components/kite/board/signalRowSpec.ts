@@ -135,3 +135,17 @@ export const DAY_HEAD_METRICS = {
   letterSpacing: '.07em',
   textTransform: 'uppercase' as const,
 } as const;
+
+
+/**
+ * How far a leg is indented under the idea it belongs to.
+ *
+ * Load-bearing, not decoration: the indent is the only thing that still says
+ * "this is part of that" once the parent row has scrolled off the top. The
+ * recessed shade groups legs together but does not tie them to a particular
+ * parent.
+ *
+ * A row indented by this much also narrows its instrument cell by the same
+ * amount, so the column's right edge stays under its heading.
+ */
+export const LEG_INDENT = 14;

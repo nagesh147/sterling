@@ -19,7 +19,7 @@ import {
   type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
-import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import { LEG_INDENT, HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -169,7 +169,8 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
 
 /** Statuses that earn a coloured pill. The rest are the board's normal state. */
 /** How far a leg sits in from the signal that owns it. */
-const INDENT = 14;
+/** @see LEG_INDENT - kept as a local alias so the call sites below read short. */
+const INDENT = LEG_INDENT;
 
 const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
 

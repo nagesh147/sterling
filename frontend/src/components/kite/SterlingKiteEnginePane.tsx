@@ -6,7 +6,7 @@ import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './bo
 import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
-import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG,
+import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
   ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   type SignalColVisibility,
 } from './board/signalRowSpec';
@@ -713,19 +713,38 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             return (
               <div key={leg.option_symbol} style={{ minWidth: 132 }}>
                 <div 
+                  // The one place in this table that hovered ORANGE. Nothing on
+                  // the shared board does -- its hover is a background lift to
+                  // `surface-hover`, and orange there means an active control,
+                  // not "the pointer is over this". It also changed the border
+                  // colour and explicitly re-set the background to transparent,
+                  // so it was the one hover in the app that moved a different
+                  // property from every other.
+                  //
+                  // Now carries the same class as the rows, so the hover, focus
+                  // and active states all come from the one rule in globals.css.
+                  className="st-leg-tile"
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => toggleExpand(e, leg.option_symbol)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    toggleExpand(e, leg.option_symbol);
+                  }}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 3,
                     padding: '6px 8px', borderRadius: 4,
                     background: 'transparent',
                     border: `1px solid ${k.border}`,
-                    cursor: 'pointer'
+                    cursor: 'pointer', outlineOffset: -2,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = 'transparent'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {/* Was orange. The shared board names a leg in plain text and
+                        saves colour for state -- an accent on every tile leaves
+                        nothing to mark the one that matters. */}
+                    <span style={{ fontSize: 10, color: k.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {bestRRSyms.has(leg.option_symbol) && (
                         <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
@@ -977,7 +996,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 }}
                 style={{ cursor: 'pointer', background: LEG_BG, outlineOffset: -2 }}
               >
-                   <span style={{ color: color, fontWeight: 700, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth, display: 'flex', alignItems: 'center', gap: 6 }}>
+                   <span style={{ color: color, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth - LEG_INDENT, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
@@ -991,7 +1010,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      )}
                      {stopBreached && (
                        <Tip text={`Live premium ₹${lastPx?.toFixed(2)} is at or below this leg's trailing stop ₹${slPx?.toFixed(2)}, but the SuperTrend exit is a RED-COUNTER rule (${legExitState ?? '—'}) — the leg still counts as running until enough ST lines flip. This is where an open drawdown builds.`}>
-                         <span style={{ fontSize: 9, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
+                         <span style={{ fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 2, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
                            TSL HIT
                          </span>
                        </Tip>
@@ -1144,9 +1163,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
-                              return <span style={{ color: k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
+                              // Tinted by the move, like the watchlist's change
+                              // column. These two were hardcoded dim and plain
+                              // text, so the direction setting appeared to do
+                              // nothing: the columns actually NAMED after the
+                              // price change were the two it did not reach.
+                              return <span style={{ color: s.showPriceDirection ? color : k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
                             case 'chgPct':
-                              return <span style={{ color: k.text, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
+                              return <span style={{ color: s.showPriceDirection ? color : k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
                             case 'dir':
                               return (
                                 <span style={{ color: color, display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
@@ -2370,7 +2394,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               borderLeft: '3px solid transparent',
               overflowX: 'auto', overflowY: 'hidden',
             }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: '1 1 150px', minWidth: 150 }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth }} />
                  {(() => {
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];
@@ -2437,7 +2461,15 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
              block is a template literal and one would close it. */
           gap: ${ROW_METRICS.gap}px;
           min-height: ${ROW_METRICS.legHeight}px;
-          padding: ${ROW_METRICS.legPadding};
+          /* The shared row sets 400 on a leg and 600 on a parent. Stated here so
+             the instrument cell inherits it rather than depending on a browser
+             default -- and so nothing has to set a weight per cell, which is how
+             this table ended up bold in the first place. */
+          font-weight: 400;
+          /* Indented under the parent, like the shared board's legs. The
+             recessed shade groups them, but only the indent ties them to the
+             row above once that row has scrolled away. */
+          padding: 0 16px 0 ${16 + LEG_INDENT}px;
           box-sizing: border-box;
           /* The shade above separates one row from the next, so the per-row line
              that this table used to draw is now redundant - and drawing both
@@ -2455,7 +2487,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-leg-row::-webkit-scrollbar { display: none; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .sort-header-div:hover { color: var(--k-text) !important; }
+        /* The heading's hover colour comes from the sb-head rule in globals.css
+           now -- this element carries that class. Only the sort glyph's fade
+           stays local, because this table's glyph is not the aria-hidden span
+           the shared rule targets. NO BACKTICKS IN HERE: this block is a
+           template literal and one closes it. */
         .sort-icon { opacity: 0; color: var(--k-dim); display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
         .sort-icon.active { opacity: 1 !important; color: var(--k-text); }

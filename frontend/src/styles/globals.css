@@ -501,16 +501,19 @@ button, a, input, select, textarea,
  * stylesheet cannot otherwise reach past an inline style. */
 .sb-row,
 .st-leg-row,
+.st-leg-tile,
 .st-parent-header,
 .st-group-header { transition: background .12s ease, box-shadow .12s ease; }
 
 .sb-row:hover,
 .st-leg-row:hover,
+.st-leg-tile:hover,
 .st-parent-header:hover,
 .st-group-header:hover { background: var(--k-surface-hover) !important; }
 
 .sb-row:focus-visible,
 .st-leg-row:focus-visible,
+.st-leg-tile:focus-visible,
 .st-parent-header:focus-visible,
 .st-group-header:focus-visible {
   outline: none;
@@ -520,12 +523,14 @@ button, a, input, select, textarea,
 
 .sb-row:active,
 .st-leg-row:active,
+.st-leg-tile:active,
 .st-parent-header:active,
 .st-group-header:active { background: var(--k-surface) !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .sb-row,
   .st-leg-row,
+  .st-leg-tile,
   .st-parent-header,
   .st-group-header { transition: none !important; }
 }

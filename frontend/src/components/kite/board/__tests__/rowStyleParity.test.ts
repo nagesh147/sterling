@@ -38,13 +38,16 @@ const legRowCss = (() => {
 
 describe('SuperTrend reads the shared row spec', () => {
   it('takes its geometry from ROW_METRICS, not from literals', () => {
-    for (const token of ['ROW_METRICS.gap', 'ROW_METRICS.legHeight', 'ROW_METRICS.legPadding']) {
+    for (const token of ['ROW_METRICS.gap', 'ROW_METRICS.legHeight']) {
       expect(legRowCss).toContain(token);
     }
-    // The literals these replaced. Any of them back means someone hardcoded a
-    // value that the shared board no longer controls.
+    // A bare `gap: 16px` back means someone hardcoded a value the shared board
+    // no longer controls.
     expect(legRowCss).not.toMatch(/gap:\s*\d+px/);
-    expect(legRowCss).not.toMatch(/padding:\s*0\s+\d+px/);
+    // The leg's own padding is the indented form rather than `legPadding` —
+    // `legPadding` is the un-indented value, which the parent row still uses.
+    expect(legRowCss).toContain('${16 + LEG_INDENT}px');
+    expect(superTrend).toContain('padding: ROW_METRICS.parentPadding');
   });
 
   it('uses a minimum row height, never a fixed one', () => {
@@ -360,5 +363,81 @@ describe('SuperTrend group bands pin under the sticky head', () => {
 
   it('survives an environment with no ResizeObserver', () => {
     expect(superTrend).toContain("typeof ResizeObserver === 'undefined'");
+  });
+});
+
+/**
+ * Nothing in this table hovers orange.
+ *
+ * One element did: a grid-view leg tile that turned its BORDER orange on
+ * mouse-enter, and re-set its background to transparent while doing it. It was
+ * the only hover in the app that moved a different property from every other,
+ * and orange on the shared board means an active control — not "the pointer is
+ * over this".
+ */
+describe('hover colour is the shared one everywhere', () => {
+  it('has no inline hover handler left in SuperTrend', () => {
+    expect(superTrend).not.toContain('onMouseEnter');
+    expect(superTrend).not.toContain('style.borderColor = k.orange');
+  });
+
+  it('gives the grid tile the same states as a row', () => {
+    expect(superTrend).toContain('className="st-leg-tile"');
+    for (const state of [':hover', ':focus-visible', ':active']) {
+      expect(globalsCss, `tile ${state}`).toContain(`.st-leg-tile${state}`);
+    }
+  });
+
+  it('never paints a leg label with the active-control accent', () => {
+    // An accent on every tile leaves nothing to mark the one that matters.
+    const tile = superTrend.slice(superTrend.indexOf('className="st-leg-tile"'));
+    expect(tile.slice(0, 1400)).not.toContain('color: k.orange');
+  });
+});
+
+describe('the direction setting reaches every price cell', () => {
+  it('tints Chg. and Chg. % as well as the price', () => {
+    // These two were hardcoded `k.dim` and `k.text`, so the setting looked
+    // broken: the columns named after the price change were the ones it missed.
+    const matches = superTrend.match(/color: s\.showPriceDirection \? color : k\.dim/g) ?? [];
+    expect(matches.length, 'both change columns follow the setting').toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * No backtick inside the component's CSS block.
+ *
+ * `SterlingKiteEnginePane` writes its stylesheet as `<style>{`...`}</style>`.
+ * A backtick anywhere inside — including in a comment, which is where it is
+ * tempting to write a class name in code font — closes the template literal
+ * early and produces dozens of parse errors far from the cause.
+ *
+ * I have done this three times in this file. Hence a test rather than a
+ * resolution.
+ */
+describe('the component stylesheet stays a valid template literal', () => {
+  it('contains no backtick between <style>{` and `}</style>', () => {
+    const open = superTrend.indexOf('<style>{`');
+    expect(open, 'the style block is still written this way').toBeGreaterThan(-1);
+    const body = superTrend.slice(open + '<style>{`'.length);
+    const close = body.indexOf('`}</style>');
+    expect(close, 'the block terminates').toBeGreaterThan(-1);
+    expect(body.slice(0, close), 'a backtick in here closes the literal early')
+      .not.toContain('`');
+  });
+});
+
+describe('legs are indented under their parent', () => {
+  it('uses one shared indent, not a number in each file', () => {
+    expect(rowSpec).toContain('LEG_INDENT = 14');
+    expect(superTrend).toContain('${16 + LEG_INDENT}px');
+    expect(sharedBoard).toContain('LEG_INDENT');
+  });
+
+  it('gives back the width the indent took, so columns stay aligned', () => {
+    // Without this the instrument column is 14px wider than its heading and
+    // every cell to its right drifts.
+    expect(superTrend).toContain('ROW_METRICS.instrumentMinWidth - LEG_INDENT');
+    expect(sharedBoard).toContain('ROW_METRICS.instrumentMinWidth - (isLeg ? INDENT : 0)');
   });
 });
