@@ -222,6 +222,25 @@ export function instrumentFlex(isLeg = false): string {
  * that: a row that grows a third badge must not shove the count and the price
  * out of alignment on that row alone.
  */
+/**
+ * The two tracks that bracket the columns.
+ *
+ * A row spent width at BOTH ends that the header never reserved: a chevron
+ * gutter at the start, where the header rendered a zero-width `<span />`, and the
+ * engine's action buttons at the end, pinned with `margin-left: auto`. The
+ * instrument is the only flexible column, so it absorbed the whole shortfall and
+ * shrank — which pulled every cell left of the heading naming it. `SL` sat above
+ * the TSL value, and so on all the way across.
+ *
+ * Fixed on both sides, so the header and the row agree about where the columns
+ * begin and end.
+ */
+export const EDGE_METRICS = {
+  chevronWidth: 15,
+  /** Buy + Sell + chart, with their gaps, and never narrower. */
+  actionsWidth: 132,
+} as const;
+
 export const PARENT_METRICS = {
   priceWidth: 92,
   countWidth: 78,

@@ -14,7 +14,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BOARD_COLUMNS_WITH_DAY_MOVE, COLUMNS, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
-import { LEG_INDENT, PARENT_METRICS, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
+import { EDGE_METRICS, LEG_INDENT, PARENT_METRICS, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
 
 /*
  * These tests write to the PERSISTED settings store, which means localStorage.
@@ -508,5 +508,78 @@ describe('parent row columns', () => {
       .find((s) => (s as HTMLElement).style.width === `${PARENT_METRICS.priceWidth}px`);
     expect(price, 'the track is still there').toBeTruthy();
     expect(price!.textContent).toBe('');
+  });
+});
+
+/**
+ * The header and the rows agree about where the columns are.
+ *
+ * They did not. A row spent width at BOTH ends that the header never reserved: a
+ * chevron gutter at the start, where the header rendered a zero-width
+ * `<span />`, and the engine's action buttons at the end, pinned with
+ * `margin-left: auto`. The instrument is the only flexible column, so it
+ * absorbed the entire shortfall and shrank — which pulled every cell left of the
+ * heading naming it. On screen, `SL` sat above the TSL value and everything after
+ * it was one column out.
+ */
+describe('column tracks line up end to end', () => {
+  it('reserves the chevron gutter in the header too', () => {
+    const { container } = board({ signals: [sig()] });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const first = head.firstElementChild as HTMLElement;
+    expect(first.style.width, 'not a zero-width spacer')
+      .toBe(`${EDGE_METRICS.chevronWidth}px`);
+  });
+
+  it('reserves the actions track in the header when the rows have actions', () => {
+    const { container } = board({
+      signals: [sig()],
+      renderRowActions: () => <button type="button">Buy</button>,
+    });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const last = head.lastElementChild as HTMLElement;
+    expect(last.style.width).toBe(`${EDGE_METRICS.actionsWidth}px`);
+  });
+
+  it('does not grow a phantom track when the rows have none', () => {
+    const { container } = board({ signals: [sig()] });
+    const head = container.querySelector('.sb-head-row') as HTMLElement;
+    const last = head.lastElementChild as HTMLElement;
+    expect(last.style.width).not.toBe(`${EDGE_METRICS.actionsWidth}px`);
+  });
+
+  it('gives the actions a fixed width rather than an auto margin', () => {
+    // `margin-left: auto` ate whatever slack was going, which is precisely the
+    // width the instrument column needed to match its heading.
+    const { container } = board({
+      signals: [sig()],
+      renderRowActions: () => <button type="button">Buy</button>,
+    });
+    const actions = [...container.querySelectorAll('.sb-row span')]
+      .find((s) => (s as HTMLElement).style.width === `${EDGE_METRICS.actionsWidth}px`) as HTMLElement;
+    expect(actions, 'the actions track exists').toBeTruthy();
+    expect(actions.style.marginLeft).not.toBe('auto');
+  });
+});
+
+describe('a collapsed parent states its time', () => {
+  const parent = () => sig({ children: [sig({ id: 'leg' })], atMs: NOW });
+
+  it('shows the moment and how long ago', () => {
+    board({ signals: [parent()] });
+    // The absolute stamp is quotable against the broker's log; the relative one
+    // is what you read while trading.
+    expect(screen.getByText(/\d{2} \w{3} \d{4} \d{2}:\d{2} (AM|PM)/)).toBeInTheDocument();
+    expect(screen.getByText(/just now|min ago|h ago|d ago/)).toBeInTheDocument();
+  });
+
+  it('keeps the name on a fixed track so the group sits beside it', () => {
+    // A growing name cell shoved the price, count and badges to the far right and
+    // left a lake of white space after the label.
+    const { container } = board({ signals: [parent()] });
+    const name = [...container.querySelectorAll('.sb-parent span')]
+      .find((s) => (s as HTMLElement).style.flex?.startsWith('0 0 ')) as HTMLElement;
+    expect(name, 'the name track is fixed').toBeTruthy();
+    expect(name.style.flex).toBe(`0 0 ${ROW_METRICS.instrumentMinWidth}px`);
   });
 });

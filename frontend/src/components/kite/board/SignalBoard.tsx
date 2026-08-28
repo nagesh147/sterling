@@ -15,12 +15,12 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayDate, sessionDayKey, stamp, trailBreached,
+  parentStamp, sessionDayDate, sessionDayKey, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
-  HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
+  EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
   SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
 } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
@@ -643,12 +643,14 @@ export function visibleColumns(signals: readonly BoardSignal[], requested: reado
  * does have goes on two sides: what it is on the left, what you should know
  * about it on the right.
  */
-function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
+function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail, nowMs }: {
   signal: BoardSignal;
   legCount: number;
   expanded: boolean;
   onToggle: () => void;
   onOpenDetail?: (signal: BoardSignal) => void;
+  /** Passed in, not read from the clock, so the relative age is deterministic. */
+  nowMs: number;
 }) {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   const statusTone = STATUS_TONE[signal.status];
@@ -678,7 +680,14 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
         <span style={{ color: k.dim, display: 'inline-flex', flexShrink: 0 }}><Chevron open={expanded} /></span>
 
-        <span style={{ flex: instrumentFlex(), minWidth: 0, overflow: 'hidden' }}>
+        {/* A FIXED track, not a growing one. `instrumentFlex()` grows, which
+            pushed the price, the count and the badges to the far right of the
+            row and left a lake of white space after the name. Fixed, they sit
+            beside the label they describe — and at the same x on every row. */}
+        <span style={{
+          flex: `0 0 ${ROW_METRICS.instrumentMinWidth}px`,
+          minWidth: 0, overflow: 'hidden',
+        }}>
           {onOpenDetail ? (
             <button
               type="button"
@@ -741,6 +750,30 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
           )}
           <Marks marks={signal.marks} />
         </span>
+
+        {/* When it fired, and how long ago.
+            The absolute stamp is what you quote when reconciling against the
+            broker's log; the relative one is what you read while trading, since
+            "17 min ago" answers "is this still worth acting on" and a wall-clock
+            time does not at a glance. */}
+        {(() => {
+          const at = parentStamp(signal.atMs, nowMs);
+          if (!at) return null;
+          return (
+            <span style={{
+              display: 'inline-flex', alignItems: 'baseline', gap: 6, flexShrink: 0,
+              fontSize: 10, color: k.dim, whiteSpace: 'nowrap',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              <span>{at.absolute}</span>
+              {at.relative && <span style={{ opacity: 0.8 }}>{at.relative}</span>}
+            </span>
+          );
+        })()}
+
+        {/* Absorbs the remaining width, so everything above keeps its own track
+            instead of being stretched across the row. */}
+        <span style={{ flex: 1, minWidth: 0 }} />
       </span>
 
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -845,7 +878,12 @@ function Row({
           overflowY: 'hidden',
         }}
       >
-        <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+        {/* Fixed gutter. The header reserves the same, so the first column starts
+            at the same x in both. */}
+        <span style={{
+          color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3,
+          flexShrink: 0, width: EDGE_METRICS.chevronWidth,
+        }}>
           <Chevron open={open} />
           {isParent && (
             <span
@@ -888,7 +926,10 @@ function Row({
             column and cannot be hidden by the column picker. */}
         {renderRowActions && (
           <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end',
+              gap: 8, flexShrink: 0, width: EDGE_METRICS.actionsWidth,
+            }}
             // The row is a button; a control inside it must not also toggle it.
             onClick={(e) => e.stopPropagation()}
           >
@@ -1045,7 +1086,9 @@ export function SignalBoard({
           background: k.bg,
         }}
       >
-        <span />
+        {/* The chevron gutter, reserved so the first heading starts where the
+            first cell does. This was a zero-width `<span />`. */}
+        <span style={{ flexShrink: 0, width: EDGE_METRICS.chevronWidth }} />
         {cols.map((col) => {
           const active = sort.column === col.id;
           const direction = active ? sort.direction : null;
@@ -1110,6 +1153,11 @@ export function SignalBoard({
             </DraggableColHeader>
           );
         })}
+        {/* The actions track. Reserved only when the rows actually carry actions,
+            so a board without them does not grow a phantom column. */}
+        {renderRowActions && (
+          <span style={{ flexShrink: 0, width: EDGE_METRICS.actionsWidth }} />
+        )}
       </div>
 
       {days.map(({ key, signals: rows }) => (
@@ -1185,6 +1233,7 @@ export function SignalBoard({
                   expanded={expanded}
                   onToggle={() => onToggleGroup?.(signal.id)}
                   onOpenDetail={onOpenDetail}
+                  nowMs={nowMs}
                 />
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
