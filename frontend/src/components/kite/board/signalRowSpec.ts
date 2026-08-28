@@ -55,6 +55,21 @@ export const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
   // worse than one that does not offer it. The shared board sorts its own
   // `time` column because there the rows are signals, which do differ.
   time: { key: 'time', label: 'Time', width: 78, align: 'right', visibleWhen: 'always', tooltip: 'When the signal fired' },
+  /**
+   * Buy and Sell, and the chart, as COLUMNS the picker can switch off.
+   *
+   * They were rendered outside the column grid so they could not be hidden — my
+   * reasoning was that losing a trade button by accident is worse than a busy
+   * row. The operator asked for the choice, and it is theirs: a board is read far
+   * more often than it is traded from, and someone reading one all day should be
+   * able to put the order buttons away.
+   *
+   * Wide enough for two 35px buttons and their gap, and for one icon
+   * respectively. They clip rather than push, so a row can never knock the
+   * columns beside it out of line.
+   */
+  trade: { key: 'trade', label: 'Trade', width: 92, align: 'right', visibleWhen: 'always', tooltip: 'Buy and Sell this contract' },
+  chart: { key: 'chart', label: 'Chart', width: 34, align: 'right', visibleWhen: 'always', tooltip: "Open this instrument's chart" },
 };
 
 /**

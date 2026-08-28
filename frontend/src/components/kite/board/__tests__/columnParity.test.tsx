@@ -103,6 +103,11 @@ describe('column parity across engines', () => {
     // use, so a cell sits in the same place whichever board you are on.
     expect(headersOf(boards.orb, DEFAULTS)).toEqual([
       'Instrument', 'Status', 'Exc.', 'Leg (Δ)', 'Entry (Δpts)', 'SL', 'TSL', 'Target', 'Exited', 'LTP', 'Time',
+      // Trade and Chart are columns now, on every board rather than only the one
+      // whose bespoke table happened to have them. They are hideable like any
+      // other, which is the point: a board is read far more often than it is
+      // traded from.
+      'Trade', 'Chart',
     ]);
   });
 

@@ -35,7 +35,9 @@ export type ColumnId =
   | 'qty' | 'risk' | 'score' | 'time'
   // Today's move. SuperTrend has shown these three since long before this board
   // existed; they were the columns a swap onto it would silently have deleted.
-  | 'chg' | 'chgPct' | 'dir';
+  | 'chg' | 'chgPct' | 'dir'
+  // Actions, as columns the picker can switch off — see the note in signalRowSpec.
+  | 'trade' | 'chart';
 
 interface ColumnDef {
   id: ColumnId;
@@ -97,6 +99,8 @@ const COLUMNS: readonly ColumnDef[] = [
   { id: 'chgPct', label: SIGNAL_RIGHT_COLUMNS.chgPct.label, width: SIGNAL_RIGHT_COLUMNS.chgPct.width, align: 'right', hint: 'Percent the instrument has moved today' },
   { id: 'dir', label: SIGNAL_RIGHT_COLUMNS.dir.label || 'Direction', width: SIGNAL_RIGHT_COLUMNS.dir.width, align: 'right', hint: 'Which way today’s move is going' },
   { id: 'time', label: SIGNAL_RIGHT_COLUMNS.time.label, width: SIGNAL_RIGHT_COLUMNS.time.width, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+  { id: 'trade', label: SIGNAL_RIGHT_COLUMNS.trade.label, width: SIGNAL_RIGHT_COLUMNS.trade.width, align: 'right', hint: 'Buy and Sell this contract. Switch the column off to put the order buttons away' },
+  { id: 'chart', label: SIGNAL_RIGHT_COLUMNS.chart.label, width: SIGNAL_RIGHT_COLUMNS.chart.width, align: 'right', hint: "Open this instrument's chart" },
 ];
 
 export interface SortState {
@@ -534,6 +538,12 @@ function cellContent(
       // the day has gone -- a rounded percent can read 0.00% on a real move.
       return { node: text, color: dayTone(move, showDayColour) };
     }
+    case 'trade':
+    case 'chart':
+      // Rendered by the caller: what an action DOES is engine business, and this
+      // function knows nothing about orders. Handled in `Row`, which has the
+      // render props; reaching here at all means neither was supplied.
+      return { node: null };
     case 'dir': {
       const abs = signal.dayMove?.abs;
       if (abs == null) return { node: '—' };
@@ -590,6 +600,12 @@ export const BOARD_COLUMNS: readonly ColumnId[] = [
   'instrument', 'engine', 'status', 'exchange', 'leg',
   'ltp', 'entry', 'stop', 'trail', 'target', 'exit',
   'qty', 'risk', 'score', 'time',
+  // Buy/Sell and the chart, on every board rather than only the one whose
+  // bespoke table happened to have them. `useBoardRowActions` builds both from a
+  // `BoardSignal` alone, so no engine needs its own order plumbing — and the
+  // picker can switch either off, because a board is read far more often than it
+  // is traded from.
+  'trade', 'chart',
 ];
 
 /**
@@ -804,6 +820,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail, nowMs
 function Row({
   signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
   depth = 0, legCount, marks, nowMs, rowScroll = false, renderRowActions,
+  renderTrade, renderChart,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -825,6 +842,10 @@ function Row({
   rowScroll?: boolean;
   /** Controls belonging to this row, rendered before the right-hand cells. */
   renderRowActions?: (signal: BoardSignal) => React.ReactNode;
+  /** Buy/Sell for this row, as the `trade` column. */
+  renderTrade?: (signal: BoardSignal) => React.ReactNode;
+  /** The chart button, as the `chart` column. */
+  renderChart?: (signal: BoardSignal) => React.ReactNode;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
@@ -895,7 +916,16 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
+          // The two action columns come from render props rather than from
+          // `cellContent`: what Buy does is engine business, and that function
+          // deliberately knows nothing about orders. They still travel through
+          // the column grid, so hiding them works exactly like hiding any other.
+          const action = col.id === 'trade' ? renderTrade?.(signal)
+            : col.id === 'chart' ? renderChart?.(signal)
+            : undefined;
+          const { node, color } = action !== undefined && action !== null
+            ? { node: action, color: undefined }
+            : cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
           const isName = col.id === 'instrument';
           return (
             <span
@@ -967,6 +997,7 @@ export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
+  renderTrade, renderChart,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -1030,6 +1061,16 @@ export function SignalBoard({
    * and this component has no business knowing what an order is.
    */
   renderRowActions?: (signal: BoardSignal) => React.ReactNode;
+  /**
+   * Buy/Sell and the chart, as the `trade` and `chart` COLUMNS.
+   *
+   * Columns rather than a pinned strip, so the picker can switch them off — a
+   * board is read far more often than it is traded from. `useBoardRowActions`
+   * builds both from a `BoardSignal` alone, so every engine can pass them
+   * without growing its own order plumbing.
+   */
+  renderTrade?: (signal: BoardSignal) => React.ReactNode;
+  renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -1195,6 +1236,8 @@ export function SignalBoard({
                     striped={i % 2 === 1}
                     rowScroll={rowScroll}
                     renderRowActions={renderRowActions}
+                    renderTrade={renderTrade}
+                    renderChart={renderChart}
                   />
                   {/* The engine knows why it found nothing, so it says so in the
                       row rather than behind a click. A parent with nothing under
@@ -1250,6 +1293,8 @@ export function SignalBoard({
                     depth={1}
                     rowScroll={rowScroll}
                     renderRowActions={renderRowActions}
+                    renderTrade={renderTrade}
+                    renderChart={renderChart}
                   />
                 ))}
               </React.Fragment>

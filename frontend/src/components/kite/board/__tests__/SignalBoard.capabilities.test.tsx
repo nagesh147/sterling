@@ -134,14 +134,22 @@ describe('row controls', () => {
     expect(onToggle, 'the row must not expand').not.toHaveBeenCalled();
   });
 
-  it('cannot be switched off by the column picker', () => {
-    // They are rendered outside the cell map on purpose: an engine's actions are
-    // not a column and must not disappear with one.
+  it('is not affected by hiding other columns', () => {
+    // `renderRowActions` remains a pinned strip outside the cell map. What
+    // CHANGED is that Buy/Sell and the chart are no longer delivered this way:
+    // they are the `trade` and `chart` columns now, and the picker can switch
+    // them off.
+    //
+    // I had argued the opposite here — that an engine's actions are not a column
+    // and must not disappear with one. The operator asked for the choice, and it
+    // is theirs to make: a board is read far more often than it is traded from,
+    // and someone reading one all day should be able to put the order buttons
+    // away. See `useBoardRowActions`.
     const { container } = board({
       hidden: new Set(['ltp', 'entry', 'stop', 'trail', 'target', 'time'] as never),
-      renderRowActions: () => <button type="button">Buy</button>,
+      renderRowActions: () => <button type="button">Pinned</button>,
     });
-    expect(container.querySelector('.sb-row')?.textContent).toContain('Buy');
+    expect(container.querySelector('.sb-row')?.textContent).toContain('Pinned');
   });
 });
 
@@ -581,5 +589,51 @@ describe('a collapsed parent states its time', () => {
       .find((s) => (s as HTMLElement).style.flex?.startsWith('0 0 ')) as HTMLElement;
     expect(name, 'the name track is fixed').toBeTruthy();
     expect(name.style.flex).toBe(`0 0 ${ROW_METRICS.instrumentMinWidth}px`);
+  });
+});
+
+/**
+ * Buy/Sell and the chart, as columns on every board.
+ *
+ * They existed on SuperTrend and nowhere else, purely because SuperTrend's
+ * bespoke table is where they were written. `useBoardRowActions` builds both from
+ * a `BoardSignal` alone — which already carries the traded symbol, its exchange,
+ * the lot size and the last price — so every engine gets them without growing its
+ * own order plumbing.
+ */
+describe('trade and chart columns', () => {
+  // Labels chosen NOT to collide with the column headings, which are themselves
+  // buttons — "Chart" matched both the heading and the cell.
+  const trade = () => <button type="button">BuyHere</button>;
+  const chart = () => <button type="button">OpenChart</button>;
+
+  it('render in the row when supplied', () => {
+    board({ signals: [sig()], renderTrade: trade, renderChart: chart });
+    expect(screen.getByRole('button', { name: 'BuyHere' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'OpenChart' })).toBeInTheDocument();
+  });
+
+  it('can be switched off by the column picker, independently', () => {
+    // The whole reason they became columns.
+    board({
+      signals: [sig()],
+      hidden: new Set(['trade'] as never),
+      renderTrade: trade,
+      renderChart: chart,
+    });
+    expect(screen.queryByRole('button', { name: 'BuyHere' }), 'trade hidden').toBeNull();
+    expect(screen.getByRole('button', { name: 'OpenChart' }), 'chart still shown').toBeInTheDocument();
+  });
+
+  it('are offered to every board through the shared column list', () => {
+    expect(BOARD_COLUMNS_WITH_DAY_MOVE).toContain('trade');
+    expect(BOARD_COLUMNS_WITH_DAY_MOVE).toContain('chart');
+  });
+
+  it('leave the cell empty rather than crash when an engine supplies neither', () => {
+    // The columns are in the shared list, so a board that passes no render props
+    // still asks for them. They must render as nothing, not as an error.
+    const { container } = board({ signals: [sig()] });
+    expect(container.querySelector('.sb-row')).not.toBeNull();
   });
 });

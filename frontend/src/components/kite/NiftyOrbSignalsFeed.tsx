@@ -5,6 +5,7 @@ import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';
 import { openSettingsSection } from './config/registry';
 import { EngineOffNotice } from './EngineOffNotice';
 import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard } from './board/SignalBoard';
+import { useBoardRowActions } from './board/useBoardRowActions';
 import { BoardTicket } from './board/BoardTicket';
 import { BoardFilters } from './board/BoardFilters';
 import { useBoardView } from './board/useBoardView';
@@ -58,6 +59,8 @@ function Chevron({ open }: { open: boolean }) {
 export function NiftyOrbSignalsFeed({ onOpenDetail }: {
   onOpenDetail?: (signal: BoardSignal) => void;
 } = {}) {
+  // Buy/Sell and the chart, built from the signal alone — same on every board.
+  const rowActions = useBoardRowActions();
   const config = useOrbConfig();
   const setEnabled = useSetOrbEnabled();
   const enabled = config.data?.config?.enabled;
@@ -151,6 +154,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail }: {
       <BoardFilters view={view} columns={BOARD_COLUMNS} />
 
       <SignalBoard
+        renderTrade={rowActions.renderTrade}
+        renderChart={rowActions.renderChart}
         signals={view.visible}
         requested={BOARD_COLUMNS}
         hidden={view.hidden}

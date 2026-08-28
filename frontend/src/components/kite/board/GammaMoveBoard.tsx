@@ -21,6 +21,7 @@ import {
 import type { GammaScanState, GammaTradeRecord } from '../../../hooks/useGammaMove';
 import { gammaMoveToBoard } from './gammaMoveAdapter';
 import { BOARD_COLUMNS, SignalBoard } from './SignalBoard';
+import { useBoardRowActions } from './useBoardRowActions';
 import { BoardFilters } from './BoardFilters';
 import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
@@ -83,6 +84,8 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
+  // Buy/Sell and the chart, built from the signal alone — same on every board.
+  const rowActions = useBoardRowActions();
   const [pollMs, setPollMs] = React.useState(0);
   const snapshot = useGammaMoveSnapshot(true, pollMs);
   const scan = useGammaMoveScan();
@@ -198,6 +201,8 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
 
       {signals.length > 0 && <BoardFilters view={view} columns={BOARD_COLUMNS} />}
       <SignalBoard
+        renderTrade={rowActions.renderTrade}
+        renderChart={rowActions.renderChart}
         signals={view.visible}
         requested={BOARD_COLUMNS}
         hidden={view.hidden}

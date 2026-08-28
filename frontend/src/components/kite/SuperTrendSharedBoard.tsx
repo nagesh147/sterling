@@ -8,7 +8,7 @@ import {
 } from './board/signalRowSpec';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { KiteActionButtons } from './KiteActionButtons';
-import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { useBoardRowActions } from './board/useBoardRowActions';
 import type { EngineSignalRow } from '../../types/kiteEngine';
 
 /**
@@ -40,7 +40,11 @@ export function SuperTrendSharedBoard({
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
 }) {
   const s = useKiteSettings();
-  const openOrderWindow = useOrderWindowStore((st) => st.openOrderWindow);
+  // The same builder every other board uses, so SuperTrend stops being the only
+  // engine with order buttons by accident of where they were written.
+  const rowActions = useBoardRowActions({
+    onOpenChart: onOpenChart ? (key) => onOpenChart(key, 'chart') : undefined,
+  });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState<SortState>(DEFAULT_SORT);
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
@@ -135,38 +139,11 @@ export function SuperTrendSharedBoard({
    * Only for legs: a parent stands for the idea, and its contracts are what get
    * bought. Offering Buy on the parent would leave the strike ambiguous.
    */
-  const renderRowActions = React.useCallback((sig: BoardSignal) => {
-    if (sig.children?.length) return null;
-    const symbol = sig.instrument.symbol;
-    const ended = sig.status === 'ended';
-    return (
-      <KiteActionButtons
-        className="st-actions-persistent"
-        // Drawn and disabled rather than dropped: an ended leg is a record, not
-        // a thing to buy, but removing the control shifts every action after it
-        // and says "no Buy here" instead of "not this row".
-        buyDisabled={ended}
-        disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
-        onBuy={() => openOrderWindow({
-          symbol,
-          exchange: sig.instrument.exchange,
-          initialSide: 'BUY',
-          lotSize: sig.instrument.lotSize || 1,
-          lastPrice: sig.levels.ltp || 0,
-          tag: 'SUPERTREND',
-        })}
-        onSell={() => openOrderWindow({
-          symbol,
-          exchange: sig.instrument.exchange,
-          initialSide: 'SELL',
-          lotSize: sig.instrument.lotSize || 1,
-          lastPrice: sig.levels.ltp || 0,
-          tag: 'SUPERTREND',
-        })}
-        onChart={onOpenChart ? () => onOpenChart(sig.instrument.quoteKey ?? symbol, 'chart') : undefined}
-      />
-    );
-  }, [onOpenChart, openOrderWindow]);
+  /*
+   * `renderRowActions` lived here — a SuperTrend-only copy of Buy/Sell/chart.
+   * `useBoardRowActions` builds the same thing from a `BoardSignal` alone, so
+   * every engine has them now and this copy would only drift.
+   */
 
   const toggleGroup = React.useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -201,7 +178,12 @@ export function SuperTrendSharedBoard({
       // without this the shared board buries a running trade from Tuesday under
       // days of closed history.
       hoistLiveFromToday
-      renderRowActions={s.boardRowActions ? renderRowActions : undefined}
+      // Trade and chart are COLUMNS now, shared with every other board, so the
+      // picker can switch either off. `boardRowActions` still governs whether
+      // this table offers them at all — the setting is about this board's
+      // behaviour, the column is about this operator's current view.
+      renderTrade={s.boardRowActions ? rowActions.renderTrade : undefined}
+      renderChart={rowActions.renderChart}
       emptyLabel="No active or recent setups on the board yet."
     />
   );
