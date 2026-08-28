@@ -735,6 +735,116 @@ async def gamma_move_simulate_stop(user: UserContext = Depends(get_current_user)
     return await stop(uid)
 
 
+# ------------------------------------------------------------------ OI Wall Flow
+
+@router.get("/oi-wall-flow")
+async def get_oi_wall_flow_config() -> dict:
+    """Current config plus the engine's own defaults, vocabularies and judgement.
+
+    Thresholds are judgement from one motivating chain, not a calibrated sample.
+    They are published as ``judgement_fields`` so the UI can say so, instead of
+    pretending they were measured.
+    """
+    from app.engines.oi_wall_flow.config import STOP_MODES, OIWallFlowConfig
+    from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES
+    from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
+    from app.services.oi_wall_flow import descriptor, get_config
+    cfg = get_config()
+    return {
+        "strategy": {**descriptor(), "enabled": cfg.enabled},
+        "config": cfg.as_dict(),
+        "defaults": OIWallFlowConfig().as_dict(),
+        "vocabularies": {
+            "stop_mode": sorted(STOP_MODES),
+            "expiry_selection": sorted(EXPIRY_SELECTIONS),
+            "scan_expiries_indices": sorted(EXPIRY_SERIES),
+            "scan_expiries_stocks": ["monthly"],
+            "data_source": ["kite"],
+            "scan_stocks": sorted(HIGH_LIQUIDITY_STOCK_NAMES),
+        },
+        "research_only": {},
+        "warnings": cfg.warnings(),
+    }
+
+
+@router.put("/oi-wall-flow")
+async def update_oi_wall_flow_config(body: dict = Body(...)) -> dict:
+    """Apply a partial config change. Unknown keys are refused rather than ignored."""
+    from app.services.oi_wall_flow import set_config
+    values = {k: v for k, v in dict(body).items() if v is not None}
+    if not values:
+        raise HTTPException(status_code=422, detail="no settings to change")
+    try:
+        cfg = set_config(values)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"config": cfg.as_dict()}
+
+
+@router.get("/oi-wall-flow/snapshot")
+async def oi_wall_flow_snapshot(user: UserContext = Depends(get_current_user)) -> dict:
+    """Config, what the scan found, and every reason nothing is armed."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.oi_wall_flow import snapshot
+    try:
+        return await snapshot(uid)
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"OI Wall Flow snapshot failed: {exc}") from exc
+
+
+@router.post("/oi-wall-flow/scan")
+async def oi_wall_flow_scan(user: UserContext = Depends(get_current_user)) -> dict:
+    """Run one on-demand universe → chain → classify pass."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    from app.services.oi_wall_flow_runner import scan_once
+    try:
+        return await scan_once(uid)
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"OI Wall Flow scan failed: {exc}") from exc
+
+
+@router.post("/oi-wall-flow/arm")
+async def oi_wall_flow_arm(body: dict = Body(...),
+                           user: UserContext = Depends(get_current_user)) -> dict:
+    """Enter one armed signal by id."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    signal_id = str(dict(body).get("signal_id") or "").strip()
+    if not signal_id:
+        raise HTTPException(status_code=422, detail="signal_id is required")
+    from app.services.oi_wall_flow_runner import arm
+    return await arm(uid, signal_id)
+
+
+@router.post("/oi-wall-flow/adopt")
+async def oi_wall_flow_adopt(body: dict = Body(...),
+                             user: UserContext = Depends(get_current_user)) -> dict:
+    """Take responsibility for a position this engine did not open."""
+    uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
+    if not uid:
+        raise HTTPException(status_code=401, detail="authenticated user is required")
+    data = dict(body)
+    symbol = str(data.get("symbol") or "").strip()
+    try:
+        quantity = int(data.get("quantity") or 0)
+        entry_price = float(data.get("entry_price") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="quantity and entry_price "
+                                                    "must be numbers") from exc
+    if not symbol or quantity <= 0 or entry_price <= 0:
+        raise HTTPException(status_code=422,
+                            detail="symbol, a positive quantity and entry_price are required")
+    from app.services.oi_wall_flow_runner import adopt
+    return await adopt(uid, symbol, quantity, entry_price)
+
+
 # ---------------------------------------------------------------- Adaptive Edge
 
 @router.get("/adaptive-edge")

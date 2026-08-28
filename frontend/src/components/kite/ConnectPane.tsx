@@ -24,6 +24,7 @@ import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
 import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
 import { GammaMoveSettingsPanel } from './GammaMoveSettingsPanel';
+import { OiWallFlowSettingsPanel } from './OiWallFlowSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -852,6 +853,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   orbOptions: <Icons.Chart />,
   atmPremiumImbalance: <Icons.Chart />,
   gammaMove: <Icons.Pulse />,
+  oiWallFlow: <Icons.Chart />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -883,6 +885,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Buys whichever at-the-money leg is cheaper at the session open and exits at the entry fill plus a fixed target. Reverse-engineered from recordings and not yet validated, so it stays paper-only until the readiness gate passes.' },
   { id: 'gammaMove', label: 'Gamma Move', eyebrow: 'OI unwind at a level, buy the gamma', group: 'Signal engines',
     pageDescription: 'Buys the option that writers are covering: an F&O stock at a support or resistance level, the highest open-interest strike there, entered when open interest falls while volume and premium rise on the same 15-minute bar. Held one to two sessions. Calibrated against real market data, which found the entry trigger alone has no edge — the level filter is where it is — so it stays paper-only until the readiness gate passes.' },
+  { id: 'oiWallFlow', label: 'OI Wall Flow', eyebrow: 'First-resistance CE / first-support PE', group: 'Signal engines',
+    pageDescription: 'Reads one expiry’s option chain the way a desk does: classify OI+premium flow, locate the put and call walls, and buy the first-resistance CE (or first-support PE) when near-ATM flow agrees — never ATM. Thresholds are judgement from the BSE Ltd 29-Sep-2026 chain, not a calibrated sample. Paper/live and manual/auto stay with Trading Mode.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -1127,6 +1131,12 @@ export function ConnectPane() {
             {section === 'gammaMove' && (
               <>
                 <GammaMoveSettingsPanel />
+              </>
+            )}
+
+            {section === 'oiWallFlow' && (
+              <>
+                <OiWallFlowSettingsPanel />
               </>
             )}
 

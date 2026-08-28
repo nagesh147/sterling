@@ -15,6 +15,12 @@ from typing import Optional
 
 from app.engines.option_contracts import EXPIRY_SELECTIONS, EXPIRY_SERIES
 
+#: Same vocabulary and default as SuperTrend / Gamma Move. ``broker`` is a GTT
+#: at Zerodha that survives this process dying; ``monitor`` is our own tick
+#: loop; ``both`` is the production answer.
+STOP_MODES: frozenset[str] = frozenset({"broker", "monitor", "both"})
+DATA_SOURCES: frozenset[str] = frozenset({"kite"})
+
 JUDGEMENT = {
     "oi_chg_deadband_pct": "0.5 — noise floor; a 0.00% print is not a buildup",
     "ltp_chg_deadband_pct": "0.5 — same, for premium",
@@ -31,11 +37,37 @@ JUDGEMENT = {
 JUDGEMENT_FIELDS: frozenset[str] = frozenset(JUDGEMENT)
 
 
+def _hhmm(value: str, label: str) -> str:
+    parts = str(value).split(":")
+    if len(parts) != 2:
+        raise ValueError(f"{label} must be HH:MM")
+    try:
+        hh, mm = int(parts[0]), int(parts[1])
+    except ValueError as exc:
+        raise ValueError(f"{label} must be HH:MM") from exc
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValueError(f"{label} must be a valid HH:MM time")
+    return f"{hh:02d}:{mm:02d}"
+
+
 @dataclass(frozen=True)
 class OIWallFlowConfig:
     """Immutable strategy configuration. Construct, then :meth:`validate`."""
 
     enabled: bool = True
+
+    # --- universe -----------------------------------------------------------
+    # Same field names, semantics and liquidity boundary as every other engine
+    # here. Indices are stored as the display names InstrumentsGroup writes
+    # ("NIFTY 50"), then mapped onto NFO option names ("NIFTY") at scan time.
+    scan_stocks: tuple[str, ...] = ()
+    #: True = every eligible high-liquidity stock, never every listed F&O name.
+    scan_all_stocks: bool = True
+    #: Master switch above the stock list, as in the SuperTrend engine.
+    stock_contracts: bool = True
+    #: Default on: this engine reads any chain, and the motivating example is a
+    #: stock, but indices are the liquid walls operators actually watch.
+    scan_indices: tuple[str, ...] = ("NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE")
 
     # --- chain reading ------------------------------------------------------
     oi_chg_deadband_pct: float = 0.5
@@ -67,6 +99,15 @@ class OIWallFlowConfig:
     target_2_premium_pct: float = 100.0
     #: Exit if spot prints through the opposing wall. That is the thesis break.
     wall_invalidation: bool = True
+    stop_mode: str = "both"
+
+    # --- session ------------------------------------------------------------
+    #: A few minutes after the open so session OI has something to difference
+    #: against. The first quote of the day is the baseline (Kite quotes have no
+    #: previous-close OI); scanning at the bell would arm on a 0% change.
+    session_start: str = "09:20"
+    session_end: str = "15:15"
+    scan_interval_seconds: int = 300
 
     # --- risk ---------------------------------------------------------------
     lot_size: int = 1
@@ -77,6 +118,12 @@ class OIWallFlowConfig:
     daily_loss_limit_inr: float = 15_000.0
     descale_after_losses: int = 3
     rescale_after_wins: int = 2
+
+    # --- plumbing -----------------------------------------------------------
+    # Paper/live is account.is_paper. Manual/auto is the engine's auto_execute.
+    # Neither is stored here — a second copy can disagree with the client that
+    # actually places the order.
+    data_source: str = "kite"
 
     def effective_quantity(self, lot_size: int, lots: int) -> int:
         return int(lot_size) * int(lots)
@@ -123,7 +170,49 @@ class OIWallFlowConfig:
             raise ValueError("position/day caps must be >= 1")
         if self.max_premium_at_risk_inr <= 0 or self.daily_loss_limit_inr <= 0:
             raise ValueError("risk caps must be > 0")
+        if self.stop_mode not in STOP_MODES:
+            raise ValueError(f"stop_mode must be one of {sorted(STOP_MODES)}")
+        if self.data_source not in DATA_SOURCES:
+            raise ValueError(f"data_source must be one of {sorted(DATA_SOURCES)}")
+        if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
+            raise ValueError(
+                "avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
+        for name, limit in (("scan_weekly_series_indices", 4),
+                            ("scan_monthly_series_indices", 2),
+                            ("scan_monthly_series_stocks", 2)):
+            ranks = getattr(self, name)
+            if any(not isinstance(r, int) or r < 0 or r >= limit for r in ranks):
+                raise ValueError(f"{name} ranks must be between 0 and {limit - 1}")
+            if len(set(ranks)) != len(ranks):
+                raise ValueError(f"{name} contains a duplicate rank")
+        from app.services.kite_engine.stock_registry import HIGH_LIQUIDITY_STOCK_NAMES
+        unknown = sorted(set(n.upper() for n in self.scan_stocks)
+                         - set(HIGH_LIQUIDITY_STOCK_NAMES))
+        if unknown:
+            raise ValueError(
+                f"scan_stocks contains names outside the curated high-liquidity "
+                f"registry: {', '.join(unknown)}")
+        if not self.stock_contracts and not self.scan_indices:
+            raise ValueError(
+                "nothing to scan: stock_contracts is off and no indices are selected")
+        start = _hhmm(self.session_start, "session_start")
+        end = _hhmm(self.session_end, "session_end")
+        if start >= end:
+            raise ValueError("session_start must be before session_end")
+        if self.scan_interval_seconds < 60:
+            raise ValueError("scan_interval_seconds must be >= 60")
         return self
+
+    def warnings(self) -> list[str]:
+        """Configured choices worth saying out loud. Not errors."""
+        out: list[str] = []
+        if self.stop_mode == "monitor":
+            out.append("stop_mode=monitor leaves nothing at the broker — if this "
+                       "process dies while holding, the position is unprotected")
+        if not self.skip_atm:
+            out.append("skip_atm is off — ATM premia pay more theta for a worse RR, "
+                       "which is why the default refuses them")
+        return out
 
     def as_dict(self) -> dict:
         out = {}
@@ -133,3 +222,7 @@ class OIWallFlowConfig:
                 val = list(val)
             out[f.name] = val
         return out
+
+    @classmethod
+    def field_names(cls) -> frozenset[str]:
+        return frozenset(f.name for f in fields(cls))

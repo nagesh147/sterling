@@ -1804,7 +1804,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       : ['supertrend', 'navigator'];
     const order: ScannableEngine[] = [
       ...lensFirst.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled)),
-      'orb', 'gamma_move', 'adaptive_edge',
+      'orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow',
     ];
     scanAll(order)
       .then((results) => {
@@ -1892,7 +1892,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       ? ['navigator', 'supertrend']
       : ['supertrend', 'navigator'];
     const onPane = lens.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled));
-    const rest: ScannableEngine[] = ['orb', 'gamma_move', 'adaptive_edge'];
+    const rest: ScannableEngine[] = ['orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow'];
     const names = [...onPane, ...rest].map((e) => SCANNABLE_ENGINE_LABEL[e]);
     const off = !navigatorEnabled ? ' · Navigator is off' : '';
     // ATM Premium Imbalance is deliberately unlisted: it has no scan, it arms one

@@ -20,14 +20,17 @@ import React from 'react';
 import gammaPayload from './fixtures/gamma-move.json';
 import atmPayload from './fixtures/atm-premium-imbalance.json';
 import orbPayload from './fixtures/nifty-orb-options.json';
+import owfPayload from './fixtures/oi-wall-flow.json';
 import { GammaMoveSettingsPanel } from '../kite/GammaMoveSettingsPanel';
 import { AtmPremiumImbalanceSettingsPanel } from '../kite/AtmPremiumImbalanceSettingsPanel';
 import { OrbMomentumOptionsSettingsPanel } from '../kite/OrbMomentumOptionsSettingsPanel';
+import { OiWallFlowSettingsPanel } from '../kite/OiWallFlowSettingsPanel';
 
 const PAYLOADS: Record<string, unknown> = {
   '/api/v1/config/gamma-move': gammaPayload,
   '/api/v1/config/atm-premium-imbalance': atmPayload,
   '/api/v1/config/nifty-orb-options': orbPayload,
+  '/api/v1/config/oi-wall-flow': owfPayload,
 };
 
 beforeEach(() => {
@@ -76,6 +79,7 @@ const PANELS: Array<[string, React.ReactElement]> = [
   ['ORB + VWAP (control)', <OrbMomentumOptionsSettingsPanel key="orb" />],
   ['Gamma Move', <GammaMoveSettingsPanel key="gm" />],
   ['ATM Premium Imbalance', <AtmPremiumImbalanceSettingsPanel key="atm" />],
+  ['OI Wall Flow', <OiWallFlowSettingsPanel key="owf" />],
 ];
 
 describe.each(PANELS)('%s settings, over the real API payload', (label, panel) => {

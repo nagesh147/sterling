@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from .bias import decide
 from .classify import classify_side, max_pain, measure, walls_of
-from .config import JUDGEMENT, JUDGEMENT_FIELDS, OIWallFlowConfig
+from .config import JUDGEMENT, JUDGEMENT_FIELDS, OIWallFlowConfig, STOP_MODES
 from .exits import realised_inr, should_exit
 from .models import (BiasReport, ChainMetrics, ChainRow, ChainSnapshot, FlowLabel,
                      FlowSignal, InstrumentRef, PositionState, TradePlan,
@@ -30,7 +30,7 @@ CONTRACT_VERSION = "A320.1"
 
 __all__ = [
     "STRATEGY_ID", "STRATEGY_NAME", "CONTRACT_VERSION",
-    "OIWallFlowConfig", "JUDGEMENT", "JUDGEMENT_FIELDS",
+    "OIWallFlowConfig", "JUDGEMENT", "JUDGEMENT_FIELDS", "STOP_MODES",
     "OIWallFlowStrategy", "SessionState", "Decision", "Intent", "Phase",
     "ChainRow", "ChainSnapshot", "ChainMetrics", "FlowLabel", "Walls",
     "BiasReport", "TradePlan", "FlowSignal", "InstrumentRef", "PositionState",

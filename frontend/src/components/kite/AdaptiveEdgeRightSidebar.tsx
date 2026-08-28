@@ -5,11 +5,13 @@ import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
 import { AdaptiveEdgeBoard } from './board/AdaptiveEdgeBoard';
 import { AtmPremiumImbalanceBoard } from './board/AtmPremiumImbalanceBoard';
 import { GammaMoveBoard } from './board/GammaMoveBoard';
+import { OiWallFlowBoard } from './board/OiWallFlowBoard';
 import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
 import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
 import { orbToBoard } from './board/orbAdapter';
 import { atmPremiumImbalanceToBoard } from './board/atmPremiumImbalanceAdapter';
 import { gammaMoveToBoard } from './board/gammaMoveAdapter';
+import { oiWallFlowToBoard } from './board/oiWallFlowAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
@@ -17,6 +19,7 @@ import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEn
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
+import { useOiWallFlowSnapshot } from '../../hooks/useOiWallFlow';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { k, Icons } from '../../styles/kiteUI';
@@ -56,6 +59,7 @@ const NAV_TARGET: Record<string, EngineId> = {
   orbOptions: 'orb',
   atmPremiumImbalance: 'atm_premium_imbalance',
   gammaMove: 'gamma_move',
+  oiWallFlow: 'oi_wall_flow',
 };
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
@@ -94,6 +98,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   const orb = useOrbSignals(orbEnabled !== false);
   const apiSnapshot = useAtmPremiumImbalanceSnapshot();
   const gmSnapshot = useGammaMoveSnapshot();
+  const owfSnapshot = useOiWallFlowSnapshot();
 
   /**
    * The countdown to the next automatic scan, 0..1.
@@ -124,7 +129,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
    * now or in twenty seconds.
    */
   const scanOrder = useMemo<ScannableEngine[]>(() => {
-    const all: ScannableEngine[] = ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge'];
+    const all: ScannableEngine[] = ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow'];
     const first = all.filter((e) => e === engine);
     return [...first, ...all.filter((e) => e !== engine)];
   }, [engine]);
@@ -182,6 +187,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     const ob = orb.signals.map(orbToBoard);
     const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
     const gm = gammaMoveToBoard(gmSnapshot.data);
+    const owf = oiWallFlowToBoard(owfSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
     return [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
@@ -198,9 +204,12 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
       { id: 'gamma_move',
         running: gmSnapshot.data?.config?.enabled === true,
         live: live(gm), scanned: gm.length },
+      { id: 'oi_wall_flow',
+        running: owfSnapshot.data?.config?.enabled === true,
+        live: live(owf), scanned: owf.length },
     ];
   }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled,
-      apiSnapshot.data, gmSnapshot.data]);
+      apiSnapshot.data, gmSnapshot.data, owfSnapshot.data]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
@@ -263,6 +272,9 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         )}
         {engine === 'gamma_move' && (
           <GammaMoveBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
+        )}
+        {engine === 'oi_wall_flow' && (
+          <OiWallFlowBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
       </div>
     </div>

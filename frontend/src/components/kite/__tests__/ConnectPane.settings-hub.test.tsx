@@ -6,6 +6,7 @@ import { ConnectPane } from '../ConnectPane';
 import gammaPayload from '../../__tests__/fixtures/gamma-move.json';
 import atmPayload from '../../__tests__/fixtures/atm-premium-imbalance.json';
 import orbPayload from '../../__tests__/fixtures/nifty-orb-options.json';
+import owfPayload from '../../__tests__/fixtures/oi-wall-flow.json';
 
 const setConfig = vi.fn();
 
@@ -203,6 +204,7 @@ describe('ConnectPane — every option engine is reachable and complete', () => 
     '/api/v1/config/gamma-move': gammaPayload,
     '/api/v1/config/atm-premium-imbalance': atmPayload,
     '/api/v1/config/nifty-orb-options': orbPayload,
+    '/api/v1/config/oi-wall-flow': owfPayload,
   };
 
   beforeEach(() => {
@@ -228,6 +230,7 @@ describe('ConnectPane — every option engine is reachable and complete', () => 
     ['ATM Premium Imbalance', /ATM Premium Imbalance\s*Cheaper ATM leg at the open/i,
       'ATM Premium Imbalance'],
     ['Gamma Move', /Gamma Move\s*OI unwind at a level/i, 'Gamma Move'],
+    ['OI Wall Flow', /OI Wall Flow\s*First-resistance CE \/ first-support PE/i, 'OI Wall Flow'],
   ];
 
   it.each(ENGINES)('gives %s a home in the rail', (_label, railName, heading) => {

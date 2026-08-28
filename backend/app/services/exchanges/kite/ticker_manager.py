@@ -82,6 +82,16 @@ def _make_broadcaster(user_id: str):
                 await ae_runner.on_ticks(user_id, ticks)
         except Exception as exc:  # never let this kill the tick loop
             log.debug("Adaptive Edge on_ticks failed for %s: %s", user_id, exc)
+        # Then OI Wall Flow: premium stop and opposing-wall invalidation both
+        # fire on ticks, and a protective stop that only runs while a UI is
+        # open is not a protective stop.
+        try:
+            from app.services import oi_wall_flow_positions as owf_positions
+            from app.services import oi_wall_flow_runner as owf_runner
+            if owf_positions.open_positions(user_id):
+                await owf_runner.on_ticks(user_id, ticks)
+        except Exception as exc:  # never let this kill the tick loop
+            log.debug("OI Wall Flow on_ticks failed for %s: %s", user_id, exc)
         try:
             from app.api.v1.endpoints.stream import stream_manager
             await stream_manager.broadcast_to_channel(

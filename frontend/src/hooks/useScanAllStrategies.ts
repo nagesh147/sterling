@@ -3,6 +3,7 @@ import { api } from '../utils/api';
 import { useRunScan } from './useSterlingKiteEngine';
 import { useRunNavigatorScan } from './useNavigator';
 import { useGammaMoveScan } from './useGammaMove';
+import { useOiWallFlowScan } from './useOiWallFlow';
 
 /**
  * One re-scan for every strategy that has one.
@@ -27,7 +28,7 @@ import { useGammaMoveScan } from './useGammaMove';
  * nothing to call would be a promise the platform cannot keep.
  */
 export type ScannableEngine =
-  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge';
+  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge' | 'oi_wall_flow';
 
 export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   supertrend: 'SuperTrend',
@@ -35,6 +36,7 @@ export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   orb: 'ORB',
   gamma_move: 'Gamma Move',
   adaptive_edge: 'Adaptive Edge',
+  oi_wall_flow: 'OI Wall Flow',
 };
 
 export interface EngineScanResult {
@@ -59,6 +61,7 @@ export function useScanAllStrategies() {
   const navigator = useRunNavigatorScan();
   const gammaMove = useGammaMoveScan();
   const adaptiveEdge = useAdaptiveEdgeScan();
+  const oiWallFlow = useOiWallFlowScan();
 
   // ORB's scan is exposed as a polling query that POSTs, not a mutation, so it
   // is triggered by refetching its key rather than by calling a mutate. Reaching
@@ -72,6 +75,7 @@ export function useScanAllStrategies() {
     orb,
     gamma_move: () => gammaMove.mutateAsync(),
     adaptive_edge: () => adaptiveEdge.mutateAsync(),
+    oi_wall_flow: () => oiWallFlow.mutateAsync(),
   };
 
   /**
@@ -102,7 +106,7 @@ export function useScanAllStrategies() {
   return {
     scanAll,
     isPending: supertrend.isPending || navigator.isPending
-      || gammaMove.isPending || adaptiveEdge.isPending,
+      || gammaMove.isPending || adaptiveEdge.isPending || oiWallFlow.isPending,
   };
 }
 

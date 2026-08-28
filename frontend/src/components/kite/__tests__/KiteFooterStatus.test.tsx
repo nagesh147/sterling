@@ -29,6 +29,7 @@ vi.mock('../../../hooks/useNavigator', () => ({
 vi.mock('../../../hooks/useOrbConfig', () => ({ useOrbConfig: () => ({ data: { config: { enabled: true } } }) }));
 vi.mock('../../../hooks/useAdaptiveEdge', () => ({ useAdaptiveEdgeSnapshot: () => ({ data: null }) }));
 vi.mock('../../../hooks/useGammaMove', () => ({ useGammaMoveSnapshot: () => ({ data: null }) }));
+vi.mock('../../../hooks/useOiWallFlow', () => ({ useOiWallFlowSnapshot: () => ({ data: null }) }));
 vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({ useAtmPremiumImbalanceSnapshot: () => ({ data: null }) }));
 
 import { KiteFooterStatus } from '../KiteFooterStatus';
@@ -76,7 +77,7 @@ describe('the broker chip', () => {
 describe('the strategy chips', () => {
   it('lists every strategy', () => {
     render(<KiteFooterStatus onOpenSession={vi.fn()} />);
-    for (const label of ['ST', 'NAV', 'ORB', 'AE', 'GM', 'ATM']) {
+    for (const label of ['ST', 'NAV', 'ORB', 'AE', 'GM', 'OWF', 'ATM']) {
       expect(screen.getByText(label), label).toBeInTheDocument();
     }
   });

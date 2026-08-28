@@ -140,6 +140,7 @@ class OIWallFlowStrategy:
             tradingsymbol=("" if plan.instrument is None
                            else plan.instrument.tradingsymbol),
             target_2=plan.target_2,
+            instrument=plan.instrument,
         )
         self.state.positions[key] = pos
         self.state.trades_today += 1

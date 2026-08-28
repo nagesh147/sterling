@@ -6,6 +6,7 @@ import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
+import { useOiWallFlowSnapshot } from '../../hooks/useOiWallFlow';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 
 /**
@@ -32,6 +33,7 @@ export function KiteFooterStatus({ onOpenSession }: { onOpenSession: () => void 
   const orbOn = useOrbConfig().data?.config?.enabled !== false;
   const aeOn = !!useAdaptiveEdgeSnapshot().data;
   const gmOn = !!useGammaMoveSnapshot().data?.strategy?.enabled;
+  const owfOn = !!useOiWallFlowSnapshot().data?.strategy?.enabled;
   const atmArmed = !!useAtmPremiumImbalanceSnapshot().data?.session?.armed;
 
   // A failed CHECK is not a disconnection: the token is intact and Sterling
@@ -67,6 +69,7 @@ export function KiteFooterStatus({ onOpenSession }: { onOpenSession: () => void 
     { label: 'ORB', on: orbOn, note: orbOn ? undefined : 'off' },
     { label: 'AE', on: aeOn, note: aeOn ? undefined : 'off' },
     { label: 'GM', on: gmOn, note: gmOn ? undefined : 'off' },
+    { label: 'OWF', on: owfOn, note: owfOn ? undefined : 'off' },
     { label: 'ATM', on: atmArmed, note: atmArmed ? 'armed' : 'not armed' },
   ];
 

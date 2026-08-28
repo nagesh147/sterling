@@ -28,6 +28,9 @@ vi.mock('../useNavigator', () => ({
 vi.mock('../useGammaMove', () => ({
   useGammaMoveScan: () => ({ mutateAsync: runner('gamma_move'), isPending: false }),
 }));
+vi.mock('../useOiWallFlow', () => ({
+  useOiWallFlowScan: () => ({ mutateAsync: runner('oi_wall_flow'), isPending: false }),
+}));
 vi.mock('../../utils/api', () => ({
   api: { post: (url: string) => runner(url.includes('adaptive-edge') ? 'adaptive_edge' : url)() },
 }));
@@ -112,6 +115,7 @@ describe('useScanAllStrategies', () => {
     // It resolves one option pair and arms it — there is no universe to sweep,
     // so offering it would promise something the platform cannot do.
     expect(Object.keys(SCANNABLE_ENGINE_LABEL)).not.toContain('atm_premium_imbalance');
-    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toHaveLength(5);
+    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toHaveLength(6);
+    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toContain('oi_wall_flow');
   });
 });

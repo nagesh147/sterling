@@ -29,7 +29,7 @@ describe('the re-scan selection', () => {
     // Absent means included. The map holds only EXCLUSIONS, so an engine added
     // tomorrow is covered rather than silently missing from every saved map.
     expect(s.getState().rescanStrategies).toEqual({});
-    for (const e of ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge']) {
+    for (const e of ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge', 'oi_wall_flow']) {
       expect(s.getState().rescanStrategies[e], e).not.toBe(false);
     }
   });

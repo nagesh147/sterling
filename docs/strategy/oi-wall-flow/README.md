@@ -2,7 +2,8 @@
 
 **Id:** `oi_wall_flow`  
 **Contract:** A320.1  
-**Engine:** `backend/app/engines/oi_wall_flow/`
+**Engine:** `backend/app/engines/oi_wall_flow/`  
+**Live path:** `backend/app/services/oi_wall_flow*.py` — scanner, runner, positions. Shared SignalBoard tab, Connect settings, Trading Mode re-scan, footer chip `OWF`.
 
 Buy the first-resistance call (or first-support put) that the chain is actually
 defending, when near-ATM flow agrees.
@@ -38,8 +39,14 @@ That chain is a golden test. If it ever arms a PE, the engine is wrong.
 
 ## What this package does not do
 
-No broker, no socket, no clock. It emits `app.domain.models.Signal`. Execution
-is the OrderRouter's job, same as every other engine.
+The engine itself has no broker, socket, or clock. It emits
+`app.domain.models.Signal`. Scanning, arming, GTT protection and the tick
+loop live in `app.services.oi_wall_flow*`, same split as Gamma Move.
+
+Open-interest *change* is against a **session baseline** (first quote of the
+day). Kite quotes have no previous-close OI; a restart with no stored
+baseline reports 0% change — conservative, not fabricated. SENSEX / BFO is
+skipped in v1.
 
 Thresholds in `config.py` are judgement (`JUDGEMENT`), not a calibrated
 sample. Do not describe them as measured.

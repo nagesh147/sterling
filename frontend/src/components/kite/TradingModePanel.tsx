@@ -60,6 +60,7 @@ const RESCANNABLE: Array<{ engine: string; label: string; note: string }> = [
   { engine: 'orb', label: 'ORB + VWAP', note: 'Opening range breakout on the index options' },
   { engine: 'gamma_move', label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
   { engine: 'adaptive_edge', label: 'Adaptive Edge', note: 'Order-flow scalping' },
+  { engine: 'oi_wall_flow', label: 'OI Wall Flow', note: 'First-resistance CE / first-support PE the chain is writing' },
 ];
 
 export function TradingModePanel() {

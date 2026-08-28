@@ -74,6 +74,10 @@ vi.mock('../../../hooks/useGammaMove', () => ({
   useGammaMoveSnapshot: () => ({ data: null }),
   useGammaMoveScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
 }));
+vi.mock('../../../hooks/useOiWallFlow', () => ({
+  useOiWallFlowSnapshot: () => ({ data: null }),
+  useOiWallFlowScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
+}));
 // The boards themselves are not under test; stub them so the shell can mount.
 vi.mock('../SterlingKiteEngineWithExpiry', () => ({ SterlingKiteEngineWithExpiry: () => <div /> }));
 

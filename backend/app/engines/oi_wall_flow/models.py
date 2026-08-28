@@ -5,7 +5,7 @@ column is a trade-destroying lie, and this codebase has shipped that bug before.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Literal, Optional, Sequence
 
 OptionType = Literal["CE", "PE"]
@@ -136,6 +136,7 @@ class TradePlan:
     instrument: Optional[InstrumentRef] = None
 
     def as_dict(self) -> dict:
+        inst = None if self.instrument is None else asdict(self.instrument)
         return {
             "option_type": self.option_type,
             "strike": q2(self.strike),
@@ -149,6 +150,7 @@ class TradePlan:
             "lots": self.lots,
             "reason": self.reason,
             "tradingsymbol": None if self.instrument is None else self.instrument.tradingsymbol,
+            "instrument": inst,
         }
 
 
@@ -170,6 +172,8 @@ class FlowSignal:
             raise ValueError(f"a '{self.state}' signal must carry a reason")
 
     def as_dict(self) -> dict:
+        plan = None if self.plan is None else self.plan.as_dict()
+        inst = None if plan is None else plan.get("instrument")
         return {
             "id": self.id,
             "state": self.state,
@@ -180,7 +184,24 @@ class FlowSignal:
             "days_to_expiry": self.days_to_expiry,
             "reason": self.reason,
             "bias": self.bias.as_dict(),
-            "plan": None if self.plan is None else self.plan.as_dict(),
+            "plan": plan,
+            "instrument": inst,
+            "levels": {
+                "ltp": None if self.plan is None else self.plan.entry,
+                "entry": None if self.plan is None else self.plan.entry,
+                "stop": None if self.plan is None else self.plan.stop,
+                "trail": None,
+                "target": None if self.plan is None else self.plan.target,
+                "exit": None,
+            },
+            "sizing": {
+                "lots": None if self.plan is None else self.plan.lots,
+                "quantity": None if self.plan is None else self.plan.quantity,
+                "at_risk_inr": None if self.plan is None else q2(
+                    (self.plan.entry - self.plan.stop) * self.plan.quantity),
+                "deployed_inr": None if self.plan is None else q2(
+                    self.plan.entry * self.plan.quantity),
+            },
         }
 
 
@@ -201,10 +222,31 @@ class PositionState:
     target_2: Optional[float] = None
     high_water: float = 0.0
     exiting: bool = False
+    instrument: Optional[InstrumentRef] = None
+
+    # --- broker reality ----------------------------------------------------
+    #: PENDING until a fill is confirmed. A position is not "open" because we
+    #: sent an order -- it is open when the broker says it filled.
+    status: str = "pending"
+    order_id: str = ""
+    fill_price: float = 0.0
+    gtt_id: int = 0
+    stop_mode: str = "both"
+    idempotency_key: str = ""
+
+    @property
+    def effective_entry(self) -> float:
+        return self.fill_price if self.fill_price > 0 else self.entry
+
+    @property
+    def is_open(self) -> bool:
+        return self.status in ("pending", "open")
 
     def __post_init__(self) -> None:
         if self.high_water <= 0:
-            self.high_water = self.entry
+            self.high_water = self.effective_entry
+        if not self.tradingsymbol and self.instrument is not None:
+            self.tradingsymbol = self.instrument.tradingsymbol
 
 
 @dataclass(frozen=True)
@@ -254,3 +296,16 @@ class TradeRecord:
         elif self.descaled and self.consecutive_wins >= rescale_after:
             self.descaled = False
         self.history.append({"pnl_inr": q2(pnl_inr), "day": day})
+
+    def as_dict(self) -> dict:
+        return {
+            "trades": self.trades, "wins": self.wins, "losses": self.losses,
+            "win_rate": q2(100.0 * self.wins / self.trades) if self.trades else None,
+            "consecutive_losses": self.consecutive_losses,
+            "consecutive_wins": self.consecutive_wins,
+            "descaled": self.descaled,
+            "realised_inr": q2(self.realised_inr),
+            "day_realised_inr": q2(self.day_realised_inr), "day": self.day,
+            "verdict": ("no realised trades yet" if not self.trades
+                        else f"{self.wins}/{self.trades} winners"),
+        }

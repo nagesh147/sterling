@@ -1562,6 +1562,13 @@ async def lifespan(app: FastAPI):
     from app.services.gamma_move_runner import auto_scan_loop as _gamma_move_scan
     gamma_move_task = asyncio.create_task(_gamma_move_scan(interval=300))
 
+    # OI Wall Flow: universe -> one expiry chain -> classify, on the strategy's
+    # own cadence. The loop is a no-op while the strategy is disabled. It
+    # reconciles against the broker before its first scan, so a restart cannot
+    # open a second position in a contract it already holds.
+    from app.services.oi_wall_flow_runner import auto_scan_loop as _oi_wall_flow_scan
+    oi_wall_flow_task = asyncio.create_task(_oi_wall_flow_scan(interval=300))
+
     # Adaptive Edge: underlyings -> contracts -> candidates, on a faster cadence
     # because the source is a scalping strategy. Safe to run unconditionally:
     # the loop is a no-op outside the session window, and the strategy's
@@ -1738,6 +1745,11 @@ async def lifespan(app: FastAPI):
     gamma_move_task.cancel()
     try:
         await gamma_move_task
+    except (Exception, BaseException):
+        pass
+    oi_wall_flow_task.cancel()
+    try:
+        await oi_wall_flow_task
     except (Exception, BaseException):
         pass
 
