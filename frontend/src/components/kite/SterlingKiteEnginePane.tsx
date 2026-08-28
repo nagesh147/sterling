@@ -1092,6 +1092,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         });
                       }}
                       onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
+                      // The Trade and Chart COLUMNS govern these. LAST, because a
+                      // later JSX prop wins over an earlier one — placed above the
+                      // handlers these spreads would simply be overwritten. Uses the
+                      // component's own contract: a button with no handler is not
+                      // rendered, so hiding one column removes exactly its own
+                      // buttons rather than the whole cluster.
+                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
+                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -1137,6 +1145,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
+                          // Trade and Chart are columns in the picker, but they are
+                          // DRAWN by the action buttons beside this map, not as price
+                          // cells. The wrapper below applies `col.width` whatever the
+                          // cell returns, so letting them through here would add 126px
+                          // of empty width to every row.
+                          if (key === 'trade' || key === 'chart') return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
                           if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                           return (
@@ -1198,6 +1212,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         setLegMenu({ symbol: sym, label: leg.option_symbol, top: r.bottom + 4, left: r.left - 150 });
                       }}
+                      // The Trade and Chart COLUMNS govern these. LAST, because a
+                      // later JSX prop wins over an earlier one — placed above the
+                      // handlers these spreads would simply be overwritten. Uses the
+                      // component's own contract: a button with no handler is not
+                      // rendered, so hiding one column removes exactly its own
+                      // buttons rather than the whole cluster.
+                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
+                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
                   </div>
                 )}
