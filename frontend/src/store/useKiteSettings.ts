@@ -155,7 +155,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       sortBy: 'Custom',
       legSort: { key: '', dir: '' },
       signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
+      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time', 'trade', 'chart'],
       hiddenSignalCols: [],
       setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s === 'classic' ? 'material' : s === 'off' ? 'minimal' : s }),
@@ -211,13 +211,13 @@ export const useKiteSettings = create<KiteSettingsState>()(
         showLeg: true,
         legSort: { key: '', dir: '' },
         signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
+        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time', 'trade', 'chart'],
         hiddenSignalCols: [],
       }),
     }),
     {
       name: 'kite-settings',
-      version: 7,
+      version: 8,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -258,6 +258,22 @@ export const useKiteSettings = create<KiteSettingsState>()(
         // update the tests and call the difference gone.
         if (next.boardRenderer !== 'shared' && next.boardRenderer !== 'classic') {
           next = { ...next, boardRenderer: 'classic' };
+        }
+
+        // v8 puts Trade and Chart in the signal table's column list.
+        //
+        // They were defined in `SIGNAL_RIGHT_COLUMNS` when Buy/Sell/chart became
+        // columns on the shared board, and the bespoke table's picker is built
+        // from this persisted ORDER — which did not contain them. So the entries
+        // existed, the picker never listed them, and the answer to "where is the
+        // show/hide option for Buy and Sell" was: nowhere, on the renderer that
+        // is still the default. Defining a column is not offering it.
+        //
+        // Appended, like 'time' above, so an operator's own arrangement survives.
+        const right8 = next.signalRightColumnOrder;
+        if (Array.isArray(right8)) {
+          const missing = ['trade', 'chart'].filter((k) => !right8.includes(k));
+          if (missing.length) next = { ...next, signalRightColumnOrder: [...right8, ...missing] };
         }
 
         // v7 adopts the layout choice from the standalone key the pane used to

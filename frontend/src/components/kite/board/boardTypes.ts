@@ -404,7 +404,14 @@ export function groupByDay(
     // sit below days of closed history, which is the case the bucket exists
     // for. Without a clock, fall back to hoisting every live row.
     const buried = todayKey == null || day !== todayKey;
-    push(liveFirst && (hoistToday || buried) && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
+    // `hoistToday` implies `liveFirst`. Asking for today's live rows to be
+    // lifted out IS asking for a live bucket, and gating one on the other meant
+    // a caller could pass `hoistToday` alone and get no live section at all —
+    // silently, because the prop was accepted and simply had no effect. That is
+    // how SuperTrend's shared board lost its "Active now" heading: the wrapper
+    // passed `hoistLiveFromToday` and never `liveFirst`.
+    const wantsLive = liveFirst || hoistToday;
+    push(wantsLive && (hoistToday || buried) && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
   }
   const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
   return [...buckets.entries()]
