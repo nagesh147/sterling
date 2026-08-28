@@ -20,6 +20,7 @@ import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { k, Icons } from '../../styles/kiteUI';
+import { useKiteSettings } from '../../store/useKiteSettings';
 import { PaneHeaderActions } from './PaneHeaderActions';
 import { ToolbarButton } from './board/EngineToolbar';
 import { ScanProgressRing } from './board/ScanProgressRing';
@@ -69,6 +70,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
    * common to the whole dock were reachable from a fifth of it.
    */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const rescanStrategies = useKiteSettings((st) => st.rescanStrategies);
   const { scanAll, isPending: scanPending } = useScanAllStrategies();
   const cancelScan = useCancelScan();
   const cancelNavigatorScan = useCancelNavigatorScan();
@@ -139,11 +141,18 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
    * both engines" whether it scanned one or two.
    */
   const enabledToScan = useMemo<ScannableEngine[]>(() => scanOrder.filter((e) => {
+    // The operator's own choice of what this button covers. Absent means
+    // included, so the map only holds exclusions and a new engine is in from the
+    // day it appears.
+    if (rescanStrategies[e] === false) return false;
+    // ANDed with whether the engine is RUNNING, never ORed: a switched-off engine
+    // is skipped whatever is ticked in settings, because scanning it would be
+    // work already declined.
     if (e === 'supertrend') return engineConfig.data?.engine_enabled !== false;
     if (e === 'navigator') return navigatorEnabled;
     if (e === 'orb') return orbEnabled !== false;
     return true;
-  }), [scanOrder, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled]);
+  }), [scanOrder, rescanStrategies, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled]);
 
   /**
    * Name what the press will actually run, in the order it will run it.

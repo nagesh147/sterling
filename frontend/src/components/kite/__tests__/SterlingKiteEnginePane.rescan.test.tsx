@@ -208,3 +208,40 @@ describe('the engine controls on the search row', () => {
     expect(screen.getByRole('button', { name: /Re-scan/ })).toBeInTheDocument();
   });
 });
+
+/**
+ * The selection and the running switch are ANDed.
+ *
+ * A stopped engine must be skipped whatever is ticked in settings — scanning it
+ * is work the operator has already declined — and an excluded engine must be
+ * skipped even when it is running, which is the whole point of the setting.
+ */
+describe('re-scan honours both the running switch and the selection', () => {
+  beforeEach(async () => {
+    localStorage.clear();
+    supertrendScan.mockClear();
+    navigatorScan.mockClear();
+    cfg.engine_enabled = true;
+    navigatorEnabled = true;
+    scanning = false;
+  });
+
+  it('skips a strategy the operator excluded, even though it is running', async () => {
+    const { useKiteSettings } = await import('../../../store/useKiteSettings');
+    useKiteSettings.getState().toggleRescanStrategy('navigator');
+    renderPane();
+    fireEvent.click(screen.getByRole('button', { name: /^Re-scan/ }));
+    await waitFor(() => expect(supertrendScan).toHaveBeenCalledTimes(1));
+    expect(navigatorScan, 'excluded from the sweep').not.toHaveBeenCalled();
+    useKiteSettings.getState().toggleRescanStrategy('navigator');
+  });
+
+  it('names only what it will actually run', async () => {
+    const { useKiteSettings } = await import('../../../store/useKiteSettings');
+    useKiteSettings.getState().toggleRescanStrategy('navigator');
+    renderPane();
+    // The tooltip and the press come from one list, so they cannot disagree.
+    expect(screen.queryByRole('button', { name: /Navigator,/ })).toBeNull();
+    useKiteSettings.getState().toggleRescanStrategy('navigator');
+  });
+});

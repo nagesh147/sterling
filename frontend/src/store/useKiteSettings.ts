@@ -106,6 +106,21 @@ export interface KiteSettingsState {
    */
   signalViewLayout: 'grid' | 'list';
   setSignalViewLayout: (l: 'grid' | 'list') => void;
+  /**
+   * Which strategies the re-scan button includes.
+   *
+   * Distinct from whether a strategy is RUNNING, which is a server-side setting
+   * that decides whether it produces signals at all. This is local and only about
+   * one press: they share a single historical-data budget and run one at a time,
+   * so a scan of five engines costs five times a scan of one. An operator working
+   * a single strategy should be able to stop paying for the other four without
+   * switching them off for everyone.
+   *
+   * A switched-off engine is skipped regardless of what is ticked here — the
+   * server-side flag wins, and the two are ANDed, never ORed.
+   */
+  rescanStrategies: Record<string, boolean>;
+  toggleRescanStrategy: (engine: string) => void;
   toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
@@ -129,6 +144,9 @@ export const useKiteSettings = create<KiteSettingsState>()(
       boardRowActions: true,
       boardRenderer: 'classic',
       signalViewLayout: 'list',
+      // Everything included by default: an operator who has never opened this
+      // should get the behaviour the button has always had.
+      rescanStrategies: {},
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -152,6 +170,15 @@ export const useKiteSettings = create<KiteSettingsState>()(
       toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
       setBoardRenderer: (r) => set({ boardRenderer: r }),
       setSignalViewLayout: (l) => set({ signalViewLayout: l }),
+      // Absent means included, so the map only ever holds exclusions. That keeps
+      // a new engine included the day it appears, rather than silently missing
+      // from everyone's saved map.
+      toggleRescanStrategy: (engine) => set((state) => ({
+        rescanStrategies: {
+          ...state.rescanStrategies,
+          [engine]: state.rescanStrategies[engine] === false,
+        },
+      })),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -176,6 +203,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
         boardRowActions: true,
         boardRenderer: 'classic',
         signalViewLayout: 'list',
+        rescanStrategies: {},
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
