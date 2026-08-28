@@ -20,6 +20,7 @@ import {
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import { LEG_INDENT, HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -171,6 +172,14 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
 /** How far a leg sits in from the signal that owns it. */
 /** @see LEG_INDENT - kept as a local alias so the call sites below read short. */
 const INDENT = LEG_INDENT;
+
+/**
+ * Keeps every scrolling row and the header in step.
+ *
+ * Module scope, like SuperTrend's: each row is its own component instance, so a
+ * per-instance handler would have nothing to sync against.
+ */
+const SB_HSCROLL = makeHscrollSync('.sb-head-row, .sb-row-scroll');
 
 const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
 
@@ -611,7 +620,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
 
 function Row({
   signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
-  depth = 0, legCount, marks, nowMs,
+  depth = 0, legCount, marks, nowMs, rowScroll = false, renderRowActions,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -629,6 +638,10 @@ function Row({
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>;
   /** The board's clock, so the time column can word a date like its day header. */
   nowMs: number;
+  /** Scroll sideways rather than clip, offsets shared with every other row. */
+  rowScroll?: boolean;
+  /** Controls belonging to this row, rendered before the right-hand cells. */
+  renderRowActions?: (signal: BoardSignal) => React.ReactNode;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
@@ -645,7 +658,8 @@ function Row({
         }
         onClick={onToggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
-        className="sb-row"
+        className={rowScroll ? 'sb-row sb-row-scroll' : 'sb-row'}
+        onScroll={rowScroll ? SB_HSCROLL : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -672,6 +686,11 @@ function Row({
           // it keeps it readable without letting it read as actionable.
           opacity: signal.status === 'ended' ? 0.62 : 1,
           textDecoration: signal.status === 'ended' ? 'line-through' : 'none',
+          // Off, the row clips and the operator hides columns to fit -- which is
+          // what this board has always done. The scrollbar itself is hidden in
+          // CSS; a bar under every row would out-shout the data.
+          overflowX: rowScroll ? 'auto' : 'hidden',
+          overflowY: 'hidden',
         }}
       >
         <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
@@ -710,6 +729,18 @@ function Row({
             </span>
           );
         })}
+        {/* The engine's own controls. After the cells so they sit at the end of
+            the row, and outside the cell map so they are not mistaken for a
+            column and cannot be hidden by the column picker. */}
+        {renderRowActions && (
+          <span
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}
+            // The row is a button; a control inside it must not also toggle it.
+            onClick={(e) => e.stopPropagation()}
+          >
+            {renderRowActions(signal)}
+          </span>
+        )}
       </div>
       {open && (
         <div style={{ padding: 10, background: k.surface, borderBottom: `2px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -740,6 +771,7 @@ function Row({
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
+  onReorderColumn, rowScroll = false, renderRowActions,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -769,6 +801,32 @@ export function SignalBoard({
   onToggleGroup?: (id: string) => void;
   /** Float open positions above the dated history. On by default. */
   liveFirst?: boolean;
+  /**
+   * Let a heading be dragged sideways to move its column.
+   *
+   * Omit and the headings are sort controls only, which is what every engine but
+   * SuperTrend has had. Supplying it is what allows SuperTrend's table to move
+   * onto this component without losing the feature — and, having moved it here,
+   * any engine can offer it.
+   */
+  onReorderColumn?: (fromId: ColumnId, toId: ColumnId) => void;
+  /**
+   * Let each row scroll sideways on its own when the board is narrower than its
+   * columns, with the offsets kept in step.
+   *
+   * Off by default. The alternative, and the shared board's habit until now, is
+   * to hide columns until the rest fit — which keeps every row aligned but makes
+   * the operator choose what to stop seeing.
+   */
+  rowScroll?: boolean;
+  /**
+   * Controls that belong to a row: buy, chart, whatever the engine offers.
+   *
+   * Rendered inside the row, before the right-hand cells. Kept as a render prop
+   * rather than a set of callbacks because what a row can do differs per engine,
+   * and this component has no business knowing what an order is.
+   */
+  renderRowActions?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -808,10 +866,14 @@ export function SignalBoard({
     <div ref={boardRef}>
       <div
         role="row"
+        className="sb-head-row"
+        onScroll={rowScroll ? SB_HSCROLL : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: ROW_METRICS.gap,
+          overflowX: rowScroll ? 'auto' : undefined,
+          overflowY: rowScroll ? 'hidden' : undefined,
           padding: HEAD_METRICS.padding,
           borderBottom: `1px solid ${k.border}`,
           borderLeft: '3px solid transparent',
@@ -825,7 +887,7 @@ export function SignalBoard({
         {cols.map((col) => {
           const active = sort.column === col.id;
           const direction = active ? sort.direction : null;
-          return (
+          const heading = (
             <Tip
               key={col.id}
               text={col.hint ? `${col.label} — ${col.hint}. Click to sort within each day.` : `${col.label} — click to sort within each day.`}
@@ -862,6 +924,23 @@ export function SignalBoard({
                 <SortMark direction={direction} />
               </button>
             </Tip>
+          );
+          // Undragged, the heading renders exactly as before -- no wrapper at
+          // all, so a board that does not offer reordering is byte-identical to
+          // what it was.
+          if (!onReorderColumn) return heading;
+          return (
+            <DraggableColHeader
+              key={col.id}
+              colKey={col.id}
+              // One run of columns, so every heading may be dropped anywhere.
+              // SuperTrend's table keeps two runs and passes the run's name.
+              group="board"
+              width={col.width}
+              reorder={(_group, fromKey, toKey) => onReorderColumn(fromKey as ColumnId, toKey as ColumnId)}
+            >
+              {heading}
+            </DraggableColHeader>
           );
         })}
       </div>
@@ -905,6 +984,8 @@ export function SignalBoard({
                   renderDetail={renderDetail}
                   onOpenDetail={onOpenDetail}
                   striped={i % 2 === 1}
+                  rowScroll={rowScroll}
+                  renderRowActions={renderRowActions}
                 />
               );
             }
@@ -937,6 +1018,8 @@ export function SignalBoard({
                     onOpenDetail={onOpenDetail}
                     striped={false}
                     depth={1}
+                    rowScroll={rowScroll}
+                    renderRowActions={renderRowActions}
                   />
                 ))}
               </React.Fragment>

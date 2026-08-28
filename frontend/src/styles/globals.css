@@ -521,6 +521,13 @@ button, a, input, select, textarea,
   box-shadow: inset 0 0 0 1px var(--k-blue);
 }
 
+/* A scrolling row hides its own bar: one under every row would out-shout the
+ * data it belongs to. The header scrolls with them, so the columns stay lined up
+ * without a visible track. */
+.sb-row-scroll, .sb-head-row, .st-row-scroll, .st-header-row { scrollbar-width: none; }
+.sb-row-scroll::-webkit-scrollbar,
+.sb-head-row::-webkit-scrollbar { display: none; }
+
 .sb-row:active,
 .st-leg-row:active,
 .st-leg-tile:active,

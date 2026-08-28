@@ -10,6 +10,7 @@ import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
   ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   type SignalColVisibility,
 } from './board/signalRowSpec';
+import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -130,101 +131,15 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
  *  next to the (flex:1) Instrument column; RIGHT is pinned after the action
  *  buttons. `visibleWhen` is a tag both the header and the row resolve against
  *  their own (equivalent, differently-named) boolean for that condition. */
-/** Drag-to-reorder header cell wrapper. Uses raw pointer events (not native
- *  HTML5 draggable/dragstart) because native drag-and-drop's gesture
- *  recognition is unreliable for plain `<div>`s across browsers/trackpads —
- *  many devices never fire `dragstart` for a generic element, which is why
- *  this looked wired up correctly yet didn't respond to a real drag. Pointer
- *  events are dispatched directly for every mouse/touch/pen down-move-up, so
- *  there's no browser-level gesture heuristic in the way. */
-function DraggableColHeader({ colKey, group, width, reorder, children, enabled = true }: {
-  colKey: string; group: 'left' | 'right'; width: number;
-  reorder: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
-  children: React.ReactNode;
-  /**
-   * Off leaves the heading a plain sort control.
-   *
-   * The wrapper still renders with the same width and data attributes, so the
-   * header lays out identically -- only the pointer handling and the grab cursor
-   * go. Returning a different element shape here would shift the columns.
-   */
-  enabled?: boolean;
-}) {
-  const draggingRef = React.useRef(false);
-  const startRef = React.useRef<{ x: number; y: number } | null>(null);
 
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    startRef.current = { x: e.clientX, y: e.clientY };
-    draggingRef.current = false;
-
-    const clearHighlight = () => {
-      document.querySelectorAll('.col-drag-over').forEach((el) => el.classList.remove('col-drag-over'));
-    };
-    const targetAt = (x: number, y: number) =>
-      document.elementFromPoint(x, y)?.closest('[data-col-key]') as HTMLElement | null;
-
-    const onMove = (ev: PointerEvent) => {
-      const start = startRef.current;
-      if (!start) return;
-      if (!draggingRef.current) {
-        // Small movement threshold so a plain click still reaches the sort handler.
-        if (Math.abs(ev.clientX - start.x) < 4 && Math.abs(ev.clientY - start.y) < 4) return;
-        draggingRef.current = true;
-        document.body.style.cursor = 'grabbing';
-      }
-      clearHighlight();
-      const el = targetAt(ev.clientX, ev.clientY);
-      if (el && el.getAttribute('data-col-group') === group && el.getAttribute('data-col-key') !== colKey) {
-        el.classList.add('col-drag-over');
-      }
-    };
-    const onUp = (ev: PointerEvent) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.body.style.cursor = '';
-      clearHighlight();
-      if (draggingRef.current) {
-        const el = targetAt(ev.clientX, ev.clientY);
-        const toKey = el?.getAttribute('data-col-key');
-        if (toKey && el?.getAttribute('data-col-group') === group && toKey !== colKey) {
-          reorder(group, colKey, toKey);
-        }
-        // A drag that ends over a different header would otherwise still fire
-        // that header's onClick (sort) right after pointerup - swallow it once.
-        document.addEventListener('click', (ce) => { ce.stopPropagation(); ce.preventDefault(); }, { capture: true, once: true });
-      }
-      draggingRef.current = false;
-      startRef.current = null;
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-  };
-
-  return (
-    <div
-      data-col-key={colKey}
-      data-col-group={group}
-      onPointerDown={enabled ? onPointerDown : undefined}
-      style={{ width, flexShrink: 0, cursor: enabled ? 'grab' : undefined, userSelect: 'none', touchAction: enabled ? 'none' : undefined }}
-      title={enabled ? 'Drag to reorder column' : undefined}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** Header row and each leg row now scroll independently (both can overflow a
- *  narrow right-sidebar width) — without syncing scrollLeft between them, a
- *  scrolled row's columns stop lining up under the header's labels. Shared at
- *  module scope since the header lives in SterlingKiteEnginePane while each
- *  row is its own SignalCard instance. */
-function syncHscroll(e: React.UIEvent<HTMLDivElement>) {
-  const left = e.currentTarget.scrollLeft;
-  document.querySelectorAll('.st-header-row, .st-leg-row').forEach((el) => {
-    if (el !== e.currentTarget) (el as HTMLElement).scrollLeft = left;
-  });
-}
+/**
+ * Rows and the header keep their sideways scroll in step.
+ *
+ * Built here, now shared: `makeHscrollSync` lives in board/tableMechanics so the
+ * shared board can offer the same thing. The selector names only rows that opted
+ * into scrolling, so a board with the setting off is not reached at all.
+ */
+const syncHscroll = makeHscrollSync('.st-header-row, .st-row-scroll');
 
 // A long option leg has EXITED once the last scan flagged its SuperTrend as no longer
 // aligned (`is_active` false) OR — between scans, while that flag is frozen — once the
