@@ -53,15 +53,21 @@ test('renders the chart and switches timeframe without a blank canvas', async ({
   });
 
   await page.goto('/e2e/fixtures/chart-harness.html');
-  await expect(page.getByLabel('Chart values').getByText('AAA')).toBeVisible();
-  await expect(page.getByText('80 bars')).toBeVisible({ timeout: 10_000 });
+  const workspace = page.getByLabel('NSE:AAA chart workspace');
+  // Pane header AND the hidden legacy toolbar both print "80 bars". Scope to
+  // the workspace so Playwright's strict mode does not see two matches.
+  await expect(workspace.getByLabel('Chart values').getByText('AAA')).toBeVisible();
+  await expect(workspace.getByText('80 bars')).toHaveCount(1);
   await expect(page.locator('canvas').first()).toBeVisible();
 
-  await page.getByRole('button', { name: '1H' }).click();
+  // 1H lives in the timeframe popover; the resting control only shows the current tf.
+  await page.getByRole('button', { name: 'Timeframe' }).click();
+  await page.locator('.zk-timeframes').getByRole('button', { name: '1H', exact: true }).click();
   await expect.poll(() => requestedTimeframes.includes('1H')).toBe(true);
   await expect(page.getByText(/Loading chart/)).toBeVisible();
   await expect(page.getByText(/Loading chart/)).toBeHidden({ timeout: 10_000 });
-  await expect(page.getByText('80 bars')).toBeVisible();
+  await expect(workspace.getByText('80 bars')).toHaveCount(1);
+  await expect(workspace.getByLabel('Chart values').getByText('AAA')).toBeVisible();
 
   const canvasBox = await page.locator('canvas').first().boundingBox();
   expect(canvasBox?.width).toBeGreaterThan(100);
