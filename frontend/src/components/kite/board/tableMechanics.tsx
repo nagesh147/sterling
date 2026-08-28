@@ -17,7 +17,9 @@ import React from 'react';
  *  this looked wired up correctly yet didn't respond to a real drag. Pointer
  *  events are dispatched directly for every mouse/touch/pen down-move-up, so
  *  there's no browser-level gesture heuristic in the way. */
-export function DraggableColHeader<G extends string>({ colKey, group, width, reorder, children, enabled = true }: {
+export function DraggableColHeader<G extends string>({
+  colKey, group, width, reorder, children, enabled = true, flex, minWidth,
+}: {
   colKey: string;
   /**
    * Which run of columns this heading belongs to.
@@ -28,6 +30,22 @@ export function DraggableColHeader<G extends string>({ colKey, group, width, reo
    */
   group: G;
   width: number;
+  /**
+   * For a column that is sized by flex rather than by a fixed width.
+   *
+   * Without this the wrapper imposed `width: <the column's width>` on every
+   * heading — and a flex-sized column declares `width: 0`, because the number is
+   * a placeholder it never uses. The instrument heading therefore rendered a
+   * 200px label inside a 0px box with `flex-shrink: 0`, overflowed it, and
+   * painted on top of itself and the heading beside it: "INSTRUMENT" came out as
+   * "INSEROMENT".
+   *
+   * When `flex` is given the wrapper becomes layout-transparent — it takes the
+   * column's flex sizing and lays its child out as a flex item, so wrapping a
+   * heading for dragging changes nothing about where it sits.
+   */
+  flex?: string;
+  minWidth?: number;
   /**
    * Generic over the group so a caller keeps its own narrow union.
    *
@@ -103,7 +121,16 @@ export function DraggableColHeader<G extends string>({ colKey, group, width, reo
       data-col-key={colKey}
       data-col-group={group}
       onPointerDown={enabled ? onPointerDown : undefined}
-      style={{ width, flexShrink: 0, cursor: enabled ? 'grab' : undefined, userSelect: 'none', touchAction: enabled ? 'none' : undefined }}
+      style={{
+        ...(flex
+          // Flex-sized: pass the sizing through and become a flex container, so
+          // the child's own flex still fills the wrapper.
+          ? { flex, minWidth, display: 'flex', alignItems: 'center' }
+          : { width, flexShrink: 0 }),
+        cursor: enabled ? 'grab' : undefined,
+        userSelect: 'none',
+        touchAction: enabled ? 'none' : undefined,
+      }}
       title={enabled ? 'Drag to reorder column' : undefined}
     >
       {children}

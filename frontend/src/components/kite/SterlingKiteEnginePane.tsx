@@ -11,6 +11,7 @@ import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
   type SignalColVisibility,
 } from './board/signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
+import { instrumentFlex } from './board/signalRowSpec';
 import { SuperTrendSharedBoard } from './SuperTrendSharedBoard';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
@@ -920,7 +921,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 }}
                 style={{ cursor: 'pointer', background: LEG_BG, outlineOffset: -2 }}
               >
-                   <span style={{ color: color, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth - LEG_INDENT, display: 'flex', alignItems: 'center', gap: 6 }}>
+                   <span style={{ color: color, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: instrumentFlex(true), minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
@@ -2429,7 +2430,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               borderLeft: '3px solid transparent',
               overflowX: 'auto', overflowY: 'hidden',
             }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: instrumentFlex(), minWidth: 0 }} />
                  {(() => {
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];

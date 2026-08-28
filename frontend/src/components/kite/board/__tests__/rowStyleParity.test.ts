@@ -440,7 +440,14 @@ describe('legs are indented under their parent', () => {
   it('gives back the width the indent took, so columns stay aligned', () => {
     // Without this the instrument column is 14px wider than its heading and
     // every cell to its right drifts.
-    expect(superTrend).toContain('ROW_METRICS.instrumentMinWidth - LEG_INDENT');
-    expect(sharedBoard).toContain('ROW_METRICS.instrumentMinWidth - (isLeg ? INDENT : 0)');
+    //
+    // The compensation moved from `minWidth` into the flex BASIS, via
+    // `instrumentFlex(isLeg)`. A minimum only bounds shrinking, and the cell no
+    // longer shrinks — so once `flex-shrink` went to 0 the old form silently
+    // stopped compensating anything. Both tables call the one helper now.
+    expect(rowSpec).toContain('export function instrumentFlex');
+    expect(rowSpec).toContain('isLeg ? LEG_INDENT : 0');
+    expect(superTrend).toContain('instrumentFlex(true)');
+    expect(sharedBoard).toContain('instrumentFlex(isLeg)');
   });
 });

@@ -72,22 +72,17 @@ export const ROW_METRICS = {
   legPadding: '0 16px',
   /** The instrument cell is the only one that flexes. */
   /**
-   * The instrument column: grows, never shrinks.
+   * The instrument column is sized by {@link instrumentFlex}, not by a constant
+   * here: a leg needs a different basis from a heading, so one string cannot
+   * serve both. Only its width lives here.
    *
-   * `1 1 150px` was wrong in both halves. It is the only flexible column on the
-   * row, so it absorbed ALL the overflow whenever the board was narrower than
-   * its columns -- and 150px does not hold what the cell draws. An option label
-   * renders as "BANKNIFTY 26 Aug 57000 CE", around 166px at this size, before
-   * the best-R and best-delta badges beside it. So the one thing you need to
-   * read was the first thing ellipsised, while the columns of numbers it names
-   * stayed whole. A leg indents by LEG_INDENT and gives back the same amount,
-   * which took it to 136 and made it plainly visible.
-   *
-   * `1 0 200px`: it takes any slack going, and under overflow the ROW scrolls or
-   * clips its right-hand columns instead. Losing a column you can bring back
-   * from the picker beats losing the name of the contract.
+   * It never shrinks. It is the only flexible column on the row, so
+   * `flex-shrink: 1` made it absorb ALL the overflow when the board was narrower
+   * than its columns — and an option label ("BANKNIFTY 26 Aug 57000 CE", ~166px
+   * at this size, plus the best-R and best-delta badges) does not fit in the 150
+   * it used to get. The result was the worst possible truncation: the name of the
+   * contract clipped while every column of numbers describing it stayed whole.
    */
-  instrumentBasis: '1 0 200px',
   instrumentMinWidth: 200,
   /** Type scale, so a cell in one board is the same size as in another. */
   instrumentFontSize: 13,
@@ -194,4 +189,21 @@ export const BOARD_COL_TO_SIGNAL = Object.fromEntries(
 /** Which of SuperTrend's two column runs a key belongs to. */
 export function signalColGroup(key: string): 'left' | 'right' {
   return key in SIGNAL_RIGHT_COLUMNS ? 'right' : 'left';
+}
+
+/**
+ * The instrument cell's flex, for a leg or for anything else.
+ *
+ * A leg indents by {@link LEG_INDENT} and has to give the same amount back, or
+ * its column runs past the heading above it and every cell to the right drifts.
+ * That compensation used to live in `minWidth` — which worked only while the
+ * cell could shrink. Now that it cannot (`flex-shrink: 0`, so the contract name
+ * is never the thing that clips), `minWidth` bounds nothing and the basis is
+ * what has to change.
+ *
+ * Getting this wrong is invisible in a test that renders one row and obvious the
+ * moment a leg sits under its parent, 14px out.
+ */
+export function instrumentFlex(isLeg = false): string {
+  return `1 0 ${ROW_METRICS.instrumentMinWidth - (isLeg ? LEG_INDENT : 0)}px`;
 }

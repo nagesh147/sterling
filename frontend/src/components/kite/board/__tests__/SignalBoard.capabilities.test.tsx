@@ -12,9 +12,9 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { BOARD_COLUMNS_WITH_DAY_MOVE, SignalBoard } from '../SignalBoard';
+import { BOARD_COLUMNS_WITH_DAY_MOVE, COLUMNS, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
-import { LEG_INDENT, ROW_METRICS } from '../signalRowSpec';
+import { LEG_INDENT, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
 
 const IST = (5 * 60 + 30) * 60_000;
 const NOW = Date.UTC(2026, 7, 21, 10, 30) - IST;
@@ -294,11 +294,26 @@ describe('inline marks', () => {
  */
 describe('the instrument column', () => {
   it('grows but never shrinks', () => {
-    const { container } = board();
-    const cell = container.querySelector('.sb-row span') as HTMLElement;
-    expect(cell).not.toBeNull();
     // flex-shrink 0: the row overflows and scrolls rather than the name clipping.
-    expect(ROW_METRICS.instrumentBasis).toMatch(/^1 0 /);
+    expect(instrumentFlex()).toMatch(/^1 0 /);
+    expect(instrumentFlex(true)).toMatch(/^1 0 /);
+  });
+
+  it('puts the indent compensation in the BASIS, not in minWidth', () => {
+    // A leg indents and must give the same back or its column runs past the
+    // heading above it. That used to live in `minWidth`, which works only while
+    // the cell can shrink — and it no longer can, so a minimum bounds nothing.
+    expect(instrumentFlex(true)).toBe(`1 0 ${ROW_METRICS.instrumentMinWidth - LEG_INDENT}px`);
+    expect(instrumentFlex()).toBe(`1 0 ${ROW_METRICS.instrumentMinWidth}px`);
+  });
+
+  it('keeps a leg’s column edge under its heading', () => {
+    // The leg starts LEG_INDENT further right and is LEG_INDENT narrower, so the
+    // right edges coincide. If these ever stop cancelling, every cell to the
+    // right of the instrument drifts.
+    const legStart = 16 + LEG_INDENT;
+    const legWidth = ROW_METRICS.instrumentMinWidth - LEG_INDENT;
+    expect(legStart + legWidth).toBe(16 + ROW_METRICS.instrumentMinWidth);
   });
 
   it('is wide enough for a full option label', () => {
@@ -311,5 +326,50 @@ describe('the instrument column', () => {
     // A leg reduces the cell by LEG_INDENT to keep the column's right edge under
     // its heading, so the usable width is this, not the full basis.
     expect(ROW_METRICS.instrumentMinWidth - LEG_INDENT).toBeGreaterThanOrEqual(170);
+  });
+});
+
+/**
+ * Wrapping a heading for dragging must not resize it.
+ *
+ * `DraggableColHeader` imposed `width: <the column's width>` with
+ * `flex-shrink: 0`. A flex-sized column declares `width: 0` — the number is a
+ * placeholder it never uses — so the instrument heading rendered a 200px label
+ * inside a 0px box, overflowed it, and painted on top of itself and the heading
+ * beside it. On screen "INSTRUMENT" came out as "INSEROMENT".
+ *
+ * Only reproducible with dragging ON, which is the default, and only on the
+ * shared renderer: the bespoke table renders its instrument heading unwrapped.
+ */
+describe('a dragged heading keeps its own size', () => {
+  const instrumentWrapper = (container: HTMLElement) =>
+    container.querySelector('[data-col-key="instrument"]') as HTMLElement | null;
+
+  it('never boxes a flex-sized heading at its placeholder width', () => {
+    const { container } = board({ onReorderColumn: vi.fn() });
+    const wrap = instrumentWrapper(container);
+    expect(wrap, 'the instrument heading is draggable').not.toBeNull();
+    expect(wrap!.style.width, 'not pinned to the placeholder 0').toBe('');
+    expect(wrap!.style.flex, 'sized by flex instead').toBe(instrumentFlex());
+  });
+
+  it('lays the heading out as a flex child so it fills the wrapper', () => {
+    // Without this the button inside a grown wrapper stops at its min-width.
+    const { container } = board({ onReorderColumn: vi.fn() });
+    expect(instrumentWrapper(container)!.style.display).toBe('flex');
+  });
+
+  it('still pins a fixed-width heading to its width', () => {
+    const { container } = board({ onReorderColumn: vi.fn() });
+    const ltp = container.querySelector('[data-col-key="ltp"]') as HTMLElement;
+    expect(ltp.style.width).toBe('70px');
+    expect(ltp.style.flexShrink).toBe('0');
+  });
+
+  it('is the only column that needs the flex path', () => {
+    // If another flex-sized column appears, it must pass `flex` too — this
+    // catches the next one rather than waiting for it to smear on screen.
+    const placeholders = COLUMNS.filter((c) => c.width === 0).map((c) => c.id);
+    expect(placeholders).toEqual(['instrument']);
   });
 });

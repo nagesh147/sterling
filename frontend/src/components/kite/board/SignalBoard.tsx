@@ -19,7 +19,10 @@ import {
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
-import { LEG_INDENT, HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import {
+  DAY_HEAD_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
+  SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
+} from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
 import { useKiteSettings } from '../../../store/useKiteSettings';
 import { fitColumns } from './columnFit';
@@ -832,8 +835,10 @@ function Row({
               style={{
                 // The name is the only cell that flexes; every other column is
                 // a fixed width so the decimal points line up down the board.
-                flex: isName ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
-                minWidth: isName ? ROW_METRICS.instrumentMinWidth - (isLeg ? INDENT : 0) : 0,
+                // The basis carries the indent compensation, not minWidth: the
+                // cell no longer shrinks, so a minimum bounds nothing.
+                flex: isName ? instrumentFlex(isLeg) : `0 0 ${col.width}px`,
+                minWidth: 0,
                 width: isName ? undefined : col.width,
                 fontSize: isName ? ROW_METRICS.instrumentFontSize : ROW_METRICS.cellFontSize,
                 color: color ?? k.text,
@@ -1031,7 +1036,7 @@ export function SignalBoard({
                   border: 'none', background: 'transparent', padding: 0, font: 'inherit',
                   // Same track as the row's cell, or the heading drifts off the
                   // numbers it names.
-                  flex: col.id === 'instrument' ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
+                  flex: col.id === 'instrument' ? instrumentFlex() : `0 0 ${col.width}px`,
                   width: col.id === 'instrument' ? undefined : col.width,
                   minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
                   fontSize: HEAD_METRICS.fontSize,
@@ -1064,6 +1069,11 @@ export function SignalBoard({
               // SuperTrend's table keeps two runs and passes the run's name.
               group="board"
               width={col.width}
+              // The instrument is flex-sized and declares `width: 0`, so it must
+              // hand the wrapper its flex instead — otherwise a 200px label ends
+              // up inside a 0px box and paints over its neighbour.
+              flex={col.id === 'instrument' ? instrumentFlex() : undefined}
+              minWidth={col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : undefined}
               reorder={(_group, fromKey, toKey) => onReorderColumn(fromKey as ColumnId, toKey as ColumnId)}
             >
               {heading}
