@@ -671,19 +671,14 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
     >
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ color: k.dim, display: 'inline-flex', flexShrink: 0 }}><Chevron open={expanded} /></span>
-        {signal.origin && (
-          <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
-            <span tabIndex={0} style={{
-              fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
-              color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
-              borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
-            }}>
-              {signal.origin.label}
-            </span>
-          </Tip>
-        )}
-        {/* Whatever else this engine wants read without opening the row. */}
-        <Marks marks={signal.marks} />
+        {/* Name FIRST, then its price, then the tags.
+
+            The badges used to lead, so every instrument name started at a
+            different x depending on how many tags that row happened to
+            carry -- PREMIUM, or PREMIUM + TSL exit, or nothing -- and a
+            column of names came out ragged. A leg already puts its marks
+            after the symbol, so leading with them on the parent was also
+            inconsistent with the rows underneath it. */}
         {onOpenDetail ? (
           <button
             type="button"
@@ -710,6 +705,19 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
         )}
         <span style={{ fontSize: 10, color: k.dim, flexShrink: 0 }}>
           {legCount} contract{legCount === 1 ? '' : 's'}
+        {signal.origin && (
+          <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
+            <span tabIndex={0} style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
+              color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
+              borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
+            }}>
+              {signal.origin.label}
+            </span>
+          </Tip>
+        )}
+        {/* Whatever else this engine wants read without opening the row. */}
+        <Marks marks={signal.marks} />
         </span>
       </span>
 

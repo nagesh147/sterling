@@ -502,3 +502,27 @@ export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
   // uses, so the two cannot disagree about what a date looks like.
   return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
 };
+
+
+/**
+ * The quote key for a signal's UNDERLYING.
+ *
+ * Kite lists the indices under names no engine uses — "NIFTY 50" for NIFTY,
+ * "NIFTY BANK" for BANKNIFTY — and SENSEX and BANKEX are BSE while everything
+ * else is NSE. Getting any of that wrong yields a key nothing is subscribed to,
+ * which reads as "this instrument has no price" rather than as a lookup miss.
+ *
+ * It lives here rather than in the pane that first needed it: the shared board
+ * needs it too, and importing it from a component the board is rendered BY would
+ * be a cycle.
+ */
+export function underlyingQuoteKey(underlying: string): string {
+  const exch = (underlying === 'SENSEX' || underlying === 'BANKEX') ? 'BSE' : 'NSE';
+  const remap: Record<string, string> = {
+    NIFTY: 'NIFTY 50',
+    BANKNIFTY: 'NIFTY BANK',
+    FINNIFTY: 'NIFTY FIN SERVICE',
+    MIDCPNIFTY: 'NIFTY MID SELECT',
+  };
+  return `${exch}:${remap[underlying] ?? underlying}`;
+}

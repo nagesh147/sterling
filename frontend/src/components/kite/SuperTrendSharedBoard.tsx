@@ -1,7 +1,7 @@
 import React from 'react';
 import { SignalBoard, DEFAULT_SORT, type ColumnId, type SortState } from './board/SignalBoard';
 import { supertrendToBoard } from './board/supertrendAdapter';
-import type { BoardSignal } from './board/boardTypes';
+import { underlyingQuoteKey, type BoardSignal } from './board/boardTypes';
 import {
   BOARD_COL_TO_SIGNAL, SIGNAL_COL_TO_BOARD, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   signalColGroup, type SignalColKey,
@@ -26,12 +26,11 @@ import type { EngineSignalRow } from '../../types/kiteEngine';
  * by moving and nobody had to decide for them which ones to drop.
  */
 export function SuperTrendSharedBoard({
-  rows, quotes, originalEntryMs, spotOf, onSelectSignal, onOpenChart, nowMs, signalMode,
+  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode,
 }: {
   rows: readonly EngineSignalRow[];
   quotes?: Record<string, any>;
   originalEntryMs?: Map<string, number>;
-  spotOf?: (underlying: string) => number | null;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   /** Tab is narrowed to what the host accepts; widening it here only moves the error. */
   /** Signature narrowed to the host's, so a mismatch surfaces here not there. */
@@ -45,6 +44,27 @@ export function SuperTrendSharedBoard({
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState<SortState>(DEFAULT_SORT);
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
+
+  /**
+   * The underlying's LIVE price, for the parent row.
+   *
+   * Without this the adapter falls back to `row.spot`, which is a scan-time
+   * snapshot — so a parent row's price never moved between scans, and a
+   * PREMIUM-source signal had no price at all, because that signal was read from
+   * the option's own premium chart and carries no underlying spot. That is why
+   * some rows showed a price and some did not, and why none of them updated.
+   *
+   * The quotes are already subscribed: the pane adds every signal's underlying
+   * to its quote set alongside the option legs.
+   */
+  const spotOf = React.useCallback(
+    (underlying: string) => {
+      const q = quotes?.[underlyingQuoteKey(underlying)];
+      const last = q?.last_price;
+      return typeof last === 'number' && last > 0 ? last : null;
+    },
+    [quotes],
+  );
 
   const signals = React.useMemo<BoardSignal[]>(
     () => supertrendToBoard(rows, {

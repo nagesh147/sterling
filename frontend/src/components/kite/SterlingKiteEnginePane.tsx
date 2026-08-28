@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, sessionDayLabel } from './board/boardTypes';
+import { stamp, sessionDayKey, sessionDayLabel, underlyingQuoteKey } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
@@ -457,7 +457,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: ROW_METRICS.parentPadding, outlineOffset: -2 }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
-          <SourceBadge source={row.source} />
           {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -497,6 +496,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               </span>
             </>
           )}
+          {/* After the name, not before it. Leading with the badge put every
+              instrument name at a different x depending on how many tags the row
+              carried, and the legs beneath already trail their own marks. */}
+          <SourceBadge source={row.source} />
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -1334,17 +1337,6 @@ function universeTip(cfg?: EngineConfigModel | null): string {
  *  SENSEX/BANKEX are BSE, and the index short names are stored under their full
  *  display names. Shared by the row rendering and the board sort so the two
  *  cannot disagree about which quote a row means. */
-function underlyingQuoteKey(underlying: string): string {
-  const exch = (underlying === 'SENSEX' || underlying === 'BANKEX') ? 'BSE' : 'NSE';
-  const remap: Record<string, string> = {
-    NIFTY: 'NIFTY 50',
-    BANKNIFTY: 'NIFTY BANK',
-    FINNIFTY: 'NIFTY FIN SERVICE',
-    MIDCPNIFTY: 'NIFTY MID SELECT',
-  };
-  return `${exch}:${remap[underlying] ?? underlying}`;
-}
-
 function RefreshIcon({ spinning }: { spinning?: boolean }) {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"

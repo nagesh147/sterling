@@ -385,3 +385,62 @@ describe('a dragged heading keeps its own size', () => {
     expect(placeholders).toEqual(['instrument']);
   });
 });
+
+/**
+ * A parent row's price, and where its tags sit.
+ *
+ * Both were visible on screen at once: some parents showed a price and some did
+ * not, none of them updated, and the instrument names came out ragged.
+ */
+describe('a parent row prices from the live quote', () => {
+  const parent = (over: Partial<BoardSignal> = {}) => sig({
+    children: [sig({ id: 'leg' })],
+    ...over,
+  });
+
+  it('shows the underlying price when the adapter supplies one', () => {
+    board({ signals: [parent({ underlyingPrice: 1079.6 })] });
+    expect(screen.getByText('1,079.60')).toBeInTheDocument();
+  });
+
+  it('shows nothing rather than a zero when there is no price', () => {
+    // A PREMIUM-source signal is read from the option's own premium chart and
+    // carries no underlying spot at all — `row.spot` is 0. Printing that as
+    // "0.00" beside a live instrument is worse than printing nothing, which is
+    // why the field is nullable and the row omits it.
+    const { container } = board({ signals: [parent({ underlyingPrice: null })] });
+    expect(container.textContent).not.toContain('0.00');
+  });
+});
+
+describe('tags come after the instrument label', () => {
+  it('on a parent row', () => {
+    // Leading with the badges put every name at a different x depending on how
+    // many tags that row happened to carry — PREMIUM, or PREMIUM + TSL exit, or
+    // none — so a column of names came out ragged.
+    board({
+      signals: [sig({
+        children: [sig({ id: 'leg' })],
+        underlying: 'RELIANCE',
+        origin: { label: 'PREMIUM', tone: 'blue', hint: 'from the premium chart' },
+        marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+      })],
+    });
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('RELIANCE'), 'name before its origin badge')
+      .toBeLessThan(body.indexOf('PREMIUM'));
+    expect(body.indexOf('RELIANCE'), 'name before its marks')
+      .toBeLessThan(body.indexOf('TSL exit'));
+  });
+
+  it('and on a leg row, which already did', () => {
+    // The legs were always this way round; the parent is what disagreed.
+    board({
+      signals: [sig({
+        marks: [{ label: 'TSL exit', tone: 'amber', hint: 'closed by the trail' }],
+      })],
+    });
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('NIFTY26AUG24000CE')).toBeLessThan(body.indexOf('TSL exit'));
+  });
+});
