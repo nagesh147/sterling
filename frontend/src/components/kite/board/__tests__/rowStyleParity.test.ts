@@ -272,3 +272,57 @@ describe('both tables share hover, focus and active', () => {
     expect(superTrend).not.toContain('.st-leg-row:hover');
   });
 });
+
+/**
+ * Keyboard parity.
+ *
+ * This is the gap that made the previous commit's claim hollow. I added
+ * `:focus-visible` to SuperTrend's rows and said keyboard use was no longer a
+ * second-class path — but its rows were click-only divs with no `tabIndex`, no
+ * `role` and no key handler, so the rule had nothing to fire on and the rows
+ * could not be reached, let alone expanded, without a mouse. Its column
+ * headings had the same problem: sorting was mouse-only.
+ *
+ * A focus style is not accessibility on its own. The element has to be
+ * focusable first, which is why this is asserted rather than assumed.
+ */
+describe('SuperTrend rows and headings work without a mouse', () => {
+  /** The leg row's opening tag. */
+  const legTag = (() => {
+    const start = superTrend.indexOf('className="st-leg-row"');
+    expect(start).toBeGreaterThan(-1);
+    return superTrend.slice(start - 200, start + 900);
+  })();
+
+  it('puts the leg row in the tab order and announces it', () => {
+    expect(legTag).toContain('tabIndex={0}');
+    expect(legTag).toContain('role="button"');
+    expect(legTag).toContain('aria-expanded');
+  });
+
+  it('expands a leg row on Enter or Space', () => {
+    expect(legTag).toMatch(/onKeyDown/);
+    expect(legTag).toMatch(/'Enter'/);
+  });
+
+  it('lets a column be sorted from the keyboard', () => {
+    const head = superTrend.slice(
+      superTrend.indexOf('export function SortHeaderDiv'),
+      superTrend.indexOf('export function SortHeaderDiv') + 1600,
+    );
+    expect(head).toContain('tabIndex={sortKey ? 0 : undefined}');
+    expect(head).toContain("'Enter'");
+    // The shared heading class, so the focus ring is defined once.
+    expect(head).toContain('sb-head');
+  });
+});
+
+describe('parent rows alternate shade, as the shared board’s do', () => {
+  it('threads a striped flag through SignalCard', () => {
+    expect(superTrend).toContain('striped?: boolean');
+    expect(superTrend).toContain('rowIndex % 2 === 1');
+    expect(superTrend).toContain('striped ? LEG_BG : k.bg');
+    // The shared board's own rule, unchanged.
+    expect(sharedBoard).toContain('striped ? LEG_BG : k.bg');
+  });
+});

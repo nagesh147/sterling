@@ -94,7 +94,20 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
       // inherited from the header strip.
       style={{ ...style, color: isActive ? k.text : undefined, cursor: 'pointer', userSelect: 'none' }} 
       onClick={() => handleSort(sortKey)}
-      className={sortKey ? "sort-header-div" : ""}
+      // Sortable from the keyboard, and carrying the shared board's focus ring.
+      // This was a plain div with an onClick: the only way to reorder this table
+      // was with a mouse. `sb-head` is the shared heading class, so the ring is
+      // defined once for both tables; the sort-glyph hover stays local because
+      // this table's glyph is not the same element as the shared board's.
+      className={sortKey ? "sort-header-div sb-head" : ""}
+      role={sortKey ? 'button' : undefined}
+      tabIndex={sortKey ? 0 : undefined}
+      aria-label={sortKey ? `Sort by ${label}` : undefined}
+      onKeyDown={sortKey ? (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        handleSort(sortKey);
+      } : undefined}
       title={`Sort by ${label}`}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
@@ -309,12 +322,20 @@ function signalColShown(
   return signalColCapable(col.visibleWhen, premiumAvailable) && !hidden.includes(col.key);
 }
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs, striped = false }: {
   row: EngineSignalRow; onClick: () => void;
   // `source` travels with the click: a Navigator origination and a SuperTrend row
   // for the same instrument share a token, so the detail request needs it to open
   // the row the user actually clicked.
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
+  /**
+   * Alternating shade, as on the shared board.
+   *
+   * Every parent row here was drawn on the same background, so a long list read
+   * as one undifferentiated block; the shared board alternates its parents so
+   * the eye can hold a line across the width of the table.
+   */
+  striped?: boolean;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
@@ -376,7 +397,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
-  const toggleExpand = (e: React.MouseEvent, sym: string) => {
+  const toggleExpand = (e: React.SyntheticEvent, sym: string) => {
     e.stopPropagation();
     window.getSelection()?.removeAllRanges();
     setExpanded((prev) => {
@@ -495,12 +516,20 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   return (
     <div
       className="st-parent-row"
-      style={{ padding: ROW_METRICS.parentPadding, borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: k.bg }}
+      style={{ padding: ROW_METRICS.parentPadding, borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: striped ? LEG_BG : k.bg }}
     >
       <div 
         className="st-parent-header" 
+        role="button"
+        tabIndex={0}
+        aria-label={`${row.underlying} ${row.option_type ?? ''}`.trim()}
         onClick={onClick}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: ROW_METRICS.parentPadding }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          onClick?.();
+        }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: ROW_METRICS.parentPadding, outlineOffset: -2 }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           <SourceBadge source={row.source} />
@@ -930,9 +959,23 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             <div key={leg.option_symbol}>
               <div 
                 className="st-leg-row"
+                // Reachable and operable without a mouse, matching the shared
+                // board's rows. This was a click-only div: not in the tab order,
+                // no key handler, and nothing announced -- so the row could not
+                // be expanded from the keyboard at all, and the :focus-visible
+                // rule these rows now share had nothing to fire on.
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExp}
+                aria-label={`${leg.option_symbol}${ended ? ', ended' : ''}`}
                 onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: LEG_BG }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  toggleExpand(e, leg.option_symbol);
+                }}
+                style={{ cursor: 'pointer', background: LEG_BG, outlineOffset: -2 }}
               >
                    <span style={{ color: color, fontWeight: 700, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: ROW_METRICS.instrumentBasis, minWidth: ROW_METRICS.instrumentMinWidth, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -1539,8 +1582,14 @@ function SourceBadge({ source }: { source: EngineSignalRow['source'] }) {
   const it = map[source ?? 'spot'] ?? map.spot;
   return (
     <span title={it.title} style={{
-      flexShrink: 0, padding: '1px 5px', borderRadius: 3, letterSpacing: 0.3,
-      fontSize: 8, fontWeight: 800, color: it.tone, background: tint(it.tone, 8),
+      flexShrink: 0, padding: '1px 5px', borderRadius: 3,
+      // Matched to the shared board's origin flag, which is this badge's
+      // counterpart there: weight 700 not 800, letter-spacing in `em` so it
+      // tracks the font size, and the same tint strength. The three were each
+      // one notch off, which is how a badge ends up looking like a different
+      // component doing the same job.
+      letterSpacing: '.04em',
+      fontSize: 8, fontWeight: 700, color: it.tone, background: tint(it.tone, 10),
     }}>
       {it.label}
     </span>
@@ -2544,9 +2593,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 
                 {!isCollapsed && (
                   <div className="kv-rows">
-                    {group.rows.map((row) => (
+                    {group.rows.map((row, rowIndex) => (
                       <div key={`${row.source ?? 'spot'}:${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
-                        <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
+                        <SignalCard row={row} quotes={quotes} viewLayout={viewLayout} striped={rowIndex % 2 === 1}
                           scanSource={cfg?.scan_source} signalMode={signalMode}
                           showPremiumColumns={showSignalPremiumColumns}
                           originalEntryMs={originalEntryMs.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`)}
