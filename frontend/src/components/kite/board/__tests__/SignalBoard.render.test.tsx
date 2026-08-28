@@ -66,70 +66,12 @@ describe('SignalBoard rendering', () => {
     expect(screen.getByText('TSL')).toBeInTheDocument();
   });
 
-  it('groups rows under their trading day', () => {
-    // liveFirst off, because this is about the date buckets; with it on these
-    // open rows would both float into "Live now".
-    show([sig({ id: 'today' }), sig({ id: 'old', atMs: NOW - 86_400_000 })], { liveFirst: false });
-    expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.getByText(/^\w{3},? \d+ \w{3}$/)).toBeInTheDocument();
-  });
 
-  it('floats open positions above the dated history', () => {
-    // A trade entered days ago and still running would otherwise sit below
-    // three days of closed history, and the top of the board would read as
-    // though nothing were on.
-    show([
-      sig({ id: 'old-but-running', status: 'running', atMs: NOW - 3 * 86_400_000 }),
-      sig({ id: 'closed-today', status: 'ended' }),
-    ]);
-    const text = document.body.textContent ?? '';
-    expect(text.indexOf('Live now')).toBeGreaterThan(-1);
-    expect(text.indexOf('Live now')).toBeLessThan(text.indexOf('Today'));
-  });
 
-  it('counts the live rows in each day heading', () => {
-    show([sig({ id: '1' }), sig({ id: '2', status: 'ended' })], { liveFirst: false });
-    expect(screen.getByText(/2 signals · 1 live/)).toBeInTheDocument();
-  });
 
-  it('does not say "all live" in the live bucket', () => {
-    // The live bucket now holds only open rows from an EARLIER day — today's
-    // sit under "Today", where the live count is informative rather than
-    // tautological. So this needs a stale open row to have a live bucket at all.
-    const DAY = 86_400_000;
-    show([
-      sig({ id: '1', status: 'running', atMs: NOW - DAY }),
-      sig({ id: '2', status: 'running', atMs: NOW - 2 * DAY }),
-    ]);
-    expect(screen.getByText('Live now')).toBeInTheDocument();
-    expect(screen.getByText('2 signals')).toBeInTheDocument();
-    expect(screen.queryByText(/2 signals · 2 live/)).not.toBeInTheDocument();
-  });
 
-  it('does count the live rows inside a dated group, where it is not redundant', () => {
-    show([sig({ id: '1', status: 'running' }), sig({ id: '2', status: 'ended' })]);
-    expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.getByText(/2 signals · 1 live/)).toBeInTheDocument();
-  });
 
-  it("keeps today's open rows under Today rather than hoisting them", () => {
-    // Hoisting a row that is already in the first section gains no visibility
-    // and costs it a date heading.
-    show([sig({ status: 'running', atMs: NOW })]);
-    expect(screen.getByText('Today')).toBeInTheDocument();
-    expect(screen.queryByText('Live now')).not.toBeInTheDocument();
-  });
 
-  it('still hoists an open row from an earlier day, which day grouping would bury', () => {
-    show([
-      sig({ id: 'stale', status: 'running', atMs: NOW - 3 * 86_400_000 }),
-      sig({ id: 'closed', status: 'ended', atMs: NOW }),
-    ]);
-    const body = document.body.textContent ?? '';
-    expect(body).toContain('Live now');
-    // and it floats above the dated sections
-    expect(body.indexOf('Live now')).toBeLessThan(body.indexOf('Today'));
-  });
 
   it('shows the engine tag only when engines are mixed', () => {
     show([sig()]);
@@ -239,5 +181,55 @@ describe('SignalBoard empty state', () => {
     show([], { emptyLabel: 'Nothing armed right now.' });
     expect(screen.getByText('Nothing armed right now.')).toBeInTheDocument();
     expect(document.querySelector('.sb-row')).toBeNull();
+  });
+});
+
+/**
+ * Day grouping, after the day band was removed.
+ *
+ * Seven tests used to live here asserting the grouping through the band's own
+ * text — "Today", "Live now", "2 signals · 1 live". The band is gone: it spent a
+ * row of vertical space restating a date every row already carries in its Time
+ * column.
+ *
+ * Three of those seven were about the HEADING'S CONTENT and describe something
+ * that no longer exists, so they went with it. The other four were about
+ * grouping and hoisting BEHAVIOUR and merely read it off the labels — that
+ * behaviour is unchanged, and it is asserted directly on `groupByDay` in
+ * `grouping.test.tsx` (`hoistToday` on and off, ended rows never hoisted, live
+ * rows from several days collected together), which is a better place for it
+ * than a string match on furniture.
+ *
+ * What is still worth checking at render level is the part a reader can see: the
+ * ORDER.
+ */
+describe('day order, without the band', () => {
+  it('puts the newest row first and the oldest last', () => {
+    const DAY = 86_400_000;
+    render(
+      <SignalBoard
+        signals={[
+          sig({ id: 'old', atMs: NOW - 3 * DAY, status: 'ended',
+                instrument: { ...sig().instrument, symbol: 'SYMOLD' } }),
+          sig({ id: 'new', atMs: NOW, status: 'ended',
+                instrument: { ...sig().instrument, symbol: 'SYMNEW' } }),
+        ]}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('SYMNEW')).toBeGreaterThanOrEqual(0);
+    expect(body.indexOf('SYMNEW'), 'newest first').toBeLessThan(body.indexOf('SYMOLD'));
+  });
+
+  it('renders no day heading at all', () => {
+    render(
+      <SignalBoard signals={[sig({ atMs: NOW })]} nowMs={NOW} openId={null} onToggle={() => {}} />,
+    );
+    for (const label of ['Today', 'Live now', 'Undated']) {
+      expect(screen.queryByText(label), `${label} band is gone`).toBeNull();
+    }
   });
 });

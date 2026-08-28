@@ -236,14 +236,19 @@ describe('dates and day order', () => {
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    // Row says "17 Aug 10:30:00"; the header above it says "Mon, 17 Aug". Both
-    // date texts come from sessionDayDate so they cannot drift apart.
+    // The row carries its own date, and that is now the ONLY place it appears:
+    // the day band that used to repeat it above each group is gone. The text
+    // still comes from `sessionDayDate`, so a row and the day grouping cannot
+    // disagree about what a date looks like.
     expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
-    expect(screen.getByText(/^\w{3},? 17 Aug$/)).toBeTruthy();
+    expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
   });
 
   it('orders day sections latest to oldest', () => {
-    const { container } = render(
+    // Asserted on ROW ORDER rather than on section headings. The headings are
+    // gone -- each row states its own date now -- but the ORDER they described is
+    // behaviour and still has to hold, so the assertion moved rather than went.
+    render(
       <SignalBoard
         signals={[
           dated('old', NOW - 3 * DAY, 'ended'),
@@ -256,12 +261,11 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
-    const heads = [...container.querySelectorAll('*')]
-      .map((e) => e.textContent ?? '')
-      .filter((s) => s === 'Today' || /^\w{3},? \d+ \w{3}$/.test(s));
-    // Today must precede Yesterday, which must precede the older date.
-    expect(heads.indexOf('Today')).toBeGreaterThanOrEqual(0);
-    expect(heads.indexOf('Today')).toBeLessThan(heads.findIndex((h) => /^\w{3},? \d+ \w{3}$/.test(h)));
+    const body = document.body.textContent ?? '';
+    const at = (sym: string) => body.indexOf(sym);
+    expect(at('SYMnew')).toBeGreaterThanOrEqual(0);
+    expect(at('SYMnew'), 'newest first').toBeLessThan(at('SYMmid'));
+    expect(at('SYMmid'), 'then older').toBeLessThan(at('SYMold'));
   });
 
   it('sorts rows newest first inside one day', () => {

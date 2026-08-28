@@ -14,13 +14,13 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  sessionDayDate, sessionDayKey, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
-  DAY_HEAD_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
+  HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
   SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
 } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
@@ -1084,29 +1084,13 @@ export function SignalBoard({
 
       {days.map(({ key, signals: rows }) => (
         <section key={key}>
-          <h3 style={{
-            margin: 0, position: 'sticky', top: 28, zIndex: 1,
-            padding: DAY_HEAD_METRICS.padding, background: k.surface,
-            borderBottom: `1px solid ${k.border}`,
-            fontSize: DAY_HEAD_METRICS.fontSize,
-            fontWeight: DAY_HEAD_METRICS.fontWeight,
-            letterSpacing: DAY_HEAD_METRICS.letterSpacing,
-            textTransform: DAY_HEAD_METRICS.textTransform,
-            color: k.dim,
-            display: 'flex', justifyContent: 'space-between',
-          }}>
-            <span>{sessionDayLabel(key, nowMs)}</span>
-            <span style={{ fontWeight: 500 }}>
-              {rows.length} signal{rows.length === 1 ? '' : 's'}
-              {(() => {
-                // The live bucket is already all-live; repeating it there
-                // would read as "8 signals · 8 live".
-                if (key === LIVE_BUCKET) return '';
-                const live = rows.filter((r) => ACTIONABLE.includes(r.status)).length;
-                return live ? ` · ${live} live` : '';
-              })()}
-            </span>
-          </h3>
+          {/* The day band is gone.
+              It printed "LIVE NOW / 8 signals" above each group — a whole row of
+              furniture restating what the rows already carry. Every row shows its
+              own date and time in the Time column, so the band was spending
+              vertical space on a heading you can read off the row beneath it.
+              The GROUPING stays: rows are still bucketed by trading day, live
+              first, so the order is unchanged and only the label is gone. */}
           {sortSignals(rows, sort).map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {

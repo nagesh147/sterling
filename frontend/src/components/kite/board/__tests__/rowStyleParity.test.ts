@@ -106,12 +106,22 @@ describe('both tables share one heading scale', () => {
     expect(superTrend).not.toMatch(/fontSize: 12, fontWeight: 400, color: k\.dim/);
   });
 
-  it('defines the group band once, and both read it', () => {
+  it('defines the group band once, for the table that still has one', () => {
+    // The shared board's DAY band is gone: it printed "LIVE NOW / 8 signals"
+    // above each group, restating a date every row already carries in its Time
+    // column. The grouping itself stays — rows are still bucketed by trading
+    // day, live first — so only the label went.
+    //
+    // SuperTrend still bands by UNDERLYING, which is a different grouping and a
+    // real one, so the tokens stay defined and it stays the reader.
     expect(rowSpec).toContain('DAY_HEAD_METRICS');
-    for (const [name, src] of [['SuperTrend', superTrend], ['SignalBoard', sharedBoard]] as const) {
-      expect(src, `${name} reads DAY_HEAD_METRICS`).toContain('DAY_HEAD_METRICS.padding');
-      expect(src, `${name} reads the band transform`).toContain('DAY_HEAD_METRICS.textTransform');
-    }
+    expect(superTrend).toContain('DAY_HEAD_METRICS.padding');
+    expect(superTrend).toContain('DAY_HEAD_METRICS.textTransform');
+  });
+
+  it('has no day band left on the shared board', () => {
+    expect(sharedBoard).not.toContain('sessionDayLabel(key, nowMs)');
+    expect(sharedBoard).not.toMatch(/signal\{rows\.length === 1/);
   });
 
   it('puts the group band on the surface shade, not the row background', () => {

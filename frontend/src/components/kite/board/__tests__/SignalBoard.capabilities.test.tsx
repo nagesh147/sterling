@@ -10,11 +10,23 @@
  * leaves the board exactly as it was — so each capability is checked both ways.
  */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BOARD_COLUMNS_WITH_DAY_MOVE, COLUMNS, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
 import { LEG_INDENT, ROW_METRICS, instrumentFlex } from '../signalRowSpec';
+
+/*
+ * These tests write to the PERSISTED settings store, which means localStorage.
+ *
+ * Left behind, that is a booby trap for whatever file runs next: a stray
+ * `boardRenderer: 'shared'` makes a later test render a different component than
+ * it was written against, and the failure surfaces far from its cause. This
+ * suite already has a history of order-dependent flakes for exactly this reason,
+ * so each file clears up after itself rather than only before itself.
+ */
+afterEach(() => localStorage.clear());
+
 
 const IST = (5 * 60 + 30) * 60_000;
 const NOW = Date.UTC(2026, 7, 21, 10, 30) - IST;
