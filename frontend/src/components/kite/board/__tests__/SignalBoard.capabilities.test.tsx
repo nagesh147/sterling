@@ -190,3 +190,42 @@ describe('today’s move', () => {
     useKiteSettings.setState({ showPriceDirection: true });
   });
 });
+
+/**
+ * A signal that resolved to no contract.
+ *
+ * An engine can fire on the underlying and then fail to find a listed option for
+ * the strike and expiry it wants. Rendered as a bare row with nothing under it,
+ * that looks like a loading state; the engine already knows why, so it says so.
+ *
+ * The distinction this rests on is `children: []` versus `children: undefined`.
+ * ORB, Gamma Move and the ATM bot leave it undefined — their signals are one
+ * instrument and always were — so they must NOT get the note. After `?? []` the
+ * two cases are identical, which is the trap.
+ */
+describe('a signal with no contracts', () => {
+  const NOTE = /No listed contract matched/;
+
+  it('says why, in the row', () => {
+    board({ signals: [sig({ children: [], reason: 'Strike 24000 is not listed for 27 Aug.' })] });
+    expect(screen.getByText('Strike 24000 is not listed for 27 Aug.')).toBeInTheDocument();
+  });
+
+  it('falls back to a plain statement when the engine gave no reason', () => {
+    board({ signals: [sig({ children: [], reason: null })] });
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it('leaves a standalone signal alone', () => {
+    // `children` undefined: ORB's rows are one instrument by nature, and a note
+    // under every one of them would be nonsense.
+    board({ signals: [sig({ reason: null })] });
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+
+  it('does not mistake an engine’s exit reason for a resolution failure', () => {
+    // A standalone signal carrying a reason is the normal case, not a failure.
+    board({ signals: [sig({ reason: 'Trail breached' })] });
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+});

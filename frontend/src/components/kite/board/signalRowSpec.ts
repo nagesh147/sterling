@@ -149,3 +149,33 @@ export const DAY_HEAD_METRICS = {
  * amount, so the column's right edge stays under its heading.
  */
 export const LEG_INDENT = 14;
+
+/**
+ * SuperTrend's column keys, in the shared board's vocabulary.
+ *
+ * The two name the same columns differently — `sl`/`tsl`/`exc` here against
+ * `stop`/`trail`/`exchange` there — because each was written without the other.
+ * Renaming either would break a persisted column order or a persisted hidden-set
+ * on someone's machine, so the two vocabularies are reconciled by one table
+ * instead.
+ *
+ * It is exhaustive on purpose: a key added to `SIGNAL_*_COLUMNS` without an
+ * entry here would silently fail to hide or reorder on the shared renderer.
+ */
+export const SIGNAL_COL_TO_BOARD = {
+  exc: 'exchange', leg: 'leg', entry: 'entry', sl: 'stop', tsl: 'trail',
+  exit: 'exit', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
+  ltp: 'ltp', time: 'time',
+} as const satisfies Record<string, string>;
+
+export type SignalColKey = keyof typeof SIGNAL_COL_TO_BOARD;
+
+/** The reverse, for turning a board column back into the key the store holds. */
+export const BOARD_COL_TO_SIGNAL = Object.fromEntries(
+  Object.entries(SIGNAL_COL_TO_BOARD).map(([k, v]) => [v, k]),
+) as Record<string, SignalColKey>;
+
+/** Which of SuperTrend's two column runs a key belongs to. */
+export function signalColGroup(key: string): 'left' | 'right' {
+  return key in SIGNAL_RIGHT_COLUMNS ? 'right' : 'left';
+}

@@ -66,6 +66,23 @@ export interface KiteSettingsState {
   boardDragColumns: boolean;
   boardRowScroll: boolean;
   boardRowActions: boolean;
+  /**
+   * Which component draws SuperTrend's rows.
+   *
+   * `shared` is `SignalBoard` — the same component the other four engines use,
+   * which is what makes the two tables identical by construction rather than by
+   * a list of matched properties. `classic` is the bespoke table this board grew
+   * up with, kept because it is the only view that has ever been used against a
+   * live account and I cannot see the shared one rendered behind the broker
+   * login. It is a way back, not a second product.
+   *
+   * `classic` is still the DEFAULT, and will be until the shared path stops
+   * losing things: day grouping replaces the "Active now" and "Today (ended)"
+   * buckets, and a signal whose strike resolved to no contract loses the message
+   * that explains it.
+   */
+  boardRenderer: 'shared' | 'classic';
+  setBoardRenderer: (r: 'shared' | 'classic') => void;
   toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
@@ -87,6 +104,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       boardDragColumns: true,
       boardRowScroll: true,
       boardRowActions: true,
+      boardRenderer: 'classic',
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -108,6 +126,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       setChgType: (t) => set({ chgType: t }),
       toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
       toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
+      setBoardRenderer: (r) => set({ boardRenderer: r }),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -130,6 +149,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
         boardDragColumns: true,
         boardRowScroll: true,
         boardRowActions: true,
+        boardRenderer: 'classic',
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
@@ -143,7 +163,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-      version: 5,
+      version: 6,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -171,6 +191,19 @@ export const useKiteSettings = create<KiteSettingsState>()(
         // the in-row order buttons all switched off, having chosen nothing.
         for (const key of ['boardDragColumns', 'boardRowScroll', 'boardRowActions'] as const) {
           if (typeof next[key] !== 'boolean') next = { ...next, [key]: true };
+        }
+
+        // v6 introduces the shared renderer as an OPT-IN, not the default.
+        //
+        // Switching it on by default would have been the wrong kind of "done":
+        // the shared board groups by trading day, so the classic table's
+        // "Active now" and "Today (ended)" buckets vanish, and a signal whose
+        // strike resolved to nothing loses the message explaining why. Twenty-
+        // seven existing tests said so. Those describe behaviour, not markup, so
+        // the answer is to close the gaps before flipping the default — not to
+        // update the tests and call the difference gone.
+        if (next.boardRenderer !== 'shared' && next.boardRenderer !== 'classic') {
+          next = { ...next, boardRenderer: 'classic' };
         }
         return next;
       },

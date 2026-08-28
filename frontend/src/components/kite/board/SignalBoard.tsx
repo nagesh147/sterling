@@ -1042,20 +1042,50 @@ export function SignalBoard({
           {sortSignals(rows, sort).map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {
+              // An EMPTY ARRAY is not the same as no array.
+              //
+              // ORB, Gamma Move and the ATM bot leave `children` undefined —
+              // their signals are one instrument and always were. SuperTrend
+              // sets it to the contracts it resolved, so an empty array means it
+              // wanted contracts and found none: an expired series, a strike
+              // that is not listed, a filter that excluded everything. Those two
+              // cases look identical after `?? []`, which is why this checks the
+              // field itself.
+              const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
               return (
-                <Row
-                  nowMs={nowMs}
-                  key={signal.id}
-                  signal={signal}
-                  columns={cols}
-                  open={openId === signal.id}
-                  onToggle={() => onToggle(signal.id)}
-                  renderDetail={renderDetail}
-                  onOpenDetail={onOpenDetail}
-                  striped={i % 2 === 1}
-                  rowScroll={rowScroll}
-                  renderRowActions={renderRowActions}
-                />
+                <React.Fragment key={signal.id}>
+                  <Row
+                    nowMs={nowMs}
+                    signal={signal}
+                    columns={cols}
+                    open={openId === signal.id}
+                    onToggle={() => onToggle(signal.id)}
+                    renderDetail={renderDetail}
+                    onOpenDetail={onOpenDetail}
+                    striped={i % 2 === 1}
+                    rowScroll={rowScroll}
+                    renderRowActions={renderRowActions}
+                  />
+                  {/* The engine knows why it found nothing, so it says so in the
+                      row rather than behind a click. A parent with nothing under
+                      it otherwise reads like a loading state, and an operator
+                      scanning for something to trade should not have to open a
+                      row to learn there is nothing in it. */}
+                  {resolvedNothing && (
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center',
+                        minHeight: ROW_METRICS.legHeight,
+                        padding: `0 16px 0 ${16 + INDENT}px`,
+                        borderLeft: '3px solid transparent',
+                        background: LEG_BG,
+                        fontSize: ROW_METRICS.cellFontSize, color: k.dim,
+                      }}
+                    >
+                      {signal.reason ?? 'No listed contract matched the selected strike and expiry series.'}
+                    </div>
+                  )}
+                </React.Fragment>
               );
             }
             // A parent's chevron shows its contracts, not its own detail —

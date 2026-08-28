@@ -11,6 +11,7 @@ import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
   type SignalColVisibility,
 } from './board/signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
+import { SuperTrendSharedBoard } from './SuperTrendSharedBoard';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -1562,6 +1563,22 @@ function SignalTableSettingsPanel({
 
         <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
           <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Behaviour</div>
+          {/* Which component draws the rows. The shared one is what the other
+              four engines use, so choosing it is what makes this table identical
+              to Adaptive Edge by construction rather than by a list of matched
+              properties. Still opt-in: see the note on the setting. */}
+          <label
+            title="Draw these rows with the same component the other four engines use. Identical by construction rather than by matched properties. Still being brought to parity — day grouping replaces the Active-now bucket."
+            style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer', marginBottom: 4 }}
+          >
+            <input
+              type="checkbox"
+              checked={settings.boardRenderer === 'shared'}
+              onChange={() => settings.setBoardRenderer(settings.boardRenderer === 'shared' ? 'classic' : 'shared')}
+              style={{ width: 14, height: 14, margin: 0, accentColor: k.orange }}
+            />
+            Shared board renderer
+          </label>
           {/* The three things this table has that the shared board does not.
               Offered as choices rather than kept as one table's habits: that is
               what lets every engine's board have them, instead of only the one
@@ -2651,6 +2668,19 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               </div>
             ) : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
           </div>
+        ) : s.boardRenderer === 'shared' ? (
+          /* The same component the other four engines render through. Everything
+             below this branch is the bespoke table it replaces, kept reachable
+             from the board settings because it is the only view that has ever
+             been used against a live account. */
+          <SuperTrendSharedBoard
+            rows={filteredRows}
+            quotes={quotes}
+            originalEntryMs={originalEntryMs}
+            onSelectSignal={onSelectSignal}
+            onOpenChart={onOpenChart ? (symbol, tab) => onOpenChart(symbol, tab, cfg?.trail_target) : undefined}
+            nowMs={Date.now()}
+          />
         ) : (
           groupedRows.map(group => {
             const isCollapsed = collapsedGroups.has(group.label);

@@ -202,3 +202,71 @@ describe('the settings panel offers all three', () => {
     expect(screen.getByText(/Column dragging is off/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * The renderer choice.
+ *
+ * `shared` draws SuperTrend's rows with the component the other four engines
+ * use — which is the whole point of this arc: identical by construction rather
+ * than by a list of matched properties.
+ *
+ * It is NOT the default yet, and that restraint is the thing worth pinning.
+ * Flipping it would have been the wrong kind of done: 27 existing tests failed,
+ * and they were describing behaviour, not markup — the shared board groups by
+ * trading day, so the classic "Active now" and "Today (ended)" buckets vanish.
+ * Updating those tests would have deleted behaviour and called the difference
+ * gone.
+ */
+describe('the board renderer', () => {
+  beforeEach(() => { localStorage.clear(); vi.resetModules(); });
+
+  it('draws the classic table until the shared one is at parity', async () => {
+    mockPane();
+    await renderPane();
+    expect(legRow(), 'the bespoke row is what renders').not.toBeNull();
+  });
+
+  it('switches to the shared board when chosen', async () => {
+    (await store()).setState({ boardRenderer: 'shared' });
+    mockPane();
+    await renderPane();
+    // The shared board's own row class, and none of the bespoke one's.
+    expect(document.querySelector('.sb-row'), 'shared rows render').not.toBeNull();
+    expect(legRow(), 'the bespoke table is gone').toBeNull();
+  });
+
+  it('offers the choice in the settings drawer', async () => {
+    mockPane();
+    await renderPane();
+    fireEvent.click(screen.getByTitle('Signal table settings'));
+    const label = screen.getByText('Shared board renderer');
+    const box = label.querySelector('input[type=checkbox]') as HTMLInputElement;
+    expect(box.checked, 'off by default').toBe(false);
+
+    const s = await store();
+    fireEvent.click(box);
+    expect(s.getState().boardRenderer).toBe('shared');
+  });
+
+  it('carries the capability settings into the shared board', async () => {
+    // The three features exist on both renderers or the choice is not free.
+    (await store()).setState({ boardRenderer: 'shared', boardRowScroll: true, boardRowActions: true });
+    mockPane();
+    await renderPane();
+    // The LEG row, not the parent. A parent is a summary — `justify-content:
+    // space-between`, no column cells — so it has nothing to keep aligned and
+    // correctly does not scroll. Selecting the first `.sb-row` picks the parent.
+    const leg = [...document.querySelectorAll('.sb-row')]
+      .find((el) => !el.className.includes('sb-parent')) as HTMLElement | undefined;
+    expect(leg, 'a contract row rendered').toBeDefined();
+    expect(leg!.className, 'sideways scroll follows the setting').toContain('sb-row-scroll');
+  });
+
+  it('drops the shared board’s row actions when the setting is off', async () => {
+    (await store()).setState({ boardRenderer: 'shared', boardRowActions: false });
+    mockPane();
+    await renderPane();
+    expect(document.querySelector('.sb-row')).not.toBeNull();
+    expect(document.querySelector('.st-actions-persistent')).toBeNull();
+  });
+});
