@@ -1750,10 +1750,53 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
+
+  /**
+   * How far down the group bands have to pin.
+   *
+   * The toolbar and the heading strip share one sticky wrapper at the top of
+   * the table, so a group band that pins at `top: 0` would slide underneath
+   * them. The offset is that wrapper's height -- which is not a constant: the
+   * toolbar wraps when the pane is narrow, and the strip is absent in the cards
+   * layout. Measured rather than guessed, and re-measured when it changes, so
+   * the band lands right at every width instead of at the one I happened to
+   * check.
+   *
+   * Published as a CSS variable so each band can read it without this value
+   * re-rendering the table on every resize.
+   */
+  const stickyHeadRef = React.useRef<HTMLDivElement>(null);
+  // The variable is set on the pane root explicitly rather than on
+  // `stickyHead.parentElement`. Today those are the same node -- the
+  // `{!settingsOpen && ...}` around the sticky wrapper creates no DOM element --
+  // but that is a coincidence of the current markup, and one added wrapper would
+  // silently move the variable onto a node that does not contain the bands. The
+  // bands would then fall back to `top: 0` and slide under the header, which is
+  // exactly the bug this is meant to prevent.
+  const paneRootRef = React.useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
     () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
   );
+
+  React.useEffect(() => {
+    const el = stickyHeadRef.current;
+    if (!el) return;
+    const apply = () => {
+      paneRootRef.current?.style.setProperty('--st-sticky-head', `${Math.round(el.offsetHeight)}px`);
+    };
+    apply();
+    // ResizeObserver is not in every test environment's jsdom.
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // Only the two things that change whether the wrapper exists or what it
+    // contains. NOT every render: this table re-renders on every quote tick, and
+    // an unkeyed effect would build and tear down a ResizeObserver each time.
+    // Height changes from the toolbar wrapping are the observer's own job.
+  }, [settingsOpen, viewLayout]);
+
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
   );
@@ -2204,7 +2247,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
+    <div ref={paneRootRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/*
         The engine's own controls, on the shared toolbar grammar.
 
@@ -2229,7 +2272,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           fill it disappeared exactly when nothing was there. Only the search box
           itself is pointless with no rows, so only it is gated. */}
       {!settingsOpen && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
+        <div ref={stickyHeadRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
               {rows.length > 0 && <KiteSearchBar
@@ -2564,6 +2607,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: DAY_HEAD_METRICS.padding, background: k.surface,
                     borderBottom: `1px solid ${k.border}`,
+                    // Stays visible while its strikes scroll past, as the shared
+                    // board's day band does. Falls back to 0 if the variable has
+                    // not been measured yet, which only costs one frame.
+                    position: 'sticky', top: 'var(--st-sticky-head, 0px)', zIndex: 1,
                     cursor: 'pointer', userSelect: 'none'
                   }}
                 >

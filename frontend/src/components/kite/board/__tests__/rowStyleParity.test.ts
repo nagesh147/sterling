@@ -326,3 +326,39 @@ describe('parent rows alternate shade, as the shared board’s do', () => {
     expect(sharedBoard).toContain('striped ? LEG_BG : k.bg');
   });
 });
+
+/**
+ * The group band stays put while its rows scroll.
+ *
+ * The shared board pins its day band under the heading strip, so you can always
+ * see which day you are looking at. SuperTrend's band scrolled away.
+ *
+ * I first wrote this off as unsafe to do blind, on the grounds that the offset
+ * is the sticky wrapper's height and the wrapper is not a fixed size. That was
+ * a reason to measure it, not a reason to skip it — and it turned out the
+ * heading strip was already inside that wrapper, so only the band was missing.
+ */
+describe('SuperTrend group bands pin under the sticky head', () => {
+  it('pins to a measured offset rather than a guessed constant', () => {
+    expect(superTrend).toContain("top: 'var(--st-sticky-head, 0px)'");
+    expect(superTrend).toContain('--st-sticky-head');
+    // Measured from the real element, so a wrapped toolbar cannot desync it.
+    expect(superTrend).toContain('el.offsetHeight');
+    // Written to the pane root, not to `stickyHead.parentElement`. Those are the
+    // same node today only because the surrounding conditional renders no
+    // element; one added wrapper would put the variable on a node that does not
+    // contain the bands, and they would silently fall back to top: 0.
+    expect(superTrend).toContain('paneRootRef.current?.style.setProperty');
+    expect(superTrend).not.toContain('el.parentElement?.style.setProperty');
+  });
+
+  it('does not rebuild the observer on every render', () => {
+    // This table re-renders on every quote tick; an unkeyed effect would build
+    // and tear down a ResizeObserver each time.
+    expect(superTrend).toContain('}, [settingsOpen, viewLayout]);');
+  });
+
+  it('survives an environment with no ResizeObserver', () => {
+    expect(superTrend).toContain("typeof ResizeObserver === 'undefined'");
+  });
+});
