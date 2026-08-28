@@ -151,7 +151,7 @@ export function ScopeDivider() {
       <span
         tabIndex={0}
         aria-label="Scope divider between engine settings and local view filters"
-        style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 4px', cursor: 'help', outlineOffset: 3 }}
+        style={{ width: 1, alignSelf: 'stretch', minHeight: 14, background: k.border, flexShrink: 0, margin: '0 4px', outlineOffset: 3 }}
       />
     </Tip>
   );

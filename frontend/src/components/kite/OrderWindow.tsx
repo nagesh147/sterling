@@ -385,7 +385,7 @@ export function OrderWindow({ options, onClose }: Props) {
                     <GttIcon />
                     <PctToggle accent={accent} label="Stoploss" on={slOn} setOn={setSlOn} pct={slPct} setPct={setSlPct} defaultPct={-5} />
                     <PctToggle accent={accent} label="Target" on={tgtOn} setOn={setTgtOn} pct={tgtPct} setPct={setTgtPct} defaultPct={5} />
-                    <span style={{ marginLeft: 'auto', color: k.dim, display: 'flex', cursor: 'help' }} title="Automatically create a GTT for the position on order completion"><Icons.Info /></span>
+                    <span style={{ marginLeft: 'auto', color: k.dim, display: 'flex' }} title="Automatically create a GTT for the position on order completion"><Icons.Info /></span>
                   </div>
                 )}
               </div>
@@ -460,7 +460,7 @@ export function OrderWindow({ options, onClose }: Props) {
                     <GttIcon />
                     <PctToggle accent={accent} label="Stoploss" on={slOn} setOn={setSlOn} pct={slPct} setPct={setSlPct} defaultPct={-5} />
                     <PctToggle accent={accent} label="Target" on={tgtOn} setOn={setTgtOn} pct={tgtPct} setPct={setTgtPct} defaultPct={5} />
-                    <span style={{ marginLeft: 'auto', color: k.dim, display: 'flex', cursor: 'help' }} title="Automatically create a GTT for the position on order completion"><Icons.Info /></span>
+                    <span style={{ marginLeft: 'auto', color: k.dim, display: 'flex' }} title="Automatically create a GTT for the position on order completion"><Icons.Info /></span>
                   </div>
                 )}
               </div>

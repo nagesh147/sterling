@@ -111,3 +111,37 @@ describe('a control carries its own name', () => {
       .toContain("scope === 'server' ? tint(tone, 8) : 'transparent'");
   });
 });
+
+/**
+ * No help cursor anywhere.
+ *
+ * `cursor: help` is drawn by browsers as a pointer with a QUESTION MARK beside
+ * it, which showed up on screen as a stray "?" floating over the row whenever a
+ * tooltip opened. The tooltip itself was fine — the glyph was the cursor.
+ *
+ * The property is removed rather than swapped for another cursor: these elements
+ * sit inside clickable rows, so inheriting the row's own cursor is the least
+ * surprising thing. Setting `default` would have made a badge look inert on a row
+ * that is very much clickable.
+ */
+describe('no help cursor', () => {
+  const files = [
+    'components/kite/board/SignalBoard.tsx',
+    'components/kite/board/EngineToolbar.tsx',
+    'components/kite/OrderWindow.tsx',
+    'components/PositionsPanel.tsx',
+  ];
+
+  it('is gone from every file that had one', () => {
+    for (const f of files) {
+      expect(read(f), f).not.toContain("cursor: 'help'");
+    }
+  });
+
+  it('keeps the tooltips it was attached to', () => {
+    // The text was never the problem; only the cursor glyph was.
+    const board = read('components/kite/board/SignalBoard.tsx');
+    expect(board).toContain('<Tip text=');
+    expect(board, 'the origin badge still explains itself').toContain('signal.origin.hint');
+  });
+});

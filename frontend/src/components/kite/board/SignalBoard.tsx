@@ -289,7 +289,7 @@ function Marks({ marks }: { marks?: readonly BoardOrigin[] }) {
         <Tip key={`${m.label}-${m.tone}`} text={m.hint ? `${m.label} — ${m.hint}` : m.label}>
           <span style={{
             flexShrink: 0, padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700,
-            letterSpacing: '.04em', whiteSpace: 'nowrap', cursor: 'help',
+            letterSpacing: '.04em', whiteSpace: 'nowrap',
             color: ORIGIN_TONE[m.tone], background: tint(ORIGIN_TONE[m.tone], 10),
             border: `1px solid ${tint(ORIGIN_TONE[m.tone], 30)}`,
           }}>
@@ -341,19 +341,19 @@ function cellContent(
               </span>
               {marks?.has('bestRR') && (
                 <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
-                  <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help', flexShrink: 0 }}>✝</span>
+                  <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                 </Tip>
               )}
               {marks?.has('bestDelta') && (
                 <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
-                  <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help', flexShrink: 0 }}>▲</span>
+                  <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, flexShrink: 0 }}>▲</span>
                 </Tip>
               )}
               {trailBreached(signal) && (
                 <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
                   <span tabIndex={0} style={{
                     fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
-                    borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', flexShrink: 0,
+                    borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', flexShrink: 0,
                   }}>
                     TSL HIT
                   </span>
@@ -401,7 +401,7 @@ function cellContent(
             {signal.origin && (
               <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
                 <span tabIndex={0} style={{
-                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em',
                   color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
                   borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
                 }}>
@@ -414,7 +414,7 @@ function cellContent(
             {signal.flags?.map((flag) => (
               <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
                 <span tabIndex={0} style={{
-                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help',
+                  fontSize: 8, fontWeight: 700, letterSpacing: '.04em',
                   color: ORIGIN_TONE[flag.tone], background: tint(ORIGIN_TONE[flag.tone], 10),
                   border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
                   borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
@@ -425,19 +425,19 @@ function cellContent(
             ))}
             {marks?.has('bestRR') && (
               <Tip text="Best reward for risk across this signal's strikes — the most the plan pays per rupee it puts at stake.">
-                <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1, cursor: 'help' }}>✝</span>
+                <span tabIndex={0} style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
               </Tip>
             )}
             {marks?.has('bestDelta') && (
               <Tip text="Highest delta across this signal's strikes — the one that moves most with the underlying.">
-                <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75, cursor: 'help' }}>▲</span>
+                <span tabIndex={0} style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: .75 }}>▲</span>
               </Tip>
             )}
             {trailBreached(signal) && (
               <Tip text="Live price is at or below this leg's trailing stop, but the engine has not closed it — this is where an open drawdown builds.">
                 <span tabIndex={0} style={{
                   fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`,
-                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', cursor: 'help', outlineOffset: 2,
+                  borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
                 }}>
                   TSL HIT
                 </span>
@@ -740,7 +740,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail, nowMs
           {signal.origin && (
             <Tip text={`${signal.origin.label} — ${signal.origin.hint}`}>
               <span tabIndex={0} style={{
-                fontSize: 8, fontWeight: 700, letterSpacing: '.04em', cursor: 'help', flexShrink: 0,
+                fontSize: 8, fontWeight: 700, letterSpacing: '.04em', flexShrink: 0,
                 color: ORIGIN_TONE[signal.origin.tone], border: `1px solid ${tint(ORIGIN_TONE[signal.origin.tone], 34)}`,
                 borderRadius: 2, padding: '0 3px', whiteSpace: 'nowrap', outlineOffset: 2,
               }}>
@@ -780,7 +780,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail, nowMs
         {signal.flags?.map((flag) => (
           <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
             <span tabIndex={0} style={{
-              fontSize: 9, fontWeight: 700, cursor: 'help', color: ORIGIN_TONE[flag.tone],
+              fontSize: 9, fontWeight: 700, color: ORIGIN_TONE[flag.tone],
               background: tint(ORIGIN_TONE[flag.tone], 10), border: `1px solid ${tint(ORIGIN_TONE[flag.tone], 30)}`,
               borderRadius: 3, padding: '1px 4px', whiteSpace: 'nowrap', outlineOffset: 2,
             }}>
