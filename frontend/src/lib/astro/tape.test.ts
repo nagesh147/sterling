@@ -133,6 +133,6 @@ describe("tape overlay", () => {
       tape,
     );
     expect(book.verb).toBe("BOOK");
-    expect(book.label.startsWith("BOOK ")).toBe(true);
+    expect(book.label).toBe("24,350 PE");
   });
 });

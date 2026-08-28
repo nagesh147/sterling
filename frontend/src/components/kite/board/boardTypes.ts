@@ -469,6 +469,7 @@ export function trailBreached(signal: BoardSignal): boolean {
 export const hhmmss = (ms: number) =>
   new Date(ms).toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    timeZone: 'Asia/Kolkata',
   });
 
 /**

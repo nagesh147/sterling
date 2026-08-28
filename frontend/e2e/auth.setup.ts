@@ -24,15 +24,10 @@ setup('kite paper auth + storageState', async ({ page, request }) => {
     await kiteBtn.first().click();
   }
 
-  // Wait for the SterlingKiteEnginePane (right sidebar) to appear — proves the layout + kite nav worked
-  // The hybrid input is a good canary that the pane rendered for the seeded user.
-  const hybridInput = page.getByTestId('hybrid-weight-input');
-  await expect(hybridInput).toBeVisible({ timeout: 25000 });
-
-  // Touch a couple controls to ensure reactive state is exercised (helps snapshots later)
-  await hybridInput.click();
-  await hybridInput.fill('0.5');
-  await page.keyboard.press('Tab');
+  // Wait for KiteLayout to mount. hybrid-weight-input used to be the canary, but
+  // that control was removed from the SuperTrend pane (the engine never read it).
+  const workspace = page.getByTestId('kite-workspace');
+  await expect(workspace).toBeVisible({ timeout: 25000 });
 
   // Save the browser context state (cookies if any + localStorage, sessionStorage, indexedDB)
   // Subsequent projects will restore this so KITE surface starts "warmed".

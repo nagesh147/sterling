@@ -35,11 +35,7 @@ Thumbs.db
 backups/*.bak
 backups/*.tmp
 
-# === Skill repos (always tracked) ===
-!security-review/
-!skills/
-!superpowers/
-!ui-ux-pro-max-skill/
+# === Skill repos ===
 .gstack/
 backend/sterling_paper.db
 frontend/sterling_paper.db
@@ -139,8 +135,14 @@ frontend/public/_verify/
 # real submodules. Two consequences: they show as permanently "modified" whenever a
 # tool updates itself, and a fresh clone gets five empty directories instead of
 # them. Nothing in backend/app or frontend/src imports any of them.
+# The remaining gitlinks (security-review, superpowers, ui-ux-pro-max-skill) are
+# removed from the index in the same change that added this ignore — CI checkout
+# otherwise fails `git submodule foreach` with "No url found in .gitmodules".
 awesome-claude-code/
 claude-mem/
 code-review/
 frontend-design/
 skills/
+security-review/
+superpowers/
+ui-ux-pro-max-skill/

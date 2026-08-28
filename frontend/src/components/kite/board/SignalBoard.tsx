@@ -238,7 +238,9 @@ const STALE_AFTER_S = 15;
 
 const hhmm = (ms: number | null) =>
   ms == null || !Number.isFinite(ms) ? '—'
-    : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    : new Date(ms).toLocaleTimeString('en-IN', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+    });
 
 function Chevron({ open }: { open: boolean }) {
   return (
