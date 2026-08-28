@@ -1,11 +1,11 @@
 import React from 'react';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { useEngineConfig, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
+import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives';
 import { PanelCard, PanelSectionHeading } from './config/ConfigPrimitives';
-import { openSettingsSection } from './config/registry';
 import { TradingModeControls } from './TradingModeControls';
+import { useEngineToggles } from '../../hooks/useEngineToggles';
 
 /**
  * The two questions that decide whether real money moves — paper or live, and
@@ -64,13 +64,11 @@ const RESCANNABLE: Array<{ engine: string; label: string; note: string }> = [
 
 export function TradingModePanel() {
   const { data: cfg } = useEngineConfig();
-  const setCfg = usePatchEngineConfig();
   const { data: navData } = useNavigatorConfig();
 
   const navCfg = navData?.record.config;
-  const navigatorOn = !!navCfg?.enabled;
   const navigatorAuto = !!navCfg?.auto_execute_originated;
-  const engineOn = !!cfg?.engine_enabled;
+  const toggles = useEngineToggles();
   const rescanStrategies = useKiteSettings((s) => s.rescanStrategies);
   const toggleRescanStrategy = useKiteSettings((s) => s.toggleRescanStrategy);
   const autoOn = !!cfg?.auto_execute;
@@ -85,43 +83,32 @@ export function TradingModePanel() {
           description="Which signal engines are active. Turning both off leaves Kite as a normal manual trading platform — market watch, charts and your own orders all still work."
         />
         <div style={{ padding: '2px 18px 16px' }}>
-          <RunningRow
-            label="SuperTrend engine"
-            description={engineOn
-              ? 'Scanning, producing signals, and eligible for automatic execution.'
-              : 'Off — no SuperTrend scanning and no SuperTrend signals.'}
-            on={engineOn}
-          >
-            {cfg && (
-              <Switch
-                checked={engineOn} label="Sterling Kite engine"
-                disabled={setCfg.isPending}
-                onChange={() => setCfg.mutate({ engine_enabled: !engineOn })}
-              />
-            )}
-          </RunningRow>
-
-          <RunningRow
-            label="Value-Flow Navigator"
-            description={navigatorOn
-              ? navigatorAuto
-                ? 'On, and placing its own originated setups automatically — a second arming switch, independent of the one above.'
-                : 'On. It can confirm SuperTrend setups and originate its own, but places nothing automatically.'
-              : 'Off — no Navigator evidence and no Navigator-originated setups.'}
-            on={navigatorOn}
-          >
-            <button
-              type="button"
-              onClick={() => openSettingsSection('navigator')}
-              style={{
-                minHeight: 32, border: `1px solid ${BORDER}`, borderRadius: 7, background: 'var(--k-bg)',
-                color: 'var(--k-brand)', padding: '0 12px', fontFamily: 'inherit',
-                fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
-              }}
+          {/* Every engine, from one list.
+              SuperTrend had a switch here and Navigator had a "Configure →" link;
+              the other four had nothing at all, so "what is running" answered for
+              two engines out of six and the only way to stop ORB or Gamma Move was
+              to find its own settings page. `useEngineToggles` owns each engine's
+              quirks — SuperTrend's field is `engine_enabled`, Navigator writes
+              under a revision — and the signals dock reads the SAME list to decide
+              which tabs to show, so the two cannot disagree. */}
+          {toggles.map((engine) => (
+            <RunningRow
+              key={engine.id}
+              label={engine.label}
+              description={engine.description}
+              on={engine.enabled}
             >
-              Configure →
-            </button>
-          </RunningRow>
+              <Switch
+                checked={engine.enabled}
+                label={engine.label}
+                // Null while the config has not arrived: a toggle needs the
+                // current value to send the opposite of it, and Navigator also
+                // needs the revision it was read at.
+                disabled={!engine.toggle || engine.pending}
+                onChange={() => engine.toggle?.()}
+              />
+            </RunningRow>
+          ))}
         </div>
 
         {autoOn && navigatorAuto && (

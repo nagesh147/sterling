@@ -12,6 +12,7 @@ import { atmPremiumImbalanceToBoard } from './board/atmPremiumImbalanceAdapter';
 import { gammaMoveToBoard } from './board/gammaMoveAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
+import { useEngineEnabled } from '../../hooks/useEngineToggles';
 import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
@@ -60,6 +61,9 @@ const NAV_TARGET: Record<string, EngineId> = {
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
   const [engine, setEngine] = useState<EngineId>('supertrend');
+  // The same list the "What is running" section writes to, so a tab cannot
+  // survive its engine being switched off — nor vanish for any other reason.
+  const engineOn = useEngineEnabled();
 
   /**
    * Rescan and the board settings, for every engine.
@@ -183,7 +187,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
     const gm = gammaMoveToBoard(gmSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
-    return [
+    const all: EngineTabState[] = [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
       { id: 'adaptive_edge', running: !!snapshot.data, live: live(ae), scanned: ae.length },
       { id: 'orb', running: orbEnabled !== false, live: live(ob), scanned: ob.length },
@@ -198,9 +202,35 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
       { id: 'gamma_move',
         running: gmSnapshot.data?.config?.enabled === true,
         live: live(gm), scanned: gm.length },
+    // A switched-off engine gets NO TAB now. It used to get one that explained
+    // itself, on the reasoning that a missing tab is harder to understand than a
+    // stopped one — but that filled the dock with engines the operator had
+    // deliberately stopped, and the explanation is in the switch that stopped it.
+    //
+    // `!== false` and not `=== true`: an engine whose config has not arrived yet
+    // keeps its tab. Hiding on "not loaded" would blink every tab out on each
+    // page load and look exactly like the operator's own setting.
     ];
+    return all.filter((tab) => {
+      // The SuperTrend tab HOSTS Navigator — Navigator has no tab of its own, its
+      // rows render in this pane under the signal lens. So this tab survives
+      // SuperTrend being switched off as long as Navigator is on, or switching
+      // SuperTrend off would silently take a running engine's only surface with
+      // it. A test caught this: with SuperTrend off, re-scan stopped naming
+      // Navigator first, because the dock had moved to another engine entirely.
+      if (tab.id === 'supertrend') return engineOn.supertrend || engineOn.navigator;
+      return engineOn[tab.id as keyof typeof engineOn] !== false;
+    });
   }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled,
-      apiSnapshot.data, gmSnapshot.data]);
+      apiSnapshot.data, gmSnapshot.data, engineOn]);
+
+  // Switching off the engine you are looking at must move you somewhere real.
+  // Without this the dock keeps rendering a board whose tab is gone, which reads
+  // as the setting having failed.
+  useEffect(() => {
+    if (!tabs.length) return;
+    if (!tabs.some((tab) => tab.id === engine)) setEngine(tabs[0].id);
+  }, [tabs, engine]);
 
   useEffect(() => {
     const onNav = (event: Event) => {
