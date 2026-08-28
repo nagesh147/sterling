@@ -36,7 +36,8 @@ expiry/leverage selection) and its smaller sibling `derivatives_native`, `edge`
 functions, no I/O), `risk` (drawdown circuit breaker, greeks budget, slippage,
 microstructure veto — stateful singletons via DI), `indicators`, `ml`,
 `backtest`, `arbitration`, `common`, and `atm_premium_imbalance`
-(reverse-engineered — see below). Each is self-contained. `scalping/` and
+(reverse-engineered — see below), and `oi_wall_flow`
+(chain OI walls + short-covering / put-writing flow — see below). Each is self-contained. `scalping/` and
 `triple_supertrend/` are legacy dirs, now empty — their logic was consolidated
 into `sterling_engine`/`directional`; do not add new code there.
 
@@ -86,3 +87,15 @@ falsified outright, because the number was measured slippage, not a setting.
 Because strategies only speak `Signal` and consume normalized data, the same
 strategy runs unchanged across Delta crypto, Zerodha equities, or any future
 broker/market — the adapters and the router absorb all the differences.
+
+## OI Wall Flow
+
+`oi_wall_flow` (`app/engines/oi_wall_flow/`) reads an Indian F&O chain the way
+a desk does: classify each strike's OI+premium change, locate the put wall
+(support) and call wall (resistance), score near-ATM flow, then **buy the
+first-resistance CE** (or first-support PE) when the flow agrees.
+
+It does not place orders. It emits `Signal`s (`instrument_type="options"`)
+with premium stop/target. Motivating fixture: BSE Ltd 29-Sep-2026, which must
+arm **3500 CE** and never a PE. Spec: `docs/strategy/oi-wall-flow/`.
+
