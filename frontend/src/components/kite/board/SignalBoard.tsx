@@ -16,11 +16,12 @@ import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
-  type BoardSignal, type BoardStatus, type EngineId,
+  type BoardDayMove, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import { LEG_INDENT, HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
+import { useKiteSettings } from '../../../store/useKiteSettings';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -28,7 +29,10 @@ import { InstrumentLabel } from '../InstrumentLabel';
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
   | 'ltp' | 'entry' | 'stop' | 'trail' | 'target' | 'exit'
-  | 'qty' | 'risk' | 'score' | 'time';
+  | 'qty' | 'risk' | 'score' | 'time'
+  // Today's move. SuperTrend has shown these three since long before this board
+  // existed; they were the columns a swap onto it would silently have deleted.
+  | 'chg' | 'chgPct' | 'dir';
 
 interface ColumnDef {
   id: ColumnId;
@@ -69,6 +73,9 @@ export const COLUMNS: readonly ColumnDef[] = [
   { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
   { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
   { id: 'ltp', label: SIGNAL_RIGHT_COLUMNS.ltp.label, width: SIGNAL_RIGHT_COLUMNS.ltp.width, align: 'right', hint: 'Last traded price of the instrument' },
+  { id: 'chg', label: SIGNAL_RIGHT_COLUMNS.chg.label, width: SIGNAL_RIGHT_COLUMNS.chg.width, align: 'right', hint: "Rupees the instrument has moved today" },
+  { id: 'chgPct', label: SIGNAL_RIGHT_COLUMNS.chgPct.label, width: SIGNAL_RIGHT_COLUMNS.chgPct.width, align: 'right', hint: 'Percent the instrument has moved today' },
+  { id: 'dir', label: SIGNAL_RIGHT_COLUMNS.dir.label || 'Direction', width: SIGNAL_RIGHT_COLUMNS.dir.width, align: 'right', hint: 'Which way today’s move is going' },
   { id: 'time', label: SIGNAL_RIGHT_COLUMNS.time.label, width: SIGNAL_RIGHT_COLUMNS.time.width, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
 ];
 
@@ -104,6 +111,11 @@ function sortKey(signal: BoardSignal, column: ColumnId): string | number | null 
     case 'risk': return signal.sizing.atRiskInr;
     case 'score': return signal.score;
     case 'time': return signal.atMs;
+    case 'chg': return signal.dayMove?.abs ?? null;
+    // Sorted by its OWN value, not by the absolute move: ordering a percent
+    // column by rupees puts a 400-point index above a 3% stock move.
+    case 'chgPct': return signal.dayMove?.pct ?? null;
+    case 'dir': return signal.dayMove?.abs ?? null;
     default: return null;
   }
 }
@@ -262,6 +274,8 @@ function cellContent(
   // midnight cannot disagree with the grouping — same reason sessionDayLabel
   // takes it.
   nowMs = Date.now(),
+  /** Whether the operator wants today's move tinted green/red. */
+  showDayColour = true,
 ): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
@@ -458,8 +472,43 @@ function cellContent(
         color: stale ? k.red : k.dim,
       };
     }
+    case 'chg':
+    case 'chgPct': {
+      const move = signal.dayMove;
+      const value = id === 'chg' ? move?.abs : move?.pct;
+      if (value == null) return { node: '—' };
+      const text = id === 'chg' ? value.toFixed(2) : `${value.toFixed(2)}%`;
+      // Tinted only when the operator has direction colours on, and by the
+      // ABSOLUTE move in both columns so the two never disagree about which way
+      // the day has gone -- a rounded percent can read 0.00% on a real move.
+      return { node: text, color: dayTone(move, showDayColour) };
+    }
+    case 'dir': {
+      const abs = signal.dayMove?.abs;
+      if (abs == null) return { node: '—' };
+      // A flat instrument gets a mark of its own rather than an arrow pointing
+      // nowhere or, worse, a green up-arrow for a zero move.
+      const glyph = abs === 0 ? '∘' : abs > 0 ? '▲' : '▼';
+      return { node: glyph, color: dayTone(signal.dayMove, showDayColour) };
+    }
     default: return { node: '—' };
   }
+}
+
+/**
+ * Green or red by today's move, or nothing when the operator has switched the
+ * direction colours off.
+ *
+ * The preference is PASSED IN, not read from the store here. Calling
+ * `useKiteSettings.getState()` mid-render creates no subscription, so toggling
+ * the setting would change nothing until something else happened to repaint the
+ * board — the same silent-toggle bug this very setting had on SuperTrend's
+ * table. `Row` subscribes properly and hands the value down.
+ */
+function dayTone(move: BoardDayMove | null | undefined, on: boolean): string | undefined {
+  if (!on) return undefined;
+  if (move?.abs == null || move.abs === 0) return undefined;
+  return move.abs > 0 ? k.green : k.red;
 }
 
 /**
@@ -490,6 +539,24 @@ export const BOARD_COLUMNS: readonly ColumnId[] = [
   'instrument', 'engine', 'status', 'exchange', 'leg',
   'ltp', 'entry', 'stop', 'trail', 'target', 'exit',
   'qty', 'risk', 'score', 'time',
+];
+
+/**
+ * The same list plus today's move.
+ *
+ * `chg`, `chgPct` and `dir` are deliberately NOT in `BOARD_COLUMNS`. The rule
+ * above — every engine requests the same list, and an unfillable cell honestly
+ * reads as a dash — holds when the engine simply produces no such number. It
+ * does not hold here: today's move needs a live quote, and SuperTrend's adapter
+ * is the only one that is handed `quotes` at all. Adding them to the shared list
+ * would give four boards three columns that can never be anything but dashes,
+ * which is not "this engine does not produce that", it is dead width.
+ *
+ * So the engine that has the data asks for them. If another adapter is ever
+ * given quotes, it can ask for them too — or they graduate into the shared list.
+ */
+export const BOARD_COLUMNS_WITH_DAY_MOVE: readonly ColumnId[] = [
+  ...BOARD_COLUMNS, 'chg', 'chgPct', 'dir',
 ];
 
 /**
@@ -645,6 +712,8 @@ function Row({
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
+  // A real subscription, so flipping the preference repaints the rows.
+  const showDayColour = useKiteSettings((s) => s.showPriceDirection);
   return (
     <>
       <div
@@ -705,7 +774,7 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
           const isName = col.id === 'instrument';
           return (
             <span

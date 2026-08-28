@@ -124,6 +124,23 @@ export interface BoardLevels {
   exit: number | null;
 }
 
+/**
+ * How far the instrument has moved today.
+ *
+ * Separate from `levels` because it is not a level: `levels` are the trade's own
+ * prices — where it got in, where it gets out — while this is the market's day.
+ *
+ * `pct` is null whenever it cannot be computed honestly. A feed that sends
+ * `net_change` but no opening or closing price gives an absolute move in RUPEES
+ * and nothing to divide it by; deriving a percentage from the last price instead
+ * printed a 12-rupee move on a 90-rupee premium as "12.00%". An absolute move
+ * with no percentage is the truthful answer there.
+ */
+export interface BoardDayMove {
+  abs: number | null;
+  pct: number | null;
+}
+
 export interface BoardSizing {
   /** Exchange lots. */
   lots: number | null;
@@ -165,6 +182,12 @@ export interface BoardSignal {
   reason: string | null;
   /** Age of the quote behind `ltp`, seconds. Drives the staleness mark. */
   quoteAgeS?: number | null;
+  /**
+   * Today's move on the instrument, when the adapter has a quote to derive it
+   * from. Absent means the Chg. columns render "—" rather than a zero, which
+   * would read as "flat" instead of "unknown".
+   */
+  dayMove?: BoardDayMove | null;
   /** This engine's own answer to "where did this come from". */
   origin?: BoardOrigin;
   /**

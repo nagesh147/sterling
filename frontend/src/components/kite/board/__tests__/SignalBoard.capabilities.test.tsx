@@ -12,7 +12,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SignalBoard } from '../SignalBoard';
+import { BOARD_COLUMNS_WITH_DAY_MOVE, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
 
 const IST = (5 * 60 + 30) * 60_000;
@@ -129,5 +129,64 @@ describe('row controls', () => {
       renderRowActions: () => <button type="button">Buy</button>,
     });
     expect(container.querySelector('.sb-row')?.textContent).toContain('Buy');
+  });
+});
+
+/**
+ * Today's move as rendered columns.
+ *
+ * The tinting is the part worth guarding: it is a subscription, not a snapshot.
+ * Reading `useKiteSettings.getState()` inside the cell renderer creates no
+ * subscription, so toggling the preference would change nothing until something
+ * else repainted the board — which is the exact silent-toggle bug this same
+ * setting had on SuperTrend's table.
+ */
+describe('today’s move', () => {
+  const withMove = (abs: number | null, pct: number | null) =>
+    sig({ dayMove: abs == null && pct == null ? null : { abs, pct } });
+
+  // Requested explicitly: these three are not in the shared list, because only
+  // an adapter with live quotes can fill them. See BOARD_COLUMNS_WITH_DAY_MOVE.
+  const moveBoard = (signals: ReturnType<typeof sig>[]) =>
+    board({ signals, columns: BOARD_COLUMNS_WITH_DAY_MOVE });
+
+  it('renders rupees, percent and a direction mark', () => {
+    moveBoard([withMove(10, 5)]);
+    expect(screen.getByText('10.00')).toBeInTheDocument();
+    expect(screen.getByText('5.00%')).toBeInTheDocument();
+    expect(screen.getByText('▲')).toBeInTheDocument();
+  });
+
+  it('shows a dash, never a zero, when there is no quote', () => {
+    // A zero reads as "flat"; the truth is "not known".
+    const { container } = moveBoard([withMove(null, null)]);
+    expect(container.textContent).not.toContain('0.00%');
+  });
+
+  it('marks a flat instrument without pointing an arrow nowhere', () => {
+    moveBoard([withMove(0, 0)]);
+    expect(screen.getByText('∘')).toBeInTheDocument();
+    expect(screen.queryByText('▲')).toBeNull();
+  });
+
+  it('prints rupees with a dash for percent when the feed gave no base', () => {
+    moveBoard([withMove(12, null)]);
+    expect(screen.getByText('12.00')).toBeInTheDocument();
+    expect(screen.queryByText(/12\.00%/)).toBeNull();
+  });
+
+  it('tints by the move, and drops the tint when the preference is off', async () => {
+    const { useKiteSettings } = await import('../../../../store/useKiteSettings');
+    useKiteSettings.setState({ showPriceDirection: true });
+    const up = moveBoard([withMove(10, 5)]);
+    expect(screen.getByText('10.00').style.color).toContain('green');
+    up.unmount();
+
+    useKiteSettings.setState({ showPriceDirection: false });
+    moveBoard([withMove(10, 5)]);
+    const colour = screen.getByText('10.00').style.color;
+    expect(colour).not.toContain('green');
+    expect(colour).not.toContain('red');
+    useKiteSettings.setState({ showPriceDirection: true });
   });
 });
