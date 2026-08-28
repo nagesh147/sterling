@@ -187,6 +187,16 @@ export function registerTokens(tokens: number[], mode: 'quote' | 'full' = 'quote
 }
 
 let _ws: WebSocket | null = null;
+/**
+ * When a tick frame last arrived.
+ *
+ * Exists so a frozen price is never silent. Every live price in the app falls
+ * back to a 30-second REST poll when the stream stops, which looks exactly like
+ * a quiet market — the difference matters enough on a board that places orders
+ * that it should be on screen rather than in a status endpoint.
+ */
+let _lastFrameAt = 0;
+
 let _refCount = 0;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _reconnectDelay = BASE_DELAY;
@@ -230,6 +240,10 @@ function _connect() {
         _tickByToken.set(tick.instrument_token, tick);
         changed = true;
       }
+      // Stamped on every tick frame, changed or not: an unchanged frame still
+      // proves the feed is alive, and a price that has not moved must not read
+      // as a dead feed.
+      _lastFrameAt = Date.now();
       if (changed) _notify();
     } catch {
       // Ignore unrelated or malformed stream frames.
@@ -237,7 +251,18 @@ function _connect() {
   };
 
   socket.onclose = () => {
+    // A STALE socket's close must not clobber the live one.
+    //
+    // `_disconnect()` calls `_ws.close()`, which resolves asynchronously. If a
+    // reconnect has already installed a new socket by the time this fires, the
+    // unguarded version set `_ws = null` on top of it — so the tracked reference
+    // was empty while an orphaned socket held the only live connection, and the
+    // next `_connect()` opened a third. Prices kept arriving on whichever socket
+    // happened to survive, which is why this shows up as flaky staleness rather
+    // than as a clean disconnect.
+    if (_ws !== socket) return;
     _ws = null;
+    _lastFrameAt = 0;
     _scheduleReconnect();
   };
   socket.onerror = () => socket.close();
@@ -276,4 +301,19 @@ function _getVersion(): number {
 /** Re-render callers on the coalesced cadence, after active interaction settles. */
 export function useTickVersion(): number {
   return useSyncExternalStore(_subscribeStore, _getVersion, _getVersion);
+}
+
+/** How long since a tick frame arrived, or null when none has yet. */
+export function tickFeedAgeMs(nowMs: number = Date.now()): number | null {
+  return _lastFrameAt ? nowMs - _lastFrameAt : null;
+}
+
+/** Whether the tick socket is open. Open is not the same as delivering. */
+export function tickSocketOpen(): boolean {
+  return _ws != null && _ws.readyState === WebSocket.OPEN;
+}
+
+/** Test hook: forget the recorded frame time. */
+export function __resetTickFeedHealth(): void {
+  _lastFrameAt = 0;
 }
