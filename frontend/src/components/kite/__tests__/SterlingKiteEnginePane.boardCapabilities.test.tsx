@@ -270,3 +270,42 @@ describe('the board renderer', () => {
     expect(document.querySelector('.st-actions-persistent')).toBeNull();
   });
 });
+
+/**
+ * One heading strip, not two.
+ *
+ * The shared renderer draws its own header. The first version of this wiring
+ * replaced only the ROWS and left the bespoke heading strip in place, so both
+ * rendered and every column label appeared twice. It surfaced as "Found multiple
+ * elements with the text: Entry (Δpts)" while trial-flipping the default — the
+ * kind of thing that is obvious in a test and easy to miss on a screen, because
+ * two identical strips stacked read as one slightly tall one.
+ */
+describe('the two renderers do not both draw furniture', () => {
+  beforeEach(() => { localStorage.clear(); vi.resetModules(); });
+
+  it('draws exactly one heading strip on the shared renderer', async () => {
+    (await store()).setState({ boardRenderer: 'shared' });
+    mockPane();
+    await renderPane();
+    expect(document.querySelectorAll('.st-header-row').length,
+           'the bespoke strip stands down').toBe(0);
+    expect(document.querySelectorAll('.sb-head-row').length,
+           'the shared strip draws once').toBe(1);
+  });
+
+  it('draws exactly one on the classic renderer', async () => {
+    mockPane();
+    await renderPane();
+    expect(document.querySelectorAll('.st-header-row').length).toBe(1);
+    expect(document.querySelectorAll('.sb-head-row').length).toBe(0);
+  });
+
+  it('never renders both row implementations at once', async () => {
+    (await store()).setState({ boardRenderer: 'shared' });
+    mockPane();
+    await renderPane();
+    expect(document.querySelectorAll('.st-leg-row').length).toBe(0);
+    expect(document.querySelectorAll('.sb-row').length).toBeGreaterThan(0);
+  });
+});

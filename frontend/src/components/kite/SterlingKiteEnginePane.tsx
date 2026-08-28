@@ -2405,7 +2405,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               />
             </div>
           </div>
-          {viewLayout === 'list' && (
+          {/* The shared renderer draws its OWN heading strip, so this one must not
+              also render — leaving both in place put two of every column label
+              on screen, which is how "Found multiple elements with the text:
+              Entry (Δpts)" showed up when the default was trial-flipped. */}
+          {viewLayout === 'list' && s.boardRenderer !== 'shared' && (
             <div className="st-header-row" onScroll={syncHscroll} style={{
               display: 'flex', alignItems: 'center', gap: ROW_METRICS.gap,
               // Headings, not content. This strip used to be 12px regular
