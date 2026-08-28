@@ -162,6 +162,12 @@ export function SuperTrendSharedBoard({
       // The three capabilities, from the operator's own Behaviour settings.
       onReorderColumn={s.boardDragColumns ? onReorderColumn : undefined}
       rowScroll={s.boardRowScroll}
+      // This board is fifty ideas across several days, and the operator's first
+      // question is "what is live", not "what fired today". The bespoke table has
+      // always answered that with an Active-now section ahead of the dated log;
+      // without this the shared board buries a running trade from Tuesday under
+      // days of closed history.
+      hoistLiveFromToday
       renderRowActions={s.boardRowActions ? renderRowActions : undefined}
       emptyLabel="No active or recent setups on the board yet."
     />

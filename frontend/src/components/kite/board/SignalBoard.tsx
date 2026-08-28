@@ -840,7 +840,7 @@ function Row({
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
-  onReorderColumn, rowScroll = false, renderRowActions,
+  onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -870,6 +870,14 @@ export function SignalBoard({
   onToggleGroup?: (id: string) => void;
   /** Float open positions above the dated history. On by default. */
   liveFirst?: boolean;
+  /**
+   * Put TODAY's live rows in that section too, so it holds everything actionable
+   * rather than only what the date buckets would bury.
+   *
+   * Off by default, because on a board whose whole content is one session the
+   * section would just duplicate "Today".
+   */
+  hoistLiveFromToday?: boolean;
   /**
    * Let a heading be dragged sideways to move its column.
    *
@@ -925,7 +933,7 @@ export function SignalBoard({
     gap: ROW_METRICS.gap,
     reserve: ACTION_RESERVE,
   });
-  const days = groupByDay(signals, { liveFirst, nowMs });
+  const days = groupByDay(signals, { liveFirst, nowMs, hoistToday: hoistLiveFromToday });
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;

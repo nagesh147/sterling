@@ -340,7 +340,22 @@ export function sessionDayLabel(key: string, nowMs: number): string {
  */
 export function groupByDay(
   signals: readonly BoardSignal[],
-  { liveFirst = false, nowMs }: { liveFirst?: boolean; nowMs?: number } = {},
+  { liveFirst = false, nowMs, hoistToday = false }: {
+    liveFirst?: boolean;
+    nowMs?: number;
+    /**
+     * Hoist a live row even when it is from today.
+     *
+     * Off, the live bucket collects only what day grouping would bury — see
+     * below. On, it collects every actionable row, which separates "things I
+     * could act on" from "history" outright rather than by date. That is how
+     * SuperTrend's own table has always read: an "Active now" section, then the
+     * dated log of entries whose trend has since ended. A board of fifty ideas
+     * across three days wants that; a board of one session's single trade does
+     * not, which is why it is a choice and not the rule.
+     */
+    hoistToday?: boolean;
+  } = {},
 ): Array<{ key: string; signals: BoardSignal[] }> {
   const buckets = new Map<string, BoardSignal[]>();
   const push = (key: string, s: BoardSignal) => {
@@ -357,7 +372,7 @@ export function groupByDay(
     // sit below days of closed history, which is the case the bucket exists
     // for. Without a clock, fall back to hoisting every live row.
     const buried = todayKey == null || day !== todayKey;
-    push(liveFirst && buried && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
+    push(liveFirst && (hoistToday || buried) && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
   }
   const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
   return [...buckets.entries()]

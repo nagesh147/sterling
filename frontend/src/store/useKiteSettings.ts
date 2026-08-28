@@ -76,10 +76,21 @@ export interface KiteSettingsState {
    * live account and I cannot see the shared one rendered behind the broker
    * login. It is a way back, not a second product.
    *
-   * `classic` is still the DEFAULT, and will be until the shared path stops
-   * losing things: day grouping replaces the "Active now" and "Today (ended)"
-   * buckets, and a signal whose strike resolved to no contract loses the message
-   * that explains it.
+   * `classic` is still the DEFAULT. Two of the three original gaps are closed —
+   * a signal that resolved to no contract now says so inline, and
+   * `hoistLiveFromToday` reproduces the Active-now section — but one remains, and
+   * it is the reason the default has not flipped:
+   *
+   * **Per-leg diagnostics.** The bespoke row distinguishes a trail close from a
+   * red-counter close in words ("TSL exit" vs "counter exit"), marks a re-entry,
+   * and prints the entry/stop premium snapshot inline. Twenty-five tests cover
+   * those, and they matter: the gap between "the premium is through its trail"
+   * and "the engine has not closed it yet" is exactly where an open drawdown
+   * builds. Moving them behind a click would be losing them.
+   *
+   * Closing it needs one more capability on the shared board — inline per-row
+   * marks supplied by the engine, alongside `renderRowActions`. Until then this
+   * setting is a way to see the shared renderer, not a recommendation.
    */
   boardRenderer: 'shared' | 'classic';
   setBoardRenderer: (r: 'shared' | 'classic') => void;
