@@ -59,17 +59,24 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
    * up, and worse, the control's absence read as "this row has no Buy" rather
    * than "you cannot buy this one, because it has ended". Disabled says which.
    */
-  const disabledStyle: React.CSSProperties = {
+  const disabledStyle = (base: string): React.CSSProperties => ({
     ...buySellStyle,
-    background: k.border, color: k.dim,
-    cursor: 'not-allowed', opacity: 0.6,
-  };
+    // The action's OWN colour, faded — not grey.
+    //
+    // A grey box reads as an unknown control; a faded blue one reads as "Buy,
+    // not available here", which is the whole point of drawing it at all. The
+    // white-ish result of `background: k.border` lost the identity the button
+    // was being kept for.
+    background: base,
+    opacity: 0.38,
+    cursor: 'not-allowed',
+  });
 
   return (
     <div className={className} onClick={(e) => e.stopPropagation()}>
       {onBuy && (
         <button
-          style={buyDisabled ? disabledStyle : { ...buySellStyle, background: 'var(--k-blue)' }}
+          style={buyDisabled ? disabledStyle('var(--k-blue)') : { ...buySellStyle, background: 'var(--k-blue)' }}
           title={buyDisabled ? (disabledHint || 'Not available on this row') : (buyLabel || 'Buy')}
           disabled={buyDisabled}
           onClick={buyDisabled ? undefined : onBuy}
@@ -79,7 +86,7 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
       )}
       {onSell && (
         <button
-          style={sellDisabled ? disabledStyle : { ...buySellStyle, background: 'var(--k-orange)' }}
+          style={sellDisabled ? disabledStyle('var(--k-orange)') : { ...buySellStyle, background: 'var(--k-orange)' }}
           title={sellDisabled ? (disabledHint || 'Not available on this row') : (sellLabel || 'Sell')}
           disabled={sellDisabled}
           onClick={sellDisabled ? undefined : onSell}
