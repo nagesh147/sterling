@@ -309,3 +309,42 @@ describe('the two renderers do not both draw furniture', () => {
     expect(document.querySelectorAll('.sb-row').length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The shared renderer shows SuperTrend's columns, not the shared board's set.
+ *
+ * The first version of this composition asked for `BOARD_COLUMNS_WITH_DAY_MOVE`
+ * and appended SuperTrend's own on top, which handed the board five columns it
+ * has never had: Engine, Status, Qty, At risk, Score. The shared list exists so
+ * the four migrated boards agree with each other — it is not a floor every board
+ * must carry, and a table that grows columns nobody asked for reads as the wrong
+ * table.
+ */
+describe('the shared renderer asks for this engine’s columns', () => {
+  beforeEach(() => { localStorage.clear(); vi.resetModules(); });
+
+  const headings = () =>
+    [...document.querySelectorAll('.sb-head-row .sb-head')].map((h) => h.textContent!.trim());
+
+  it('does not add the shared board’s generic columns', async () => {
+    (await store()).setState({ boardRenderer: 'shared' });
+    mockPane();
+    await renderPane();
+    const heads = headings();
+    for (const generic of ['Engine', 'Status', 'Qty', 'At risk', 'Score']) {
+      expect(heads, `${generic} is not one of this table's columns`).not.toContain(generic);
+    }
+  });
+
+  it('shows the ones it does have, in the operator’s order', async () => {
+    (await store()).setState({ boardRenderer: 'shared' });
+    mockPane();
+    await renderPane();
+    const heads = headings();
+    expect(heads[0]).toBe('Instrument');
+    // Its own set, matching the persisted left-then-right order.
+    for (const own of ['Exc.', 'Leg (Δ)', 'Entry (Δpts)', 'LTP', 'Time']) {
+      expect(heads, own).toContain(own);
+    }
+  });
+});

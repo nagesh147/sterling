@@ -1,5 +1,5 @@
 import React from 'react';
-import { SignalBoard, BOARD_COLUMNS_WITH_DAY_MOVE, DEFAULT_SORT, type ColumnId, type SortState } from './board/SignalBoard';
+import { SignalBoard, DEFAULT_SORT, type ColumnId, type SortState } from './board/SignalBoard';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import type { BoardSignal } from './board/boardTypes';
 import {
@@ -67,12 +67,17 @@ export function SuperTrendSharedBoard({
     const ordered = [...s.signalLeftColumnOrder, ...s.signalRightColumnOrder]
       .map((key) => SIGNAL_COL_TO_BOARD[key as SignalColKey])
       .filter(Boolean) as ColumnId[];
-    // `instrument` is the row's identity and is not part of either run; the
-    // remaining shared columns keep the board's own ordering behind them.
-    const rest = BOARD_COLUMNS_WITH_DAY_MOVE.filter(
-      (c) => c === 'instrument' || (!ordered.includes(c) && !(c in BOARD_COL_TO_SIGNAL)),
-    );
-    return [...rest, ...ordered];
+    // THIS ENGINE'S columns, and only those.
+    //
+    // The first version asked for the shared list and appended these, which
+    // handed SuperTrend five columns it has never had — Engine, Status, Qty, At
+    // risk, Score. The shared list exists so the four migrated boards agree with
+    // each other; it is not a floor every board has to carry. A board that
+    // suddenly grows columns nobody asked for reads as the wrong table.
+    //
+    // `instrument` leads because it is the row's identity rather than a member
+    // of either column run.
+    return ['instrument', ...ordered];
   }, [s.signalLeftColumnOrder, s.signalRightColumnOrder]);
 
   /** The operator's hidden set, in the board's names. */

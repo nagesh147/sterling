@@ -71,8 +71,24 @@ export const ROW_METRICS = {
   /** Horizontal padding on a leg row. */
   legPadding: '0 16px',
   /** The instrument cell is the only one that flexes. */
-  instrumentBasis: '1 1 150px',
-  instrumentMinWidth: 150,
+  /**
+   * The instrument column: grows, never shrinks.
+   *
+   * `1 1 150px` was wrong in both halves. It is the only flexible column on the
+   * row, so it absorbed ALL the overflow whenever the board was narrower than
+   * its columns -- and 150px does not hold what the cell draws. An option label
+   * renders as "BANKNIFTY 26 Aug 57000 CE", around 166px at this size, before
+   * the best-R and best-delta badges beside it. So the one thing you need to
+   * read was the first thing ellipsised, while the columns of numbers it names
+   * stayed whole. A leg indents by LEG_INDENT and gives back the same amount,
+   * which took it to 136 and made it plainly visible.
+   *
+   * `1 0 200px`: it takes any slack going, and under overflow the ROW scrolls or
+   * clips its right-hand columns instead. Losing a column you can bring back
+   * from the picker beats losing the name of the contract.
+   */
+  instrumentBasis: '1 0 200px',
+  instrumentMinWidth: 200,
   /** Type scale, so a cell in one board is the same size as in another. */
   instrumentFontSize: 13,
   cellFontSize: 11,

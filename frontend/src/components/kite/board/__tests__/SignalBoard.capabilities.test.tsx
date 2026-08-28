@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BOARD_COLUMNS_WITH_DAY_MOVE, SignalBoard } from '../SignalBoard';
 import type { BoardSignal } from '../boardTypes';
+import { LEG_INDENT, ROW_METRICS } from '../signalRowSpec';
 
 const IST = (5 * 60 + 30) * 60_000;
 const NOW = Date.UTC(2026, 7, 21, 10, 30) - IST;
@@ -275,5 +276,40 @@ describe('inline marks', () => {
       })],
     });
     expect(screen.getAllByText('exit')).toHaveLength(2);
+  });
+});
+
+/**
+ * The instrument column never gives up its width.
+ *
+ * It is the only flexible column on the row, so `flex: 1 1 150px` made it absorb
+ * ALL the overflow whenever the board was narrower than its columns — and 150px
+ * does not hold what the cell draws: an option renders as
+ * "BANKNIFTY 26 Aug 57000 CE", around 166px, before the best-R and best-delta
+ * badges beside it. A leg indents and gives back the same amount, taking it to
+ * 136.
+ *
+ * The result was the worst possible truncation: the name of the contract clipped
+ * while every column of numbers describing it stayed whole.
+ */
+describe('the instrument column', () => {
+  it('grows but never shrinks', () => {
+    const { container } = board();
+    const cell = container.querySelector('.sb-row span') as HTMLElement;
+    expect(cell).not.toBeNull();
+    // flex-shrink 0: the row overflows and scrolls rather than the name clipping.
+    expect(ROW_METRICS.instrumentBasis).toMatch(/^1 0 /);
+  });
+
+  it('is wide enough for a full option label', () => {
+    // "BANKNIFTY 26 Aug 57000 CE" is ~166px at 13px, plus two 12px badges and
+    // their gaps. 150 was never enough.
+    expect(ROW_METRICS.instrumentMinWidth).toBeGreaterThanOrEqual(190);
+  });
+
+  it('leaves a leg room even after the indent takes its cut', () => {
+    // A leg reduces the cell by LEG_INDENT to keep the column's right edge under
+    // its heading, so the usable width is this, not the full basis.
+    expect(ROW_METRICS.instrumentMinWidth - LEG_INDENT).toBeGreaterThanOrEqual(170);
   });
 });

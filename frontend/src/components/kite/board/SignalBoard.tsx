@@ -55,7 +55,24 @@ interface ColumnDef {
  */
 const ACTION_RESERVE = 96;
 
-export const COLUMNS: readonly ColumnDef[] = [
+export /*
+ * Labels and widths come from `signalRowSpec` — SuperTrend's own table — ON
+ * PURPOSE, so a cell sits in the same place with the same name whichever board
+ * you are on. `columnParity.test.tsx` pins it.
+ *
+ * I briefly decoupled these, on the reading that SuperTrend "should have its own
+ * column names". That reverses a deliberate decision whose whole point is the
+ * cross-tab consistency asked for earlier in the same conversation, and it makes
+ * the two tables show DIFFERENT words for the same number. Reverted, because the
+ * thing actually wrong was elsewhere: `SuperTrendSharedBoard` was requesting the
+ * shared column SET and appending its own, which handed SuperTrend five columns
+ * it has never had (Engine, Status, Qty, At risk, Score).
+ *
+ * If the words themselves should diverge, that is a call to make deliberately —
+ * the mechanism is a `label` per column def here, and the cost is that switching
+ * tabs renames columns.
+ */
+const COLUMNS: readonly ColumnDef[] = [
   // Widths, labels and alignment come from SuperTrend's table (see
   // signalRowSpec) so a cell sits in the same place on every board. The extras
   // it does not have are sized to the same rhythm.
