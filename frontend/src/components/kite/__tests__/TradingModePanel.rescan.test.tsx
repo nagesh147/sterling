@@ -17,9 +17,30 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: { record: { config: { enabled: true, auto_execute_originated: false } } } }),
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: true, auto_execute_originated: false }, revision: 3 } } }),
+  useSetNavigatorConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>mode controls</div> }));
+
+// "What is running" now lists every engine, so the panel asks all six for their
+// config. Mocked rather than wrapped in a QueryClientProvider so this file stays a
+// unit test of the panel and each engine's state is something it can set.
+vi.mock('../../../hooks/useOrbConfig', () => ({
+  useOrbConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetOrbConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useGammaMove', () => ({
+  useGammaMoveConfig: () => ({ data: { config: { enabled: true } } }),
+  useUpdateGammaMove: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useAdaptiveEdge', () => ({
+  useAdaptiveEdgeEngineConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetAdaptiveEdgeEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
+  useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 import { TradingModePanel } from '../TradingModePanel';
 import { useKiteSettings } from '../../../store/useKiteSettings';
@@ -59,8 +80,18 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
     render(<TradingModePanel />);
     for (const { note } of ROWS) expect(screen.getByText(note)).toBeInTheDocument();
     // ATM Premium Imbalance resolves one pair and arms it — there is no universe
-    // to sweep, so offering it here would be a choice that changes nothing.
-    expect(screen.queryByText(/ATM Premium/i)).toBeNull();
+    // to sweep, so a re-scan tick box for it would change nothing.
+    //
+    // It IS named elsewhere on this panel, under "What is running", because it can
+    // still be switched off. The two lists answer different questions, so this
+    // scopes to the re-scan rows rather than the whole document — which is what
+    // the first version of this assertion got wrong the moment the running list
+    // grew past SuperTrend.
+    for (const { note } of ROWS) {
+      const row = screen.getByText(note).closest('label');
+      expect(row?.textContent ?? '').not.toMatch(/ATM Premium/i);
+    }
+    expect(screen.getByText('ATM Premium Imbalance')).toBeInTheDocument();
   });
 
   it('starts with everything included, because absent means covered', () => {
