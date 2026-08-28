@@ -93,12 +93,14 @@ function TradeRecord({ record }: { record?: AtmTradeRecord }) {
   );
 }
 
-export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
+export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail, onOpenChart }: {
+  /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
+  onOpenChart?: (quoteKey: string) => void;
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
-  const rowActions = useBoardRowActions();
+  const rowActions = useBoardRowActions({ onOpenChart });
   const config = useAtmPremiumImbalanceConfig();
   const enabled = config.data?.config?.enabled ?? false;
   const [armedOnce, setArmedOnce] = React.useState(false);

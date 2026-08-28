@@ -65,6 +65,14 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   // survive its engine being switched off — nor vanish for any other reason.
   const engineOn = useEngineEnabled();
 
+  // Every board's Chart column needs this. Four of the five never received it, so
+  // `useBoardRowActions` returned null for the chart cell and the column rendered
+  // empty — present in the picker, headed "Chart", and permanently blank.
+  const openChartFor = React.useCallback(
+    (quoteKey: string) => onOpenChart?.(quoteKey, 'chart'),
+    [onOpenChart],
+  );
+
   /**
    * Rescan and the board settings, for every engine.
    *
@@ -286,13 +294,13 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         {engine === 'supertrend' && (
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         )}
-        {engine === 'adaptive_edge' && <AdaptiveEdgeBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />}
-        {engine === 'orb' && <NiftyOrbSignalsFeed onOpenDetail={onOpenBoardDetail} />}
+        {engine === 'adaptive_edge' && <AdaptiveEdgeBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />}
+        {engine === 'orb' && <NiftyOrbSignalsFeed onOpenChart={openChartFor} onOpenDetail={onOpenBoardDetail} />}
         {engine === 'atm_premium_imbalance' && (
-          <AtmPremiumImbalanceBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
+          <AtmPremiumImbalanceBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
         {engine === 'gamma_move' && (
-          <GammaMoveBoard nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
+          <GammaMoveBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
       </div>
     </div>

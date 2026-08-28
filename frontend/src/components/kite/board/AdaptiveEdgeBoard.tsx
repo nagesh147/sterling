@@ -17,12 +17,14 @@ import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
 import { k } from '../../../styles/kiteUI';
 
-export function AdaptiveEdgeBoard({ nowMs, onOpenDetail }: {
+export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
+  /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
+  onOpenChart?: (quoteKey: string) => void;
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
-  const rowActions = useBoardRowActions();
+  const rowActions = useBoardRowActions({ onOpenChart });
   const snapshot = useAdaptiveEdgeSnapshot();
   const signals = React.useMemo(
     () => (snapshot.data ? adaptiveEdgeToBoard(rowsFromSnapshot(snapshot.data)) : []),

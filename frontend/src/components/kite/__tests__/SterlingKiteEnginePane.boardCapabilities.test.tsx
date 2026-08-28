@@ -153,7 +153,7 @@ describe('board capabilities reach the DOM', () => {
   it('keeps the order buttons in the row by default', async () => {
     mockPane();
     await renderPane();
-    expect(document.querySelector('.st-actions-persistent'),
+    expect(document.querySelector('.st-trade-cell'),
            'the trade path is in the row unless asked otherwise').not.toBeNull();
   });
 
@@ -161,7 +161,7 @@ describe('board capabilities reach the DOM', () => {
     (await store()).setState({ boardRowActions: false });
     mockPane();
     await renderPane();
-    expect(document.querySelector('.st-actions-persistent')).toBeNull();
+    expect(document.querySelector('.st-trade-cell')).toBeNull();
   });
 
   it('MOVES the trade buttons rather than deleting them', async () => {
@@ -291,7 +291,7 @@ describe('the board renderer', () => {
     mockPane();
     await renderPane();
     expect(document.querySelector('.sb-row')).not.toBeNull();
-    expect(document.querySelector('.st-actions-persistent')).toBeNull();
+    expect(document.querySelector('.st-trade-cell')).toBeNull();
   });
 });
 
