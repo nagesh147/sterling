@@ -489,17 +489,57 @@ button, a, input, select, textarea,
  * rather than the row changing colour twice, which keeps the direction colour
  * readable while hovered.
  */
-.sb-row { transition: background .12s ease, box-shadow .12s ease; }
-.sb-row:hover { background: var(--k-surface-hover) !important; }
-.sb-row:focus-visible {
+/* SuperTrend's table is a bespoke implementation whose rows carry their own
+ * class names, so they are listed alongside `.sb-row` rather than restyled
+ * separately. It previously declared a lone `:hover` of its own: no transition,
+ * so the highlight snapped on where the shared board's eases, and no
+ * focus-visible or active state at all -- on a board that places real orders,
+ * that made keyboard use a second-class path through one table only.
+ *
+ * `!important` throughout because every row paints its own background inline
+ * (a leg is recessed onto surface-2, an open row is already lifted), and a
+ * stylesheet cannot otherwise reach past an inline style. */
+.sb-row,
+.st-leg-row,
+.st-leg-tile,
+.st-parent-header,
+.st-group-header { transition: background .12s ease, box-shadow .12s ease; }
+
+.sb-row:hover,
+.st-leg-row:hover,
+.st-leg-tile:hover,
+.st-parent-header:hover,
+.st-group-header:hover { background: var(--k-surface-hover) !important; }
+
+.sb-row:focus-visible,
+.st-leg-row:focus-visible,
+.st-leg-tile:focus-visible,
+.st-parent-header:focus-visible,
+.st-group-header:focus-visible {
   outline: none;
   background: var(--k-surface-hover) !important;
   box-shadow: inset 0 0 0 1px var(--k-blue);
 }
-.sb-row:active { background: var(--k-surface) !important; }
+
+/* A scrolling row hides its own bar: one under every row would out-shout the
+ * data it belongs to. The header scrolls with them, so the columns stay lined up
+ * without a visible track. */
+.sb-row-scroll, .sb-head-row, .st-row-scroll, .st-header-row { scrollbar-width: none; }
+.sb-row-scroll::-webkit-scrollbar,
+.sb-head-row::-webkit-scrollbar { display: none; }
+
+.sb-row:active,
+.st-leg-row:active,
+.st-leg-tile:active,
+.st-parent-header:active,
+.st-group-header:active { background: var(--k-surface) !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  .sb-row { transition: none !important; }
+  .sb-row,
+  .st-leg-row,
+  .st-leg-tile,
+  .st-parent-header,
+  .st-group-header { transition: none !important; }
 }
 
 /* ── Engine toolbar ───────────────────────────────────────────────────── */

@@ -14,6 +14,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html', { open: 'never' }], ['list']],
+  // No committed Playwright PNG baselines exist. Visual assertions would fail
+  // CI with "A snapshot doesn't exist" on every run. Skip them unless a
+  // snapshot-update job explicitly asks to write them.
+  ignoreSnapshots: !!process.env.CI && process.env.UPDATE_SNAPSHOTS !== '1',
   // Global setup: seeds paper Kite account + activates for the test user (X-User-Id=default).
   // This gives reliable "logged in + active paper account" state for kite engine + picker flows
   // without every test having to do the login dance.

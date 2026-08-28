@@ -124,6 +124,23 @@ export interface BoardLevels {
   exit: number | null;
 }
 
+/**
+ * How far the instrument has moved today.
+ *
+ * Separate from `levels` because it is not a level: `levels` are the trade's own
+ * prices — where it got in, where it gets out — while this is the market's day.
+ *
+ * `pct` is null whenever it cannot be computed honestly. A feed that sends
+ * `net_change` but no opening or closing price gives an absolute move in RUPEES
+ * and nothing to divide it by; deriving a percentage from the last price instead
+ * printed a 12-rupee move on a 90-rupee premium as "12.00%". An absolute move
+ * with no percentage is the truthful answer there.
+ */
+export interface BoardDayMove {
+  abs: number | null;
+  pct: number | null;
+}
+
 export interface BoardSizing {
   /** Exchange lots. */
   lots: number | null;
@@ -165,6 +182,29 @@ export interface BoardSignal {
   reason: string | null;
   /** Age of the quote behind `ltp`, seconds. Drives the staleness mark. */
   quoteAgeS?: number | null;
+  /**
+   * Today's move on the instrument, when the adapter has a quote to derive it
+   * from. Absent means the Chg. columns render "—" rather than a zero, which
+   * would read as "flat" instead of "unknown".
+   */
+  dayMove?: BoardDayMove | null;
+  /**
+   * Short inline badges an engine wants on the row itself.
+   *
+   * `origin` says where a signal came from and there is exactly one of those.
+   * These are everything else worth seeing WITHOUT opening the row: which of two
+   * exit rules actually closed it, that a contract has been re-entered, what a
+   * second system thinks of it.
+   *
+   * They are data, not a render prop, so the board stays ignorant of what any
+   * engine's rules are — it knows how to draw a labelled badge and nothing more.
+   * And they are inline rather than in `sections` because the distinction they
+   * carry is often the reason to look: "the premium is through its trail" and
+   * "the engine has not closed it yet" are different situations, and the gap
+   * between them is where an open drawdown builds. Behind a click, that is a
+   * thing nobody reads.
+   */
+  marks?: readonly BoardOrigin[];
   /** This engine's own answer to "where did this come from". */
   origin?: BoardOrigin;
   /**
@@ -234,16 +274,52 @@ export const STATUS_RANK: Record<BoardStatus, number> = {
 
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
 export function sessionDayKey(atMs: number | null): string {
-  if (atMs == null) return 'unknown';
+  // Non-finite as well as null. `Date.parse` returns NaN for any format it does
+  // not recognise, `??` does not catch NaN, and `new Date(NaN).toISOString()`
+  // throws RangeError — so one unparseable timestamp upstream would take the
+  // whole board down rather than render one bad cell.
+  if (atMs == null || !Number.isFinite(atMs)) return 'unknown';
   const ist = new Date(atMs + (5 * 60 + 30) * 60_000);
   return ist.toISOString().slice(0, 10);
+}
+
+/**
+ * The date text for a day key — "28 Aug", "24 Jul 2025" — with no relative
+ * wording at all.
+ *
+ * Split out so the day header and a row's own stamp cannot disagree about what a
+ * date looks like. The header adds "Today" and a weekday on top of this; a row
+ * needs the bare date because it is a precise stamp, not a friendly heading.
+ *
+ * The year appears only when it is not the current one: unambiguous within a
+ * year, and a real ambiguity across one.
+ */
+export function sessionDayDate(key: string, nowMs: number): string {
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const thisYear = Number(sessionDayKey(nowMs).slice(0, 4));
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', timeZone: 'UTC',
+    ...(y === thisYear ? {} : { year: 'numeric' }),
+  });
 }
 
 /** The bucket live positions float into, ahead of every dated one. */
 export const LIVE_BUCKET = 'live';
 
 /**
- * "Today" / "Yesterday" / "Thu 14 Aug" — relative to the IST trading day.
+ * "Today" / "Thu 14 Aug" / "Thu 14 Aug 2025" — on the IST trading day.
+ *
+ * Only today is named in words. Everything else gets a real date, because
+ * relative wording stops being an answer almost immediately: "Yesterday" is
+ * useful for exactly one day and then becomes a thing the reader has to convert,
+ * and on a board that keeps history most rows are not from either of the two
+ * days it can describe.
+ *
+ * The year appears only when it is not the current one. "Thu 14 Aug" is
+ * unambiguous within a year and adding 2026 to every row of a board someone is
+ * watching live is noise; leaving it off a row from last year is a real
+ * ambiguity, so that case says it.
  *
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
@@ -253,12 +329,10 @@ export function sessionDayLabel(key: string, nowMs: number): string {
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
   if (key === today) return 'Today';
-  const yesterday = sessionDayKey(nowMs - 86_400_000);
-  if (key === yesterday) return 'Yesterday';
   const [y, m, d] = key.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-  });
+  const weekday = new Date(Date.UTC(y, m - 1, d))
+    .toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+  return `${weekday}, ${sessionDayDate(key, nowMs)}`;
 }
 
 /**
@@ -267,15 +341,38 @@ export function sessionDayLabel(key: string, nowMs: number): string {
  * Undated rows sort last rather than being dropped — an engine that failed to
  * stamp a signal still has something to say.
  *
- * With `liveFirst`, anything still open floats into one bucket ahead of every
- * dated one. Without it a position entered last Tuesday and still running sits
- * under "Tue 12 Aug", below three days of closed history, and the top of the
- * board reads as though nothing is on. The date buckets are then what they
- * should be: the log of entries whose trade has ended.
+ * With `liveFirst` and a `nowMs`, an open position floats into one bucket ahead
+ * of every dated one **only when its day is not today**. That is the case the
+ * bucket exists for: a position entered last Tuesday and still running would
+ * otherwise sit under "Tue 12 Aug" below three days of closed history, and the
+ * top of the board would read as though nothing were on.
+ *
+ * Today's live rows stay under "Today", which is the first section anyway, so
+ * hoisting them gains no visibility and costs them a date heading. Day grouping
+ * is then the board's primary organisation — what an operator scanning a log
+ * asks for — without letting a stale open position hide in it.
+ *
+ * With no `nowMs` every live row is hoisted, preserving the older behaviour for
+ * callers that cannot supply a clock.
  */
 export function groupByDay(
   signals: readonly BoardSignal[],
-  { liveFirst = false }: { liveFirst?: boolean } = {},
+  { liveFirst = false, nowMs, hoistToday = false }: {
+    liveFirst?: boolean;
+    nowMs?: number;
+    /**
+     * Hoist a live row even when it is from today.
+     *
+     * Off, the live bucket collects only what day grouping would bury — see
+     * below. On, it collects every actionable row, which separates "things I
+     * could act on" from "history" outright rather than by date. That is how
+     * SuperTrend's own table has always read: an "Active now" section, then the
+     * dated log of entries whose trend has since ended. A board of fifty ideas
+     * across three days wants that; a board of one session's single trade does
+     * not, which is why it is a choice and not the rule.
+     */
+    hoistToday?: boolean;
+  } = {},
 ): Array<{ key: string; signals: BoardSignal[] }> {
   const buckets = new Map<string, BoardSignal[]>();
   const push = (key: string, s: BoardSignal) => {
@@ -283,8 +380,16 @@ export function groupByDay(
     if (list) list.push(s);
     else buckets.set(key, [s]);
   };
+  const todayKey = nowMs == null ? null : sessionDayKey(nowMs);
   for (const s of signals) {
-    push(liveFirst && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : sessionDayKey(s.atMs), s);
+    const day = sessionDayKey(s.atMs);
+    // Hoist only what day grouping would actually bury. A live row from today
+    // is already in the first section, so lifting it out gains nothing and
+    // costs it its date heading; a live row from last Tuesday would otherwise
+    // sit below days of closed history, which is the case the bucket exists
+    // for. Without a clock, fall back to hoisting every live row.
+    const buried = todayKey == null || day !== todayKey;
+    push(liveFirst && (hoistToday || buried) && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
   }
   const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
   return [...buckets.entries()]
@@ -350,3 +455,50 @@ export function trailBreached(signal: BoardSignal): boolean {
   const { ltp, trail } = signal.levels;
   return signal.status !== 'ended' && ltp != null && trail != null && ltp <= trail;
 }
+
+
+/*
+ * Signal timestamps.
+ *
+ * These moved here from `SignalBoard` so SuperTrend's bespoke table can print
+ * the same stamp. They already depended on `sessionDayKey`/`sessionDayDate`,
+ * which live here, so this is where they belong: two tables formatting a time
+ * two ways is how one ends up saying "14:15" while the other says
+ * "Tue 25 Aug 14:15:03" for the same signal.
+ */
+export const hhmmss = (ms: number) =>
+  new Date(ms).toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    timeZone: 'Asia/Kolkata',
+  });
+
+/**
+ * The time a signal fired, carrying its date whenever that is not today.
+ *
+ * The bare time was ambiguous in exactly the case that matters. Rows in the
+ * "Live now" bucket are grouped by being live rather than by day, so an
+ * actionable row from yesterday sat under a header that named no date beside a
+ * cell that showed only `09:20` — indistinguishable from this morning. Ended
+ * rows were fine because their day header named the date; live ones were not.
+ *
+ * Today stays bare, because repeating today's date on every row of a board an
+ * operator is watching live is noise.
+ */
+export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  // A leg shows the time only. The parent above it already names the day, and a
+  // group's legs share it by construction — repeating the date on every one of
+  // NIFTY's eighteen strikes is the noise the grouping exists to remove.
+  if (isLeg) return hhmmss(ms);
+  // A complete stamp: the date always, and seconds.
+  //
+  // Today used to render bare on the grounds that repeating today's date is
+  // noise. It is not, for these engines — Adaptive Edge scalps order flow and
+  // the recorded ATM bot opened and closed a position inside three seconds, so
+  // "10:30" is not a time you can reason about. Minute precision hid the thing
+  // the row exists to report.
+  //
+  // The date text comes from sessionDayDate, the same helper the day header
+  // uses, so the two cannot disagree about what a date looks like.
+  return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
+};

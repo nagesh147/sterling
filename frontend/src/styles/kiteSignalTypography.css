@@ -1,7 +1,0 @@
-/* Keep Kite signal rows light and compact. Inline cell styles defaulted the
- * right-side LTP to a heavier weight; this override intentionally makes the
- * signal row typography thin without removing any controls. */
-.st-leg-row .st-prices span,
-.st-leg-row > span:first-child {
-  font-weight: 100 !important;
-}

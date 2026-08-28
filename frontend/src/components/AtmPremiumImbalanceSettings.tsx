@@ -104,6 +104,11 @@ export function AtmPremiumImbalanceSettings() {
   const defaults = data?.defaults;
   const strategy = data?.strategy;
   const researchOnly = data?.research_only;
+  // Why live is unavailable, computed by the engine's own gate. Never a
+  // client-side copy of those rules -- the previous hand-written mirror had
+  // already drifted, omitting the size and the stop.
+  const liveBlockers = data?.live_blockers ?? [];
+  const liveReady = data?.strategy?.live_ready === true;
 
   const [draft, setDraft] = React.useState<AtmPremiumImbalanceConfig | null>(null);
   const [resetConfirm, setResetConfirm] = React.useState(false);
@@ -546,6 +551,43 @@ export function AtmPremiumImbalanceSettings() {
               the stop in force, and none of them can pull it back down.
             </ConfigNote>
           </>
+        )}
+      </Section>
+
+      <Section
+        title="Live readiness"
+        description="What stands between this config and real money."
+        summary={liveReady ? (liveBlockers.length ? `${liveBlockers.length} blocking` : 'ready') : 'gated'}
+        persistKey="api-live"
+      >
+        <Field label="Execution mode" hint="Paper fills are simulated. Live sends real orders.">
+          <span style={{ color: DIM, fontSize: 12 }}>{cfg.execution_mode}</span>
+        </Field>
+        {!liveReady && (
+          <ConfigNote>
+            Live is <strong>withheld by the engine</strong>, not by this panel: the strategy
+            reports <code>live_ready: false</code> until its readiness gate passes. Every
+            decodable recording of the source bot was a winner and none shows a loss, so no
+            win rate has ever been measured — which is what that gate is waiting for. The
+            trade journal on the board starts answering it from the first paper session.
+          </ConfigNote>
+        )}
+        {liveBlockers.length > 0 ? (
+          <>
+            <ConfigNote>
+              Even once the gate opens, live would be refused for {liveBlockers.length}{' '}
+              {liveBlockers.length === 1 ? 'reason' : 'reasons'}. These come from the engine,
+              so this list cannot drift from what validation actually enforces.
+            </ConfigNote>
+            <ul style={{ margin: 0, paddingLeft: 18, color: DIM, fontSize: 12, lineHeight: 1.7 }}>
+              {liveBlockers.map((b) => <li key={b}>{b}</li>)}
+            </ul>
+          </>
+        ) : (
+          <ConfigNote>
+            This config satisfies every live requirement the engine checks — quote mode, size,
+            broker-side protection, the session-origin gate and a percent stop.
+          </ConfigNote>
         )}
       </Section>
 

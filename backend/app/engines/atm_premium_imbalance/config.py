@@ -218,6 +218,55 @@ class ATMPremiumImbalanceConfig:
     data_source: str = "kite"
     execution_mode: str = "paper"
 
+    def live_blockers(self) -> list[str]:
+        """Every reason this config could not trade real money, in words.
+
+        The single source of truth for the live gate. :meth:`validate` raises the
+        first of these, and the API publishes the whole list, so the panel can
+        show what is missing instead of the operator discovering it one 422 at a
+        time.
+
+        This exists because the API used to carry a hand-written ``live_requires``
+        dict listing the rules, and it had already drifted -- it named protection,
+        quote mode and the session-origin gate while silently omitting the size
+        and the stop. That is the same failure as the pydantic mirror that dropped
+        nine settings: a second copy of a rule is a rule that will disagree.
+        """
+        out: list[str] = []
+        if self.entry_price_policy in RESEARCH_ONLY_ENTRY_POLICIES:
+            out.append(f"entry_price_policy={self.entry_price_policy} is research-only "
+                       "and cannot run in live mode")
+        if self.exit_policy in RESEARCH_ONLY_EXIT_POLICIES:
+            out.append(f"exit_policy={self.exit_policy} is research-only and cannot "
+                       "run in live mode")
+        if self.quote_mode != "EXECUTABLE":
+            out.append("live mode requires quote_mode=EXECUTABLE: pricing a real order off a "
+                       "cached LTP is what COMPATIBILITY mode exists to reproduce, not to trade")
+        if not self.size_is_set:
+            out.append("live mode requires an explicit positive size")
+        if not self.require_session_origin_tick:
+            out.append("live mode requires require_session_origin_tick: pricing a real order "
+                       "from a quote that cannot be proved to belong to this session is how "
+                       "the recorded bot sent 416.90 into a market that opened at 356.70")
+        if self.protection_mode == "NONE":
+            out.append("live mode requires broker-side protection: with protection_mode=NONE "
+                       "a crash or a dropped socket leaves the open position with nothing "
+                       "watching it")
+        # A stop is not optional with real money, and the arithmetic is the reason
+        # rather than taste. The observed policy wins about +3% net on a fixed
+        # target and the downside is the whole premium; no recording establishes
+        # any win rate, because all five decodable sessions were winners.
+        if not self.stop_enabled or self.stop_distance <= 0:
+            out.append("live mode requires a stop: set stop_enabled with a positive "
+                       f"{'stop_percent' if self.stop_basis == 'PERCENT' else 'stop_points'}. "
+                       "The observed policy has no stop and the maximum loss is the whole "
+                       "premium")
+        elif self.stop_basis != "PERCENT":
+            out.append("live mode requires stop_basis=PERCENT: these premiums run from "
+                       "roughly 50 to 500, so a points stop is a 30% risk at one end and "
+                       "3% at the other -- the same number meaning two different trades")
+        return out
+
     def validate(self) -> "ATMPremiumImbalanceConfig":
         if self.expiry_policy not in EXPIRY_POLICIES:
             raise ValueError(f"expiry_policy must be one of {sorted(EXPIRY_POLICIES)}")
@@ -314,6 +363,19 @@ class ATMPremiumImbalanceConfig:
             if not self.stop_enabled or self.stop_distance <= 0:
                 raise ValueError("TRAILING_STOP requires stop_enabled and a positive "
                                  "stop distance as its initial risk")
+            # ...and a trailing stop that cannot trail is a fixed stop wearing the
+            # wrong name. The UI offered this policy while `trail_percent` was not
+            # settable, so selecting "trailing stop" produced a stop that never
+            # moved -- the config meaning something nobody intended, which is the
+            # exact failure this file exists to prevent. Either rung satisfies it:
+            # break-even alone still moves the stop once.
+            if not self.trails and not self.breakeven_enabled:
+                raise ValueError(
+                    "TRAILING_STOP requires something that actually moves the stop: set "
+                    f"{'trail_percent' if self.stop_basis == 'PERCENT' else 'trail_points'} "
+                    f"or {'breakeven_percent' if self.stop_basis == 'PERCENT' else 'breakeven_points'}. "
+                    "With neither, this is a fixed stop and FIXED_POINT_TARGET is the honest name"
+                )
         if self.max_hold_seconds < 0:
             raise ValueError("max_hold_seconds cannot be negative")
 
@@ -336,60 +398,9 @@ class ATMPremiumImbalanceConfig:
         # unproven models stay *replayable*; they must not become tradable by
         # flipping one unrelated switch.
         if self.execution_mode == "live":
-            if self.entry_price_policy in RESEARCH_ONLY_ENTRY_POLICIES:
-                raise ValueError(
-                    f"entry_price_policy={self.entry_price_policy} is research-only "
-                    "and cannot run in live mode"
-                )
-            if self.exit_policy in RESEARCH_ONLY_EXIT_POLICIES:
-                raise ValueError(
-                    f"exit_policy={self.exit_policy} is research-only and cannot run in live mode"
-                )
-            if self.quote_mode != "EXECUTABLE":
-                raise ValueError(
-                    "live mode requires quote_mode=EXECUTABLE: pricing a real order off a "
-                    "cached LTP is what COMPATIBILITY mode exists to reproduce, not to trade"
-                )
-            if not self.size_is_set:
-                raise ValueError("live mode requires an explicit positive size")
-            if not self.require_session_origin_tick:
-                raise ValueError(
-                    "live mode requires require_session_origin_tick: pricing a real order "
-                    "from a quote that cannot be proved to belong to this session is how "
-                    "the recorded bot sent 416.90 into a market that opened at 356.70"
-                )
-            if self.protection_mode == "NONE":
-                raise ValueError(
-                    "live mode requires broker-side protection: with protection_mode=NONE "
-                    "a crash or a dropped socket leaves the open position with nothing "
-                    "watching it"
-                )
-            # A stop is not optional with real money, and the arithmetic is the
-            # reason rather than taste. The observed policy wins about +3% net
-            # and the downside is uncapped, so with an average loss of 40% of
-            # premium the break-even win rate is about 93%. No recording
-            # establishes any win rate at all -- three decodable sessions, all
-            # winners, and a strategy that merely breaks even shows three
-            # straight winners four times out of five.
-            #
-            # This does NOT change the default exit policy. FIXED_POINT_TARGET
-            # stays the default precisely so the conformance replay still
-            # reproduces the recordings; what changes is that the recorded
-            # policy is no longer *tradable* on its own.
-            if not self.stop_enabled or self.stop_distance <= 0:
-                raise ValueError(
-                    "live mode requires a stop: set stop_enabled with a positive "
-                    f"{'stop_percent' if self.stop_basis == 'PERCENT' else 'stop_points'}. "
-                    "The observed policy has no stop and the maximum loss is the whole "
-                    "premium, which needs roughly a 93% win rate to break even — and no "
-                    "recording establishes any win rate"
-                )
-            if self.stop_basis != "PERCENT":
-                raise ValueError(
-                    "live mode requires stop_basis=PERCENT: these premiums run from "
-                    "roughly 50 to 500, so a points stop is a 30% risk at one end and "
-                    "3% at the other — the same number meaning two different trades"
-                )
+            blockers = self.live_blockers()
+            if blockers:
+                raise ValueError(blockers[0])
         return self
 
     # --- stop / trail distances --------------------------------------------

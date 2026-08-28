@@ -46,12 +46,9 @@ test.describe('Bars, exit mode, hybrid weight - multi pane + risk unification', 
         expect(r.hybrid_st_weight).toBeCloseTo(0.4);
       }
 
-      // Check kite engine config also reflects (unification work)
-      const kiteRes = await request.get(`${E2E_API}/api/v1/kite/engine/config`, { headers: AUTH });
-      if (kiteRes.ok()) {
-        const k = await kiteRes.json();
-        // May be synced via TradingMode or direct; assert presence at least
-        expect(k).toHaveProperty('hybrid_st_weight');
+      const saveBtn = page.getByRole('button', { name: /SAVE CONFIG/i });
+      if (await saveBtn.count() > 0) {
+        await saveBtn.first().click().catch(() => {});
       }
     }
 
@@ -112,35 +109,27 @@ test.describe('Bars, exit mode, hybrid weight - multi pane + risk unification', 
       }
     }
 
-    // Back to KITE for exit mode change + more snapshots (right sidebar always in kite context)
+    // Back to KITE — the engine pane no longer has hybrid-weight-input.
     const kiteTab = page.getByRole('button', { name: /KITE/i });
     if (await kiteTab.count() > 0) {
       await kiteTab.first().click();
     }
     await page.waitForTimeout(300);
 
-    const exitSeg = page.getByText('3 Red', { exact: false }).or(page.getByText('2 Red'));
-    if (await exitSeg.count() > 0) {
-      await exitSeg.first().click().catch(() => {});
-      await page.waitForTimeout(200);
-    }
-
-    const hybridInKite = page.getByTestId('hybrid-weight-input');
-    await expect(hybridInKite).toBeVisible();
-    // call endpoint inside for visual greeks data
+    const workspace = page.getByTestId('kite-workspace');
+    await expect(workspace).toBeVisible({ timeout: 25000 });
+    await expect(page.getByTestId('hybrid-weight-input')).toHaveCount(0);
     await request.get(`${E2E_API}/api/v1/directional/debug/compute-signal`, { headers: AUTH }).catch(() => {});
-    await expect(hybridInKite).toHaveScreenshot({ name: 'kite-pane-hybrid-after-nav.png' });
 
     // Final API check for exit_mode from kite pane change
     const finalKite = await request.get(`${E2E_API}/api/v1/kite/engine/config`, { headers: AUTH });
     if (finalKite.ok()) {
       const cfg = await finalKite.json();
-      // Should have been updated by previous interactions or at least present
       expect(cfg).toHaveProperty('exit_mode');
     }
   });
 
-  test('paper research tab shows EXIT/REDS columns and potential bars', async ({ page }) => {
+  test('paper research tab shows EXIT/REDS columns and potential bars', async ({ page, request }) => {
     await page.goto('/');
 
     // Go to CRYPTO then paper research section (has the table with EXIT REDS)

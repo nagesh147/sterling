@@ -14,12 +14,17 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  sessionDayLabel, trailBreached,
-  type BoardSignal, type BoardStatus, type EngineId,
+  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  sessionDayDate, sessionDayKey, stamp, trailBreached,
+  type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
-import { ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
+import {
+  HEAD_METRICS, LEG_BG, LEG_INDENT, ROW_METRICS,
+  SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
+} from './signalRowSpec';
+import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
+import { useKiteSettings } from '../../../store/useKiteSettings';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
 import { InstrumentLabel } from '../InstrumentLabel';
@@ -27,7 +32,10 @@ import { InstrumentLabel } from '../InstrumentLabel';
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
   | 'ltp' | 'entry' | 'stop' | 'trail' | 'target' | 'exit'
-  | 'qty' | 'risk' | 'score' | 'time';
+  | 'qty' | 'risk' | 'score' | 'time'
+  // Today's move. SuperTrend has shown these three since long before this board
+  // existed; they were the columns a swap onto it would silently have deleted.
+  | 'chg' | 'chgPct' | 'dir';
 
 interface ColumnDef {
   id: ColumnId;
@@ -50,7 +58,24 @@ interface ColumnDef {
  */
 const ACTION_RESERVE = 96;
 
-export const COLUMNS: readonly ColumnDef[] = [
+export /*
+ * Labels and widths come from `signalRowSpec` — SuperTrend's own table — ON
+ * PURPOSE, so a cell sits in the same place with the same name whichever board
+ * you are on. `columnParity.test.tsx` pins it.
+ *
+ * I briefly decoupled these, on the reading that SuperTrend "should have its own
+ * column names". That reverses a deliberate decision whose whole point is the
+ * cross-tab consistency asked for earlier in the same conversation, and it makes
+ * the two tables show DIFFERENT words for the same number. Reverted, because the
+ * thing actually wrong was elsewhere: `SuperTrendSharedBoard` was requesting the
+ * shared column SET and appending its own, which handed SuperTrend five columns
+ * it has never had (Engine, Status, Qty, At risk, Score).
+ *
+ * If the words themselves should diverge, that is a call to make deliberately —
+ * the mechanism is a `label` per column def here, and the cost is that switching
+ * tabs renames columns.
+ */
+const COLUMNS: readonly ColumnDef[] = [
   // Widths, labels and alignment come from SuperTrend's table (see
   // signalRowSpec) so a cell sits in the same place on every board. The extras
   // it does not have are sized to the same rhythm.
@@ -68,7 +93,10 @@ export const COLUMNS: readonly ColumnDef[] = [
   { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
   { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
   { id: 'ltp', label: SIGNAL_RIGHT_COLUMNS.ltp.label, width: SIGNAL_RIGHT_COLUMNS.ltp.width, align: 'right', hint: 'Last traded price of the instrument' },
-  { id: 'time', label: 'Time', width: 78, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
+  { id: 'chg', label: SIGNAL_RIGHT_COLUMNS.chg.label, width: SIGNAL_RIGHT_COLUMNS.chg.width, align: 'right', hint: "Rupees the instrument has moved today" },
+  { id: 'chgPct', label: SIGNAL_RIGHT_COLUMNS.chgPct.label, width: SIGNAL_RIGHT_COLUMNS.chgPct.width, align: 'right', hint: 'Percent the instrument has moved today' },
+  { id: 'dir', label: SIGNAL_RIGHT_COLUMNS.dir.label || 'Direction', width: SIGNAL_RIGHT_COLUMNS.dir.width, align: 'right', hint: 'Which way today’s move is going' },
+  { id: 'time', label: SIGNAL_RIGHT_COLUMNS.time.label, width: SIGNAL_RIGHT_COLUMNS.time.width, align: 'right', hint: 'When the signal fired. Marked stale when the quote behind it has aged out' },
 ];
 
 export interface SortState {
@@ -103,6 +131,11 @@ function sortKey(signal: BoardSignal, column: ColumnId): string | number | null 
     case 'risk': return signal.sizing.atRiskInr;
     case 'score': return signal.score;
     case 'time': return signal.atMs;
+    case 'chg': return signal.dayMove?.abs ?? null;
+    // Sorted by its OWN value, not by the absolute move: ordering a percent
+    // column by rupees puts a 400-point index above a 3% stock move.
+    case 'chgPct': return signal.dayMove?.pct ?? null;
+    case 'dir': return signal.dayMove?.abs ?? null;
     default: return null;
   }
 }
@@ -169,7 +202,16 @@ function SortMark({ direction }: { direction: 'asc' | 'desc' | null }) {
 
 /** Statuses that earn a coloured pill. The rest are the board's normal state. */
 /** How far a leg sits in from the signal that owns it. */
-const INDENT = 14;
+/** @see LEG_INDENT - kept as a local alias so the call sites below read short. */
+const INDENT = LEG_INDENT;
+
+/**
+ * Keeps every scrolling row and the header in step.
+ *
+ * Module scope, like SuperTrend's: each row is its own component instance, so a
+ * per-instance handler would have nothing to sync against.
+ */
+const SB_HSCROLL = makeHscrollSync('.sb-head-row, .sb-row-scroll');
 
 const NOTABLE_STATUS = new Set<BoardStatus>(['armed', 'weakening', 'error']);
 
@@ -198,7 +240,10 @@ export const inr = (v: number | null | undefined) =>
 const STALE_AFTER_S = 15;
 
 const hhmm = (ms: number | null) =>
-  ms == null ? '—' : new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  ms == null || !Number.isFinite(ms) ? '—'
+    : new Date(ms).toLocaleTimeString('en-IN', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+    });
 
 function Chevron({ open }: { open: boolean }) {
   return (
@@ -229,6 +274,33 @@ function Pill({ tone, children, title }: { tone: string; children: React.ReactNo
  * security kind: the parent of an LT signal was reading "LTINDEX · LONG",
  * and LT is a stock.
  */
+/**
+ * The engine's own inline badges.
+ *
+ * Same shape as the origin badge beside them, deliberately: an operator should
+ * not have to learn two badge vocabularies on one row. The board reads a label,
+ * a hint and a tone, and knows nothing about what any of them mean.
+ */
+function Marks({ marks }: { marks?: readonly BoardOrigin[] }) {
+  if (!marks?.length) return null;
+  return (
+    <>
+      {marks.map((m) => (
+        <Tip key={`${m.label}-${m.tone}`} text={m.hint ? `${m.label} — ${m.hint}` : m.label}>
+          <span style={{
+            flexShrink: 0, padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700,
+            letterSpacing: '.04em', whiteSpace: 'nowrap', cursor: 'help',
+            color: ORIGIN_TONE[m.tone], background: tint(ORIGIN_TONE[m.tone], 10),
+            border: `1px solid ${tint(ORIGIN_TONE[m.tone], 30)}`,
+          }}>
+            {m.label}
+          </span>
+        </Tip>
+      ))}
+    </>
+  );
+}
+
 function contractLabel(signal: BoardSignal): string | null {
   if (signal.instrument.optionType) return signal.instrument.optionType;
   const legs = signal.children ?? [];
@@ -246,6 +318,13 @@ function cellContent(
   onOpenDetail?: (signal: BoardSignal) => void,
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>,
   isLeg = false,
+  // Needed only by the time column, which words a row's date the same way the
+  // day header would. Passed rather than read from the clock so a re-render at
+  // midnight cannot disagree with the grouping — same reason sessionDayLabel
+  // takes it.
+  nowMs = Date.now(),
+  /** Whether the operator wants today's move tinted green/red. */
+  showDayColour = true,
 ): { node: React.ReactNode; color?: string } {
   const dirTone = signal.direction === 'long' ? k.green : k.red;
   switch (id) {
@@ -330,6 +409,8 @@ function cellContent(
                 </span>
               </Tip>
             )}
+            {/* Whatever else this engine wants read without opening the row. */}
+            <Marks marks={signal.marks} />
             {signal.flags?.map((flag) => (
               <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
                 <span tabIndex={0} style={{
@@ -437,13 +518,48 @@ function cellContent(
       const stale = signal.quoteAgeS != null && signal.quoteAgeS > STALE_AFTER_S;
       return {
         node: stale
-          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{hhmm(signal.atMs)} · stale</span>
-          : hhmm(signal.atMs),
+          ? <span title={`Quote is ${Math.round(signal.quoteAgeS!)}s old`}>{stamp(signal.atMs, nowMs, isLeg)} · stale</span>
+          : stamp(signal.atMs, nowMs, isLeg),
         color: stale ? k.red : k.dim,
       };
     }
+    case 'chg':
+    case 'chgPct': {
+      const move = signal.dayMove;
+      const value = id === 'chg' ? move?.abs : move?.pct;
+      if (value == null) return { node: '—' };
+      const text = id === 'chg' ? value.toFixed(2) : `${value.toFixed(2)}%`;
+      // Tinted only when the operator has direction colours on, and by the
+      // ABSOLUTE move in both columns so the two never disagree about which way
+      // the day has gone -- a rounded percent can read 0.00% on a real move.
+      return { node: text, color: dayTone(move, showDayColour) };
+    }
+    case 'dir': {
+      const abs = signal.dayMove?.abs;
+      if (abs == null) return { node: '—' };
+      // A flat instrument gets a mark of its own rather than an arrow pointing
+      // nowhere or, worse, a green up-arrow for a zero move.
+      const glyph = abs === 0 ? '∘' : abs > 0 ? '▲' : '▼';
+      return { node: glyph, color: dayTone(signal.dayMove, showDayColour) };
+    }
     default: return { node: '—' };
   }
+}
+
+/**
+ * Green or red by today's move, or nothing when the operator has switched the
+ * direction colours off.
+ *
+ * The preference is PASSED IN, not read from the store here. Calling
+ * `useKiteSettings.getState()` mid-render creates no subscription, so toggling
+ * the setting would change nothing until something else happened to repaint the
+ * board — the same silent-toggle bug this very setting had on SuperTrend's
+ * table. `Row` subscribes properly and hands the value down.
+ */
+function dayTone(move: BoardDayMove | null | undefined, on: boolean): string | undefined {
+  if (!on) return undefined;
+  if (move?.abs == null || move.abs === 0) return undefined;
+  return move.abs > 0 ? k.green : k.red;
 }
 
 /**
@@ -474,6 +590,24 @@ export const BOARD_COLUMNS: readonly ColumnId[] = [
   'instrument', 'engine', 'status', 'exchange', 'leg',
   'ltp', 'entry', 'stop', 'trail', 'target', 'exit',
   'qty', 'risk', 'score', 'time',
+];
+
+/**
+ * The same list plus today's move.
+ *
+ * `chg`, `chgPct` and `dir` are deliberately NOT in `BOARD_COLUMNS`. The rule
+ * above — every engine requests the same list, and an unfillable cell honestly
+ * reads as a dash — holds when the engine simply produces no such number. It
+ * does not hold here: today's move needs a live quote, and SuperTrend's adapter
+ * is the only one that is handed `quotes` at all. Adding them to the shared list
+ * would give four boards three columns that can never be anything but dashes,
+ * which is not "this engine does not produce that", it is dead width.
+ *
+ * So the engine that has the data asks for them. If another adapter is ever
+ * given quotes, it can ask for them too — or they graduate into the shared list.
+ */
+export const BOARD_COLUMNS_WITH_DAY_MOVE: readonly ColumnId[] = [
+  ...BOARD_COLUMNS, 'chg', 'chgPct', 'dir',
 ];
 
 /**
@@ -548,6 +682,8 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
             </span>
           </Tip>
         )}
+        {/* Whatever else this engine wants read without opening the row. */}
+        <Marks marks={signal.marks} />
         {onOpenDetail ? (
           <button
             type="button"
@@ -604,7 +740,7 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
 
 function Row({
   signal, columns, open, onToggle, renderDetail, onOpenDetail, striped,
-  depth = 0, legCount, marks,
+  depth = 0, legCount, marks, nowMs, rowScroll = false, renderRowActions,
 }: {
   signal: BoardSignal;
   columns: ColumnDef[];
@@ -620,9 +756,17 @@ function Row({
   legCount?: number;
   /** Which of its siblings' comparisons this leg wins. */
   marks?: ReadonlySet<'bestRR' | 'bestDelta'>;
+  /** The board's clock, so the time column can word a date like its day header. */
+  nowMs: number;
+  /** Scroll sideways rather than clip, offsets shared with every other row. */
+  rowScroll?: boolean;
+  /** Controls belonging to this row, rendered before the right-hand cells. */
+  renderRowActions?: (signal: BoardSignal) => React.ReactNode;
 }) {
   const isLeg = depth > 0;
   const isParent = legCount != null;
+  // A real subscription, so flipping the preference repaints the rows.
+  const showDayColour = useKiteSettings((s) => s.showPriceDirection);
   return (
     <>
       <div
@@ -636,7 +780,8 @@ function Row({
         }
         onClick={onToggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
-        className="sb-row"
+        className={rowScroll ? 'sb-row sb-row-scroll' : 'sb-row'}
+        onScroll={rowScroll ? SB_HSCROLL : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -657,12 +802,17 @@ function Row({
           // Alternating shade separates rows the way the old Adaptive Edge
           // table did, without a coloured edge on each one. Legs share one
           // shade so a group reads as a block rather than a stripe pattern.
-          background: open ? k.surfaceHover : isLeg ? 'var(--k-surface-2)' : striped ? 'var(--k-surface-2)' : k.bg,
+          background: open ? k.surfaceHover : isLeg ? LEG_BG : striped ? LEG_BG : k.bg,
           fontWeight: isParent ? 600 : 400,
           // An ended row is a record, not a live position. Dimming and striking
           // it keeps it readable without letting it read as actionable.
           opacity: signal.status === 'ended' ? 0.62 : 1,
           textDecoration: signal.status === 'ended' ? 'line-through' : 'none',
+          // Off, the row clips and the operator hides columns to fit -- which is
+          // what this board has always done. The scrollbar itself is hidden in
+          // CSS; a bar under every row would out-shout the data.
+          overflowX: rowScroll ? 'auto' : 'hidden',
+          overflowY: 'hidden',
         }}
       >
         <span style={{ color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
@@ -677,7 +827,7 @@ function Row({
           )}
         </span>
         {columns.map((col) => {
-          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg);
+          const { node, color } = cellContent(signal, col.id, col.id === 'instrument' ? onOpenDetail : undefined, marks, isLeg, nowMs, showDayColour);
           const isName = col.id === 'instrument';
           return (
             <span
@@ -685,8 +835,10 @@ function Row({
               style={{
                 // The name is the only cell that flexes; every other column is
                 // a fixed width so the decimal points line up down the board.
-                flex: isName ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
-                minWidth: isName ? ROW_METRICS.instrumentMinWidth - (isLeg ? INDENT : 0) : 0,
+                // The basis carries the indent compensation, not minWidth: the
+                // cell no longer shrinks, so a minimum bounds nothing.
+                flex: isName ? instrumentFlex(isLeg) : `0 0 ${col.width}px`,
+                minWidth: 0,
                 width: isName ? undefined : col.width,
                 fontSize: isName ? ROW_METRICS.instrumentFontSize : ROW_METRICS.cellFontSize,
                 color: color ?? k.text,
@@ -701,6 +853,18 @@ function Row({
             </span>
           );
         })}
+        {/* The engine's own controls. After the cells so they sit at the end of
+            the row, and outside the cell map so they are not mistaken for a
+            column and cannot be hidden by the column picker. */}
+        {renderRowActions && (
+          <span
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}
+            // The row is a button; a control inside it must not also toggle it.
+            onClick={(e) => e.stopPropagation()}
+          >
+            {renderRowActions(signal)}
+          </span>
+        )}
       </div>
       {open && (
         <div style={{ padding: 10, background: k.surface, borderBottom: `2px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -731,6 +895,7 @@ function Row({
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
+  onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
 }: {
   signals: readonly BoardSignal[];
   requested?: readonly ColumnId[];
@@ -760,6 +925,40 @@ export function SignalBoard({
   onToggleGroup?: (id: string) => void;
   /** Float open positions above the dated history. On by default. */
   liveFirst?: boolean;
+  /**
+   * Put TODAY's live rows in that section too, so it holds everything actionable
+   * rather than only what the date buckets would bury.
+   *
+   * Off by default, because on a board whose whole content is one session the
+   * section would just duplicate "Today".
+   */
+  hoistLiveFromToday?: boolean;
+  /**
+   * Let a heading be dragged sideways to move its column.
+   *
+   * Omit and the headings are sort controls only, which is what every engine but
+   * SuperTrend has had. Supplying it is what allows SuperTrend's table to move
+   * onto this component without losing the feature — and, having moved it here,
+   * any engine can offer it.
+   */
+  onReorderColumn?: (fromId: ColumnId, toId: ColumnId) => void;
+  /**
+   * Let each row scroll sideways on its own when the board is narrower than its
+   * columns, with the offsets kept in step.
+   *
+   * Off by default. The alternative, and the shared board's habit until now, is
+   * to hide columns until the rest fit — which keeps every row aligned but makes
+   * the operator choose what to stop seeing.
+   */
+  rowScroll?: boolean;
+  /**
+   * Controls that belong to a row: buy, chart, whatever the engine offers.
+   *
+   * Rendered inside the row, before the right-hand cells. Kept as a render prop
+   * rather than a set of callbacks because what a row can do differs per engine,
+   * and this component has no business knowing what an order is.
+   */
+  renderRowActions?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
   emptyLabel?: string;
@@ -789,7 +988,7 @@ export function SignalBoard({
     gap: ROW_METRICS.gap,
     reserve: ACTION_RESERVE,
   });
-  const days = groupByDay(signals, { liveFirst });
+  const days = groupByDay(signals, { liveFirst, nowMs, hoistToday: hoistLiveFromToday });
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -799,11 +998,15 @@ export function SignalBoard({
     <div ref={boardRef}>
       <div
         role="row"
+        className="sb-head-row"
+        onScroll={rowScroll ? SB_HSCROLL : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: ROW_METRICS.gap,
-          padding: '7px 16px',
+          overflowX: rowScroll ? 'auto' : undefined,
+          overflowY: rowScroll ? 'hidden' : undefined,
+          padding: HEAD_METRICS.padding,
           borderBottom: `1px solid ${k.border}`,
           borderLeft: '3px solid transparent',
           position: 'sticky',
@@ -816,7 +1019,7 @@ export function SignalBoard({
         {cols.map((col) => {
           const active = sort.column === col.id;
           const direction = active ? sort.direction : null;
-          return (
+          const heading = (
             <Tip
               key={col.id}
               text={col.hint ? `${col.label} — ${col.hint}. Click to sort within each day.` : `${col.label} — click to sort within each day.`}
@@ -833,12 +1036,15 @@ export function SignalBoard({
                   border: 'none', background: 'transparent', padding: 0, font: 'inherit',
                   // Same track as the row's cell, or the heading drifts off the
                   // numbers it names.
-                  flex: col.id === 'instrument' ? ROW_METRICS.instrumentBasis : `0 0 ${col.width}px`,
+                  flex: col.id === 'instrument' ? instrumentFlex() : `0 0 ${col.width}px`,
                   width: col.id === 'instrument' ? undefined : col.width,
                   minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
-                  fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em',
+                  fontSize: HEAD_METRICS.fontSize,
+                  fontWeight: HEAD_METRICS.fontWeight,
+                  letterSpacing: HEAD_METRICS.letterSpacing,
+                  textTransform: HEAD_METRICS.textTransform,
                   color: active ? k.text : k.dim,
-                  textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap',
                   overflow: 'hidden', textOverflow: 'ellipsis',
                   cursor: onSortChange ? 'pointer' : 'default',
                   outlineOffset: 2,
@@ -851,43 +1057,87 @@ export function SignalBoard({
               </button>
             </Tip>
           );
+          // Undragged, the heading renders exactly as before -- no wrapper at
+          // all, so a board that does not offer reordering is byte-identical to
+          // what it was.
+          if (!onReorderColumn) return heading;
+          return (
+            <DraggableColHeader
+              key={col.id}
+              colKey={col.id}
+              // One run of columns, so every heading may be dropped anywhere.
+              // SuperTrend's table keeps two runs and passes the run's name.
+              group="board"
+              width={col.width}
+              // The instrument is flex-sized and declares `width: 0`, so it must
+              // hand the wrapper its flex instead — otherwise a 200px label ends
+              // up inside a 0px box and paints over its neighbour.
+              flex={col.id === 'instrument' ? instrumentFlex() : undefined}
+              minWidth={col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : undefined}
+              reorder={(_group, fromKey, toKey) => onReorderColumn(fromKey as ColumnId, toKey as ColumnId)}
+            >
+              {heading}
+            </DraggableColHeader>
+          );
         })}
       </div>
 
       {days.map(({ key, signals: rows }) => (
         <section key={key}>
-          <h3 style={{
-            margin: 0, position: 'sticky', top: 28, zIndex: 1,
-            padding: '4px 12px', background: k.surface, borderBottom: `1px solid ${k.border}`,
-            fontSize: 8.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: k.dim,
-            display: 'flex', justifyContent: 'space-between',
-          }}>
-            <span>{sessionDayLabel(key, nowMs)}</span>
-            <span style={{ fontWeight: 500 }}>
-              {rows.length} signal{rows.length === 1 ? '' : 's'}
-              {(() => {
-                // The live bucket is already all-live; repeating it there
-                // would read as "8 signals · 8 live".
-                if (key === LIVE_BUCKET) return '';
-                const live = rows.filter((r) => ACTIONABLE.includes(r.status)).length;
-                return live ? ` · ${live} live` : '';
-              })()}
-            </span>
-          </h3>
+          {/* The day band is gone.
+              It printed "LIVE NOW / 8 signals" above each group — a whole row of
+              furniture restating what the rows already carry. Every row shows its
+              own date and time in the Time column, so the band was spending
+              vertical space on a heading you can read off the row beneath it.
+              The GROUPING stays: rows are still bucketed by trading day, live
+              first, so the order is unchanged and only the label is gone. */}
           {sortSignals(rows, sort).map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {
+              // An EMPTY ARRAY is not the same as no array.
+              //
+              // ORB, Gamma Move and the ATM bot leave `children` undefined —
+              // their signals are one instrument and always were. SuperTrend
+              // sets it to the contracts it resolved, so an empty array means it
+              // wanted contracts and found none: an expired series, a strike
+              // that is not listed, a filter that excluded everything. Those two
+              // cases look identical after `?? []`, which is why this checks the
+              // field itself.
+              const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
               return (
-                <Row
-                  key={signal.id}
-                  signal={signal}
-                  columns={cols}
-                  open={openId === signal.id}
-                  onToggle={() => onToggle(signal.id)}
-                  renderDetail={renderDetail}
-                  onOpenDetail={onOpenDetail}
-                  striped={i % 2 === 1}
-                />
+                <React.Fragment key={signal.id}>
+                  <Row
+                    nowMs={nowMs}
+                    signal={signal}
+                    columns={cols}
+                    open={openId === signal.id}
+                    onToggle={() => onToggle(signal.id)}
+                    renderDetail={renderDetail}
+                    onOpenDetail={onOpenDetail}
+                    striped={i % 2 === 1}
+                    rowScroll={rowScroll}
+                    renderRowActions={renderRowActions}
+                  />
+                  {/* The engine knows why it found nothing, so it says so in the
+                      row rather than behind a click. A parent with nothing under
+                      it otherwise reads like a loading state, and an operator
+                      scanning for something to trade should not have to open a
+                      row to learn there is nothing in it. */}
+                  {resolvedNothing && (
+                    <div
+                      style={{
+                        display: 'flex', alignItems: 'center',
+                        minHeight: ROW_METRICS.legHeight,
+                        padding: `0 16px 0 ${16 + INDENT}px`,
+                        borderLeft: '3px solid transparent',
+                        background: LEG_BG,
+                        fontSize: ROW_METRICS.cellFontSize, color: k.dim,
+                      }}
+                    >
+                      {signal.reason ?? 'No listed contract matched the selected strike and expiry series.'}
+                    </div>
+                  )}
+                </React.Fragment>
               );
             }
             // A parent's chevron shows its contracts, not its own detail —
@@ -908,6 +1158,7 @@ export function SignalBoard({
                 />
                 {expanded && sortSignals(legs, sort).map((leg) => (
                   <Row
+                    nowMs={nowMs}
                     key={leg.id}
                     marks={legMarks.get(leg.id)}
                     signal={leg}
@@ -918,6 +1169,8 @@ export function SignalBoard({
                     onOpenDetail={onOpenDetail}
                     striped={false}
                     depth={1}
+                    rowScroll={rowScroll}
+                    renderRowActions={renderRowActions}
                   />
                 ))}
               </React.Fragment>

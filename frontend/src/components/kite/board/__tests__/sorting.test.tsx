@@ -127,7 +127,12 @@ describe('sorting on the rendered board', () => {
       />,
     );
     const text = document.body.textContent ?? '';
-    expect(text.indexOf('Today')).toBeLessThan(text.indexOf('Yesterday'));
-    expect(text.indexOf('1.00')).toBeLessThan(text.indexOf('999.00'));
+    // The day bands are gone -- each row carries its own date now -- so this
+    // reads the property off the ROWS. That is the property that mattered all
+    // along: a descending price sort must not lift yesterday's 999 above today's
+    // 1, because the day grouping is the primary organisation and sorting works
+    // within it.
+    expect(text.indexOf('1.00'), "today's cheap row comes first")
+      .toBeLessThan(text.indexOf('999.00'));
   });
 });

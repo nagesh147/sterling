@@ -21,7 +21,7 @@
 import type { AlignmentChip, EngineSignalRow, OptionLeg } from '../../../types/kiteEngine';
 import { computeGreeksFromLeg } from '../../../utils/computeGreeks';
 import { k } from '../../../styles/kiteUI';
-import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
+import type { BoardDayMove, BoardOrigin, BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 
 /**
  * A tradable price, or nothing.
@@ -40,6 +40,64 @@ const price = (v: number | null | undefined): number | null =>
  * contract can produce a spot row AND a premium row with different entries,
  * and without this they read as a duplicate.
  */
+/**
+ * The badges this engine wants read without opening the row.
+ *
+ * Each carries a distinction the row is otherwise silent about:
+ *
+ * - **Which rule closed it.** A trail breach and a red-counter close are not the
+ *   same event, and the difference matters most when they disagree: the premium
+ *   can be through its trail while the counter has not yet flipped enough lines
+ *   to close, and that gap is where an open drawdown builds. This board's own
+ *   history has an entry of 971 sitting beside an LTP of 193.
+ * - **A re-entry.** The same trend re-arming is not a second independent setup,
+ *   and auto-exec's one-position-per-instrument guard will not open another.
+ *   Without the badge two rows on one contract look like a duplicate.
+ * - **Navigator's verdict**, when it has one, because the two systems can
+ *   disagree and the row otherwise shows only SuperTrend's view.
+ */
+function marksOf(row: EngineSignalRow, opts: SuperTrendAdapterOptions): BoardOrigin[] {
+  const marks: BoardOrigin[] = [];
+
+  const reason = row.exit_reason;
+  if (reason) {
+    const trail = reason.startsWith('trail breach');
+    const theta = reason.startsWith('time decay');
+    marks.push({
+      label: trail ? 'TSL exit' : theta ? 'Theta exit' : 'counter exit',
+      tone: trail ? 'amber' : theta ? 'amber' : 'dim',
+      hint: trail
+        ? `Closed by the trailing stop — ${reason}.`
+        : theta
+          ? `Closed by the time-decay limit — ${reason}. Price consolidated without expanding momentum.`
+          : `Closed by the red counter — ${reason}.`,
+    });
+  }
+
+  const firstMs = opts.originalEntryMs?.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`);
+  if (firstMs != null && row.timestamp_ms != null && firstMs < row.timestamp_ms) {
+    marks.push({
+      label: 're-entry',
+      tone: 'dim',
+      hint: `Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running. Not a second independent setup — auto-exec's one-position-per-instrument guard will not open another.`,
+    });
+  }
+
+  // Suppressed under the SuperTrend-only lens, which is defined as this board
+  // with no Navigator in it. The row can still HOLD a navigator verdict — the
+  // row filter removes rows Navigator originated, not Navigator's opinion of a
+  // SuperTrend setup — so the badge has to be gated separately.
+  const nav = row.navigator;
+  if (nav?.status && opts.signalMode !== 'supertrend') {
+    marks.push({
+      label: `Nav ${nav.status.replace('_', ' ')}`,
+      tone: nav.status === 'CONFIRMED' || nav.status === 'HIGH_CONVICTION' ? 'green' : 'dim',
+      hint: `Value-Flow Navigator: ${nav.status}. Reasons: ${nav.reason_codes?.join(', ') || 'none'}.`,
+    });
+  }
+  return marks;
+}
+
 function originOf(row: EngineSignalRow): BoardOrigin | undefined {
   switch (row.source) {
     case 'spot':
@@ -167,6 +225,8 @@ export function supertrendLegToBoard(
   const sections = [evidenceSection(row), exitSection(row, leg), navigatorSection(row)]
     .filter(Boolean) as BoardSection[];
   const quantity = leg.lot_size ?? null;
+  const quoteKey = `${row.exchange}:${leg.option_symbol}`;
+  const dayMove = dayMoveFromQuote(opts.quotes?.[quoteKey], opts.chgBasis);
 
   return {
     id: `${engine}-${row.underlying}-${leg.option_symbol}-${index}`,
@@ -192,7 +252,7 @@ export function supertrendLegToBoard(
       // and TSL HIT could never fire — the very check that says an open
       // drawdown is building.
       ltp: price(
-        (opts.quotes?.[`${row.exchange}:${leg.option_symbol}`]?.last_price as number | undefined)
+        (opts.quotes?.[quoteKey]?.last_price as number | undefined)
         ?? leg.premium_spot,
       ),
       entry: price(leg.premium_spot),
@@ -203,6 +263,10 @@ export function supertrendLegToBoard(
       target: price(leg.premium_target),
       exit: null,
     },
+    // On the LEG, not the parent. The parent stands for the idea and its
+    // instrument is the underlying; giving it a contract's day move would label
+    // NIFTY's move with a strike's.
+    dayMove,
     sizing: {
       lots: null,
       quantity,
@@ -214,6 +278,7 @@ export function supertrendLegToBoard(
     },
     score: row.score ?? null,
     origin: originOf(row),
+    marks: marksOf(row, opts),
     flags: flagsFor(row, leg, opts),
     // Solved from the live quote, not replayed from the scan. Omitted rather
     // than guessed when the implied volatility has no solution — a delta the
@@ -276,6 +341,7 @@ function supertrendSignalToBoard(
     sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score ?? null,
     origin: originOf(row),
+    marks: marksOf(row, opts),
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections: [evidenceSection(row), navigatorSection(row)].filter(Boolean) as BoardSection[],
     children: legs,
@@ -326,6 +392,54 @@ export interface SuperTrendAdapterOptions {
   originalEntryMs?: Map<string, number>;
   /** The underlying's live price, which the Greeks need. */
   spotOf?: (underlying: string) => number | null;
+  /**
+   * Whether today's move is measured from the previous close or today's open.
+   * The operator's choice; the board only reports what it is told.
+   */
+  chgBasis?: 'close' | 'open';
+  /**
+   * Which lens the board is showing.
+   *
+   * Needed only to suppress the Navigator badge under `'supertrend'`. That lens
+   * means "what this board looks like with no Navigator at all", so a Navigator
+   * verdict has no business on the row — and filtering the ROWS is not enough,
+   * because a SuperTrend setup can carry Navigator's opinion of it without
+   * having come from Navigator.
+   */
+  signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
+}
+
+/**
+ * Today's move on one contract.
+ *
+ * Two rules carried over from the table this replaces, both of which were bugs
+ * once:
+ *
+ * - `net_change` is in RUPEES. An option premium has no previous close on the
+ *   day it starts trading, which is exactly when that branch runs, so there is
+ *   nothing to divide by — the percentage stays null rather than being derived
+ *   from the last price, which printed a 12-rupee move on a 90-rupee premium as
+ *   "12.00%".
+ * - A zero or missing base is not a base. Dividing by it yields Infinity, and a
+ *   board that prints "Infinity%" beside a live position is worse than one that
+ *   prints nothing.
+ */
+export function dayMoveFromQuote(
+  quote: Record<string, unknown> | undefined,
+  basis: 'close' | 'open' = 'close',
+): BoardDayMove | null {
+  if (!quote) return null;
+  const last = typeof quote.last_price === 'number' ? quote.last_price : null;
+  const ohlc = quote.ohlc as { close?: number; open?: number } | undefined;
+  const base = basis === 'close' ? ohlc?.close : ohlc?.open;
+
+  if (last != null && typeof base === 'number' && base > 0) {
+    const abs = last - base;
+    return { abs, pct: (abs / base) * 100 };
+  }
+  const net = quote.net_change;
+  if (typeof net === 'number') return { abs: net, pct: null };
+  return null;
 }
 
 /** Most-actionable first, so a group takes its liveliest leg's status. */

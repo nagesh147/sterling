@@ -1,14 +1,18 @@
 import React from 'react';
+import { stamp, sessionDayKey, sessionDayLabel } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
-import { FilterToggle } from './board/BoardFilters';
+import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
-import {
+import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
   ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS,
   type SignalColVisibility,
 } from './board/signalRowSpec';
+import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
+import { instrumentFlex } from './board/signalRowSpec';
+import { SuperTrendSharedBoard } from './SuperTrendSharedBoard';
 import { useEngineConfig, useEngineSignals, useRunScan, useCancelScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -22,7 +26,7 @@ import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { stopDistance, selectBestLegs, type LegCandidate } from './impactMath';
 import { notifyOrder } from '../../store/useKiteNotifications';
-import { useKiteSettings } from '../../store/useKiteSettings';
+import { type BoardCapabilityKey, useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
@@ -31,6 +35,10 @@ import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
+import { PaneHeaderActions } from './PaneHeaderActions';
+import {
+  SCANNABLE_ENGINE_LABEL, useScanAllStrategies, type ScannableEngine,
+} from '../../hooks/useScanAllStrategies';
 
 interface Props {
   // `source` travels with the click: a Navigator origination and a SuperTrend row
@@ -83,9 +91,26 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
   const isActive = sort.key === sortKey && sort.dir !== '';
   return (
     <div 
-      style={{ ...style, cursor: 'pointer', userSelect: 'none' }} 
+      // The active column's heading brightens, as it does on the shared board:
+      // the sort arrow alone is a 8x4 glyph, which is not enough to say which
+      // column the table is ordered by. Everything else about the type is
+      // inherited from the header strip.
+      style={{ ...style, color: isActive ? k.text : undefined, cursor: 'pointer', userSelect: 'none' }} 
       onClick={() => handleSort(sortKey)}
-      className={sortKey ? "sort-header-div" : ""}
+      // Sortable from the keyboard, and carrying the shared board's focus ring.
+      // This was a plain div with an onClick: the only way to reorder this table
+      // was with a mouse. `sb-head` is the shared heading class, so the ring is
+      // defined once for both tables; the sort-glyph hover stays local because
+      // this table's glyph is not the same element as the shared board's.
+      className={sortKey ? "sort-header-div sb-head" : ""}
+      role={sortKey ? 'button' : undefined}
+      tabIndex={sortKey ? 0 : undefined}
+      aria-label={sortKey ? `Sort by ${label}` : undefined}
+      onKeyDown={sortKey ? (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        handleSort(sortKey);
+      } : undefined}
       title={`Sort by ${label}`}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
@@ -108,93 +133,15 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
  *  next to the (flex:1) Instrument column; RIGHT is pinned after the action
  *  buttons. `visibleWhen` is a tag both the header and the row resolve against
  *  their own (equivalent, differently-named) boolean for that condition. */
-/** Drag-to-reorder header cell wrapper. Uses raw pointer events (not native
- *  HTML5 draggable/dragstart) because native drag-and-drop's gesture
- *  recognition is unreliable for plain `<div>`s across browsers/trackpads —
- *  many devices never fire `dragstart` for a generic element, which is why
- *  this looked wired up correctly yet didn't respond to a real drag. Pointer
- *  events are dispatched directly for every mouse/touch/pen down-move-up, so
- *  there's no browser-level gesture heuristic in the way. */
-function DraggableColHeader({ colKey, group, width, reorder, children }: {
-  colKey: string; group: 'left' | 'right'; width: number;
-  reorder: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
-  children: React.ReactNode;
-}) {
-  const draggingRef = React.useRef(false);
-  const startRef = React.useRef<{ x: number; y: number } | null>(null);
 
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    startRef.current = { x: e.clientX, y: e.clientY };
-    draggingRef.current = false;
-
-    const clearHighlight = () => {
-      document.querySelectorAll('.col-drag-over').forEach((el) => el.classList.remove('col-drag-over'));
-    };
-    const targetAt = (x: number, y: number) =>
-      document.elementFromPoint(x, y)?.closest('[data-col-key]') as HTMLElement | null;
-
-    const onMove = (ev: PointerEvent) => {
-      const start = startRef.current;
-      if (!start) return;
-      if (!draggingRef.current) {
-        // Small movement threshold so a plain click still reaches the sort handler.
-        if (Math.abs(ev.clientX - start.x) < 4 && Math.abs(ev.clientY - start.y) < 4) return;
-        draggingRef.current = true;
-        document.body.style.cursor = 'grabbing';
-      }
-      clearHighlight();
-      const el = targetAt(ev.clientX, ev.clientY);
-      if (el && el.getAttribute('data-col-group') === group && el.getAttribute('data-col-key') !== colKey) {
-        el.classList.add('col-drag-over');
-      }
-    };
-    const onUp = (ev: PointerEvent) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.body.style.cursor = '';
-      clearHighlight();
-      if (draggingRef.current) {
-        const el = targetAt(ev.clientX, ev.clientY);
-        const toKey = el?.getAttribute('data-col-key');
-        if (toKey && el?.getAttribute('data-col-group') === group && toKey !== colKey) {
-          reorder(group, colKey, toKey);
-        }
-        // A drag that ends over a different header would otherwise still fire
-        // that header's onClick (sort) right after pointerup - swallow it once.
-        document.addEventListener('click', (ce) => { ce.stopPropagation(); ce.preventDefault(); }, { capture: true, once: true });
-      }
-      draggingRef.current = false;
-      startRef.current = null;
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-  };
-
-  return (
-    <div
-      data-col-key={colKey}
-      data-col-group={group}
-      onPointerDown={onPointerDown}
-      style={{ width, flexShrink: 0, cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
-      title="Drag to reorder column"
-    >
-      {children}
-    </div>
-  );
-}
-
-/** Header row and each leg row now scroll independently (both can overflow a
- *  narrow right-sidebar width) — without syncing scrollLeft between them, a
- *  scrolled row's columns stop lining up under the header's labels. Shared at
- *  module scope since the header lives in SterlingKiteEnginePane while each
- *  row is its own SignalCard instance. */
-function syncHscroll(e: React.UIEvent<HTMLDivElement>) {
-  const left = e.currentTarget.scrollLeft;
-  document.querySelectorAll('.st-header-row, .st-leg-row').forEach((el) => {
-    if (el !== e.currentTarget) (el as HTMLElement).scrollLeft = left;
-  });
-}
+/**
+ * Rows and the header keep their sideways scroll in step.
+ *
+ * Built here, now shared: `makeHscrollSync` lives in board/tableMechanics so the
+ * shared board can offer the same thing. The selector names only rows that opted
+ * into scrolling, so a board with the setting off is not reached at all.
+ */
+const syncHscroll = makeHscrollSync('.st-header-row, .st-row-scroll');
 
 // A long option leg has EXITED once the last scan flagged its SuperTrend as no longer
 // aligned (`is_active` false) OR — between scans, while that flag is frozen — once the
@@ -272,12 +219,48 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs }: {
+/**
+ * Whether a signal-table column is rendered.
+ *
+ * Two separate questions, which the old single map conflated.
+ *
+ * **Capability** — can the column be filled at all? `premium` is the only real
+ * one: Entry, SL, TSL and Target need a scan source that produces premiums, and
+ * a spot scan has none. That is not a preference and must not appear in a menu.
+ *
+ * **Preference** — does the operator want it? Per column, by key.
+ *
+ * Before this, `visibleWhen` did both, so four columns hid behind one `premium`
+ * flag and Exit and LTP were `always` with no way to switch them off. A COLUMNS
+ * menu built on that could only offer six abstract groups, which is why it did
+ * not list the columns the table actually shows.
+ */
+function signalColCapable(visibleWhen: SignalColVisibility, premiumAvailable: boolean): boolean {
+  return visibleWhen === 'premium' ? premiumAvailable : true;
+}
+
+function signalColShown(
+  col: { key: string; visibleWhen: SignalColVisibility },
+  premiumAvailable: boolean,
+  hidden: readonly string[],
+): boolean {
+  return signalColCapable(col.visibleWhen, premiumAvailable) && !hidden.includes(col.key);
+}
+
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs, striped = false }: {
   row: EngineSignalRow; onClick: () => void;
   // `source` travels with the click: a Navigator origination and a SuperTrend row
   // for the same instrument share a token, so the detail request needs it to open
   // the row the user actually clicked.
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
+  /**
+   * Alternating shade, as on the shared board.
+   *
+   * Every parent row here was drawn on the same background, so a long list read
+   * as one undifferentiated block; the shared board alternates its parents so
+   * the eye can hold a line across the width of the table.
+   */
+  striped?: boolean;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
@@ -339,7 +322,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
-  const toggleExpand = (e: React.MouseEvent, sym: string) => {
+  const toggleExpand = (e: React.SyntheticEvent, sym: string) => {
     e.stopPropagation();
     window.getSelection()?.removeAllRanges();
     setExpanded((prev) => {
@@ -458,12 +441,20 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: k.bg }}
+      style={{ padding: ROW_METRICS.parentPadding, borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: striped ? LEG_BG : k.bg }}
     >
       <div 
         className="st-parent-header" 
+        role="button"
+        tabIndex={0}
+        aria-label={`${row.underlying} ${row.option_type ?? ''}`.trim()}
         onClick={onClick}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          onClick?.();
+        }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: ROW_METRICS.parentPadding, outlineOffset: -2 }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           <SourceBadge source={row.source} />
@@ -589,15 +580,18 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             );
           })()}
           {(() => {
-            const d = new Date(row.timestamp_ms);
-            const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const wday = d.toLocaleDateString('en-US', { weekday: 'short' });
-            const date = d.toLocaleDateString('en-US', { day: '2-digit' });
-            const month = d.toLocaleDateString('en-US', { month: 'short' });
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, paddingLeft: 4, whiteSpace: 'nowrap' }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: k.text, letterSpacing: 0.2 }}>{time}</span>
-                <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{wday} {date} {month}</span>
+              // One stamp in the shared board's cell type, from the shared
+              // helper. This was two spans -- the time at 14px weight 800, the
+              // loudest thing on the row, and the date at 10px beside it -- so
+              // the same signal read completely differently here and on every
+              // other board. The time it fired is context, not the headline.
+              <span style={{
+                fontSize: ROW_METRICS.cellFontSize, color: k.dim,
+                fontVariantNumeric: 'tabular-nums',
+                paddingLeft: 4, whiteSpace: 'nowrap',
+              }}>
+                {stamp(row.timestamp_ms, Date.now())}
               </span>
             );
           })()}
@@ -644,19 +638,38 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             return (
               <div key={leg.option_symbol} style={{ minWidth: 132 }}>
                 <div 
+                  // The one place in this table that hovered ORANGE. Nothing on
+                  // the shared board does -- its hover is a background lift to
+                  // `surface-hover`, and orange there means an active control,
+                  // not "the pointer is over this". It also changed the border
+                  // colour and explicitly re-set the background to transparent,
+                  // so it was the one hover in the app that moved a different
+                  // property from every other.
+                  //
+                  // Now carries the same class as the rows, so the hover, focus
+                  // and active states all come from the one rule in globals.css.
+                  className="st-leg-tile"
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => toggleExpand(e, leg.option_symbol)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    toggleExpand(e, leg.option_symbol);
+                  }}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 3,
                     padding: '6px 8px', borderRadius: 4,
                     background: 'transparent',
                     border: `1px solid ${k.border}`,
-                    cursor: 'pointer'
+                    cursor: 'pointer', outlineOffset: -2,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = 'transparent'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {/* Was orange. The shared board names a leg in plain text and
+                        saves colour for state -- an accent on every tile leaves
+                        nothing to mark the one that matters. */}
+                    <span style={{ fontSize: 10, color: k.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {bestRRSyms.has(leg.option_symbol) && (
                         <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
@@ -889,16 +902,30 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           return (
             <div key={leg.option_symbol}>
               <div 
-                className="st-leg-row"
-                onScroll={syncHscroll}
+                className={s.boardRowScroll ? 'st-leg-row st-row-scroll' : 'st-leg-row'}
+                // Reachable and operable without a mouse, matching the shared
+                // board's rows. This was a click-only div: not in the tab order,
+                // no key handler, and nothing announced -- so the row could not
+                // be expanded from the keyboard at all, and the :focus-visible
+                // rule these rows now share had nothing to fire on.
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExp}
+                aria-label={`${leg.option_symbol}${ended ? ', ended' : ''}`}
+                onScroll={s.boardRowScroll ? syncHscroll : undefined}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: k.bg }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  toggleExpand(e, leg.option_symbol);
+                }}
+                style={{ cursor: 'pointer', background: LEG_BG, outlineOffset: -2 }}
               >
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
+                   <span style={{ color: color, fontSize: ROW_METRICS.instrumentFontSize, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: instrumentFlex(true), minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
-                         <span style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
+                         <span style={{ fontSize: ROW_METRICS.instrumentFontSize, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                        </Tip>
                      )}
                      {bestDeltaSyms.has(leg.option_symbol) && (
@@ -908,25 +935,20 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      )}
                      {stopBreached && (
                        <Tip text={`Live premium ₹${lastPx?.toFixed(2)} is at or below this leg's trailing stop ₹${slPx?.toFixed(2)}, but the SuperTrend exit is a RED-COUNTER rule (${legExitState ?? '—'}) — the leg still counts as running until enough ST lines flip. This is where an open drawdown builds.`}>
-                         <span style={{ fontSize: 9, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
+                         <span style={{ fontSize: 8, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 2, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
                            TSL HIT
                          </span>
                        </Tip>
                      )}
                    </span>
                    {(() => {
-                     const colVisible: Record<SignalColVisibility, boolean> = {
-                       always: true, exchange: s.showExchange, leg: s.showLeg,
-                       premium: showPremiumCols, chg: s.showPriceChange,
-                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                     };
                      const renderLeftCell = (key: string) => {
                        switch (key) {
                          case 'exc':
-                           return <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>{row.exchange}</span>;
+                           return <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', flexShrink: 0 }}>{row.exchange}</span>;
                          case 'leg':
                            return (
-                             <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>
+                             <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', flexShrink: 0 }}>
                                {leg.moneyness}
                                {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
                              </span>
@@ -937,10 +959,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // spot-source row (no per-leg premium) so the column stays aligned.
                            return (
                              <Tip text={snapTitle}>
-                               <span style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {entryPx != null ? entryPx.toFixed(2) : '—'}
                                  {entryDiff != null && (
-                                   <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
+                                   <span style={{ fontSize: ROW_METRICS.cellFontSize, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
                                      ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
                                    </span>
                                  )}
@@ -956,7 +978,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={row.source === 'navigator'
                                ? 'Stop from the AVWAP proposal that originated this signal'
                                : 'Initial stop at entry (fast SuperTrend line)'}>
-                               <span data-testid="leg-sl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-sl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                                </span>
                              </Tip>
@@ -972,7 +994,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              <Tip text={isNav
                                ? 'Navigator signals do not trail — the single stop is in the SL column'
                                : 'Trailing stop — ratchets tighter as SuperTrend lines flip red'}>
-                               <span data-testid="leg-tsl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-tsl" style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {isNav ? '—' : (slPx != null ? slPx.toFixed(1) : '—')}
                                </span>
                              </Tip>
@@ -982,7 +1004,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // Red-counter progress toward the auto-exit rule (row-level).
                            return (
                              <Tip text="Red-counter progress toward the auto-exit rule (exit_mode)">
-                               <span style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
                                  {legExitState ?? '—'}
                                </span>
                              </Tip>
@@ -994,13 +1016,13 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // R-multiple of the accepted stop and rejects the signal without it.
                            return targetPx != null ? (
                              <Tip text={`Target ₹${targetPx.toFixed(2)} — Navigator's AVWAP stop/target proposal (an R-multiple of its accepted stop)`}>
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {targetPx.toFixed(1)}
                                </span>
                              </Tip>
                            ) : (
                              <Tip text="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)">
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
+                               <span style={{ fontSize: ROW_METRICS.cellFontSize, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
                                  —
                                </span>
                              </Tip>
@@ -1011,16 +1033,23 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      };
                      return s.signalLeftColumnOrder.map((key) => {
                        const col = SIGNAL_LEFT_COLUMNS[key];
-                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                        return (
-                         <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                         <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                            {renderLeftCell(col.key)}
                          </div>
                        );
                      });
                    })()}
 
-                {!isExp && (
+                {/* The trade handlers, named so the expanded row can offer the
+                    same actions when they are switched off in the row itself.
+                    They were inline closures here only, which meant "order
+                    buttons in the row: off" did not MOVE the Buy button, it
+                    deleted it -- and the setting's own description promised a
+                    relocation. A control that quietly disappears is bad
+                    anywhere; on the path that places a real order it is worse. */}
+                {!isExp && s.boardRowActions && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
@@ -1063,17 +1092,17 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       {(() => {
-                        const colVisible: Record<SignalColVisibility, boolean> = {
-                          always: true, exchange: s.showExchange, leg: s.showLeg,
-                          premium: showPremiumCols, chg: s.showPriceChange,
-                          chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                        };
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
-                              return <span style={{ color: k.dim, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
+                              // Tinted by the move, like the watchlist's change
+                              // column. These two were hardcoded dim and plain
+                              // text, so the direction setting appeared to do
+                              // nothing: the columns actually NAMED after the
+                              // price change were the two it did not reach.
+                              return <span style={{ color: s.showPriceDirection ? color : k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
                             case 'chgPct':
-                              return <span style={{ color: k.text, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
+                              return <span style={{ color: s.showPriceDirection ? color : k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
                             case 'dir':
                               return (
                                 <span style={{ color: color, display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
@@ -1083,8 +1112,20 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                               );
                             case 'ltp':
                               return (
-                                <span style={{ color: color, fontWeight: 500, fontSize: 13, width: '100%', textAlign: 'right' }}>
+                                <span style={{ color: color, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>
                                   {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                                </span>
+                              );
+                            case 'time':
+                              // `isLeg` -> time only. The parent header above
+                              // already carries the date, exactly as on the
+                              // shared board, so repeating it on each of an
+                              // underlying's strikes is the noise the grouping
+                              // exists to remove. Same `stamp` helper both
+                              // tables use, so the format cannot diverge.
+                              return (
+                                <span style={{ color: k.dim, fontSize: ROW_METRICS.cellFontSize, width: '100%', textAlign: 'right' }}>
+                                  {stamp(row.timestamp_ms, Date.now(), true)}
                                 </span>
                               );
                             default:
@@ -1093,9 +1134,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         };
                         return s.signalRightColumnOrder.map((key) => {
                           const col = SIGNAL_RIGHT_COLUMNS[key];
-                          if (!col || !colVisible[col.visibleWhen]) return null;
+                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
                           return (
-                            <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                            <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                               {renderRightCell(col.key)}
                             </div>
                           );
@@ -1105,6 +1146,47 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
+                      // Present only when the row is not carrying them, so the
+                      // two configurations offer the same actions in different
+                      // places rather than one offering fewer.
+                      onBuy={s.boardRowActions || ended ? undefined : (e) => {
+                        e.stopPropagation();
+                        const entryForSl = lastPx || leg.premium_spot || 0;
+                        const slPxVal = leg.entry_sl ?? leg.premium_sl;
+                        const slPercentage =
+                          entryForSl > 0 && slPxVal && slPxVal > 0
+                            ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        const tgtPercentage =
+                          entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                            ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'BUY',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          initialSlPct: slPercentage,
+                          initialTgtPct: tgtPercentage,
+                          tag: 'SUPERTREND',
+                        });
+                      }}
+                      onSell={s.boardRowActions ? undefined : (e) => {
+                        e.stopPropagation();
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'SELL',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          tag: 'SUPERTREND',
+                        });
+                      }}
+                      onChart={s.boardRowActions ? undefined : (e) => {
+                        e.stopPropagation();
+                        onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg));
+                      }}
                       onMore={(e) => {
                         e.stopPropagation();
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1394,6 +1476,21 @@ function SignalTableSettingsPanel({
     { key: 'showPriceDirection', label: 'Direction', hint: 'Up/down direction indicator' },
   ];
 
+  const behaviours: Array<{ key: BoardCapabilityKey; label: string; hint: string }> = [
+    {
+      key: 'boardDragColumns', label: 'Drag columns to reorder',
+      hint: 'Drag a column heading sideways to move it. Off leaves the heading a plain sort control.',
+    },
+    {
+      key: 'boardRowScroll', label: 'Scroll rows sideways',
+      hint: 'Each row scrolls horizontally on its own when the board is narrower than its columns. Off keeps every row aligned and relies on hiding columns instead.',
+    },
+    {
+      key: 'boardRowActions', label: 'Order buttons in the row',
+      hint: 'Buy, chart and pin sit in the row itself. Off moves them into the row you expand — fewer controls under the pointer, one more click to trade.',
+    },
+  ];
+
   const reset = () => {
     settings.resetSignalTableSettings();
     onLayoutChange('list');
@@ -1464,10 +1561,54 @@ function SignalTableSettingsPanel({
             ))}
           </div>
         </div>
+
+        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Behaviour</div>
+          {/* Which component draws the rows. The shared one is what the other
+              four engines use, so choosing it is what makes this table identical
+              to Adaptive Edge by construction rather than by a list of matched
+              properties. Still opt-in: see the note on the setting. */}
+          <label
+            title="Draw these rows with the same component the other four engines use. Identical by construction rather than by matched properties. Still being brought to parity — day grouping replaces the Active-now bucket."
+            style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer', marginBottom: 4 }}
+          >
+            <input
+              type="checkbox"
+              checked={settings.boardRenderer === 'shared'}
+              onChange={() => settings.setBoardRenderer(settings.boardRenderer === 'shared' ? 'classic' : 'shared')}
+              style={{ width: 14, height: 14, margin: 0, accentColor: k.orange }}
+            />
+            Shared board renderer
+          </label>
+          {/* The three things this table has that the shared board does not.
+              Offered as choices rather than kept as one table's habits: that is
+              what lets every engine's board have them, instead of only the one
+              that happens to render through this component. */}
+          <div style={{ color: k.dim, fontSize: 9.5, lineHeight: 1.45, marginBottom: 8 }}>
+            Applies to this board. Turning one off does not change what is scanned.
+          </div>
+          <div style={{ display: 'grid', gap: '2px 8px' }}>
+            {behaviours.map((option) => (
+              <label key={option.key} title={option.hint} style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings[option.key]}
+                  onChange={() => settings.toggleBoardCapability(option.key)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: k.orange }}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
-        <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
+        <span style={{ color: k.dim, fontSize: 9.5 }}>
+          {settings.boardDragColumns
+            ? 'In List view, drag column headers to reorder them.'
+            : 'Column dragging is off — headers still sort when clicked.'}
+        </span>
         <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: 'var(--k-ink-4)', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
           Reset board view
         </button>
@@ -1497,8 +1638,14 @@ function SourceBadge({ source }: { source: EngineSignalRow['source'] }) {
   const it = map[source ?? 'spot'] ?? map.spot;
   return (
     <span title={it.title} style={{
-      flexShrink: 0, padding: '1px 5px', borderRadius: 3, letterSpacing: 0.3,
-      fontSize: 8, fontWeight: 800, color: it.tone, background: tint(it.tone, 8),
+      flexShrink: 0, padding: '1px 5px', borderRadius: 3,
+      // Matched to the shared board's origin flag, which is this badge's
+      // counterpart there: weight 700 not 800, letter-spacing in `em` so it
+      // tracks the font size, and the same tint strength. The three were each
+      // one notch off, which is how a badge ends up looking like a different
+      // component doing the same job.
+      letterSpacing: '.04em',
+      fontSize: 8, fontWeight: 700, color: it.tone, background: tint(it.tone, 10),
     }}>
       {it.label}
     </span>
@@ -1615,23 +1762,41 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // too, so the button is never a no-op.
   const scanRunsSupertrend = supertrendEnabled || !navigatorEnabled;
   const scanPending = scan.isPending || navigatorScan.isPending;
-  const scanTitle = navigatorOnlyRuntime
-    ? 'Run Navigator scan'
-    : (scanRunsSupertrend && navigatorEnabled ? 'Re-scan both engines' : 'Re-scan now');
+  const { scanAll } = useScanAllStrategies();
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scanPending) return;
     scanLock.current = true;
-    // The two engines are peers with separate scan endpoints, so a manual
-    // re-scan has to refresh whichever ones are actually on — otherwise the
-    // Navigator half of the board stays stale until its own 5-minute loop.
-    // Sequential on purpose: both draw on the same Kite ~3 req/s historical
-    // budget, and firing them together would double the effective concurrency.
-    (async () => {
-      if (scanRunsSupertrend) await scan.mutateAsync();
-      if (navigatorEnabled) await navigatorScan.mutateAsync();
-    })()
-      .catch(() => { /* each mutation surfaces its own error toast */ })
+    // Every strategy that has a scan, not just the two whose rows share this
+    // pane. Gamma Move, ORB and Adaptive Edge all have scan endpoints and this
+    // button never reached them, so pressing it refreshed part of the platform
+    // and left the rest on its own background loop.
+    //
+    // Sequential and lens-first. They all draw on the same Kite ~3 req/s
+    // historical budget, so firing them together makes each slower rather than
+    // the set faster — and the table being looked at should not wait behind four
+    // others. The fan-out itself lives in useScanAllStrategies.
+    const lensFirst: ScannableEngine[] = signalMode === 'navigator'
+      ? ['navigator', 'supertrend']
+      : ['supertrend', 'navigator'];
+    const order: ScannableEngine[] = [
+      ...lensFirst.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled)),
+      'orb', 'gamma_move', 'adaptive_edge',
+    ];
+    scanAll(order)
+      .then((results) => {
+        const failed = results.filter((r) => !r.ok);
+        // Said once, naming the engines. A button that claims to scan everything
+        // has to report the ones it could not, or "all strategies" is a promise
+        // nobody can check.
+        if (failed.length) {
+          notifyOrder({
+            kind: 'error',
+            title: 'Re-scan',
+            message: `Could not scan ${failed.map((f) => SCANNABLE_ENGINE_LABEL[f.engine]).join(', ')}.`,
+          });
+        }
+      })
       .finally(() => { scanLock.current = false; });
   };
   const doCancelScan = () => {
@@ -1641,13 +1806,75 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
+
+  /**
+   * How far down the group bands have to pin.
+   *
+   * The toolbar and the heading strip share one sticky wrapper at the top of
+   * the table, so a group band that pins at `top: 0` would slide underneath
+   * them. The offset is that wrapper's height -- which is not a constant: the
+   * toolbar wraps when the pane is narrow, and the strip is absent in the cards
+   * layout. Measured rather than guessed, and re-measured when it changes, so
+   * the band lands right at every width instead of at the one I happened to
+   * check.
+   *
+   * Published as a CSS variable so each band can read it without this value
+   * re-rendering the table on every resize.
+   */
+  const stickyHeadRef = React.useRef<HTMLDivElement>(null);
+  // The variable is set on the pane root explicitly rather than on
+  // `stickyHead.parentElement`. Today those are the same node -- the
+  // `{!settingsOpen && ...}` around the sticky wrapper creates no DOM element --
+  // but that is a coincidence of the current markup, and one added wrapper would
+  // silently move the variable onto a node that does not contain the bands. The
+  // bands would then fall back to `top: 0` and slide under the header, which is
+  // exactly the bug this is meant to prevent.
+  const paneRootRef = React.useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
     () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
   );
+
+  React.useEffect(() => {
+    const el = stickyHeadRef.current;
+    if (!el) return;
+    const apply = () => {
+      paneRootRef.current?.style.setProperty('--st-sticky-head', `${Math.round(el.offsetHeight)}px`);
+    };
+    apply();
+    // ResizeObserver is not in every test environment's jsdom.
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // Only the two things that change whether the wrapper exists or what it
+    // contains. NOT every render: this table re-renders on every quote tick, and
+    // an unkeyed effect would build and tear down a ResizeObserver each time.
+    // Height changes from the toolbar wrapping are the observer's own job.
+  }, [settingsOpen, viewLayout]);
+
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
   );
+  // Name what this will actually run, in the order it will run it.
+  //
+  // The label said "Re-scan both engines" whenever SuperTrend and Navigator were
+  // both on, and "Re-scan now" otherwise — so a press that scanned one looked
+  // identical to a press that scanned two, and it never mentioned the three other
+  // strategies it now also refreshes.
+  const scanTitle = (() => {
+    const lens: ScannableEngine[] = signalMode === 'navigator'
+      ? ['navigator', 'supertrend']
+      : ['supertrend', 'navigator'];
+    const onPane = lens.filter((e) => (e === 'supertrend' ? scanRunsSupertrend : navigatorEnabled));
+    const rest: ScannableEngine[] = ['orb', 'gamma_move', 'adaptive_edge'];
+    const names = [...onPane, ...rest].map((e) => SCANNABLE_ENGINE_LABEL[e]);
+    const off = !navigatorEnabled ? ' · Navigator is off' : '';
+    // ATM Premium Imbalance is deliberately unlisted: it has no scan, it arms one
+    // resolved pair. Naming it would promise something the platform cannot do.
+    return `Re-scan ${names.join(', ')}${off}`;
+  })();
+
   const changeSignalMode = (next: SignalMode) => {
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
@@ -1862,8 +2089,18 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    // Only today is named in words. "Yesterday" is useful for exactly one day
+    // and then becomes something the reader has to convert, so it carries its
+    // real date instead — worded by the board's own formatter so the two
+    // surfaces cannot disagree about what a date looks like.
+    //
+    // The three that follow are RANGES spanning many days, not single days, so
+    // there is no date to put in their place. They stay as they are.
+    const yesterdayLabel = sessionDayLabel(
+      sessionDayKey(todayStart - 86_400_000), todayStart,
+    );
     const groups: Record<string, typeof filteredRows> = {
-      "Today": [], "Yesterday": [], "Last week": [], "Last 15 days": [], "Older": [],
+      "Today": [], [yesterdayLabel]: [], "Last week": [], "Last 15 days": [], "Older": [],
     };
     for (const r of history) {
       const d = new Date(r.timestamp_ms);
@@ -1871,13 +2108,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       const diffDays = Math.round((todayStart - startOfDay) / (1000 * 60 * 60 * 24));
       let label = "";
       if (diffDays === 0) label = "Today";
-      else if (diffDays === 1) label = "Yesterday";
+      else if (diffDays === 1) label = yesterdayLabel;
       else if (diffDays >= 2 && diffDays <= 7) label = "Last week";
       else if (diffDays >= 8 && diffDays <= 15) label = "Last 15 days";
       else label = "Older";
       groups[label].push(r);
     }
-    for (const label of ["Today", "Yesterday", "Last week", "Last 15 days", "Older"]) {
+    for (const label of ["Today", yesterdayLabel, "Last week", "Last 15 days", "Older"]) {
       if (groups[label].length) {
         buckets.push({ label: `${label} (ended)`, rows: applyUserSort(groups[label]) });
       }
@@ -1972,8 +2209,101 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     );
   }
 
+  // The engine's own controls — timeframe, SOURCE, EXIT and the VIEW lens.
+  // They had a row of their own above the table; they now sit on the search row
+  // between the search box and COLUMNS, which is a row that already existed.
+  const engineControls = (
+    <>
+                <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <EngineMark />
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
+                </span>
+
+                {/* SuperTrend rules. Hidden under the Navigator lens because a
+                    Navigator row has no SuperTrend lines for them to govern. */}
+                {cfg && signalMode !== 'navigator' && (
+                  <>
+                    <ToolbarControl
+                      label="SOURCE"
+                      hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
+                      tone={k.orange}
+                    >
+                      <InlineDropdown
+                        value={cfg.scan_source}
+                        options={SCAN_SOURCE_OPTS}
+                        tone={k.orange}
+                        title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
+                        onChange={(next) => patch(
+                          { scan_source: next },
+                          `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
+                          needsRescan('scan_source'),
+                        )}
+                      />
+                    </ToolbarControl>
+                    <ToolbarControl
+                      label="EXIT"
+                      hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
+                      tone={k.blue}
+                    >
+                      <InlineDropdown
+                        value={cfg.exit_mode ?? 'one_red'}
+                        options={EXIT_MODE_OPTS}
+                        tone={k.blue}
+                        title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
+                        onChange={(next) => patch(
+                          { exit_mode: next },
+                          `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
+                          needsRescan('exit_mode'),
+                        )}
+                      />
+                    </ToolbarControl>
+                    <ScopeDivider />
+                  </>
+                )}
+
+                <ToolbarControl
+                  label="VIEW"
+                  hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
+                  tone={k.purple}
+                >
+                  <InlineDropdown
+                    value={signalMode}
+                    options={SIGNAL_MODE_OPTS}
+                    tone={k.purple}
+                    title="Signal lens — local only."
+                    onChange={changeSignalMode}
+                  />
+                </ToolbarControl>
+    </>
+  );
+
+  // Rescan and table settings. Portalled into the pane title bar beside
+  // minimize; renders here if no title bar exists.
+  const paneActions = (
+              <PaneHeaderActions pane="signals">
+                {scanning ? (
+                  <ToolbarButton
+                    title="Stop scan"
+                    onClick={doCancelScan}
+                    disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+                  </ToolbarButton>
+                ) : (
+                  <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
+                    <RefreshIcon spinning={scanPending} />
+                  </ToolbarButton>
+                )}
+                <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+                  <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+                    <Icons.Settings />
+                  </ToolbarButton>
+                </span>
+              </PaneHeaderActions>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
+    <div ref={paneRootRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/*
         The engine's own controls, on the shared toolbar grammar.
 
@@ -1989,105 +2319,79 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         before, which is a dangerous thing for a control that closes positions.
       */}
       <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
-        <EngineToolbar>
-          <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <EngineMark />
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
-          </span>
-
-          {/* SuperTrend rules. Hidden under the Navigator lens because a
-              Navigator row has no SuperTrend lines for them to govern. */}
-          {cfg && signalMode !== 'navigator' && (
-            <>
-              <ToolbarControl
-                label="SOURCE"
-                hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
-                tone={k.orange}
-              >
-                <InlineDropdown
-                  value={cfg.scan_source}
-                  options={SCAN_SOURCE_OPTS}
-                  tone={k.orange}
-                  title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
-                  onChange={(next) => patch(
-                    { scan_source: next },
-                    `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
-                    needsRescan('scan_source'),
-                  )}
-                />
-              </ToolbarControl>
-              <ToolbarControl
-                label="EXIT"
-                hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
-                tone={k.blue}
-              >
-                <InlineDropdown
-                  value={cfg.exit_mode ?? 'one_red'}
-                  options={EXIT_MODE_OPTS}
-                  tone={k.blue}
-                  title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
-                  onChange={(next) => patch(
-                    { exit_mode: next },
-                    `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
-                    needsRescan('exit_mode'),
-                  )}
-                />
-              </ToolbarControl>
-              <ScopeDivider />
-            </>
-          )}
-
-          <ToolbarControl
-            label="VIEW"
-            hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
-            tone={k.purple}
-          >
-            <InlineDropdown
-              value={signalMode}
-              options={SIGNAL_MODE_OPTS}
-              tone={k.purple}
-              title="Signal lens — local only."
-              onChange={changeSignalMode}
-            />
-          </ToolbarControl>
-
-          <span style={{ flex: 1 }} />
-
-          {scanning ? (
-            <ToolbarButton
-              title="Stop scan"
-              onClick={doCancelScan}
-              disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-            </ToolbarButton>
-          ) : (
-            <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
-              <RefreshIcon spinning={scanPending} />
-            </ToolbarButton>
-          )}
-          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
-            <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </ToolbarButton>
-          </span>
-        </EngineToolbar>
 
         <ScanProgressBar signals={signals} />
       </div>
-      {rows.length > 0 && !settingsOpen && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
+      {/* Not gated on `rows.length` any more. This row now carries the engine
+          controls and the rescan button, and those are most needed when the table
+          is EMPTY — gating them on having rows meant the one press that could
+          fill it disappeared exactly when nothing was there. Only the search box
+          itself is pointless with no rows, so only it is gated. */}
+      {!settingsOpen && (
+        <div ref={stickyHeadRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
-              <KiteSearchBar
+              {rows.length > 0 && <KiteSearchBar
                 query={query}
                 setQuery={setQuery}
                 searchSettingsOpen={searchSettingsOpen}
                 setSearchSettingsOpen={setSearchSettingsOpen}
-                height={35}
-              />
+                // 35 made this row half again as tall as the same row on
+                // every other board. 22 is the shared filter bar's field height.
+                height={22}
+                compact
+                // Its panel is the watchlist's, and the only part that governed
+                // this table was the column list — now a labelled COLUMNS button
+                // beside the filters, where the other boards keep theirs.
+                showSettings={false}
+              />}
+            </div>
+            {/* After search, before COLUMNS. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+              {engineControls}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              {paneActions}
+              {/* The columns this table actually renders, in the order it
+                  renders them — not the six abstract visibility groups the old
+                  gear exposed. `premium` is filtered out rather than offered:
+                  Entry, SL, TSL and Target need a scan source that produces
+                  premiums, so on a spot scan they are unavailable, not hidden. */}
+              <ColumnsMenu
+                items={[
+                  ...s.signalLeftColumnOrder
+                    .map((key) => SIGNAL_LEFT_COLUMNS[key])
+                    .filter((col) => col && signalColCapable(col.visibleWhen, showSignalPremiumColumns)),
+                  ...s.signalRightColumnOrder
+                    .map((key) => SIGNAL_RIGHT_COLUMNS[key])
+                    .filter((col) => col && signalColCapable(col.visibleWhen, showSignalPremiumColumns)),
+                ].map((col) => ({
+                  id: col.key,
+                  // `dir` is an unlabelled arrow in the header, so the menu has to
+                  // name it — an unnamed checkbox is not a choice. "arrow"
+                  // because the entry below governs the colours, and two items
+                  // both called Direction would be a coin toss.
+                  label: col.label || 'Direction arrow',
+                  on: !s.hiddenSignalCols.includes(col.key),
+                  toggle: () => s.toggleSignalCol(col.key),
+                })).concat([{
+                  // Not a column — a display option, and the only one that was
+                  // lost when this table stopped offering the watchlist's gear.
+                  // It tints LTP and Chg. green or red by the move, which the
+                  // table has always honoured; there was simply no longer
+                  // anywhere to switch it. The COLUMNS menu is where this table
+                  // keeps its other per-column display choices, so it goes here.
+                  id: 'showPriceDirection',
+                  label: 'Direction colours',
+                  on: s.showPriceDirection,
+                  toggle: () => s.toggleShow('showPriceDirection'),
+                }])}
+                onShowAll={() => {
+                  s.showAllSignalCols();
+                  // "Show all" that left the colours off would be a lie.
+                  if (!s.showPriceDirection) s.toggleShow('showPriceDirection');
+                }}
+              />
               <FilterToggle
                 on={bestOnly}
                 label="BEST LEG"
@@ -2102,24 +2406,37 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               />
             </div>
           </div>
-          {viewLayout === 'list' && (
+          {/* The shared renderer draws its OWN heading strip, so this one must not
+              also render — leaving both in place put two of every column label
+              on screen, which is how "Found multiple elements with the text:
+              Entry (Δpts)" showed up when the default was trial-flipped. */}
+          {viewLayout === 'list' && s.boardRenderer !== 'shared' && (
             <div className="st-header-row" onScroll={syncHscroll} style={{
-              display: 'flex', alignItems: 'center', gap: 16,
-              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`,
+              display: 'flex', alignItems: 'center', gap: ROW_METRICS.gap,
+              // Headings, not content. This strip used to be 12px regular
+              // sentence-case, which made it read as one more row of data and
+              // was the single biggest reason this table looked unrelated to
+              // the shared board. The type is set on the container so both
+              // SortHeaderDiv and DraggableColHeader inherit it -- neither sets
+              // a font of its own, so there is nothing to override per cell.
+              padding: HEAD_METRICS.padding,
+              fontSize: HEAD_METRICS.fontSize,
+              fontWeight: HEAD_METRICS.fontWeight,
+              letterSpacing: HEAD_METRICS.letterSpacing,
+              textTransform: HEAD_METRICS.textTransform,
+              color: k.dim, borderBottom: `1px solid ${k.border}`,
+              // Matches the shared header's reserved accent gutter, so the
+              // headings sit over the cells they name rather than 3px left.
+              borderLeft: '3px solid transparent',
               overflowX: 'auto', overflowY: 'hidden',
             }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: '1 1 150px', minWidth: 150 }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: instrumentFlex(), minWidth: 0 }} />
                  {(() => {
-                   const colVisible: Record<SignalColVisibility, boolean> = {
-                     always: true, exchange: s.showExchange, leg: s.showLeg,
-                     premium: showSignalPremiumColumns, chg: s.showPriceChange,
-                     chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                   };
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];
-                     if (!col || !colVisible[col.visibleWhen]) return null;
+                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                      return (
-                       <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn}>
+                       <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                          {col.sortKey
                            ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
                            : (
@@ -2135,16 +2452,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  <div style={{ width: 150 }}></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                    {(() => {
-                     const colVisible: Record<SignalColVisibility, boolean> = {
-                       always: true, exchange: s.showExchange, leg: s.showLeg,
-                       premium: showSignalPremiumColumns, chg: s.showPriceChange,
-                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
-                     };
                      return s.signalRightColumnOrder.map((key) => {
                        const col = SIGNAL_RIGHT_COLUMNS[key];
-                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                        return (
-                         <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn}>
+                         <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                            {col.sortKey
                              ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
                              : <span style={{ display: 'block', width: '100%' }} />}
@@ -2164,11 +2476,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           position: relative;
           background: ${k.bg};
         }
-        .st-parent-header:hover,
-        .st-leg-row:hover,
-        .st-group-header:hover {
-          background: ${k.surfaceHover} !important;
-        }
+        /* Row hover, focus and active now come from styles/globals.css, which
+           states them once for this table's rows and the shared board's. This
+           table used to declare a bare :hover here with no transition, focus or
+           active state, so its highlight snapped on and keyboard focus showed
+           nothing -- on one table only. */
 
         .col-drag-over {
           box-shadow: inset 2px 0 0 0 ${k.blue};
@@ -2178,19 +2490,50 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           position: relative;
           display: flex;
           align-items: center;
-          gap: 16px;
-          height: 41px;
-          padding: 0 16px;
+          /* Geometry from ROW_METRICS, the spec the shared board renders against,
+             rather than the literals this table was built with. A minimum height
+             rather than a fixed one: a fixed height clips a cell that wraps, and
+             the shared row has always used a minimum. No backticks in here - this
+             block is a template literal and one would close it. */
+          gap: ${ROW_METRICS.gap}px;
+          min-height: ${ROW_METRICS.legHeight}px;
+          /* The shared row sets 400 on a leg and 600 on a parent. Stated here so
+             the instrument cell inherits it rather than depending on a browser
+             default -- and so nothing has to set a weight per cell, which is how
+             this table ended up bold in the first place. */
+          font-weight: 400;
+          /* Indented under the parent, like the shared board's legs. The
+             recessed shade groups them, but only the indent ties them to the
+             row above once that row has scrolled away. */
+          padding: 0 16px 0 ${16 + LEG_INDENT}px;
           box-sizing: border-box;
-          border-bottom: 1px solid ${k.border};
+          /* The shade above separates one row from the next, so the per-row line
+             that this table used to draw is now redundant - and drawing both
+             gives a heavier grid than the shared board. Kept as a transparent
+             edge rather than deleted so the row keeps its box height. */
+          border-bottom: 1px solid transparent;
+          /* Reserved, not decorative: the shared board turns this gutter blue on
+             the open row, and a border that appears later would shift every cell
+             3px sideways. Holding the space means it never does. */
+          border-left: 3px solid transparent;
+        }
+        /* Sideways scrolling is opt-in per the board's Behaviour setting. Off, the
+           row clips instead, and the operator hides columns to fit -- which is
+           what the shared board has always done. */
+        .st-row-scroll {
           overflow-x: auto;
           overflow-y: hidden;
           scrollbar-width: none;
         }
-        .st-leg-row::-webkit-scrollbar { display: none; }
+        .st-row-scroll::-webkit-scrollbar { display: none; }
+        .st-leg-row:not(.st-row-scroll) { overflow: hidden; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .sort-header-div:hover { color: var(--k-text) !important; }
+        /* The heading's hover colour comes from the sb-head rule in globals.css
+           now -- this element carries that class. Only the sort glyph's fade
+           stays local, because this table's glyph is not the aria-hidden span
+           the shared rule targets. NO BACKTICKS IN HERE: this block is a
+           template literal and one closes it. */
         .sort-icon { opacity: 0; color: var(--k-dim); display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
         .sort-icon.active { opacity: 1 !important; color: var(--k-text); }
@@ -2330,6 +2673,20 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               </div>
             ) : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
           </div>
+        ) : s.boardRenderer === 'shared' ? (
+          /* The same component the other four engines render through. Everything
+             below this branch is the bespoke table it replaces, kept reachable
+             from the board settings because it is the only view that has ever
+             been used against a live account. */
+          <SuperTrendSharedBoard
+            rows={filteredRows}
+            quotes={quotes}
+            originalEntryMs={originalEntryMs}
+            onSelectSignal={onSelectSignal}
+            onOpenChart={onOpenChart ? (symbol, tab) => onOpenChart(symbol, tab, cfg?.trail_target) : undefined}
+            nowMs={Date.now()}
+            signalMode={signalMode}
+          />
         ) : (
           groupedRows.map(group => {
             const isCollapsed = collapsedGroups.has(group.label);
@@ -2340,16 +2697,33 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   className="st-group-header"
                   style={{ 
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 16px', background: k.bg, borderBottom: `1px solid ${k.border}`,
+                    padding: DAY_HEAD_METRICS.padding, background: k.surface,
+                    borderBottom: `1px solid ${k.border}`,
+                    // Stays visible while its strikes scroll past, as the shared
+                    // board's day band does. Falls back to 0 if the variable has
+                    // not been measured yet, which only costs one frame.
+                    position: 'sticky', top: 'var(--st-sticky-head, 0px)', zIndex: 1,
                     cursor: 'pointer', userSelect: 'none'
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 600, color: group.active ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    fontSize: DAY_HEAD_METRICS.fontSize,
+                    fontWeight: DAY_HEAD_METRICS.fontWeight,
+                    letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+                    textTransform: DAY_HEAD_METRICS.textTransform,
+                    // Quiet baseline like the shared band, but an active group
+                    // keeps its green: that is real state, not decoration, and
+                    // the dot beside it would otherwise be the only sign of it.
+                    color: group.active ? k.green : k.dim,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
                     {group.active && <span style={{ width: 7, height: 7, borderRadius: 4, background: k.green }} />}
                     {group.label}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: k.dim }}>{group.rows.length} signals</span>
+                    {/* Inherits the band's micro-type; lighter than the label,
+                        as in the shared board's count. */}
+                    <span style={{ fontWeight: 500, color: k.dim }}>{group.rows.length} signals</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
@@ -2358,9 +2732,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 
                 {!isCollapsed && (
                   <div className="kv-rows">
-                    {group.rows.map((row) => (
+                    {group.rows.map((row, rowIndex) => (
                       <div key={`${row.source ?? 'spot'}:${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
-                        <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
+                        <SignalCard row={row} quotes={quotes} viewLayout={viewLayout} striped={rowIndex % 2 === 1}
                           scanSource={cfg?.scan_source} signalMode={signalMode}
                           showPremiumColumns={showSignalPremiumColumns}
                           originalEntryMs={originalEntryMs.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`)}

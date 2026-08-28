@@ -85,9 +85,16 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
     scanning = false;
   });
 
-  it('refreshes both engines when both are on', async () => {
+  it('refreshes both engines when both are on, and names them in order', async () => {
     renderPane();
-    fireEvent.click(screen.getByRole('button', { name: 'Re-scan both engines' }));
+    // The label used to be "Re-scan both engines" whenever both were on and
+    // "Re-scan now" otherwise, so a press that scanned only SuperTrend looked
+    // identical to one that scanned both. It now names what will run.
+    // Matched loosely: the label names every strategy it will scan, so pinning
+    // the full string would break each time another engine gains a scan. What
+    // matters is that it names the two on this pane and their order.
+    const button = screen.getByRole('button', { name: /^Re-scan SuperTrend, Navigator/ });
+    fireEvent.click(button);
     await waitFor(() => expect(navigatorScan).toHaveBeenCalledTimes(1));
     expect(supertrendScan).toHaveBeenCalledTimes(1);
   });
@@ -95,15 +102,20 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
   it('runs only Navigator when SuperTrend is off', async () => {
     cfg.engine_enabled = false;
     renderPane();
-    fireEvent.click(screen.getByRole('button', { name: 'Run Navigator scan' }));
+    // No longer a special case: with SuperTrend off, the general label simply
+    // starts with Navigator.
+    fireEvent.click(screen.getByRole('button', { name: /^Re-scan Navigator/ }));
     await waitFor(() => expect(navigatorScan).toHaveBeenCalledTimes(1));
     expect(supertrendScan).not.toHaveBeenCalled();
   });
 
-  it('runs only SuperTrend when Navigator is off', async () => {
+  it('runs only SuperTrend when Navigator is off, and says Navigator is off', async () => {
     navigatorEnabled = false;
     renderPane();
-    fireEvent.click(screen.getByRole('button', { name: 'Re-scan now' }));
+    // This is the case that read as a bug: the button appeared to promise both
+    // engines and only one ran. Skipping a disabled engine is correct; being
+    // silent about it was not.
+    fireEvent.click(screen.getByRole('button', { name: /^Re-scan SuperTrend.*Navigator is off$/ }));
     await waitFor(() => expect(supertrendScan).toHaveBeenCalledTimes(1));
     expect(navigatorScan).not.toHaveBeenCalled();
   });
@@ -123,5 +135,36 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
     fireEvent.click(screen.getByRole('button', { name: 'Stop scan' }));
     expect(cancelNavigator).toHaveBeenCalledTimes(1);
     expect(cancelSupertrend).not.toHaveBeenCalled();
+  });
+});
+
+describe('the engine controls on the search row', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    supertrendScan.mockClear();
+    navigatorScan.mockClear();
+    cfg.engine_enabled = true;
+    navigatorEnabled = true;
+    scanning = false;
+  });
+
+  it('carries the timeframe, SOURCE, EXIT and VIEW', () => {
+    // These had a toolbar row of their own above the table. They now sit on the
+    // search row, between the search box and COLUMNS, and that row was already
+    // there — so the table gained a row of vertical space.
+    renderPane();
+    expect(screen.getByText('1H')).toBeInTheDocument();
+    expect(screen.getByText('SOURCE')).toBeInTheDocument();
+    expect(screen.getByText('EXIT')).toBeInTheDocument();
+    expect(screen.getByText('VIEW')).toBeInTheDocument();
+  });
+
+  it('keeps re-scan reachable with no rows at all', () => {
+    // The row it moved onto was gated on `rows.length > 0`, which would have
+    // hidden re-scan exactly when the one press that could fill the table is
+    // what you want. This harness always renders zero rows, so every test in
+    // this file guards it — this one says so out loud.
+    renderPane();
+    expect(screen.getByRole('button', { name: /Re-scan/ })).toBeInTheDocument();
   });
 });

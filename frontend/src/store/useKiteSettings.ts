@@ -28,6 +28,16 @@ export interface KiteSettingsState {
   legSort: { key: string; dir: string };
   signalLeftColumnOrder: string[];
   signalRightColumnOrder: string[];
+  /**
+   * Signal-table columns the operator has switched off, by column key.
+   *
+   * Per-column, and specific to the signal table. The five `show*` booleans
+   * above are the watchlist panel's and group several columns behind one flag —
+   * `premium` alone gates Entry, SL, TSL and Target — so a COLUMNS menu built
+   * from them could not name the columns it was actually hiding. Ordering is
+   * already per-table here (`signalLeftColumnOrder`); visibility now matches.
+   */
+  hiddenSignalCols: string[];
   setMacKite: (on: boolean) => void;
   setLoaderStyle: (s: LoaderStyle) => void;
   setBrandIcon: (icon: KiteBrandIcon) => void;
@@ -38,8 +48,57 @@ export interface KiteSettingsState {
   setSortBy: (s: string) => void;
   setLegSort: (sort: { key: string; dir: string }) => void;
   reorderSignalColumn: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
+  toggleSignalCol: (key: string) => void;
+  showAllSignalCols: () => void;
+  /**
+   * Board capabilities, as choices rather than as one implementation's habits.
+   *
+   * SuperTrend's table grew three things the shared board never had: draggable
+   * column headers, rows that scroll sideways on their own, and order buttons
+   * sitting in the row. Keeping them meant keeping a second table; dropping them
+   * meant deciding for the operator which ones they could live without.
+   *
+   * They are settings instead. Every one defaults ON, so nothing changes for
+   * anyone who does not go looking, and the shared board can offer the same
+   * three to every engine rather than one engine having them by accident of
+   * which component it happens to render through.
+   */
+  boardDragColumns: boolean;
+  boardRowScroll: boolean;
+  boardRowActions: boolean;
+  /**
+   * Which component draws SuperTrend's rows.
+   *
+   * `shared` is `SignalBoard` — the same component the other four engines use,
+   * which is what makes the two tables identical by construction rather than by
+   * a list of matched properties. `classic` is the bespoke table this board grew
+   * up with, kept because it is the only view that has ever been used against a
+   * live account and I cannot see the shared one rendered behind the broker
+   * login. It is a way back, not a second product.
+   *
+   * `classic` is still the DEFAULT. Two of the three original gaps are closed —
+   * a signal that resolved to no contract now says so inline, and
+   * `hoistLiveFromToday` reproduces the Active-now section — but one remains, and
+   * it is the reason the default has not flipped:
+   *
+   * **Per-leg diagnostics.** The bespoke row distinguishes a trail close from a
+   * red-counter close in words ("TSL exit" vs "counter exit"), marks a re-entry,
+   * and prints the entry/stop premium snapshot inline. Twenty-five tests cover
+   * those, and they matter: the gap between "the premium is through its trail"
+   * and "the engine has not closed it yet" is exactly where an open drawdown
+   * builds. Moving them behind a click would be losing them.
+   *
+   * Closing it needs one more capability on the shared board — inline per-row
+   * marks supplied by the engine, alongside `renderRowActions`. Until then this
+   * setting is a way to see the shared renderer, not a recommendation.
+   */
+  boardRenderer: 'shared' | 'classic';
+  setBoardRenderer: (r: 'shared' | 'classic') => void;
+  toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
+
+export type BoardCapabilityKey = 'boardDragColumns' | 'boardRowScroll' | 'boardRowActions';
 
 export const useKiteSettings = create<KiteSettingsState>()(
   persist(
@@ -51,6 +110,12 @@ export const useKiteSettings = create<KiteSettingsState>()(
       recentBrandIcons: [],
       engineSettingsLayout: 'tabs',
       chgType: 'close',
+      // ON by default: these describe how the board behaves today, so a fresh
+      // install and an existing one look the same.
+      boardDragColumns: true,
+      boardRowScroll: true,
+      boardRowActions: true,
+      boardRenderer: 'classic',
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -59,7 +124,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
       sortBy: 'Custom',
       legSort: { key: '', dir: '' },
       signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
+      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
+      hiddenSignalCols: [],
       setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s === 'classic' ? 'material' : s === 'off' ? 'minimal' : s }),
       setBrandIcon: (icon) => set((state) => ({
@@ -70,6 +136,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
       setEngineSettingsLayout: (l) => set({ engineSettingsLayout: l }),
       setChgType: (t) => set({ chgType: t }),
       toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
+      toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
+      setBoardRenderer: (r) => set({ boardRenderer: r }),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -82,7 +150,17 @@ export const useKiteSettings = create<KiteSettingsState>()(
         order.splice(toIdx, 0, fromKey);
         return { [field]: order } as Partial<KiteSettingsState>;
       }),
+      toggleSignalCol: (key) => set((state) => ({
+        hiddenSignalCols: state.hiddenSignalCols.includes(key)
+          ? state.hiddenSignalCols.filter((k) => k !== key)
+          : [...state.hiddenSignalCols, key],
+      })),
+      showAllSignalCols: () => set({ hiddenSignalCols: [] }),
       resetSignalTableSettings: () => set({
+        boardDragColumns: true,
+        boardRowScroll: true,
+        boardRowActions: true,
+        boardRenderer: 'classic',
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
@@ -90,18 +168,55 @@ export const useKiteSettings = create<KiteSettingsState>()(
         showLeg: true,
         legSort: { key: '', dir: '' },
         signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
-        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
+        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time'],
+        hiddenSignalCols: [],
       }),
     }),
     {
       name: 'kite-settings',
-      version: 3,
+      version: 6,
       migrate: (persisted: any) => {
-        const legacy = persisted?.loaderStyle;
-        if (legacy === 'classic') return { ...persisted, loaderStyle: 'material' };
-        if (legacy === 'off') return { ...persisted, loaderStyle: 'minimal' };
-        if (legacy === 'mac' || legacy === 'ubuntu' || legacy === 'material' || legacy === 'windows' || legacy === 'gnome' || legacy === 'kde' || legacy === 'minimal') return persisted;
-        return { ...persisted, loaderStyle: 'ubuntu' };
+        const loaderStyle = (() => {
+          const legacy = persisted?.loaderStyle;
+          if (legacy === 'classic') return 'material';
+          if (legacy === 'off') return 'minimal';
+          const known = ['mac', 'ubuntu', 'material', 'windows', 'gnome', 'kde', 'minimal'];
+          return known.includes(legacy) ? legacy : 'ubuntu';
+        })();
+        let next = { ...persisted, loaderStyle };
+
+        // v4 adds the Time column to the signal table's right group.
+        //
+        // Bumping the default array is not enough: this order is persisted, so
+        // anyone who has used the app already has a stored array without 'time'
+        // and would simply never see the column. Appended rather than inserted,
+        // so an operator's own column arrangement survives.
+        const right = next.signalRightColumnOrder;
+        if (Array.isArray(right) && !right.includes('time')) {
+          next = { ...next, signalRightColumnOrder: [...right, 'time'] };
+        }
+
+        // v5 adds the three board capabilities. A stored state predating them has
+        // the keys absent, and `undefined` is falsy — so without this every
+        // existing user would open the app to find dragging, row scrolling and
+        // the in-row order buttons all switched off, having chosen nothing.
+        for (const key of ['boardDragColumns', 'boardRowScroll', 'boardRowActions'] as const) {
+          if (typeof next[key] !== 'boolean') next = { ...next, [key]: true };
+        }
+
+        // v6 introduces the shared renderer as an OPT-IN, not the default.
+        //
+        // Switching it on by default would have been the wrong kind of "done":
+        // the shared board groups by trading day, so the classic table's
+        // "Active now" and "Today (ended)" buckets vanish, and a signal whose
+        // strike resolved to nothing loses the message explaining why. Twenty-
+        // seven existing tests said so. Those describe behaviour, not markup, so
+        // the answer is to close the gaps before flipping the default — not to
+        // update the tests and call the difference gone.
+        if (next.boardRenderer !== 'shared' && next.boardRenderer !== 'classic') {
+          next = { ...next, boardRenderer: 'classic' };
+        }
+        return next;
       },
     },
   ),

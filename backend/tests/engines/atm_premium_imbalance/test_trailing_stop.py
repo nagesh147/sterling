@@ -23,6 +23,22 @@ def trailing(**kw) -> ATMPremiumImbalanceConfig:
     return ATMPremiumImbalanceConfig(**base).validate()
 
 
+def fixed_stop(**kw) -> ATMPremiumImbalanceConfig:
+    """A stop with no trail — which is a FIXED stop, and now has to say so.
+
+    `TRAILING_STOP` with no trail and no break-even is refused by the config: it
+    is a fixed stop wearing the wrong name, and the UI offering that policy while
+    `trail_percent` was unsettable is exactly how a "trailing" stop shipped that
+    never moved. These three tests isolate rung 0, so they ask for the honest
+    policy instead of the misnamed one. `trailing_stop_price` reads the stop
+    fields, not `exit_policy`, so the arithmetic under test is unchanged.
+    """
+    base = dict(enabled=True, exit_policy="FIXED_POINT_TARGET", target_points=15.0,
+                stop_enabled=True, stop_basis="PERCENT", stop_percent=20.0)
+    base.update(kw)
+    return ATMPremiumImbalanceConfig(**base).validate()
+
+
 # ------------------------------------------------------------------ the ladder
 
 def test_before_any_gain_the_stop_is_the_agreed_risk():
@@ -66,7 +82,7 @@ def test_percent_distances_are_measured_from_the_entry_fill():
 
     The trail distance is the deliberate exception — it follows the peak.
     """
-    cfg = trailing(stop_percent=25.0, trail_percent=0.0, breakeven_percent=0.0)
+    cfg = fixed_stop(stop_percent=25.0)
     assert trailing_stop_price(400.0, 400.0, cfg) == 300.0       # 25% of 400
     assert trailing_stop_price(400.0, 900.0, cfg) == 300.0       # unchanged by the peak
 
@@ -80,18 +96,16 @@ def test_points_basis_is_an_absolute_distance():
 
 def test_the_same_number_means_different_risk_on_different_premiums():
     """Why PERCENT exists: 15 points is 30% of a 50 premium and 3% of a 500."""
-    pts = trailing(stop_basis="POINTS", stop_points=15.0, trail_points=0.0,
-                   trail_start_points=0.0, breakeven_points=0.0)
+    pts = fixed_stop(stop_basis="POINTS", stop_points=15.0, stop_percent=0.0)
     assert trailing_stop_price(50.0, 50.0, pts) == 35.0          # risking 30%
     assert trailing_stop_price(500.0, 500.0, pts) == 485.0       # risking 3%
-    pct = trailing(trail_percent=0.0, trail_start_percent=0.0, breakeven_percent=0.0)
+    pct = fixed_stop()
     assert trailing_stop_price(50.0, 50.0, pct) == 40.0          # both 20%
     assert trailing_stop_price(500.0, 500.0, pct) == 400.0
 
 
 def test_a_stop_can_never_be_negative():
-    cfg = trailing(stop_basis="POINTS", stop_points=500.0, trail_points=0.0,
-                   trail_start_points=0.0, breakeven_points=0.0)
+    cfg = fixed_stop(stop_basis="POINTS", stop_points=500.0, stop_percent=0.0)
     assert trailing_stop_price(100.0, 100.0, cfg) == 0.0
 
 
@@ -203,3 +217,29 @@ def test_a_trailing_trade_carries_no_target_on_the_record():
     assert s.trade.target_price is None
     assert s.live_stop == 228.35            # 268.65 x 0.85
 
+
+
+def test_a_trailing_stop_that_cannot_trail_is_refused():
+    """The UI shipped this exact configuration and it never moved the stop.
+
+    `exit_policy=TRAILING_STOP` with `trail_percent=0` and `breakeven_percent=0`
+    is a fixed stop wearing the wrong name. The panel offered the policy while the
+    trail fields were unsettable, so operators selected "trailing stop" and got a
+    stop pinned at its initial level however far the price ran.
+    """
+    with pytest.raises(ValueError, match="actually moves the stop"):
+        ATMPremiumImbalanceConfig(
+            enabled=True, exit_policy="TRAILING_STOP", stop_enabled=True,
+            stop_basis="PERCENT", stop_percent=20.0, target_points=0.0,
+        ).validate()
+
+
+def test_break_even_alone_is_enough_to_earn_the_name():
+    """It moves the stop exactly once, which is still movement."""
+    cfg = ATMPremiumImbalanceConfig(
+        enabled=True, exit_policy="TRAILING_STOP", stop_enabled=True,
+        stop_basis="PERCENT", stop_percent=20.0, breakeven_percent=5.0,
+        target_points=0.0,
+    ).validate()
+    assert trailing_stop_price(100.0, 100.0, cfg) == 80.0     # rung 0
+    assert trailing_stop_price(100.0, 106.0, cfg) == 100.0    # rung 1, break-even

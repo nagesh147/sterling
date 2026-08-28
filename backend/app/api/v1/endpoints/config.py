@@ -429,9 +429,12 @@ async def get_atm_premium_imbalance_config() -> dict:
         },
         # Live refuses NONE: a crash while long would leave the position with
         # nothing watching it. Published so the UI can say so up front.
-        "live_requires": {"protection_mode": sorted(PROTECTION_MODES - {"NONE"}),
-                          "quote_mode": ["EXECUTABLE"],
-                          "require_session_origin_tick": [True]},
+        # Computed from the engine's own live gate, never a hand-written mirror of
+        # it. The previous static dict had already drifted: it named protection,
+        # quote mode and the session-origin gate while silently omitting the size
+        # and the stop, so the panel could show a config as live-ready that
+        # validate() would refuse.
+        "live_blockers": cfg.live_blockers(),
     }
 
 

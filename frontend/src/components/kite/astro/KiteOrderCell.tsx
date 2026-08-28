@@ -3,6 +3,7 @@ import { useKiteGtts, useKiteInstrumentSearch, useKitePositions, useKiteQuote, u
 import { useOrderWindowStore } from "../../../store/useOrderWindowStore";
 import { notifyOrder } from "../../../store/useKiteNotifications";
 import {
+  bookQty,
   findGtt,
   gttBody,
   heldStrikeLabel,

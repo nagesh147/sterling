@@ -9,7 +9,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard, visibleColumns, COLUMNS } from '../SignalBoard';
-import { flattenSignals, hasGroups, type BoardSignal } from '../boardTypes';
+import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, type BoardSignal, type BoardStatus } from '../boardTypes';
 import { supertrendToBoard } from '../supertrendAdapter';
 import type { EngineSignalRow, OptionLeg } from '../../../../types/kiteEngine';
 
@@ -179,5 +179,169 @@ describe('rendering a grouped board', () => {
     const parent = container.querySelector('.sb-row') as HTMLElement;
     fireEvent.click(within(parent).getByRole('button', { name: /Open NIFTY 50 detail/ }));
     expect(onOpenDetail).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Dates on the row, and the order of the day sections.
+ *
+ * The complaint that prompted this: an Adaptive Edge board showed no date
+ * anywhere. Two things combined to cause it. Actionable rows are hoisted into
+ * one "Live now" bucket rather than a dated one — deliberate, so a position
+ * entered last Tuesday and still running does not hide under three days of
+ * closed history — and the time column rendered only `HH:MM`. So a live row
+ * from yesterday read `09:20`, indistinguishable from this morning.
+ */
+describe('dates and day order', () => {
+  const DAY = 86_400_000;
+
+  const dated = (id: string, atMs: number, status: BoardSignal['status']): BoardSignal => ({
+    id, engine: 'adaptive_edge', underlying: 'NIFTY',
+    instrument: { symbol: `SYM${id}`, exchange: 'NFO', kind: 'option', quoteKey: 'NFO:X' },
+    direction: 'long', status, atMs,
+    levels: { ltp: 100, entry: 100, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: 1, quantity: 75, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it('stamps today with a date and seconds, not a bare minute', () => {
+    // Minute precision hid what the row exists to report: Adaptive Edge scalps
+    // order flow, and the recorded ATM bot opened and closed inside 3 seconds.
+    render(<SignalBoard signals={[dated('a', NOW - 3_600_000, 'running')]}
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+    expect(screen.getByText('21 Aug 09:30:00')).toBeTruthy();
+  });
+
+  it('carries the date when the row is not from today — the original bug', () => {
+    // A running row from an earlier day sits in "Live now", which names no date,
+    // so the cell has to.
+    render(<SignalBoard signals={[dated('a', NOW - DAY, 'running')]}
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+    expect(screen.getByText('20 Aug 10:30:00')).toBeTruthy();
+  });
+
+  it('renders a dash for an unusable timestamp instead of throwing', () => {
+    // Date.parse returns NaN for any format it does not know, and `??` does not
+    // catch NaN. sessionDayKey(NaN) used to throw RangeError, which took the
+    // whole board down rather than spoiling one cell.
+    expect(() => render(
+      <SignalBoard signals={[dated('a', NaN, 'running')]}
+        requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />,
+    )).not.toThrow();
+    // The cell says so with a dash. Other empty columns render one too, so this
+    // only checks one exists — not throwing is the assertion that matters here.
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('takes its date text from the same helper as the day header', () => {
+    render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
+      requested={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
+    // The row carries its own date, and that is now the ONLY place it appears:
+    // the day band that used to repeat it above each group is gone. The text
+    // still comes from `sessionDayDate`, so a row and the day grouping cannot
+    // disagree about what a date looks like.
+    expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
+    expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
+  });
+
+  it('orders day sections latest to oldest', () => {
+    // Asserted on ROW ORDER rather than on section headings. The headings are
+    // gone -- each row states its own date now -- but the ORDER they described is
+    // behaviour and still has to hold, so the assertion moved rather than went.
+    render(
+      <SignalBoard
+        signals={[
+          dated('old', NOW - 3 * DAY, 'ended'),
+          dated('mid', NOW - 1 * DAY, 'ended'),
+          dated('new', NOW, 'ended'),
+        ]}
+        requested={['instrument', 'time']}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    const body = document.body.textContent ?? '';
+    const at = (sym: string) => body.indexOf(sym);
+    expect(at('SYMnew')).toBeGreaterThanOrEqual(0);
+    expect(at('SYMnew'), 'newest first').toBeLessThan(at('SYMmid'));
+    expect(at('SYMmid'), 'then older').toBeLessThan(at('SYMold'));
+  });
+
+  it('sorts rows newest first inside one day', () => {
+    render(
+      <SignalBoard
+        signals={[
+          dated('early', NOW - 7_200_000, 'ended'),
+          dated('late', NOW - 1_800_000, 'ended'),
+        ]}
+        requested={['instrument', 'time']}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    const body = document.body.textContent ?? '';
+    expect(body.indexOf('10:00')).toBeLessThan(body.indexOf('08:30'));
+  });
+});
+
+/**
+ * Hoisting today's live rows.
+ *
+ * The live section normally collects only what date grouping would bury: a live
+ * row from today already sits in the first section, so lifting it out gains
+ * nothing and costs it its date heading.
+ *
+ * SuperTrend's own table reads differently and always has — an "Active now"
+ * section holding everything running, then the dated log of entries whose trend
+ * has ended. On a board of fifty ideas across several days the first question is
+ * "what is live", not "what fired today". Hence the option, and hence it being
+ * an option rather than the rule.
+ */
+describe('groupByDay hoistToday', () => {
+  const IST_ = (5 * 60 + 30) * 60_000;
+  const NOW_ = Date.UTC(2026, 7, 21, 10, 30) - IST_;
+  const DAY = 86_400_000;
+
+  const s = (id: string, atMs: number, status: BoardStatus): BoardSignal => ({
+    id, engine: 'supertrend', underlying: 'NIFTY',
+    instrument: { symbol: id, exchange: 'NFO', kind: 'option', optionType: 'CE', strike: 1, expiry: null, lotSize: 75, quoteKey: null },
+    direction: 'long', status, atMs,
+    levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it('leaves today’s live row in its date section by default', () => {
+    const days = groupByDay([s('a', NOW_, 'running')], { liveFirst: true, nowMs: NOW_ });
+    expect(days.map((d) => d.key)).not.toContain(LIVE_BUCKET);
+  });
+
+  it('lifts it out when asked', () => {
+    const days = groupByDay([s('a', NOW_, 'running')], { liveFirst: true, nowMs: NOW_, hoistToday: true });
+    expect(days[0].key).toBe(LIVE_BUCKET);
+  });
+
+  it('still buries nothing that is not actionable', () => {
+    // An ended row is a record. Hoisting it would put history above the live
+    // section, which is the opposite of the point.
+    const days = groupByDay(
+      [s('a', NOW_, 'ended'), s('b', NOW_, 'running')],
+      { liveFirst: true, nowMs: NOW_, hoistToday: true },
+    );
+    const live = days.find((d) => d.key === LIVE_BUCKET);
+    expect(live!.signals.map((x) => x.id)).toEqual(['b']);
+  });
+
+  it('collects live rows from every day into one section', () => {
+    // The case the bespoke table exists to handle: a trade that entered last
+    // Tuesday and is still running must not sit below days of closed history.
+    const days = groupByDay(
+      [s('old', NOW_ - 4 * DAY, 'running'), s('new', NOW_, 'running')],
+      { liveFirst: true, nowMs: NOW_, hoistToday: true },
+    );
+    expect(days[0].key).toBe(LIVE_BUCKET);
+    expect(days[0].signals.map((x) => x.id).sort()).toEqual(['new', 'old']);
   });
 });

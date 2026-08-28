@@ -40,6 +40,21 @@ export const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
   chgPct: { key: 'chgPct', label: 'Chg. %', width: 60, align: 'right', sortKey: 'chgPct', visibleWhen: 'chgPct' },
   dir: { key: 'dir', label: '', width: 14, align: 'right', visibleWhen: 'dir' },
   ltp: { key: 'ltp', label: 'LTP', width: 70, align: 'right', sortKey: 'ltp', visibleWhen: 'always' },
+  /**
+   * When the signal fired.
+   *
+   * A column, not a line of text on the row above. SuperTrend used to print it
+   * inline in the parent header at 14px weight 800 -- the loudest thing on the
+   * row -- while the shared board has always kept it as an ordinary
+   * right-aligned cell. Same signal, two presentations, and the louder one was
+   * shouting the least actionable number in the row.
+   */
+  // No `sortKey`, deliberately. In SuperTrend these cells sit on the LEGS of a
+  // signal, and every leg of one signal fired at the same moment -- there is
+  // nothing to order, and a heading that offers a sort it cannot perform is
+  // worse than one that does not offer it. The shared board sorts its own
+  // `time` column because there the rows are signals, which do differ.
+  time: { key: 'time', label: 'Time', width: 78, align: 'right', visibleWhen: 'always', tooltip: 'When the signal fired' },
 };
 
 /**
@@ -56,8 +71,19 @@ export const ROW_METRICS = {
   /** Horizontal padding on a leg row. */
   legPadding: '0 16px',
   /** The instrument cell is the only one that flexes. */
-  instrumentBasis: '1 1 150px',
-  instrumentMinWidth: 150,
+  /**
+   * The instrument column is sized by {@link instrumentFlex}, not by a constant
+   * here: a leg needs a different basis from a heading, so one string cannot
+   * serve both. Only its width lives here.
+   *
+   * It never shrinks. It is the only flexible column on the row, so
+   * `flex-shrink: 1` made it absorb ALL the overflow when the board was narrower
+   * than its columns — and an option label ("BANKNIFTY 26 Aug 57000 CE", ~166px
+   * at this size, plus the best-R and best-delta badges) does not fit in the 150
+   * it used to get. The result was the worst possible truncation: the name of the
+   * contract clipped while every column of numbers describing it stayed whole.
+   */
+  instrumentMinWidth: 200,
   /** Type scale, so a cell in one board is the same size as in another. */
   instrumentFontSize: 13,
   cellFontSize: 11,
@@ -66,3 +92,118 @@ export const ROW_METRICS = {
   parentGap: 6,
   parentFontSize: 12,
 } as const;
+
+/**
+ * The shade a leg row sits on.
+ *
+ * A leg is recessed one surface below the idea it belongs to. That shade is what
+ * separates one row from the next and what makes a group of legs read as a single
+ * block, which is why neither table draws a line under a leg as well — the two
+ * together give a heavier grid than either alone.
+ *
+ * It lives here because SuperTrend's bespoke table and the shared `SignalBoard`
+ * both need it, and two files each holding the string `var(--k-surface-2)` is two
+ * files that can disagree.
+ */
+export const LEG_BG = 'var(--k-surface-2)';
+
+/**
+ * The column-heading type scale.
+ *
+ * Headings are deliberately much smaller than the data they label — 8.5px bold
+ * uppercase with open letter-spacing — because a heading competing with its own
+ * column for attention is what makes a dense table hard to scan. This is the
+ * single largest thing that made the two signal tables look unrelated:
+ * SuperTrend's headings were 12px regular sentence-case, so its header read as
+ * another row of content rather than as a label strip.
+ *
+ * `textTransform` is typed as a literal so it satisfies React's CSSProperties
+ * without a cast at each use.
+ */
+export const HEAD_METRICS = {
+  padding: '7px 16px',
+  fontSize: 8.5,
+  fontWeight: 700,
+  letterSpacing: '.06em',
+  textTransform: 'uppercase' as const,
+} as const;
+
+/**
+ * The band that separates one group of rows from the next.
+ *
+ * The shared board groups by trading day; SuperTrend groups by underlying. The
+ * grouping key differs but the band is the same furniture, so it gets the same
+ * treatment: a quiet `surface` strip in the same micro-type as the headings,
+ * slightly wider letter-spacing because it sits alone on its line.
+ *
+ * It stays quiet on purpose. Anything the group needs to shout — an active
+ * marker, a count — carries its own colour on top of this baseline.
+ */
+export const DAY_HEAD_METRICS = {
+  padding: '4px 12px',
+  fontSize: 8.5,
+  fontWeight: 700,
+  letterSpacing: '.07em',
+  textTransform: 'uppercase' as const,
+} as const;
+
+
+/**
+ * How far a leg is indented under the idea it belongs to.
+ *
+ * Load-bearing, not decoration: the indent is the only thing that still says
+ * "this is part of that" once the parent row has scrolled off the top. The
+ * recessed shade groups legs together but does not tie them to a particular
+ * parent.
+ *
+ * A row indented by this much also narrows its instrument cell by the same
+ * amount, so the column's right edge stays under its heading.
+ */
+export const LEG_INDENT = 14;
+
+/**
+ * SuperTrend's column keys, in the shared board's vocabulary.
+ *
+ * The two name the same columns differently — `sl`/`tsl`/`exc` here against
+ * `stop`/`trail`/`exchange` there — because each was written without the other.
+ * Renaming either would break a persisted column order or a persisted hidden-set
+ * on someone's machine, so the two vocabularies are reconciled by one table
+ * instead.
+ *
+ * It is exhaustive on purpose: a key added to `SIGNAL_*_COLUMNS` without an
+ * entry here would silently fail to hide or reorder on the shared renderer.
+ */
+export const SIGNAL_COL_TO_BOARD = {
+  exc: 'exchange', leg: 'leg', entry: 'entry', sl: 'stop', tsl: 'trail',
+  exit: 'exit', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
+  ltp: 'ltp', time: 'time',
+} as const satisfies Record<string, string>;
+
+export type SignalColKey = keyof typeof SIGNAL_COL_TO_BOARD;
+
+/** The reverse, for turning a board column back into the key the store holds. */
+export const BOARD_COL_TO_SIGNAL = Object.fromEntries(
+  Object.entries(SIGNAL_COL_TO_BOARD).map(([k, v]) => [v, k]),
+) as Record<string, SignalColKey>;
+
+/** Which of SuperTrend's two column runs a key belongs to. */
+export function signalColGroup(key: string): 'left' | 'right' {
+  return key in SIGNAL_RIGHT_COLUMNS ? 'right' : 'left';
+}
+
+/**
+ * The instrument cell's flex, for a leg or for anything else.
+ *
+ * A leg indents by {@link LEG_INDENT} and has to give the same amount back, or
+ * its column runs past the heading above it and every cell to the right drifts.
+ * That compensation used to live in `minWidth` — which worked only while the
+ * cell could shrink. Now that it cannot (`flex-shrink: 0`, so the contract name
+ * is never the thing that clips), `minWidth` bounds nothing and the basis is
+ * what has to change.
+ *
+ * Getting this wrong is invisible in a test that renders one row and obvious the
+ * moment a leg sits under its parent, 14px out.
+ */
+export function instrumentFlex(isLeg = false): string {
+  return `1 0 ${ROW_METRICS.instrumentMinWidth - (isLeg ? LEG_INDENT : 0)}px`;
+}

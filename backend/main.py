@@ -1533,6 +1533,19 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
+    # Kite tick stream: restart it if its task dies.
+    #
+    # The stream's own reconnect loop handles a dropped socket. This covers the
+    # case that loop cannot: the task itself finishing. `ticker_manager.ensure()`
+    # repairs that, but only when something calls it, and its only caller is a
+    # subscribe — which the frontend issues when its token set changes. An
+    # operator watching a board of live prices changes nothing, so nothing
+    # triggered the repair and every price sat on the 30-second REST heartbeat
+    # looking alive.
+    from app.services.exchanges.kite import ticker_manager as _kite_ticker_manager
+    ticker_watchdog_task = asyncio.create_task(_kite_ticker_manager.supervise(interval=30))
+    log.info("Kite ticker watchdog started (every 30s)")
+
     # ATM Premium Imbalance: arm inside the pre-open lead so both legs are
     # subscribed before the bell. Arming does not trade -- entry is still gated
     # on verified market hours -- and the loop is a no-op whenever the strategy
@@ -1724,6 +1737,12 @@ async def lifespan(app: FastAPI):
     try:
         await gamma_move_task
     except (Exception, BaseException):
+        pass
+
+    ticker_watchdog_task.cancel()
+    try:
+        await ticker_watchdog_task
+    except asyncio.CancelledError:
         pass
 
     ohlcv_task.cancel()

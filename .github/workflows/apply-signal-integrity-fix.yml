@@ -1,5 +1,9 @@
 name: Apply signal integrity fix
 
+# One-shot patcher for the (now deleted) fix/kite-signal-integrity-audit
+# branch. It must not fail open PRs: GitHub still fires it whenever the
+# leftover .github/signal-integrity/** tree is in the PR diff, and checkout
+# of that missing branch is a hard failure.
 on:
   push:
     branches:
@@ -22,36 +26,59 @@ concurrency:
 
 jobs:
   apply-and-test:
-    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[signal-integrity-applied]')"
     runs-on: ubuntu-latest
     steps:
+      - name: Gate one-shot patcher
+        id: gate
+        run: |
+          set -euo pipefail
+          msg="${{ github.event.head_commit.message || '' }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped on pull_request: branch fix/kite-signal-integrity-audit no longer exists."
+          elif [ "${{ github.ref }}" != "refs/heads/fix/kite-signal-integrity-audit" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: not on fix/kite-signal-integrity-audit."
+          elif printf '%s' "$msg" | grep -q '\[signal-integrity-applied\]'; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: patches already applied."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
         with:
           ref: fix/kite-signal-integrity-audit
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Apply reviewed patches
+        if: steps.gate.outputs.run == 'true'
         run: |
           python .github/signal-integrity/patch_backend.py
           python .github/signal-integrity/patch_frontend.py
           python .github/signal-integrity/patch_tests.py
 
       - name: Install backend dependencies
+        if: steps.gate.outputs.run == 'true'
         run: pip install -r backend/requirements.txt
 
       - name: Run focused backend regressions
+        if: steps.gate.outputs.run == 'true'
         working-directory: backend
         env:
           ENVIRONMENT: test
@@ -60,23 +87,28 @@ jobs:
         run: pytest tests/engines/sterling_kite_engine/test_scanner.py -q --tb=short
 
       - name: Install frontend dependencies
+        if: steps.gate.outputs.run == 'true'
         working-directory: frontend
         run: npm ci --silent
 
       - name: Run marker regressions
+        if: steps.gate.outputs.run == 'true'
         working-directory: frontend
         run: npx vitest run src/components/charts/signalMarkerLogic.test.ts --coverage=false
 
       - name: Type check frontend
+        if: steps.gate.outputs.run == 'true'
         working-directory: frontend
         run: npx tsc --noEmit
 
       - name: Remove one-shot patch machinery
+        if: steps.gate.outputs.run == 'true'
         run: |
           rm -rf .github/signal-integrity
           rm -f .github/workflows/apply-signal-integrity-fix.yml
 
       - name: Commit verified fix
+        if: steps.gate.outputs.run == 'true'
         run: |
           git config user.name 'OpenAI'
           git config user.email 'noreply@openai.com'

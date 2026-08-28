@@ -246,23 +246,63 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
 // ─── Search Bar Component ───────────────────────────────────────────────────────
 
 export function KiteSearchBar({
-  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen, height = 50
+  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen, height = 50,
+  showSettings = true, compact = false
 }: {
   query: string; setQuery: (q: string) => void; watchCount?: number;
   searchSettingsOpen: boolean; setSearchSettingsOpen: (v: boolean) => void;
+  /**
+   * Whether to offer the sliders gear.
+   *
+   * Defaults on, because the watchlist's panel is the watchlist's own. The
+   * SuperTrend board turns it off: only the column list in there governed that
+   * table, and it now has a labelled COLUMNS button instead — leaving the gear
+   * would offer the same five toggles twice, alongside Change type settings that
+   * do nothing to a signal table.
+   */
+  showSettings?: boolean;
   height?: number;
+  /**
+   * Match the shared board's filter bar instead of the watchlist's.
+   *
+   * The watchlist owns a tall 50px search bar with a large borderless field,
+   * which is right for a panel whose whole job is search. Dropped into a signal
+   * table's toolbar it made that row half again as tall as the same row on every
+   * other board, and the field read as a different control: 13px borderless
+   * against the shared board's bordered 10px box.
+   *
+   * This switches the metrics rather than adding a second component, because the
+   * behaviour — query, settings panel, icon — is identical and worth keeping in
+   * one place.
+   */
+  compact?: boolean;
 }) {
   const s = useKiteSettings();
+  // The row that hosts a compact bar supplies its own horizontal inset, so the
+  // bar must not add a second one on top of it.
+  const outerPad = compact ? '0' : '0 16px';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <style>{`
         .kite-radio, .kite-checkbox { display: none; }
       `}</style>
-      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', height }}>
+      <div style={{ padding: outerPad, background: t.bg, display: 'flex', alignItems: 'center', height }}>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-          <span style={{ position: 'absolute', left: 0, color: t.dim }}><Icons.Search /></span>
+          <span style={{
+            position: 'absolute', left: compact ? 7 : 0, color: t.dim,
+            display: 'flex', alignItems: 'center',
+            // Scaled down with the field; the watchlist's icon is sized for a
+            // 50px bar and overhangs a 22px one.
+            transform: compact ? 'scale(.74)' : undefined, transformOrigin: 'left center',
+            pointerEvents: 'none',
+          }}><Icons.Search /></span>
           <input
-            style={{ flex: 1, background: 'transparent', color: t.text, border: 'none', padding: '8px 8px 8px 32px', fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
+            style={compact ? {
+              // The shared board's filter input: a bordered box, not an inline field.
+              flex: 1, minWidth: 0, height: 22, background: t.bg, color: t.text,
+              border: `1px solid ${t.border}`, borderRadius: 4,
+              padding: '0 6px 0 24px', fontFamily: 'inherit', fontSize: 10, outline: 'none',
+            } : { flex: 1, background: 'transparent', color: t.text, border: 'none', padding: '8px 8px 8px 32px', fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search"
@@ -270,14 +310,18 @@ export function KiteSearchBar({
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {watchCount !== undefined && <span style={{ color: t.dim, fontSize: 12 }}>{watchCount} / 50</span>}
-            <div style={{ width: 1, height: 16, background: t.border }} />
-            <div style={{ cursor: 'pointer', color: searchSettingsOpen ? t.blue : t.dim, display: 'flex', alignItems: 'center' }} onClick={() => setSearchSettingsOpen(!searchSettingsOpen)}>
-              <Icons.Sliders />
-            </div>
+            {showSettings && (
+              <>
+                <div style={{ width: 1, height: 16, background: t.border }} />
+                <div style={{ cursor: 'pointer', color: searchSettingsOpen ? t.blue : t.dim, display: 'flex', alignItems: 'center' }} onClick={() => setSearchSettingsOpen(!searchSettingsOpen)}>
+                  <Icons.Sliders />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
-      {searchSettingsOpen && (
+      {showSettings && searchSettingsOpen && (
         <div style={{ position: 'absolute', top: height, left: 0, right: 0, zIndex: 100, padding: '24px 16px', background: t.bg, borderBottom: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, color: t.text }}>
           <div style={{ display: 'flex', marginBottom: 24, alignItems: 'center' }}>
             <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, display: 'flex', alignItems: 'center' }}>CHANGE TYPE <span style={{ marginLeft: 6, cursor: 'pointer' }}><Icons.Info /></span></div>

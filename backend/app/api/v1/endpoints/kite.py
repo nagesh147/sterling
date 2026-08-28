@@ -180,7 +180,36 @@ async def create_session(body: GenerateSessionRequest,
     try:
         data = await client.generate_session(body.request_token)
     except KiteError as exc:
-        raise HTTPException(401, str(exc)) from exc
+        # A `request_token` is SINGLE USE and lives for minutes.
+        #
+        # The overwhelmingly common way to arrive here is not a bad token: it is
+        # a token the /callback page has already exchanged. Kite redirects to the
+        # callback, the callback completes the login and stores the session, and
+        # then the operator copies the `request_token` out of the address bar and
+        # pastes it here — where Kite quite correctly refuses to spend it twice.
+        # Surfacing Kite's raw "Token is invalid or has expired" sent them off
+        # hunting a login problem they did not have, because they were already
+        # logged in.
+        #
+        # So check before blaming the token. Re-read the account: `save_session`
+        # from the callback wrote to storage, and this handler is holding an
+        # object fetched before that.
+        fresh = (kite_accounts.get(user.user_id, body.account_id) if body.account_id
+                 else kite_accounts.get_active(user.user_id))
+        if fresh is not None and fresh.token_is_live:
+            return KiteSessionResult(
+                connected=True,
+                kite_user_id=fresh.kite_user_id or None,
+                user_name=fresh.user_name or None,
+                login_time=None,
+            )
+        raise HTTPException(
+            401,
+            f"{exc} — a request_token can only be used once and expires within "
+            "minutes. If the Kite login page already showed success, the session "
+            "is stored and no token needs pasting; otherwise open Kite Login "
+            "again from Sterling for a fresh one.",
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, str(exc)) from exc
     finally:

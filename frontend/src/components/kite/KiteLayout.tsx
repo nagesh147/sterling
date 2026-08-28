@@ -26,6 +26,7 @@ import {
   type WorkspacePresetId,
   type WorkspaceSlotId,
 } from './workspaceLayout';
+import { paneActionsSlotId } from './PaneHeaderActions';
 
 export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
@@ -214,6 +215,11 @@ function PaneWindow({ pane, slot, locked, focus, compact = false, onMinimize, on
               <ControlIcon kind="restore" />
             </button>
           )}
+          {/* Actions belonging to whatever is inside this pane, filled by that
+              component through PaneHeaderActions. Before minimize on purpose:
+              these are the controls reached for during a session, and the window
+              controls are the ones reached for around it. */}
+          <span id={paneActionsSlotId(pane.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }} />
           {control('minimize', 'Minimize')}
           {!compact && control('half', 'Half screen', 'half')}
           {control('maximize', 'Maximize', 'maximized')}

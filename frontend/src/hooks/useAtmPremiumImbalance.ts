@@ -92,9 +92,16 @@ export interface AtmPremiumImbalanceResponse {
    * they have already clicked it.
    */
   research_only: { entry_price_policy: string[]; exit_policy: string[] };
-  /** What live mode will insist on, published so the UI can say so up front. */
-  live_requires?: { protection_mode: string[]; quote_mode: string[];
-    require_session_origin_tick?: boolean[] };
+  /**
+   * Every reason the current config could not go live, in words, computed by the
+   * engine's own gate.
+   *
+   * This replaces a hand-written `live_requires` dict that had already drifted —
+   * it named protection, quote mode and the session-origin gate while silently
+   * omitting the size and the stop, so a config could look live-ready here and
+   * still be refused on save. Empty means live will validate.
+   */
+  live_blockers?: string[];
 }
 
 /** One leg's live quote, plus whether it may be traded on at all. */
