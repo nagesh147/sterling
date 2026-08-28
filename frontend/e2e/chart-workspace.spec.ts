@@ -53,7 +53,7 @@ test('renders the chart and switches timeframe without a blank canvas', async ({
   });
 
   await page.goto('/e2e/fixtures/chart-harness.html');
-  await expect(page.getByText('AAA')).toBeVisible();
+  await expect(page.getByLabel('Chart values').getByText('AAA')).toBeVisible();
   await expect(page.getByText('80 bars')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('canvas').first()).toBeVisible();
 

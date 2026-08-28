@@ -130,7 +130,10 @@ jobs:
           exit 1
       - name: Install Playwright browser
         working-directory: frontend
-        run: npx playwright install --with-deps ${{ matrix.project }}
+        # setup project always launches Desktop Chrome, even when the matrix
+        # browser is firefox/webkit. Without chromium the setup job dies with
+        # "Executable doesn't exist … chromium_headless_shell".
+        run: npx playwright install --with-deps chromium ${{ matrix.project }}
       - name: Run Playwright E2E
         working-directory: frontend
         env:
