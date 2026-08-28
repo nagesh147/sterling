@@ -78,7 +78,7 @@ const headersOf = (signals: BoardSignal[], hidden: ReadonlySet<ColumnId>) => {
   const { container } = render(
     <SignalBoard
       signals={signals}
-      requested={BOARD_COLUMNS}
+      columns={BOARD_COLUMNS}
       hidden={hidden}
       openId={null}
       onToggle={() => {}}
@@ -155,7 +155,7 @@ describe('expanded-row parity across engines', () => {
     const { container } = render(
       <SignalBoard
         signals={signals}
-        requested={BOARD_COLUMNS}
+        columns={BOARD_COLUMNS}
         hidden={DEFAULTS}
         openId={target.id}
         onToggle={() => {}}

@@ -204,7 +204,7 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
         renderTrade={rowActions.renderTrade}
         renderChart={rowActions.renderChart}
         signals={view.visible}
-        requested={BOARD_COLUMNS}
+        columns={BOARD_COLUMNS}
         hidden={view.hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}

@@ -37,7 +37,9 @@ export type ColumnId =
   // existed; they were the columns a swap onto it would silently have deleted.
   | 'chg' | 'chgPct' | 'dir'
   // Actions, as columns the picker can switch off — see the note in signalRowSpec.
-  | 'trade' | 'chart';
+  | 'trade' | 'chart'
+  // Progress toward the closing RULE, which is not the price it got out at.
+  | 'exitState';
 
 interface ColumnDef {
   id: ColumnId;
@@ -91,6 +93,10 @@ const COLUMNS: readonly ColumnDef[] = [
   { id: 'trail', label: SIGNAL_LEFT_COLUMNS.tsl.label, width: SIGNAL_LEFT_COLUMNS.tsl.width, align: 'right', hint: 'Where the trailing stop has ratcheted to' },
   { id: 'target', label: SIGNAL_LEFT_COLUMNS.target.label, width: 58, align: 'right', hint: 'Where the plan gets out, for an engine that quotes one' },
   { id: 'exit', label: 'Exited', width: 58, align: 'right', hint: 'Where it actually got out, once it has' },
+  // A counter, not a price. Kept apart from `exit` because they answer different
+  // questions and sharing one column made SuperTrend's counter vanish behind a
+  // realised price it does not have.
+  { id: 'exitState', label: SIGNAL_LEFT_COLUMNS.exit.label, width: SIGNAL_LEFT_COLUMNS.exit.width, align: 'right', hint: 'Progress toward the rule that closes the position' },
   { id: 'qty', label: 'Qty', width: 52, align: 'right', hint: 'Units, not lots' },
   { id: 'risk', label: 'At risk', width: 70, align: 'right', hint: 'Rupees lost if the stop is honoured' },
   { id: 'score', label: 'Score', width: 44, align: 'right', hint: 'Engine conviction. Not comparable across engines' },
@@ -131,6 +137,8 @@ function sortKey(signal: BoardSignal, column: ColumnId): string | number | null 
     case 'trail': return signal.levels.trail;
     case 'target': return signal.levels.target;
     case 'exit': return signal.levels.exit;
+    // Sorted as text: "0/3 red" has no numeric order worth inventing.
+    case 'exitState': return signal.exitProgress ?? null;
     case 'qty': return signal.sizing.quantity;
     case 'risk': return signal.sizing.atRiskInr;
     case 'score': return signal.score;
@@ -527,6 +535,10 @@ function cellContent(
         color: stale ? k.red : k.dim,
       };
     }
+    case 'exitState':
+      // Plain ink: this is a state, and colouring it would compete with the
+      // status pill that already carries how the row is doing.
+      return { node: signal.exitProgress || '—', color: k.dim };
     case 'chg':
     case 'chgPct': {
       const move = signal.dayMove;
@@ -1000,7 +1012,17 @@ export function SignalBoard({
   renderTrade, renderChart,
 }: {
   signals: readonly BoardSignal[];
-  requested?: readonly ColumnId[];
+  /**
+   * Which columns this board asks for, in `COLUMNS` order.
+   *
+   * There used to be a `requested?` here as well — the name this function
+   * destructures `columns` INTO. It was declared, never read, and four of the
+   * five boards passed it. They got away with it because they each passed
+   * exactly the default the fallback supplies, so the board looked correct while
+   * the prop did nothing; a per-engine list passed that way would have vanished
+   * silently, and six grouping tests were asking for two columns and rendering
+   * sixteen. Deleted so the compiler answers the question instead.
+   */
   columns?: readonly ColumnId[];
   openId: string | null;
   onToggle: (id: string) => void;

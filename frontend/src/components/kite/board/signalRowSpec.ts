@@ -190,7 +190,10 @@ export const LEG_INDENT = 14;
  */
 export const SIGNAL_COL_TO_BOARD = {
   exc: 'exchange', leg: 'leg', entry: 'entry', sl: 'stop', tsl: 'trail',
-  exit: 'exit', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
+  // SuperTrend's `exit` is the red-counter PROGRESS, not a realised price, so it
+  // maps to `exitState`. Mapping it to `exit` put a counter under a heading that
+  // means "where it got out" and lost the counter entirely.
+  exit: 'exitState', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
   ltp: 'ltp', time: 'time',
 } as const satisfies Record<string, string>;
 

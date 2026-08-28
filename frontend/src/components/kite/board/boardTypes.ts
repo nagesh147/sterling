@@ -189,6 +189,21 @@ export interface BoardSignal {
    */
   dayMove?: BoardDayMove | null;
   /**
+   * How close the engine's own closing RULE is to firing — e.g. "0/3 red".
+   *
+   * Not the same thing as `levels.exit`, which is the price a position actually
+   * got out at. SuperTrend's exit is a counter, not a price: three SuperTrend
+   * lines must turn red before it closes, and the count in between is the single
+   * most useful number on the row. It is how you spot the gap where the premium
+   * is already through its trail while the engine has not closed yet — which is
+   * exactly where an open drawdown builds, and this board's history has an entry
+   * of 971 sitting beside an LTP of 193.
+   *
+   * The two shared one column id for a while, so moving SuperTrend onto this
+   * board silently replaced its counter with a realised price it does not have.
+   */
+  exitProgress?: string | null;
+  /**
    * Short inline badges an engine wants on the row itself.
    *
    * `origin` says where a signal came from and there is exactly one of those.
