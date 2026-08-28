@@ -25,6 +25,10 @@ vi.mock('../../../store/useLiveSignalCount', () => ({
 }));
 vi.mock('../../../hooks/useMacKite', () => ({ useMacKite: () => macState }));
 vi.mock('../mac/MacKiteToggle', () => ({ MacKiteToggle: () => <button type="button">MAC</button> }));
+// The footer now carries broker and per-strategy state, which reaches for every
+// engine's hook. None of that is under test here, and this file is about the
+// workspace, so the strip is stubbed rather than each of its six hooks mocked.
+vi.mock('../KiteFooterStatus', () => ({ KiteFooterStatus: () => <div data-testid="footer-status" /> }));
 vi.mock('../mac/MacStageLayout', () => ({ MacStageLayout: () => <div data-testid="mac-stage">Mac stage</div> }));
 
 const props = {
