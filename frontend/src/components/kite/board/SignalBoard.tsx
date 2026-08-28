@@ -942,6 +942,12 @@ function Row({
           return (
             <span
               key={col.id}
+              // Which column this cell IS, so a test can ask for "the trail cell"
+              // without knowing which renderer drew it. The bespoke table names
+              // the same two cells the same way; a test that queries this passes
+              // on either, which is the only way parity between two renderers can
+              // actually be asserted rather than assumed.
+              data-cell={col.id}
               style={{
                 // The name is the only cell that flexes; every other column is
                 // a fixed width so the decimal points line up down the board.

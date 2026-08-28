@@ -52,3 +52,37 @@ describe('a disabled action', () => {
     expect(screen.getByTitle('Sell')).toBeInTheDocument();
   });
 });
+
+/**
+ * ...and it is still recognisably ITSELF.
+ *
+ * The tests above hold "drawn, inert, and explained". They passed while the
+ * disabled fill was taken from the border token, which renders near-white — so a
+ * kept Buy read as an unknown greyed control rather than as "Buy, not here",
+ * losing the identity it was being kept for. Colour is the part of that claim
+ * they did not cover.
+ */
+describe('a disabled action keeps its own colour', () => {
+  it('fades the blue rather than replacing it', () => {
+    render(<KiteActionButtons onBuy={vi.fn()} buyDisabled variant="long" />);
+    const buy = screen.getByRole('button', { name: 'BUY' });
+    expect(buy.style.background).toContain('--k-blue');
+    expect(buy.style.background).not.toContain('--k-border');
+    // Faded enough to read as unavailable, not so faint it vanishes.
+    expect(Number(buy.style.opacity)).toBeGreaterThan(0.2);
+    expect(Number(buy.style.opacity)).toBeLessThan(0.6);
+  });
+
+  it('does not fade an enabled one', () => {
+    render(<KiteActionButtons onBuy={vi.fn()} variant="long" />);
+    const buy = screen.getByRole('button', { name: 'BUY' });
+    expect(buy.style.opacity === '' || buy.style.opacity === '1').toBe(true);
+  });
+
+  it('keeps Sell orange rather than borrowing Buy\'s blue', () => {
+    render(<KiteActionButtons onSell={vi.fn()} sellDisabled variant="long" />);
+    const sell = screen.getByRole('button', { name: 'SELL' });
+    expect(sell.style.background).toContain('--k-orange');
+    expect(sell.style.background).not.toContain('--k-blue');
+  });
+});
