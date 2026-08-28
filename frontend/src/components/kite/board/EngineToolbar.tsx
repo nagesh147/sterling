@@ -138,15 +138,23 @@ export function ToolbarControl({ label, hint, tone = k.dim, children }: {
   tone?: string;
   children: React.ReactNode;
 }) {
+  // The label used to render HERE, as coloured text outside the control, while
+  // COLUMNS and BEST LEG carry their names inside their own chips. Three
+  // controls labelled one way and three the other, on one row.
+  //
+  // The name now lives inside the chip, so this is a wrapper that carries the
+  // explanation and nothing else. `tone` and `label` stay in the signature
+  // because the tooltip is still built from them, and a control with no
+  // explanation of what it changes is worse than a slightly redundant prop.
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-      <Tip text={`${label} — ${hint}`}>
-        <span tabIndex={0} style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.07em', color: tone, cursor: 'help', outlineOffset: 2 }}>
-          {label}
-        </span>
-      </Tip>
-      {children}
-    </span>
+    <Tip text={`${label} — ${hint}`}>
+      <span
+        tabIndex={0}
+        style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, cursor: 'help', outlineOffset: 2 }}
+      >
+        {children}
+      </span>
+    </Tip>
   );
 }
 

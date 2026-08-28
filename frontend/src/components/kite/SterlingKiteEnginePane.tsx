@@ -1646,12 +1646,15 @@ function SourceBadge({ source }: { source: EngineSignalRow['source'] }) {
 
 function InlineDropdown<T extends string>({
   value, options, onChange, tone, title,
+  label,
 }: {
   value: T;
   options: { value: T; label: string; hint?: string }[];
   onChange: (next: T) => void;
   tone: string;
   title: string;
+  /** The control's own name, rendered INSIDE the chip as COLUMNS does. */
+  label?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -1669,13 +1672,27 @@ function InlineDropdown<T extends string>({
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      {/* One chip family across the whole toolbar.
+          This was a borderless `border-radius: 999` pill sitting beside COLUMNS,
+          BEST LEG and ENDED, which are 22px bordered chips at radius 4 — three
+          controls of one shape and three of another, on one row. It now matches
+          them, and carries its own NAME the way COLUMNS does ("COLUMNS 12/13"),
+          so the label no longer floats outside as separate coloured text. */}
       <button type="button" title={title} aria-haspopup="listbox" aria-expanded={open}
+        className="sb-tool"
         onClick={() => setOpen((v) => !v)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 4, border: 'none', borderRadius: 999,
-          background: tint(tone, 7), color: tone, padding: '2px 6px 2px 8px', fontSize: 9, fontWeight: 700,
-          fontFamily: 'inherit', cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 7px',
+          border: `1px solid ${open ? tint(tone, 45) : k.border}`, borderRadius: 4,
+          background: open ? tint(tone, 10) : 'transparent',
+          color: tone, fontSize: 9, fontWeight: 700, letterSpacing: '.05em',
+          fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
+        {label && (
+          /* The control's own name, inside the chip. Dimmer than the value: the
+             value is what you read, the name is what tells you what it means. */
+          <span style={{ color: k.dim, fontWeight: 700 }}>{label}</span>
+        )}
         {current?.label ?? value}
         <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s ease' }}>
           <path d="M6 9l6 6 6-6" />
@@ -2208,7 +2225,15 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     <>
                 <span title={universeTip(cfg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   <EngineMark />
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px' }}>1H</span>
+                  {/* Same chip family as the rest of the row: 22px, radius 4.
+                      It was radius 3 with its own padding, which is the kind of
+                      one-pixel difference that reads as sloppiness rather than
+                      as a distinction. */}
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 7px',
+                    fontSize: 9, fontWeight: 700, letterSpacing: '.05em', color: k.dim,
+                    border: `1px solid ${k.border}`, borderRadius: 4, whiteSpace: 'nowrap',
+                  }}>1H</span>
                 </span>
 
                 {/* SuperTrend rules. Hidden under the Navigator lens because a
@@ -2221,6 +2246,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                       tone={k.orange}
                     >
                       <InlineDropdown
+                        label="SOURCE"
                         value={cfg.scan_source}
                         options={SCAN_SOURCE_OPTS}
                         tone={k.orange}
@@ -2238,6 +2264,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                       tone={k.blue}
                     >
                       <InlineDropdown
+                        label="EXIT"
                         value={cfg.exit_mode ?? 'one_red'}
                         options={EXIT_MODE_OPTS}
                         tone={k.blue}
@@ -2259,6 +2286,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   tone={k.purple}
                 >
                   <InlineDropdown
+                        label="VIEW"
                     value={signalMode}
                     options={SIGNAL_MODE_OPTS}
                     tone={k.purple}
