@@ -242,7 +242,18 @@ function signalColShown(
   col: { key: string; visibleWhen: SignalColVisibility },
   premiumAvailable: boolean,
   hidden: readonly string[],
+  /**
+   * Whether the row is carrying its order buttons.
+   *
+   * Trade and Chart answer to TWO controls: the column picker, and the older
+   * "order buttons in the row" switch whose description promises they MOVE into
+   * the expanded row rather than disappear. Either one can withhold them, and
+   * both the header and the cells go through this function — which is the only
+   * reason the headings can be trusted to sit over their own columns.
+   */
+  rowActionsOn = true,
 ): boolean {
+  if (!rowActionsOn && (col.key === 'trade' || col.key === 'chart')) return false;
   return signalColCapable(col.visibleWhen, premiumAvailable) && !hidden.includes(col.key);
 }
 
@@ -1035,7 +1046,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      };
                      return s.signalLeftColumnOrder.map((key) => {
                        const col = SIGNAL_LEFT_COLUMNS[key];
-                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
+                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                        return (
                          <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                            {renderLeftCell(col.key)}
@@ -1051,13 +1062,18 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     deleted it -- and the setting's own description promised a
                     relocation. A control that quietly disappears is bad
                     anywhere; on the path that places a real order it is worse. */}
-                {!isExp && s.boardRowActions && (
+                {!isExp && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
-                    <KiteActionButtons
-                      className="st-actions-persistent"
-                      buyDisabled={ended}
-                      disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
-                      onBuy={(e) => {
+                  {/* NOT gated on `boardRowActions` any more. That gate wrapped this
+                      whole block, so switching the row's order buttons off also took
+                      Chg., Chg.%, LTP and Time with it — and the relocated cluster
+                      below, whose whole purpose is to appear when the setting is off,
+                      sat INSIDE the gate and could therefore never render. */}
+                    
+                    
+                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {(() => {
+                  const legBuy = (e: React.MouseEvent) => {
                         e.stopPropagation();
                         const entryForSl = lastPx || leg.premium_spot || 0;
                         const slPxVal = leg.entry_sl ?? leg.premium_sl;
@@ -1079,8 +1095,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           initialTgtPct: tgtPercentage,
                           tag: 'SUPERTREND',
                         });
-                      }}
-                      onSell={(e) => {
+                      };
+                  const legSell = (e: React.MouseEvent) => {
                         e.stopPropagation();
                         openOrderWindow({
                           symbol: leg.option_symbol,
@@ -1090,20 +1106,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           lastPrice: lastPx || 0,
                           tag: 'SUPERTREND',
                         });
-                      }}
-                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
-                      // The Trade and Chart COLUMNS govern these. LAST, because a
-                      // later JSX prop wins over an earlier one — placed above the
-                      // handlers these spreads would simply be overwritten. Uses the
-                      // component's own contract: a button with no handler is not
-                      // rendered, so hiding one column removes exactly its own
-                      // buttons rather than the whole cluster.
-                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
-                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
-                    />
-                    
-                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {(() => {
+                      };
+                  const legChart = (e: React.MouseEvent) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); };
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
@@ -1140,19 +1144,31 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                                   {stamp(row.timestamp_ms, Date.now(), true)}
                                 </span>
                               );
+                            // Buy/Sell and the chart, IN the column grid rather than
+                            // beside it. They used to render in a separate cluster
+                            // before this map, so the headings for Trade and Chart sat
+                            // over the price columns while the buttons sat 126px away —
+                            // and the header reserved 150px for a cluster that measured
+                            // 114px, pushing every right-hand heading off its cells.
+                            case 'trade':
+                              return (
+                                <KiteActionButtons
+                                  className="st-trade-cell"
+                                  buyDisabled={ended}
+                                  disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
+                                  onBuy={legBuy}
+                                  onSell={legSell}
+                                />
+                              );
+                            case 'chart':
+                              return <KiteActionButtons className="st-chart-cell" onChart={legChart} />;
                             default:
                               return null;
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
-                          // Trade and Chart are columns in the picker, but they are
-                          // DRAWN by the action buttons beside this map, not as price
-                          // cells. The wrapper below applies `col.width` whatever the
-                          // cell returns, so letting them through here would add 126px
-                          // of empty width to every row.
-                          if (key === 'trade' || key === 'chart') return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
-                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
+                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                           return (
                             <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                               {renderRightCell(col.key)}
@@ -2426,7 +2442,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  {(() => {
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];
-                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
+                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols, s.boardRowActions)) return null;
                      return (
                        <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                          {col.sortKey
@@ -2441,17 +2457,35 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                    });
                  })()}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0, marginLeft: 'auto' }}>
-                 <div style={{ width: 150 }}></div>
+                 {/* The 150px spacer that stood here reserved room for the action
+                     cluster that used to precede the price cells. It measured 114px,
+                     so the reservation was 36px wrong even before Trade and Chart
+                     joined the column list and the row stopped drawing a cluster at
+                     all. Both sides now iterate `signalRightColumnOrder` and nothing
+                     else, which is the only way the headings can stay over their
+                     cells. */}
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                    {(() => {
                      return s.signalRightColumnOrder.map((key) => {
                        const col = SIGNAL_RIGHT_COLUMNS[key];
-                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
+                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols, s.boardRowActions)) return null;
                        return (
                          <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                            {col.sortKey
                              ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
-                             : <span style={{ display: 'block', width: '100%' }} />}
+                             : (
+                               // An unsortable right column still has a NAME. This
+                               // rendered an empty span, so Time, Trade and Chart
+                               // each reserved their width and displayed nothing —
+                               // which is why the operator could not find the
+                               // Buy/Sell column at all, and why Time has been an
+                               // unlabelled column of timestamps since it shipped.
+                               // `dir` is the one that genuinely has no label: it is
+                               // an arrow, and the column menu names it instead.
+                               <Tip text={col.tooltip}>
+                                 <span style={{ display: 'block', width: '100%', textAlign: col.align }}>{col.label}</span>
+                               </Tip>
+                             )}
                          </DraggableColHeader>
                        );
                      });
