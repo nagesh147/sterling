@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useState } from 'react';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
@@ -18,7 +18,15 @@ import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
-import { k } from '../../styles/kiteUI';
+import { useNavigatorConfig } from '../../hooks/useNavigator';
+import { k, Icons } from '../../styles/kiteUI';
+import { PaneHeaderActions } from './PaneHeaderActions';
+import { ToolbarButton } from './board/EngineToolbar';
+import { ScanProgressRing } from './board/ScanProgressRing';
+import { SignalTableSettingsPanel } from './SterlingKiteEnginePane';
+import { SCANNABLE_ENGINE_LABEL, useScanAllStrategies, type ScannableEngine } from '../../hooks/useScanAllStrategies';
+import { useCancelScan } from '../../hooks/useSterlingKiteEngine';
+import { useCancelNavigatorScan } from '../../hooks/useNavigator';
 
 /**
  * The engine workspace: pick an engine, see its board.
@@ -51,6 +59,25 @@ const NAV_TARGET: Record<string, EngineId> = {
 
 export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBoardDetail }: Props) {
   const [engine, setEngine] = useState<EngineId>('supertrend');
+
+  /**
+   * Rescan and the board settings, for every engine.
+   *
+   * They used to be rendered by SuperTrend's pane, which meant they existed on
+   * one tab out of five — yet rescan already scans all five, and every setting in
+   * that drawer lives in the shared store and governs every board. Two controls
+   * common to the whole dock were reachable from a fifth of it.
+   */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { scanAll, isPending: scanPending } = useScanAllStrategies();
+  const cancelScan = useCancelScan();
+  const cancelNavigatorScan = useCancelNavigatorScan();
+  // Re-render once a second so the countdown ring actually counts down.
+  const [, tickRing] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    const id = setInterval(tickRing, 1000);
+    return () => clearInterval(id);
+  }, []);
   // One clock per render, so every day heading in a paint agrees on "today".
   const nowMs = Date.now();
 
@@ -59,9 +86,86 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   const engineConfig = useEngineConfig();
   const orbConfig = useOrbConfig();
   const orbEnabled = orbConfig.data?.config?.enabled;
+  // Same path the pane reads: the flag lives under record.config, and absent
+  // means off rather than on — an engine nobody has enabled is not running.
+  const navigatorEnabled = useNavigatorConfig().data?.record.config.enabled ?? false;
   const orb = useOrbSignals(orbEnabled !== false);
   const apiSnapshot = useAtmPremiumImbalanceSnapshot();
   const gmSnapshot = useGammaMoveSnapshot();
+
+  /**
+   * The countdown to the next automatic scan, 0..1.
+   *
+   * This is the only percentage in the vicinity that is real. A scan in FLIGHT is
+   * indeterminate — the engine says it is scanning and which instrument it is on,
+   * not how far through a known total — so the ring shows motion for that and a
+   * number only for this.
+   *
+   * Market closed means the loop is paused and `next_scan_ms` is stale, so the
+   * ring would sit convincingly at 100% forever. Zero instead.
+   */
+  const sig = engineSignals.data;
+  const scanning = sig?.scanning ?? false;
+  const countdown = (() => {
+    const gen = sig?.generated_ms ?? 0;
+    const next = sig?.next_scan_ms ?? 0;
+    const interval = next - gen;
+    if (!sig?.auto_scan || interval <= 0 || sig?.market_open === false) return 0;
+    return Math.min(1, Math.max(0, (Date.now() - gen) / interval));
+  })();
+
+  /**
+   * Rescan order: the engine you are looking at first.
+   *
+   * They share one historical-data budget, so they run one at a time — which
+   * makes the order the difference between the board in front of you refreshing
+   * now or in twenty seconds.
+   */
+  const scanOrder = useMemo<ScannableEngine[]>(() => {
+    const all: ScannableEngine[] = ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge'];
+    const first = all.filter((e) => e === engine);
+    return [...first, ...all.filter((e) => e !== engine)];
+  }, [engine]);
+
+  /**
+   * The engines a press will ACTUALLY scan.
+   *
+   * Switched-off engines are skipped. Scanning one would be work the operator has
+   * explicitly declined, and it would make the button's own tooltip a lie — it
+   * names what it will run, including "Navigator is off".
+   *
+   * Derived once and used by both the title and the press, because those two
+   * disagreeing is exactly the bug this replaces: the old button said "Re-scan
+   * both engines" whether it scanned one or two.
+   */
+  const enabledToScan = useMemo<ScannableEngine[]>(() => scanOrder.filter((e) => {
+    if (e === 'supertrend') return engineConfig.data?.engine_enabled !== false;
+    if (e === 'navigator') return navigatorEnabled;
+    if (e === 'orb') return orbEnabled !== false;
+    return true;
+  }), [scanOrder, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled]);
+
+  /**
+   * Name what the press will actually run, in the order it will run it.
+   *
+   * A button that scans five engines one at a time, skipping the ones that are
+   * switched off, must say so — otherwise a press that scanned three looks
+   * identical to a press that scanned five. This moved up from SuperTrend's pane
+   * with the button; the ORDER it names changed from lens-first to
+   * ACTIVE-TAB-first, because the button now belongs to the whole dock and the
+   * board in front of you is the one you want refreshed first.
+   *
+   * ATM Premium Imbalance stays unlisted: it has no scan, it arms one resolved
+   * pair. Naming it would promise something the platform cannot do.
+   */
+  const scanTitle = (() => {
+    if (scanning) return `Scanning ${sig?.scanning_label || '…'}`;
+    const names = enabledToScan.map((e) => SCANNABLE_ENGINE_LABEL[e]);
+    const off = !navigatorEnabled ? ' · Navigator is off' : '';
+    return names.length
+      ? `Re-scan ${names.join(', ')}${off}`
+      : `Every strategy is switched off${off}`;
+  })();
 
   const tabs: EngineTabState[] = useMemo(() => {
     const st = supertrendToBoard(engineSignals.data?.rows ?? []);
@@ -102,7 +206,42 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: k.bg }}>
       <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${k.border}`, background: k.bg }}>
         <EngineTabs tabs={tabs} active={engine} onSelect={setEngine} />
+
+        {/* Portalled into the pane's own title bar. Rendered here rather than by
+            any one engine's board, because both controls are common to all of
+            them. */}
+        <PaneHeaderActions pane="signals">
+          {scanning ? (
+            <ToolbarButton
+              title="Stop scan"
+              // Stops every engine a press could have started. Cancelling only
+              // SuperTrend left Navigator running with the button showing idle.
+              onClick={() => {
+                if (engineConfig.data?.engine_enabled !== false) cancelScan.mutate();
+                if (navigatorEnabled) cancelNavigatorScan.mutate();
+              }}
+              disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+            </ToolbarButton>
+          ) : (
+            <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => { void scanAll(enabledToScan); }}>
+              <ScanProgressRing fraction={countdown} scanning={scanPending} />
+            </ToolbarButton>
+          )}
+          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+            <ToolbarButton title="Board settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+              <Icons.Settings />
+            </ToolbarButton>
+          </span>
+        </PaneHeaderActions>
       </div>
+
+      {settingsOpen && (
+        <div style={{ flexShrink: 0, overflow: 'hidden' }}>
+          <SignalTableSettingsPanel />
+        </div>
+      )}
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {engine === 'supertrend' && (

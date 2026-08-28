@@ -1456,14 +1456,20 @@ function Collapsible({ label, summary, open, onToggle, children }: {
  * "Reset board view" therefore resets appearance only. A button in an
  * appearance panel that silently un-filters your list is a surprise.
  */
-function SignalTableSettingsPanel({
-  viewLayout,
-  onLayoutChange,
-}: {
-  viewLayout: 'grid' | 'list';
-  onLayoutChange: (layout: 'grid' | 'list') => void;
-}) {
+/**
+ * Board display settings, for every engine.
+ *
+ * Exported and prop-free because it opens from the pane's TITLE BAR now, which
+ * is rendered by the engine-tab shell rather than by any one engine's board.
+ * Every setting in here already lived in the shared store — columns, the three
+ * behaviours, the renderer — so nothing about it was SuperTrend-specific except
+ * where it happened to be mounted. The layout choice was the last hold-out and
+ * has moved into the store as well.
+ */
+export function SignalTableSettingsPanel() {
   const settings = useKiteSettings();
+  const viewLayout = settings.signalViewLayout;
+  const onLayoutChange = settings.setSignalViewLayout;
   const columns: Array<{ key: 'showExchange' | 'showLeg' | 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection'; label: string; hint: string }> = [
     { key: 'showExchange', label: 'Exchange', hint: 'NSE, NFO or BFO badge' },
     { key: 'showLeg', label: 'Leg', hint: 'ATM, ITM or OTM label' },
@@ -1503,7 +1509,9 @@ function SignalTableSettingsPanel({
     <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 15 }}>
         <div>
-          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>SuperTrend board settings</div>
+          {/* Not "SuperTrend board settings" any more: this drawer opens from the pane's
+              title bar and every setting in it governs whichever board is showing. */}
+          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Board settings</div>
           <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
             How this board looks — nothing here changes what is scanned or how a trade exits. Best leg and
             Ended are live filters and sit in the toolbar above. Entry, stop, exit and sizing rules live
@@ -1750,30 +1758,15 @@ function InlineDropdown<T extends string>({
 }
 
 // Thin progress bar that ticks independently so the rest of the pane doesn't re-render every second.
-function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
-  const [, tick] = React.useReducer((x) => x + 1, 0);
-  React.useEffect(() => { const id = setInterval(tick, 1000); return () => clearInterval(id); }, []);
-
-  const scanning = signals?.scanning ?? false;
-  const auto = signals?.auto_scan ?? false;
-  const gen = signals?.generated_ms ?? 0;
-  const next = signals?.next_scan_ms ?? 0;
-  const interval = next - gen;
-  const frac = interval > 0 ? Math.min(1, Math.max(0, (Date.now() - gen) / interval)) : 0;
-  // Market closed → the loop is paused and next_scan_ms is stale, so the
-  // countdown bar would falsely sit full. Don't show it then.
-  const counting = auto && interval > 0 && signals?.market_open !== false;
-
-  return (
-    <div style={{ height: 2, background: k.border, position: 'relative', overflow: 'hidden' }}>
-      {scanning
-          ? <div className="st-scan-bar" />
-          : counting
-            ? <div key={gen} style={{ height: '100%', width: `${frac * 100}%`, background: k.orange, transition: 'width 1s linear' }} />
-            : null}
-    </div>
-  );
-}
+/*
+ * `ScanProgressBar` lived here: a 2px band above the search row, showing an
+ * indeterminate stripe while scanning and a countdown fill otherwise.
+ *
+ * It spent a whole row of a dense dock restating what the rescan button can
+ * say in the space it already occupies — see `ScanProgressRing`, which shows
+ * the countdown as a dial with its percentage and reserves motion, not a
+ * number, for a scan in flight.
+ */
 
 export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
@@ -1861,9 +1854,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // exactly the bug this is meant to prevent.
   const paneRootRef = React.useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
-    () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
-  );
+  // From the shared store, not local state. The settings drawer that changes it
+  // is common to every engine and opens from the pane's title bar, so the value
+  // has to live somewhere both can reach.
+  const viewLayout = s.signalViewLayout;
+  const setViewLayout = s.setSignalViewLayout;
 
   React.useEffect(() => {
     const el = stickyHeadRef.current;
@@ -1927,9 +1922,8 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [settingsOpen]);
-  React.useEffect(() => {
-    localStorage.setItem('kite_st_view_layout', viewLayout);
-  }, [viewLayout]);
+  // The store persists it now; the standalone `kite_st_view_layout` key is only
+  // read once, by the v7 migration, so an existing choice survives the move.
 
   // The signal table can still turn the engine back on from its dedicated off state.
   // All other engine configuration now lives under Connect → Engine.
@@ -2304,28 +2298,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   // Rescan and table settings. Portalled into the pane title bar beside
   // minimize; renders here if no title bar exists.
-  const paneActions = (
-              <PaneHeaderActions pane="signals">
-                {scanning ? (
-                  <ToolbarButton
-                    title="Stop scan"
-                    onClick={doCancelScan}
-                    disabled={cancelScan.isPending || cancelNavigatorScan.isPending}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-                  </ToolbarButton>
-                ) : (
-                  <ToolbarButton title={scanTitle} disabled={scanPending} onClick={() => doScan()}>
-                    <RefreshIcon spinning={scanPending} />
-                  </ToolbarButton>
-                )}
-                <span data-signal-table-settings style={{ display: 'inline-flex' }}>
-                  <ToolbarButton title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-                    <Icons.Settings />
-                  </ToolbarButton>
-                </span>
-              </PaneHeaderActions>
-  );
+  // Rescan and the table settings moved to the engine-tab shell.
+  //
+  // They were rendered here, which meant they existed on the SuperTrend tab
+  // and nowhere else — yet rescan already scans all five engines and every
+  // setting in that drawer lives in the shared store. Two controls common to
+  // the whole dock were only reachable from one fifth of it.
+  //
+  // See AdaptiveEdgeRightSidebar, which renders regardless of engine.
 
   return (
     <div ref={paneRootRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
@@ -2345,7 +2325,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       */}
       <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
 
-        <ScanProgressBar signals={signals} />
+        {/* The scan progress bar was here, above the search row. It spent a full
+            band restating something the rescan button already shows by spinning,
+            and the scan label is in that button's tooltip. On a dock this dense
+            a row of chrome has to earn its height. */}
       </div>
       {/* Not gated on `rows.length` any more. This row now carries the engine
           controls and the rescan button, and those are most needed when the table
@@ -2376,7 +2359,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               {engineControls}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              {paneActions}
               {/* The columns this table actually renders, in the order it
                   renders them — not the six abstract visibility groups the old
                   gear exposed. `premium` is filtered out rather than offered:
@@ -2581,14 +2563,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-spin { animation: st-spin .8s linear infinite; transform-origin: 50% 50%; }
         @keyframes st-spin { to { transform: rotate(360deg); } }
         .st-pulse { animation: st-pulse 1.5s ease-in-out infinite; }
-        @keyframes st-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-        .st-scan-bar { position: absolute; top: 0; left: 0; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, ${k.orange}, transparent); animation: st-scan 1.1s ease-in-out infinite; }
-        @keyframes st-scan { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
+        @keyframes st-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } } }
         .st-drawer { transition: grid-template-rows .22s ease; }
         .st-signal-in { animation: st-signal-in .28s ease-out; }
         @keyframes st-signal-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
-          .st-spin, .st-pulse, .st-scan-bar, .st-drawer, .st-signal-in { animation: none !important; transition: none !important; }
+          .st-spin, .st-pulse, .st-drawer, .st-signal-in { animation: none !important; transition: none !important; }
         }
       `}</style>
 
@@ -2596,10 +2576,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       <div data-signal-table-settings className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
         <div style={{ overflow: 'hidden' }}>
           {settingsOpen && (
-            <SignalTableSettingsPanel
-              viewLayout={viewLayout}
-              onLayoutChange={setViewLayout}
-            />
+            <SignalTableSettingsPanel />
           )}
         </div>
       </div>

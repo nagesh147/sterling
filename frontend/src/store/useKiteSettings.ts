@@ -94,6 +94,18 @@ export interface KiteSettingsState {
    */
   boardRenderer: 'shared' | 'classic';
   setBoardRenderer: (r: 'shared' | 'classic') => void;
+  /**
+   * List or cards, for the signal table.
+   *
+   * It lived as local state inside SuperTrend's pane, written straight to
+   * localStorage under `kite_st_view_layout`. That was fine while the settings
+   * drawer lived in the same component — but the drawer is common to every
+   * engine and now opens from the pane's own title bar, so the setting has to be
+   * somewhere both can read. Two copies of a persisted preference is one copy
+   * too many.
+   */
+  signalViewLayout: 'grid' | 'list';
+  setSignalViewLayout: (l: 'grid' | 'list') => void;
   toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
@@ -116,6 +128,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       boardRowScroll: true,
       boardRowActions: true,
       boardRenderer: 'classic',
+      signalViewLayout: 'list',
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -138,6 +151,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
       toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
       setBoardRenderer: (r) => set({ boardRenderer: r }),
+      setSignalViewLayout: (l) => set({ signalViewLayout: l }),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -161,6 +175,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
         boardRowScroll: true,
         boardRowActions: true,
         boardRenderer: 'classic',
+        signalViewLayout: 'list',
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
@@ -174,7 +189,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-      version: 6,
+      version: 7,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -215,6 +230,19 @@ export const useKiteSettings = create<KiteSettingsState>()(
         // update the tests and call the difference gone.
         if (next.boardRenderer !== 'shared' && next.boardRenderer !== 'classic') {
           next = { ...next, boardRenderer: 'classic' };
+        }
+
+        // v7 adopts the layout choice from the standalone key the pane used to
+        // write. Read it rather than resetting to the default: someone who chose
+        // cards should not silently be put back on the list because the setting
+        // moved house.
+        if (next.signalViewLayout !== 'grid' && next.signalViewLayout !== 'list') {
+          let adopted: 'grid' | 'list' = 'list';
+          try {
+            const legacy = localStorage.getItem('kite_st_view_layout');
+            if (legacy === 'grid' || legacy === 'list') adopted = legacy;
+          } catch { /* storage unavailable — the default stands */ }
+          next = { ...next, signalViewLayout: adopted };
         }
         return next;
       },

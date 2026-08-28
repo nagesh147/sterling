@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { AdaptiveEdgeRightSidebar } from '../AdaptiveEdgeRightSidebar';
 import { SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
 
 // Navigator is a peer engine with its own scan endpoint, so the one manual
@@ -64,11 +65,34 @@ vi.mock('../../../hooks/useNavigator', () => ({
 
 vi.mock('../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
 
+// The shell reads every engine to count its tab. None of them matter here.
+vi.mock('../../../hooks/useAdaptiveEdge', () => ({ useAdaptiveEdgeSnapshot: () => ({ data: null }) }));
+vi.mock('../../../hooks/useOrbSignals', () => ({ useOrbSignals: () => ({ signals: [] }) }));
+vi.mock('../../../hooks/useOrbConfig', () => ({ useOrbConfig: () => ({ data: { config: { enabled: true } } }) }));
+vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({ useAtmPremiumImbalanceSnapshot: () => ({ data: null }) }));
+vi.mock('../../../hooks/useGammaMove', () => ({
+  useGammaMoveSnapshot: () => ({ data: null }),
+  useGammaMoveScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
+}));
+// The boards themselves are not under test; stub them so the shell can mount.
+vi.mock('../SterlingKiteEngineWithExpiry', () => ({ SterlingKiteEngineWithExpiry: () => <div /> }));
+
+/**
+ * Renders the engine-tab SHELL, not one engine's pane.
+ *
+ * Re-scan and the board settings used to be rendered by SuperTrend's pane, which
+ * meant they existed on one tab out of five — yet re-scan already scans all five
+ * and the settings drawer writes to the shared store that every board reads. They
+ * moved up to the shell, so this is where they are now tested.
+ *
+ * The extra mocks below are the other four engines' snapshots: the shell reads
+ * all of them to count each tab's live rows.
+ */
 function renderPane() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
+      <AdaptiveEdgeRightSidebar onSelectSignal={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -138,6 +162,22 @@ describe('SterlingKiteEnginePane — manual re-scan across both engines', () => 
   });
 });
 
+/**
+ * The engine's own controls, which did NOT move.
+ *
+ * SOURCE, EXIT, VIEW and the timeframe belong to SuperTrend and change what IT
+ * scans, so they stay on its own toolbar. Only re-scan and the board settings
+ * went up to the shell, because those two are common to every engine.
+ */
+function renderEnginePane() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
+    </QueryClientProvider>,
+  );
+}
+
 describe('the engine controls on the search row', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -152,7 +192,7 @@ describe('the engine controls on the search row', () => {
     // These had a toolbar row of their own above the table. They now sit on the
     // search row, between the search box and COLUMNS, and that row was already
     // there — so the table gained a row of vertical space.
-    renderPane();
+    renderEnginePane();
     expect(screen.getByText('1H')).toBeInTheDocument();
     expect(screen.getByText('SOURCE')).toBeInTheDocument();
     expect(screen.getByText('EXIT')).toBeInTheDocument();
@@ -160,10 +200,10 @@ describe('the engine controls on the search row', () => {
   });
 
   it('keeps re-scan reachable with no rows at all', () => {
-    // The row it moved onto was gated on `rows.length > 0`, which would have
-    // hidden re-scan exactly when the one press that could fill the table is
-    // what you want. This harness always renders zero rows, so every test in
-    // this file guards it — this one says so out loud.
+    // Re-scan is in the pane's TITLE BAR now, rendered by the shell, so it can no
+    // longer be gated on a row count at all — which is the strongest version of
+    // the property this test was written for: the one press that could fill an
+    // empty table used to disappear exactly when the table was empty.
     renderPane();
     expect(screen.getByRole('button', { name: /Re-scan/ })).toBeInTheDocument();
   });
