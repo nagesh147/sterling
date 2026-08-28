@@ -594,6 +594,7 @@ async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
                       if expires_at and health.connected else None),
         validated=health.validated,
         auto_renewed=health.auto_renewed,
+        transient=health.transient,
     )
 
 
