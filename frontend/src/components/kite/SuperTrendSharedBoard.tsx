@@ -26,7 +26,7 @@ import type { EngineSignalRow } from '../../types/kiteEngine';
  * by moving and nobody had to decide for them which ones to drop.
  */
 export function SuperTrendSharedBoard({
-  rows, quotes, originalEntryMs, spotOf, onSelectSignal, onOpenChart, nowMs,
+  rows, quotes, originalEntryMs, spotOf, onSelectSignal, onOpenChart, nowMs, signalMode,
 }: {
   rows: readonly EngineSignalRow[];
   quotes?: Record<string, any>;
@@ -37,6 +37,8 @@ export function SuperTrendSharedBoard({
   /** Signature narrowed to the host's, so a mismatch surfaces here not there. */
   onOpenChart?: (symbol: string, tab: 'chart') => void;
   nowMs: number;
+  /** The lens, so the adapter can suppress a Navigator badge under 'supertrend'. */
+  signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((st) => st.openOrderWindow);
@@ -51,8 +53,9 @@ export function SuperTrendSharedBoard({
       spotOf,
       // The operator's close-vs-open choice, which this board only reports.
       chgBasis: s.chgType,
+      signalMode,
     }),
-    [rows, quotes, originalEntryMs, spotOf, s.chgType],
+    [rows, quotes, originalEntryMs, spotOf, s.chgType, signalMode],
   );
 
   /**

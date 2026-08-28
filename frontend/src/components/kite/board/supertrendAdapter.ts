@@ -83,8 +83,12 @@ function marksOf(row: EngineSignalRow, opts: SuperTrendAdapterOptions): BoardOri
     });
   }
 
+  // Suppressed under the SuperTrend-only lens, which is defined as this board
+  // with no Navigator in it. The row can still HOLD a navigator verdict — the
+  // row filter removes rows Navigator originated, not Navigator's opinion of a
+  // SuperTrend setup — so the badge has to be gated separately.
   const nav = row.navigator;
-  if (nav?.status) {
+  if (nav?.status && opts.signalMode !== 'supertrend') {
     marks.push({
       label: `Nav ${nav.status.replace('_', ' ')}`,
       tone: nav.status === 'CONFIRMED' || nav.status === 'HIGH_CONVICTION' ? 'green' : 'dim',
@@ -393,6 +397,16 @@ export interface SuperTrendAdapterOptions {
    * The operator's choice; the board only reports what it is told.
    */
   chgBasis?: 'close' | 'open';
+  /**
+   * Which lens the board is showing.
+   *
+   * Needed only to suppress the Navigator badge under `'supertrend'`. That lens
+   * means "what this board looks like with no Navigator at all", so a Navigator
+   * verdict has no business on the row — and filtering the ROWS is not enough,
+   * because a SuperTrend setup can carry Navigator's opinion of it without
+   * having come from Navigator.
+   */
+  signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
 }
 
 /**

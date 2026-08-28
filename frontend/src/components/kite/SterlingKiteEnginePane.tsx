@@ -2685,6 +2685,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             onSelectSignal={onSelectSignal}
             onOpenChart={onOpenChart ? (symbol, tab) => onOpenChart(symbol, tab, cfg?.trail_target) : undefined}
             nowMs={Date.now()}
+            signalMode={signalMode}
           />
         ) : (
           groupedRows.map(group => {

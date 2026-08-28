@@ -98,6 +98,33 @@ describe('supertrend marks', () => {
     expect(nav?.tone, 'agreement reads as agreement').toBe('green');
   });
 
+  it('hides the Navigator badge under the SuperTrend-only lens', () => {
+    // That lens is DEFINED as this board with no Navigator in it.
+    //
+    // Filtering the rows is not enough, and that is the trap: the row filter
+    // removes signals Navigator ORIGINATED, but a SuperTrend setup can carry
+    // Navigator's opinion of it and still be a SuperTrend setup. So the badge
+    // needs its own gate — which is exactly what the bespoke table does
+    // (`row.navigator && signalMode !== 'supertrend'`) and what the first
+    // version of `marksOf` forgot, putting "Nav WATCH" on rows in a lens that
+    // promises no Navigator at all.
+    const r = row({ navigator: { status: 'WATCH', reason_codes: [] } });
+    expect(labels(r, { signalMode: 'supertrend' }).filter((l) => l.startsWith('Nav'))).toEqual([]);
+    // Still shown in every other lens.
+    for (const mode of ['combined', 'navigator', 'common'] as const) {
+      expect(labels(r, { signalMode: mode }), mode).toContain('Nav WATCH');
+    }
+    // And with no lens given at all, since absent is not 'supertrend'.
+    expect(labels(r)).toContain('Nav WATCH');
+  });
+
+  it('keeps this engine’s OWN marks under the SuperTrend-only lens', () => {
+    // The exit rule and the re-entry are SuperTrend's own findings, not
+    // Navigator's, so the lens has nothing to say about them.
+    const r = row({ exit_reason: 'trail breach at 120' });
+    expect(labels(r, { signalMode: 'supertrend' })).toContain('TSL exit');
+  });
+
   it('does not colour a weak Navigator verdict as agreement', () => {
     const marks = supertrendToBoard([row({ navigator: { status: 'WATCHING', reason_codes: [] } })])[0].marks ?? [];
     expect(marks.find((m) => m.label.startsWith('Nav'))?.tone).toBe('dim');
