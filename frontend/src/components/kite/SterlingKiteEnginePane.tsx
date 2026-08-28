@@ -23,7 +23,7 @@ import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { stopDistance, selectBestLegs, type LegCandidate } from './impactMath';
 import { notifyOrder } from '../../store/useKiteNotifications';
-import { useKiteSettings } from '../../store/useKiteSettings';
+import { type BoardCapabilityKey, useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
@@ -137,10 +137,18 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
  *  this looked wired up correctly yet didn't respond to a real drag. Pointer
  *  events are dispatched directly for every mouse/touch/pen down-move-up, so
  *  there's no browser-level gesture heuristic in the way. */
-function DraggableColHeader({ colKey, group, width, reorder, children }: {
+function DraggableColHeader({ colKey, group, width, reorder, children, enabled = true }: {
   colKey: string; group: 'left' | 'right'; width: number;
   reorder: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
   children: React.ReactNode;
+  /**
+   * Off leaves the heading a plain sort control.
+   *
+   * The wrapper still renders with the same width and data attributes, so the
+   * header lays out identically -- only the pointer handling and the grab cursor
+   * go. Returning a different element shape here would shift the columns.
+   */
+  enabled?: boolean;
 }) {
   const draggingRef = React.useRef(false);
   const startRef = React.useRef<{ x: number; y: number } | null>(null);
@@ -197,9 +205,9 @@ function DraggableColHeader({ colKey, group, width, reorder, children }: {
     <div
       data-col-key={colKey}
       data-col-group={group}
-      onPointerDown={onPointerDown}
-      style={{ width, flexShrink: 0, cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
-      title="Drag to reorder column"
+      onPointerDown={enabled ? onPointerDown : undefined}
+      style={{ width, flexShrink: 0, cursor: enabled ? 'grab' : undefined, userSelect: 'none', touchAction: enabled ? 'none' : undefined }}
+      title={enabled ? 'Drag to reorder column' : undefined}
     >
       {children}
     </div>
@@ -977,7 +985,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           return (
             <div key={leg.option_symbol}>
               <div 
-                className="st-leg-row"
+                className={s.boardRowScroll ? 'st-leg-row st-row-scroll' : 'st-leg-row'}
                 // Reachable and operable without a mouse, matching the shared
                 // board's rows. This was a click-only div: not in the tab order,
                 // no key handler, and nothing announced -- so the row could not
@@ -987,7 +995,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 tabIndex={0}
                 aria-expanded={isExp}
                 aria-label={`${leg.option_symbol}${ended ? ', ended' : ''}`}
-                onScroll={syncHscroll}
+                onScroll={s.boardRowScroll ? syncHscroll : undefined}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1117,7 +1125,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      });
                    })()}
 
-                {!isExp && (
+                {/* The trade handlers, named so the expanded row can offer the
+                    same actions when they are switched off in the row itself.
+                    They were inline closures here only, which meant "order
+                    buttons in the row: off" did not MOVE the Buy button, it
+                    deleted it -- and the setting's own description promised a
+                    relocation. A control that quietly disappears is bad
+                    anywhere; on the path that places a real order it is worse. */}
+                {!isExp && s.boardRowActions && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
@@ -1214,6 +1229,47 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
+                      // Present only when the row is not carrying them, so the
+                      // two configurations offer the same actions in different
+                      // places rather than one offering fewer.
+                      onBuy={s.boardRowActions || ended ? undefined : (e) => {
+                        e.stopPropagation();
+                        const entryForSl = lastPx || leg.premium_spot || 0;
+                        const slPxVal = leg.entry_sl ?? leg.premium_sl;
+                        const slPercentage =
+                          entryForSl > 0 && slPxVal && slPxVal > 0
+                            ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        const tgtPercentage =
+                          entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                            ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'BUY',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          initialSlPct: slPercentage,
+                          initialTgtPct: tgtPercentage,
+                          tag: 'SUPERTREND',
+                        });
+                      }}
+                      onSell={s.boardRowActions ? undefined : (e) => {
+                        e.stopPropagation();
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'SELL',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          tag: 'SUPERTREND',
+                        });
+                      }}
+                      onChart={s.boardRowActions ? undefined : (e) => {
+                        e.stopPropagation();
+                        onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg));
+                      }}
                       onMore={(e) => {
                         e.stopPropagation();
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1503,6 +1559,21 @@ function SignalTableSettingsPanel({
     { key: 'showPriceDirection', label: 'Direction', hint: 'Up/down direction indicator' },
   ];
 
+  const behaviours: Array<{ key: BoardCapabilityKey; label: string; hint: string }> = [
+    {
+      key: 'boardDragColumns', label: 'Drag columns to reorder',
+      hint: 'Drag a column heading sideways to move it. Off leaves the heading a plain sort control.',
+    },
+    {
+      key: 'boardRowScroll', label: 'Scroll rows sideways',
+      hint: 'Each row scrolls horizontally on its own when the board is narrower than its columns. Off keeps every row aligned and relies on hiding columns instead.',
+    },
+    {
+      key: 'boardRowActions', label: 'Order buttons in the row',
+      hint: 'Buy, chart and pin sit in the row itself. Off moves them into the row you expand — fewer controls under the pointer, one more click to trade.',
+    },
+  ];
+
   const reset = () => {
     settings.resetSignalTableSettings();
     onLayoutChange('list');
@@ -1573,10 +1644,38 @@ function SignalTableSettingsPanel({
             ))}
           </div>
         </div>
+
+        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
+          <div style={{ color: 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Behaviour</div>
+          {/* The three things this table has that the shared board does not.
+              Offered as choices rather than kept as one table's habits: that is
+              what lets every engine's board have them, instead of only the one
+              that happens to render through this component. */}
+          <div style={{ color: k.dim, fontSize: 9.5, lineHeight: 1.45, marginBottom: 8 }}>
+            Applies to this board. Turning one off does not change what is scanned.
+          </div>
+          <div style={{ display: 'grid', gap: '2px 8px' }}>
+            {behaviours.map((option) => (
+              <label key={option.key} title={option.hint} style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={settings[option.key]}
+                  onChange={() => settings.toggleBoardCapability(option.key)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: k.orange }}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
-        <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
+        <span style={{ color: k.dim, fontSize: 9.5 }}>
+          {settings.boardDragColumns
+            ? 'In List view, drag column headers to reorder them.'
+            : 'Column dragging is off — headers still sort when clicked.'}
+        </span>
         <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: 'var(--k-ink-4)', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
           Reset board view
         </button>
@@ -2400,7 +2499,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                      const col = SIGNAL_LEFT_COLUMNS[key];
                      if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                      return (
-                       <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn}>
+                       <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                          {col.sortKey
                            ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
                            : (
@@ -2420,7 +2519,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                        const col = SIGNAL_RIGHT_COLUMNS[key];
                        if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
                        return (
-                         <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn}>
+                         <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                            {col.sortKey
                              ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
                              : <span style={{ display: 'block', width: '100%' }} />}
@@ -2480,11 +2579,17 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
              the open row, and a border that appears later would shift every cell
              3px sideways. Holding the space means it never does. */
           border-left: 3px solid transparent;
+        }
+        /* Sideways scrolling is opt-in per the board's Behaviour setting. Off, the
+           row clips instead, and the operator hides columns to fit -- which is
+           what the shared board has always done. */
+        .st-row-scroll {
           overflow-x: auto;
           overflow-y: hidden;
           scrollbar-width: none;
         }
-        .st-leg-row::-webkit-scrollbar { display: none; }
+        .st-row-scroll::-webkit-scrollbar { display: none; }
+        .st-leg-row:not(.st-row-scroll) { overflow: hidden; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
         /* The heading's hover colour comes from the sb-head rule in globals.css

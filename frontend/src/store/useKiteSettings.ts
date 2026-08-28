@@ -50,8 +50,27 @@ export interface KiteSettingsState {
   reorderSignalColumn: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
   toggleSignalCol: (key: string) => void;
   showAllSignalCols: () => void;
+  /**
+   * Board capabilities, as choices rather than as one implementation's habits.
+   *
+   * SuperTrend's table grew three things the shared board never had: draggable
+   * column headers, rows that scroll sideways on their own, and order buttons
+   * sitting in the row. Keeping them meant keeping a second table; dropping them
+   * meant deciding for the operator which ones they could live without.
+   *
+   * They are settings instead. Every one defaults ON, so nothing changes for
+   * anyone who does not go looking, and the shared board can offer the same
+   * three to every engine rather than one engine having them by accident of
+   * which component it happens to render through.
+   */
+  boardDragColumns: boolean;
+  boardRowScroll: boolean;
+  boardRowActions: boolean;
+  toggleBoardCapability: (key: BoardCapabilityKey) => void;
   resetSignalTableSettings: () => void;
 }
+
+export type BoardCapabilityKey = 'boardDragColumns' | 'boardRowScroll' | 'boardRowActions';
 
 export const useKiteSettings = create<KiteSettingsState>()(
   persist(
@@ -63,6 +82,11 @@ export const useKiteSettings = create<KiteSettingsState>()(
       recentBrandIcons: [],
       engineSettingsLayout: 'tabs',
       chgType: 'close',
+      // ON by default: these describe how the board behaves today, so a fresh
+      // install and an existing one look the same.
+      boardDragColumns: true,
+      boardRowScroll: true,
+      boardRowActions: true,
       showPriceChange: true,
       showPriceChangePct: true,
       showPriceDirection: true,
@@ -83,6 +107,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       setEngineSettingsLayout: (l) => set({ engineSettingsLayout: l }),
       setChgType: (t) => set({ chgType: t }),
       toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
+      toggleBoardCapability: (key) => set((state) => ({ [key]: !state[key] })),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
@@ -102,6 +127,9 @@ export const useKiteSettings = create<KiteSettingsState>()(
       })),
       showAllSignalCols: () => set({ hiddenSignalCols: [] }),
       resetSignalTableSettings: () => set({
+        boardDragColumns: true,
+        boardRowScroll: true,
+        boardRowActions: true,
         showPriceChange: true,
         showPriceChangePct: true,
         showPriceDirection: true,
@@ -115,7 +143,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-      version: 4,
+      version: 5,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -135,6 +163,14 @@ export const useKiteSettings = create<KiteSettingsState>()(
         const right = next.signalRightColumnOrder;
         if (Array.isArray(right) && !right.includes('time')) {
           next = { ...next, signalRightColumnOrder: [...right, 'time'] };
+        }
+
+        // v5 adds the three board capabilities. A stored state predating them has
+        // the keys absent, and `undefined` is falsy — so without this every
+        // existing user would open the app to find dragging, row scrolling and
+        // the in-row order buttons all switched off, having chosen nothing.
+        for (const key of ['boardDragColumns', 'boardRowScroll', 'boardRowActions'] as const) {
+          if (typeof next[key] !== 'boolean') next = { ...next, [key]: true };
         }
         return next;
       },

@@ -15,18 +15,28 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const KEY = 'kite-settings';
 
-/** Load the store fresh so `persist` re-reads localStorage and runs `migrate`. */
+/**
+ * Load the store fresh so `persist` re-reads localStorage and runs `migrate`.
+ *
+ * Returns a SNAPSHOT. Actions on it work, but the snapshot does not update — so
+ * a test that calls an action and then reads the same object back sees the old
+ * value. Use `loadHook` when the test needs to observe a change.
+ */
 async function loadStore() {
+  return (await loadHook()).getState();
+}
+
+/** The store itself, for tests that act and then re-read. */
+async function loadHook() {
   vi.resetModules();
-  const mod = await import('../useKiteSettings');
-  return mod.useKiteSettings.getState();
+  return (await import('../useKiteSettings')).useKiteSettings;
 }
 
 function seed(version: number, state: Record<string, unknown>) {
   localStorage.setItem(KEY, JSON.stringify({ version, state }));
 }
 
-describe('kite-settings migration to v4', () => {
+describe('kite-settings migration', () => {
   beforeEach(() => localStorage.clear());
 
   it('adds the Time column to an order stored before it existed', async () => {
@@ -60,5 +70,42 @@ describe('kite-settings migration to v4', () => {
   it('gives a fresh install the column without needing a migration', async () => {
     const s = await loadStore();
     expect(s.signalRightColumnOrder).toContain('time');
+  });
+
+  /**
+   * v5 adds the three board capabilities.
+   *
+   * This is the same trap as the Time column but worse. A stored state that
+   * predates these keys has them absent, and `undefined` is falsy — so without a
+   * migration every existing user would open the app to find column dragging,
+   * sideways row scrolling and the in-row order buttons all switched off, having
+   * chosen nothing. The order buttons are the trade path.
+   */
+  it('turns the board capabilities on for a state saved before they existed', async () => {
+    seed(4, { signalRightColumnOrder: ['ltp', 'time'] });
+    const s = await loadStore();
+    expect(s.boardDragColumns).toBe(true);
+    expect(s.boardRowScroll).toBe(true);
+    expect(s.boardRowActions, 'the order buttons must not vanish').toBe(true);
+  });
+
+  it('respects a capability the operator has deliberately switched off', async () => {
+    seed(5, { boardRowActions: false, boardDragColumns: true, boardRowScroll: true });
+    const s = await loadStore();
+    expect(s.boardRowActions, 'false is a choice, not a missing key').toBe(false);
+    expect(s.boardDragColumns).toBe(true);
+  });
+
+  it('resets all three when the board view is reset', async () => {
+    const store = await loadHook();
+    store.getState().toggleBoardCapability('boardRowActions');
+    store.getState().toggleBoardCapability('boardDragColumns');
+    expect(store.getState().boardRowActions).toBe(false);
+    expect(store.getState().boardDragColumns).toBe(false);
+
+    store.getState().resetSignalTableSettings();
+    expect(store.getState().boardRowActions).toBe(true);
+    expect(store.getState().boardDragColumns).toBe(true);
+    expect(store.getState().boardRowScroll).toBe(true);
   });
 });

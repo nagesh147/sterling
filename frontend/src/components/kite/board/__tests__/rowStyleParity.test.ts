@@ -292,9 +292,12 @@ describe('both tables share hover, focus and active', () => {
 describe('SuperTrend rows and headings work without a mouse', () => {
   /** The leg row's opening tag. */
   const legTag = (() => {
-    const start = superTrend.indexOf('className="st-leg-row"');
-    expect(start).toBeGreaterThan(-1);
-    return superTrend.slice(start - 200, start + 900);
+    // Anchored on the class EXPRESSION, not a literal `className="st-leg-row"`:
+    // the class is now conditional (the sideways-scroll setting adds a second
+    // class), and the old literal anchor silently stopped matching.
+    const start = superTrend.indexOf("'st-leg-row st-row-scroll'");
+    expect(start, 'the leg row is still rendered here').toBeGreaterThan(-1);
+    return superTrend.slice(start - 300, start + 1100);
   })();
 
   it('puts the leg row in the tab order and announces it', () => {
