@@ -242,3 +242,108 @@ async def test_start_revives_a_finished_task_and_keeps_subscriptions():
         assert t._subscribed == {123, 456}, "and the subscription list survives"
     finally:
         await t.stop()
+
+
+# ─── Watchdog: a dead stream must not wait for a page reload ─────────────────
+#
+# `ensure()` revives a dead ticker, but only when something calls it — and its
+# only caller is a subscribe, which the frontend issues when its token set
+# CHANGES. An operator watching a board of live prices changes nothing, so
+# nothing triggered the repair and every price sat on the 30-second REST
+# heartbeat still looking alive. That is the gap the watchdog closes.
+
+@pytest.mark.asyncio
+async def test_watchdog_restarts_a_died_ticker(monkeypatch):
+    from app.services.exchanges.kite import ticker_manager as tm
+
+    dead = _ticker()
+    dead._active = True
+    dead._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert dead.died is True
+
+    restarted: list[str] = []
+
+    async def fake_ensure(uid):
+        restarted.append(uid)
+        return dead
+
+    monkeypatch.setattr(tm, "_tickers", {"u1": dead})
+    monkeypatch.setattr(tm, "ensure", fake_ensure)
+
+    task = asyncio.create_task(tm.supervise(interval=0.01))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert "u1" in restarted, "the watchdog must repair a dead stream unprompted"
+
+
+@pytest.mark.asyncio
+async def test_watchdog_leaves_a_deliberately_stopped_ticker_alone(monkeypatch):
+    # `stop()` clears `_active`, so a stopped ticker is not `died`. Without that
+    # distinction the watchdog would fight an operator who shut the feed off.
+    from app.services.exchanges.kite import ticker_manager as tm
+
+    stopped = _ticker()
+    stopped._active = False
+    stopped._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+    assert stopped.died is False
+
+    touched: list[str] = []
+
+    async def fake_ensure(uid):
+        touched.append(uid)
+        return stopped
+
+    monkeypatch.setattr(tm, "_tickers", {"u1": stopped})
+    monkeypatch.setattr(tm, "ensure", fake_ensure)
+
+    task = asyncio.create_task(tm.supervise(interval=0.01))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert touched == [], "a stopped feed stays stopped"
+
+
+@pytest.mark.asyncio
+async def test_watchdog_survives_a_failing_iteration(monkeypatch):
+    # A watchdog that dies on one bad iteration is worse than none: the thing it
+    # watched is now unwatched AND silent.
+    from app.services.exchanges.kite import ticker_manager as tm
+
+    dead = _ticker()
+    dead._active = True
+    dead._task = asyncio.create_task(asyncio.sleep(0))
+    await asyncio.sleep(0.01)
+
+    calls: list[int] = []
+
+    async def exploding_ensure(uid):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("transient")
+        return dead
+
+    monkeypatch.setattr(tm, "_tickers", {"u1": dead})
+    monkeypatch.setattr(tm, "ensure", exploding_ensure)
+
+    task = asyncio.create_task(tm.supervise(interval=0.01))
+    await asyncio.sleep(0.08)
+    running = not task.done()
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert running, "the watchdog kept running after a failed iteration"
+    assert len(calls) >= 2, "and tried again"

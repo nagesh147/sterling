@@ -8,6 +8,8 @@ connected Kite account). Decoded ticks are broadcast to the StreamManager channe
 """
 from __future__ import annotations
 
+import asyncio
+
 from typing import Dict, List, Optional, Set, Tuple
 
 from app.core.logging import get_logger
@@ -262,6 +264,40 @@ def status(user_id: str) -> dict:
     if not ticker:
         return {"active": False, "connected": False, "subscribed": [], "tick_count": 0}
     return ticker.status()
+
+
+async def supervise(interval: float = 30.0) -> None:
+    """Restart any ticker whose stream has died.
+
+    :func:`ensure` already revives a dead ticker, but only when something calls
+    it — and its only caller is a subscribe, which the frontend issues when its
+    token set CHANGES. A stream that died mid-session therefore stayed dead until
+    somebody reloaded the page, and that is precisely the case that matters: an
+    operator watching a board of live prices has no reason to touch anything, so
+    nothing triggers the repair. Meanwhile every price falls back to the
+    30-second REST heartbeat and still looks alive.
+
+    Only a ``died`` ticker is touched — started, never stopped, not running. A
+    ticker someone deliberately stopped has ``_active`` cleared and is therefore
+    not ``died``, so this never fights an operator who shut the feed off.
+    """
+    while True:
+        try:
+            for uid, ticker in list(_tickers.items()):
+                if not ticker.died:
+                    continue
+                log.warning(
+                    "Ticker watchdog: %s stream had died (%s) — restarting",
+                    uid, ticker.last_error or "no error recorded",
+                )
+                await ensure(uid)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A watchdog that dies on a bad iteration is worse than no watchdog,
+            # because the thing it was watching is now unwatched AND silent.
+            log.exception("Ticker watchdog iteration failed — continuing")
+        await asyncio.sleep(interval)
 
 
 async def stop_all() -> None:
