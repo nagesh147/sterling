@@ -129,6 +129,16 @@ export function KiteTab() {
       setSavedTerminalMode(cur === 'minimized' || cur === 'partial' || cur === 'full' ? cur : 'normal');
       window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' }));
     }
+    // The instrument view renders in the CENTRE slot. If the operator has that pane
+    // minimized, it mounts into a collapsed dock and the Chart button looks dead —
+    // which is exactly how it was reported. Minimized state persists across reloads,
+    // so this is not a transient condition that fixes itself.
+    window.dispatchEvent(new CustomEvent('kite-restore-slot', { detail: 'center' }));
+    // A detail or setup view outranks the instrument view where `content` is chosen,
+    // so opening a chart while either is up would set state that nothing renders.
+    // Every other caller clears its siblings; this one did not.
+    setDetailView(null);
+    setSetupView(null);
     setInstrumentView({ symbol, tab: defaultTab as InstrumentTab, trailTarget, signalData });
   };
 

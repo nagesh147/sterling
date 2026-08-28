@@ -384,6 +384,32 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     return () => window.removeEventListener('kite-terminal-mode', onTerminalMode);
   }, []);
 
+  /**
+   * Restore whichever pane occupies a slot, so something opened INTO that slot is
+   * actually visible.
+   *
+   * Opening a chart from a board sets `instrumentView`, which renders in the centre
+   * slot. If the operator has that pane minimized — and it stays minimized across
+   * reloads, so this is a sticky state, not a transient one — the chart mounts into
+   * a collapsed dock and the click looks like it did nothing. Measured on the live
+   * app: `minimized: ["watchlist","terminal","dashboard"]` while the Chart button
+   * fired correctly with the right symbol every time.
+   *
+   * By SLOT rather than by pane id, because the panes can be rearranged and the
+   * caller only knows where its content goes, not which pane is parked there.
+   */
+  useEffect(() => {
+    const onRestoreSlot = (event: Event) => {
+      const slot = (event as CustomEvent<WorkspaceSlotId>).detail;
+      setLayout((current) => {
+        const pane = current.slots[slot];
+        return pane ? restorePane(current, pane) : current;
+      });
+    };
+    window.addEventListener('kite-restore-slot', onRestoreSlot);
+    return () => window.removeEventListener('kite-restore-slot', onRestoreSlot);
+  }, []);
+
   const syncTerminalStorage = useCallback((pane: WorkspacePaneId, mode: 'minimized' | 'normal' | 'partial' | 'full') => {
     if (pane !== 'terminal') return;
     try { localStorage.setItem('kite_terminal_mode', mode); } catch { void 0; }
