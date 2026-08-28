@@ -85,15 +85,29 @@ describe('a control carries its own name', () => {
   });
 
   it('no longer prints it outside as coloured text', () => {
-    // ToolbarControl used to render the label itself; it is a tooltip wrapper now.
-    const body = toolbar.slice(toolbar.indexOf('export function ToolbarControl'));
-    const render = body.slice(body.indexOf('return ('), body.indexOf('export function ScopeDivider'));
-    // `{label}` on its own line was the rendered text. The tooltip string
-    // `${label} — ${hint}` contains it as a substring, so the check has to be
-    // for the JSX expression as a child, not for the characters anywhere.
-    expect(render).not.toMatch(/^\s*\{label\}\s*$/m);
-    // The explanation must survive: a control that does not say what it changes
-    // is worse than one with a redundant prop.
-    expect(render).toContain('${label} — ${hint}');
+    // `ToolbarControl` rendered the label outside the control. It is gone: once
+    // the name moved inside the chip it was a bare tooltip wrapper around an
+    // interactive element, and hovering the chip to click it painted the tooltip
+    // over the menu it had just opened.
+    expect(toolbar).not.toContain('export function ToolbarControl');
+    expect(pane).not.toContain('<ToolbarControl');
+  });
+
+  it('keeps the explanation, as the chip’s own title', () => {
+    // A control that does not say what it changes is worse than a verbose title
+    // — and on this row it matters: SOURCE and EXIT close live positions.
+    for (const label of ['SOURCE', 'EXIT', 'VIEW']) {
+      expect(controls, `${label} explains itself`).toContain(`title="${label} — `);
+    }
+  });
+
+  it('marks the two server-side settings apart from the local lens', () => {
+    // Moving the names inside made every chip look alike, and looking alike is
+    // wrong for two controls where one can close a position and the other only
+    // filters rows that are already on screen.
+    expect(controls).toContain('scope="server"');
+    expect(controls).toContain('scope="local"');
+    expect(pane, 'a server chip carries a standing tint')
+      .toContain("scope === 'server' ? tint(tone, 8) : 'transparent'");
   });
 });

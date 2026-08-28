@@ -2,7 +2,7 @@ import React from 'react';
 import { stamp, sessionDayKey, sessionDayLabel, underlyingQuoteKey } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
-import { EngineToolbar, ScopeDivider, ToolbarButton, ToolbarControl } from './board/EngineToolbar';
+import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
 import { ColumnsMenu, FilterToggle } from './board/BoardFilters';
 // The row's geometry and columns now live beside the shared board, so every
 // engine renders against the same table rather than a copy of it.
@@ -1056,7 +1056,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
-                      onBuy={ended ? undefined : (e) => {
+                      buyDisabled={ended}
+                      disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
+                      onBuy={(e) => {
                         e.stopPropagation();
                         const entryForSl = lastPx || leg.premium_spot || 0;
                         const slPxVal = leg.entry_sl ?? leg.premium_sl;
@@ -1152,7 +1154,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       // Present only when the row is not carrying them, so the
                       // two configurations offer the same actions in different
                       // places rather than one offering fewer.
-                      onBuy={s.boardRowActions || ended ? undefined : (e) => {
+                      buyDisabled={ended}
+                      disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
+                      onBuy={s.boardRowActions ? undefined : (e) => {
                         e.stopPropagation();
                         const entryForSl = lastPx || leg.premium_spot || 0;
                         const slPxVal = leg.entry_sl ?? leg.premium_sl;
@@ -1646,7 +1650,7 @@ function SourceBadge({ source }: { source: EngineSignalRow['source'] }) {
 
 function InlineDropdown<T extends string>({
   value, options, onChange, tone, title,
-  label,
+  label, scope = 'local',
 }: {
   value: T;
   options: { value: T; label: string; hint?: string }[];
@@ -1655,6 +1659,22 @@ function InlineDropdown<T extends string>({
   title: string;
   /** The control's own name, rendered INSIDE the chip as COLUMNS does. */
   label?: string;
+  /**
+   * Whether this setting reaches the server or only this browser.
+   *
+   * It matters more here than most places: SOURCE and EXIT are saved server-side
+   * and change how LIVE trades close, for everyone, while VIEW is a lens over
+   * rows that are already there. That difference used to be carried by the
+   * coloured labels floating outside each control — moving the names inside made
+   * every chip look alike, and looking alike is wrong for two controls where one
+   * can close a position and the other cannot.
+   *
+   * A `server` chip therefore keeps a standing tint and a toned border; a `local`
+   * one is plain until opened. The divider still separates the two groups, and
+   * the tooltip still spells it out; this is the version you can see without
+   * hovering anything.
+   */
+  scope?: 'server' | 'local';
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -1683,8 +1703,9 @@ function InlineDropdown<T extends string>({
         onClick={() => setOpen((v) => !v)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 7px',
-          border: `1px solid ${open ? tint(tone, 45) : k.border}`, borderRadius: 4,
-          background: open ? tint(tone, 10) : 'transparent',
+          border: `1px solid ${open || scope === 'server' ? tint(tone, 45) : k.border}`,
+          borderRadius: 4,
+          background: open ? tint(tone, 16) : scope === 'server' ? tint(tone, 8) : 'transparent',
           color: tone, fontSize: 9, fontWeight: 700, letterSpacing: '.05em',
           fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
         }}>
@@ -2240,60 +2261,44 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                     Navigator row has no SuperTrend lines for them to govern. */}
                 {cfg && signalMode !== 'navigator' && (
                   <>
-                    <ToolbarControl
-                      label="SOURCE"
-                      hint="Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
-                      tone={k.orange}
-                    >
                       <InlineDropdown
                         label="SOURCE"
+                        scope="server"
                         value={cfg.scan_source}
                         options={SCAN_SOURCE_OPTS}
                         tone={k.orange}
-                        title="SuperTrend's signal source — change it here or from Connect → SuperTrend."
+                        title="SOURCE — Which chart SuperTrend reads a signal from. Saved on the server. Navigator keeps its own source, under Connect → Value-Flow Navigator."
                         onChange={(next) => patch(
                           { scan_source: next },
                           `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
                           needsRescan('scan_source'),
                         )}
                       />
-                    </ToolbarControl>
-                    <ToolbarControl
-                      label="EXIT"
-                      hint="How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
-                      tone={k.blue}
-                    >
                       <InlineDropdown
                         label="EXIT"
+                        scope="server"
                         value={cfg.exit_mode ?? 'one_red'}
                         options={EXIT_MODE_OPTS}
                         tone={k.blue}
-                        title="Exit confirmation, the counter to the 3-green entry. Applies to every SuperTrend row."
+                        title="EXIT — How many SuperTrend lines must turn red to close a trade. Saved on the server and applied to every live SuperTrend position."
                         onChange={(next) => patch(
                           { exit_mode: next },
                           `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
                           needsRescan('exit_mode'),
                         )}
                       />
-                    </ToolbarControl>
                     <ScopeDivider />
                   </>
                 )}
-
-                <ToolbarControl
-                  label="VIEW"
-                  hint="A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
-                  tone={k.purple}
-                >
                   <InlineDropdown
                         label="VIEW"
+                        scope="local"
                     value={signalMode}
                     options={SIGNAL_MODE_OPTS}
                     tone={k.purple}
-                    title="Signal lens — local only."
+                    title="VIEW — A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
                     onChange={changeSignalMode}
                   />
-                </ToolbarControl>
     </>
   );
 

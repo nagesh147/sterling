@@ -125,38 +125,17 @@ export function ToolbarButton({ title, onClick, active, disabled, children }: {
   );
 }
 
-/**
- * A labelled control.
+/*
+ * `ToolbarControl` lived here. It rendered a control's name as coloured text
+ * OUTSIDE the control, while COLUMNS and BEST LEG carried their names inside
+ * their own chips — two conventions on one row.
  *
- * The label is not decoration: an unlabelled pill reading "Derivatives" next to
- * one reading "1 Red" tells you nothing about which is the signal source and
- * which is the exit rule. Every control on this bar says what it governs.
+ * The name moved inside the chip (see `InlineDropdown`'s `label`), which left
+ * this as a bare tooltip wrapper around an interactive element — and that was
+ * actively worse: hovering the chip to click it painted the tooltip over the
+ * menu it had just opened. The explanation is now the chip's own `title`, which
+ * cannot overlap anything, and this component is gone rather than left dead.
  */
-export function ToolbarControl({ label, hint, tone = k.dim, children }: {
-  label: string;
-  hint: string;
-  tone?: string;
-  children: React.ReactNode;
-}) {
-  // The label used to render HERE, as coloured text outside the control, while
-  // COLUMNS and BEST LEG carry their names inside their own chips. Three
-  // controls labelled one way and three the other, on one row.
-  //
-  // The name now lives inside the chip, so this is a wrapper that carries the
-  // explanation and nothing else. `tone` and `label` stay in the signature
-  // because the tooltip is still built from them, and a control with no
-  // explanation of what it changes is worse than a slightly redundant prop.
-  return (
-    <Tip text={`${label} — ${hint}`}>
-      <span
-        tabIndex={0}
-        style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, cursor: 'help', outlineOffset: 2 }}
-      >
-        {children}
-      </span>
-    </Tip>
-  );
-}
 
 /**
  * Separates server-side settings from local view filters.

@@ -142,7 +142,12 @@ export function SuperTrendSharedBoard({
     return (
       <KiteActionButtons
         className="st-actions-persistent"
-        onBuy={ended ? undefined : () => openOrderWindow({
+        // Drawn and disabled rather than dropped: an ended leg is a record, not
+        // a thing to buy, but removing the control shifts every action after it
+        // and says "no Buy here" instead of "not this row".
+        buyDisabled={ended}
+        disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
+        onBuy={() => openOrderWindow({
           symbol,
           exchange: sig.instrument.exchange,
           initialSide: 'BUY',
