@@ -229,3 +229,51 @@ describe('a signal with no contracts', () => {
     expect(screen.queryByText(NOTE)).toBeNull();
   });
 });
+
+/**
+ * The engine's own inline badges.
+ *
+ * `origin` says where a signal came from and there is exactly one of those.
+ * These are everything else worth seeing WITHOUT opening the row — and they are
+ * data, not a render prop, so the board can draw them while knowing nothing
+ * about what any engine's rules mean.
+ *
+ * The one that earns its place: a trail breach and a red-counter close are not
+ * the same event, and they matter most when they disagree. The premium can be
+ * through its trail while the counter has not flipped enough lines to close, and
+ * that gap is where an open drawdown builds.
+ */
+describe('inline marks', () => {
+  it('draws nothing when an engine supplies none', () => {
+    const { container } = board({ signals: [sig()] });
+    expect(container.textContent).not.toContain('TSL exit');
+  });
+
+  it('draws each one with its label', () => {
+    board({
+      signals: [sig({
+        marks: [
+          { label: 'TSL exit', tone: 'amber', hint: 'Closed by the trailing stop.' },
+          { label: 're-entry', tone: 'dim', hint: 'Same trend re-arming.' },
+          { label: 'Nav CONFIRMED', tone: 'green', hint: 'Navigator agrees.' },
+        ],
+      })],
+    });
+    for (const label of ['TSL exit', 're-entry', 'Nav CONFIRMED']) {
+      expect(screen.getByText(label), label).toBeInTheDocument();
+    }
+  });
+
+  it('keeps two marks with the same label but different tone apart', () => {
+    // The React key is label+tone; a label alone would collide.
+    board({
+      signals: [sig({
+        marks: [
+          { label: 'exit', tone: 'amber', hint: 'a' },
+          { label: 'exit', tone: 'dim', hint: 'b' },
+        ],
+      })],
+    });
+    expect(screen.getAllByText('exit')).toHaveLength(2);
+  });
+});

@@ -16,7 +16,7 @@ import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
-  type BoardDayMove, type BoardSignal, type BoardStatus, type EngineId,
+  type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import { LEG_INDENT, HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, ROW_METRICS, SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS } from './signalRowSpec';
@@ -252,6 +252,33 @@ function Pill({ tone, children, title }: { tone: string; children: React.ReactNo
  * security kind: the parent of an LT signal was reading "LTINDEX · LONG",
  * and LT is a stock.
  */
+/**
+ * The engine's own inline badges.
+ *
+ * Same shape as the origin badge beside them, deliberately: an operator should
+ * not have to learn two badge vocabularies on one row. The board reads a label,
+ * a hint and a tone, and knows nothing about what any of them mean.
+ */
+function Marks({ marks }: { marks?: readonly BoardOrigin[] }) {
+  if (!marks?.length) return null;
+  return (
+    <>
+      {marks.map((m) => (
+        <Tip key={`${m.label}-${m.tone}`} text={m.hint ? `${m.label} — ${m.hint}` : m.label}>
+          <span style={{
+            flexShrink: 0, padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700,
+            letterSpacing: '.04em', whiteSpace: 'nowrap', cursor: 'help',
+            color: ORIGIN_TONE[m.tone], background: tint(ORIGIN_TONE[m.tone], 10),
+            border: `1px solid ${tint(ORIGIN_TONE[m.tone], 30)}`,
+          }}>
+            {m.label}
+          </span>
+        </Tip>
+      ))}
+    </>
+  );
+}
+
 function contractLabel(signal: BoardSignal): string | null {
   if (signal.instrument.optionType) return signal.instrument.optionType;
   const legs = signal.children ?? [];
@@ -360,6 +387,8 @@ function cellContent(
                 </span>
               </Tip>
             )}
+            {/* Whatever else this engine wants read without opening the row. */}
+            <Marks marks={signal.marks} />
             {signal.flags?.map((flag) => (
               <Tip key={flag.label} text={`${flag.label} — ${flag.hint}`}>
                 <span tabIndex={0} style={{
@@ -631,6 +660,8 @@ function GroupHeader({ signal, legCount, expanded, onToggle, onOpenDetail }: {
             </span>
           </Tip>
         )}
+        {/* Whatever else this engine wants read without opening the row. */}
+        <Marks marks={signal.marks} />
         {onOpenDetail ? (
           <button
             type="button"

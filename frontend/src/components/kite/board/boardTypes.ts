@@ -188,6 +188,23 @@ export interface BoardSignal {
    * would read as "flat" instead of "unknown".
    */
   dayMove?: BoardDayMove | null;
+  /**
+   * Short inline badges an engine wants on the row itself.
+   *
+   * `origin` says where a signal came from and there is exactly one of those.
+   * These are everything else worth seeing WITHOUT opening the row: which of two
+   * exit rules actually closed it, that a contract has been re-entered, what a
+   * second system thinks of it.
+   *
+   * They are data, not a render prop, so the board stays ignorant of what any
+   * engine's rules are — it knows how to draw a labelled badge and nothing more.
+   * And they are inline rather than in `sections` because the distinction they
+   * carry is often the reason to look: "the premium is through its trail" and
+   * "the engine has not closed it yet" are different situations, and the gap
+   * between them is where an open drawdown builds. Behind a click, that is a
+   * thing nobody reads.
+   */
+  marks?: readonly BoardOrigin[];
   /** This engine's own answer to "where did this come from". */
   origin?: BoardOrigin;
   /**

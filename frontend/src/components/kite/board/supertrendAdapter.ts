@@ -40,6 +40,60 @@ const price = (v: number | null | undefined): number | null =>
  * contract can produce a spot row AND a premium row with different entries,
  * and without this they read as a duplicate.
  */
+/**
+ * The badges this engine wants read without opening the row.
+ *
+ * Each carries a distinction the row is otherwise silent about:
+ *
+ * - **Which rule closed it.** A trail breach and a red-counter close are not the
+ *   same event, and the difference matters most when they disagree: the premium
+ *   can be through its trail while the counter has not yet flipped enough lines
+ *   to close, and that gap is where an open drawdown builds. This board's own
+ *   history has an entry of 971 sitting beside an LTP of 193.
+ * - **A re-entry.** The same trend re-arming is not a second independent setup,
+ *   and auto-exec's one-position-per-instrument guard will not open another.
+ *   Without the badge two rows on one contract look like a duplicate.
+ * - **Navigator's verdict**, when it has one, because the two systems can
+ *   disagree and the row otherwise shows only SuperTrend's view.
+ */
+function marksOf(row: EngineSignalRow, opts: SuperTrendAdapterOptions): BoardOrigin[] {
+  const marks: BoardOrigin[] = [];
+
+  const reason = row.exit_reason;
+  if (reason) {
+    const trail = reason.startsWith('trail breach');
+    const theta = reason.startsWith('time decay');
+    marks.push({
+      label: trail ? 'TSL exit' : theta ? 'Theta exit' : 'counter exit',
+      tone: trail ? 'amber' : theta ? 'amber' : 'dim',
+      hint: trail
+        ? `Closed by the trailing stop — ${reason}.`
+        : theta
+          ? `Closed by the time-decay limit — ${reason}. Price consolidated without expanding momentum.`
+          : `Closed by the red counter — ${reason}.`,
+    });
+  }
+
+  const firstMs = opts.originalEntryMs?.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`);
+  if (firstMs != null && row.timestamp_ms != null && firstMs < row.timestamp_ms) {
+    marks.push({
+      label: 're-entry',
+      tone: 'dim',
+      hint: `Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running. Not a second independent setup — auto-exec's one-position-per-instrument guard will not open another.`,
+    });
+  }
+
+  const nav = row.navigator;
+  if (nav?.status) {
+    marks.push({
+      label: `Nav ${nav.status.replace('_', ' ')}`,
+      tone: nav.status === 'CONFIRMED' || nav.status === 'HIGH_CONVICTION' ? 'green' : 'dim',
+      hint: `Value-Flow Navigator: ${nav.status}. Reasons: ${nav.reason_codes?.join(', ') || 'none'}.`,
+    });
+  }
+  return marks;
+}
+
 function originOf(row: EngineSignalRow): BoardOrigin | undefined {
   switch (row.source) {
     case 'spot':
@@ -220,6 +274,7 @@ export function supertrendLegToBoard(
     },
     score: row.score ?? null,
     origin: originOf(row),
+    marks: marksOf(row, opts),
     flags: flagsFor(row, leg, opts),
     // Solved from the live quote, not replayed from the scan. Omitted rather
     // than guessed when the implied volatility has no solution — a delta the
@@ -282,6 +337,7 @@ function supertrendSignalToBoard(
     sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
     score: row.score ?? null,
     origin: originOf(row),
+    marks: marksOf(row, opts),
     reason: row.exit_reason ?? row.resolution_reason ?? null,
     sections: [evidenceSection(row), navigatorSection(row)].filter(Boolean) as BoardSection[],
     children: legs,
