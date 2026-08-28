@@ -3,6 +3,7 @@
 ## Canonical strategy sources
 
 - `adaptive-edge/` — Adaptive Edge. **Read this first for every Adaptive Edge change.**
+- `oi-wall-flow/` — OI Wall Flow (chain walls + covering/writing).
 
 ## Rule
 
