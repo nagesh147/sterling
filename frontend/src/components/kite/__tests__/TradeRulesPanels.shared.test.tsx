@@ -30,6 +30,10 @@ vi.mock('../../../hooks/useNavigator', () => ({
 vi.mock('../DirectionalModePanel', () => ({
   DirectionalModePanel: () => <div>Directional mode panel</div>,
 }));
+vi.mock('../../../hooks/useAlgoToggles', () => ({
+  useAlgoToggles: () => [],
+  default: () => [],
+}));
 
 beforeEach(() => {
   patch.mockClear();
