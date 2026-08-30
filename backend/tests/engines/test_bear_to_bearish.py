@@ -55,8 +55,29 @@ def test_evaluate_bear_to_bearish_armed():
         PcrPoint(timestamp_ms=1000, pcr=0.80),
         PcrPoint(timestamp_ms=2000, pcr=0.58),
     ]
-    sig = evaluate_bear_to_bearish("NIFTY", candles, pts, cfg, current_spot=24000.0, now_ms=123456789)
+    sig = evaluate_bear_to_bearish("NIFTY", candles, pts, cfg, current_spot=24350.0, now_ms=123456789)
     assert sig.status == "armed"
     assert sig.direction == "short"
     assert sig.option_type == "PE"
-    assert sig.strike == 24000.0
+    assert sig.strike == 24350.0
+    assert sig.spot_price == 24350.0
+    assert sig.option_premium > 0 and sig.option_premium < 1000.0
+    assert sig.entry_price == sig.option_premium
+    assert sig.stop_loss < sig.entry_price
+    assert sig.target_price > sig.entry_price
+    assert sig.lot_size == 25
+
+def test_atm_strike_steps():
+    cfg = BearToBearishConfig()
+    pts = [PcrPoint(timestamp_ms=1000, pcr=0.55)]
+
+    # BANKNIFTY 100 step
+    bank = evaluate_bear_to_bearish("BANKNIFTY", [], pts, cfg, current_spot=52140.0)
+    assert bank.strike == 52100.0
+    assert bank.lot_size == 15
+
+    # SENSEX 100 step
+    sensex = evaluate_bear_to_bearish("SENSEX", [], pts, cfg, current_spot=80160.0)
+    assert sensex.strike == 80200.0
+    assert sensex.lot_size == 10
+

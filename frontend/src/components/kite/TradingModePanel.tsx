@@ -60,6 +60,8 @@ const RESCANNABLE: Array<{ engine: string; label: string; note: string }> = [
   { engine: 'orb', label: 'ORB + VWAP', note: 'Opening range breakout on the index options' },
   { engine: 'gamma_move', label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
   { engine: 'adaptive_edge', label: 'Adaptive Edge', note: 'Order-flow scalping' },
+  { engine: 'atm_imbalance', label: 'ATM Premium Imbalance', note: 'ATM straddle/strangle premium imbalance scan' },
+  { engine: 'bear_to_bearish', label: 'Bear to Bearish', note: 'PCR short momentum & lower high structure scan' },
 ];
 
 export function TradingModePanel() {
@@ -138,32 +140,35 @@ export function TradingModePanel() {
         />
         <div style={{ padding: '2px 18px 16px', display: 'grid', gap: 2 }}>
           {RESCANNABLE.map(({ engine, label, note }) => {
-            // Absent means included: the map holds only exclusions, so a new
-            // engine is covered from the day it appears rather than silently
-            // missing from every saved map.
-            const on = rescanStrategies[engine] !== false;
+            const isEngineRunning = toggles.find((t) => t.id === engine)?.enabled ?? true;
+            const checked = isEngineRunning && rescanStrategies[engine] !== false;
             return (
               <label
                 key={engine}
-                title={note}
+                title={isEngineRunning ? note : `${label} is turned off above — turn on engine to enable re-scan.`}
                 style={{
                   minHeight: 30, display: 'flex', alignItems: 'center', gap: 8,
-                  color: 'var(--k-text)', fontSize: 11, cursor: 'pointer',
+                  color: isEngineRunning ? 'var(--k-text)' : 'var(--k-dim)',
+                  fontSize: 11, cursor: isEngineRunning ? 'pointer' : 'not-allowed',
+                  opacity: isEngineRunning ? 1 : 0.5,
                 }}
               >
                 <input
                   type="checkbox"
-                  checked={on}
-                  onChange={() => toggleRescanStrategy(engine)}
-                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--k-orange)' }}
+                  checked={checked}
+                  disabled={!isEngineRunning}
+                  onChange={() => isEngineRunning && toggleRescanStrategy(engine)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--k-orange)', cursor: isEngineRunning ? 'pointer' : 'not-allowed' }}
                 />
                 <span style={{ fontWeight: 600 }}>{label}</span>
-                <span style={{ color: 'var(--k-dim)', fontSize: 10 }}>{note}</span>
+                <span style={{ color: 'var(--k-dim)', fontSize: 10 }}>
+                  {isEngineRunning ? note : '(Disabled — strategy engine is turned off)'}
+                </span>
               </label>
             );
           })}
           <div style={{ marginTop: 8, fontSize: 10, lineHeight: 1.5, color: 'var(--k-dim)' }}>
-            A strategy switched off above is skipped whatever is ticked here — the
+            A strategy switched off above is disabled and skipped here — the
             running switch wins, because scanning a stopped engine is work you have
             already declined.
           </div>

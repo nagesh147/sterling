@@ -29,7 +29,7 @@ import { useBearToBearishScan } from './useBearToBearish';
  * nothing to call would be a promise the platform cannot keep.
  */
 export type ScannableEngine =
-  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge' | 'bear_to_bearish';
+  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge' | 'atm_imbalance' | 'bear_to_bearish';
 
 export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   supertrend: 'SuperTrend',
@@ -37,6 +37,7 @@ export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   orb: 'ORB',
   gamma_move: 'Gamma Move',
   adaptive_edge: 'Adaptive Edge',
+  atm_imbalance: 'ATM Premium Imbalance',
   bear_to_bearish: 'Bear to Bearish',
 };
 
@@ -56,12 +57,22 @@ export function useAdaptiveEdgeScan() {
   });
 }
 
+/** `POST /config/atm-premium-imbalance/arm`. Arm & scan ATM imbalance pair. */
+export function useAtmImbalanceScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/api/v1/config/atm-premium-imbalance/arm', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['atm-premium-imbalance-snapshot'] }),
+  });
+}
+
 export function useScanAllStrategies() {
   const qc = useQueryClient();
   const supertrend = useRunScan();
   const navigator = useRunNavigatorScan();
   const gammaMove = useGammaMoveScan();
   const adaptiveEdge = useAdaptiveEdgeScan();
+  const atmImbalance = useAtmImbalanceScan();
   const bearToBearish = useBearToBearishScan();
 
   // ORB's scan is exposed as a polling query that POSTs, not a mutation, so it
@@ -76,6 +87,7 @@ export function useScanAllStrategies() {
     orb,
     gamma_move: () => gammaMove.mutateAsync(),
     adaptive_edge: () => adaptiveEdge.mutateAsync(),
+    atm_imbalance: () => atmImbalance.mutateAsync(),
     bear_to_bearish: () => bearToBearish.mutateAsync(),
   };
 

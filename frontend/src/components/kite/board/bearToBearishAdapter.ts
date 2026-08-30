@@ -40,9 +40,13 @@ function originOf(row: BearToBearishSignalRow): BoardOrigin {
 
 export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSignal {
   const st = STATE_TO_STATUS[row.status] || 'watching';
-  const entry = price(row.entry_price);
+  const entry = price(row.entry_price || row.option_premium);
   const stop = price(row.stop_loss);
   const target = price(row.target_price);
+
+  const spot = price(row.spot_price);
+  const spotSl = price(row.spot_sl || row.lower_high_price);
+  const spotTgt = price(row.spot_target);
 
   const sections: BoardSection[] = [
     {
@@ -51,7 +55,9 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
         { label: 'Open PCR', value: row.pcr_open.toFixed(2) },
         { label: 'Live PCR', value: row.pcr_current.toFixed(2) },
         { label: '5m PCR Chg', value: `${row.pcr_change_5m >= 0 ? '+' : ''}${row.pcr_change_5m.toFixed(2)}` },
-        { label: 'Lower High', value: row.lower_high_price ? `₹${row.lower_high_price.toFixed(2)}` : '—' },
+        { label: 'Index Spot', value: spot ? `₹${spot.toFixed(2)}` : '—' },
+        { label: 'Spot SL (LH)', value: spotSl ? `₹${spotSl.toFixed(2)}` : '—' },
+        { label: 'Spot Target', value: spotTgt ? `₹${spotTgt.toFixed(2)}` : '—' },
       ],
     },
   ];

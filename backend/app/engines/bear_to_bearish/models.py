@@ -39,6 +39,10 @@ class BearToBearishSignal:
     pcr_current: float = 0.58
     pcr_change_5m: float = -0.05
     lower_high_price: float = 0.0
+    spot_price: float = 0.0
+    spot_sl: float = 0.0
+    spot_target: float = 0.0
+    option_premium: float = 0.0
     entry_price: float = 0.0
     stop_loss: float = 0.0
     target_price: float = 0.0
@@ -63,6 +67,10 @@ class BearToBearishSignal:
             "pcr_current": self.pcr_current,
             "pcr_change_5m": self.pcr_change_5m,
             "lower_high_price": self.lower_high_price,
+            "spot_price": self.spot_price,
+            "spot_sl": self.spot_sl,
+            "spot_target": self.spot_target,
+            "option_premium": self.option_premium,
             "entry_price": self.entry_price,
             "stop_loss": self.stop_loss,
             "target_price": self.target_price,

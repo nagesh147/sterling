@@ -120,16 +120,35 @@ def evaluate_bear_to_bearish(
         status = "watching"
         reason = pcr_reason
 
-    # Levels
+    # Levels (Index Spot)
     spot_price = current_spot if current_spot > 0 else 24000.0
-    stop_loss = latest_lh if latest_lh > spot_price else spot_price * 1.006
-    risk_points = max(10.0, stop_loss - spot_price)
-    target_price = spot_price - (risk_points * 2.0)
+    spot_sl = latest_lh if latest_lh > spot_price else spot_price * 1.006
+    spot_risk = max(10.0, spot_sl - spot_price)
+    spot_target = spot_price - (spot_risk * 2.0)
 
-    # Strike selection (ATM Put option)
-    strike = round(spot_price / 50.0) * 50.0
+    # Index specifications (ATM Strike Step & Lot Sizes)
+    index_specs = {
+        "NIFTY": {"step": 50.0, "lot_size": 25},
+        "BANKNIFTY": {"step": 100.0, "lot_size": 15},
+        "FINNIFTY": {"step": 50.0, "lot_size": 25},
+        "SENSEX": {"step": 100.0, "lot_size": 10},
+    }
+    spec = index_specs.get(underlying.upper(), {"step": 50.0, "lot_size": 25})
+    step = spec["step"]
+    lot_size = spec["lot_size"]
+
+    # Exact ATM Strike selection
+    strike = float(round(spot_price / step) * step)
     symbol = f"{underlying}26SEP{int(strike)}PE"
     quote_key = f"NFO:{symbol}"
+
+    # Option Premium Levels (estimating ATM PE option premium & delta-based SL/Target)
+    # ATM Option Premium is approx 0.60% of index spot price
+    option_premium = round(max(20.0, spot_price * 0.0060), 2)
+    # Delta for ATM Put option ~ 0.50
+    delta = 0.50
+    option_sl = round(max(2.0, option_premium - (spot_risk * delta)), 2)
+    option_target = round(option_premium + ((spot_price - spot_target) * delta), 2)
 
     score = 90 if status == "armed" else 65 if status == "watching" else 30
 
@@ -145,14 +164,18 @@ def evaluate_bear_to_bearish(
         pcr_current=pcr_current,
         pcr_change_5m=pcr_change_5m,
         lower_high_price=latest_lh if latest_lh > 0 else spot_price * 1.004,
-        entry_price=spot_price,
-        stop_loss=stop_loss,
-        target_price=target_price,
+        spot_price=spot_price,
+        spot_sl=spot_sl,
+        spot_target=spot_target,
+        option_premium=option_premium,
+        entry_price=option_premium,
+        stop_loss=option_sl,
+        target_price=option_target,
         score=score,
         reason=reason,
         option_type="PE",
         strike=strike,
         expiry="2026-09-24",
-        lot_size=25 if underlying == "NIFTY" else 15,
+        lot_size=lot_size,
         quote_key=quote_key,
     )

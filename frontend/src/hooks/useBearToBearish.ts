@@ -17,6 +17,10 @@ export interface BearToBearishSignalRow {
   pcr_current: float;
   pcr_change_5m: float;
   lower_high_price: number;
+  spot_price?: number;
+  spot_sl?: number;
+  spot_target?: number;
+  option_premium?: number;
   entry_price: number;
   stop_loss: number;
   target_price: number;
