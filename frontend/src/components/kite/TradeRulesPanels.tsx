@@ -11,6 +11,7 @@ import { FIELDS, STOP_MODE_OPTIONS, openSettingsSection } from './config/registr
 import { useConfigPatch } from './config/useConfigPatch';
 import { DirectionalModePanel } from './DirectionalModePanel';
 import { RunningRow } from './TradingModePanel';
+import { ModeToggle } from './ModeToggle';
 
 /**
  * Manual and automatic trading rules, as two separate pages.
@@ -267,20 +268,17 @@ export function AutomaticRulesPanel() {
             <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 3 }}>
               {autoOn
                 ? 'Signals can place orders on the active account. Every rule below is in force.'
-                : 'Rules below are saved. Nothing places until you arm Algo in Trading Mode.'}
+                : 'Master AUTO-execution is OFF. Toggle ON here or in Trading Mode to arm automatic order placement.'}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => openSettingsSection('mode')}
-            style={{
-              minHeight: 34, flexShrink: 0, border: `1px solid ${BORDER}`, borderRadius: 7,
-              background: 'var(--k-bg)', color: 'var(--k-brand)', padding: '0 13px',
-              fontSize: 11, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            {autoOn ? 'Turn off in Trading Mode →' : 'Turn on in Trading Mode →'}
-          </button>
+          <ModeToggle
+            left="OFF" right="ON"
+            value={autoOn ? 'right' : 'left'}
+            onSelect={(side) => patch({ auto_execute: side === 'right' }, 'auto_execute', `Algo Trade ${side === 'right' ? 'ON' : 'OFF'}`)}
+            leftColor="var(--k-blue-kite)" rightColor="var(--k-amber-2)"
+            rightDotWhenActive
+            busy={saving}
+          />
         </div>
 
       <PanelCard>
