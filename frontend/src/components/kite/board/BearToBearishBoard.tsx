@@ -6,16 +6,19 @@ import {
   useUpdateBearToBearishConfig,
 } from '../../../hooks/useBearToBearish';
 import { bearToBearishToBoard } from './bearToBearishAdapter';
-import { BOARD_COLUMNS, SignalBoard } from './SignalBoard';
+import { DEFAULT_SORT, SignalBoard, type ColumnId, type SortState } from './SignalBoard';
+import { SIGNAL_COL_TO_BOARD, type SignalColKey } from './signalRowSpec';
 import { useBoardRowActions } from './useBoardRowActions';
 import { BoardFilters } from './BoardFilters';
 import { BoardTicket } from './BoardTicket';
 import { useBoardView } from './useBoardView';
 import type { BoardSignal } from './boardTypes';
+import { useKiteSettings } from '../../../store/useKiteSettings';
+import { KiteActionButtons } from '../KiteActionButtons';
 import { k } from '../../../styles/kiteUI';
 
 const note: React.CSSProperties = {
-  padding: '10px 12px',
+  padding: '12px 14px',
   margin: 0,
   fontSize: 11,
   color: k.dim,
@@ -31,9 +34,13 @@ export function BearToBearishBoard({
   nowMs: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
+  const s = useKiteSettings();
   const rowActions = useBoardRowActions({ onOpenChart });
   const [pollMs, setPollMs] = React.useState(3000);
   const [openId, setOpenId] = React.useState<string | null>(null);
+  const [sort, setSort] = React.useState<SortState>(DEFAULT_SORT);
+  const [collapsedGroups, setCollapsedGroups] = React.useState<ReadonlySet<string>>(new Set());
+
   const snapshot = useBearToBearishSnapshot(true, pollMs);
   const scan = useBearToBearishScan();
   const updateConfig = useUpdateBearToBearishConfig();
@@ -42,6 +49,31 @@ export function BearToBearishBoard({
   const data = snapshot.data;
   const signals = React.useMemo(() => bearToBearishToBoard(data), [data]);
   const view = useBoardView(signals, { endedByDefault: true, storageKey: 'bear_to_bearish' });
+
+  const columns = React.useMemo<readonly ColumnId[]>(() => {
+    const ordered = [...s.signalLeftColumnOrder, ...s.signalRightColumnOrder]
+      .map((key) => SIGNAL_COL_TO_BOARD[key as SignalColKey])
+      .filter(Boolean) as ColumnId[];
+    return ['instrument', ...ordered];
+  }, [s.signalLeftColumnOrder, s.signalRightColumnOrder]);
+
+  const hidden = React.useMemo(
+    () => new Set(
+      s.hiddenSignalCols
+        .map((key) => SIGNAL_COL_TO_BOARD[key as SignalColKey])
+        .filter(Boolean) as ColumnId[],
+    ),
+    [s.hiddenSignalCols],
+  );
+
+  const toggleGroup = React.useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   if (snapshot.isLoading && !data) return <p style={note}>Loading Bear to Bearish Strategy...</p>;
   if (snapshot.error) {
@@ -52,12 +84,12 @@ export function BearToBearishBoard({
     );
   }
 
-  const armedRows = signals.filter((s) => s.status === 'armed');
+  const armedRows = signals.filter((sig) => sig.status === 'armed');
   const autoExecute = data?.auto_execute ?? false;
 
   return (
     <div>
-      {/* Strategy Toolbar Header */}
+      {/* Strategy Toolbar Header matching Adaptive Edge & SuperTrend */}
       <div
         style={{
           display: 'flex',
@@ -142,44 +174,54 @@ export function BearToBearishBoard({
         <span>Chart Structure: 1m / 3m / 5m Lower Highs</span>
       </div>
 
-      {signals.length > 0 && <BoardFilters view={view} columns={BOARD_COLUMNS} />}
+      {signals.length > 0 && <BoardFilters view={view} columns={columns} />}
 
       {/* Main Signal Board */}
       <SignalBoard
         renderTrade={rowActions.renderTrade}
         renderChart={rowActions.renderChart}
         signals={view.visible}
-        columns={BOARD_COLUMNS}
-        hidden={view.hidden}
+        columns={columns}
+        hidden={hidden}
         openId={openId}
         onToggle={(id) => setOpenId((p) => (p === id ? null : id))}
+        sort={sort}
+        onSortChange={setSort}
+        collapsedGroups={collapsedGroups}
+        onToggleGroup={toggleGroup}
         renderDetail={(sig) => (
-          <div>
+          <div style={{ padding: '8px 0' }}>
             <BoardTicket signal={sig} tag="BEAR_TO_BEARISH" />
             {sig.status === 'armed' && (
-              <button
-                type="button"
-                onClick={() => executeOrder.mutate(sig.id)}
-                disabled={executeOrder.isPending}
-                style={{
-                  margin: '8px 12px',
-                  background: 'transparent',
-                  border: `1px solid ${k.green}`,
-                  color: k.green,
-                  borderRadius: 6,
-                  padding: '4px 12px',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                {executeOrder.isPending ? 'Executing...' : `Execute ${sig.direction.toUpperCase()} ${sig.instrument.symbol}`}
-              </button>
+              <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => executeOrder.mutate(sig.id)}
+                  disabled={executeOrder.isPending}
+                  style={{
+                    background: 'rgba(46,160,67,0.18)',
+                    border: `1px solid ${k.green}`,
+                    color: k.green,
+                    borderRadius: 6,
+                    padding: '5px 14px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {executeOrder.isPending ? 'Executing...' : `⚡ Execute Order: ${sig.direction.toUpperCase()} 1 Lot ${sig.instrument.symbol}`}
+                </button>
+              </div>
             )}
           </div>
         )}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
-        emptyLabel="No active Bear to Bearish setup found. Press Scan now to scan intraday PCR dynamics."
+        emptyLabel={
+          view.counts.total
+            ? 'Every row is filtered out. Clear the search or include ended positions.'
+            : 'No active Bear to Bearish setup found. Press Scan now to scan intraday PCR dynamics.'
+        }
       />
     </div>
   );
