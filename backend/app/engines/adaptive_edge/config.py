@@ -96,6 +96,7 @@ class AdaptiveEdgeConfig:
     #: whatever this is set to. With the account on PAPER, an enabled engine
     #: paper-trades; it cannot reach real money while promotion is RESEARCH_ONLY.
     enabled: bool = True
+    auto_execute: bool = False
 
     # --- universe -----------------------------------------------------------
     #: Same field names, semantics and curated-registry boundary as every other

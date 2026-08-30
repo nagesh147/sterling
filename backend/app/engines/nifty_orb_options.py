@@ -45,6 +45,7 @@ class StrategyConfig:
     #: whether an order reaches the exchange is `account.is_paper`, which this
     #: strategy has never carried a copy of.
     enabled: bool = True
+    auto_execute: bool = False
     underlying: str = "NIFTY"
     scan_indices: tuple[str, ...] = ("NIFTY",)
     scan_stocks: tuple[str, ...] = ()

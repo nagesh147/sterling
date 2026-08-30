@@ -115,7 +115,9 @@ export function useAlgoToggles(): AlgoToggle[] {
       enabled: aeAuto,
       engineEnabled: engineOn.adaptive_edge,
       pending: aeSet.isPending,
-      toggle: ae.data ? () => aeSet.mutate({ auto_execute: !aeAuto }) : null,
+      toggle: ae.data
+        ? () => aeSet.mutate({ auto_execute: !aeAuto, auto_execute_futures: !aeAuto, auto_execute_options: !aeAuto })
+        : null,
       description: aeAuto
         ? 'Algo Trade ON — places orders automatically on order-flow scalping candidates.'
         : 'Off — manual order placement only for Adaptive Edge candidates.',
