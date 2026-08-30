@@ -100,18 +100,18 @@ export function TradingModeControls() {
 
         <div style={S.divider} />
 
-        {/* Manual / Auto — who places orders */}
+        {/* Off / On — who places orders */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
             <div style={S.modeLabel}>WHO PLACES ORDERS</div>
             <div style={S.modeDesc}>
               {auto
-                ? 'Automatic — the engine places ready signals (live-safety gated).'
-                : 'Manual — you place every order yourself from the signal list.'}
+                ? 'ON — automatic order placement is enabled for active strategies.'
+                : 'OFF — manual order placement only; no automatic orders will be placed.'}
             </div>
           </div>
           <ModeToggle
-            left="MANUAL" right="AUTO"
+            left="OFF" right="ON"
             value={auto ? 'right' : 'left'}
             onSelect={onSignals}
             leftColor="var(--k-blue-kite)" rightColor="var(--k-amber-2)"
