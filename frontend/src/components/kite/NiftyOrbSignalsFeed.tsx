@@ -56,11 +56,13 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function NiftyOrbSignalsFeed({ onOpenDetail }: {
+export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
+  /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
+  onOpenChart?: (quoteKey: string) => void;
   onOpenDetail?: (signal: BoardSignal) => void;
 } = {}) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
-  const rowActions = useBoardRowActions();
+  const rowActions = useBoardRowActions({ onOpenChart });
   const config = useOrbConfig();
   const setEnabled = useSetOrbEnabled();
   const enabled = config.data?.config?.enabled;

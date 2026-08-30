@@ -18,7 +18,7 @@
 import type { Stat } from './StatCard';
 
 export type EngineId = 'supertrend' | 'navigator' | 'adaptive_edge' | 'orb'
-  | 'atm_premium_imbalance' | 'gamma_move';
+  | 'atm_premium_imbalance' | 'gamma_move' | 'bear_to_bearish';
 
 export const ENGINE_LABEL: Record<EngineId, string> = {
   supertrend: 'SuperTrend',
@@ -27,6 +27,7 @@ export const ENGINE_LABEL: Record<EngineId, string> = {
   orb: 'ORB + VWAP',
   atm_premium_imbalance: 'ATM Premium Imbalance',
   gamma_move: 'Gamma Move',
+  bear_to_bearish: 'Bear to Bearish',
 };
 
 /** Short form for a badge, where the full name will not fit. */
@@ -37,6 +38,7 @@ export const ENGINE_TAG: Record<EngineId, string> = {
   orb: 'ORB',
   atm_premium_imbalance: 'API',
   gamma_move: 'GM',
+  bear_to_bearish: 'BTB',
 };
 
 /**

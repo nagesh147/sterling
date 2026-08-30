@@ -994,13 +994,21 @@ class KiteEngineScanner:
                     if not pick.token:
                         diag.deriv_no_data += 1
                         return
+                    # The label is progress the UI shows; the log line is for whoever
+                    # happens to be tailing. Both were inside `if log_cb`, so on any
+                    # sweep with nothing attached to the log stream the derivative
+                    # label never advanced — it sat on whatever the last attached
+                    # session left behind. The dock showed one contract for a whole
+                    # scan while rows kept arriving, which reads as a frozen UI.
+                    #
+                    # The two spot paths (`_one`, `_confluence_one`) already set it
+                    # outside the guard; this was the one that did not.
+                    try:
+                        ed = datetime.strptime(pick.expiry[:10], "%Y-%m-%d")
+                        readable = f"{item.name} {ed.strftime('%b').upper()} {int(pick.strike)} {pick.option_type}"
+                    except Exception:
+                        readable = pick.option_symbol
                     if log_cb:
-                        try:
-                            ed = datetime.strptime(pick.expiry[:10], "%Y-%m-%d")
-                            readable = f"{item.name} {ed.strftime('%b').upper()} {int(pick.strike)} {pick.option_type}"
-                        except Exception:
-                            readable = pick.option_symbol
-                        us.scanning_label = readable
                         log_cb(f"Scanning derivative: {readable} ({m})")
                     async with sem:
                         try:
@@ -1010,6 +1018,18 @@ class KiteEngineScanner:
                             log.warning("kite-engine deriv chart fail %s: %s", pick.option_symbol, exc)
                             diag.deriv_no_data += 1
                             return
+                    # Set AFTER the fetch, not before it.
+                    #
+                    # These run concurrently under `sem`, so an assignment before the
+                    # await records whichever coroutine STARTED last — and once the
+                    # universe has finished launching, every worker is blocked on I/O
+                    # and the label sits on that one contract for the rest of the
+                    # sweep. Measured against the live dock: rows climbed 37 -> 49
+                    # while the label held "TCS OCT 2300 PE" for thirty seconds.
+                    #
+                    # Assigning on completion makes it track work that actually
+                    # finished, so it advances whenever anything lands.
+                    us.scanning_label = readable
                     if not oc:
                         # Nothing returned. A short-but-present weekly is still
                         # charted below and is never treated as no-data.

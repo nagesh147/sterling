@@ -29,10 +29,27 @@
 export const COLUMN_PRIORITY: Readonly<Record<string, number>> = {
   instrument: 1000, // never dropped
   ltp: 900,         // never dropped
+  // Buy and Sell outrank the numbers they act on. They were absent from this
+  // table, so `priorityOf` gave them the fallback 10 — BELOW `engine` — which
+  // made them the first two columns dropped on every board narrower than the
+  // full set. They were in `BOARD_COLUMNS`, offered in the picker, ticked on, and
+  // never once drawn in the signals dock: "partially working", because the same
+  // buttons do appear on a wide enough window.
+  trade: 95,
   entry: 90,
   stop: 85,
   time: 80,
   status: 75,
+  // Just above the trailing stop, which is the cheapest thing left worth losing.
+  //
+  // Measured on the real 982px dock rather than reasoned about: at 58 it lost to
+  // `target`, and freeing 78px by hiding Time handed the room to `leg` instead —
+  // so the column existed, was ticked on, and could never appear at any realistic
+  // dock width. The observed cutoff sits between 75 and 70, so this is the lowest
+  // rank that actually shows it. It briefly sat at 94, which worked but claimed
+  // the chart outranks entry and stop; on a narrower dock that would shed the
+  // risk ladder to keep a 34px icon, which is the wrong way round.
+  chart: 76,
   trail: 70,
   leg: 65,
   exit: 60,
