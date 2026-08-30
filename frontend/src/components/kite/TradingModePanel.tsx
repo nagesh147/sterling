@@ -168,7 +168,7 @@ export function TradingModePanel() {
             );
           })}
           <div style={{ marginTop: 8, fontSize: 10, lineHeight: 1.5, color: 'var(--k-dim)' }}>
-            A strategy switched off above is disabled and skipped here — the
+            A strategy switched off above is skipped whatever is ticked here — the
             running switch wins, because scanning a stopped engine is work you have
             already declined.
           </div>

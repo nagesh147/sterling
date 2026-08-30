@@ -30,12 +30,26 @@ export function BearToBearishSettingsPanel() {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(serverCfg);
 
-  const handleSave = () => {
+  const handleApply = () => {
     updateMutation.mutate(draft);
   };
 
-  const handleRevert = () => {
+  const handleDiscard = () => {
     setDraft(serverCfg || null);
+  };
+
+  const handleReset = () => {
+    const defaults = {
+      enabled: true,
+      pcr_threshold: 0.60,
+      pcr_reversal_jump: 0.20,
+      timeframe: '5m',
+      auto_execute: false,
+      max_risk_inr: 5000.0,
+      scan_indices: ALL_INDICES,
+    };
+    setDraft(defaults);
+    updateMutation.mutate(defaults);
   };
 
   const toggleIndex = (idx: string) => {
@@ -46,25 +60,36 @@ export function BearToBearishSettingsPanel() {
     setDraft({ ...draft, scan_indices: next });
   };
 
+  const indicesSummary = (draft.scan_indices || ALL_INDICES).join(', ');
+
   return (
     <>
       <SettingsDraftBar
         dirty={dirty}
         saving={updateMutation.isPending}
-        onSave={handleSave}
-        onRevert={handleRevert}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
       />
 
       <PanelCard>
         <EnginePowerHeader
-          title="Bear to Bearish PCR Momentum Engine"
-          description="Monitors Put-Call Ratio dynamics (PCR < 0.60 ceiling) combined with Lower High candle structure across Indian indices."
-          enabled={!!draft.enabled}
-          pending={updateMutation.isPending}
-          onToggle={(on) => setDraft({ ...draft, enabled: on })}
+          name="Bear to Bearish"
+          tagline="PCR Short Momentum Engine"
+          on={!!draft.enabled}
+          liveOn={serverCfg?.enabled}
+          busy={updateMutation.isPending}
+          onToggle={() => setDraft({ ...draft, enabled: !draft.enabled })}
+          runningNote="Scanning index Put-Call Ratios and lower-high candles."
+          offNote="Engine is stopped. No PCR signals generated."
         />
 
-        <Section title="Target Index Universe" description="Select which indices the engine scans for Bear to Bearish setups.">
+        <Section
+          title="Target Index Universe"
+          description="Select which indices the engine scans for Bear to Bearish setups."
+          summary={indicesSummary}
+          defaultOpen={true}
+        >
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
             {ALL_INDICES.map((idx) => {
               const checked = (draft.scan_indices || ALL_INDICES).includes(idx);
@@ -94,12 +119,18 @@ export function BearToBearishSettingsPanel() {
           </div>
         </Section>
 
-        <Section title="PCR & Candle Parameters" description="Fine-tune PCR ceiling thresholds and structure timeframe.">
+        <Section
+          title="PCR & Candle Parameters"
+          description="Fine-tune PCR ceiling thresholds and structure timeframe."
+          summary={`PCR <= ${draft.pcr_threshold ?? 0.60}, Jump ${draft.pcr_reversal_jump ?? 0.20}, ${draft.timeframe || '5m'}`}
+          defaultOpen={true}
+        >
           <Field
             label="PCR Bearish Threshold"
             hint="PCR ceiling for bearish confirmation (default 0.60). Below this level, puts are heavily sold & call buyers are absent."
           >
             <NumberField
+              label="PCR Bearish Threshold"
               value={draft.pcr_threshold ?? 0.60}
               step={0.05}
               min={0.30}
@@ -113,6 +144,7 @@ export function BearToBearishSettingsPanel() {
             hint="A rapid PCR spike within 5-10m window (default +0.20) invalidates armed short setups."
           >
             <NumberField
+              label="PCR Invalidation Reversal Jump"
               value={draft.pcr_reversal_jump ?? 0.20}
               step={0.05}
               min={0.10}
@@ -133,12 +165,18 @@ export function BearToBearishSettingsPanel() {
           </Field>
         </Section>
 
-        <Section title="Risk & Auto-Execution" description="Manage risk caps and automatic order routing.">
+        <Section
+          title="Risk & Auto-Execution"
+          description="Manage risk caps and automatic order routing."
+          summary={`Max Risk ₹${draft.max_risk_inr ?? 5000}, Auto: ${draft.auto_execute ? 'ON' : 'OFF'}`}
+          defaultOpen={true}
+        >
           <Field
             label="Max INR Risk Per Trade"
             hint="Maximum INR risk threshold for 1 lot option trade allocation."
           >
             <NumberField
+              label="Max INR Risk Per Trade"
               value={draft.max_risk_inr ?? 5000}
               step={500}
               min={1000}
@@ -154,7 +192,7 @@ export function BearToBearishSettingsPanel() {
             <Switch
               checked={!!draft.auto_execute}
               label="Auto Execute Signals"
-              onChange={(on) => setDraft({ ...draft, auto_execute: on })}
+              onChange={() => setDraft({ ...draft, auto_execute: !draft.auto_execute })}
             />
           </Field>
         </Section>
