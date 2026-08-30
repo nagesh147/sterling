@@ -21,6 +21,8 @@ vi.mock('../config/useConfigPatch', () => ({
 }));
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineSignals: () => ({ data: { rows: [] } }),
+  useEngineConfig: () => ({ data: { auto_execute: false } }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../../../hooks/useNavigator', () => ({
   useNavigatorConfig: () => ({ data: { record: { config: { enabled: false } } } }),
