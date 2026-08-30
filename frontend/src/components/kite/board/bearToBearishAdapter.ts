@@ -38,7 +38,7 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
   const sym = row.symbol || `${row.underlying} PE`;
 
   // If LTP is not provided, estimate live LTP with favorable movement for armed setups
-  const ltp = price(row.option_premium) ? row.option_premium : (entry ? entry + 30.0 : null);
+  const ltp: number | null = price(row.option_premium) ?? (entry != null ? entry + 30.0 : null);
 
   const sections: BoardSection[] = [
     {

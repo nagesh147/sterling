@@ -6,7 +6,7 @@ import {
   useUpdateBearToBearishConfig,
 } from '../../../hooks/useBearToBearish';
 import { bearToBearishToBoard } from './bearToBearishAdapter';
-import { DEFAULT_SORT, SignalBoard, type ColumnId, type SortState } from './SignalBoard';
+import { BOARD_COLUMNS, DEFAULT_SORT, SignalBoard, type ColumnId, type SortState } from './SignalBoard';
 import { SIGNAL_COL_TO_BOARD, type SignalColKey } from './signalRowSpec';
 import { useBoardRowActions } from './useBoardRowActions';
 import { BoardFilters } from './BoardFilters';
