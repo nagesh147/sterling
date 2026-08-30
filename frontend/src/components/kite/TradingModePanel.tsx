@@ -24,7 +24,7 @@ import { useAlgoToggles } from '../../hooks/useAlgoToggles';
  * mentioned the other.
  */
 
-function RunningRow({ label, description, on, children }: {
+export function RunningRow({ label, description, on, children }: {
   label: string;
   description: string;
   on: boolean;
@@ -72,7 +72,6 @@ export function TradingModePanel() {
   const navCfg = navData?.record.config;
   const navigatorAuto = !!navCfg?.auto_execute_originated;
   const toggles = useEngineToggles();
-  const algoToggles = useAlgoToggles();
   const rescanStrategies = useKiteSettings((s) => s.rescanStrategies);
   const toggleRescanStrategy = useKiteSettings((s) => s.toggleRescanStrategy);
   const autoOn = !!cfg?.auto_execute;
@@ -121,44 +120,6 @@ export function TradingModePanel() {
         }}>
           Paper/live is set per account. Automatic execution is set once for your user and applies to
           whichever account is active.
-        </div>
-      </PanelCard>
-
-      <PanelCard>
-        <PanelSectionHeading
-          title="Algo Trade by strategy"
-          description="Control which specific strategies place automatic orders. Turning off a strategy here stops automatic order placement for that engine while leaving manual trading intact."
-        />
-        <div style={{ padding: '2px 18px 16px' }}>
-          {algoToggles.map((algo) => {
-            const isOff = !algo.engineEnabled;
-            return (
-              <RunningRow
-                key={algo.id}
-                label={algo.label}
-                description={
-                  isOff
-                    ? `${algo.description} (Disabled — strategy engine is turned off above)`
-                    : algo.description
-                }
-                on={algo.engineEnabled && algo.enabled}
-              >
-                <Switch
-                  checked={algo.engineEnabled && algo.enabled}
-                  label={`Algo Trade — ${algo.label}`}
-                  disabled={isOff || !algo.toggle || algo.pending}
-                  onChange={() => !isOff && algo.toggle?.()}
-                />
-              </RunningRow>
-            );
-          })}
-        </div>
-
-        <div style={{
-          padding: '12px 18px', background: SOFT, borderTop: `1px solid ${BORDER}`,
-          color: DIM, fontSize: 10.5, lineHeight: 1.5,
-        }}>
-          Master AUTO-execution toggle (above) acts as the global safety gate. An individual strategy will only auto-trade when both master AUTO and its strategy-level Algo Trade toggle are enabled.
         </div>
       </PanelCard>
 

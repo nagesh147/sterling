@@ -1,14 +1,16 @@
 import React from 'react';
 import { useEngineSignals } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
+import { useAlgoToggles } from '../../hooks/useAlgoToggles';
 import {
   BORDER, ChoiceRow, DIM, Field, MUTED, Section, SOFT, Switch, TEXT, inputStyle,
   settingsCardStyle,
 } from './kiteSettingsPrimitives';
-import { AdvancedSection, ConfigNote, PanelCard, PanelHeader } from './config/ConfigPrimitives';
+import { AdvancedSection, ConfigNote, PanelCard, PanelHeader, PanelSectionHeading } from './config/ConfigPrimitives';
 import { FIELDS, STOP_MODE_OPTIONS, openSettingsSection } from './config/registry';
 import { useConfigPatch } from './config/useConfigPatch';
 import { DirectionalModePanel } from './DirectionalModePanel';
+import { RunningRow } from './TradingModePanel';
 
 /**
  * Manual and automatic trading rules, as two separate pages.
@@ -213,27 +215,31 @@ export function ManualRulesPanel() {
 
 export function AutomaticRulesPanel() {
   const { cfg, patch, saving } = useConfigPatch();
-  const { data: signals } = useEngineSignals();
   const { data: navData } = useNavigatorConfig();
-  if (!cfg) return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading automatic rules…</div>;
+  const { data: stData } = useEngineSignals();
+  const algoToggles = useAlgoToggles();
 
+  if (!cfg) return <div style={{ padding: 18, color: DIM, fontSize: 12 }}>Loading…</div>;
+
+  const navCfg = navData?.record.config;
   const autoOn = !!cfg.auto_execute;
-  const rows = signals?.rows ?? [];
-  const pick = rows.find((r) => r.is_fresh) ?? rows.find((r) => r.is_active) ?? rows[0];
-  const leg = pick?.legs?.find((l) => l.moneyness === 'ATM') ?? pick?.legs?.[0];
+  const pick = cfg.vehicle_profiles?.[cfg.vehicle] ?? { vehicle: cfg.vehicle, underlying: 'NIFTY' };
+  const leg = stData?.solvable?.[pick.underlying];
 
   const entryFilterCount = [
-    cfg.adx_min, cfg.atr_pct_min, cfg.max_spread_pct, cfg.min_oi,
-  ].filter((v) => v != null).length
-    + ((cfg.block_entry_minutes_before_close ?? 0) > 0 ? 1 : 0)
-    + ((cfg.max_contract_staleness_bars ?? 0) > 0 ? 1 : 0);
+    cfg.adx_min, cfg.atr_pct_min, cfg.block_entry_minutes_before_close,
+    cfg.max_spread_pct, cfg.min_oi, cfg.max_contract_staleness_bars,
+  ].filter((v) => v != null && v > 0).length;
 
-  const advancedCount = entryFilterCount + 2 + 1 + 1; // time limits, portfolio, signal rules
+  const timeLimitCount = [
+    (cfg.expiry_square_off_days ?? 1) > 0,
+    (cfg.time_stop_bars ?? 0) > 0,
+  ].filter(Boolean).length;
+
+  const advancedCount = entryFilterCount + timeLimitCount;
 
   const num = (
-    key: Parameters<typeof patch>[1] & string,
-    testId: string,
-    value: number | null | undefined,
+    key: string, testId: string, value: number | null | undefined,
     onChange: (v: number | null) => void,
     bounds: { min?: number; max?: number; step?: number } = {},
   ) => (
@@ -276,8 +282,45 @@ export function AutomaticRulesPanel() {
             {autoOn ? 'Turn off in Trading Mode →' : 'Turn on in Trading Mode →'}
           </button>
         </div>
-      
 
+      <PanelCard>
+        <PanelSectionHeading
+          title="Algo Trade by strategy"
+          description="Control which specific strategies place automatic orders. Turning off a strategy here stops automatic order placement for that engine while leaving manual trading intact."
+        />
+        <div style={{ padding: '2px 18px 16px' }}>
+          {algoToggles.map((algo) => {
+            const isOff = !algo.engineEnabled;
+            return (
+              <RunningRow
+                key={algo.id}
+                label={algo.label}
+                description={
+                  isOff
+                    ? `${algo.description} (Disabled — strategy engine is turned off above)`
+                    : algo.description
+                }
+                on={algo.engineEnabled && algo.enabled}
+              >
+                <Switch
+                  checked={algo.engineEnabled && algo.enabled}
+                  label={`Algo Trade — ${algo.label}`}
+                  disabled={isOff || !algo.toggle || algo.pending}
+                  onChange={() => !isOff && algo.toggle?.()}
+                />
+              </RunningRow>
+            );
+          })}
+        </div>
+
+        <div style={{
+          padding: '12px 18px', background: SOFT, borderTop: `1px solid ${BORDER}`,
+          color: DIM, fontSize: 10.5, lineHeight: 1.5,
+        }}>
+          Master AUTO-execution toggle (in Trading Mode) acts as the global safety gate. An individual strategy will only auto-trade when both master AUTO and its strategy-level Algo Trade toggle are enabled.
+        </div>
+      </PanelCard>
+      
       <PanelCard>
         <PanelHeader saving={saving} />
 
