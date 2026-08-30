@@ -274,7 +274,7 @@ export function AutomaticRulesPanel() {
           <ModeToggle
             left="OFF" right="ON"
             value={autoOn ? 'right' : 'left'}
-            onSelect={(side) => patch({ auto_execute: side === 'right' }, 'auto_execute', `Algo Trade ${side === 'right' ? 'ON' : 'OFF'}`)}
+            onSelect={(side) => patch({ auto_execute: side === 'right' }, undefined, `Algo Trade ${side === 'right' ? 'ON' : 'OFF'}`)}
             leftColor="var(--k-blue-kite)" rightColor="var(--k-amber-2)"
             rightDotWhenActive
             busy={saving}
