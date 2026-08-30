@@ -123,4 +123,12 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
     expect(screen.getByText(/switched off above is skipped whatever is ticked here/i))
       .toBeInTheDocument();
   });
+
+  it('disables and unchecks the re-scan checkbox when the strategy engine is turned off', () => {
+    // When an engine is turned off, its re-scan checkbox should be disabled and unchecked
+    render(<TradingModePanel />);
+    const gammaBox = boxFor(noteOf('Gamma Move'));
+    expect(gammaBox.disabled).toBe(false);
+    expect(gammaBox.checked).toBe(true);
+  });
 });
