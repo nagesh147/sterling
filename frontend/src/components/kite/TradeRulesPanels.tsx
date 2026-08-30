@@ -223,8 +223,8 @@ export function AutomaticRulesPanel() {
 
   const navCfg = navData?.record.config;
   const autoOn = !!cfg.auto_execute;
-  const pick = cfg.vehicle_profiles?.[cfg.vehicle] ?? { vehicle: cfg.vehicle, underlying: 'NIFTY' };
-  const leg = stData?.solvable?.[pick.underlying];
+  const pick = (cfg as Record<string, any>).vehicle_profiles?.[cfg.vehicle] ?? { vehicle: cfg.vehicle, underlying: 'NIFTY' };
+  const leg = (stData as Record<string, any>)?.solvable?.[pick.underlying];
 
   const entryFilterCount = [
     cfg.adx_min, cfg.atr_pct_min, cfg.block_entry_minutes_before_close,
