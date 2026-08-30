@@ -47,6 +47,7 @@ describe('bearToBearishAdapter', () => {
     expect(leg.levels.entry).toBe(24000);
     expect(leg.levels.stop).toBe(24150);
     expect(leg.levels.target).toBe(23700);
-    expect(sig.origin?.label).toContain('PCR 0.58');
+    expect(sig.origin?.label).toBe('SPOT SCAN');
+    expect(leg.origin?.label).toContain('PCR 0.58');
   });
 });
