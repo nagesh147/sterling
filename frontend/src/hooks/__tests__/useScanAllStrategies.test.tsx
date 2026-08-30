@@ -157,10 +157,8 @@ describe('useScanAllStrategies', () => {
     expect(useScanActivity.getState().current).toBeNull();
   });
 
-  it('does not list ATM Premium Imbalance, which has no scan', () => {
-    // It resolves one option pair and arms it — there is no universe to sweep,
-    // so offering it would promise something the platform cannot do.
-    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).not.toContain('atm_premium_imbalance');
-    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toHaveLength(6);
+  it('includes ATM Premium Imbalance in scannable engines', () => {
+    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toContain('atm_imbalance');
+    expect(Object.keys(SCANNABLE_ENGINE_LABEL)).toHaveLength(7);
   });
 });
