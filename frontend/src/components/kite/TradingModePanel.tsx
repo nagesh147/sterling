@@ -145,7 +145,7 @@ export function TradingModePanel() {
               >
                 <Switch
                   checked={algo.engineEnabled && algo.enabled}
-                  label={algo.label}
+                  label={`Algo Trade — ${algo.label}`}
                   disabled={isOff || !algo.toggle || algo.pending}
                   onChange={() => !isOff && algo.toggle?.()}
                 />

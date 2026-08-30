@@ -17,6 +17,7 @@ export type StopBasis = 'POINTS' | 'PERCENT';
 
 export interface AtmPremiumImbalanceConfig {
   enabled: boolean;
+  auto_execute?: boolean;
   underlying: string;
   expiry_policy: ExpiryPolicy;
   explicit_expiry: string;
