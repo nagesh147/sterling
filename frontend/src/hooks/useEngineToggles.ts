@@ -4,6 +4,7 @@ import { useOrbConfig, useSetOrbConfig } from './useOrbConfig';
 import { useGammaMoveConfig, useUpdateGammaMove } from './useGammaMove';
 import { useAdaptiveEdgeEngineConfig, useSetAdaptiveEdgeEngineConfig } from './useAdaptiveEdge';
 import { useAtmPremiumImbalanceConfig, useSetAtmPremiumImbalanceConfig } from './useAtmPremiumImbalance';
+import { useBearToBearishConfig, useUpdateBearToBearishConfig } from './useBearToBearish';
 
 /**
  * Every signal engine's running switch, in one place.
@@ -27,7 +28,7 @@ import { useAtmPremiumImbalanceConfig, useSetAtmPremiumImbalanceConfig } from '.
  */
 export type EngineToggleId =
   | 'supertrend' | 'navigator' | 'orb'
-  | 'gamma_move' | 'adaptive_edge' | 'atm_premium_imbalance';
+  | 'gamma_move' | 'adaptive_edge' | 'atm_premium_imbalance' | 'bear_to_bearish';
 
 export interface EngineToggle {
   id: EngineToggleId;
@@ -64,6 +65,7 @@ export function useEngineEnabled(): Record<EngineToggleId, boolean> {
   const gm = useGammaMoveConfig();
   const ae = useAdaptiveEdgeEngineConfig();
   const atm = useAtmPremiumImbalanceConfig();
+  const btb = useBearToBearishConfig();
 
   // `!== false` throughout: absent or still loading counts as ON. See the note on
   // `EngineToggle.enabled` — hiding on "not loaded" looks like the operator's own
@@ -75,6 +77,7 @@ export function useEngineEnabled(): Record<EngineToggleId, boolean> {
     gamma_move: (gm.data?.config as { enabled?: boolean } | undefined)?.enabled !== false,
     adaptive_edge: (ae.data?.config as { enabled?: boolean } | undefined)?.enabled !== false,
     atm_premium_imbalance: atm.data?.config?.enabled !== false,
+    bear_to_bearish: btb.data?.enabled !== false,
   };
 }
 
@@ -98,6 +101,9 @@ export function useEngineToggles(): EngineToggle[] {
   const atm = useAtmPremiumImbalanceConfig();
   const atmSet = useSetAtmPremiumImbalanceConfig();
 
+  const btb = useBearToBearishConfig();
+  const btbSet = useUpdateBearToBearishConfig();
+
   const stOn = on.supertrend;
   const navRecord = nav.data?.record;
   const navOn = on.navigator;
@@ -105,6 +111,7 @@ export function useEngineToggles(): EngineToggle[] {
   const gmOn = on.gamma_move;
   const aeOn = on.adaptive_edge;
   const atmOn = on.atm_premium_imbalance;
+  const btbOn = on.bear_to_bearish;
 
   return [
     {
@@ -172,6 +179,16 @@ export function useEngineToggles(): EngineToggle[] {
       description: atmOn
         ? 'Resolves one ATM pair per session and arms it. It does not sweep a universe.'
         : 'Off — no pair is resolved and no session can be armed.',
+    },
+    {
+      id: 'bear_to_bearish',
+      label: 'Bear to Bearish',
+      enabled: btbOn,
+      pending: btbSet.isPending,
+      toggle: btb.data ? () => btbSet.mutate({ enabled: !btbOn }) : null,
+      description: btbOn
+        ? 'Intraday PCR drop + Lower High momentum short setup.'
+        : 'Off — no Bear to Bearish scanning and no PCR momentum short signals.',
     },
   ];
 }
