@@ -1,5 +1,5 @@
 import type {
-  BoardInstrument, BoardOrigin, BoardSection, BoardSignal, BoardStatus,
+  BoardOrigin, BoardSection, BoardSignal, BoardStatus,
 } from './boardTypes';
 import type { BearToBearishSnapshotResponse, BearToBearishSignalRow } from '../../../hooks/useBearToBearish';
 
@@ -15,20 +15,6 @@ const STATE_TO_STATUS: Record<string, BoardStatus> = {
   error: 'error',
 };
 
-function instrument(row: BearToBearishSignalRow): BoardInstrument {
-  return {
-    symbol: row.symbol || `${row.underlying} PE`,
-    exchange: row.exchange || 'NFO',
-    kind: 'option',
-    optionType: row.option_type || 'PE',
-    strike: row.strike || null,
-    expiry: row.expiry || null,
-    lotSize: row.lot_size || 25,
-    moneyness: 'ATM',
-    quoteKey: row.quote_key || `NFO:${row.symbol}`,
-  };
-}
-
 function originOf(row: BearToBearishSignalRow): BoardOrigin {
   const tone = row.pcr_current <= 0.60 ? 'brand' : row.pcr_current <= 0.70 ? 'purple' : 'dim';
   return {
@@ -39,7 +25,7 @@ function originOf(row: BearToBearishSignalRow): BoardOrigin {
 }
 
 export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSignal {
-  const st = STATE_TO_STATUS[row.status] || 'watching';
+  const st = STATE_TO_STATUS[row.status] || 'armed';
   const entry = price(row.entry_price || row.option_premium);
   const stop = price(row.stop_loss);
   const target = price(row.target_price);
@@ -48,16 +34,29 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
   const spotSl = price(row.spot_sl || row.lower_high_price);
   const spotTgt = price(row.spot_target);
 
+  const lotSize = row.lot_size || 25;
+  const sym = row.symbol || `${row.underlying} SEP ${row.strike || ''} PE`.replace(/\s+/g, ' ').trim();
+
   const sections: BoardSection[] = [
     {
       title: 'PCR & Structure Metrics',
       stats: [
-        { label: 'Open PCR', value: row.pcr_open.toFixed(2) },
-        { label: 'Live PCR', value: row.pcr_current.toFixed(2) },
-        { label: '5m PCR Chg', value: `${row.pcr_change_5m >= 0 ? '+' : ''}${row.pcr_change_5m.toFixed(2)}` },
+        { label: 'Open PCR', value: row.pcr_open ? row.pcr_open.toFixed(2) : '—' },
+        { label: 'Live PCR', value: row.pcr_current ? row.pcr_current.toFixed(2) : '—' },
+        { label: '5m PCR Chg', value: `${row.pcr_change_5m >= 0 ? '+' : ''}${(row.pcr_change_5m || 0).toFixed(2)}` },
         { label: 'Index Spot', value: spot ? `₹${spot.toFixed(2)}` : '—' },
         { label: 'Spot SL (LH)', value: spotSl ? `₹${spotSl.toFixed(2)}` : '—' },
         { label: 'Spot Target', value: spotTgt ? `₹${spotTgt.toFixed(2)}` : '—' },
+      ],
+    },
+    {
+      title: 'Per lot economics',
+      layout: 'rows',
+      summary: `${lotSize} per lot`,
+      stats: [
+        { label: 'Lot size', value: lotSize },
+        { label: 'Cost of one lot', value: entry ? `₹${Math.round(entry * lotSize).toLocaleString('en-IN')}` : '—' },
+        { label: 'Risk on one lot', value: entry && stop ? `₹${Math.round(Math.abs(entry - stop) * lotSize).toLocaleString('en-IN')}` : '—' },
       ],
     },
   ];
@@ -66,7 +65,17 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
     id: row.id,
     engine: 'bear_to_bearish',
     underlying: row.underlying,
-    instrument: instrument(row),
+    instrument: {
+      symbol: sym,
+      exchange: row.exchange || 'NFO',
+      kind: 'option',
+      optionType: row.option_type || 'PE',
+      strike: row.strike || null,
+      expiry: row.expiry || null,
+      lotSize,
+      moneyness: 'ATM',
+      quoteKey: row.quote_key || `NFO:${sym}`,
+    },
     direction: row.direction || 'short',
     status: st,
     atMs: row.timestamp_ms || Date.now(),
@@ -78,24 +87,67 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
       target,
       exit: null,
     },
+    dayMove: entry && stop ? {
+      abs: +(entry - stop).toFixed(2),
+      pct: +(((entry - stop) / stop) * 100).toFixed(2),
+    } : undefined,
     sizing: {
       lots: 1,
-      quantity: row.lot_size || 25,
-      atRiskInr: stop && entry ? Math.abs(stop - entry) * (row.lot_size || 25) : 1500,
-      deployedInr: entry ? entry * (row.lot_size || 25) : 5000,
+      quantity: lotSize,
+      atRiskInr: stop && entry ? Math.abs(stop - entry) * lotSize : 1500,
+      deployedInr: entry ? entry * lotSize : 5000,
     },
     score: row.score || 85,
     reason: row.reason || 'Live PCR drop below 0.60 threshold + Lower High Structure',
     sections,
-    flags: [
-      { label: `PCR ${row.pcr_current.toFixed(2)}`, hint: 'Intraday Put Call Ratio', tone: 'brand' },
-      { label: 'Lower Highs', hint: '1m/3m/5m Lower High structure detected', tone: 'purple' },
-    ],
+    flags: [], // Keep leg instrument cell clean of inline badge clutter
     origin: originOf(row),
   };
 }
 
+const STATUS_ORDER: readonly BoardStatus[] = ['armed', 'running', 'weakening', 'watching', 'ended', 'error'];
+
 export function bearToBearishToBoard(data?: BearToBearishSnapshotResponse | null): BoardSignal[] {
-  if (!data?.rows) return [];
-  return data.rows.map(bearToBearishRowToBoard);
+  if (!data?.rows || !data.rows.length) return [];
+
+  const groups = new Map<string, BearToBearishSignalRow[]>();
+  for (const row of data.rows) {
+    const list = groups.get(row.underlying);
+    if (list) list.push(row);
+    else groups.set(row.underlying, [row]);
+  }
+
+  return [...groups.values()].map((members) => {
+    const legs = members.map(bearToBearishRowToBoard);
+    const head = members[0];
+    const spot = price(head.spot_price);
+
+    const bestStatus = legs.reduce<BoardStatus>(
+      (best, leg) => (STATUS_ORDER.indexOf(leg.status) < STATUS_ORDER.indexOf(best) ? leg.status : best),
+      legs[0].status,
+    );
+
+    return {
+      ...legs[0],
+      id: `btb-group-${head.underlying}`,
+      instrument: {
+        symbol: head.underlying,
+        exchange: head.exchange || 'NFO',
+        kind: 'index' as const,
+        strike: null,
+        expiry: null,
+        lotSize: null,
+        quoteKey: null,
+      },
+      underlying: head.underlying,
+      status: bestStatus,
+      underlyingPrice: spot,
+      levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
+      sizing: { lots: null, quantity: null, atRiskInr: null, deployedInr: null },
+      origin: { label: 'SPOT SCAN', tone: 'blue', hint: 'PCR short momentum & lower high structure scan' },
+      sections: legs[0].sections.filter((s) => s.title !== 'Per lot economics'),
+      children: legs,
+    };
+  });
 }
+

@@ -510,20 +510,7 @@ export const hhmmss = (ms: number) =>
  */
 export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
   if (ms == null || !Number.isFinite(ms)) return '—';
-  // A leg shows the time only. The parent above it already names the day, and a
-  // group's legs share it by construction — repeating the date on every one of
-  // NIFTY's eighteen strikes is the noise the grouping exists to remove.
-  if (isLeg) return hhmmss(ms);
-  // A complete stamp: the date always, and seconds.
-  //
-  // Today used to render bare on the grounds that repeating today's date is
-  // noise. It is not, for these engines — Adaptive Edge scalps order flow and
-  // the recorded ATM bot opened and closed a position inside three seconds, so
-  // "10:30" is not a time you can reason about. Minute precision hid the thing
-  // the row exists to report.
-  //
-  // The date text comes from sessionDayDate, the same helper the day header
-  // uses, so the two cannot disagree about what a date looks like.
+  if (isLeg || (nowMs != null && sessionDayKey(ms) === sessionDayKey(nowMs))) return hhmmss(ms);
   return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
 };
 
