@@ -510,7 +510,7 @@ export const hhmmss = (ms: number) =>
  */
 export const stamp = (ms: number | null, nowMs: number, isLeg = false) => {
   if (ms == null || !Number.isFinite(ms)) return '—';
-  if (isLeg || (nowMs != null && sessionDayKey(ms) === sessionDayKey(nowMs))) return hhmmss(ms);
+  if (isLeg) return hhmmss(ms);
   return `${sessionDayDate(sessionDayKey(ms), nowMs)} ${hhmmss(ms)}`;
 };
 

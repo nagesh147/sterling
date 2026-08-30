@@ -119,6 +119,8 @@ export function bearToBearishToBoard(data?: BearToBearishSnapshotResponse | null
 
   return [...groups.values()].map((members) => {
     const legs = members.map(bearToBearishRowToBoard);
+    if (legs.length === 1) return legs[0];
+
     const head = members[0];
     const spot = price(head.spot_price);
 
