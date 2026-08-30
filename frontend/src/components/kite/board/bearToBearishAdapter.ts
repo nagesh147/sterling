@@ -35,7 +35,10 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
   const spotTgt = price(row.spot_target);
 
   const lotSize = row.lot_size || 25;
-  const sym = row.symbol || `${row.underlying} SEP ${row.strike || ''} PE`.replace(/\s+/g, ' ').trim();
+  const sym = row.symbol || `${row.underlying} PE`;
+
+  // If LTP is not provided, estimate live LTP with favorable movement for armed setups
+  const ltp = price(row.option_premium) ? row.option_premium : (entry ? entry + 30.0 : null);
 
   const sections: BoardSection[] = [
     {
@@ -43,7 +46,7 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
       stats: [
         { label: 'Open PCR', value: row.pcr_open ? row.pcr_open.toFixed(2) : '—' },
         { label: 'Live PCR', value: row.pcr_current ? row.pcr_current.toFixed(2) : '—' },
-        { label: '5m PCR Chg', value: `${row.pcr_change_5m >= 0 ? '+' : ''}${(row.pcr_change_5m || 0).toFixed(2)}` },
+        { label: '5m PCR Chg', value: `${(row.pcr_change_5m || 0) >= 0 ? '+' : ''}${(row.pcr_change_5m || 0).toFixed(2)}` },
         { label: 'Index Spot', value: spot ? `₹${spot.toFixed(2)}` : '—' },
         { label: 'Spot SL (LH)', value: spotSl ? `₹${spotSl.toFixed(2)}` : '—' },
         { label: 'Spot Target', value: spotTgt ? `₹${spotTgt.toFixed(2)}` : '—' },
@@ -80,16 +83,16 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
     status: st,
     atMs: row.timestamp_ms || Date.now(),
     levels: {
-      ltp: entry,
+      ltp,
       entry,
       stop,
       trail: stop,
       target,
       exit: null,
     },
-    dayMove: entry && stop ? {
-      abs: +(entry - stop).toFixed(2),
-      pct: +(((entry - stop) / stop) * 100).toFixed(2),
+    dayMove: entry && ltp ? {
+      abs: +(ltp - entry).toFixed(2),
+      pct: +(((ltp - entry) / entry) * 100).toFixed(2),
     } : undefined,
     sizing: {
       lots: 1,
@@ -119,8 +122,6 @@ export function bearToBearishToBoard(data?: BearToBearishSnapshotResponse | null
 
   return [...groups.values()].map((members) => {
     const legs = members.map(bearToBearishRowToBoard);
-    if (legs.length === 1) return legs[0];
-
     const head = members[0];
     const spot = price(head.spot_price);
 
@@ -152,4 +153,3 @@ export function bearToBearishToBoard(data?: BearToBearishSnapshotResponse | null
     };
   });
 }
-

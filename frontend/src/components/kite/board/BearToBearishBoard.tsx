@@ -47,12 +47,7 @@ export function BearToBearishBoard({
   const signals = React.useMemo(() => bearToBearishToBoard(data), [data]);
   const view = useBoardView(signals, { endedByDefault: true, storageKey: 'bear_to_bearish' });
 
-  const columns = React.useMemo<readonly ColumnId[]>(() => {
-    const ordered = [...s.signalLeftColumnOrder, ...s.signalRightColumnOrder]
-      .map((key) => SIGNAL_COL_TO_BOARD[key as SignalColKey])
-      .filter(Boolean) as ColumnId[];
-    return ['instrument', ...ordered];
-  }, [s.signalLeftColumnOrder, s.signalRightColumnOrder]);
+  const columns = BOARD_COLUMNS;
 
   const hidden = React.useMemo(
     () => new Set(
