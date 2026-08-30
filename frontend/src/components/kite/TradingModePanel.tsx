@@ -6,6 +6,7 @@ import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives
 import { PanelCard, PanelSectionHeading } from './config/ConfigPrimitives';
 import { TradingModeControls } from './TradingModeControls';
 import { useEngineToggles } from '../../hooks/useEngineToggles';
+import { useAlgoToggles } from '../../hooks/useAlgoToggles';
 
 /**
  * The two questions that decide whether real money moves — paper or live, and
@@ -71,6 +72,7 @@ export function TradingModePanel() {
   const navCfg = navData?.record.config;
   const navigatorAuto = !!navCfg?.auto_execute_originated;
   const toggles = useEngineToggles();
+  const algoToggles = useAlgoToggles();
   const rescanStrategies = useKiteSettings((s) => s.rescanStrategies);
   const toggleRescanStrategy = useKiteSettings((s) => s.toggleRescanStrategy);
   const autoOn = !!cfg?.auto_execute;
@@ -85,14 +87,6 @@ export function TradingModePanel() {
           description="Which signal engines are active. Turning both off leaves Kite as a normal manual trading platform — market watch, charts and your own orders all still work."
         />
         <div style={{ padding: '2px 18px 16px' }}>
-          {/* Every engine, from one list.
-              SuperTrend had a switch here and Navigator had a "Configure →" link;
-              the other four had nothing at all, so "what is running" answered for
-              two engines out of six and the only way to stop ORB or Gamma Move was
-              to find its own settings page. `useEngineToggles` owns each engine's
-              quirks — SuperTrend's field is `engine_enabled`, Navigator writes
-              under a revision — and the signals dock reads the SAME list to decide
-              which tabs to show, so the two cannot disagree. */}
           {toggles.map((engine) => (
             <RunningRow
               key={engine.id}
@@ -103,9 +97,6 @@ export function TradingModePanel() {
               <Switch
                 checked={engine.enabled}
                 label={engine.label}
-                // Null while the config has not arrived: a toggle needs the
-                // current value to send the opposite of it, and Navigator also
-                // needs the revision it was read at.
                 disabled={!engine.toggle || engine.pending}
                 onChange={() => engine.toggle?.()}
               />
@@ -130,6 +121,44 @@ export function TradingModePanel() {
         }}>
           Paper/live is set per account. Automatic execution is set once for your user and applies to
           whichever account is active.
+        </div>
+      </PanelCard>
+
+      <PanelCard>
+        <PanelSectionHeading
+          title="Algo Trade by strategy"
+          description="Control which specific strategies place automatic orders. Turning off a strategy here stops automatic order placement for that engine while leaving manual trading intact."
+        />
+        <div style={{ padding: '2px 18px 16px' }}>
+          {algoToggles.map((algo) => {
+            const isOff = !algo.engineEnabled;
+            return (
+              <RunningRow
+                key={algo.id}
+                label={algo.label}
+                description={
+                  isOff
+                    ? `${algo.description} (Disabled — strategy engine is turned off above)`
+                    : algo.description
+                }
+                on={algo.engineEnabled && algo.enabled}
+              >
+                <Switch
+                  checked={algo.engineEnabled && algo.enabled}
+                  label={algo.label}
+                  disabled={isOff || !algo.toggle || algo.pending}
+                  onChange={() => !isOff && algo.toggle?.()}
+                />
+              </RunningRow>
+            );
+          })}
+        </div>
+
+        <div style={{
+          padding: '12px 18px', background: SOFT, borderTop: `1px solid ${BORDER}`,
+          color: DIM, fontSize: 10.5, lineHeight: 1.5,
+        }}>
+          Master AUTO-execution toggle (above) acts as the global safety gate. An individual strategy will only auto-trade when both master AUTO and its strategy-level Algo Trade toggle are enabled.
         </div>
       </PanelCard>
 
