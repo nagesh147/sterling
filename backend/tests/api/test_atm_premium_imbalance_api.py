@@ -122,7 +122,9 @@ def test_snapshot_reports_blockers_rather_than_pretending_to_be_armed():
 
 
 def test_get_publishes_protection_modes_and_live_requirements():
-    payload = client().get("/api/v1/config/atm-premium-imbalance").json()
+    c = client()
+    c.put("/api/v1/config/atm-premium-imbalance", json={"quantity": 0, "lots": 0, "stop_enabled": False})
+    payload = c.get("/api/v1/config/atm-premium-imbalance").json()
     vocab = payload["vocabularies"]
     assert set(vocab["protection_mode"]) == {"NONE", "RESTING_TARGET_LIMIT", "GTT"}
     assert payload["defaults"]["protection_mode"] == "NONE"   # fidelity by default
@@ -169,6 +171,7 @@ def test_put_rejects_live_without_broker_side_protection():
     bad = client().put(
         "/api/v1/config/atm-premium-imbalance",
         json={"execution_mode": "live", "quote_mode": "EXECUTABLE", "quantity": 20,
+              "stop_enabled": True, "stop_basis": "PERCENT", "stop_percent": 20.0,
               "protection_mode": "NONE"},
     )
     assert bad.status_code == 422
