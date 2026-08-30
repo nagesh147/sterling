@@ -180,6 +180,7 @@ def test_arm_refuses_while_disabled_rather_than_half_arming():
     assert got.status_code == 200
     # A refusal with a reason, never a partially armed session.
     assert got.json()["status"] in ("disabled", "no_quantity", "market_closed")
+    c.put("/api/v1/config/atm-premium-imbalance", json={"enabled": True})
 
 
 def test_every_config_field_is_settable_through_the_api():
