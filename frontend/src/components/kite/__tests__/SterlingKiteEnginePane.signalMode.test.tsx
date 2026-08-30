@@ -72,7 +72,7 @@ async function renderPane() {
 }
 
 function openSignalModeMenu() {
-  fireEvent.click(screen.getAllByTitle(/^VIEW —/)[0]);
+  fireEvent.click(screen.getByTitle(/^VIEW — A local lens/));
 }
 
 describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {

@@ -16,7 +16,9 @@ def client():
 
 
 def test_get_publishes_identity_defaults_and_vocabularies():
-    got = client().get("/api/v1/config/atm-premium-imbalance")
+    c = client()
+    c.put("/api/v1/config/atm-premium-imbalance", json={"enabled": True, "quantity": 0, "lots": 0})
+    got = c.get("/api/v1/config/atm-premium-imbalance")
     assert got.status_code == 200
     payload = got.json()
 
