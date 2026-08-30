@@ -41,6 +41,10 @@ vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
   useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
   useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock('../../../hooks/useBearToBearish', () => ({
+  useBearToBearishConfig: () => ({ data: { enabled: true } }),
+  useUpdateBearToBearishConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 import { TradingModePanel } from '../TradingModePanel';
 import { useKiteSettings } from '../../../store/useKiteSettings';

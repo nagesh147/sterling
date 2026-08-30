@@ -242,15 +242,6 @@ function signalColShown(
   col: { key: string; visibleWhen: SignalColVisibility },
   premiumAvailable: boolean,
   hidden: readonly string[],
-  /**
-   * Whether the row is carrying its order buttons.
-   *
-   * Trade and Chart answer to TWO controls: the column picker, and the older
-   * "order buttons in the row" switch whose description promises they MOVE into
-   * the expanded row rather than disappear. Either one can withhold them, and
-   * both the header and the cells go through this function — which is the only
-   * reason the headings can be trusted to sit over their own columns.
-   */
   rowActionsOn = true,
 ): boolean {
   if (!rowActionsOn && (col.key === 'trade' || col.key === 'chart')) return false;
@@ -911,6 +902,44 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           const snapTitle = ended
             ? `Past setup (fired at ${entryPx != null ? entryPx.toFixed(2) : '—'}, stop ${slPx != null ? slPx.toFixed(1) : '—'}) — ${liveExited ? 'live premium has fallen through the stop' : "the entry's SuperTrend has since flipped"}, not a live order.`
             : undefined;
+          const legBuy = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            const entryForSl = lastPx || leg.premium_spot || 0;
+            const slPxVal = leg.entry_sl ?? leg.premium_sl;
+            const slPercentage =
+              entryForSl > 0 && slPxVal && slPxVal > 0
+                ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            const tgtPercentage =
+              entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'BUY',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              initialSlPct: slPercentage,
+              initialTgtPct: tgtPercentage,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legSell = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'SELL',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legChart = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg));
+          };
 
           return (
             <div key={leg.option_symbol}>
@@ -1063,60 +1092,16 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     relocation. A control that quietly disappears is bad
                     anywhere; on the path that places a real order it is worse. */}
                 {!isExp && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
-                  {/* NOT gated on `boardRowActions` any more. That gate wrapped this
-                      whole block, so switching the row's order buttons off also took
-                      Chg., Chg.%, LTP and Time with it — and the relocated cluster
-                      below, whose whole purpose is to appear when the setting is off,
-                      sat INSIDE the gate and could therefore never render. */}
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
+                    {/* NOT gated on `boardRowActions` any more. That gate wrapped this
+                        whole block, so switching the row's order buttons off also took
+                        Chg., Chg.%, LTP and Time with it — and the relocated cluster
+                        below, whose whole purpose is to appear when the setting is off,
+                        sat INSIDE the gate and could therefore never render. */}
                     
                     
-                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {(() => {
-                  const legBuy = (e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        const entryForSl = lastPx || leg.premium_spot || 0;
-                        const slPxVal = leg.entry_sl ?? leg.premium_sl;
-                        const slPercentage =
-                          entryForSl > 0 && slPxVal && slPxVal > 0
-                            ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
-                            : undefined;
-                        const tgtPercentage =
-                          entryForSl > 0 && leg.premium_target && leg.premium_target > 0
-                            ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
-                            : undefined;
-                        openOrderWindow({
-                          symbol: leg.option_symbol,
-                          exchange: row.exchange,
-                          initialSide: 'BUY',
-                          lotSize: leg.lot_size || 1,
-                          lastPrice: lastPx || 0,
-                          initialSlPct: slPercentage,
-                          initialTgtPct: tgtPercentage,
-                          tag: 'SUPERTREND',
-                        });
-                      };
-                  const legSell = (e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        openOrderWindow({
-                          symbol: leg.option_symbol,
-                          exchange: row.exchange,
-                          initialSide: 'SELL',
-                          lotSize: leg.lot_size || 1,
-                          lastPrice: lastPx || 0,
-                          tag: 'SUPERTREND',
-                        });
-                      }}
-                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
-                      // The Trade and Chart COLUMNS govern these. LAST, because a
-                      // later JSX prop wins over an earlier one — placed above the
-                      // handlers these spreads would simply be overwritten. Uses the
-                      // component's own contract: a button with no handler is not
-                      // rendered, so hiding one column removes exactly its own
-                      // buttons rather than the whole cluster.
-                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
-                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
-                    />
+
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       {(() => {
@@ -1179,12 +1164,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
-                          // Trade and Chart are columns in the picker, but they are
-                          // DRAWN by the action buttons beside this map, not as price
-                          // cells. The wrapper below applies `col.width` whatever the
-                          // cell returns, so letting them through here would add 126px
-                          // of empty width to every row.
-                          if (key === 'trade' || key === 'chart') return null;
+                          if (!s.boardRowActions && (key === 'trade' || key === 'chart')) return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
                           if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                           return (
@@ -1195,6 +1175,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         });
                       })()}
                     </div>
+                  </div>
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
@@ -1255,7 +1236,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
                       {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
-                  </div>
+                  </>
                 )}
               </div>
               {isExp && (() => {

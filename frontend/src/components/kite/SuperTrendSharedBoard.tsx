@@ -179,10 +179,8 @@ export function SuperTrendSharedBoard({
       // days of closed history.
       hoistLiveFromToday
       // Trade and chart are COLUMNS now, shared with every other board, so the
-      // picker can switch either off. `boardRowActions` still governs whether
-      // this table offers them at all — the setting is about this board's
-      // behaviour, the column is about this operator's current view.
-      renderTrade={s.boardRowActions ? rowActions.renderTrade : undefined}
+      // picker can switch either off.
+      renderTrade={rowActions.renderTrade}
       renderChart={rowActions.renderChart}
       emptyLabel="No active or recent setups on the board yet."
     />

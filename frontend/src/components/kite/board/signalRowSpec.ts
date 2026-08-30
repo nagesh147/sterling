@@ -194,7 +194,7 @@ export const SIGNAL_COL_TO_BOARD = {
   // maps to `exitState`. Mapping it to `exit` put a counter under a heading that
   // means "where it got out" and lost the counter entirely.
   exit: 'exitState', target: 'target', chg: 'chg', chgPct: 'chgPct', dir: 'dir',
-  ltp: 'ltp', time: 'time',
+  ltp: 'ltp', time: 'time', trade: 'trade', chart: 'chart',
 } as const satisfies Record<string, string>;
 
 export type SignalColKey = keyof typeof SIGNAL_COL_TO_BOARD;

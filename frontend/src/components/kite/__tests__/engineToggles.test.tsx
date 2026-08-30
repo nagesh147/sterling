@@ -44,13 +44,17 @@ vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
   useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
   useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock('../../../hooks/useBearToBearish', () => ({
+  useBearToBearishConfig: () => ({ data: { enabled: true } }),
+  useUpdateBearToBearishConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>mode controls</div> }));
 
 import { TradingModePanel } from '../TradingModePanel';
 
 const ENGINES = [
   'SuperTrend engine', 'Value-Flow Navigator', 'ORB + VWAP',
-  'Gamma Move', 'Adaptive Edge', 'ATM Premium Imbalance',
+  'Gamma Move', 'Adaptive Edge', 'ATM Premium Imbalance', 'Bear to Bearish',
 ];
 
 /**
