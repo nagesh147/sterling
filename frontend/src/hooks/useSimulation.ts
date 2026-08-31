@@ -39,6 +39,8 @@ export interface SimStatus {
   bars_total: number;
   stats: SimStats;
   elapsed_real_s: number;
+  status_message: string;
+  last_signal: SimSignalEvent | null;
 }
 
 interface SimulationStore {
@@ -74,6 +76,8 @@ const DEFAULT_STATUS: SimStatus = {
   bars_total: 0,
   stats: { signals_fired: 0, trades_entered: 0, wins: 0, losses: 0, pnl: 0, events: [] },
   elapsed_real_s: 0,
+  status_message: '',
+  last_signal: null,
 };
 
 export const useSimulationStore = create<SimulationStore>((set) => ({

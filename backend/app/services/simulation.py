@@ -60,6 +60,8 @@ class SimStatus(BaseModel):
     bars_total: int = 0
     stats: SimStats = SimStats()
     elapsed_real_s: float = 0.0
+    status_message: str = ""
+    last_signal: Optional[SimSignalEvent] = None
 
 
 class SimulationRunner:
@@ -80,6 +82,8 @@ class SimulationRunner:
         self._bars_total = 0
         self._start_real = 0.0
         self._candles: List[Dict] = []
+        self._status_message = "Ready for simulation"
+        self._last_signal: Optional[SimSignalEvent] = None
 
     @property
     def status(self) -> SimStatus:
@@ -92,6 +96,8 @@ class SimulationRunner:
             bars_total=self._bars_total,
             stats=self._stats,
             elapsed_real_s=round(time.monotonic() - self._start_real, 1) if self._start_real else 0,
+            status_message=self._status_message,
+            last_signal=self._last_signal,
         )
 
     async def start(self, config: SimConfig) -> SimStatus:
@@ -177,7 +183,7 @@ class SimulationRunner:
         # Determine instruments
         instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "BTCUSD", "ETHUSD"]
 
-        # Ensure real historical candle data is fetched for the selected date if missing
+        self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Delta / Kite APIs..."
         await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
 
         # Fetch candles for each instrument from local store
@@ -192,6 +198,7 @@ class SimulationRunner:
         all_bars.sort(key=lambda b: b["time"])
 
         if not all_bars:
+            self._status_message = f"Generating session candles for {cfg.date}..."
             log.info("No remote or local candles found for simulation date %s; generating session candles...", cfg.date)
             for sym in instruments:
                 all_bars.extend(_generate_synthetic_candles(sym, res, start_epoch, end_epoch, res_sec))
@@ -199,12 +206,14 @@ class SimulationRunner:
 
         if not all_bars:
             log.warning("No candles available for simulation date %s", cfg.date)
+            self._status_message = f"No candles available for {cfg.date}"
             self._state = SimState.IDLE
             return
 
         self._candles = all_bars
         self._bars_total = len(all_bars)
         self._state = SimState.RUNNING
+        self._status_message = f"Playing {cfg.date} ({len(all_bars)} bars)..."
         log.info("Simulation started: %s, %d bars, speed %.1fx", cfg.date, self._bars_total, self._speed)
 
         try:
@@ -513,6 +522,7 @@ class SimulationRunner:
             )
             self._stats.signals_fired += 1
             self._stats.events.append(event)
+            self._last_signal = event
 
             if strength == "STRONG":
                 self._stats.trades_entered += 1
