@@ -1770,6 +1770,7 @@ async def _sse_all_generator(
     last_pnl_t       = 0.0
     last_portfolio_t = 0.0
     last_alerts_t    = 0.0
+    last_sim_t       = 0.0
 
     while True:
         if await request.is_disconnected():
@@ -1938,14 +1939,16 @@ async def _sse_all_generator(
             except Exception as _e:
                 log.debug("SSE portfolio build error: %s", _e)
 
-        # ── signal alerts (every 15s from in-memory deque) ───────────────────
-        if now_mono - last_alerts_t >= 15.0:
-            last_alerts_t = now_mono
-            now_ms = int(time.time() * 1000)
+        # ── simulation status (every 1s if simulation active) ────────────────
+        if now_mono - last_sim_t >= 1.0:
+            last_sim_t = now_mono
             try:
-                yield f"event: alerts\ndata: {_build_alerts_event(now_ms)}\n\n"
+                from app.services.simulation import simulation_runner, SimState
+                sim_status = simulation_runner.status
+                if sim_status.state != SimState.IDLE:
+                    yield f"event: simulation\ndata: {sim_status.model_dump_json()}\n\n"
             except Exception as _e:
-                log.debug("SSE alerts build error: %s", _e)
+                log.debug("SSE simulation build error: %s", _e)
 
         await asyncio.sleep(price_interval)
 
