@@ -718,7 +718,9 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
         </div>
 
-        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, maxWidth: '48%', overflow: 'hidden' }}>
+        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
+          <SimulationFooterButton />
+          <SimulationFooterBadge />
           {macOn ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
           ) : minimizedAvailable.length > 0 ? (
@@ -783,9 +785,6 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
           {!scanning && (activity?.last_scan_ms ?? 0) > 0 && <span style={{ opacity: .7 }}>· {fmtAgo(activity?.last_scan_ms ?? 0)}</span>}
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
-          <span style={{ width: 1, height: 14, background: 'var(--k-border)' }} />
-          <SimulationFooterButton />
-          <SimulationFooterBadge />
         </div>
       </footer>
       {!macOn && fullscreenWorkspace}
