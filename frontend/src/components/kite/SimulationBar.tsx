@@ -71,13 +71,25 @@ export function SimulationBar() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!barOpen) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
       if (e.key === ' ') {
         e.preventDefault();
         if (sim.status.state === 'running') sim.pause();
         else if (sim.status.state === 'paused') sim.resume();
         else if (sim.status.state === 'idle') sim.start();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        sim.stepBars(-5);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        sim.stepBars(5);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        sim.jumpStart();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        sim.jumpEnd();
       } else if (e.key === 'Escape') {
         if (showStreamDrawer) setShowStreamDrawer(false);
         else sim.setBarOpen(false);
