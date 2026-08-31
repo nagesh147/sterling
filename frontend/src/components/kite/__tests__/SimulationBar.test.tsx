@@ -18,6 +18,8 @@ globalThis.fetch = vi.fn().mockImplementation(() =>
         bars_total: 0,
         stats: { signals_fired: 0, trades_entered: 0, wins: 0, losses: 0, pnl: 0, events: [] },
         elapsed_real_s: 0,
+        status_message: '',
+        last_signal: null,
       }),
   })
 );
@@ -35,6 +37,8 @@ describe('SimulationBar Component', () => {
         bars_total: 0,
         stats: { signals_fired: 0, trades_entered: 0, wins: 0, losses: 0, pnl: 0, events: [] },
         elapsed_real_s: 0,
+        status_message: '',
+        last_signal: null,
       },
       date: '2026-08-28',
       startTime: '09:15:00',
