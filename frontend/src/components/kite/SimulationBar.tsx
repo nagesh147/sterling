@@ -487,7 +487,7 @@ export function SimulationBar() {
           }}
         >
           {/* Drag Handle & Icon */}
-          <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: '#c2c2c2', flexShrink: 0 }}>
+          <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: 'var(--k-faint-2)', flexShrink: 0 }}>
             {Array.from({ length: 6 }).map((_, index) => <span key={index} style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'currentColor' }} />)}
           </span>
           <span style={{ color: 'var(--k-cyan)', display: 'inline-flex' }}>⚡</span>
@@ -606,7 +606,7 @@ export function SimulationBar() {
                     padding: 8,
                     borderRadius: 8,
                     border: '1px solid var(--k-border-strong-3)',
-                    background: 'var(--k-surface-3, #181d28)',
+                    background: 'var(--k-surface-3)',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -680,7 +680,7 @@ export function SimulationBar() {
                     padding: 8,
                     borderRadius: 8,
                     border: '1px solid var(--k-border-strong-3)',
-                    background: 'var(--k-surface-3, #181d28)',
+                    background: 'var(--k-surface-3)',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1049,10 +1049,10 @@ export function SimulationFooterButton() {
       data-active={barOpen || active} 
       onClick={() => setBarOpen(!barOpen)}
       style={{
-        background: active ? 'color-mix(in srgb, var(--k-cyan, #22d3ee) 18%, transparent)' : undefined,
-        borderColor: active ? 'var(--k-cyan, #22d3ee)' : undefined,
-        color: active ? 'var(--k-cyan, #22d3ee)' : 'var(--k-ink-3)',
-        boxShadow: active ? '0 0 10px color-mix(in srgb, var(--k-cyan, #22d3ee) 30%, transparent)' : undefined,
+        background: active ? 'color-mix(in srgb, var(--k-cyan) 18%, transparent)' : undefined,
+        borderColor: active ? 'var(--k-cyan)' : undefined,
+        color: active ? 'var(--k-cyan)' : 'var(--k-ink-3)',
+        boxShadow: active ? '0 0 10px color-mix(in srgb, var(--k-cyan) 30%, transparent)' : undefined,
         fontWeight: 700,
       }}
     >
