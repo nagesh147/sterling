@@ -107,6 +107,7 @@ export function SimulationBar() {
 
   const [showStratDropdown, setShowStratDropdown] = useState(false);
   const [showLegsDropdown, setShowLegsDropdown] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   // Trigger toast on new signal
   useEffect(() => {
@@ -183,8 +184,6 @@ export function SimulationBar() {
   if (!barOpen) return null;
 
   const isBullish = sim.status.last_signal?.direction === 'BULLISH' || sim.status.last_signal?.direction === 'LONG';
-
-  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const STRATEGY_LIST = [
     { key: 'all', label: '⚡ ALL STRATEGIES' },
