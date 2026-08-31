@@ -1,25 +1,67 @@
-/* ── Simulation Bar ──────────────────────────────────────── */
+/* ── Market Replay Expandable Footer Dock ─────────────────── */
 
 .sim-bar-wrapper {
   position: relative;
   z-index: 149;
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-top: 1px solid var(--k-border-strong-4, #242936);
+  background: color-mix(in srgb, var(--k-bg, #0a0d12) 96%, var(--k-cyan, #22d3ee) 4%);
+  backdrop-filter: blur(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.sim-bar-wrapper[data-open="true"] { max-height: 120px; }
-.sim-bar-wrapper[data-open="false"] { max-height: 0; }
+.sim-bar-wrapper[data-open="false"] {
+  display: none;
+}
 
-.sim-bar {
+.sim-dock-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 0 14px;
-  height: 52px;
-  border-top: 1px solid color-mix(in srgb, var(--k-cyan, #22d3ee) 30%, transparent);
-  background: color-mix(in srgb, var(--k-bg, #0a0d12) 92%, var(--k-cyan, #22d3ee) 8%);
-  backdrop-filter: blur(12px);
-  font-family: 'Inter', system-ui, sans-serif;
+  padding: 0 12px;
+  height: 42px;
+  border-bottom: 1px solid color-mix(in srgb, var(--k-border-strong-3) 60%, transparent);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 11px;
   user-select: none;
+}
+
+.sim-dock-expandable {
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+  background: var(--k-bg, #0a0d12);
+}
+.sim-dock-expandable[data-expanded="true"] {
+  max-height: 320px;
+  border-bottom: 1px solid var(--k-border-strong-4);
+}
+.sim-dock-expandable[data-expanded="false"] {
+  max-height: 0;
+}
+
+.sim-dock-resizer {
+  height: 6px;
+  cursor: ns-resize;
+  background: color-mix(in srgb, var(--k-border-strong-3) 40%, transparent);
+  transition: background 0.15s;
+}
+.sim-dock-resizer:hover {
+  background: var(--k-cyan, #22d3ee);
+}
+
+.sim-dock-tabstrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--k-border-strong-3);
+  background: color-mix(in srgb, var(--k-bg) 92%, var(--k-cyan) 8%);
+}
+
+.sim-dock-content {
+  height: 240px;
+  overflow-y: auto;
+  padding: 12px;
 }
 
 /* ── Date / Time pickers ───────────────── */

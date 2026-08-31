@@ -9,6 +9,16 @@ const tint = (color: string, opacity: number) => `color-mix(in srgb, ${color} ${
 // Tick intervals for 30 mins
 const TICKS = ['09:15', '09:45', '10:15', '10:45', '11:15', '11:45', '12:15', '12:45', '13:15', '13:45', '14:15', '14:45', '15:15', '15:30'];
 
+const STRATEGY_OPTIONS = [
+  { id: 'supertrend', label: '🎯 SUPERTREND' },
+  { id: 'vcp', label: '📈 VCP SQUEEZE' },
+  { id: 'adaptive_edge', label: '⚡ ADAPTIVE EDGE' },
+  { id: 'bear_to_bearish', label: '📉 BEAR TO BEARISH' },
+  { id: 'atm_imbalance', label: '⚖️ ATM IMBALANCE' },
+  { id: 'navigator', label: '🧭 NAVIGATOR' },
+  { id: 'nifty_orb', label: '🔔 NIFTY ORB' },
+];
+
 // Helper: parse HH:MM or ISO datetime string to minutes since midnight safely
 function parseTimeToMinutes(timeStr?: string): number {
   if (!timeStr) return 0;
@@ -91,6 +101,9 @@ export function SimulationBar() {
   const [showStreamDrawer, setShowStreamDrawer] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'signals' | 'trades'>('signals');
   const [toastSignal, setToastSignal] = useState<SimSignalEvent | null>(null);
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
 
   // Trigger toast on new signal
   useEffect(() => {
@@ -422,65 +435,21 @@ export function SimulationBar() {
         </div>
       )}
 
+      {/* Expandable Replay Footer Dock */}
       <div className="sim-bar-wrapper" data-open={barOpen}>
-        <div className="sim-bar">
-          {/* Left: Input group */}
+        {/* Top Dock Toolbar Strip */}
+        <div className="sim-dock-toolbar">
+          {/* Left: Quick Date & Time Inputs */}
           <div className="sim-date-group">
             <button
               className="sim-speed-pill"
               style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-cyan)', color: 'var(--k-cyan)', background: 'color-mix(in srgb, var(--k-cyan) 12%, transparent)' }}
-              onClick={() => setShowConfigModal(true)}
+              onClick={() => { setActiveDockTab('config'); setIsExpanded(!isExpanded); }}
               disabled={simActive}
               title="Configure Strategies, Moneyness & Lots"
             >
               ⚙️ Config
             </button>
-            <select
-              className="sim-input"
-              style={{ paddingRight: 4, cursor: 'pointer' }}
-              value={sim.selectedStrategy}
-              onChange={e => sim.setSelectedStrategy(e.target.value)}
-              disabled={simActive}
-              title="Select strategy to replay (or ALL)"
-            >
-              <option value="all">⚡ ALL STRATEGIES</option>
-              <option value="supertrend">🎯 SUPERTREND</option>
-              <option value="vcp">📈 VCP SQUEEZE</option>
-              <option value="adaptive_edge">⚡ ADAPTIVE EDGE</option>
-              <option value="bear_to_bearish">📉 BEAR TO BEARISH</option>
-              <option value="atm_imbalance">⚖️ ATM IMBALANCE</option>
-              <option value="navigator">🧭 NAVIGATOR</option>
-              <option value="nifty_orb">🔔 NIFTY ORB</option>
-            </select>
-            <select
-              className="sim-input"
-              style={{ paddingRight: 4, cursor: 'pointer' }}
-              value={sim.moneyness}
-              onChange={e => sim.setMoneyness(e.target.value)}
-              disabled={simActive}
-              title="Strike selection (ATM, ITM, OTM, or ALL)"
-            >
-              <option value="ATM">🎯 ATM (At-The-Money)</option>
-              <option value="ITM1">🟢 ITM1 (In-The-Money +1)</option>
-              <option value="ITM2">🟢 ITM2 (In-The-Money +2)</option>
-              <option value="OTM1">🔴 OTM1 (Out-of-Money +1)</option>
-              <option value="OTM2">🔴 OTM2 (Out-of-Money +2)</option>
-              <option value="ALL">✨ ALL (ATM + ITM + OTM)</option>
-            </select>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--k-dim)' }}>LOTS:</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                className="sim-input"
-                style={{ width: 44 }}
-                value={sim.lots}
-                onChange={e => sim.setLots(Math.max(1, parseInt(e.target.value) || 1))}
-                disabled={simActive}
-                title="Number of lots per position"
-              />
-            </div>
             <input 
               type="date" 
               className="sim-input" 
@@ -504,10 +473,10 @@ export function SimulationBar() {
             />
           </div>
 
-          {/* Transport */}
+          {/* Center: Transport & Speeds */}
           <div className="sim-transport">
-            <button className="sim-btn" title="Jump to start" onClick={sim.jumpStart} disabled={!simActive}>⏮</button>
-            <button className="sim-btn" title="Back 5 bars" onClick={() => sim.stepBars(-5)} disabled={!simActive}>◀◀</button>
+            <button className="sim-btn" title="Jump to start (Home)" onClick={sim.jumpStart} disabled={!simActive}>⏮</button>
+            <button className="sim-btn" title="Back 5 bars (←)" onClick={() => sim.stepBars(-5)} disabled={!simActive}>◀◀</button>
             
             {sim.status.state === 'running' ? (
               <button className="sim-btn sim-btn--play" title="Pause (Space)" onClick={sim.pause}>⏸</button>
@@ -517,61 +486,12 @@ export function SimulationBar() {
               <button className="sim-btn sim-btn--play" title="Start Replay (Space)" onClick={sim.start}>⏵</button>
             )}
             
-            <button className="sim-btn" title="Forward 5 bars" onClick={() => sim.stepBars(5)} disabled={!simActive}>▶▶</button>
-            <button className="sim-btn" title="Jump to end" onClick={sim.jumpEnd} disabled={!simActive}>⏭</button>
+            <button className="sim-btn" title="Forward 5 bars (→)" onClick={() => sim.stepBars(5)} disabled={!simActive}>▶▶</button>
+            <button className="sim-btn" title="Jump to end (End)" onClick={sim.jumpEnd} disabled={!simActive}>⏭</button>
             <button className="sim-btn sim-btn--stop" title="Stop & View Summary" onClick={sim.stop} disabled={!simActive}>⏹</button>
           </div>
 
-          {/* Status Message / Hydration Banner */}
-          {sim.status.state === 'loading' && (
-            <div className="sim-status-banner">
-              <span className="sim-spinner">⚡</span>
-              <span>{sim.status.status_message || 'Hydrating historical candles...'}</span>
-            </div>
-          )}
-
-          {/* Last Fired Signal Ticker */}
-          {sim.status.state !== 'loading' && sim.status.last_signal && (
-            <div 
-              className="sim-last-signal-pill" 
-              data-direction={sim.status.last_signal.direction}
-              onClick={() => setShowStreamDrawer(true)}
-              title="Click to view all replayed signals log"
-            >
-              <span className="sim-sig-dot" />
-              <span className="sim-sig-strat">[{sim.status.last_signal.strategy.toUpperCase()}]</span>
-              <span className="sim-sig-inst">{sim.status.last_signal.instrument}</span>
-              <span className="sim-sig-dir">{isBullish ? 'BUY' : 'SELL'}</span>
-              <span className="sim-sig-price">@ ₹{sim.status.last_signal.entry}</span>
-              <span className="sim-sig-time">({sim.status.last_signal.time_iso})</span>
-            </div>
-          )}
-
-          {/* Timeline */}
-          <div className="sim-timeline">
-            <div className="sim-timeline-header">
-              <span>{sim.status.config?.resolution || '5m'}</span>
-              <span className="sim-clock">
-                {formatTime(sim.status.current_time_iso, 8)}
-              </span>
-              <span>{sim.status.bars_played} / {sim.status.bars_total} bars</span>
-            </div>
-            
-            <div className="sim-progress-track">
-              <div className="sim-progress-fill" style={{ width: `${sim.status.progress_pct}%` }} />
-              <div className="sim-progress-head" data-playing={sim.status.state === 'running'} style={{ left: `${sim.status.progress_pct}%` }} />
-            </div>
-
-            <div className="sim-ticks">
-              {TICKS.map((t, i) => <span key={i} className="sim-tick">{t}</span>)}
-            </div>
-
-            <div className="sim-heatmap">
-              {heatmapDots}
-            </div>
-          </div>
-
-          {/* Speeds */}
+          {/* Speed Pills */}
           <div className="sim-speeds">
             {[1, 5, 10, 50, 100, 250, 500, 1000, 5000].map(s => (
               <button 
@@ -585,30 +505,230 @@ export function SimulationBar() {
             ))}
           </div>
 
-          {/* Stats */}
+          {/* Timeline */}
+          <div className="sim-timeline" style={{ maxWidth: 180 }}>
+            <div className="sim-timeline-header">
+              <span className="sim-clock">{sim.status.current_time_iso || sim.startTime}</span>
+              <span>{sim.status.progress_pct}%</span>
+            </div>
+            <div className="sim-progress-track">
+              <div className="sim-progress-fill" style={{ width: `${sim.status.progress_pct}%` }} />
+            </div>
+          </div>
+
+          {/* Right: Expandable Dock Tabs & Stats */}
           <div className="sim-stats">
             <button 
-              className="sim-stream-btn"
-              onClick={() => setShowStreamDrawer(true)}
-              title="Open full signal stream drawer"
+              className="sim-speed-pill"
+              data-active={isExpanded && activeDockTab === 'signals'}
+              onClick={() => { setActiveDockTab('signals'); setIsExpanded(true); }}
+              title="Open replayed signals log"
             >
               ⚡ Signals ({sim.status.stats.signals_fired})
             </button>
 
-            <div className="sim-stat">
-              <span className="sim-stat-label">W/L</span>
-              <span className="sim-stat-value">{sim.status.stats.wins}/{sim.status.stats.losses}</span>
+            <button 
+              className="sim-speed-pill"
+              data-active={isExpanded && activeDockTab === 'trades'}
+              onClick={() => { setActiveDockTab('trades'); setIsExpanded(true); }}
+              title="Open executed paper trades log"
+            >
+              💼 Trades ({(sim.status.stats.trades || []).length})
+            </button>
+
+            <button
+              className="sim-speed-pill"
+              style={{ color: 'var(--k-cyan)', borderColor: 'var(--k-cyan)', background: isExpanded ? 'color-mix(in srgb, var(--k-cyan) 20%, transparent)' : undefined }}
+              onClick={() => setIsExpanded(!isExpanded)}
+              title={isExpanded ? 'Collapse Dock' : 'Expand Dock'}
+            >
+              {isExpanded ? '▼ Dock' : '▲ Dock'}
+            </button>
+          </div>
+        </div>
+
+        {/* Expandable Multi-Tab Dock Panel */}
+        <div className="sim-dock-expandable" data-expanded={isExpanded}>
+          <div className="sim-dock-tabstrip">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="sim-speed-pill"
+                data-active={activeDockTab === 'config'}
+                onClick={() => setActiveDockTab('config')}
+              >
+                ⚙️ CONFIGURATION
+              </button>
+              <button
+                className="sim-speed-pill"
+                data-active={activeDockTab === 'signals'}
+                onClick={() => setActiveDockTab('signals')}
+              >
+                ⚡ SIGNALS ({sim.status.stats.events.length})
+              </button>
+              <button
+                className="sim-speed-pill"
+                data-active={activeDockTab === 'trades'}
+                onClick={() => setActiveDockTab('trades')}
+              >
+                💼 EXECUTED TRADES ({(sim.status.stats.trades || []).length})
+              </button>
             </div>
 
-            <div className="sim-stat">
-              <span className="sim-stat-label">P&L</span>
-              <span 
-                className="sim-stat-value" 
-                data-positive={sim.status.stats.pnl > 0 ? true : sim.status.stats.pnl < 0 ? false : undefined}
-              >
-                {sim.status.stats.pnl > 0 ? '+' : ''}{sim.status.stats.pnl.toFixed(2)}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {activeDockTab === 'signals' && sim.status.stats.events.length > 0 && (
+                <button
+                  className="sim-speed-pill"
+                  style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)' }}
+                  onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}
+                >
+                  📥 Export Signals CSV
+                </button>
+              )}
+              {activeDockTab === 'trades' && (sim.status.stats.trades || []).length > 0 && (
+                <button
+                  className="sim-speed-pill"
+                  style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)' }}
+                  onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}
+                >
+                  📥 Export Trades CSV
+                </button>
+              )}
+              <button className="sim-drawer-close" onClick={() => setIsExpanded(false)}>✕</button>
             </div>
+          </div>
+
+          <div className="sim-dock-content">
+            {activeDockTab === 'config' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                    ⚡ ACTIVE REPLAY STRATEGIES
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {STRATEGY_OPTIONS.map(strat => {
+                      const isSel = sim.selectedStrategies.includes(strat.id);
+                      return (
+                        <button
+                          key={strat.id}
+                          className="sim-speed-pill"
+                          data-active={isSel}
+                          style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                          onClick={() => sim.toggleStrategy(strat.id)}
+                          disabled={simActive}
+                        >
+                          {strat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                    🎯 STRIKE MONEYNESS & POSITION LOTS
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                    {['ATM', 'ITM1', 'ITM2', 'OTM1', 'OTM2', 'ALL'].map(m => (
+                      <button
+                        key={m}
+                        className="sim-speed-pill"
+                        data-active={sim.moneyness === m}
+                        style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                        onClick={() => sim.setMoneyness(m)}
+                        disabled={simActive}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: 'var(--k-dim)' }}>Lots:</span>
+                    {[1, 2, 5, 10, 25, 50].map(l => (
+                      <button
+                        key={l}
+                        className="sim-speed-pill"
+                        data-active={sim.lots === l}
+                        style={{ height: 24, padding: '0 8px', fontSize: 9 }}
+                        onClick={() => sim.setLots(l)}
+                        disabled={simActive}
+                      >
+                        {l}L
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeDockTab === 'signals' && (
+              sim.status.stats.events.length === 0 ? (
+                <div className="sim-drawer-empty">Replay stepping through bars... No signals triggered yet.</div>
+              ) : (
+                sim.status.stats.events.slice().reverse().map((ev, i) => (
+                  <div key={i} className="sim-stream-row" data-direction={ev.direction}>
+                    <div className="sim-stream-time">{ev.time_iso}</div>
+                    <div className="sim-stream-strat">[{ev.strategy.toUpperCase()}]</div>
+                    <div className="sim-stream-inst">{ev.instrument}</div>
+                    <div className="sim-stream-dir" data-bull={ev.direction === 'BULLISH' || ev.direction === 'LONG'}>{ev.direction}</div>
+                    <div className="sim-stream-price">Entry: ₹{ev.entry}</div>
+                    <div className="sim-stream-sl">SL: ₹{ev.stop}</div>
+                    <div className="sim-stream-tp">TP: ₹{ev.target}</div>
+                  </div>
+                ))
+              )
+            )}
+
+            {activeDockTab === 'trades' && (
+              !(sim.status.stats.trades && sim.status.stats.trades.length > 0) ? (
+                <div className="sim-drawer-empty">No trades executed yet. Strong signals will enter trades automatically.</div>
+              ) : (
+                <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--k-border)', color: 'var(--k-dim)', fontSize: 10 }}>
+                      <th style={{ padding: '6px 4px' }}>ID</th>
+                      <th style={{ padding: '6px 4px' }}>Time</th>
+                      <th style={{ padding: '6px 4px' }}>Strategy</th>
+                      <th style={{ padding: '6px 4px' }}>Contract</th>
+                      <th style={{ padding: '6px 4px' }}>Lots (Qty)</th>
+                      <th style={{ padding: '6px 4px' }}>Entry ₹</th>
+                      <th style={{ padding: '6px 4px' }}>Exit ₹</th>
+                      <th style={{ padding: '6px 4px' }}>Status</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'right' }}>Realized P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sim.status.stats.trades.slice().reverse().map((tr, i) => {
+                      const isWin = tr.status === 'WIN';
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--k-text) 6%, transparent)' }}>
+                          <td style={{ padding: '6px 4px', fontFamily: 'monospace', color: 'var(--k-cyan)', fontWeight: 600 }}>{tr.trade_id}</td>
+                          <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.entry_time_iso} → {tr.exit_time_iso}</td>
+                          <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--k-text)' }}>[{tr.strategy.toUpperCase()}]</td>
+                          <td style={{ padding: '6px 4px', color: 'var(--k-text)', fontWeight: 600 }}>{tr.symbol}</td>
+                          <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.lots}L ({tr.quantity}Q)</td>
+                          <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>₹{tr.entry_price}</td>
+                          <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
+                          <td style={{ padding: '6px 4px' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontSize: 9,
+                              fontWeight: 700,
+                              background: isWin ? 'color-mix(in srgb, var(--k-green) 15%, transparent)' : 'color-mix(in srgb, var(--k-red) 15%, transparent)',
+                              color: isWin ? 'var(--k-green)' : 'var(--k-red)',
+                            }}>
+                              {tr.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: tr.pnl_usd >= 0 ? 'var(--k-green)' : 'var(--k-red)' }}>
+                            {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)} ({tr.pnl_pct >= 0 ? '+' : ''}{tr.pnl_pct}%)
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            )}
           </div>
         </div>
       </div>
@@ -620,20 +740,26 @@ export function SimulationFooterButton() {
   const barOpen = useSimBarOpen();
   const setBarOpen = useSimulationStore(s => s.setBarOpen);
   const active = useSimActive();
+  const status = useSimulationStore(s => s.status);
   
   return (
     <button 
-      className="sim-footer-btn" 
+      type="button"
+      className="kw-dock-chip" 
       data-active={barOpen || active} 
       onClick={() => setBarOpen(!barOpen)}
       style={{
-        background: active ? 'color-mix(in srgb, var(--k-cyan, #22d3ee) 20%, transparent)' : undefined,
+        background: active ? 'color-mix(in srgb, var(--k-cyan, #22d3ee) 18%, transparent)' : undefined,
         borderColor: active ? 'var(--k-cyan, #22d3ee)' : undefined,
+        color: active ? 'var(--k-cyan, #22d3ee)' : 'var(--k-ink-3)',
         boxShadow: active ? '0 0 10px color-mix(in srgb, var(--k-cyan, #22d3ee) 30%, transparent)' : undefined,
+        fontWeight: 700,
       }}
     >
-      <span style={{ fontSize: '11px' }}>{active ? '⚡' : '▶'}</span>
-      REPLAY {active ? 'ACTIVE' : ''}
+      <span style={{ color: active ? 'var(--k-cyan)' : 'var(--k-brand)', display: 'inline-flex', fontSize: 11 }}>
+        {active ? '⚡' : '▶'}
+      </span>
+      REPLAY DOCK {active ? `(${status.current_time_iso || 'RUNNING'})` : ''}
     </button>
   );
 }
@@ -643,9 +769,24 @@ export function SimulationFooterBadge() {
   if (!active) return null;
   
   return (
-    <div className="sim-footer-badge" data-playing={true}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--k-cyan)', boxShadow: '0 0 4px var(--k-cyan)' }}></span>
+    <span 
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 22,
+        padding: '0 8px',
+        borderRadius: 6,
+        background: 'color-mix(in srgb, var(--k-cyan, #22d3ee) 12%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--k-cyan, #22d3ee) 40%, transparent)',
+        color: 'var(--k-cyan, #22d3ee)',
+        fontSize: 9.5,
+        fontWeight: 800,
+        letterSpacing: '.04em',
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--k-cyan)', boxShadow: '0 0 6px var(--k-cyan)' }} />
       REPLAYING
-    </div>
+    </span>
   );
 }
