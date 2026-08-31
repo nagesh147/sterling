@@ -136,7 +136,7 @@ class SimulationRunner:
         return self.status
 
     def set_speed(self, speed: float) -> SimStatus:
-        self._speed = max(0.5, min(speed, 100.0))
+        self._speed = max(0.5, min(speed, 5000.0))
         return self.status
 
     async def _run_loop(self):
@@ -206,12 +206,14 @@ class SimulationRunner:
             current_sim_epoch = float(start_epoch)
             total_sim_seconds = float(max(1, end_epoch - start_epoch))
             bar_idx = 0
-            dt = 0.2  # 200ms tick in real time
 
             while current_sim_epoch <= end_epoch and not self._stop_requested:
                 await self._pause_event.wait()
                 if self._stop_requested:
                     break
+
+                # Dynamic update tick interval (30ms for >=500x, 50ms for >=50x, 100ms otherwise)
+                dt = 0.03 if self._speed >= 500 else (0.05 if self._speed >= 50 else 0.1)
 
                 # Dynamic second-by-second clock & progress update
                 bar_dt = datetime.fromtimestamp(current_sim_epoch, tz=ist)

@@ -69,8 +69,8 @@ def test_set_speed():
     assert simulation_runner._speed == 15.0
 
     # Bounds check
-    simulation_runner.set_speed(150.0)
-    assert simulation_runner._speed == 100.0
+    simulation_runner.set_speed(6000.0)
+    assert simulation_runner._speed == 5000.0
 
     simulation_runner.set_speed(0.1)
     assert simulation_runner._speed == 0.5

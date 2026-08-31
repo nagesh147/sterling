@@ -187,7 +187,7 @@ function startPolling() {
         }
       }
     } catch { /* ignore polling errors */ }
-  }, 500);
+  }, 150);
 }
 
 function stopPolling() {

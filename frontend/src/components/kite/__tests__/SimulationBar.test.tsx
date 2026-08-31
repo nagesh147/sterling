@@ -60,10 +60,10 @@ describe('SimulationBar Component', () => {
 
   it('allows selecting speed', () => {
     render(<SimulationBar />);
-    const speed20Btn = screen.getByText('20×');
-    fireEvent.click(speed20Btn);
+    const speed100Btn = screen.getByText('100×');
+    fireEvent.click(speed100Btn);
 
-    expect(useSimulationStore.getState().speed).toBe(20);
+    expect(useSimulationStore.getState().speed).toBe(100);
   });
 
   it('renders footer replay button and toggles bar open state', () => {

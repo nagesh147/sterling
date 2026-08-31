@@ -46,11 +46,11 @@ export function SimulationBar() {
       } else if (e.key === 'Escape') {
         sim.setBarOpen(false);
       } else if (e.key === '=' || e.key === '+') {
-        const speeds = [1, 2, 5, 10, 15, 20, 50];
+        const speeds = [1, 5, 10, 50, 100, 250, 500, 1000, 5000];
         const idx = speeds.indexOf(sim.speed);
         if (idx < speeds.length - 1) sim.setSpeed(speeds[idx + 1]);
       } else if (e.key === '-' || e.key === '_') {
-        const speeds = [1, 2, 5, 10, 15, 20, 50];
+        const speeds = [1, 5, 10, 50, 100, 250, 500, 1000, 5000];
         const idx = speeds.indexOf(sim.speed);
         if (idx > 0) sim.setSpeed(speeds[idx - 1]);
       }
@@ -183,14 +183,14 @@ export function SimulationBar() {
 
         {/* Speeds */}
         <div className="sim-speeds">
-          {[1, 2, 5, 10, 15, 20, 50].map(s => (
+          {[1, 5, 10, 50, 100, 250, 500, 1000, 5000].map(s => (
             <button 
               key={s} 
               className="sim-speed-pill" 
               data-active={sim.speed === s}
               onClick={() => sim.setSpeed(s)}
             >
-              {s}×
+              {s === 5000 ? '⚡ MAX' : `${s}×`}
             </button>
           ))}
         </div>
