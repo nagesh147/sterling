@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSimulation, useSimulationStore, useSimBarOpen, useSimActive, SimSignalEvent } from '../../hooks/useSimulation';
+import { useSimulation, useSimulationStore, useSimBarOpen, useSimActive, SimSignalEvent, SimTradeEvent } from '../../hooks/useSimulation';
 import { k } from '../../styles/kiteUI';
 import './SimulationBar.css';
 
