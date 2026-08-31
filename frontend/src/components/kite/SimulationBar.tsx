@@ -9,6 +9,24 @@ const tint = (color: string, opacity: number) => `color-mix(in srgb, ${color} ${
 // Tick intervals for 30 mins
 const TICKS = ['09:15', '09:45', '10:15', '10:45', '11:15', '11:45', '12:15', '12:45', '13:15', '13:45', '14:15', '14:45', '15:15', '15:30'];
 
+// Helper: parse HH:MM or ISO datetime string to minutes since midnight safely
+function parseTimeToMinutes(timeStr?: string): number {
+  if (!timeStr) return 0;
+  const str = timeStr.includes('T') ? (timeStr.split('T')[1] || '') : timeStr;
+  const parts = str.split(':').map(Number);
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return parts[0] * 60 + parts[1];
+  }
+  return 0;
+}
+
+// Helper: safely format time string to HH:MM or HH:MM:SS
+function formatTime(isoStr?: string, len: number = 8): string {
+  if (!isoStr) return '--:--:--';
+  const str = isoStr.includes('T') ? (isoStr.split('T')[1] || isoStr) : isoStr;
+  return str.substring(0, len);
+}
+
 export function SimulationBar() {
   const sim = useSimulation();
   const barOpen = useSimBarOpen();
@@ -41,31 +59,51 @@ export function SimulationBar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [barOpen, sim]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!barOpen) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (sim.status.state === 'running') sim.pause();
+        else if (sim.status.state === 'paused') sim.resume();
+        else if (sim.status.state === 'idle') sim.start();
+      } else if (e.key === 'Escape') {
+        sim.setBarOpen(false);
+      } else if (e.key === '=' || e.key === '+') {
+        const speeds = [1, 2, 5, 10, 15, 20, 50];
+        const idx = speeds.indexOf(sim.speed);
+        if (idx < speeds.length - 1) sim.setSpeed(speeds[idx + 1]);
+      } else if (e.key === '-' || e.key === '_') {
+        const speeds = [1, 2, 5, 10, 15, 20, 50];
+        const idx = speeds.indexOf(sim.speed);
+        if (idx > 0) sim.setSpeed(speeds[idx - 1]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [barOpen, sim]);
+
   // Compute heatmap dots
   const heatmapDots = useMemo(() => {
     if (!sim.status.config) return [];
     
-    // Parse start and end times to get total minutes
-    const parseTime = (iso: string) => {
-      const d = new Date(iso);
-      return d.getHours() * 60 + d.getMinutes();
-    };
-    
-    // Fallback if config is missing time strings, use arbitrary range
-    const startMins = parseTime(`${sim.status.config.date}T${sim.status.config.start_time}`);
-    const endMins = parseTime(`${sim.status.config.date}T${sim.status.config.end_time}`);
-    const totalMins = endMins - startMins;
+    const startMins = parseTimeToMinutes(sim.status.config.start_time || '09:15:00');
+    const endMins = parseTimeToMinutes(sim.status.config.end_time || '15:30:00');
+    const totalMins = Math.max(1, endMins - startMins);
 
     return sim.status.stats.events.map((ev, i) => {
-      const evMins = parseTime(ev.time_iso);
+      const evMins = parseTimeToMinutes(ev.time_iso);
       const pct = Math.max(0, Math.min(100, ((evMins - startMins) / totalMins) * 100));
-      const color = ev.direction === 'LONG' ? k.green : k.red;
+      const color = ev.direction === 'BULLISH' || ev.direction === 'LONG' ? k.green : k.red;
       return (
         <div 
           key={i} 
           className="sim-heatmap-dot" 
           style={{ left: `${pct}%`, background: color, boxShadow: `0 0 4px ${color}` }}
-          title={`${ev.time_iso.split('T')[1].substring(0, 5)} - ${ev.strategy} ${ev.direction}`}
+          title={`${formatTime(ev.time_iso, 5)} - ${ev.strategy} ${ev.direction}`}
         />
       );
     });
@@ -124,7 +162,7 @@ export function SimulationBar() {
           <div className="sim-timeline-header">
             <span>{sim.status.config?.resolution || '5m'}</span>
             <span className="sim-clock">
-              {sim.status.current_time_iso ? sim.status.current_time_iso.split('T')[1].substring(0, 8) : '--:--:--'}
+              {formatTime(sim.status.current_time_iso, 8)}
             </span>
             <span>{sim.status.bars_played} / {sim.status.bars_total} bars</span>
           </div>
