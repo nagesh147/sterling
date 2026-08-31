@@ -5,7 +5,7 @@ import { SimulationBar, SimulationFooterButton } from '../SimulationBar';
 import { useSimulationStore } from '../../../hooks/useSimulation';
 
 // Mock fetch API
-global.fetch = vi.fn().mockImplementation(() =>
+globalThis.fetch = vi.fn().mockImplementation(() =>
   Promise.resolve({
     ok: true,
     json: () =>
