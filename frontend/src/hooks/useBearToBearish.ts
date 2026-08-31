@@ -49,7 +49,10 @@ export interface BearToBearishSnapshotResponse {
   auto_execute?: boolean;
 }
 
+import { useSimActive } from './useSimulation';
+
 export function useBearToBearishSnapshot(enabled = true, pollMs = 5000) {
+  const isSimActive = useSimActive();
   return useQuery<BearToBearishSnapshotResponse>({
     queryKey: SNAPSHOT_KEY,
     queryFn: async () => {
@@ -57,7 +60,7 @@ export function useBearToBearishSnapshot(enabled = true, pollMs = 5000) {
       return res.data ?? res;
     },
     enabled,
-    refetchInterval: pollMs > 0 ? pollMs : false,
+    refetchInterval: isSimActive ? 300 : (pollMs > 0 ? pollMs : false),
   });
 }
 

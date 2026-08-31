@@ -712,7 +712,7 @@ class SimulationRunner:
 
         signals_to_fire = []
 
-        # 1. SuperTrend (Trend continuation / crossover)
+        # 1. SuperTrend (Trend crossover / continuation)
         if close >= prev_close and (sma5 >= sma20 or close >= float(prev_bar["high"])):
             signals_to_fire.append({
                 "strategy": "supertrend",
@@ -756,11 +756,49 @@ class SimulationRunner:
                 "strength": "STRONG",
             })
 
+        # 5. ATM Premium Imbalance (Skew Expansion)
+        if len(history) >= 2 and abs(close - opens) > atr * 0.3:
+            signals_to_fire.append({
+                "strategy": "atm_imbalance",
+                "direction": "BULLISH" if close >= opens else "BEARISH",
+                "strength": "STRONG",
+            })
+
+        # 6. Navigator (AVWAP & Volatility)
+        if len(history) >= 4 and ((sma5 > sma20 and close > opens) or (sma5 < sma20 and close < opens)):
+            signals_to_fire.append({
+                "strategy": "navigator",
+                "direction": "BULLISH" if close >= opens else "BEARISH",
+                "strength": "STRONG",
+            })
+
+        # 7. Nifty ORB Options (Opening Range Expansion)
+        if len(history) >= 3 and (high > float(prev_bar["high"]) or low < float(prev_bar["low"])):
+            signals_to_fire.append({
+                "strategy": "nifty_orb",
+                "direction": "BULLISH" if close >= opens else "BEARISH",
+                "strength": "STRONG",
+            })
+
+        # Track recent signals per (symbol, strategy) to prevent flood
+        if not hasattr(self, '_last_fired'):
+            self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
+
+        current_bar_idx = len(history)
+
         # Emit all generated strategy signals for this bar
         for sdef in signals_to_fire:
             direction = sdef["direction"]
             strength = sdef["strength"]
             strategy = sdef["strategy"]
+
+            key = (sym, strategy)
+            last_dir, last_idx = self._last_fired.get(key, ("", -1))
+            # De-duplicate: do not re-emit identical direction within 3 bars
+            if last_dir == direction and (current_bar_idx - last_idx) < 3:
+                continue
+
+            self._last_fired[key] = (direction, current_bar_idx)
 
             if direction == "BULLISH":
                 stop = round(close - 1.5 * atr, 2)
