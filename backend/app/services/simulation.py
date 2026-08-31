@@ -180,10 +180,10 @@ class SimulationRunner:
         res = cfg.resolution or "5m"
         res_sec = RESOLUTION_SECONDS.get(res, 300)
 
-        # Determine instruments
-        instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "BTCUSD", "ETHUSD"]
+        # Determine instruments (NSE Indian Markets only)
+        instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "TATASTEEL", "HDFCBANK", "ICICIBANK"]
 
-        self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Delta / Kite APIs..."
+        self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Zerodha Kite API..."
         await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
 
         # Fetch candles for each instrument from local store
@@ -268,7 +268,7 @@ class SimulationRunner:
         for ev in self._stats.events:
             signals.append({
                 "underlying": ev.instrument,
-                "has_options": ev.instrument in ("NIFTY", "BANKNIFTY"),
+                "has_options": True,
                 "spot_price": ev.entry,
                 "ivr": 25.0,
                 "green_arrow": ev.direction == "BULLISH",
@@ -543,8 +543,12 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
     base_prices = {
         "NIFTY": 24500.0,
         "BANKNIFTY": 52300.0,
-        "BTCUSD": 88000.0,
-        "ETHUSD": 3200.0,
+        "FINNIFTY": 23100.0,
+        "MIDCPNIFTY": 13200.0,
+        "RELIANCE": 3000.0,
+        "TATASTEEL": 150.0,
+        "HDFCBANK": 1650.0,
+        "ICICIBANK": 1200.0,
     }
     spot = base_prices.get(symbol.upper(), 1000.0)
     volatility = spot * 0.0015  # 0.15% per candle standard deviation
@@ -582,10 +586,20 @@ async def _hydrate_missing_candles(
     start_epoch: int,
     end_epoch: int,
 ) -> None:
-    """Fetch missing historical candles for selected replay date range from exchange/broker APIs."""
-    import httpx
+    """Fetch missing historical candles for selected replay date range from Zerodha Kite API."""
     from app.services import ohlcv_store
-    from app.services.delta_candle_fetcher import _fetch_chunk
+
+    # Standard Kite NSE Instrument Token Map
+    KITE_TOKENS: Dict[str, int] = {
+        "NIFTY": 256265,
+        "BANKNIFTY": 260101,
+        "FINNIFTY": 257001,
+        "MIDCPNIFTY": 288001,
+        "RELIANCE": 738561,
+        "TATASTEEL": 895745,
+        "HDFCBANK": 341249,
+        "ICICIBANK": 12705,
+    }
 
     for sym in instruments:
         existing = ohlcv_store.get_candles(sym, resolution, limit=5000, since=start_epoch)
@@ -593,54 +607,40 @@ async def _hydrate_missing_candles(
         if len(in_range) >= 5:
             continue  # Already cached locally
 
-        log.info("Missing local candles for %s [%s] on range %d-%d. Triggering remote historical fetch...", sym, resolution, start_epoch, end_epoch)
+        log.info("Missing local candles for Sterling Kite token %s [%s] on range %d-%d. Triggering Zerodha Kite fetch...", sym, resolution, start_epoch, end_epoch)
 
-        # 1. Delta Exchange Crypto Fetcher
-        if sym.upper() in ("BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "LINKUSD", "LTCUSD", "BNBUSD"):
-            try:
-                headers = {"Accept": "application/json"}
-                async with httpx.AsyncClient(headers=headers) as client:
-                    candles = await _fetch_chunk(client, sym.upper(), resolution, start_epoch - 3600, end_epoch + 3600)
-                    if candles:
-                        written = ohlcv_store.upsert_candles(sym, resolution, candles)
-                        log.info("Hydrated %d real historical candles for %s from Delta Exchange", written, sym)
-            except Exception as exc:
-                log.warning("Failed to fetch Delta historical candles for %s: %s", sym, exc)
+        try:
+            from app.services.exchange_account_store import exchange_account_store
+            from app.services.exchanges.kite.client import KiteClient
 
-        # 2. Zerodha / Kite Historical Fetcher
-        else:
-            try:
-                from app.services.exchange_account_store import exchange_account_store
-                from app.services.exchanges.kite.client import KiteClient
-                
-                token = 256265 if sym.upper() == "NIFTY" else (260101 if sym.upper() == "BANKNIFTY" else None)
-                if token:
-                    accounts = exchange_account_store.list_accounts()
-                    zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
-                    if zerodha_acct and zerodha_acct.access_token:
-                        kc = KiteClient(api_key=zerodha_acct.api_key, access_token=zerodha_acct.access_token)
-                        from_str = datetime.fromtimestamp(start_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                        to_str = datetime.fromtimestamp(end_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                        k_res = "5minute" if resolution == "5m" else ("15minute" if resolution == "15m" else "60minute")
-                        hist_data = await kc.get_historical(token, k_res, from_str, to_str)
-                        if isinstance(hist_data, dict) and "candles" in hist_data:
-                            raw_list = hist_data["candles"]
-                            parsed_candles = []
-                            for row in raw_list:
-                                dt_c = datetime.fromisoformat(row[0])
-                                parsed_candles.append({
-                                    "time": int(dt_c.timestamp()),
-                                    "open": float(row[1]),
-                                    "high": float(row[2]),
-                                    "low": float(row[3]),
-                                    "close": float(row[4]),
-                                    "volume": float(row[5]) if len(row) > 5 else 0.0,
-                                })
-                            if parsed_candles:
-                                written = ohlcv_store.upsert_candles(sym, resolution, parsed_candles)
-                                log.info("Hydrated %d real historical candles for %s from Kite", written, sym)
-            except Exception as exc:
-                log.warning("Failed to fetch Kite historical candles for %s: %s", sym, exc)
+            token = KITE_TOKENS.get(sym.upper())
+            if token:
+                accounts = exchange_account_store.list_accounts()
+                zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
+                if zerodha_acct and zerodha_acct.access_token:
+                    kc = KiteClient(api_key=zerodha_acct.api_key, access_token=zerodha_acct.access_token)
+                    from_str = datetime.fromtimestamp(start_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    to_str = datetime.fromtimestamp(end_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    k_res = "5minute" if resolution == "5m" else ("15minute" if resolution == "15m" else "60minute")
+                    hist_data = await kc.get_historical(token, k_res, from_str, to_str)
+                    if isinstance(hist_data, dict) and "candles" in hist_data:
+                        raw_list = hist_data["candles"]
+                        parsed_candles = []
+                        for row in raw_list:
+                            dt_c = datetime.fromisoformat(row[0])
+                            parsed_candles.append({
+                                "time": int(dt_c.timestamp()),
+                                "open": float(row[1]),
+                                "high": float(row[2]),
+                                "low": float(row[3]),
+                                "close": float(row[4]),
+                                "volume": float(row[5]) if len(row) > 5 else 0.0,
+                            })
+                        if parsed_candles:
+                            written = ohlcv_store.upsert_candles(sym, resolution, parsed_candles)
+                            log.info("Hydrated %d real historical candles for %s from Zerodha Kite", written, sym)
+        except Exception as exc:
+            log.warning("Failed to fetch Zerodha Kite historical candles for %s: %s", sym, exc)
 
 
 def reset_all_engine_signals() -> None:
