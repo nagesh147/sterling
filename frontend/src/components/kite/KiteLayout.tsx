@@ -6,6 +6,8 @@ import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
+import { SimulationBar, SimulationFooterButton, SimulationFooterBadge } from './SimulationBar';
+import { SimulationSummary } from './SimulationSummary';
 import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
@@ -698,6 +700,8 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
+      <SimulationBar />
+      <SimulationSummary />
       <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
@@ -779,6 +783,9 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
           {!scanning && (activity?.last_scan_ms ?? 0) > 0 && <span style={{ opacity: .7 }}>· {fmtAgo(activity?.last_scan_ms ?? 0)}</span>}
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
+          <span style={{ width: 1, height: 14, background: 'var(--k-border)' }} />
+          <SimulationFooterButton />
+          <SimulationFooterBadge />
         </div>
       </footer>
       {!macOn && fullscreenWorkspace}
