@@ -29,6 +29,7 @@ class SimConfig(BaseModel):
     speed: float = 1.0                 # 1,2,5,10,15,20,50
     resolution: str = "5m"             # candle resolution
     instruments: List[str] = []        # empty = all watchlist
+    strategy: str = "all"              # "all" or specific strategy name
 
 
 class SimSignalEvent(BaseModel):
@@ -786,11 +787,14 @@ class SimulationRunner:
 
         current_bar_idx = len(history)
 
-        # Emit all generated strategy signals for this bar
+        # Emit all generated strategy signals for this bar (or filter by selected strategy)
+        target_strat = self._config.strategy.lower() if self._config and self._config.strategy else "all"
         for sdef in signals_to_fire:
+            strategy = sdef["strategy"]
+            if target_strat not in ("all", "*") and strategy != target_strat:
+                continue
             direction = sdef["direction"]
             strength = sdef["strength"]
-            strategy = sdef["strategy"]
 
             key = (sym, strategy)
             last_dir, last_idx = self._last_fired.get(key, ("", -1))

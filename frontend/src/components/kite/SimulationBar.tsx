@@ -152,6 +152,23 @@ export function SimulationBar() {
         <div className="sim-bar">
           {/* Left: Input group */}
           <div className="sim-date-group">
+            <select
+              className="sim-input"
+              style={{ paddingRight: 4, cursor: 'pointer' }}
+              value={sim.selectedStrategy}
+              onChange={e => sim.setSelectedStrategy(e.target.value)}
+              disabled={simActive}
+              title="Select strategy to replay (or ALL)"
+            >
+              <option value="all">⚡ ALL STRATEGIES</option>
+              <option value="supertrend">🎯 SUPERTREND</option>
+              <option value="vcp">📈 VCP SQUEEZE</option>
+              <option value="adaptive_edge">⚡ ADAPTIVE EDGE</option>
+              <option value="bear_to_bearish">📉 BEAR TO BEARISH</option>
+              <option value="atm_imbalance">⚖️ ATM IMBALANCE</option>
+              <option value="navigator">🧭 NAVIGATOR</option>
+              <option value="nifty_orb">🔔 NIFTY ORB</option>
+            </select>
             <input 
               type="date" 
               className="sim-input" 
