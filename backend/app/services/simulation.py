@@ -311,18 +311,57 @@ class SimulationRunner:
     def get_kite_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for Kite Engine signal responses during simulation."""
         now_ms = int(time.time() * 1000)
+        KITE_TOKENS: Dict[str, int] = {
+            "NIFTY": 256265,
+            "BANKNIFTY": 260101,
+            "FINNIFTY": 257001,
+            "MIDCPNIFTY": 288001,
+            "RELIANCE": 738561,
+            "TATASTEEL": 895745,
+            "HDFCBANK": 341249,
+            "ICICIBANK": 12705,
+        }
         rows = []
         for ev in self._stats.events:
+            is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
+            direction_str = "long" if is_long else "short"
+            regime_str = "BULL" if is_long else "BEAR"
+            opt_type = "CE" if is_long else "PE"
+            token_val = KITE_TOKENS.get(ev.instrument.upper(), 256265)
+            strike_val = round(ev.entry / 50.0) * 50.0
+
+            leg = {
+                "moneyness": "ATM",
+                "option_type": opt_type,
+                "option_symbol": f"{ev.instrument}26AUG{int(strike_val)}{opt_type}",
+                "strike": strike_val,
+                "expiry": "2026-08-28",
+                "premium_spot": round(ev.entry * 0.02, 2),
+                "premium_sl": round(ev.entry * 0.015, 2),
+                "entry_sl": round(ev.entry * 0.01, 2),
+                "is_active": True,
+                "signal_timestamp_ms": now_ms,
+                "entry_timestamp_ms": now_ms,
+            }
+
             rows.append({
                 "underlying": ev.instrument,
-                "direction": ev.direction,
-                "state": "ENTRY_ARMED" if ev.strength == "STRONG" else "SETUP_ACTIVE",
+                "token": token_val,
+                "exchange": "NSE",
+                "regime": regime_str,
+                "alignment": {"fast": 1 if is_long else -1, "mid": 1 if is_long else -1, "slow": 1 if is_long else -1},
+                "direction": direction_str,
+                "option_type": opt_type,
+                "legs": [leg],
+                "spot": ev.entry,
+                "underlying_spot": ev.entry,
+                "stop_loss": ev.stop,
+                "entry_sl": ev.stop,
+                "target": ev.target,
                 "score": 90.0 if ev.strength == "STRONG" else 65.0,
+                "timestamp_ms": now_ms,
                 "is_active": True,
                 "is_fresh": True,
-                "timestamp_ms": now_ms,
-                "spot_price": ev.entry,
-                "legs": [],
                 "source": "spot",
             })
 
