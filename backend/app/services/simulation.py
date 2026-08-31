@@ -273,7 +273,7 @@ class SimulationRunner:
                 "exec_confidence": 0.88,
                 "signal_score": 90.0 if ev.strength == "STRONG" else 65.0,
                 "signal_strength": ev.strength,
-                "track": "vcp" if ev.strategy == "supertrend" else "trend_following",
+                "track": "vcp" if ev.strategy == "vcp" else ("mean_reversion" if ev.strategy == "adaptive_edge" else "trend_following"),
                 "strategy": ev.strategy,
                 "regime_score": 15.0,
                 "stop_price": ev.stop,

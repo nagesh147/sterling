@@ -117,6 +117,13 @@ export function useSimulation() {
     /* safely fallback when rendered outside QueryClientProvider in isolated tests */
   }
 
+  const clearLocalFeedCache = () => {
+    try {
+      sessionStorage.removeItem('sterling_signal_feed_v3');
+      sessionStorage.removeItem('sterling_signal_states_v3');
+    } catch { /* quota */ }
+  };
+
   const start = async () => {
     const config = {
       date: store.date,
@@ -126,6 +133,7 @@ export function useSimulation() {
       resolution: '5m',
       instruments: [],
     };
+    clearLocalFeedCache();
     try {
       const status = await post('/start', config);
       setStatus(status);
@@ -136,6 +144,7 @@ export function useSimulation() {
       console.warn('Simulation start failed, stopping prior session and retrying:', err);
       try {
         await post('/stop');
+        clearLocalFeedCache();
         const status = await post('/start', config);
         setStatus(status);
         queryClient?.invalidateQueries();
@@ -148,6 +157,7 @@ export function useSimulation() {
   };
 
   const stop = async () => {
+    clearLocalFeedCache();
     const status = await post('/stop');
     setStatus(status);
     queryClient?.invalidateQueries();

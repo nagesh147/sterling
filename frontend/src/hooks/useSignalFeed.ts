@@ -611,7 +611,18 @@ export function useSignalFeed() {
       } catch { /* quota */ }
       statesRef.current = {};
     };
-    return () => { _globalAddArrow = null; _globalClearState = null; _globalClearFeed = null; };
+
+    const handleSimStart = () => {
+      _globalClearFeed?.();
+    };
+    window.addEventListener('sterling-simulation-start', handleSimStart);
+
+    return () => {
+      _globalAddArrow = null;
+      _globalClearState = null;
+      _globalClearFeed = null;
+      window.removeEventListener('sterling-simulation-start', handleSimStart);
+    };
   }, []);
 
   const dismiss = useCallback((id: string) =>
