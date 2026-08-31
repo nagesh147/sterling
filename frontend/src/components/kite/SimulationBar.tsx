@@ -98,6 +98,19 @@ export function SimulationBar() {
 
   const isBullish = sim.status.last_signal?.direction === 'BULLISH' || sim.status.last_signal?.direction === 'LONG';
 
+  const [showConfigModal, setShowConfigModal] = useState(false);
+
+  const STRATEGY_LIST = [
+    { key: 'all', label: '⚡ ALL STRATEGIES' },
+    { key: 'supertrend', label: '🎯 SuperTrend' },
+    { key: 'vcp', label: '📈 VCP Squeeze' },
+    { key: 'adaptive_edge', label: '⚡ Adaptive Edge' },
+    { key: 'bear_to_bearish', label: '📉 Bear to Bearish' },
+    { key: 'atm_imbalance', label: '⚖️ ATM Imbalance' },
+    { key: 'navigator', label: '🧭 Navigator' },
+    { key: 'nifty_orb', label: '🔔 Nifty ORB' },
+  ];
+
   return (
     <>
       {/* Toast popup when a signal triggers */}
@@ -109,6 +122,105 @@ export function SimulationBar() {
           </span>
           <span className="sim-toast-price">@ ₹{toastSignal.entry}</span>
           <span className="sim-toast-time">({toastSignal.time_iso})</span>
+        </div>
+      )}
+
+      {/* Multi-Strategy & Strike Settings Drawer */}
+      {showConfigModal && (
+        <div className="sim-drawer-overlay" onClick={() => setShowConfigModal(false)}>
+          <div className="sim-drawer-card" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+            <div className="sim-drawer-header">
+              <div className="sim-drawer-title">
+                ⚙️ MARKET REPLAY CONFIGURATION
+              </div>
+              <button className="sim-drawer-close" onClick={() => setShowConfigModal(false)}>✕</button>
+            </div>
+
+            <div className="sim-drawer-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Strategies Multi-Select */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                  ⚡ SELECT STRATEGIES TO REPLAY ({sim.selectedStrategies.includes('all') ? 'ALL' : sim.selectedStrategies.length})
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {STRATEGY_LIST.map(s => {
+                    const isSelected = sim.selectedStrategies.includes(s.key) || (sim.selectedStrategies.includes('all') && s.key === 'all');
+                    return (
+                      <button
+                        key={s.key}
+                        className="sim-speed-pill"
+                        data-active={isSelected}
+                        style={{ height: 26, padding: '0 10px', fontSize: 10, borderRadius: 13 }}
+                        onClick={() => sim.toggleStrategy(s.key)}
+                        disabled={simActive}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Moneyness / Strike Selection */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                  🎯 MONEYNESS & STRIKE SELECTION
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { key: 'ATM', label: '🎯 ATM (At-The-Money)' },
+                    { key: 'ITM1', label: '🟢 ITM1 (+1 Strike In-the-Money)' },
+                    { key: 'ITM2', label: '🟢 ITM2 (+2 Strikes In-the-Money)' },
+                    { key: 'OTM1', label: '🔴 OTM1 (+1 Strike Out-of-Money)' },
+                    { key: 'OTM2', label: '🔴 OTM2 (+2 Strikes Out-of-Money)' },
+                    { key: 'ALL', label: '✨ ALL (ATM + ITM + OTM)' },
+                  ].map(m => (
+                    <button
+                      key={m.key}
+                      className="sim-speed-pill"
+                      data-active={sim.moneyness === m.key}
+                      style={{ height: 26, padding: '0 10px', fontSize: 10, borderRadius: 13 }}
+                      onClick={() => sim.setMoneyness(m.key)}
+                      disabled={simActive}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Position Sizing (Lots) */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                  📦 POSITION SIZING (LOTS)
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {[1, 2, 5, 10, 25, 50].map(l => (
+                    <button
+                      key={l}
+                      className="sim-speed-pill"
+                      data-active={sim.lots === l}
+                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      onClick={() => sim.setLots(l)}
+                      disabled={simActive}
+                    >
+                      {l} {l === 1 ? 'Lot' : 'Lots'}
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    className="sim-input"
+                    style={{ width: 50, height: 26 }}
+                    value={sim.lots}
+                    onChange={e => sim.setLots(Math.max(1, parseInt(e.target.value) || 1))}
+                    disabled={simActive}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -152,6 +264,15 @@ export function SimulationBar() {
         <div className="sim-bar">
           {/* Left: Input group */}
           <div className="sim-date-group">
+            <button
+              className="sim-speed-pill"
+              style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-cyan)', color: 'var(--k-cyan)', background: 'color-mix(in srgb, var(--k-cyan) 12%, transparent)' }}
+              onClick={() => setShowConfigModal(true)}
+              disabled={simActive}
+              title="Configure Strategies, Moneyness & Lots"
+            >
+              ⚙️ Config
+            </button>
             <select
               className="sim-input"
               style={{ paddingRight: 4, cursor: 'pointer' }}

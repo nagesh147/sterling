@@ -58,6 +58,7 @@ interface SimulationStore {
   endTime: string;
   speed: number;
   selectedStrategy: string;
+  selectedStrategies: string[];
   lots: number;
   moneyness: string;
   setDate: (d: string) => void;
@@ -65,6 +66,8 @@ interface SimulationStore {
   setEndTime: (t: string) => void;
   setSpeed: (s: number) => void;
   setSelectedStrategy: (s: string) => void;
+  setSelectedStrategies: (s: string[]) => void;
+  toggleStrategy: (s: string) => void;
   setLots: (l: number) => void;
   setMoneyness: (m: string) => void;
   
@@ -96,13 +99,32 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   endTime: '15:30:00',
   speed: 5,
   selectedStrategy: 'all',
+  selectedStrategies: ['all'],
   lots: 1,
   moneyness: 'ATM',
   setDate: (date) => set({ date }),
   setStartTime: (startTime) => set({ startTime }),
   setEndTime: (endTime) => set({ endTime }),
   setSpeed: (speed) => set({ speed }),
-  setSelectedStrategy: (selectedStrategy) => set({ selectedStrategy }),
+  setSelectedStrategy: (selectedStrategy) => set({ selectedStrategy, selectedStrategies: [selectedStrategy] }),
+  setSelectedStrategies: (selectedStrategies) => set({ selectedStrategies, selectedStrategy: selectedStrategies.length === 1 ? selectedStrategies[0] : (selectedStrategies.includes('all') ? 'all' : selectedStrategies.join(',')) }),
+  toggleStrategy: (stratKey: string) => set((state) => {
+    if (stratKey === 'all') {
+      return { selectedStrategies: ['all'], selectedStrategy: 'all' };
+    }
+    const current = state.selectedStrategies.filter(s => s !== 'all');
+    let next: string[];
+    if (current.includes(stratKey)) {
+      next = current.filter(s => s !== stratKey);
+      if (next.length === 0) next = ['all'];
+    } else {
+      next = [...current, stratKey];
+    }
+    return {
+      selectedStrategies: next,
+      selectedStrategy: next.length === 1 ? next[0] : (next.includes('all') ? 'all' : next.join(',')),
+    };
+  }),
   setLots: (lots) => set({ lots }),
   setMoneyness: (moneyness) => set({ moneyness }),
   showSummary: false,
@@ -149,6 +171,7 @@ export function useSimulation() {
       resolution: '5m',
       instruments: [],
       strategy: store.selectedStrategy,
+      strategies: store.selectedStrategies,
       lots: store.lots,
       moneyness: store.moneyness,
     };
