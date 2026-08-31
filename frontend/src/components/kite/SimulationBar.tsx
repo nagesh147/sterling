@@ -746,20 +746,20 @@ export function SimulationBar() {
 
           {/* Center: Transport & Speeds */}
           <div className="sim-transport">
-            <button className="sim-btn" title="Jump to start (Home)" onClick={sim.jumpStart} disabled={!simActive}>⏮</button>
+            <button className="sim-btn" title="Jump to start (Home)" onClick={() => sim.jumpStart()} disabled={!simActive}>⏮</button>
             <button className="sim-btn" title="Back 5 bars (←)" onClick={() => sim.stepBars(-5)} disabled={!simActive}>◀◀</button>
             
             {sim.status.state === 'running' ? (
-              <button className="sim-btn sim-btn--play" title="Pause (Space)" onClick={sim.pause}>⏸</button>
+              <button className="sim-btn sim-btn--play" title="Pause (Space)" onClick={() => sim.pause()}>⏸</button>
             ) : sim.status.state === 'paused' ? (
-              <button className="sim-btn sim-btn--play" title="Resume (Space)" onClick={sim.resume}>⏵</button>
+              <button className="sim-btn sim-btn--play" title="Resume (Space)" onClick={() => sim.resume()}>⏵</button>
             ) : (
-              <button className="sim-btn sim-btn--play" title="Start Replay (Space)" onClick={sim.start}>⏵</button>
+              <button className="sim-btn sim-btn--play" title="Start Replay (Space)" onClick={() => sim.start()}>⏵</button>
             )}
             
             <button className="sim-btn" title="Forward 5 bars (→)" onClick={() => sim.stepBars(5)} disabled={!simActive}>▶▶</button>
-            <button className="sim-btn" title="Jump to end (End)" onClick={sim.jumpEnd} disabled={!simActive}>⏭</button>
-            <button className="sim-btn sim-btn--stop" title="Stop & View Summary" onClick={sim.stop} disabled={!simActive}>⏹</button>
+            <button className="sim-btn" title="Jump to end (End)" onClick={() => sim.jumpEnd()} disabled={!simActive}>⏭</button>
+            <button className="sim-btn sim-btn--stop" title="Stop & View Summary" onClick={() => sim.stop()} disabled={!simActive}>⏹</button>
           </div>
 
           {/* Speed Pills */}
