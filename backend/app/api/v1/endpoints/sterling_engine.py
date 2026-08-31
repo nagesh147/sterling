@@ -318,6 +318,10 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
 @router.get("/signals")
 async def signals(request: Request, armed_only: bool = False) -> ScalpingScanResponse:
     """Scan the stored-crypto universe, return signals from all enabled strategies."""
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return ScalpingScanResponse(signals=[], armed_count=0, total_signals=0)
+
     import time as _t
     cfg = _effective_config(request)   # overlays optimized params when the toggle is on
     src = _adm.get_data_source()

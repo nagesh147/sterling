@@ -74,6 +74,10 @@ V2_SIGNALS_CONFIG = [
 def signals() -> dict:
     """Actionable signals per symbol at 4h from the validated V2 stack based on config.
     Paper-only display: this NEVER calls the order router. Execution stays manual."""
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return {"signals": [], "count": 0, "simulated": True}
+
     out = []
     symbols_paths = D.list_symbols()
     for sym, tf, strat, profiles in V2_SIGNALS_CONFIG:

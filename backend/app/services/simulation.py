@@ -292,6 +292,34 @@ class SimulationRunner:
             "simulated_date": sim_date,
         }
 
+    def get_kite_signals_response(self) -> Dict[str, Any]:
+        """Return signals formatted for Kite Engine signal responses during simulation."""
+        now_ms = int(time.time() * 1000)
+        rows = []
+        for ev in self._stats.events:
+            rows.append({
+                "underlying": ev.instrument,
+                "direction": ev.direction,
+                "state": "ENTRY_ARMED" if ev.strength == "STRONG" else "SETUP_ACTIVE",
+                "score": 90.0 if ev.strength == "STRONG" else 65.0,
+                "is_active": True,
+                "is_fresh": True,
+                "timestamp_ms": now_ms,
+                "spot_price": ev.entry,
+                "legs": [],
+                "source": "spot",
+            })
+
+        return {
+            "generated_ms": now_ms,
+            "scanning": False,
+            "scanning_label": "SIMULATION_REPLAY",
+            "rows": rows,
+            "next_scan_ms": 0,
+            "auto_scan": False,
+            "market_open": True,
+        }
+
     def _evaluate_bar(self, bar: Dict, bar_dt):
         """Run simple signal heuristics on a bar. In production this would
         call the full _compute_signal_item pipeline, but for the initial

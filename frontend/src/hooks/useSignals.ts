@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 
 export interface MtfBreakdown {
@@ -96,6 +97,16 @@ export function visibleGrokSignals(signals: SignalItem[] = []): SignalItem[] {
 }
 
 export function useSignals() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const handleSimStart = () => {
+      queryClient.refetchQueries({ queryKey: ['signals-all'] });
+    };
+    window.addEventListener('sterling-simulation-start', handleSimStart);
+    return () => window.removeEventListener('sterling-simulation-start', handleSimStart);
+  }, [queryClient]);
+
   return useQuery<SignalsResponse>({
     queryKey: ['signals-all'],
     queryFn: () => api.get<SignalsResponse>('/api/v1/directional/signals'),

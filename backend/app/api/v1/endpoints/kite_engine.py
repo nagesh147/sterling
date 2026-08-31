@@ -77,6 +77,11 @@ def _merge_signal_rows(base_rows: list[EngineSignalRow], navigator_rows: list[En
 
 
 def _signals_response(uid: str) -> SignalsResponse:
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        res = simulation_runner.get_kite_signals_response()
+        return SignalsResponse(**res)
+
     cfg = state.get_config(uid)
     us = scanner.snapshot(uid)
     st = state.status(uid)
