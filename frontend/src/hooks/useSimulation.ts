@@ -85,6 +85,7 @@ interface SimulationStore {
   selectedStrategies: string[];
   lots: number;
   moneyness: string;
+  selectedMoneyness: string[];
   setDate: (d: string) => void;
   setStartTime: (t: string) => void;
   setEndTime: (t: string) => void;
@@ -94,6 +95,8 @@ interface SimulationStore {
   toggleStrategy: (s: string) => void;
   setLots: (l: number) => void;
   setMoneyness: (m: string) => void;
+  setSelectedMoneyness: (m: string[]) => void;
+  toggleMoneyness: (m: string) => void;
   
   // Summary modal
   showSummary: boolean;
@@ -126,6 +129,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   selectedStrategies: ['all'],
   lots: 1,
   moneyness: 'ATM',
+  selectedMoneyness: ['ATM'],
   setDate: (date) => set({ date }),
   setStartTime: (startTime) => set({ startTime }),
   setEndTime: (endTime) => set({ endTime }),
@@ -150,7 +154,25 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     };
   }),
   setLots: (lots) => set({ lots }),
-  setMoneyness: (moneyness) => set({ moneyness }),
+  setMoneyness: (moneyness) => set({ moneyness, selectedMoneyness: [moneyness] }),
+  setSelectedMoneyness: (selectedMoneyness) => set({ selectedMoneyness, moneyness: selectedMoneyness.join(',') }),
+  toggleMoneyness: (legKey: string) => set((state) => {
+    if (legKey === 'ALL') {
+      return { selectedMoneyness: ['ALL'], moneyness: 'ALL' };
+    }
+    const current = state.selectedMoneyness.filter(m => m !== 'ALL');
+    let next: string[];
+    if (current.includes(legKey)) {
+      next = current.filter(m => m !== legKey);
+      if (next.length === 0) next = ['ALL'];
+    } else {
+      next = [...current, legKey];
+    }
+    return {
+      selectedMoneyness: next,
+      moneyness: next.length === 1 ? next[0] : (next.includes('ALL') ? 'ALL' : next.join(',')),
+    };
+  }),
   showSummary: false,
   setShowSummary: (showSummary) => set({ showSummary }),
 }));

@@ -105,6 +105,9 @@ export function SimulationBar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
 
+  const [showStratDropdown, setShowStratDropdown] = useState(false);
+  const [showLegsDropdown, setShowLegsDropdown] = useState(false);
+
   // Trigger toast on new signal
   useEffect(() => {
     if (sim.status.last_signal) {
@@ -450,6 +453,133 @@ export function SimulationBar() {
             >
               ⚙️ Config
             </button>
+
+            {/* Multi-Select Strategy Dropdown Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="sim-speed-pill"
+                style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
+                onClick={() => { setShowStratDropdown(!showStratDropdown); setShowLegsDropdown(false); }}
+                disabled={simActive}
+                title="Multi-select strategies to replay"
+              >
+                ⚡ STRATEGIES ({sim.selectedStrategies.includes('all') ? 'ALL' : sim.selectedStrategies.length}) ▼
+              </button>
+
+              {showStratDropdown && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: 30,
+                    left: 0,
+                    zIndex: 200,
+                    width: 220,
+                    padding: 8,
+                    borderRadius: 8,
+                    border: '1px solid var(--k-border-strong-3)',
+                    background: 'var(--k-bg)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
+                    Select Strategies:
+                  </div>
+                  <button
+                    className="sim-speed-pill"
+                    data-active={sim.selectedStrategies.includes('all')}
+                    style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+                    onClick={() => { sim.toggleStrategy('all'); setShowStratDropdown(false); }}
+                  >
+                    ⚡ ALL STRATEGIES
+                  </button>
+                  {STRATEGY_OPTIONS.map(strat => {
+                    const isSel = sim.selectedStrategies.includes(strat.id);
+                    return (
+                      <button
+                        key={strat.id}
+                        className="sim-speed-pill"
+                        data-active={isSel}
+                        style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+                        onClick={() => sim.toggleStrategy(strat.id)}
+                      >
+                        <span style={{ marginRight: 6 }}>{isSel ? '☑' : '☐'}</span>
+                        {strat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Multi-Select Moneyness / Legs Dropdown Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="sim-speed-pill"
+                style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
+                onClick={() => { setShowLegsDropdown(!showLegsDropdown); setShowStratDropdown(false); }}
+                disabled={simActive}
+                title="Multi-select strike moneyness legs"
+              >
+                🎯 LEGS ({sim.selectedMoneyness.includes('ALL') ? 'ALL' : sim.selectedMoneyness.length}) ▼
+              </button>
+
+              {showLegsDropdown && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    top: 30,
+                    left: 0,
+                    zIndex: 200,
+                    width: 200,
+                    padding: 8,
+                    borderRadius: 8,
+                    border: '1px solid var(--k-border-strong-3)',
+                    background: 'var(--k-bg)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
+                    Select Option Legs:
+                  </div>
+                  <button
+                    className="sim-speed-pill"
+                    data-active={sim.selectedMoneyness.includes('ALL')}
+                    style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+                    onClick={() => { sim.toggleMoneyness('ALL'); setShowLegsDropdown(false); }}
+                  >
+                    ✨ ALL LEGS
+                  </button>
+                  {[
+                    { id: 'ATM', label: '🎯 ATM (At-The-Money)' },
+                    { id: 'ITM1', label: '🟢 ITM1 (In-The-Money +1)' },
+                    { id: 'ITM2', label: '🟢 ITM2 (In-The-Money +2)' },
+                    { id: 'OTM1', label: '🔴 OTM1 (Out-of-Money +1)' },
+                    { id: 'OTM2', label: '🔴 OTM2 (Out-of-Money +2)' },
+                  ].map(leg => {
+                    const isSel = sim.selectedMoneyness.includes(leg.id);
+                    return (
+                      <button
+                        key={leg.id}
+                        className="sim-speed-pill"
+                        data-active={isSel}
+                        style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+                        onClick={() => sim.toggleMoneyness(leg.id)}
+                      >
+                        <span style={{ marginRight: 6 }}>{isSel ? '☑' : '☐'}</span>
+                        {leg.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <input 
               type="date" 
               className="sim-input" 
@@ -602,9 +732,18 @@ export function SimulationBar() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
-                    ⚡ ACTIVE REPLAY STRATEGIES
+                    ⚡ ACTIVE REPLAY STRATEGIES (MULTI-SELECT)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button
+                      className="sim-speed-pill"
+                      data-active={sim.selectedStrategies.includes('all')}
+                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      onClick={() => sim.toggleStrategy('all')}
+                      disabled={simActive}
+                    >
+                      ⚡ ALL STRATEGIES
+                    </button>
                     {STRATEGY_OPTIONS.map(strat => {
                       const isSel = sim.selectedStrategies.includes(strat.id);
                       return (
@@ -616,6 +755,7 @@ export function SimulationBar() {
                           onClick={() => sim.toggleStrategy(strat.id)}
                           disabled={simActive}
                         >
+                          <span style={{ marginRight: 4 }}>{isSel ? '☑' : '☐'}</span>
                           {strat.label}
                         </button>
                       );
@@ -624,21 +764,40 @@ export function SimulationBar() {
                 </div>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
-                    🎯 STRIKE MONEYNESS & POSITION LOTS
+                    🎯 STRIKE MONEYNESS LEGS (MULTI-SELECT)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                    {['ATM', 'ITM1', 'ITM2', 'OTM1', 'OTM2', 'ALL'].map(m => (
-                      <button
-                        key={m}
-                        className="sim-speed-pill"
-                        data-active={sim.moneyness === m}
-                        style={{ height: 26, padding: '0 10px', fontSize: 10 }}
-                        onClick={() => sim.setMoneyness(m)}
-                        disabled={simActive}
-                      >
-                        {m}
-                      </button>
-                    ))}
+                    <button
+                      className="sim-speed-pill"
+                      data-active={sim.selectedMoneyness.includes('ALL')}
+                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      onClick={() => sim.toggleMoneyness('ALL')}
+                      disabled={simActive}
+                    >
+                      ✨ ALL LEGS
+                    </button>
+                    {[
+                      { id: 'ATM', label: '🎯 ATM' },
+                      { id: 'ITM1', label: '🟢 ITM1' },
+                      { id: 'ITM2', label: '🟢 ITM2' },
+                      { id: 'OTM1', label: '🔴 OTM1' },
+                      { id: 'OTM2', label: '🔴 OTM2' },
+                    ].map(leg => {
+                      const isSel = sim.selectedMoneyness.includes(leg.id);
+                      return (
+                        <button
+                          key={leg.id}
+                          className="sim-speed-pill"
+                          data-active={isSel}
+                          style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                          onClick={() => sim.toggleMoneyness(leg.id)}
+                          disabled={simActive}
+                        >
+                          <span style={{ marginRight: 4 }}>{isSel ? '☑' : '☐'}</span>
+                          {leg.label}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 10, color: 'var(--k-dim)' }}>Lots:</span>
