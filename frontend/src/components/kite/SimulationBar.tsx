@@ -103,18 +103,20 @@ export function SimulationBar() {
 
         {/* Transport */}
         <div className="sim-transport">
-          <button className="sim-btn" disabled={simActive}>⏮</button>
+          <button className="sim-btn" title="Jump to start" disabled={simActive}>⏮</button>
+          <button className="sim-btn" title="Back 5 bars" disabled={!simActive}>◀◀</button>
           
           {sim.status.state === 'running' ? (
-            <button className="sim-btn sim-btn--play" onClick={sim.pause}>⏸</button>
+            <button className="sim-btn sim-btn--play" title="Pause (Space)" onClick={sim.pause}>⏸</button>
           ) : sim.status.state === 'paused' ? (
-            <button className="sim-btn sim-btn--play" onClick={sim.resume}>⏵</button>
+            <button className="sim-btn sim-btn--play" title="Resume (Space)" onClick={sim.resume}>⏵</button>
           ) : (
-            <button className="sim-btn sim-btn--play" onClick={sim.start}>⏵</button>
+            <button className="sim-btn sim-btn--play" title="Start Replay (Space)" onClick={sim.start}>⏵</button>
           )}
           
-          <button className="sim-btn" disabled={simActive}>⏭</button>
-          <button className="sim-btn sim-btn--stop" onClick={sim.stop} disabled={!simActive}>⏹</button>
+          <button className="sim-btn" title="Forward 5 bars" disabled={!simActive}>▶▶</button>
+          <button className="sim-btn" title="Jump to end" disabled={simActive}>⏭</button>
+          <button className="sim-btn sim-btn--stop" title="Stop & View Summary" onClick={sim.stop} disabled={!simActive}>⏹</button>
         </div>
 
         {/* Timeline */}

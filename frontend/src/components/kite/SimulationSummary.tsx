@@ -40,6 +40,9 @@ export function SimulationSummary() {
           />
         </div>
 
+        {/* Cumulative Equity Curve Sparkline */}
+        <EquityCurveSparkline events={stats.events} />
+
         {/* Strategy Breakdown */}
         <StrategyTable events={stats.events} />
 
@@ -118,6 +121,48 @@ function StatBox({ label, value, color = k.text }: { label: string; value: strin
     <div style={{ background: k.surface, padding: '12px', borderRadius: 8, border: `1px solid ${k.border}` }}>
       <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, color }}>{value}</div>
+    </div>
+  );
+}
+
+function EquityCurveSparkline({ events }: { events: any[] }) {
+  const equityPoints = useMemo(() => {
+    let pnl = 0;
+    const points = [0];
+    events.forEach(ev => {
+      const isWin = ev.direction === 'BULLISH';
+      const change = isWin ? Math.abs(ev.target - ev.entry) : -Math.abs(ev.entry - ev.stop);
+      pnl += change;
+      points.push(pnl);
+    });
+    return points;
+  }, [events]);
+
+  if (equityPoints.length < 2) return null;
+
+  const min = Math.min(...equityPoints);
+  const max = Math.max(...equityPoints);
+  const range = max - min || 1;
+  const width = 430;
+  const height = 44;
+
+  const pointsSvg = equityPoints.map((pt, i) => {
+    const x = (i / (equityPoints.length - 1)) * width;
+    const y = height - ((pt - min) / range) * (height - 8) - 4;
+    return `${x},${y}`;
+  }).join(' ');
+
+  const isPositive = equityPoints[equityPoints.length - 1] >= 0;
+  const color = isPositive ? k.green : k.red;
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Equity Curve Sparkline</div>
+      <div style={{ background: k.surface, padding: '8px 12px', borderRadius: 8, border: `1px solid ${k.border}` }}>
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+          <polyline fill="none" stroke={color} strokeWidth="2" points={pointsSvg} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
     </div>
   );
 }
