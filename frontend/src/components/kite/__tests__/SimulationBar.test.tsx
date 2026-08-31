@@ -4,6 +4,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SimulationBar, SimulationFooterButton } from '../SimulationBar';
 import { useSimulationStore } from '../../../hooks/useSimulation';
 
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    invalidateQueries: vi.fn(),
+  }),
+}));
+
 // Mock fetch API
 globalThis.fetch = vi.fn().mockImplementation(() =>
   Promise.resolve({

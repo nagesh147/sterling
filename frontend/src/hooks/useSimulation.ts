@@ -193,13 +193,7 @@ async function post<T = SimStatus>(path: string, body?: unknown): Promise<T> {
 export function useSimulation() {
   const store = useSimulationStore();
   const { setStatus, setShowSummary } = store;
-
-  let queryClient: ReturnType<typeof useQueryClient> | null = null;
-  try {
-    queryClient = useQueryClient();
-  } catch {
-    /* safely fallback when rendered outside QueryClientProvider in isolated tests */
-  }
+  const queryClient = useQueryClient();
 
   const clearLocalFeedCache = () => {
     try {
