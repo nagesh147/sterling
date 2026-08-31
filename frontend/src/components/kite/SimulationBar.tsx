@@ -102,7 +102,7 @@ export function SimulationBar() {
   const [drawerTab, setDrawerTab] = useState<'signals' | 'trades'>('signals');
   const [toastSignal, setToastSignal] = useState<SimSignalEvent | null>(null);
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
   const [viewMode, setViewMode] = useState<'docked' | 'half' | 'maximized'>('docked');
 
@@ -112,6 +112,13 @@ export function SimulationBar() {
 
   const stratDropdownRef = useRef<HTMLDivElement>(null);
   const legsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Default expandable drawer to open whenever dock opens
+  useEffect(() => {
+    if (barOpen) {
+      setIsExpanded(true);
+    }
+  }, [barOpen]);
 
   // Close dropdowns on click outside
   useEffect(() => {
