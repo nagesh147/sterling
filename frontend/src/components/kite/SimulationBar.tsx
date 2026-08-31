@@ -232,7 +232,19 @@ export function SimulationBar() {
               <div className="sim-drawer-title">
                 ⚡ REPLAY SIGNAL LOG ({sim.status.stats.events.length})
               </div>
-              <button className="sim-drawer-close" onClick={() => setShowStreamDrawer(false)}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {sim.status.stats.events.length > 0 && (
+                  <button
+                    className="sim-speed-pill"
+                    style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)', background: 'color-mix(in srgb, var(--k-green) 12%, transparent)' }}
+                    onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}
+                    title="Export Signal Log to CSV"
+                  >
+                    📥 Export CSV
+                  </button>
+                )}
+                <button className="sim-drawer-close" onClick={() => setShowStreamDrawer(false)}>✕</button>
+              </div>
             </div>
 
             <div className="sim-drawer-body">

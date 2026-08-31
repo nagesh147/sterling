@@ -48,6 +48,18 @@ export function SimulationSummary() {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+          {stats.events.length > 0 && (
+            <button
+              onClick={() => exportSignalsToCSV(stats.events, date)}
+              style={{
+                padding: '8px 16px', background: `color-mix(in srgb, ${k.green} 15%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${k.green} 30%, transparent)`,
+                borderRadius: 6, color: k.green, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              📥 Export CSV
+            </button>
+          )}
           <button
             onClick={onClose}
             style={{
@@ -71,6 +83,29 @@ export function SimulationSummary() {
       </div>
     </div>
   );
+}
+
+function exportSignalsToCSV(events: any[], date: string) {
+  if (!events || events.length === 0) return;
+  const headers = ['Time', 'Strategy', 'Instrument', 'Direction', 'Strength', 'Entry Price', 'Stop Loss', 'Target Price'];
+  const rows = events.map(ev => [
+    ev.time_iso,
+    (ev.strategy || '').toUpperCase(),
+    ev.instrument,
+    ev.direction,
+    ev.strength,
+    ev.entry,
+    ev.stop,
+    ev.target,
+  ]);
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sterling_replay_signals_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function StrategyTable({ events }: { events: { strategy: string; direction: string }[] }) {
