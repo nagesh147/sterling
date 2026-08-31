@@ -98,6 +98,8 @@ class SimulationRunner:
         if self._state in (SimState.RUNNING, SimState.LOADING, SimState.PAUSED):
             log.info("Simulation already running/paused. Stopping prior session before starting new one.")
             await self.stop()
+        
+        reset_all_engine_signals()
         self._config = config
         self._speed = config.speed
         self._state = SimState.LOADING
@@ -487,10 +489,32 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
             "close": close_p,
             "volume": volume,
         })
-        curr_price = close_p
-        curr_time += res_sec
-
     return bars
+
+
+def reset_all_engine_signals() -> None:
+    """Clear existing signal caches across all strategy engines when simulation starts."""
+    try:
+        from app.services import snapshot_cache
+        snapshot_cache.clear()
+    except Exception as exc:
+        log.debug("Snapshot cache clear error: %s", exc)
+
+    try:
+        from app.api.v1.endpoints import directional
+        directional._prev_states.clear()
+        directional._active_signal_ids.clear()
+        directional._active_signal_sls.clear()
+        directional._prev_all_green.clear()
+        directional._prev_all_red.clear()
+    except Exception as exc:
+        log.debug("Directional tracker state clear error: %s", exc)
+
+    try:
+        from app.services.kite_engine.scanner import scanner
+        scanner._users.clear()
+    except Exception as exc:
+        log.debug("Kite scanner users clear error: %s", exc)
 
 
 # Module-level singleton
