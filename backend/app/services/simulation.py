@@ -104,6 +104,7 @@ class SimulationRunner:
         self._stop_requested = False
         self._pause_event.set()
         self._stats = SimStats()
+        self._bar_history = {}
         self._bars_played = 0
         self._start_real = time.monotonic()
         self._task = asyncio.create_task(self._run_loop())
@@ -282,28 +283,6 @@ class SimulationRunner:
                 "simulated_date": sim_date,
                 "simulated_time": ev.time_iso,
             })
-
-        if not signals and cfg:
-            instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "BTCUSD", "ETHUSD"]
-            for sym in instruments:
-                signals.append({
-                    "underlying": sym,
-                    "has_options": sym in ("NIFTY", "BANKNIFTY"),
-                    "spot_price": 24500.0 if sym == "NIFTY" else (52300.0 if sym == "BANKNIFTY" else 88000.0),
-                    "ivr": 20.0,
-                    "green_arrow": False,
-                    "red_arrow": False,
-                    "state": "IDLE",
-                    "direction": "neutral",
-                    "regime": "SIMULATION_REPLAY",
-                    "score_long": 50.0,
-                    "score_short": 50.0,
-                    "exec_mode": "paper",
-                    "fresh": True,
-                    "timestamp_ms": int(time.time() * 1000),
-                    "simulated_date": sim_date,
-                    "simulated_time": self._current_time_iso,
-                })
 
         return {
             "signals": signals,

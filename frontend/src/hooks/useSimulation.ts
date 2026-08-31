@@ -121,6 +121,7 @@ export function useSimulation() {
     try {
       const status = await post('/start', config);
       setStatus(status);
+      window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
       startPolling();
     } catch (err) {
       console.warn('Simulation start failed, stopping prior session and retrying:', err);
@@ -128,6 +129,7 @@ export function useSimulation() {
         await post('/stop');
         const status = await post('/start', config);
         setStatus(status);
+        window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
         startPolling();
       } catch (retryErr) {
         console.error('Simulation start failed:', retryErr);
