@@ -95,8 +95,9 @@ class SimulationRunner:
         )
 
     async def start(self, config: SimConfig) -> SimStatus:
-        if self._state in (SimState.RUNNING, SimState.LOADING):
-            raise RuntimeError("Simulation already running. Stop it first.")
+        if self._state in (SimState.RUNNING, SimState.LOADING, SimState.PAUSED):
+            log.info("Simulation already running/paused. Stopping prior session before starting new one.")
+            await self.stop()
         self._config = config
         self._speed = config.speed
         self._state = SimState.LOADING
@@ -141,14 +142,17 @@ class SimulationRunner:
         """Main replay loop — fetch candles, then step through them."""
         from app.services.ohlcv_store import get_candles as ohlcv_get, RESOLUTION_SECONDS
         from datetime import datetime, timezone, timedelta
-        import pytz
+        try:
+            from zoneinfo import ZoneInfo
+            ist = ZoneInfo("Asia/Kolkata")
+        except ImportError:
+            ist = timezone(timedelta(hours=5, minutes=30))
 
         cfg = self._config
         if not cfg:
             self._state = SimState.IDLE
             return
 
-        ist = pytz.timezone("Asia/Kolkata")
         try:
             day = datetime.strptime(cfg.date, "%Y-%m-%d")
         except ValueError:

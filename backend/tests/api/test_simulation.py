@@ -77,11 +77,13 @@ def test_set_speed():
 
 
 @pytest.mark.asyncio
-async def test_cannot_start_duplicate_simulation():
-    config = SimConfig(date="2026-08-28", speed=5.0)
-    await simulation_runner.start(config)
+async def test_auto_restart_on_duplicate_start():
+    config1 = SimConfig(date="2026-08-28", speed=5.0)
+    await simulation_runner.start(config1)
+    assert simulation_runner.status.config.date == "2026-08-28"
 
-    with pytest.raises(RuntimeError, match="Simulation already running"):
-        await simulation_runner.start(config)
+    config2 = SimConfig(date="2026-08-29", speed=10.0)
+    status = await simulation_runner.start(config2)
+    assert status.config.date == "2026-08-29"
 
     await simulation_runner.stop()

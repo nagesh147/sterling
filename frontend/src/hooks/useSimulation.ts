@@ -118,9 +118,21 @@ export function useSimulation() {
       resolution: '5m',
       instruments: [],
     };
-    const status = await post('/start', config);
-    setStatus(status);
-    startPolling();
+    try {
+      const status = await post('/start', config);
+      setStatus(status);
+      startPolling();
+    } catch (err) {
+      console.warn('Simulation start failed, stopping prior session and retrying:', err);
+      try {
+        await post('/stop');
+        const status = await post('/start', config);
+        setStatus(status);
+        startPolling();
+      } catch (retryErr) {
+        console.error('Simulation start failed:', retryErr);
+      }
+    }
   };
 
   const stop = async () => {

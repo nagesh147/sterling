@@ -20,10 +20,7 @@ class AvailableDatesResponse(BaseModel):
 
 @router.post("/start", response_model=SimStatus)
 async def start_sim(config: SimConfig):
-    try:
-        return await simulation_runner.start(config)
-    except RuntimeError as e:
-        raise HTTPException(409, str(e))
+    return await simulation_runner.start(config)
 
 
 @router.post("/stop", response_model=SimStatus)
