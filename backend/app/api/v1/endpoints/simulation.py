@@ -70,6 +70,21 @@ async def available_dates(instrument: str = "NIFTY", resolution: str = "5m"):
                     if current.weekday() < 5:
                         dates.add(current.strftime("%Y-%m-%d"))
                     current += timedelta(days=1)
+    # Fallback to last 30 business days if no stored candles found
+    if not dates:
+        try:
+            from zoneinfo import ZoneInfo
+            ist_tz = ZoneInfo("Asia/Kolkata")
+        except ImportError:
+            ist_tz = timezone.utc
+        from datetime import timedelta
+        today = datetime.now(tz=ist_tz)
+        curr = today - timedelta(days=90)
+        while curr <= today:
+            if curr.weekday() < 5:
+                dates.add(curr.strftime("%Y-%m-%d"))
+            curr += timedelta(days=1)
+
     return AvailableDatesResponse(
         dates=sorted(dates)[-90:],  # Last 90 trading days
         instrument=instrument.upper(),

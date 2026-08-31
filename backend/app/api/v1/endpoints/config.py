@@ -332,6 +332,9 @@ async def update_nifty_orb_options_config(body: NiftyOrbConfigRequest) -> dict:
 
 @router.post("/nifty-orb-options/snapshot")
 async def nifty_orb_options_snapshot(user: UserContext = Depends(get_current_user)) -> dict:
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_nifty_orb_signals_response()
     from app.services.nifty_orb_options import snapshot
     try:
         return await snapshot(user.user_id)
@@ -340,6 +343,9 @@ async def nifty_orb_options_snapshot(user: UserContext = Depends(get_current_use
 
 @router.post("/nifty-orb-options/scan")
 async def nifty_orb_options_scan(user: UserContext = Depends(get_current_user)) -> dict:
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_nifty_orb_signals_response()
     from app.services.nifty_orb_scanner import scan_user
     try:
         return await scan_user(user.user_id)

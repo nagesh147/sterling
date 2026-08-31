@@ -946,9 +946,13 @@ async def _hydrate_missing_candles(
                 accounts = exchange_account_store.list_accounts()
                 zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
                 if zerodha_acct and zerodha_acct.access_token:
-                    kc = KiteClient(api_key=zerodha_acct.api_key, access_token=zerodha_acct.access_token)
-                    from_str = datetime.fromtimestamp(start_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                    to_str = datetime.fromtimestamp(end_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                    try:
+                        from zoneinfo import ZoneInfo
+                        ist_tz = ZoneInfo("Asia/Kolkata")
+                    except ImportError:
+                        ist_tz = timezone(timedelta(hours=5, minutes=30))
+                    from_str = datetime.fromtimestamp(start_epoch, tz=ist_tz).strftime("%Y-%m-%d %H:%M:%S")
+                    to_str = datetime.fromtimestamp(end_epoch, tz=ist_tz).strftime("%Y-%m-%d %H:%M:%S")
                     k_res = "5minute" if resolution == "5m" else ("15minute" if resolution == "15m" else "60minute")
                     hist_data = await kc.get_historical(token, k_res, from_str, to_str)
                     if isinstance(hist_data, dict) and "candles" in hist_data:
