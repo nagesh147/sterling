@@ -18,6 +18,10 @@ router = APIRouter(prefix="/bear-to-bearish", tags=["bear-to-bearish"])
 @router.get("/snapshot")
 async def snapshot() -> Dict[str, Any]:
     """Get live Bear to Bearish engine snapshot."""
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_bear_to_bearish_snapshot()
+
     snap = get_snapshot()
     if not snap.rows:
         snap = await run_scan()

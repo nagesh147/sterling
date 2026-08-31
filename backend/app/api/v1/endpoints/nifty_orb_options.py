@@ -107,6 +107,9 @@ async def scan(body: dict, user: UserContext = Depends(get_current_user)) -> dic
     uid = str(user.user_id or "").strip()
     if not uid:
         raise HTTPException(401, "authenticated user is required")
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_nifty_orb_signals_response()
     try:
         raw = body.get("config") or {}
         cfg = StrategyConfig(**raw)
