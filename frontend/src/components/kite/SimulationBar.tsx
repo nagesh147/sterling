@@ -51,11 +51,45 @@ export function exportSignalsToCSV(events: SimSignalEvent[], date: string) {
   URL.revokeObjectURL(url);
 }
 
+// Helper: export replayed trades log to CSV
+export function exportTradesToCSV(trades: SimTradeEvent[], date: string) {
+  if (!trades || trades.length === 0) return;
+  const headers = ['Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying', 'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity', 'Entry Price', 'Exit Price', 'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'];
+  const rows = trades.map(tr => [
+    tr.trade_id,
+    tr.entry_time_iso,
+    tr.exit_time_iso,
+    (tr.strategy || '').toUpperCase(),
+    tr.symbol,
+    tr.underlying,
+    tr.direction,
+    tr.opt_type,
+    tr.strike,
+    tr.lots,
+    tr.quantity,
+    tr.entry_price,
+    tr.exit_price || '',
+    tr.status,
+    tr.pnl_usd,
+    tr.pnl_pct,
+    tr.duration_mins,
+  ]);
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sterling_replay_trades_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function SimulationBar() {
   const sim = useSimulation();
   const barOpen = useSimBarOpen();
   const simActive = useSimActive();
   const [showStreamDrawer, setShowStreamDrawer] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'signals' | 'trades'>('signals');
   const [toastSignal, setToastSignal] = useState<SimSignalEvent | null>(null);
 
   // Trigger toast on new signal
@@ -260,23 +294,48 @@ export function SimulationBar() {
         </div>
       )}
 
-      {/* Replay Signal Stream Drawer */}
+      {/* Replay Signal & Trade Stream Drawer */}
       {showStreamDrawer && (
         <div className="sim-drawer-overlay" onClick={() => setShowStreamDrawer(false)}>
-          <div className="sim-drawer-card" onClick={e => e.stopPropagation()}>
+          <div className="sim-drawer-card" style={{ width: 780, maxWidth: '92vw' }} onClick={e => e.stopPropagation()}>
             <div className="sim-drawer-header">
-              <div className="sim-drawer-title">
-                ⚡ REPLAY SIGNAL LOG ({sim.status.stats.events.length})
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  className="sim-speed-pill"
+                  data-active={drawerTab === 'signals'}
+                  onClick={() => setDrawerTab('signals')}
+                  style={{ height: 26, fontSize: 10 }}
+                >
+                  ⚡ SIGNALS ({sim.status.stats.events.length})
+                </button>
+                <button
+                  className="sim-speed-pill"
+                  data-active={drawerTab === 'trades'}
+                  onClick={() => setDrawerTab('trades')}
+                  style={{ height: 26, fontSize: 10 }}
+                >
+                  💼 EXECUTED TRADES ({(sim.status.stats.trades || []).length})
+                </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {sim.status.stats.events.length > 0 && (
+                {drawerTab === 'signals' && sim.status.stats.events.length > 0 && (
                   <button
                     className="sim-speed-pill"
                     style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)', background: 'color-mix(in srgb, var(--k-green) 12%, transparent)' }}
                     onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}
                     title="Export Signal Log to CSV"
                   >
-                    📥 Export CSV
+                    📥 Export Signals CSV
+                  </button>
+                )}
+                {drawerTab === 'trades' && (sim.status.stats.trades || []).length > 0 && (
+                  <button
+                    className="sim-speed-pill"
+                    style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)', background: 'color-mix(in srgb, var(--k-green) 12%, transparent)' }}
+                    onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}
+                    title="Export Trades Log to CSV"
+                  >
+                    📥 Export Trades CSV
                   </button>
                 )}
                 <button className="sim-drawer-close" onClick={() => setShowStreamDrawer(false)}>✕</button>
@@ -284,24 +343,79 @@ export function SimulationBar() {
             </div>
 
             <div className="sim-drawer-body">
-              {sim.status.stats.events.length === 0 ? (
-                <div className="sim-drawer-empty">
-                  Replay stepping through bars... No signals triggered yet.
-                </div>
-              ) : (
-                sim.status.stats.events.slice().reverse().map((ev, i) => (
-                  <div key={i} className="sim-stream-row" data-direction={ev.direction}>
-                    <div className="sim-stream-time">{ev.time_iso}</div>
-                    <div className="sim-stream-strat">[{ev.strategy.toUpperCase()}]</div>
-                    <div className="sim-stream-inst">{ev.instrument}</div>
-                    <div className="sim-stream-dir" data-bull={ev.direction === 'BULLISH' || ev.direction === 'LONG'}>
-                      {ev.direction}
-                    </div>
-                    <div className="sim-stream-price">Entry: ₹{ev.entry}</div>
-                    <div className="sim-stream-sl">SL: ₹{ev.stop}</div>
-                    <div className="sim-stream-tp">TP: ₹{ev.target}</div>
+              {drawerTab === 'signals' ? (
+                sim.status.stats.events.length === 0 ? (
+                  <div className="sim-drawer-empty">
+                    Replay stepping through bars... No signals triggered yet.
                   </div>
-                ))
+                ) : (
+                  sim.status.stats.events.slice().reverse().map((ev, i) => (
+                    <div key={i} className="sim-stream-row" data-direction={ev.direction}>
+                      <div className="sim-stream-time">{ev.time_iso}</div>
+                      <div className="sim-stream-strat">[{ev.strategy.toUpperCase()}]</div>
+                      <div className="sim-stream-inst">{ev.instrument}</div>
+                      <div className="sim-stream-dir" data-bull={ev.direction === 'BULLISH' || ev.direction === 'LONG'}>
+                        {ev.direction}
+                      </div>
+                      <div className="sim-stream-price">Entry: ₹{ev.entry}</div>
+                      <div className="sim-stream-sl">SL: ₹{ev.stop}</div>
+                      <div className="sim-stream-tp">TP: ₹{ev.target}</div>
+                    </div>
+                  ))
+                )
+              ) : (
+                !(sim.status.stats.trades && sim.status.stats.trades.length > 0) ? (
+                  <div className="sim-drawer-empty">
+                    No trades executed yet. Strong signals will enter trades automatically.
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--k-border)', color: 'var(--k-dim)', fontSize: 10 }}>
+                        <th style={{ padding: '6px 4px' }}>ID</th>
+                        <th style={{ padding: '6px 4px' }}>Time</th>
+                        <th style={{ padding: '6px 4px' }}>Strategy</th>
+                        <th style={{ padding: '6px 4px' }}>Contract</th>
+                        <th style={{ padding: '6px 4px' }}>Lots (Qty)</th>
+                        <th style={{ padding: '6px 4px' }}>Entry ₹</th>
+                        <th style={{ padding: '6px 4px' }}>Exit ₹</th>
+                        <th style={{ padding: '6px 4px' }}>Status</th>
+                        <th style={{ padding: '6px 4px', textAlign: 'right' }}>Realized P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sim.status.stats.trades.slice().reverse().map((tr, i) => {
+                        const isWin = tr.status === 'WIN';
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--k-text) 6%, transparent)' }}>
+                            <td style={{ padding: '6px 4px', fontFamily: 'monospace', color: 'var(--k-cyan)', fontWeight: 600 }}>{tr.trade_id}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.entry_time_iso} → {tr.exit_time_iso}</td>
+                            <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--k-text)' }}>[{tr.strategy.toUpperCase()}]</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--k-text)', fontWeight: 600 }}>{tr.symbol}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.lots}L ({tr.quantity}Q)</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>₹{tr.entry_price}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
+                            <td style={{ padding: '6px 4px' }}>
+                              <span style={{
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontSize: 9,
+                                fontWeight: 700,
+                                background: isWin ? 'color-mix(in srgb, var(--k-green) 15%, transparent)' : 'color-mix(in srgb, var(--k-red) 15%, transparent)',
+                                color: isWin ? 'var(--k-green)' : 'var(--k-red)',
+                              }}>
+                                {tr.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 700, color: tr.pnl_usd >= 0 ? 'var(--k-green)' : 'var(--k-red)' }}>
+                              {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)} ({tr.pnl_pct >= 0 ? '+' : ''}{tr.pnl_pct}%)
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )
               )}
             </div>
           </div>

@@ -47,6 +47,29 @@ class SimSignalEvent(BaseModel):
     target: float
 
 
+class SimTradeEvent(BaseModel):
+    trade_id: str
+    entry_time_iso: str
+    exit_time_iso: str = "OPEN"
+    timestamp_ms: int = 0
+    strategy: str
+    symbol: str
+    underlying: str
+    direction: str
+    opt_type: str
+    strike: float
+    lots: int
+    quantity: int
+    entry_price: float
+    exit_price: Optional[float] = None
+    stop_loss: float
+    target_price: float
+    status: str = "OPEN"
+    pnl_usd: float = 0.0
+    pnl_pct: float = 0.0
+    duration_mins: int = 0
+
+
 class SimStats(BaseModel):
     signals_fired: int = 0
     trades_entered: int = 0
@@ -54,6 +77,7 @@ class SimStats(BaseModel):
     losses: int = 0
     pnl: float = 0.0
     events: List[SimSignalEvent] = []
+    trades: List[SimTradeEvent] = []
 
 
 class SimStatus(BaseModel):
@@ -903,13 +927,50 @@ class SimulationRunner:
             if strength == "STRONG":
                 self._stats.trades_entered += 1
                 won = random.random() < 0.55
+                pnl_change = abs(target - close) if won else -abs(close - stop)
                 if won:
                     self._stats.wins += 1
-                    self._stats.pnl += abs(target - close)
                 else:
                     self._stats.losses += 1
-                    self._stats.pnl -= abs(close - stop)
-                self._stats.pnl = round(self._stats.pnl, 2)
+                self._stats.pnl = round(self._stats.pnl + pnl_change, 2)
+
+                # Construct detailed SimTradeEvent
+                cfg_lots = max(1, self._config.lots) if self._config else 1
+                cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
+                opt_type = "CE" if direction == "BULLISH" else "PE"
+                atm_strike = round(close / 50.0) * 50.0
+                lot_size = 25 if "NIFTY" in sym else 15
+                qty = cfg_lots * lot_size
+                entry_p = round(close * 0.02, 2)
+                exit_p = round(entry_p + (pnl_change * 0.02), 2)
+                pnl_usd_val = round(pnl_change * qty, 2)
+                pnl_pct_val = round((pnl_usd_val / (entry_p * qty)) * 100.0, 2) if entry_p > 0 else 0.0
+                dur_mins = random.randint(5, 45)
+                exit_dt = bar_dt + timedelta(minutes=dur_mins)
+
+                trade = SimTradeEvent(
+                    trade_id=f"TRD-{1000 + len(self._stats.trades) + 1}",
+                    entry_time_iso=bar_dt.strftime("%H:%M:%S"),
+                    exit_time_iso=exit_dt.strftime("%H:%M:%S"),
+                    timestamp_ms=int(bar_dt.timestamp() * 1000),
+                    strategy=strategy,
+                    symbol=f"{sym}26AUG{int(atm_strike)}{opt_type}",
+                    underlying=sym,
+                    direction="BUY",
+                    opt_type=opt_type,
+                    strike=atm_strike,
+                    lots=cfg_lots,
+                    quantity=qty,
+                    entry_price=entry_p,
+                    exit_price=exit_p,
+                    stop_loss=round(entry_p * 0.75, 2),
+                    target_price=round(entry_p * 1.5, 2),
+                    status="WIN" if won else "LOSS",
+                    pnl_usd=pnl_usd_val,
+                    pnl_pct=pnl_pct_val,
+                    duration_mins=dur_mins,
+                )
+                self._stats.trades.append(trade)
 
 
 def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epoch: int, res_sec: int) -> List[Dict[str, Any]]:

@@ -46,25 +46,40 @@ export function SimulationSummary() {
         {/* Strategy Breakdown */}
         <StrategyTable events={stats.events} />
 
+        {/* Executed Trades Table */}
+        <ExecutedTradesTable trades={stats.trades || []} />
+
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {stats.events.length > 0 && (
             <button
               onClick={() => exportSignalsToCSV(stats.events, date)}
               style={{
-                padding: '8px 16px', background: `color-mix(in srgb, ${k.green} 15%, transparent)`,
+                padding: '8px 14px', background: `color-mix(in srgb, ${k.green} 15%, transparent)`,
                 border: `1px solid color-mix(in srgb, ${k.green} 30%, transparent)`,
-                borderRadius: 6, color: k.green, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 6, color: k.green, fontSize: 11, fontWeight: 600, cursor: 'pointer',
               }}
             >
-              📥 Export CSV
+              📥 Export Signals CSV
+            </button>
+          )}
+          {(stats.trades || []).length > 0 && (
+            <button
+              onClick={() => exportTradesToCSV(stats.trades || [], date)}
+              style={{
+                padding: '8px 14px', background: `color-mix(in srgb, ${k.cyan} 15%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${k.cyan} 30%, transparent)`,
+                borderRadius: 6, color: k.cyan, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              📥 Export Trades CSV
             </button>
           )}
           <button
             onClick={onClose}
             style={{
-              padding: '8px 16px', background: 'transparent', border: `1px solid ${k.border}`,
-              borderRadius: 6, color: k.text, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              padding: '8px 14px', background: 'transparent', border: `1px solid ${k.border}`,
+              borderRadius: 6, color: k.text, fontSize: 11, fontWeight: 600, cursor: 'pointer',
             }}
           >
             Close
@@ -72,9 +87,9 @@ export function SimulationSummary() {
           <button
             onClick={() => { onClose(); useSimulationStore.getState().setBarOpen(true); }}
             style={{
-              padding: '8px 16px', background: `color-mix(in srgb, ${k.cyan} 15%, transparent)`,
+              padding: '8px 14px', background: `color-mix(in srgb, ${k.cyan} 15%, transparent)`,
               border: `1px solid color-mix(in srgb, ${k.cyan} 30%, transparent)`,
-              borderRadius: 6, color: k.cyan, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              borderRadius: 6, color: k.cyan, fontSize: 11, fontWeight: 600, cursor: 'pointer',
             }}
           >
             Replay Again
@@ -83,6 +98,38 @@ export function SimulationSummary() {
       </div>
     </div>
   );
+}
+
+function exportTradesToCSV(trades: any[], date: string) {
+  if (!trades || trades.length === 0) return;
+  const headers = ['Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying', 'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity', 'Entry Price', 'Exit Price', 'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'];
+  const rows = trades.map(tr => [
+    tr.trade_id,
+    tr.entry_time_iso,
+    tr.exit_time_iso,
+    (tr.strategy || '').toUpperCase(),
+    tr.symbol,
+    tr.underlying,
+    tr.direction,
+    tr.opt_type,
+    tr.strike,
+    tr.lots,
+    tr.quantity,
+    tr.entry_price,
+    tr.exit_price || '',
+    tr.status,
+    tr.pnl_usd,
+    tr.pnl_pct,
+    tr.duration_mins,
+  ]);
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sterling_replay_trades_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportSignalsToCSV(events: any[], date: string) {
@@ -199,5 +246,60 @@ function EquityCurveSparkline({ events }: { events: any[] }) {
         </svg>
       </div>
     </div>
+  );
+}
+
+function ExecutedTradesTable({ trades }: { trades: any[] }) {
+  if (!trades || trades.length === 0) return null;
+
+  return (
+    <>
+      <h3 style={{ fontSize: 12, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontWeight: 600 }}>Executed Trades Log</h3>
+      <div style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 24, borderRadius: 6, border: `1px solid ${k.border}` }}>
+        <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${k.border}`, color: k.dim, position: 'sticky', top: 0, background: k.surface }}>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>ID</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Time</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Strategy</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Symbol</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Lots</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Entry</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Exit</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Status</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Realized P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trades.map(tr => {
+              const isWin = tr.status === 'WIN';
+              return (
+                <tr key={tr.trade_id} style={{ borderBottom: `1px solid color-mix(in srgb, ${k.text} 6%, transparent)` }}>
+                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', color: k.cyan, fontWeight: 600 }}>{tr.trade_id}</td>
+                  <td style={{ padding: '6px 8px', color: k.dim }}>{tr.entry_time_iso}</td>
+                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>[{tr.strategy.toUpperCase()}]</td>
+                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>{tr.symbol}</td>
+                  <td style={{ padding: '6px 8px', color: k.dim }}>{tr.lots}L</td>
+                  <td style={{ padding: '6px 8px', color: k.text }}>₹{tr.entry_price}</td>
+                  <td style={{ padding: '6px 8px', color: k.text }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <span style={{
+                      padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                      background: isWin ? `color-mix(in srgb, ${k.green} 15%, transparent)` : `color-mix(in srgb, ${k.red} 15%, transparent)`,
+                      color: isWin ? k.green : k.red,
+                    }}>
+                      {tr.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: tr.pnl_usd >= 0 ? k.green : k.red }}>
+                    {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

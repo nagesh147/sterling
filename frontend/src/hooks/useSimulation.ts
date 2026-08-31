@@ -14,6 +14,29 @@ export interface SimSignalEvent {
   target: number;
 }
 
+export interface SimTradeEvent {
+  trade_id: string;
+  entry_time_iso: string;
+  exit_time_iso: string;
+  timestamp_ms: number;
+  strategy: string;
+  symbol: string;
+  underlying: string;
+  direction: string;
+  opt_type: string;
+  strike: number;
+  lots: number;
+  quantity: number;
+  entry_price: number;
+  exit_price?: number | null;
+  stop_loss: number;
+  target_price: number;
+  status: string;
+  pnl_usd: number;
+  pnl_pct: number;
+  duration_mins: number;
+}
+
 export interface SimStats {
   signals_fired: number;
   trades_entered: number;
@@ -21,6 +44,7 @@ export interface SimStats {
   losses: number;
   pnl: number;
   events: SimSignalEvent[];
+  trades?: SimTradeEvent[];
 }
 
 export interface SimStatus {
