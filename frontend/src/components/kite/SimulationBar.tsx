@@ -27,6 +27,30 @@ function formatTime(isoStr?: string, len: number = 8): string {
   return str.substring(0, len);
 }
 
+// Helper: export replayed signals log to CSV
+export function exportSignalsToCSV(events: SimSignalEvent[], date: string) {
+  if (!events || events.length === 0) return;
+  const headers = ['Time', 'Strategy', 'Instrument', 'Direction', 'Strength', 'Entry Price', 'Stop Loss', 'Target Price'];
+  const rows = events.map(ev => [
+    ev.time_iso,
+    (ev.strategy || '').toUpperCase(),
+    ev.instrument,
+    ev.direction,
+    ev.strength,
+    ev.entry,
+    ev.stop,
+    ev.target,
+  ]);
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sterling_replay_signals_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function SimulationBar() {
   const sim = useSimulation();
   const barOpen = useSimBarOpen();
