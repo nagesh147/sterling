@@ -1165,6 +1165,10 @@ async def all_signals(request: Request) -> dict:
     calls for stale instruments and caches the result — so the first call
     may take a few seconds but subsequent calls return instantly.
     """
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_directional_signals_response()
+
     mode = getattr(request.app.state, "trading_mode", None)
     macro_filter  = mode.macro_filter  if mode else "adx_4h"
     st_threshold  = mode.st_threshold  if mode else 3
@@ -1837,7 +1841,12 @@ async def _sse_all_generator(
         # ── full signal data (every signal_emit_interval s from snap cache) ──
         if now_mono - last_signals_t >= signal_emit_interval:
             last_signals_t = now_mono
-            mode = getattr(request.app.state, "trading_mode", None)
+            from app.services.simulation import simulation_runner, SimState
+            if simulation_runner.status.state != SimState.IDLE:
+                sim_res = simulation_runner.get_directional_signals_response()
+                yield f"event: signals\ndata: {json.dumps(sim_res)}\n\n"
+            else:
+                mode = getattr(request.app.state, "trading_mode", None)
 
             signals_list: list[dict] = []
             for inst in instruments:

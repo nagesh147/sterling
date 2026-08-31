@@ -202,29 +202,33 @@ class SimulationRunner:
         log.info("Simulation started: %s, %d bars, speed %.1fx", cfg.date, self._bars_total, self._speed)
 
         try:
-            for i, bar in enumerate(all_bars):
-                if self._stop_requested:
-                    break
+            current_sim_epoch = float(start_epoch)
+            total_sim_seconds = float(max(1, end_epoch - start_epoch))
+            bar_idx = 0
+            dt = 0.2  # 200ms tick in real time
 
-                # Wait if paused
+            while current_sim_epoch <= end_epoch and not self._stop_requested:
                 await self._pause_event.wait()
                 if self._stop_requested:
                     break
 
-                # Process this bar
-                bar_dt = datetime.fromtimestamp(bar["time"], tz=ist)
+                # Dynamic second-by-second clock & progress update
+                bar_dt = datetime.fromtimestamp(current_sim_epoch, tz=ist)
                 self._current_time_iso = bar_dt.strftime("%H:%M:%S")
-                self._bars_played = i + 1
-                self._progress = round((i + 1) / self._bars_total * 100, 1)
+                self._progress = round(min(100.0, max(0.0, (current_sim_epoch - start_epoch) / total_sim_seconds * 100.0)), 1)
 
-                # Simulate signal generation
-                self._evaluate_bar(bar, bar_dt)
+                # Process bars up to current simulated timestamp
+                while bar_idx < len(all_bars) and current_sim_epoch >= all_bars[bar_idx]["time"]:
+                    bar = all_bars[bar_idx]
+                    self._bars_played = bar_idx + 1
+                    self._evaluate_bar(bar, datetime.fromtimestamp(bar["time"], tz=ist))
+                    bar_idx += 1
 
-                # Sleep based on speed (real candle interval / speed multiplier)
-                sleep_time = res_sec / self._speed
-                # Cap sleep to keep UI responsive: min 0.05s, max 5s
-                sleep_time = max(0.05, min(sleep_time, 5.0))
-                await asyncio.sleep(sleep_time)
+                # Advance simulated clock by speed * dt
+                current_sim_epoch += self._speed * dt
+
+                # Real-time sleep step
+                await asyncio.sleep(dt)
 
         except asyncio.CancelledError:
             log.info("Simulation cancelled")
@@ -237,6 +241,77 @@ class SimulationRunner:
                     "Simulation complete: %d bars, %d signals, P&L %.2f",
                     self._bars_played, self._stats.signals_fired, self._stats.pnl,
                 )
+
+    def get_directional_signals_response(self) -> Dict[str, Any]:
+        """Return signals formatted for /api/v1/directional/signals matching the active simulation date."""
+        cfg = self._config
+        sim_date = cfg.date if cfg else "2026-08-28"
+
+        signals = []
+        for ev in self._stats.events:
+            signals.append({
+                "underlying": ev.instrument,
+                "has_options": ev.instrument in ("NIFTY", "BANKNIFTY"),
+                "spot_price": ev.entry,
+                "ivr": 25.0,
+                "green_arrow": ev.direction == "BULLISH",
+                "red_arrow": ev.direction == "BEARISH",
+                "state": "ENTRY_ARMED" if ev.strength == "STRONG" else "SETUP_ACTIVE",
+                "direction": ev.direction.lower(),
+                "regime": "SIMULATION_REPLAY",
+                "score_long": 85.0 if ev.direction == "BULLISH" else 15.0,
+                "score_short": 85.0 if ev.direction == "BEARISH" else 15.0,
+                "exec_mode": "paper",
+                "exec_confidence": 0.88,
+                "signal_score": 90.0 if ev.strength == "STRONG" else 65.0,
+                "signal_strength": ev.strength,
+                "track": "vcp" if ev.strategy == "supertrend" else "trend_following",
+                "strategy": ev.strategy,
+                "regime_score": 15.0,
+                "stop_price": ev.stop,
+                "target_price": ev.target,
+                "atr": round(abs(ev.target - ev.entry) / 3.0, 2),
+                "adx": 32.5,
+                "atr_percentile": 65.0,
+                "rsi": 58.0,
+                "squeezed": False,
+                "rec_leverage": 10,
+                "futures_symbol": f"{ev.instrument}FUT",
+                "fresh": True,
+                "timestamp_ms": int(time.time() * 1000),
+                "simulated_date": sim_date,
+                "simulated_time": ev.time_iso,
+            })
+
+        if not signals and cfg:
+            instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "BTCUSD", "ETHUSD"]
+            for sym in instruments:
+                signals.append({
+                    "underlying": sym,
+                    "has_options": sym in ("NIFTY", "BANKNIFTY"),
+                    "spot_price": 24500.0 if sym == "NIFTY" else (52300.0 if sym == "BANKNIFTY" else 88000.0),
+                    "ivr": 20.0,
+                    "green_arrow": False,
+                    "red_arrow": False,
+                    "state": "IDLE",
+                    "direction": "neutral",
+                    "regime": "SIMULATION_REPLAY",
+                    "score_long": 50.0,
+                    "score_short": 50.0,
+                    "exec_mode": "paper",
+                    "fresh": True,
+                    "timestamp_ms": int(time.time() * 1000),
+                    "simulated_date": sim_date,
+                    "simulated_time": self._current_time_iso,
+                })
+
+        return {
+            "signals": signals,
+            "count": len(signals),
+            "timestamp": int(time.time()),
+            "mode": "simulation",
+            "simulated_date": sim_date,
+        }
 
     def _evaluate_bar(self, bar: Dict, bar_dt):
         """Run simple signal heuristics on a bar. In production this would
