@@ -33,6 +33,7 @@ class SimConfig(BaseModel):
 
 class SimSignalEvent(BaseModel):
     time_iso: str
+    timestamp_ms: int = 0
     strategy: str
     instrument: str
     direction: str
@@ -295,7 +296,7 @@ class SimulationRunner:
                 "rec_leverage": 10,
                 "futures_symbol": f"{ev.instrument}FUT",
                 "fresh": True,
-                "timestamp_ms": int(time.time() * 1000),
+                "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else int(time.time() * 1000),
                 "simulated_date": sim_date,
                 "simulated_time": ev.time_iso,
             })
@@ -323,6 +324,7 @@ class SimulationRunner:
         }
         rows = []
         for ev in self._stats.events:
+            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             direction_str = "long" if is_long else "short"
             regime_str = "BULL" if is_long else "BEAR"
@@ -340,8 +342,8 @@ class SimulationRunner:
                 "premium_sl": round(ev.entry * 0.015, 2),
                 "entry_sl": round(ev.entry * 0.01, 2),
                 "is_active": True,
-                "signal_timestamp_ms": now_ms,
-                "entry_timestamp_ms": now_ms,
+                "signal_timestamp_ms": ev_ms,
+                "entry_timestamp_ms": ev_ms,
             }
 
             rows.append({
@@ -359,7 +361,7 @@ class SimulationRunner:
                 "entry_sl": ev.stop,
                 "target": ev.target,
                 "score": 90.0 if ev.strength == "STRONG" else 65.0,
-                "timestamp_ms": now_ms,
+                "timestamp_ms": ev_ms,
                 "is_active": True,
                 "is_fresh": True,
                 "source": "spot",
@@ -380,6 +382,7 @@ class SimulationRunner:
         now_ms = int(time.time() * 1000)
         signals = []
         for ev in self._stats.events:
+            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "signal_id": f"sim_{ev.instrument}_{ev.time_iso}",
                 "symbol": ev.instrument,
@@ -390,7 +393,7 @@ class SimulationRunner:
                 "stop_loss": ev.stop,
                 "take_profit": ev.target,
                 "confidence": 0.88,
-                "timestamp_ms": now_ms,
+                "timestamp_ms": ev_ms,
             })
         return {
             "signals": signals,
@@ -403,6 +406,7 @@ class SimulationRunner:
         now_ms = int(time.time() * 1000)
         signals = []
         for ev in self._stats.events:
+            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "id": f"sim_v2_{ev.instrument}_{ev.time_iso}",
                 "symbol": ev.instrument,
@@ -412,7 +416,7 @@ class SimulationRunner:
                 "stop": ev.stop,
                 "target": ev.target,
                 "confidence": 0.90,
-                "timestamp_ms": now_ms,
+                "timestamp_ms": ev_ms,
             })
         return {"signals": signals, "total": len(signals)}
 
@@ -421,12 +425,13 @@ class SimulationRunner:
         now_ms = int(time.time() * 1000)
         items = []
         for ev in self._stats.events:
+            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             items.append({
                 "event_id": f"nav_sim_{ev.instrument}_{ev.time_iso}",
                 "underlying": ev.instrument,
                 "strategy": ev.strategy,
                 "direction": ev.direction,
-                "generated_at_ms": now_ms,
+                "generated_at_ms": ev_ms,
                 "spot_price": ev.entry,
                 "score": 88.0,
                 "armed": ev.strength == "STRONG",
@@ -551,6 +556,7 @@ class SimulationRunner:
 
             event = SimSignalEvent(
                 time_iso=bar_dt.strftime("%H:%M:%S"),
+                timestamp_ms=int(bar_dt.timestamp() * 1000),
                 strategy=strategy,
                 instrument=sym,
                 direction=direction,
