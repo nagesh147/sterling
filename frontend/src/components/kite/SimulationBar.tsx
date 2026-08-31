@@ -169,6 +169,35 @@ export function SimulationBar() {
               <option value="navigator">🧭 NAVIGATOR</option>
               <option value="nifty_orb">🔔 NIFTY ORB</option>
             </select>
+            <select
+              className="sim-input"
+              style={{ paddingRight: 4, cursor: 'pointer' }}
+              value={sim.moneyness}
+              onChange={e => sim.setMoneyness(e.target.value)}
+              disabled={simActive}
+              title="Strike selection (ATM, ITM, OTM, or ALL)"
+            >
+              <option value="ATM">🎯 ATM (At-The-Money)</option>
+              <option value="ITM1">🟢 ITM1 (In-The-Money +1)</option>
+              <option value="ITM2">🟢 ITM2 (In-The-Money +2)</option>
+              <option value="OTM1">🔴 OTM1 (Out-of-Money +1)</option>
+              <option value="OTM2">🔴 OTM2 (Out-of-Money +2)</option>
+              <option value="ALL">✨ ALL (ATM + ITM + OTM)</option>
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--k-dim)' }}>LOTS:</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                className="sim-input"
+                style={{ width: 44 }}
+                value={sim.lots}
+                onChange={e => sim.setLots(Math.max(1, parseInt(e.target.value) || 1))}
+                disabled={simActive}
+                title="Number of lots per position"
+              />
+            </div>
             <input 
               type="date" 
               className="sim-input" 

@@ -58,11 +58,15 @@ interface SimulationStore {
   endTime: string;
   speed: number;
   selectedStrategy: string;
+  lots: number;
+  moneyness: string;
   setDate: (d: string) => void;
   setStartTime: (t: string) => void;
   setEndTime: (t: string) => void;
   setSpeed: (s: number) => void;
   setSelectedStrategy: (s: string) => void;
+  setLots: (l: number) => void;
+  setMoneyness: (m: string) => void;
   
   // Summary modal
   showSummary: boolean;
@@ -92,11 +96,15 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   endTime: '15:30:00',
   speed: 5,
   selectedStrategy: 'all',
+  lots: 1,
+  moneyness: 'ATM',
   setDate: (date) => set({ date }),
   setStartTime: (startTime) => set({ startTime }),
   setEndTime: (endTime) => set({ endTime }),
   setSpeed: (speed) => set({ speed }),
   setSelectedStrategy: (selectedStrategy) => set({ selectedStrategy }),
+  setLots: (lots) => set({ lots }),
+  setMoneyness: (moneyness) => set({ moneyness }),
   showSummary: false,
   setShowSummary: (showSummary) => set({ showSummary }),
 }));
@@ -141,6 +149,8 @@ export function useSimulation() {
       resolution: '5m',
       instruments: [],
       strategy: store.selectedStrategy,
+      lots: store.lots,
+      moneyness: store.moneyness,
     };
     clearLocalFeedCache();
     try {

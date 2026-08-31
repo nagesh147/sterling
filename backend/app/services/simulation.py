@@ -30,6 +30,9 @@ class SimConfig(BaseModel):
     resolution: str = "5m"             # candle resolution
     instruments: List[str] = []        # empty = all watchlist
     strategy: str = "all"              # "all" or specific strategy name
+    strategies: List[str] = ["all"]    # list of selected strategies
+    lots: int = 1                      # number of option/futures lots
+    moneyness: str = "ATM"             # "ATM", "ITM1", "ITM2", "OTM1", "OTM2", "ALL"
 
 
 class SimSignalEvent(BaseModel):
@@ -323,6 +326,9 @@ class SimulationRunner:
             "HDFCBANK": 341249,
             "ICICIBANK": 12705,
         }
+        cfg_lots = max(1, self._config.lots) if self._config else 1
+        cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
+
         rows = []
         for ev in self._stats.events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
@@ -331,21 +337,37 @@ class SimulationRunner:
             regime_str = "BULL" if is_long else "BEAR"
             opt_type = "CE" if is_long else "PE"
             token_val = KITE_TOKENS.get(ev.instrument.upper(), 256265)
-            strike_val = round(ev.entry / 50.0) * 50.0
+            atm_strike = round(ev.entry / 50.0) * 50.0
 
-            leg = {
-                "moneyness": "ATM",
-                "option_type": opt_type,
-                "option_symbol": f"{ev.instrument}26AUG{int(strike_val)}{opt_type}",
-                "strike": strike_val,
-                "expiry": "2026-08-28",
-                "premium_spot": round(ev.entry * 0.02, 2),
-                "premium_sl": round(ev.entry * 0.015, 2),
-                "entry_sl": round(ev.entry * 0.01, 2),
-                "is_active": True,
-                "signal_timestamp_ms": ev_ms,
-                "entry_timestamp_ms": ev_ms,
-            }
+            moneyness_types = ["ITM1", "ATM", "OTM1"] if cfg_money == "ALL" else [cfg_money]
+            legs = []
+
+            for m_type in moneyness_types:
+                strike_offset = 0.0
+                if m_type == "ITM1":
+                    strike_offset = -50.0 if is_long else 50.0
+                elif m_type == "ITM2":
+                    strike_offset = -100.0 if is_long else 100.0
+                elif m_type == "OTM1":
+                    strike_offset = 50.0 if is_long else -50.0
+                elif m_type == "OTM2":
+                    strike_offset = 100.0 if is_long else -100.0
+
+                s_val = atm_strike + strike_offset
+                legs.append({
+                    "moneyness": m_type,
+                    "option_type": opt_type,
+                    "option_symbol": f"{ev.instrument}26AUG{int(s_val)}{opt_type}",
+                    "strike": s_val,
+                    "expiry": "2026-08-28",
+                    "premium_spot": round(ev.entry * 0.02, 2),
+                    "premium_sl": round(ev.entry * 0.015, 2),
+                    "entry_sl": round(ev.entry * 0.01, 2),
+                    "lots": cfg_lots,
+                    "is_active": True,
+                    "signal_timestamp_ms": ev_ms,
+                    "entry_timestamp_ms": ev_ms,
+                })
 
             rows.append({
                 "underlying": ev.instrument,
@@ -355,7 +377,7 @@ class SimulationRunner:
                 "alignment": {"fast": 1 if is_long else -1, "mid": 1 if is_long else -1, "slow": 1 if is_long else -1},
                 "direction": direction_str,
                 "option_type": opt_type,
-                "legs": [leg],
+                "legs": legs,
                 "spot": ev.entry,
                 "underlying_spot": ev.entry,
                 "stop_loss": ev.stop,
@@ -787,11 +809,13 @@ class SimulationRunner:
 
         current_bar_idx = len(history)
 
-        # Emit all generated strategy signals for this bar (or filter by selected strategy)
-        target_strat = self._config.strategy.lower() if self._config and self._config.strategy else "all"
+        # Emit all generated strategy signals for this bar (or filter by selected strategies)
+        cfg_strats = [s.lower() for s in (self._config.strategies if self._config and self._config.strategies else [self._config.strategy if self._config else "all"])]
+        allow_all = "all" in cfg_strats or "*" in cfg_strats or not cfg_strats
+
         for sdef in signals_to_fire:
             strategy = sdef["strategy"]
-            if target_strat not in ("all", "*") and strategy != target_strat:
+            if not allow_all and strategy.lower() not in cfg_strats:
                 continue
             direction = sdef["direction"]
             strength = sdef["strength"]
