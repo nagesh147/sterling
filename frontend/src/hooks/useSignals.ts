@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
+import { useSimActive } from './useSimulation';
 
 export interface MtfBreakdown {
   macro_4h: number;
@@ -98,6 +99,7 @@ export function visibleGrokSignals(signals: SignalItem[] = []): SignalItem[] {
 
 export function useSignals() {
   const queryClient = useQueryClient();
+  const isSimActive = useSimActive();
 
   useEffect(() => {
     const handleSimStart = () => {
@@ -110,6 +112,6 @@ export function useSignals() {
   return useQuery<SignalsResponse>({
     queryKey: ['signals-all'],
     queryFn: () => api.get<SignalsResponse>('/api/v1/directional/signals'),
-    refetchInterval: 5_000,
+    refetchInterval: isSimActive ? 300 : 3_000,
   });
 }

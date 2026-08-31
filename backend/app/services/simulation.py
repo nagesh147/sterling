@@ -442,45 +442,58 @@ class SimulationRunner:
         rs = avg_gain / avg_loss if avg_loss > 0 else 100
         rsi = 100 - (100 / (1 + rs))
 
-        signal_generated = False
-        direction = "NEUTRAL"
-        strength = "NONE"
-        strategy = ""
+        signals_to_fire = []
 
-        # 1. SuperTrend / Trend Crossover
-        if close > prev_close and (sma5 >= sma20 or close > float(prev_bar["high"])):
-            direction = "BULLISH"
-            strength = "STRONG" if (close - opens) > atr * 0.3 else "MODERATE"
-            strategy = "supertrend"
-            signal_generated = True
+        # 1. SuperTrend (Trend continuation / crossover)
+        if close >= prev_close and (sma5 >= sma20 or close >= float(prev_bar["high"])):
+            signals_to_fire.append({
+                "strategy": "supertrend",
+                "direction": "BULLISH",
+                "strength": "STRONG" if (close - opens) >= 0 else "MODERATE",
+            })
+        elif close < prev_close and (sma5 < sma20 or close <= float(prev_bar["low"])):
+            signals_to_fire.append({
+                "strategy": "supertrend",
+                "direction": "BEARISH",
+                "strength": "STRONG" if (opens - close) >= 0 else "MODERATE",
+            })
 
-        # 2. VCP Squeeze Breakout (Volatility Contraction -> Body Expansion)
-        elif len(history) >= 4 and abs(close - opens) > atr * 0.7:
-            direction = "BULLISH" if close > opens else "BEARISH"
-            strength = "STRONG"
-            strategy = "vcp"
-            signal_generated = True
+        # 2. VCP Squeeze Breakout (Expansion after contraction)
+        if len(history) >= 3 and abs(close - opens) > atr * 0.4:
+            signals_to_fire.append({
+                "strategy": "vcp",
+                "direction": "BULLISH" if close >= opens else "BEARISH",
+                "strength": "STRONG",
+            })
 
-        # 3. Adaptive Edge / Mean Reversion (RSI Extreme Reversal)
-        elif rsi < 42 and close > opens:
-            direction = "BULLISH"
-            strength = "MODERATE"
-            strategy = "adaptive_edge"
-            signal_generated = True
-        elif rsi > 58 and close < opens:
-            direction = "BEARISH"
-            strength = "MODERATE"
-            strategy = "adaptive_edge"
-            signal_generated = True
+        # 3. Adaptive Edge (RSI Extreme Reversals)
+        if rsi < 45 and close >= opens:
+            signals_to_fire.append({
+                "strategy": "adaptive_edge",
+                "direction": "BULLISH",
+                "strength": "MODERATE",
+            })
+        elif rsi > 55 and close < opens:
+            signals_to_fire.append({
+                "strategy": "adaptive_edge",
+                "direction": "BEARISH",
+                "strength": "MODERATE",
+            })
 
         # 4. Bear to Bearish Breakdown
-        elif close < prev_close and (sma5 < sma20 or close < float(prev_bar["low"])):
-            direction = "BEARISH"
-            strength = "STRONG" if (opens - close) > atr * 0.3 else "MODERATE"
-            strategy = "bear_to_bearish"
-            signal_generated = True
+        if close < prev_close and (sma5 < sma20 or close < float(prev_bar["low"])):
+            signals_to_fire.append({
+                "strategy": "bear_to_bearish",
+                "direction": "BEARISH",
+                "strength": "STRONG",
+            })
 
-        if signal_generated:
+        # Emit all generated strategy signals for this bar
+        for sdef in signals_to_fire:
+            direction = sdef["direction"]
+            strength = sdef["strength"]
+            strategy = sdef["strategy"]
+
             if direction == "BULLISH":
                 stop = round(close - 1.5 * atr, 2)
                 target = round(close + 2.5 * atr, 2)
@@ -501,10 +514,8 @@ class SimulationRunner:
             self._stats.signals_fired += 1
             self._stats.events.append(event)
 
-            # Simulate instant trade for P&L tracking
             if strength == "STRONG":
                 self._stats.trades_entered += 1
-                rr_ratio = abs(target - close) / abs(close - stop) if abs(close - stop) > 0 else 1
                 won = random.random() < 0.55
                 if won:
                     self._stats.wins += 1
