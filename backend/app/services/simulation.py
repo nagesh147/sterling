@@ -177,7 +177,10 @@ class SimulationRunner:
         # Determine instruments
         instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "BTCUSD", "ETHUSD"]
 
-        # Fetch candles for each instrument
+        # Ensure real historical candle data is fetched for the selected date if missing
+        await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
+
+        # Fetch candles for each instrument from local store
         all_bars: List[Dict[str, Any]] = []
         for sym in instruments:
             candles = ohlcv_get(sym, res, limit=5000, since=start_epoch)
@@ -189,7 +192,7 @@ class SimulationRunner:
         all_bars.sort(key=lambda b: b["time"])
 
         if not all_bars:
-            log.info("No cached candles found for simulation date %s; generating session candles...", cfg.date)
+            log.info("No remote or local candles found for simulation date %s; generating session candles...", cfg.date)
             for sym in instruments:
                 all_bars.extend(_generate_synthetic_candles(sym, res, start_epoch, end_epoch, res_sec))
             all_bars.sort(key=lambda b: b["time"])
@@ -490,6 +493,73 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
             "volume": volume,
         })
     return bars
+
+
+async def _hydrate_missing_candles(
+    instruments: List[str],
+    resolution: str,
+    start_epoch: int,
+    end_epoch: int,
+) -> None:
+    """Fetch missing historical candles for selected replay date range from exchange/broker APIs."""
+    import httpx
+    from app.services import ohlcv_store
+    from app.services.delta_candle_fetcher import _fetch_chunk
+
+    for sym in instruments:
+        existing = ohlcv_store.get_candles(sym, resolution, limit=5000, since=start_epoch)
+        in_range = [c for c in existing if start_epoch <= c["time"] <= end_epoch]
+        if len(in_range) >= 5:
+            continue  # Already cached locally
+
+        log.info("Missing local candles for %s [%s] on range %d-%d. Triggering remote historical fetch...", sym, resolution, start_epoch, end_epoch)
+
+        # 1. Delta Exchange Crypto Fetcher
+        if sym.upper() in ("BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "LINKUSD", "LTCUSD", "BNBUSD"):
+            try:
+                headers = {"Accept": "application/json"}
+                async with httpx.AsyncClient(headers=headers) as client:
+                    candles = await _fetch_chunk(client, sym.upper(), resolution, start_epoch - 3600, end_epoch + 3600)
+                    if candles:
+                        written = ohlcv_store.upsert_candles(sym, resolution, candles)
+                        log.info("Hydrated %d real historical candles for %s from Delta Exchange", written, sym)
+            except Exception as exc:
+                log.warning("Failed to fetch Delta historical candles for %s: %s", sym, exc)
+
+        # 2. Zerodha / Kite Historical Fetcher
+        else:
+            try:
+                from app.services.exchange_account_store import exchange_account_store
+                from app.services.exchanges.kite.client import KiteClient
+                
+                token = 256265 if sym.upper() == "NIFTY" else (260101 if sym.upper() == "BANKNIFTY" else None)
+                if token:
+                    accounts = exchange_account_store.list_accounts()
+                    zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
+                    if zerodha_acct and zerodha_acct.access_token:
+                        kc = KiteClient(api_key=zerodha_acct.api_key, access_token=zerodha_acct.access_token)
+                        from_str = datetime.fromtimestamp(start_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        to_str = datetime.fromtimestamp(end_epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                        k_res = "5minute" if resolution == "5m" else ("15minute" if resolution == "15m" else "60minute")
+                        hist_data = await kc.get_historical(token, k_res, from_str, to_str)
+                        if isinstance(hist_data, dict) and "candles" in hist_data:
+                            raw_list = hist_data["candles"]
+                            parsed_candles = []
+                            for row in raw_list:
+                                dt_c = datetime.fromisoformat(row[0])
+                                parsed_candles.append({
+                                    "time": int(dt_c.timestamp()),
+                                    "open": float(row[1]),
+                                    "high": float(row[2]),
+                                    "low": float(row[3]),
+                                    "close": float(row[4]),
+                                    "volume": float(row[5]) if len(row) > 5 else 0.0,
+                                })
+                            if parsed_candles:
+                                written = ohlcv_store.upsert_candles(sym, resolution, parsed_candles)
+                                log.info("Hydrated %d real historical candles for %s from Kite", written, sym)
+            except Exception as exc:
+                log.warning("Failed to fetch Kite historical candles for %s: %s", sym, exc)
 
 
 def reset_all_engine_signals() -> None:
