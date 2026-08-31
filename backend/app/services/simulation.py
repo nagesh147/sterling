@@ -577,6 +577,8 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
             "close": close_p,
             "volume": volume,
         })
+        curr_price = close_p
+        curr_time += res_sec
     return bars
 
 

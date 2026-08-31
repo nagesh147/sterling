@@ -85,7 +85,7 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   setBarOpen: (open) => set({ barOpen: open }),
   status: DEFAULT_STATUS,
   setStatus: (status) => set({ status }),
-  date: new Date().toISOString().slice(0, 10),
+  date: '2026-08-28',
   startTime: '09:15:00',
   endTime: '15:30:00',
   speed: 5,
