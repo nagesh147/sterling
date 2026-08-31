@@ -201,10 +201,10 @@ function startPolling() {
     try {
       const res = await fetch('/api/v1/simulation/status');
       if (res.ok) {
-        const status: SimStatus = await res.json();
+        const prevState = useSimulationStore.getState().status.state;
         useSimulationStore.getState().setStatus(status);
         // Auto-stop polling when simulation ends
-        if (status.state === 'idle' && useSimulationStore.getState().status.state !== 'idle') {
+        if (status.state === 'idle' && prevState !== 'idle') {
           stopPolling();
           if (status.stats.signals_fired > 0) {
             useSimulationStore.getState().setShowSummary(true);

@@ -290,11 +290,21 @@ export function SimulationBar() {
 export function SimulationFooterButton() {
   const barOpen = useSimBarOpen();
   const setBarOpen = useSimulationStore(s => s.setBarOpen);
+  const active = useSimActive();
   
   return (
-    <button className="sim-footer-btn" onClick={() => setBarOpen(!barOpen)}>
-      <span style={{ fontSize: '11px' }}>▶</span>
-      REPLAY
+    <button 
+      className="sim-footer-btn" 
+      data-active={barOpen || active} 
+      onClick={() => setBarOpen(!barOpen)}
+      style={{
+        background: active ? 'color-mix(in srgb, var(--k-cyan, #22d3ee) 20%, transparent)' : undefined,
+        borderColor: active ? 'var(--k-cyan, #22d3ee)' : undefined,
+        boxShadow: active ? '0 0 10px color-mix(in srgb, var(--k-cyan, #22d3ee) 30%, transparent)' : undefined,
+      }}
+    >
+      <span style={{ fontSize: '11px' }}>{active ? '⚡' : '▶'}</span>
+      REPLAY {active ? 'ACTIVE' : ''}
     </button>
   );
 }
