@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSimulation, useSimulationStore, useSimBarOpen, useSimActive, SimSignalEvent, SimTradeEvent } from '../../hooks/useSimulation';
 import { k } from '../../styles/kiteUI';
 import './SimulationBar.css';
@@ -104,10 +104,28 @@ export function SimulationBar() {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
+  const [viewMode, setViewMode] = useState<'docked' | 'half' | 'maximized'>('docked');
 
   const [showStratDropdown, setShowStratDropdown] = useState(false);
   const [showLegsDropdown, setShowLegsDropdown] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
+
+  const stratDropdownRef = useRef<HTMLDivElement>(null);
+  const legsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (stratDropdownRef.current && !stratDropdownRef.current.contains(e.target as Node)) {
+        setShowStratDropdown(false);
+      }
+      if (legsDropdownRef.current && !legsDropdownRef.current.contains(e.target as Node)) {
+        setShowLegsDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Trigger toast on new signal
   useEffect(() => {
@@ -437,8 +455,109 @@ export function SimulationBar() {
         </div>
       )}
 
-      {/* Expandable Replay Footer Dock */}
-      <div className="sim-bar-wrapper" data-open={barOpen}>
+      {/* Expandable Replay Footer Dock (Sterling Dock Shell) */}
+      <div 
+        className="sim-bar-wrapper kw-pane" 
+        data-open={barOpen}
+        style={{
+          height: viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : 'auto',
+          maxHeight: viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : 'none',
+          transition: 'height 0.25s ease, max-height 0.25s ease',
+        }}
+      >
+        {/* Sterling Dock Shell Header Bar */}
+        <div
+          style={{
+            height: 31,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
+            padding: '0 8px',
+            borderBottom: '1px solid var(--k-border-2)',
+            background: 'var(--k-surface-3)',
+            userSelect: 'none',
+          }}
+        >
+          {/* Drag Handle & Icon */}
+          <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: '#c2c2c2', flexShrink: 0 }}>
+            {Array.from({ length: 6 }).map((_, index) => <span key={index} style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'currentColor' }} />)}
+          </span>
+          <span style={{ color: 'var(--k-cyan)', display: 'inline-flex' }}>⚡</span>
+
+          {/* Title & Status */}
+          <span style={{ fontSize: 11, fontWeight: 650, color: 'var(--k-text)', letterSpacing: '.01em' }}>
+            MARKET REPLAY ENGINE
+          </span>
+          <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--k-dim)', fontVariantNumeric: 'tabular-nums' }}>
+            [{sim.status.current_time_iso || '09:15:00'} IST · {sim.speed}× SPEED]
+          </span>
+
+          {/* Right-Aligned Dock Window Controls */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
+            {/* Config Toggle */}
+            <button
+              type="button"
+              className="kw-pane-control"
+              style={{ width: 'auto', padding: '0 6px', fontSize: 10, fontWeight: 700, color: isExpanded ? 'var(--k-cyan)' : 'var(--k-dim)' }}
+              onClick={() => setIsExpanded(!isExpanded)}
+              title="Toggle Expandable Dock Panel"
+            >
+              {isExpanded ? '▼ DOCK' : '▲ DOCK'}
+            </button>
+
+            {/* Minimize */}
+            <button
+              type="button"
+              className="kw-pane-control"
+              title="Minimize Dock"
+              aria-label="Minimize Dock"
+              onClick={() => sim.setBarOpen(false)}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 18h14"/></svg>
+            </button>
+
+            {/* Half Screen */}
+            <button
+              type="button"
+              className="kw-pane-control"
+              title="Half Screen View"
+              aria-label="Half Screen View"
+              onClick={() => setViewMode(viewMode === 'half' ? 'docked' : 'half')}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M3 4h9v16H3z" fill="currentColor" opacity=".14" stroke="none"/></svg>
+            </button>
+
+            {/* Maximize */}
+            <button
+              type="button"
+              className="kw-pane-control"
+              title="Maximize Dock View"
+              aria-label="Maximize Dock View"
+              onClick={() => setViewMode(viewMode === 'maximized' ? 'docked' : 'maximized')}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
+
+            {/* Full Screen */}
+            <button
+              type="button"
+              className="kw-pane-control"
+              title="Full Screen Presentation"
+              aria-label="Full Screen Presentation"
+              onClick={() => {
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                  document.exitFullscreen().catch(() => {});
+                }
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>
+            </button>
+          </div>
+        </div>
+
         {/* Top Dock Toolbar Strip */}
         <div className="sim-dock-toolbar">
           {/* Left: Quick Date & Time Inputs */}
@@ -454,11 +573,15 @@ export function SimulationBar() {
             </button>
 
             {/* Multi-Select Strategy Dropdown Button */}
-            <div style={{ position: 'relative' }}>
+            <div ref={stratDropdownRef} style={{ position: 'relative' }}>
               <button
                 className="sim-speed-pill"
                 style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
-                onClick={() => { setShowStratDropdown(!showStratDropdown); setShowLegsDropdown(false); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowStratDropdown(!showStratDropdown);
+                  setShowLegsDropdown(false);
+                }}
                 disabled={simActive}
                 title="Multi-select strategies to replay"
               >
@@ -469,40 +592,50 @@ export function SimulationBar() {
                 <div 
                   style={{
                     position: 'absolute',
-                    top: 30,
+                    top: 32,
                     left: 0,
-                    zIndex: 200,
-                    width: 220,
+                    zIndex: 10000,
+                    width: 230,
                     padding: 8,
                     borderRadius: 8,
                     border: '1px solid var(--k-border-strong-3)',
-                    background: 'var(--k-bg)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    background: 'var(--k-surface-3, #181d28)',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 4,
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
                     Select Strategies:
                   </div>
                   <button
+                    type="button"
                     className="sim-speed-pill"
                     data-active={sim.selectedStrategies.includes('all')}
                     style={{ textAlign: 'left', justifyContent: 'flex-start' }}
-                    onClick={() => { sim.toggleStrategy('all'); setShowStratDropdown(false); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sim.toggleStrategy('all');
+                    }}
                   >
+                    <span style={{ marginRight: 6 }}>{sim.selectedStrategies.includes('all') ? '☑' : '☐'}</span>
                     ⚡ ALL STRATEGIES
                   </button>
                   {STRATEGY_OPTIONS.map(strat => {
                     const isSel = sim.selectedStrategies.includes(strat.id);
                     return (
                       <button
+                        type="button"
                         key={strat.id}
                         className="sim-speed-pill"
                         data-active={isSel}
                         style={{ textAlign: 'left', justifyContent: 'flex-start' }}
-                        onClick={() => sim.toggleStrategy(strat.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sim.toggleStrategy(strat.id);
+                        }}
                       >
                         <span style={{ marginRight: 6 }}>{isSel ? '☑' : '☐'}</span>
                         {strat.label}
@@ -514,11 +647,15 @@ export function SimulationBar() {
             </div>
 
             {/* Multi-Select Moneyness / Legs Dropdown Button */}
-            <div style={{ position: 'relative' }}>
+            <div ref={legsDropdownRef} style={{ position: 'relative' }}>
               <button
                 className="sim-speed-pill"
                 style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
-                onClick={() => { setShowLegsDropdown(!showLegsDropdown); setShowStratDropdown(false); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLegsDropdown(!showLegsDropdown);
+                  setShowStratDropdown(false);
+                }}
                 disabled={simActive}
                 title="Multi-select strike moneyness legs"
               >
@@ -529,46 +666,44 @@ export function SimulationBar() {
                 <div 
                   style={{
                     position: 'absolute',
-                    top: 30,
+                    top: 32,
                     left: 0,
-                    zIndex: 200,
-                    width: 200,
+                    zIndex: 10000,
+                    width: 220,
                     padding: 8,
                     borderRadius: 8,
                     border: '1px solid var(--k-border-strong-3)',
-                    background: 'var(--k-bg)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    background: 'var(--k-surface-3, #181d28)',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 4,
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
                     Select Option Legs:
                   </div>
-                  <button
-                    className="sim-speed-pill"
-                    data-active={sim.selectedMoneyness.includes('ALL')}
-                    style={{ textAlign: 'left', justifyContent: 'flex-start' }}
-                    onClick={() => { sim.toggleMoneyness('ALL'); setShowLegsDropdown(false); }}
-                  >
-                    ✨ ALL LEGS
-                  </button>
                   {[
-                    { id: 'ATM', label: '🎯 ATM (At-The-Money)' },
-                    { id: 'ITM1', label: '🟢 ITM1 (In-The-Money +1)' },
-                    { id: 'ITM2', label: '🟢 ITM2 (In-The-Money +2)' },
-                    { id: 'OTM1', label: '🔴 OTM1 (Out-of-Money +1)' },
-                    { id: 'OTM2', label: '🔴 OTM2 (Out-of-Money +2)' },
+                    { key: 'ALL', label: '✨ ALL (ATM + ITM + OTM)' },
+                    { key: 'ATM', label: '🎯 ATM (At-The-Money)' },
+                    { key: 'ITM1', label: '🟢 ITM1 (+1 Strike ITM)' },
+                    { key: 'ITM2', label: '🟢 ITM2 (+2 Strikes ITM)' },
+                    { key: 'OTM1', label: '🔴 OTM1 (+1 Strike OTM)' },
+                    { key: 'OTM2', label: '🔴 OTM2 (+2 Strikes OTM)' },
                   ].map(leg => {
-                    const isSel = sim.selectedMoneyness.includes(leg.id);
+                    const isSel = sim.selectedMoneyness.includes(leg.key);
                     return (
                       <button
-                        key={leg.id}
+                        type="button"
+                        key={leg.key}
                         className="sim-speed-pill"
                         data-active={isSel}
                         style={{ textAlign: 'left', justifyContent: 'flex-start' }}
-                        onClick={() => sim.toggleMoneyness(leg.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sim.toggleMoneyness(leg.key);
+                        }}
                       >
                         <span style={{ marginRight: 6 }}>{isSel ? '☑' : '☐'}</span>
                         {leg.label}
