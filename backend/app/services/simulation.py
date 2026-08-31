@@ -89,6 +89,11 @@ class SimulationRunner:
         self._candles: List[Dict] = []
         self._status_message = "Ready for simulation"
         self._last_signal: Optional[SimSignalEvent] = None
+        self._current_sim_epoch: float = 0.0
+        self._start_epoch: int = 0
+        self._end_epoch: int = 0
+        self._seek_requested_epoch: Optional[float] = None
+        self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
     @property
     def status(self) -> SimStatus:
@@ -118,7 +123,9 @@ class SimulationRunner:
         self._pause_event.set()
         self._stats = SimStats()
         self._bar_history = {}
+        self._last_fired = {}
         self._bars_played = 0
+        self._seek_requested_epoch = None
         self._start_real = time.monotonic()
         self._task = asyncio.create_task(self._run_loop())
         return self.status
@@ -150,6 +157,30 @@ class SimulationRunner:
 
     def set_speed(self, speed: float) -> SimStatus:
         self._speed = max(0.5, min(speed, 5000.0))
+        return self.status
+
+    def step_bars(self, count: int) -> SimStatus:
+        from app.services.ohlcv_store import RESOLUTION_SECONDS
+        if self._state == SimState.IDLE:
+            return self.status
+        res = self._config.resolution if self._config else "5m"
+        res_sec = RESOLUTION_SECONDS.get(res, 300)
+        target = self._current_sim_epoch + (count * res_sec)
+        target = max(float(self._start_epoch), min(float(self._end_epoch), target))
+        self._seek_requested_epoch = target
+        return self.status
+
+    def jump_start(self) -> SimStatus:
+        if self._start_epoch > 0:
+            self._seek_requested_epoch = float(self._start_epoch)
+            self._stats = SimStats()
+            self._last_signal = None
+            self._last_fired.clear()
+        return self.status
+
+    def jump_end(self) -> SimStatus:
+        if self._end_epoch > 0:
+            self._seek_requested_epoch = float(self._end_epoch)
         return self.status
 
     async def _run_loop(self):
@@ -221,33 +252,52 @@ class SimulationRunner:
         self._status_message = f"Playing {cfg.date} ({len(all_bars)} bars)..."
         log.info("Simulation started: %s, %d bars, speed %.1fx", cfg.date, self._bars_total, self._speed)
 
+        self._start_epoch = start_epoch
+        self._end_epoch = end_epoch
+        self._current_sim_epoch = float(start_epoch)
+
         try:
-            current_sim_epoch = float(start_epoch)
             total_sim_seconds = float(max(1, end_epoch - start_epoch))
             bar_idx = 0
 
-            while current_sim_epoch <= end_epoch and not self._stop_requested:
+            while self._current_sim_epoch <= end_epoch and not self._stop_requested:
                 await self._pause_event.wait()
                 if self._stop_requested:
                     break
+
+                # Handle seek/rewind requests
+                if self._seek_requested_epoch is not None:
+                    target = self._seek_requested_epoch
+                    self._seek_requested_epoch = None
+                    self._current_sim_epoch = target
+                    # Reset bar pointer to match target epoch
+                    bar_idx = 0
+                    while bar_idx < len(all_bars) and all_bars[bar_idx]["time"] <= target:
+                        bar_idx += 1
+                    self._bars_played = bar_idx
+                    # Filter event stats up to seek target
+                    target_ms = int(target * 1000)
+                    self._stats.events = [ev for ev in self._stats.events if ev.timestamp_ms <= target_ms]
+                    self._stats.signals_fired = len(self._stats.events)
+                    self._last_signal = self._stats.events[-1] if self._stats.events else None
 
                 # Dynamic update tick interval (30ms for >=500x, 50ms for >=50x, 100ms otherwise)
                 dt = 0.03 if self._speed >= 500 else (0.05 if self._speed >= 50 else 0.1)
 
                 # Dynamic second-by-second clock & progress update
-                bar_dt = datetime.fromtimestamp(current_sim_epoch, tz=ist)
+                bar_dt = datetime.fromtimestamp(self._current_sim_epoch, tz=ist)
                 self._current_time_iso = bar_dt.strftime("%H:%M:%S")
-                self._progress = round(min(100.0, max(0.0, (current_sim_epoch - start_epoch) / total_sim_seconds * 100.0)), 1)
+                self._progress = round(min(100.0, max(0.0, (self._current_sim_epoch - start_epoch) / total_sim_seconds * 100.0)), 1)
 
                 # Process bars up to current simulated timestamp
-                while bar_idx < len(all_bars) and current_sim_epoch >= all_bars[bar_idx]["time"]:
+                while bar_idx < len(all_bars) and self._current_sim_epoch >= all_bars[bar_idx]["time"]:
                     bar = all_bars[bar_idx]
                     self._bars_played = bar_idx + 1
                     self._evaluate_bar(bar, datetime.fromtimestamp(bar["time"], tz=ist))
                     bar_idx += 1
 
                 # Advance simulated clock by speed * dt
-                current_sim_epoch += self._speed * dt
+                self._current_sim_epoch += self._speed * dt
 
                 # Real-time sleep step
                 await asyncio.sleep(dt)

@@ -87,3 +87,21 @@ async def test_auto_restart_on_duplicate_start():
     assert status.config.date == "2026-08-29"
 
     await simulation_runner.stop()
+
+
+@pytest.mark.asyncio
+async def test_step_and_seek_controls():
+    config = SimConfig(date="2026-08-28", start_time="09:15:00", end_time="15:30:00", speed=10.0, instruments=["NIFTY"])
+    await simulation_runner.start(config)
+    simulation_runner._state = SimState.RUNNING
+    simulation_runner._start_epoch = 1787889000
+    simulation_runner._end_epoch = 1787911500
+    simulation_runner._current_sim_epoch = 1787889000.0
+
+    status = simulation_runner.step_bars(5)
+    assert simulation_runner._seek_requested_epoch == 1787889000.0 + (5 * 300)
+
+    jump_status = simulation_runner.jump_start()
+    assert simulation_runner._seek_requested_epoch == 1787889000.0
+
+    await simulation_runner.stop()

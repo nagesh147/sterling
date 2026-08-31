@@ -42,9 +42,27 @@ async def resume_sim():
     return await simulation_runner.resume()
 
 
+class SeekBody(BaseModel):
+    bars_offset: Optional[int] = None
+    action: Optional[str] = None  # "jump_start", "jump_end", "step"
+
+
 @router.post("/speed", response_model=SimStatus)
 async def set_speed(body: SpeedBody):
     return simulation_runner.set_speed(body.speed)
+
+
+@router.post("/seek", response_model=SimStatus)
+async def seek_sim(body: SeekBody):
+    if simulation_runner.status.state == SimState.IDLE:
+        raise HTTPException(400, "Simulation not running")
+    if body.action == "jump_start":
+        return simulation_runner.jump_start()
+    elif body.action == "jump_end":
+        return simulation_runner.jump_end()
+    elif body.bars_offset is not None:
+        return simulation_runner.step_bars(body.bars_offset)
+    return simulation_runner.status
 
 
 @router.get("/status", response_model=SimStatus)

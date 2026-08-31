@@ -227,7 +227,28 @@ export function useSimulation() {
     }
   };
 
-  return { ...store, start, stop, pause, resume, setSpeed };
+  const stepBars = async (count: number) => {
+    if (store.status.state !== 'idle') {
+      const status = await post('/seek', { bars_offset: count });
+      setStatus(status);
+    }
+  };
+
+  const jumpStart = async () => {
+    if (store.status.state !== 'idle') {
+      const status = await post('/seek', { action: 'jump_start' });
+      setStatus(status);
+    }
+  };
+
+  const jumpEnd = async () => {
+    if (store.status.state !== 'idle') {
+      const status = await post('/seek', { action: 'jump_end' });
+      setStatus(status);
+    }
+  };
+
+  return { ...store, start, stop, pause, resume, setSpeed, stepBars, jumpStart, jumpEnd };
 }
 
 // ── Polling for status updates ──
