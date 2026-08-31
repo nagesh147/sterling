@@ -320,7 +320,8 @@ async def signals(request: Request, armed_only: bool = False) -> ScalpingScanRes
     """Scan the stored-crypto universe, return signals from all enabled strategies."""
     from app.services.simulation import simulation_runner, SimState
     if simulation_runner.status.state != SimState.IDLE:
-        return ScalpingScanResponse(signals=[], armed_count=0, total_signals=0)
+        res = simulation_runner.get_scalping_signals_response()
+        return ScalpingScanResponse(**res)
 
     import time as _t
     cfg = _effective_config(request)   # overlays optimized params when the toggle is on

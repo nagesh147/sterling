@@ -332,7 +332,7 @@ async def list_signals(
 ) -> dict:
     from app.services.simulation import simulation_runner, SimState
     if simulation_runner.status.state != SimState.IDLE:
-        return {"items": [], "next_cursor": None, "has_more": False, "simulated": True}
+        return simulation_runner.get_navigator_signals_response()
 
     limit = max(1, min(limit, 200))
     try:

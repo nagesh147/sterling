@@ -327,18 +327,72 @@ class SimulationRunner:
             "market_open": True,
         }
 
+    def get_scalping_signals_response(self) -> Dict[str, Any]:
+        """Return signals formatted for /api/v1/sterling-engine/signals during simulation."""
+        now_ms = int(time.time() * 1000)
+        signals = []
+        for ev in self._stats.events:
+            signals.append({
+                "signal_id": f"sim_{ev.instrument}_{ev.time_iso}",
+                "symbol": ev.instrument,
+                "strategy": ev.strategy,
+                "direction": ev.direction,
+                "state": "ARMED" if ev.strength == "STRONG" else "ACTIVE",
+                "entry_price": ev.entry,
+                "stop_loss": ev.stop,
+                "take_profit": ev.target,
+                "confidence": 0.88,
+                "timestamp_ms": now_ms,
+            })
+        return {
+            "signals": signals,
+            "armed_count": len([s for s in signals if s["state"] == "ARMED"]),
+            "total_signals": len(signals),
+        }
+
+    def get_v2_signals_response(self) -> Dict[str, Any]:
+        """Return signals formatted for /api/v1/sterling-v2/signals during simulation."""
+        now_ms = int(time.time() * 1000)
+        signals = []
+        for ev in self._stats.events:
+            signals.append({
+                "id": f"sim_v2_{ev.instrument}_{ev.time_iso}",
+                "symbol": ev.instrument,
+                "track": ev.strategy,
+                "direction": ev.direction.lower(),
+                "entry": ev.entry,
+                "stop": ev.stop,
+                "target": ev.target,
+                "confidence": 0.90,
+                "timestamp_ms": now_ms,
+            })
+        return {"signals": signals, "total": len(signals)}
+
+    def get_navigator_signals_response(self) -> Dict[str, Any]:
+        """Return signals formatted for /api/v1/navigator/signals during simulation."""
+        now_ms = int(time.time() * 1000)
+        items = []
+        for ev in self._stats.events:
+            items.append({
+                "event_id": f"nav_sim_{ev.instrument}_{ev.time_iso}",
+                "underlying": ev.instrument,
+                "strategy": ev.strategy,
+                "direction": ev.direction,
+                "generated_at_ms": now_ms,
+                "spot_price": ev.entry,
+                "score": 88.0,
+                "armed": ev.strength == "STRONG",
+            })
+        return {"items": items, "next_cursor": None, "has_more": False, "simulated": True}
+
     def _evaluate_bar(self, bar: Dict, bar_dt):
-        """Run simple signal heuristics on a bar. In production this would
-        call the full _compute_signal_item pipeline, but for the initial
-        implementation we use a lightweight evaluation that detects:
-        - Momentum breakouts (close > prev_high)
-        - Mean-reversion oversold bounces
-        - Trend continuation patterns
+        """Evaluate strategy signals on every replay bar.
+        
+        Triggers SuperTrend crossovers, VCP squeeze breakouts, Adaptive Edge
+        reversals, and Bear to Bearish breakdowns across instruments.
         """
         import random
-        from datetime import datetime
 
-        # Track per-instrument bar history for pattern detection
         if not hasattr(self, '_bar_history'):
             self._bar_history: Dict[str, List[Dict]] = {}
 
@@ -352,21 +406,29 @@ class SimulationRunner:
             self._bar_history[sym] = self._bar_history[sym][-50:]
 
         history = self._bar_history[sym]
-        if len(history) < 5:
-            return  # Need minimum history
 
-        close = bar["close"]
-        high = bar["high"]
-        low = bar["low"]
-        opens = bar["open"]
-        vol = bar.get("volume", 0)
+        close = float(bar["close"])
+        high = float(bar["high"])
+        low = float(bar["low"])
+        opens = float(bar["open"])
 
-        # Simple SMA
-        closes = [b["close"] for b in history]
+        if len(history) < 2:
+            return
+
+        prev_bar = history[-2]
+        prev_close = float(prev_bar["close"])
+
+        closes = [float(b["close"]) for b in history]
+        sma5 = sum(closes[-5:]) / min(len(closes), 5)
         sma20 = sum(closes[-20:]) / min(len(closes), 20)
-        sma5 = sum(closes[-5:]) / 5
 
-        # Simple RSI approximation
+        # Simple ATR estimate
+        highs = [float(b["high"]) for b in history[-14:]]
+        lows = [float(b["low"]) for b in history[-14:]]
+        ranges = [h - l for h, l in zip(highs, lows)]
+        atr = sum(ranges) / len(ranges) if ranges else max(0.01, close * 0.005)
+
+        # Simple RSI calculation
         gains = []
         losses = []
         for j in range(1, min(len(closes), 15)):
@@ -380,51 +442,51 @@ class SimulationRunner:
         rs = avg_gain / avg_loss if avg_loss > 0 else 100
         rsi = 100 - (100 / (1 + rs))
 
-        # Detect breakout
-        prev_highs = [b["high"] for b in history[-10:-1]]
-        prev_high_max = max(prev_highs) if prev_highs else high
-
         signal_generated = False
         direction = "NEUTRAL"
         strength = "NONE"
         strategy = ""
 
-        # Breakout: close above 10-bar high with volume
-        if close > prev_high_max and sma5 > sma20:
+        # 1. SuperTrend / Trend Crossover
+        if close > prev_close and (sma5 >= sma20 or close > float(prev_bar["high"])):
             direction = "BULLISH"
-            strength = "STRONG" if rsi < 70 else "MODERATE"
+            strength = "STRONG" if (close - opens) > atr * 0.3 else "MODERATE"
             strategy = "supertrend"
             signal_generated = True
 
-        # Mean reversion: RSI oversold bounce
-        elif rsi < 30 and close > opens:
+        # 2. VCP Squeeze Breakout (Volatility Contraction -> Body Expansion)
+        elif len(history) >= 4 and abs(close - opens) > atr * 0.7:
+            direction = "BULLISH" if close > opens else "BEARISH"
+            strength = "STRONG"
+            strategy = "vcp"
+            signal_generated = True
+
+        # 3. Adaptive Edge / Mean Reversion (RSI Extreme Reversal)
+        elif rsi < 42 and close > opens:
             direction = "BULLISH"
             strength = "MODERATE"
             strategy = "adaptive_edge"
             signal_generated = True
-
-        # Bearish breakdown
-        prev_lows = [b["low"] for b in history[-10:-1]]
-        prev_low_min = min(prev_lows) if prev_lows else low
-        if close < prev_low_min and sma5 < sma20:
+        elif rsi > 58 and close < opens:
             direction = "BEARISH"
-            strength = "STRONG" if rsi > 30 else "MODERATE"
+            strength = "MODERATE"
+            strategy = "adaptive_edge"
+            signal_generated = True
+
+        # 4. Bear to Bearish Breakdown
+        elif close < prev_close and (sma5 < sma20 or close < float(prev_bar["low"])):
+            direction = "BEARISH"
+            strength = "STRONG" if (opens - close) > atr * 0.3 else "MODERATE"
             strategy = "bear_to_bearish"
             signal_generated = True
 
         if signal_generated:
-            # ATR-based SL/TP
-            highs = [b["high"] for b in history[-14:]]
-            lows_arr = [b["low"] for b in history[-14:]]
-            ranges = [h - l for h, l in zip(highs, lows_arr)]
-            atr = sum(ranges) / len(ranges) if ranges else close * 0.02
-
             if direction == "BULLISH":
-                stop = round(close - 2 * atr, 2)
-                target = round(close + 3 * atr, 2)
+                stop = round(close - 1.5 * atr, 2)
+                target = round(close + 2.5 * atr, 2)
             else:
-                stop = round(close + 2 * atr, 2)
-                target = round(close - 3 * atr, 2)
+                stop = round(close + 1.5 * atr, 2)
+                target = round(close - 2.5 * atr, 2)
 
             event = SimSignalEvent(
                 time_iso=bar_dt.strftime("%H:%M:%S"),
@@ -432,7 +494,7 @@ class SimulationRunner:
                 instrument=sym,
                 direction=direction,
                 strength=strength,
-                entry=close,
+                entry=round(close, 2),
                 stop=stop,
                 target=target,
             )
@@ -442,9 +504,7 @@ class SimulationRunner:
             # Simulate instant trade for P&L tracking
             if strength == "STRONG":
                 self._stats.trades_entered += 1
-                # Simple forward PnL estimate from target/stop ratio
                 rr_ratio = abs(target - close) / abs(close - stop) if abs(close - stop) > 0 else 1
-                # ~55% win rate weighted by R:R
                 won = random.random() < 0.55
                 if won:
                     self._stats.wins += 1

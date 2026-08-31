@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useQueryClient } from '@tanstack/react-query';
 
 export type SimState = 'idle' | 'loading' | 'running' | 'paused';
 
@@ -108,6 +109,7 @@ async function post<T = SimStatus>(path: string, body?: unknown): Promise<T> {
 export function useSimulation() {
   const store = useSimulationStore();
   const { setStatus, setShowSummary } = store;
+  const queryClient = useQueryClient();
 
   const start = async () => {
     const config = {
@@ -121,6 +123,7 @@ export function useSimulation() {
     try {
       const status = await post('/start', config);
       setStatus(status);
+      queryClient.invalidateQueries();
       window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
       startPolling();
     } catch (err) {
@@ -129,6 +132,7 @@ export function useSimulation() {
         await post('/stop');
         const status = await post('/start', config);
         setStatus(status);
+        queryClient.invalidateQueries();
         window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
         startPolling();
       } catch (retryErr) {
@@ -140,6 +144,7 @@ export function useSimulation() {
   const stop = async () => {
     const status = await post('/stop');
     setStatus(status);
+    queryClient.invalidateQueries();
     stopPolling();
     if (store.status.stats.signals_fired > 0) {
       setShowSummary(true);

@@ -76,7 +76,7 @@ def signals() -> dict:
     Paper-only display: this NEVER calls the order router. Execution stays manual."""
     from app.services.simulation import simulation_runner, SimState
     if simulation_runner.status.state != SimState.IDLE:
-        return {"signals": [], "count": 0, "simulated": True}
+        return simulation_runner.get_v2_signals_response()
 
     out = []
     symbols_paths = D.list_symbols()
