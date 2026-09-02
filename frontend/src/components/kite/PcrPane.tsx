@@ -6,8 +6,9 @@ import {
   SESSION_OPEN_MIN,
   bandTitle,
   buildGrid,
-  describeFlow,
+  buildIdea,
   expiryKind,
+  flowPath,
   formatDelta,
   formatDeskStamp,
   formatExpiry,
@@ -18,6 +19,7 @@ import {
   putShare,
   readPcr,
   shiftSession,
+  type PcrAction,
 } from "../../lib/pcr/slots";
 import {
   PCR_INDICES,
@@ -43,6 +45,22 @@ function pad(n: number) {
 function fmtLtp(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
+
+function ideaKind(action: PcrAction): "ce" | "pe" | "wait" {
+  if (action === "Buy CE") return "ce";
+  if (action === "Buy PE") return "pe";
+  return "wait";
+}
+
+function ideaTag(action: PcrAction): string {
+  if (action === "Buy CE") return "CE";
+  if (action === "Buy PE") return "PE";
+  return "Wait";
+}
+
+function moveTxt(n: number): string {
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
 function Spark({ slots }: { slots: PcrSlot[] }) {
@@ -213,9 +231,37 @@ const CSS = `
 .kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
 .kite-pcr .kp-print.kp-band-empty{background:var(--k-surface-hover)}
 .kite-pcr .kp-side{display:flex;flex-direction:column;gap:12px}
-.kite-pcr .kp-tape li{font-size:13px;margin:0 0 10px;padding:0 0 10px;border-bottom:1px solid var(--k-border);line-height:1.4}
-.kite-pcr .kp-tape li:last-child{margin:0;padding:0;border:0}
-.kite-pcr .kp-tape ul,.kite-pcr .kp-legend ul{list-style:none;margin:10px 0 0;padding:0}
+.kite-pcr .kp-tape-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:8px}
+.kite-pcr .kp-idea-act{margin:4px 0 2px;font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.kite-pcr .kp-idea-act.ce{color:var(--k-green)}
+.kite-pcr .kp-idea-act.pe{color:var(--k-red)}
+.kite-pcr .kp-idea-act.wait{color:var(--k-dim)}
+.kite-pcr .kp-idea-meta{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px;color:var(--k-dim);font-variant-numeric:tabular-nums}
+.kite-pcr .kp-idea-path{margin:8px 0 6px;font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kite-pcr .kp-idea-path .mv{margin-left:8px;font-size:13px;font-weight:400}
+.kite-pcr .kp-idea-why{margin:0;font-size:13px;line-height:1.45;color:var(--k-text)}
+.kite-pcr .kp-ev{margin-top:14px;padding-top:12px;border-top:1px solid var(--k-border)}
+.kite-pcr .kp-ev-lab{margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
+.kite-pcr .kp-ev-row{display:grid;grid-template-columns:76px 1fr auto;gap:8px;align-items:baseline;padding:7px 0;font-size:12px;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--k-border)}
+.kite-pcr .kp-ev-row:last-child{border-bottom:0;padding-bottom:0}
+.kite-pcr .kp-ev-clock{color:var(--k-dim)}
+.kite-pcr .kp-ev-path{color:var(--k-text)}
+.kite-pcr .kp-ev-tag{font-size:11px;font-weight:700;letter-spacing:.04em}
+.kite-pcr .kp-ev-tag.ce{color:var(--k-green)}
+.kite-pcr .kp-ev-tag.pe{color:var(--k-red)}
+.kite-pcr .kp-skip{margin:10px 0 0;font-size:12px;color:var(--k-dim);line-height:1.4}
+.kite-pcr .kp-all{list-style:none;margin:8px 0 0;padding:0}
+.kite-pcr .kp-all-row{display:grid;grid-template-columns:64px 72px 1fr auto;gap:8px;align-items:baseline;width:100%;text-align:left;border:0;background:none;color:inherit;padding:10px 0;border-bottom:1px solid var(--k-border);cursor:pointer;font-family:inherit;font-size:13px;font-variant-numeric:tabular-nums}
+.kite-pcr .kp-all-row:hover{background:var(--k-surface-hover)}
+.kite-pcr .kp-all-row:last-child{border-bottom:0}
+.kite-pcr .kp-all-name{font-weight:500}
+.kite-pcr .kp-all-act{font-weight:600;letter-spacing:-.01em}
+.kite-pcr .kp-all-act.ce{color:var(--k-green)}
+.kite-pcr .kp-all-act.pe{color:var(--k-red)}
+.kite-pcr .kp-all-act.wait{color:var(--k-dim);font-weight:500}
+.kite-pcr .kp-all-path{color:var(--k-text)}
+.kite-pcr .kp-all-clock{color:var(--k-dim);font-size:12px}
+.kite-pcr .kp-legend ul{list-style:none;margin:4px 0 0;padding:0}
 .kite-pcr .kp-legend li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--k-dim);line-height:1.45;margin:0 0 8px}
 .kite-pcr .kp-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0;margin-top:3px;display:inline-block}
 .kite-pcr .kp-foot{margin:16px 0 0;font-size:11px;color:var(--k-dim)}
@@ -246,6 +292,7 @@ export function PcrPane() {
   const [liveIso, setLiveIso] = useState("");
   const [sessionIso, setSessionIso] = useState("");
   const [followLive, setFollowLive] = useState(true);
+  const [tapeAll, setTapeAll] = useState(false);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -337,18 +384,12 @@ export function PcrPane() {
   const band = lastFilled?.band ?? (current != null ? pcrBand(current) : "empty");
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
   const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
-  const tape = useMemo(() => {
-    const out: { id: string; title: string; detail: string; up: boolean; hhmm: string; action: string }[] = [];
-    for (const u of PCR_INDICES) {
-      const row = boards?.[u.id] ?? [];
-      for (const s of row) {
-        if (s.delta == null || Math.abs(s.delta) < 0.06) continue;
-        const line = describeFlow(u.short, s.hhmm, s.pcr, s.delta);
-        out.push({ id: `${u.id}-${s.hhmm}`, hhmm: s.hhmm, ...line });
-      }
-    }
-    return out.slice(-8).reverse();
-  }, [boards]);
+  const ideaName = PCR_INDICES.find((u) => u.id === index)?.short ?? index;
+  const idea = useMemo(() => buildIdea(ideaName, grid), [ideaName, grid]);
+  const allIdeas = useMemo(() => {
+    if (!tapeAll || !boards) return [];
+    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, boards[u.id] ?? []) }));
+  }, [tapeAll, boards]);
   const putPct = putShare(current);
   const live = payload?.source === "live" && viewingLive;
   const expiryLabel = series
@@ -567,21 +608,70 @@ export function PcrPane() {
 
               <div className="kp-side">
                 <aside className="kp-card kp-tape">
-                  <p className="kp-kicker">Flow tape</p>
-                  {tape.length ? (
-                    <ul>
-                      {tape.map((e) => (
-                        <li key={e.id}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                            <b className={e.up ? "text-up" : "text-down"}>{e.title}</b>
-                            <span className={`kp-play-tag ${e.up ? "text-up" : "text-down"}`}>{e.action}</span>
-                          </div>
-                          <div className="kp-sub" style={{ marginTop: 4 }}>{e.detail}</div>
-                        </li>
-                      ))}
+                  <div className="kp-tape-head">
+                    <p className="kp-kicker">What to buy</p>
+                    <div className="kp-seg" role="tablist" aria-label="Idea scope">
+                      <button type="button" data-on={!tapeAll} onClick={() => setTapeAll(false)}>This index</button>
+                      <button type="button" data-on={tapeAll} onClick={() => setTapeAll(true)}>All</button>
+                    </div>
+                  </div>
+                  {tapeAll ? (
+                    <ul className="kp-all">
+                      {allIdeas.map((row) => {
+                        const line = row.idea;
+                        const kind = line ? ideaKind(line.action) : "wait";
+                        return (
+                          <li key={row.id}>
+                            <button
+                              type="button"
+                              className="kp-all-row"
+                              onClick={() => { setIndex(row.id); setTapeAll(false); setView("grid"); }}
+                            >
+                              <span className="kp-all-name">{row.name}</span>
+                              <span className={`kp-all-act ${kind}`}>{line ? line.action : "Wait"}</span>
+                              <span className="kp-all-path">{line ? flowPath(line) : "—"}</span>
+                              <span className="kp-all-clock">{line?.clock ?? ""}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
+                  ) : idea.idea ? (
+                    <div>
+                      <div className={`kp-idea-act ${ideaKind(idea.idea.action)}`}>{idea.idea.action}</div>
+                      <div className="kp-idea-meta">
+                        <span>{idea.idea.name}</span>
+                        <span>{idea.idea.clock}</span>
+                      </div>
+                      <div className="kp-idea-path">
+                        {flowPath(idea.idea)}
+                        <span className={`mv ${(idea.idea.move ?? 0) > 0 ? "text-up" : (idea.idea.move ?? 0) < 0 ? "text-down" : ""}`}>
+                          {moveTxt(idea.idea.move)}
+                        </span>
+                      </div>
+                      <p className="kp-idea-why">{idea.idea.why}</p>
+                      {idea.earlier.length ? (
+                        <div className="kp-ev">
+                          <p className="kp-ev-lab">Earlier today</p>
+                          {idea.earlier.map((e) => (
+                            <div key={e.hhmm} className="kp-ev-row">
+                              <span className="kp-ev-clock">{e.clock}</span>
+                              <span className="kp-ev-path">{flowPath(e)}</span>
+                              <span className={`kp-ev-tag ${ideaKind(e.action)}`}>{ideaTag(e.action)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {idea.idea.action !== "Wait" && idea.skipped > 0 ? (
+                        <p className="kp-skip">
+                          {idea.skipped} move{idea.skipped === 1 ? "" : "s"} skipped — PCR never crossed 1.00 going up, or 0.90 going down.
+                        </p>
+                      ) : null}
+                    </div>
                   ) : (
-                    <p className="kp-sub" style={{ marginTop: 10 }}>No big PCR jump this session yet.</p>
+                    <p className="kp-sub" style={{ marginTop: 12 }}>
+                      No 15-minute jump yet. Need PCR above 1.00 and rising for CE, or below 0.90 and falling for PE.
+                    </p>
                   )}
                 </aside>
                 <section className="kp-card kp-legend" aria-label="How to read PCR">

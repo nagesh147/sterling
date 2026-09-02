@@ -329,31 +329,74 @@ export function compareShot(
   return { matched, total, diffs };
 }
 
-export type PcrAction = "Buy PE" | "Buy CE" | "Stand aside";
+export type PcrAction = "Buy PE" | "Buy CE" | "Wait";
 
-export function describeFlow(
-  name: string,
-  hhmm: string,
-  pcr: number | null,
-  delta: number,
-): { title: string; detail: string; action: Exclude<PcrAction, "Stand aside">; up: boolean } {
+export type FlowLine = {
+  action: PcrAction;
+  name: string;
+  hhmm: string;
+  clock: string;
+  from: number | null;
+  to: number | null;
+  move: number;
+  why: string;
+};
+
+export const FLOW_MOVE_MIN = 0.06;
+/** Rising PCR only becomes CE once it is at/above 1.00. */
+export const CE_PCR_MIN = 1;
+/** Falling PCR only becomes PE once it is at/below 0.90. */
+export const PE_PCR_MAX = 0.9;
+
+export function flowPath(line: Pick<FlowLine, "from" | "to">): string {
+  const from = line.from == null ? "—" : line.from.toFixed(2);
+  const to = line.to == null ? "—" : line.to.toFixed(2);
+  return `${from} → ${to}`;
+}
+
+/**
+ * A 15-min PCR jump is only a CE/PE ticket if the *level* agrees.
+ * PCR 0.63 ticking up is still more calls than puts — not a CE buy.
+ */
+export function describeFlow(name: string, hhmm: string, pcr: number | null, delta: number): FlowLine {
   const clock = formatHhmm12(hhmm);
-  const print = pcr != null && Number.isFinite(pcr) ? pcr.toFixed(2) : "—";
-  const move = `${delta > 0 ? "+" : ""}${delta.toFixed(2)}`;
+  const to = pcr != null && Number.isFinite(pcr) ? roundPcr(pcr) : null;
+  const from = to != null ? roundPcr(to - delta) : null;
+  const n = to ?? 0;
+  const base = { name, hhmm, clock, from, to, move: delta };
+
   if (delta > 0) {
-    return {
-      up: true,
-      action: "Buy CE",
-      title: `${name} · Buy CE`,
-      detail: `PCR rose ${move} at ${clock}, now ${print}. More puts than calls — dips usually get bought. Prefer CE.`,
-    };
+    if (n >= 1.2) return { ...base, action: "Buy CE", why: "Puts are being sold. Dips usually get bought." };
+    if (n >= CE_PCR_MIN) return { ...base, action: "Buy CE", why: "Puts now more than calls. Buy CE on a dip." };
+    if (n >= 0.85) return { ...base, action: "Wait", why: "PCR went up, but calls are still more. Not a CE yet." };
+    return { ...base, action: "Wait", why: "PCR went up, still more calls than puts. Do not buy CE." };
   }
-  return {
-    up: false,
-    action: "Buy PE",
-    title: `${name} · Buy PE`,
-    detail: `PCR fell ${move} at ${clock}, now ${print}. More calls than puts — upside is being sold. Prefer PE.`,
-  };
+
+  if (n <= 0.7) return { ...base, action: "Buy PE", why: "Calls are being sold. Upside looks capped." };
+  if (n <= PE_PCR_MAX) return { ...base, action: "Buy PE", why: "Calls now more than puts. Skip CE." };
+  if (n >= 1.2) return { ...base, action: "Wait", why: "Puts cooled off. Don't chase CE." };
+  return { ...base, action: "Wait", why: "PCR slipped. No clear CE or PE yet." };
+}
+
+export type IdeaBoard = {
+  idea: FlowLine | null;
+  earlier: FlowLine[];
+  skipped: number;
+};
+
+/** Latest CE/PE for an index, with earlier confirming prints. */
+export function buildIdea(name: string, slots: PcrSlot[]): IdeaBoard {
+  const moves: FlowLine[] = [];
+  for (const s of slots) {
+    if (s.delta == null || Math.abs(s.delta) < FLOW_MOVE_MIN) continue;
+    moves.push(describeFlow(name, s.hhmm, s.pcr, s.delta));
+  }
+  const newest = (a: FlowLine, b: FlowLine) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm);
+  const trades = moves.filter((m) => m.action !== "Wait").sort(newest);
+  const skipped = moves.length - trades.length;
+  const idea = (trades[0] ?? [...moves].sort(newest)[0]) ?? null;
+  const earlier = trades.filter((m) => !(idea && m.hhmm === idea.hhmm && m.name === idea.name)).slice(0, 4);
+  return { idea, earlier, skipped };
 }
 
 export type PcrRead = {
@@ -376,7 +419,7 @@ export function readPcr(slots: PcrSlot[], spotChg: number | null): PcrRead {
       reason: "No PCR yet this session.",
       conviction: 0,
       regime: "Pre-open",
-      action: "Stand aside",
+      action: "Wait",
       play: "Wait for the first valid 15-minute print before overlaying PE or CE.",
     };
   }
@@ -447,7 +490,7 @@ export function readPcr(slots: PcrSlot[], spotChg: number | null): PcrRead {
     reason: `Session PCR moved ${first.toFixed(2)} → ${pcr.toFixed(2)}. Trade the index, size off conviction.`,
     conviction: clamp(Math.round(40 + Math.abs(pcr - 1) * 90), 28, 70),
     regime: "Range",
-    action: "Stand aside",
+    action: "Wait",
     play: "No CE/PE overlay. Trade the index until PCR leaves the 0.75–1.20 band.",
   };
 }
