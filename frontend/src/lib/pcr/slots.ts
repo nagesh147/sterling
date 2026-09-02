@@ -51,6 +51,41 @@ export function formatDelta(n: number | null): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
 }
 
+/** Drop 0.00 / negative OI prints — those are missing ticks, not a ratio. */
+export function isValidPrint(n: number | null, metric: PcrMetric = "oi"): boolean {
+  if (n == null || !Number.isFinite(n)) return false;
+  if (metric === "changeOi") return Math.abs(n) < 8;
+  return n > 0.12 && n < 4.5;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+/** `02 Sept 2026 09:15 AM` */
+export function formatDeskStamp(iso: string, hhmm?: string | null): string {
+  const [y, m, d] = (iso || "").slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "—";
+  const [hhRaw, mmRaw] = (hhmm || "09:15").split(":");
+  const h24 = Number(hhRaw);
+  const min = Number(mmRaw);
+  const hour = Number.isFinite(h24) ? h24 : 9;
+  const minute = Number.isFinite(min) ? min : 15;
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  const ap = hour < 12 ? "AM" : "PM";
+  return `${String(d).padStart(2, "0")} ${MONTHS[m - 1]} ${y} ${String(h12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${ap}`;
+}
+
+export function shiftSession(iso: string, dir: -1 | 1): string {
+  let cur = iso.slice(0, 10);
+  for (let i = 0; i < 14; i++) {
+    const [y, m, d] = cur.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + dir));
+    cur = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+    const wd = dt.getUTCDay();
+    if (wd !== 0 && wd !== 6) return cur;
+  }
+  return iso;
+}
+
 /** Indian F&O reading: high PCR (put writing) is bullish; low PCR is bearish. */
 export function pcrBand(n: number | null): PcrBand {
   if (n == null || !Number.isFinite(n)) return "empty";
@@ -152,6 +187,10 @@ export function buildGrid(marks: PcrMark[], latest: PcrMark | null, nowMin: numb
       }
     } else {
       value = frozen ? metricValue(frozen, metric) : null;
+    }
+    if (!isValidPrint(value, metric)) {
+      value = null;
+      live = false;
     }
     return {
       hhmm,
@@ -279,17 +318,20 @@ export function compareShot(
   return { matched, total, diffs };
 }
 
-export function readPcr(
-  slots: PcrSlot[],
-  spotChg: number | null,
-): {
+export type PcrAction = "Buy PE" | "Buy CE" | "Stand aside";
+
+export type PcrRead = {
   headline: string;
   bias: "Bullish" | "Bearish" | "Balanced";
   reason: string;
   conviction: number;
   regime: string;
-} {
-  const filled = slots.filter((s) => s.pcr != null);
+  action: PcrAction;
+  play: string;
+};
+
+export function readPcr(slots: PcrSlot[], spotChg: number | null): PcrRead {
+  const filled = slots.filter((s) => s.pcr != null && isValidPrint(s.pcr));
   const last = filled[filled.length - 1];
   if (!last || last.pcr == null) {
     return {
@@ -298,6 +340,8 @@ export function readPcr(
       reason: "No PCR yet this session.",
       conviction: 0,
       regime: "Pre-open",
+      action: "Stand aside",
+      play: "Wait for the first valid 15-minute print before overlaying PE or CE.",
     };
   }
   const pcr = last.pcr;
@@ -313,6 +357,8 @@ export function readPcr(
       reason: `PCR ${pcr.toFixed(2)} is rising while spot is red. Protective demand, not writing.`,
       conviction: clamp(Math.round(62 + (pcr - 0.8) * 80), 48, 92),
       regime: "Defensive",
+      action: "Buy PE",
+      play: "This is PE demand, not put writing. Stay with PE until PCR rolls over — do not fade with CE.",
     };
   }
   if (rising && chg > 0.1) {
@@ -322,6 +368,8 @@ export function readPcr(
       reason: `PCR climbed to ${pcr.toFixed(2)} with spot higher. Dips get supported.`,
       conviction: clamp(Math.round(58 + (pcr - 1) * 90), 42, 93),
       regime: "Constructive",
+      action: "Buy CE",
+      play: "Writers are selling PE into the bounce. Buy CE on dips while PCR holds up.",
     };
   }
   if (!rising && chg > 0.2) {
@@ -331,6 +379,8 @@ export function readPcr(
       reason: `PCR ${pcr.toFixed(2)} is easing into strength. Momentum, not a ceiling yet.`,
       conviction: clamp(Math.round(50 + Math.abs(pcr - first) * 140), 38, 90),
       regime: "Upside chase",
+      action: "Buy CE",
+      play: "Call momentum is in control. Trail CE. Do not fade this with PE yet.",
     };
   }
   if (pcr >= 1.2) {
@@ -340,6 +390,8 @@ export function readPcr(
       reason: `OI PCR ${pcr.toFixed(2)} is a constructive skew.`,
       conviction: 72,
       regime: "Put skew",
+      action: "Buy CE",
+      play: "Prefer CE on pullbacks. Avoid shorts / PE while PCR holds ≥ 1.20.",
     };
   }
   if (pcr <= 0.75) {
@@ -349,6 +401,8 @@ export function readPcr(
       reason: `OI PCR ${pcr.toFixed(2)} — upside is being sold.`,
       conviction: 70,
       regime: "Call skew",
+      action: "Buy PE",
+      play: "Upside is being sold. Prefer PE. Do not chase CE into this call wall.",
     };
   }
   return {
@@ -357,6 +411,8 @@ export function readPcr(
     reason: `Session PCR moved ${first.toFixed(2)} → ${pcr.toFixed(2)}. Trade the index, size off conviction.`,
     conviction: clamp(Math.round(40 + Math.abs(pcr - 1) * 90), 28, 70),
     regime: "Range",
+    action: "Stand aside",
+    play: "No CE/PE overlay. Trade the index until PCR leaves the 0.75–1.20 band.",
   };
 }
 
