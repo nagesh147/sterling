@@ -276,3 +276,47 @@ export function compareShot(
   }
   return { matched, total, diffs };
 }
+
+export function readPcr(
+  slots: PcrSlot[],
+  spotChg: number | null,
+): { headline: string; bias: "Bullish" | "Bearish" | "Balanced"; reason: string } {
+  const filled = slots.filter((s) => s.pcr != null);
+  const last = filled[filled.length - 1];
+  if (!last || last.pcr == null) {
+    return { headline: "Waiting for the open print", bias: "Balanced", reason: "No PCR yet this session." };
+  }
+  const pcr = last.pcr;
+  const path = filled.slice(-4).map((s) => s.pcr ?? 0);
+  const rising = path.length >= 2 && path[path.length - 1] > path[0];
+  const chg = spotChg ?? 0;
+  if (rising && chg < -0.2) {
+    return {
+      bias: "Bearish",
+      headline: "Puts being bought into weakness",
+      reason: `PCR ${pcr.toFixed(2)} is rising while spot is red. Protective demand, not writing.`,
+    };
+  }
+  if (rising && chg > 0.1) {
+    return {
+      bias: "Bullish",
+      headline: "Put writing on the bounce",
+      reason: `PCR climbed to ${pcr.toFixed(2)} with spot higher. Dips get supported.`,
+    };
+  }
+  if (!rising && chg > 0.2) {
+    return {
+      bias: "Bullish",
+      headline: "Calls chasing the rally",
+      reason: `PCR ${pcr.toFixed(2)} is easing into strength. Momentum, not a ceiling yet.`,
+    };
+  }
+  if (pcr >= 1.2) {
+    return { bias: "Bullish", headline: "Put writers in control", reason: `OI PCR ${pcr.toFixed(2)} is a constructive skew.` };
+  }
+  if (pcr <= 0.75) {
+    return { bias: "Bearish", headline: "Call load is heavy", reason: `OI PCR ${pcr.toFixed(2)} — upside is being sold.` };
+  }
+  return { bias: "Balanced", headline: "No options skew worth fading", reason: `PCR ${pcr.toFixed(2)} is orderly. Trade the index.` };
+}
+
