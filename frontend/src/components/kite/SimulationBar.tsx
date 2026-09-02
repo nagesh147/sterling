@@ -217,8 +217,6 @@ export function SimulationBar() {
     });
   }, [sim.status.stats.events, sim.status.config]);
 
-  if (!barOpen) return null;
-
   return (
     <>
       {toastSignal && sim.status.state === 'running' && (
