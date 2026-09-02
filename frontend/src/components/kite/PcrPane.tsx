@@ -1,4 +1,5 @@
-import { HEAD_METRICS, ROW_METRICS } from "../board/signalRowSpec";
+import { useEffect, useMemo, useState } from "react";
+import { HEAD_METRICS, ROW_METRICS } from "./board/signalRowSpec";
 import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
   SESSION_CLOSE_MIN,
