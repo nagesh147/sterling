@@ -299,10 +299,15 @@ class SimulationRunner:
                     while bar_idx < len(all_bars) and all_bars[bar_idx]["time"] <= target:
                         bar_idx += 1
                     self._bars_played = bar_idx
-                    # Filter event stats up to seek target
+                    # Filter event stats & trades up to seek target
                     target_ms = int(target * 1000)
                     self._stats.events = [ev for ev in self._stats.events if ev.timestamp_ms <= target_ms]
+                    self._stats.trades = [tr for tr in self._stats.trades if tr.timestamp_ms <= target_ms]
                     self._stats.signals_fired = len(self._stats.events)
+                    self._stats.trades_entered = len(self._stats.trades)
+                    self._stats.wins = len([tr for tr in self._stats.trades if tr.status == "WIN"])
+                    self._stats.losses = len([tr for tr in self._stats.trades if tr.status == "LOSS"])
+                    self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
                     self._last_signal = self._stats.events[-1] if self._stats.events else None
 
                 # Dynamic update tick interval (30ms for >=500x, 50ms for >=50x, 100ms otherwise)
@@ -932,7 +937,6 @@ class SimulationRunner:
                     self._stats.wins += 1
                 else:
                     self._stats.losses += 1
-                self._stats.pnl = round(self._stats.pnl + pnl_change, 2)
 
                 # Construct detailed SimTradeEvent
                 cfg_lots = max(1, self._config.lots) if self._config else 1
@@ -971,6 +975,7 @@ class SimulationRunner:
                     duration_mins=dur_mins,
                 )
                 self._stats.trades.append(trade)
+                self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
 
 
 def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epoch: int, res_sec: int) -> List[Dict[str, Any]]:
