@@ -327,11 +327,6 @@ export function PcrPane() {
         <header className="kp-head">
           <div className="kp-head-row">
             <h1 className="kp-title">PCR Desk</h1>
-            <div className="kp-tools">
-              <div className="kp-seg" role="tablist" aria-label="View">
-                <button type="button" role="tab" data-on={view === "path"} onClick={() => setView("path")}>Path</button>
-              </div>
-            </div>
           </div>
           <div className="kp-idx" role="tablist" aria-label="Underlying">
             <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
@@ -346,6 +341,7 @@ export function PcrPane() {
                 {u.short}
               </button>
             ))}
+            <button type="button" role="tab" data-on={view === "path"} onClick={() => setView("path")}>Path</button>
           </div>
           <div className="kp-tabs" role="tablist" aria-label="PCR metric">
             {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
@@ -450,7 +446,7 @@ export function PcrPane() {
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
-          <p className="kp-foot">Book is OI PCR. Heat is the 15-minute table. 1–5 index · A all · P path</p>
+          <p className="kp-foot">All five, or one index. Path is PCR vs spot. 1–5 index · A all · P path</p>
         </div>
       </div>
     </div>
