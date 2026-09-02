@@ -8,15 +8,14 @@ import {
   expiryKind,
   flowPath,
   formatDelta,
-  formatDeskStamp,
   formatExpiry,
   formatPcr,
   isValidPrint,
-  metricValue,
+  lastValidSlot,
+  liveAction,
   pcrBand,
   putShare,
   readBook,
-  shiftSession,
   type PcrAction,
   type Stance,
 } from "../../lib/pcr/slots";
@@ -25,7 +24,6 @@ import {
   type PcrDeskPayload,
   type PcrIndex,
   type PcrMetric,
-  type PcrSeries,
   type PcrSlot,
 } from "../../lib/pcr/types";
 import { formatIstIsoDate, getIstParts } from "../../lib/astro/time";
@@ -35,10 +33,6 @@ type View = "grid" | "board" | "path";
 function nowMinutes(now: Date): number {
   const p = getIstParts(now);
   return p.hour * 60 + p.minute;
-}
-
-function pad(n: number) {
-  return String(n).padStart(2, "0");
 }
 
 function fmtLtp(n: number | null | undefined): string {
@@ -206,14 +200,6 @@ function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; index
   );
 }
 
-function livePcr(series: PcrSeries | undefined, slots: PcrSlot[], metric: PcrMetric): number | null {
-  const last = [...slots].reverse().find((s) => s.pcr != null)?.pcr ?? null;
-  if (last != null) return last;
-  if (series?.latest) return metricValue(series.latest, metric);
-  if (metric === "oi" && series?.livePcr != null) return series.livePcr;
-  return null;
-}
-
 const CSS = `
 .kite-pcr{display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:inherit;font-size:14px}
 .kite-pcr *{box-sizing:border-box}
@@ -223,34 +209,34 @@ const CSS = `
 .kite-pcr .kp-kicker{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
 .kite-pcr h1.kp-title{margin:0;font-size:16px;font-weight:600;letter-spacing:-.02em;line-height:1;color:var(--k-text)}
 .kite-pcr .kp-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.kite-pcr .kp-chip{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-dim);border-radius:3px;padding:4px 8px;font-size:11px;font-variant-numeric:tabular-nums}
-.kite-pcr .kp-date{display:flex;align-items:center;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
-.kite-pcr .kp-date button{border:0;background:none;color:var(--k-text);width:26px;height:28px;cursor:pointer;font-size:14px;font-family:inherit}
-.kite-pcr .kp-date button:disabled{opacity:.35;cursor:default}
-.kite-pcr .kp-date button:hover:not(:disabled){background:var(--k-surface-hover)}
-.kite-pcr .kp-date-lab{position:relative;display:flex;align-items:center;padding:0 8px;min-width:158px;justify-content:center;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--k-text);cursor:pointer}
-.kite-pcr .kp-date-lab input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:0}
 .kite-pcr .kp-seg{display:flex;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
 .kite-pcr .kp-seg button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-seg button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
-.kite-pcr .kp-live{color:var(--k-green);border-color:color-mix(in srgb,var(--k-green) 35%, var(--k-border))}
-.kite-pcr .kp-meta-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-bottom:8px}
-.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:4px}
-.kite-pcr .kp-idx button{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:3px;padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
-.kite-pcr .kp-idx button[data-on="true"]{border-color:var(--k-orange);color:var(--k-orange)}
-.kite-pcr .kp-chip-pcr{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;padding:0 4px;border-radius:2px}
-.kite-pcr .kp-tabs{display:flex;gap:12px}
+.kite-pcr .kp-plays{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:10px 0 8px}
+.kite-pcr .kp-play{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:4px;padding:8px 10px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-width:0}
+.kite-pcr .kp-play:hover{background:var(--k-surface-hover)}
+.kite-pcr .kp-play[data-on="true"]{border-color:var(--k-orange)}
+.kite-pcr .kp-play-name{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
+.kite-pcr .kp-play-pcr{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1.15;color:var(--k-text)}
+.kite-pcr .kp-play-act{font-size:12px;font-weight:600;letter-spacing:-.01em}
+.kite-pcr .kp-play-act.ce,.kite-pcr .kp-strip-act.ce,.kite-pcr .kp-idea-act.ce,.kite-pcr .kp-all-act.ce{color:var(--k-green)}
+.kite-pcr .kp-play-act.pe,.kite-pcr .kp-strip-act.pe,.kite-pcr .kp-idea-act.pe,.kite-pcr .kp-all-act.pe{color:var(--k-red)}
+.kite-pcr .kp-play-act.wait,.kite-pcr .kp-strip-act.wait,.kite-pcr .kp-idea-act.wait,.kite-pcr .kp-all-act.wait{color:var(--k-dim);font-weight:500}
+.kite-pcr .kp-tabs{display:flex;gap:12px;padding-bottom:8px}
 .kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 0 6px;font-size:12px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
 .kite-pcr .kp-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange);font-weight:500}
 .kite-pcr .kp-body{flex:1;padding:10px 16px 16px;overflow:auto}
-.kite-pcr .kp-strip{display:grid;grid-template-columns:auto minmax(160px,1.1fr) minmax(0,1.6fr);gap:10px 16px;align-items:center;margin-bottom:10px;padding:8px 12px;border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px}
-.kite-pcr .kp-strip-pcr{font-size:26px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;padding:6px 10px;border-radius:3px}
-.kite-pcr .kp-strip-act{font-size:15px;font-weight:600;letter-spacing:-.02em}
-.kite-pcr .kp-strip-read p{margin:2px 0 0;font-size:12px;color:var(--k-dim);line-height:1.4}
-.kite-pcr .kp-strip-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0}
-.kite-pcr .kp-strip-stats div{min-width:64px}
-.kite-pcr .kp-strip-stats dt{margin:0;font-size:10px;color:var(--k-dim)}
-.kite-pcr .kp-strip-stats dd{margin:1px 0 0;font-size:13px;font-variant-numeric:tabular-nums;font-weight:500}
+.kite-pcr .kp-strip{display:grid;grid-template-columns:132px minmax(0,1fr);margin-bottom:10px;border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;overflow:hidden}
+.kite-pcr .kp-strip-hero{padding:14px 16px;border-right:1px solid var(--k-border);display:flex;flex-direction:column;justify-content:center;gap:6px}
+.kite-pcr .kp-strip-pcr{font-size:32px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+.kite-pcr .kp-strip-read{padding:14px 16px;display:flex;flex-direction:column;justify-content:center}
+.kite-pcr .kp-strip-act{font-size:22px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.kite-pcr .kp-strip-read p{margin:6px 0 0;font-size:13px;color:var(--k-dim);line-height:1.4}
+.kite-pcr .kp-strip-stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0;border-top:1px solid var(--k-border)}
+.kite-pcr .kp-strip-stats div{padding:10px 12px;border-right:1px solid var(--k-border);min-width:0}
+.kite-pcr .kp-strip-stats div:last-child{border-right:0}
+.kite-pcr .kp-strip-stats dt{margin:0;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--k-dim)}
+.kite-pcr .kp-strip-stats dd{margin:3px 0 0;font-size:13px;font-variant-numeric:tabular-nums;font-weight:500}
 .kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;padding:12px}
 .kite-pcr .kp-sub{margin:0;font-size:12px;color:var(--k-dim);line-height:1.45}
 .kite-pcr .text-up{color:var(--k-green)}
@@ -276,9 +262,6 @@ const CSS = `
 .kite-pcr .kp-idea-sec+.kp-idea-sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--k-border)}
 .kite-pcr .kp-idea-sec-lab{margin:0 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
 .kite-pcr .kp-idea-act{margin:2px 0;font-size:20px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
-.kite-pcr .kp-idea-act.ce{color:var(--k-green)}
-.kite-pcr .kp-idea-act.pe{color:var(--k-red)}
-.kite-pcr .kp-idea-act.wait{color:var(--k-dim)}
 .kite-pcr .kp-idea-meta{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px;color:var(--k-dim);font-variant-numeric:tabular-nums}
 .kite-pcr .kp-idea-path{margin:8px 0 6px;font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .kite-pcr .kp-idea-path .mv{margin-left:8px;font-size:13px;font-weight:400}
@@ -305,9 +288,6 @@ const CSS = `
 .kite-pcr .kp-all-row:last-child{border-bottom:0}
 .kite-pcr .kp-all-name{font-weight:500}
 .kite-pcr .kp-all-act{font-weight:600;letter-spacing:-.01em}
-.kite-pcr .kp-all-act.ce{color:var(--k-green)}
-.kite-pcr .kp-all-act.pe{color:var(--k-red)}
-.kite-pcr .kp-all-act.wait{color:var(--k-dim);font-weight:500}
 .kite-pcr .kp-all-path{color:var(--k-text)}
 .kite-pcr .kp-all-clock{color:var(--k-dim);font-size:12px}
 .kite-pcr .kp-foot{margin:10px 0 0;font-size:11px;color:var(--k-dim)}
@@ -322,6 +302,9 @@ const CSS = `
 .kite-pcr .kp-empty{padding:28px 8px;text-align:center;color:var(--k-dim);font-size:13px}
 @media (max-width:980px){
   .kite-pcr .kp-strip,.kite-pcr .kp-main{grid-template-columns:1fr}
+  .kite-pcr .kp-strip-hero{border-right:0;border-bottom:1px solid var(--k-border)}
+  .kite-pcr .kp-strip-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kite-pcr .kp-plays{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kite-pcr .kp-head,.kite-pcr .kp-body{padding-left:10px;padding-right:10px}
 }
 `;
@@ -335,7 +318,6 @@ export function PcrPane() {
   const [now, setNow] = useState<Date | null>(null);
   const [liveIso, setLiveIso] = useState("");
   const [sessionIso, setSessionIso] = useState("");
-  const [followLive, setFollowLive] = useState(true);
   const [tapeAll, setTapeAll] = useState(false);
 
   useEffect(() => {
@@ -357,14 +339,16 @@ export function PcrPane() {
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      fetchPcrDesk(followLive ? null : sessionIso)
+      fetchPcrDesk(null)
         .then((data) => {
           if (cancelled) return;
           setPayload(data);
           setError(null);
           const iso = sessionIsoOf(data);
-          if (data.source === "live" && iso) setLiveIso(iso);
-          if (followLive && iso) setSessionIso(iso);
+          if (iso) {
+            setLiveIso(iso);
+            setSessionIso(iso);
+          }
         })
         .catch((err: unknown) => {
           if (cancelled) return;
@@ -372,12 +356,12 @@ export function PcrPane() {
         });
     };
     load();
-    const id = followLive ? window.setInterval(load, 30_000) : 0;
+    const id = window.setInterval(load, 30_000);
     return () => {
       cancelled = true;
-      if (id) window.clearInterval(id);
+      window.clearInterval(id);
     };
-  }, [followLive, followLive ? "live" : sessionIso]);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -398,25 +382,13 @@ export function PcrPane() {
   }, []);
 
   const todayIso = now ? formatIstIsoDate(now) : liveIso;
-  const capIso = liveIso || todayIso;
-  let dateMin = capIso || "2026-06-01";
-  for (let i = 0; i < 40; i++) dateMin = shiftSession(dateMin, -1);
-
-  const pickSession = (next: string) => {
-    if (!next) return;
-    let iso = next;
-    if (capIso && iso > capIso) iso = capIso;
-    setSessionIso(iso);
-    setFollowLive(Boolean(capIso) && iso === capIso);
-  };
 
   const series = payload?.series[index];
   const nowMin = now ? nowMinutes(now) : null;
-  const viewingLive = followLive || (capIso && sessionIso === capIso);
   const inLiveSession = Boolean(
-    viewingLive && nowMin != null && nowMin >= SESSION_OPEN_MIN && nowMin < SESSION_CLOSE_MIN,
+    nowMin != null && nowMin >= SESSION_OPEN_MIN && nowMin < SESSION_CLOSE_MIN,
   );
-  const gridNowMin = viewingLive && inLiveSession ? nowMin : SESSION_CLOSE_MIN;
+  const gridNowMin = inLiveSession ? nowMin : SESSION_CLOSE_MIN;
   const metricBoards = useMemo(() => {
     if (!payload) return null;
     const make = (m: PcrMetric) => {
@@ -432,13 +404,6 @@ export function PcrPane() {
   }, [payload, gridNowMin]);
   const boards = metricBoards?.[metric] ?? null;
   const grid = boards?.[index] ?? [];
-  const current = livePcr(series, grid, metric);
-  const lastFilled = [...grid].reverse().find((s) => s.pcr != null);
-  const prevFilled = grid.filter((s) => s.pcr != null);
-  const prev = prevFilled.length >= 2 ? prevFilled[prevFilled.length - 2] : null;
-  const delta =
-    current != null && prev?.pcr != null ? Math.round((current - prev.pcr) * 100) / 100 : (lastFilled?.delta ?? null);
-  const band = lastFilled?.band ?? (current != null ? pcrBand(current) : "empty");
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
   const ideaName = PCR_INDICES.find((u) => u.id === index)?.short ?? index;
   const book = useMemo(
@@ -462,18 +427,29 @@ export function PcrPane() {
       book: readBook(u.short, metricBoards.oi[u.id] ?? [], metricBoards.volume[u.id] ?? [], metricBoards.changeOi[u.id] ?? []),
     }));
   }, [tapeAll, metricBoards]);
-  const putPct = putShare(current);
-  const live = payload?.source === "live" && viewingLive;
+  const indexPlays = useMemo(() => {
+    return PCR_INDICES.map((u) => {
+      const last = lastValidSlot(metricBoards?.oi[u.id] ?? [], "oi");
+      const raw = last?.pcr ?? payload?.series[u.id]?.livePcr ?? payload?.series[u.id]?.latest?.pcr ?? null;
+      const pcr = isValidPrint(raw, "oi") ? raw : null;
+      return { id: u.id, name: u.short, pcr, action: liveAction(pcr) };
+    });
+  }, [metricBoards, payload]);
+  const oiSlots = metricBoards?.oi[index] ?? [];
+  const oiLast = lastValidSlot(oiSlots, "oi");
+  const oiFilled = oiSlots.filter((s) => isValidPrint(s.pcr, "oi"));
+  const oiPrev = oiFilled.length >= 2 ? oiFilled[oiFilled.length - 2] : null;
+  const stripPcr = book.book?.to ?? oiLast?.pcr ?? null;
+  const stripDelta =
+    stripPcr != null && oiPrev?.pcr != null
+      ? Math.round((stripPcr - oiPrev.pcr) * 100) / 100
+      : (oiLast?.delta ?? null);
+  const putPct = putShare(stripPcr);
   const expiryLabel = series
     ? `${kindNow === "today" ? "Today" : kindNow === "weekly" ? "Weekly" : "Monthly"} · ${formatExpiry(series.expiry)}`
     : "—";
-  const stampHhmm = lastFilled?.hhmm
-    ?? (inLiveSession && nowMin != null ? `${pad(Math.floor(nowMin / 60))}:${pad(nowMin % 60)}` : "09:15");
-  const deskStamp = formatDeskStamp(sessionIso || capIso, stampHhmm);
-  const hasSeries = Boolean(series?.marks?.length || current != null);
-  const prevIso = sessionIso ? shiftSession(sessionIso, -1) : "";
-  const nextIso = sessionIso ? shiftSession(sessionIso, 1) : "";
-  const canNext = Boolean(capIso && nextIso && nextIso <= capIso);
+  const hasSeries = Boolean(series?.marks?.length || stripPcr != null);
+  const stripKind = ideaKind(book.book?.action ?? "Wait");
 
   return (
     <div className="kite-pcr">
@@ -483,22 +459,6 @@ export function PcrPane() {
           <div className="kp-head-row">
             <h1 className="kp-title">PCR Desk</h1>
             <div className="kp-tools">
-              <div className="kp-date">
-                <button type="button" aria-label="Previous session" onClick={() => prevIso && pickSession(prevIso)}>‹</button>
-                <label className="kp-date-lab">
-                  <span>{deskStamp}</span>
-                  <input
-                    type="date"
-                    value={sessionIso}
-                    min={dateMin}
-                    max={capIso}
-                    onChange={(e) => pickSession(e.target.value)}
-                    aria-label="Session date"
-                  />
-                </label>
-                <button type="button" aria-label="Next session" disabled={!canNext} onClick={() => canNext && pickSession(nextIso)}>›</button>
-              </div>
-              <div className={`kp-chip ${live ? "kp-live" : ""}`}>{live ? "Live" : "Stored"}</div>
               <div className="kp-seg" role="tablist" aria-label="View">
                 <button type="button" role="tab" data-on={view === "grid"} onClick={() => setView("grid")}>Grid</button>
                 <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
@@ -506,24 +466,26 @@ export function PcrPane() {
               </div>
             </div>
           </div>
-          <div className="kp-meta-row">
-            <div className="kp-idx" role="tablist" aria-label="Underlying">
-              {PCR_INDICES.map((u) => {
-                const raw = payload?.series[u.id]?.livePcr ?? payload?.series[u.id]?.latest?.pcr ?? null;
-                const val = isValidPrint(raw, "oi") ? raw : null;
-                return (
-                  <button key={u.id} type="button" role="tab" data-on={index === u.id} onClick={() => { setIndex(u.id); setView("grid"); }}>
-                    {u.short}
-                    {val != null ? <span className={`kp-chip-pcr kp-band-${pcrBand(val)}`}>{formatPcr(val)}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="kp-tabs" role="tablist" aria-label="PCR metric">
-              {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
-              ))}
-            </div>
+          <div className="kp-plays" role="tablist" aria-label="Underlying">
+            {indexPlays.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                role="tab"
+                className="kp-play"
+                data-on={index === row.id}
+                onClick={() => { setIndex(row.id); setView("grid"); }}
+              >
+                <span className="kp-play-name">{row.name}</span>
+                <span className="kp-play-pcr">{row.pcr != null ? formatPcr(row.pcr) : "—"}</span>
+                <span className={`kp-play-act ${ideaKind(row.action)}`}>{row.action}</span>
+              </button>
+            ))}
+          </div>
+          <div className="kp-tabs" role="tablist" aria-label="PCR metric">
+            {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
+            ))}
           </div>
         </header>
 
@@ -532,16 +494,12 @@ export function PcrPane() {
 
           {hasSeries ? (
             <section className="kp-strip">
-              <div>
-                <div className={`kp-strip-pcr kp-band-${book.book?.to != null ? pcrBand(book.book.to) : band}`}>
-                  {book.book?.to != null ? formatPcr(book.book.to) : formatPcr(current) || "—"}
-                </div>
-                <p className="kp-kicker" style={{ marginTop: 6 }}>OI PCR</p>
+              <div className="kp-strip-hero">
+                <div className={`kp-strip-pcr ${stripKind}`}>{stripPcr != null ? formatPcr(stripPcr) : "—"}</div>
+                <p className="kp-kicker">OI PCR</p>
               </div>
               <div className="kp-strip-read">
-                <div className={`kp-strip-act ${book.book?.action === "Buy CE" ? "text-up" : book.book?.action === "Buy PE" ? "text-down" : ""}`}>
-                  {book.book?.action ?? "Wait"}
-                </div>
+                <div className={`kp-strip-act ${stripKind}`}>{book.book?.action ?? "Wait"}</div>
                 <p>{book.book?.why ?? "Waiting on the OI print."}</p>
               </div>
               <dl className="kp-strip-stats">
@@ -558,7 +516,7 @@ export function PcrPane() {
                 </div>
                 <div>
                   <dt>Δ 15m</dt>
-                  <dd className={(delta ?? 0) > 0 ? "text-up" : (delta ?? 0) < 0 ? "text-down" : ""}>{formatDelta(delta)}</dd>
+                  <dd className={(stripDelta ?? 0) > 0 ? "text-up" : (stripDelta ?? 0) < 0 ? "text-down" : ""}>{formatDelta(stripDelta)}</dd>
                 </div>
                 <div>
                   <dt>Puts / Calls</dt>
@@ -575,7 +533,7 @@ export function PcrPane() {
               </dl>
             </section>
           ) : (
-            <p className="kp-sub">{payload ? `No F&O prints stored for ${deskStamp}. Live feed keeps the current session.` : "Loading put-call prints…"}</p>
+            <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
           {view === "path" && series ? (
@@ -618,7 +576,7 @@ export function PcrPane() {
                   <table>
                     <thead>
                       <tr>
-                        <th>{deskStamp}</th>
+                        <th>Time</th>
                         {PCR_INDICES.map((u) => <th key={u.id} style={{ textAlign: "center" }}>{u.short}</th>)}
                       </tr>
                     </thead>
@@ -664,7 +622,7 @@ export function PcrPane() {
             </div>
           )}
 
-          <p className="kp-foot">OI PCR is the book. Volume and ΔOI only agree or fight that print. 1–5 index · G grid · A all · P path</p>
+          <p className="kp-foot">OI PCR ≤ 0.80 Buy PE · ≥ 1.20 Buy CE · else Wait. 1–5 index · G grid · A all · P path</p>
         </div>
       </div>
     </div>
