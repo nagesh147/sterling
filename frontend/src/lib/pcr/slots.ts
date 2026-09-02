@@ -137,7 +137,9 @@ export function buildGrid(marks: PcrMark[], latest: PcrMark | null, nowMin: numb
     let value: number | null = null;
     let live = false;
     const frozen = by.get(hhmm);
-    if (nowMin == null) {
+    const inSession = nowMin != null && nowMin >= SESSION_OPEN_MIN && nowMin < SESSION_CLOSE_MIN;
+    if (nowMin == null || !inSession) {
+      // Overnight / after cash close: paint the session we already have.
       value = frozen ? metricValue(frozen, metric) : null;
     } else if (nowMin < minutes - SLOT_STEP) {
       value = null;
@@ -280,21 +282,37 @@ export function compareShot(
 export function readPcr(
   slots: PcrSlot[],
   spotChg: number | null,
-): { headline: string; bias: "Bullish" | "Bearish" | "Balanced"; reason: string } {
+): {
+  headline: string;
+  bias: "Bullish" | "Bearish" | "Balanced";
+  reason: string;
+  conviction: number;
+  regime: string;
+} {
   const filled = slots.filter((s) => s.pcr != null);
   const last = filled[filled.length - 1];
   if (!last || last.pcr == null) {
-    return { headline: "Waiting for the open print", bias: "Balanced", reason: "No PCR yet this session." };
+    return {
+      headline: "Waiting for the open print",
+      bias: "Balanced",
+      reason: "No PCR yet this session.",
+      conviction: 0,
+      regime: "Pre-open",
+    };
   }
   const pcr = last.pcr;
+  const first = filled[0]?.pcr ?? pcr;
   const path = filled.slice(-4).map((s) => s.pcr ?? 0);
   const rising = path.length >= 2 && path[path.length - 1] > path[0];
   const chg = spotChg ?? 0;
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
   if (rising && chg < -0.2) {
     return {
       bias: "Bearish",
       headline: "Puts being bought into weakness",
       reason: `PCR ${pcr.toFixed(2)} is rising while spot is red. Protective demand, not writing.`,
+      conviction: clamp(Math.round(62 + (pcr - 0.8) * 80), 48, 92),
+      regime: "Defensive",
     };
   }
   if (rising && chg > 0.1) {
@@ -302,6 +320,8 @@ export function readPcr(
       bias: "Bullish",
       headline: "Put writing on the bounce",
       reason: `PCR climbed to ${pcr.toFixed(2)} with spot higher. Dips get supported.`,
+      conviction: clamp(Math.round(58 + (pcr - 1) * 90), 42, 93),
+      regime: "Constructive",
     };
   }
   if (!rising && chg > 0.2) {
@@ -309,14 +329,34 @@ export function readPcr(
       bias: "Bullish",
       headline: "Calls chasing the rally",
       reason: `PCR ${pcr.toFixed(2)} is easing into strength. Momentum, not a ceiling yet.`,
+      conviction: clamp(Math.round(50 + Math.abs(pcr - first) * 140), 38, 90),
+      regime: "Upside chase",
     };
   }
   if (pcr >= 1.2) {
-    return { bias: "Bullish", headline: "Put writers in control", reason: `OI PCR ${pcr.toFixed(2)} is a constructive skew.` };
+    return {
+      bias: "Bullish",
+      headline: "Put writers in control",
+      reason: `OI PCR ${pcr.toFixed(2)} is a constructive skew.`,
+      conviction: 72,
+      regime: "Put skew",
+    };
   }
   if (pcr <= 0.75) {
-    return { bias: "Bearish", headline: "Call load is heavy", reason: `OI PCR ${pcr.toFixed(2)} — upside is being sold.` };
+    return {
+      bias: "Bearish",
+      headline: "Call load is heavy",
+      reason: `OI PCR ${pcr.toFixed(2)} — upside is being sold.`,
+      conviction: 70,
+      regime: "Call skew",
+    };
   }
-  return { bias: "Balanced", headline: "No options skew worth fading", reason: `PCR ${pcr.toFixed(2)} is orderly. Trade the index.` };
+  return {
+    bias: "Balanced",
+    headline: "No options skew worth fading",
+    reason: `Session PCR moved ${first.toFixed(2)} → ${pcr.toFixed(2)}. Trade the index, size off conviction.`,
+    conviction: clamp(Math.round(40 + Math.abs(pcr - 1) * 90), 28, 70),
+    regime: "Range",
+  };
 }
 

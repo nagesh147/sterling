@@ -58,6 +58,15 @@ describe("pcr slots", () => {
     expect(roundPcr(s1500?.pcr ?? 0)).toBe(0.6);
   });
 
+  it("paints the full session after cash close and before the next open", () => {
+    const series = snapshotSeries("NIFTY");
+    const after = buildGrid(series.marks, series.latest, 16 * 60);
+    const pre = buildGrid(series.marks, series.latest, 8 * 60 + 10);
+    expect(after.filter((s) => s.pcr != null).length).toBe(26);
+    expect(pre.filter((s) => s.pcr != null).length).toBe(26);
+    expect(after.find((s) => s.hhmm === "15:30")?.live).toBe(false);
+  });
+
   it("matches the 27 Aug Nifty print on 25 of 25 published cells", () => {
     const series = snapshotSeries("NIFTY");
     const grid = buildGrid(series.marks, series.latest, 15 * 60 + 30);
