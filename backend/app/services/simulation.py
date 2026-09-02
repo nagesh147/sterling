@@ -309,6 +309,9 @@ class SimulationRunner:
                     self._stats.losses = len([tr for tr in self._stats.trades if tr.status == "LOSS"])
                     self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
                     self._last_signal = self._stats.events[-1] if self._stats.events else None
+                    # Reset bar history and dedup state for clean indicator recalculation
+                    self._bar_history = {}
+                    self._last_fired = {}
 
                 # Dynamic update tick interval (30ms for >=500x, 50ms for >=50x, 100ms otherwise)
                 dt = 0.03 if self._speed >= 500 else (0.05 if self._speed >= 50 else 0.1)
@@ -762,6 +765,7 @@ class SimulationRunner:
         reversals, and Bear to Bearish breakdowns across instruments.
         """
         import random
+        from datetime import timedelta
 
         if not hasattr(self, '_bar_history'):
             self._bar_history: Dict[str, List[Dict]] = {}
@@ -903,7 +907,7 @@ class SimulationRunner:
         if not hasattr(self, '_last_fired'):
             self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
-        current_bar_idx = len(self._candles)
+        current_bar_idx = self._bars_played
 
         # Emit all generated strategy signals for this bar (or filter by selected strategies)
         cfg_strats = [s.lower() for s in (self._config.strategies if self._config and self._config.strategies else [self._config.strategy if self._config else "all"])]
@@ -948,25 +952,66 @@ class SimulationRunner:
 
             if strength == "STRONG":
                 self._stats.trades_entered += 1
-                won = random.random() < 0.55
-                pnl_change = abs(target - close) if won else -abs(close - stop)
+
+                # Determine trade outcome from subsequent price action
+                future_bars = [b for b in self._candles[self._bars_played:] if b.get("symbol") == sym]
+                won = False
+                exit_close = close  # default if neither SL nor TP hit
+                bars_held = 0
+                if direction == "BULLISH":
+                    for fb in future_bars[:30]:  # scan up to 30 bars (2.5h)
+                        bars_held += 1
+                        fb_high = float(fb["high"])
+                        fb_low = float(fb["low"])
+                        if fb_low <= stop:  # SL hit first
+                            exit_close = stop
+                            break
+                        if fb_high >= target:  # TP hit first
+                            exit_close = target
+                            won = True
+                            break
+                        exit_close = float(fb["close"])
+                else:
+                    for fb in future_bars[:30]:
+                        bars_held += 1
+                        fb_high = float(fb["high"])
+                        fb_low = float(fb["low"])
+                        if fb_high >= stop:  # SL hit first (short)
+                            exit_close = stop
+                            break
+                        if fb_low <= target:  # TP hit first (short)
+                            exit_close = target
+                            won = True
+                            break
+                        exit_close = float(fb["close"])
+
+                # If neither SL nor TP hit within 30 bars, close at last bar's close
+                if bars_held == 0:
+                    bars_held = 1
+                if not won and exit_close != stop:
+                    # Neither hit — treat as scratch/loss based on actual P&L
+                    won = (exit_close > close) if direction == "BULLISH" else (exit_close < close)
+
                 if won:
                     self._stats.wins += 1
                 else:
                     self._stats.losses += 1
 
-                # Construct detailed SimTradeEvent
+                # Construct detailed SimTradeEvent with correct option PnL
                 cfg_lots = max(1, self._config.lots) if self._config else 1
-                cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
                 opt_type = "CE" if direction == "BULLISH" else "PE"
                 atm_strike = round(close / 50.0) * 50.0
                 lot_size = 25 if "NIFTY" in sym else 15
                 qty = cfg_lots * lot_size
-                entry_p = round(close * 0.02, 2)
-                exit_p = round(entry_p + (pnl_change * 0.02), 2)
-                pnl_usd_val = round(pnl_change * qty, 2)
-                pnl_pct_val = round((pnl_usd_val / (entry_p * qty)) * 100.0, 2) if entry_p > 0 else 0.0
-                dur_mins = random.randint(5, 45)
+                entry_p = round(close * 0.02, 2)  # approx option premium
+                spot_move = exit_close - close if direction == "BULLISH" else close - exit_close
+                # Option premium moves ~40-60% of spot move (delta approximation)
+                premium_move = round(spot_move * 0.50, 2)
+                exit_p = round(max(0.05, entry_p + premium_move), 2)
+                pnl_per_unit = exit_p - entry_p
+                pnl_usd_val = round(pnl_per_unit * qty, 2)
+                pnl_pct_val = round((pnl_per_unit / entry_p) * 100.0, 2) if entry_p > 0 else 0.0
+                dur_mins = bars_held * 5  # each bar is 5m
                 exit_dt = bar_dt + timedelta(minutes=dur_mins)
 
                 trade = SimTradeEvent(

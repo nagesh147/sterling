@@ -244,7 +244,7 @@ export function useSimulation() {
     setStatus(status);
     queryClient?.invalidateQueries();
     stopPolling();
-    if (store.status.stats.signals_fired > 0) {
+    if (status.stats.signals_fired > 0) {
       setShowSummary(true);
     }
   };
