@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
-  BAND_COPY,
   SESSION_CLOSE_MIN,
   SESSION_OPEN_MIN,
-  bandTitle,
   buildGrid,
   buildIdea,
   expiryKind,
@@ -63,50 +61,6 @@ function moveTxt(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
-function Spark({ slots }: { slots: PcrSlot[] }) {
-  const pts = slots.map((s) => s.pcr).filter((v): v is number => v != null);
-  if (pts.length < 2) return null;
-  const min = Math.min(...pts, 0.7);
-  const max = Math.max(...pts, 1.3);
-  const w = 220;
-  const h = 56;
-  const d = pts
-    .map((v, i) => {
-      const x = (i / (pts.length - 1)) * w;
-      const y = h - ((v - min) / (max - min || 1)) * (h - 8) - 4;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const y1 = h - ((1 - min) / (max - min || 1)) * (h - 8) - 4;
-  const last = pts[pts.length - 1];
-  const ly = h - ((last - min) / (max - min || 1)) * (h - 8) - 4;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="kp-spark" aria-hidden>
-      <line x1="0" y1={y1} x2={w} y2={y1} className="kp-spark-ref" />
-      <path d={d} />
-      <circle cx={w} cy={ly} r="2.4" />
-    </svg>
-  );
-}
-
-function Split({ pcr }: { pcr: number | null }) {
-  const put = putShare(pcr);
-  if (put == null) return null;
-  const putPct = Math.round(put * 100);
-  return (
-    <div className="kp-split-wrap">
-      <div className="kp-split-lab">
-        <span>Puts {putPct}%</span>
-        <span>Calls {100 - putPct}%</span>
-      </div>
-      <div className="kp-split">
-        <span className="kp-split-put" style={{ width: `${putPct}%` }} />
-        <span className="kp-split-call" style={{ width: `${100 - putPct}%` }} />
-      </div>
-    </div>
-  );
-}
-
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
   const by = new Map(marks.map((m) => [m.hhmm, m.indexClose]));
   const pts = slots.filter((s) => s.pcr != null);
@@ -160,68 +114,52 @@ const CSS = `
 .kite-pcr{display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:inherit;font-size:14px}
 .kite-pcr *{box-sizing:border-box}
 .kite-pcr .kp-desk{display:flex;flex-direction:column;min-height:100%}
-.kite-pcr .kp-head{padding:16px 24px 0;border-bottom:1px solid var(--k-border)}
-.kite-pcr .kp-head-row{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.kite-pcr .kp-head{padding:8px 16px 0;border-bottom:1px solid var(--k-border)}
+.kite-pcr .kp-head-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .kite-pcr .kp-kicker{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
-.kite-pcr h1.kp-title{margin:4px 0 0;font-size:28px;font-weight:500;letter-spacing:-.02em;line-height:1.1;color:var(--k-text)}
-.kite-pcr .kp-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.kite-pcr .kp-chip{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-dim);border-radius:4px;padding:6px 10px;font-size:12px;font-variant-numeric:tabular-nums}
-.kite-pcr .kp-date{display:flex;align-items:center;border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;overflow:hidden}
-.kite-pcr .kp-date button{border:0;background:none;color:var(--k-text);width:32px;height:32px;cursor:pointer;font-size:16px;font-family:inherit}
+.kite-pcr h1.kp-title{margin:0;font-size:16px;font-weight:600;letter-spacing:-.02em;line-height:1;color:var(--k-text)}
+.kite-pcr .kp-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.kite-pcr .kp-chip{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-dim);border-radius:3px;padding:4px 8px;font-size:11px;font-variant-numeric:tabular-nums}
+.kite-pcr .kp-date{display:flex;align-items:center;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
+.kite-pcr .kp-date button{border:0;background:none;color:var(--k-text);width:26px;height:28px;cursor:pointer;font-size:14px;font-family:inherit}
 .kite-pcr .kp-date button:disabled{opacity:.35;cursor:default}
 .kite-pcr .kp-date button:hover:not(:disabled){background:var(--k-surface-hover)}
-.kite-pcr .kp-date-lab{position:relative;display:flex;align-items:center;padding:0 8px;min-width:168px;justify-content:center;font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--k-text);cursor:pointer}
+.kite-pcr .kp-date-lab{position:relative;display:flex;align-items:center;padding:0 8px;min-width:158px;justify-content:center;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--k-text);cursor:pointer}
 .kite-pcr .kp-date-lab input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:0}
-.kite-pcr .kp-seg{display:flex;border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;overflow:hidden}
-.kite-pcr .kp-seg button{border:0;background:none;color:var(--k-dim);padding:7px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+.kite-pcr .kp-seg{display:flex;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
+.kite-pcr .kp-seg button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-seg button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
 .kite-pcr .kp-live{color:var(--k-green);border-color:color-mix(in srgb,var(--k-green) 35%, var(--k-border))}
-.kite-pcr .kp-meta-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding-bottom:10px}
-.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:6px}
-.kite-pcr .kp-idx button{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:4px;padding:5px 9px;font-size:13px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
+.kite-pcr .kp-meta-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-bottom:8px}
+.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:4px}
+.kite-pcr .kp-idx button{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:3px;padding:3px 8px;font-size:12px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
 .kite-pcr .kp-idx button[data-on="true"]{border-color:var(--k-orange);color:var(--k-orange)}
-.kite-pcr .kp-chip-pcr{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;padding:1px 5px;border-radius:2px}
-.kite-pcr .kp-tabs{display:flex;gap:16px}
-.kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 0 8px;font-size:13px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
+.kite-pcr .kp-chip-pcr{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;padding:0 4px;border-radius:2px}
+.kite-pcr .kp-tabs{display:flex;gap:12px}
+.kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 0 6px;font-size:12px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
 .kite-pcr .kp-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange);font-weight:500}
-.kite-pcr .kp-body{flex:1;padding:16px 24px 28px;overflow:auto}
-.kite-pcr .kp-hero{display:grid;grid-template-columns:minmax(220px,1.15fr) minmax(260px,1.1fr) minmax(200px,.85fr);gap:12px;margin-bottom:14px}
-.kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:6px;padding:16px}
-.kite-pcr .kp-print{font-size:52px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;display:inline-block;padding:6px 12px;border-radius:4px;margin:8px 0}
-.kite-pcr .kp-sub{margin:0;font-size:13px;color:var(--k-dim);line-height:1.5}
-.kite-pcr .kp-read h2{margin:8px 0 6px;font-size:22px;font-weight:500;line-height:1.25}
-.kite-pcr .kp-read p{margin:0;font-size:13px;color:var(--k-dim);line-height:1.5}
-.kite-pcr .kp-play{margin-top:12px;padding:10px 12px;border-radius:4px;background:var(--k-surface-hover);border:1px solid var(--k-border)}
-.kite-pcr .kp-play-tag{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
-.kite-pcr .kp-play p{color:var(--k-text)}
-.kite-pcr .kp-conv{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
-.kite-pcr .kp-conv .lab{font-size:11px;color:var(--k-dim)}
-.kite-pcr .kp-conv .val{font-size:15px;font-weight:500;margin:2px 0 0}
-.kite-pcr .kp-bar{height:6px;background:var(--k-surface-hover);border-radius:99px;overflow:hidden;margin-top:6px}
-.kite-pcr .kp-bar>span{display:block;height:100%;background:var(--k-blue)}
-.kite-pcr .kp-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
-.kite-pcr .kp-stats .lab{font-size:11px;color:var(--k-dim)}
-.kite-pcr .kp-stats .val{font-size:13px;font-variant-numeric:tabular-nums;margin-top:2px}
+.kite-pcr .kp-body{flex:1;padding:10px 16px 16px;overflow:auto}
+.kite-pcr .kp-strip{display:grid;grid-template-columns:auto minmax(160px,1.1fr) minmax(0,1.6fr);gap:10px 16px;align-items:center;margin-bottom:10px;padding:8px 12px;border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px}
+.kite-pcr .kp-strip-pcr{font-size:26px;line-height:1;font-weight:600;font-variant-numeric:tabular-nums;padding:6px 10px;border-radius:3px}
+.kite-pcr .kp-strip-act{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.kite-pcr .kp-strip-read p{margin:2px 0 0;font-size:12px;color:var(--k-dim);line-height:1.4}
+.kite-pcr .kp-strip-stats{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0}
+.kite-pcr .kp-strip-stats div{min-width:64px}
+.kite-pcr .kp-strip-stats dt{margin:0;font-size:10px;color:var(--k-dim)}
+.kite-pcr .kp-strip-stats dd{margin:1px 0 0;font-size:13px;font-variant-numeric:tabular-nums;font-weight:500}
+.kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;padding:12px}
+.kite-pcr .kp-sub{margin:0;font-size:12px;color:var(--k-dim);line-height:1.45}
 .kite-pcr .text-up{color:var(--k-green)}
 .kite-pcr .text-down{color:var(--k-red)}
-.kite-pcr .kp-split-wrap{margin-top:14px}
-.kite-pcr .kp-split-lab{display:flex;justify-content:space-between;font-size:11px;font-variant-numeric:tabular-nums;color:var(--k-dim);margin-bottom:6px}
-.kite-pcr .kp-split{display:flex;height:6px;border-radius:99px;overflow:hidden;background:var(--k-surface-hover)}
-.kite-pcr .kp-split-put{background:var(--k-green)}
-.kite-pcr .kp-split-call{background:var(--k-red)}
-.kite-pcr .kp-spark{display:block;width:100%;height:56px;margin-top:8px}
-.kite-pcr .kp-spark path{fill:none;stroke:var(--k-blue);stroke-width:1.6}
-.kite-pcr .kp-spark circle{fill:var(--k-blue)}
-.kite-pcr .kp-spark-ref{stroke:var(--k-border);stroke-dasharray:3 3}
-.kite-pcr .kp-main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(240px,.8fr);gap:12px;align-items:start}
-.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:6px;background:var(--k-surface);padding:8px}
-.kite-pcr table{width:100%;border-collapse:separate;border-spacing:3px;font-variant-numeric:tabular-nums}
-.kite-pcr thead th{background:transparent;color:var(--k-dim);font-weight:500;font-size:11px;padding:6px 8px;text-align:left;border:0}
-.kite-pcr tbody th{padding:6px 8px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:transparent;border:0}
+.kite-pcr .kp-main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(220px,.72fr);gap:10px;align-items:start}
+.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface);padding:4px}
+.kite-pcr table{width:100%;border-collapse:separate;border-spacing:2px;font-variant-numeric:tabular-nums}
+.kite-pcr thead th{background:transparent;color:var(--k-dim);font-weight:500;font-size:11px;padding:4px 6px;text-align:left;border:0}
+.kite-pcr tbody th{padding:4px 6px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:transparent;border:0}
 .kite-pcr tbody td{padding:0}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
-.kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:7px 6px;border-radius:3px;min-height:28px}
-.kite-pcr .kp-delta{display:block;text-align:right;padding:7px 8px;font-size:12px;color:var(--k-dim)}
+.kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:5px 4px;border-radius:2px;min-height:24px}
+.kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-band-extreme-positive{background:var(--k-green);color:var(--k-on-accent)}
 .kite-pcr .kp-band-highly-positive{background:color-mix(in srgb,var(--k-green) 38%, var(--k-surface));color:var(--k-green-deep)}
 .kite-pcr .kp-band-positive{background:var(--k-tint-green);color:var(--k-green-deep)}
@@ -229,10 +167,9 @@ const CSS = `
 .kite-pcr .kp-band-highly-negative{background:color-mix(in srgb,var(--k-red) 38%, var(--k-surface));color:var(--k-red-deep)}
 .kite-pcr .kp-band-extreme-negative{background:var(--k-red);color:var(--k-on-accent)}
 .kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
-.kite-pcr .kp-print.kp-band-empty{background:var(--k-surface-hover)}
-.kite-pcr .kp-side{display:flex;flex-direction:column;gap:12px}
-.kite-pcr .kp-tape-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:8px}
-.kite-pcr .kp-idea-act{margin:4px 0 2px;font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.kite-pcr .kp-side{display:flex;flex-direction:column;gap:10px}
+.kite-pcr .kp-tape-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:6px}
+.kite-pcr .kp-idea-act{margin:2px 0;font-size:20px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
 .kite-pcr .kp-idea-act.ce{color:var(--k-green)}
 .kite-pcr .kp-idea-act.pe{color:var(--k-red)}
 .kite-pcr .kp-idea-act.wait{color:var(--k-dim)}
@@ -261,10 +198,7 @@ const CSS = `
 .kite-pcr .kp-all-act.wait{color:var(--k-dim);font-weight:500}
 .kite-pcr .kp-all-path{color:var(--k-text)}
 .kite-pcr .kp-all-clock{color:var(--k-dim);font-size:12px}
-.kite-pcr .kp-legend ul{list-style:none;margin:4px 0 0;padding:0}
-.kite-pcr .kp-legend li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--k-dim);line-height:1.45;margin:0 0 8px}
-.kite-pcr .kp-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0;margin-top:3px;display:inline-block}
-.kite-pcr .kp-foot{margin:16px 0 0;font-size:11px;color:var(--k-dim)}
+.kite-pcr .kp-foot{margin:10px 0 0;font-size:11px;color:var(--k-dim)}
 .kite-pcr .kp-path-svg{width:100%;height:220px}
 .kite-pcr .kp-path-pcr{fill:none;stroke:var(--k-blue);stroke-width:2}
 .kite-pcr .kp-path-spot{fill:none;stroke:var(--k-green);stroke-width:1.5}
@@ -275,10 +209,8 @@ const CSS = `
 .kite-pcr .kp-muted{color:var(--k-dim)}
 .kite-pcr .kp-empty{padding:28px 8px;text-align:center;color:var(--k-dim);font-size:13px}
 @media (max-width:980px){
-  .kite-pcr .kp-hero,.kite-pcr .kp-main{grid-template-columns:1fr}
-  .kite-pcr h1.kp-title{font-size:24px}
-  .kite-pcr .kp-print{font-size:40px}
-  .kite-pcr .kp-head,.kite-pcr .kp-body{padding-left:14px;padding-right:14px}
+  .kite-pcr .kp-strip,.kite-pcr .kp-main{grid-template-columns:1fr}
+  .kite-pcr .kp-head,.kite-pcr .kp-body{padding-left:10px;padding-right:10px}
 }
 `;
 
@@ -295,9 +227,18 @@ export function PcrPane() {
   const [tapeAll, setTapeAll] = useState(false);
 
   useEffect(() => {
-    const tick = () => setNow(new Date());
+    const tick = () => {
+      const d = new Date();
+      setNow((prev) => {
+        if (!prev) return d;
+        const a = getIstParts(prev);
+        const b = getIstParts(d);
+        if (a.hour === b.hour && a.minute === b.minute) return prev;
+        return d;
+      });
+    };
     tick();
-    const id = window.setInterval(tick, 1000);
+    const id = window.setInterval(tick, 5_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -409,10 +350,7 @@ export function PcrPane() {
       <div className="kp-desk">
         <header className="kp-head">
           <div className="kp-head-row">
-            <div>
-              <p className="kp-kicker">Intraday + Weekly</p>
-              <h1 className="kp-title">PCR Desk</h1>
-            </div>
+            <h1 className="kp-title">PCR Desk</h1>
             <div className="kp-tools">
               <div className="kp-date">
                 <button type="button" aria-label="Previous session" onClick={() => prevIso && pickSession(prevIso)}>‹</button>
@@ -429,7 +367,7 @@ export function PcrPane() {
                 </label>
                 <button type="button" aria-label="Next session" disabled={!canNext} onClick={() => canNext && pickSession(nextIso)}>›</button>
               </div>
-              <div className={`kp-chip ${live ? "kp-live" : ""}`}>{live ? "Live F&O" : "Stored"}</div>
+              <div className={`kp-chip ${live ? "kp-live" : ""}`}>{live ? "Live" : "Stored"}</div>
               <div className="kp-seg" role="tablist" aria-label="View">
                 <button type="button" role="tab" data-on={view === "grid"} onClick={() => setView("grid")}>Grid</button>
                 <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
@@ -451,7 +389,7 @@ export function PcrPane() {
               })}
             </div>
             <div className="kp-tabs" role="tablist" aria-label="PCR metric">
-              {([["oi", "OI PCR"], ["volume", "Volume PCR"], ["changeOi", "ΔOI PCR"]] as const).map(([id, label]) => (
+              {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
                 <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
               ))}
             </div>
@@ -462,72 +400,43 @@ export function PcrPane() {
           {error && !payload ? <p className="kp-sub">{error}</p> : null}
 
           {hasSeries ? (
-            <section className="kp-hero">
-              <div className="kp-card">
-                <p className="kp-kicker">Live print</p>
-                <div className={`kp-print kp-band-${band}`}>{formatPcr(current) || "—"}</div>
-                <p className="kp-sub">{lastFilled ? lastFilled.hhmm : "—"} · {bandTitle(band) || "Waiting for print"}</p>
-                <Spark slots={grid} />
-                <Split pcr={current} />
+            <section className="kp-strip">
+              <div className={`kp-strip-pcr kp-band-${band}`}>{formatPcr(current) || "—"}</div>
+              <div className="kp-strip-read">
+                <div className={`kp-strip-act ${insight.action === "Buy CE" ? "text-up" : insight.action === "Buy PE" ? "text-down" : ""}`}>
+                  {insight.action}
+                </div>
+                <p>{insight.play}</p>
               </div>
-              <div className="kp-card kp-read">
-                <p className="kp-kicker">Read</p>
-                <h2>{insight.headline}</h2>
-                <p>{insight.reason}</p>
-                <div className="kp-play">
-                  <div className={`kp-play-tag ${insight.action === "Buy CE" ? "text-up" : insight.action === "Buy PE" ? "text-down" : ""}`}>
-                    {insight.action}
-                  </div>
-                  <p>{insight.play}</p>
-                </div>
-                <div className="kp-conv">
-                  <div>
-                    <div className="lab">Bias</div>
-                    <div className={`val ${insight.bias === "Bullish" ? "text-up" : insight.bias === "Bearish" ? "text-down" : ""}`}>{insight.bias}</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="lab">Conviction {insight.conviction}</div>
-                    <div className="kp-bar"><span style={{ width: `${insight.conviction}%` }} /></div>
-                  </div>
-                  <div>
-                    <div className="lab">Regime</div>
-                    <div className="val">{insight.regime}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="kp-card kp-stats">
+              <dl className="kp-strip-stats">
                 <div>
-                  <div className="lab">Δ 15m</div>
-                  <div className={`val ${(delta ?? 0) > 0 ? "text-up" : (delta ?? 0) < 0 ? "text-down" : ""}`}>{formatDelta(delta)}</div>
-                </div>
-                <div>
-                  <div className="lab">Spot</div>
-                  <div className="val">
+                  <dt>Spot</dt>
+                  <dd>
                     {fmtLtp(series?.spot.ltp)}
                     {series?.spot.changePer != null ? (
                       <span className={series.spot.changePer >= 0 ? "text-up" : "text-down"}>
                         {" "}{series.spot.changePer >= 0 ? "+" : ""}{series.spot.changePer.toFixed(2)}%
                       </span>
                     ) : null}
-                  </div>
+                  </dd>
                 </div>
                 <div>
-                  <div className="lab">Max pain</div>
-                  <div className="val">{fmtLtp(series?.spot.maxPain)}</div>
+                  <dt>Δ 15m</dt>
+                  <dd className={(delta ?? 0) > 0 ? "text-up" : (delta ?? 0) < 0 ? "text-down" : ""}>{formatDelta(delta)}</dd>
                 </div>
                 <div>
-                  <div className="lab">Expiry</div>
-                  <div className="val">{expiryLabel}</div>
+                  <dt>Puts / Calls</dt>
+                  <dd>{putPct == null ? "—" : `${Math.round(putPct * 100)} / ${100 - Math.round(putPct * 100)}`}</dd>
                 </div>
                 <div>
-                  <div className="lab">Put share</div>
-                  <div className="val">{putPct == null ? "—" : `${Math.round(putPct * 100)}%`}</div>
+                  <dt>Expiry</dt>
+                  <dd>{expiryLabel}</dd>
                 </div>
                 <div>
-                  <div className="lab">Call share</div>
-                  <div className="val">{putPct == null ? "—" : `${100 - Math.round(putPct * 100)}%`}</div>
+                  <dt>Max pain</dt>
+                  <dd>{fmtLtp(series?.spot.maxPain)}</dd>
                 </div>
-              </div>
+              </dl>
             </section>
           ) : (
             <p className="kp-sub">{payload ? `No F&O prints stored for ${deskStamp}. Live feed keeps the current session.` : "Loading put-call prints…"}</p>
@@ -542,14 +451,6 @@ export function PcrPane() {
                   {grid.length ? (
                     <table>
                       <thead>
-                        <tr>
-                          <th colSpan={3}>
-                            {deskStamp}
-                            <span style={{ marginLeft: 10, color: "var(--k-text)" }}>
-                              {PCR_INDICES.find((u) => u.id === index)?.label} {metric === "oi" ? "OI" : metric === "volume" ? "Volume" : "ΔOI"} PCR
-                            </span>
-                          </th>
-                        </tr>
                         <tr>
                           <th>Time</th>
                           <th style={{ textAlign: "center" }}>PCR</th>
@@ -674,27 +575,11 @@ export function PcrPane() {
                     </p>
                   )}
                 </aside>
-                <section className="kp-card kp-legend" aria-label="How to read PCR">
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>How to read PCR</h3>
-                  <ul>
-                    {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
-                      <li key={id}>
-                        <i className={`kp-swatch kp-band-${id}`} />
-                        {BAND_COPY[id].hint}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="kp-sub" style={{ marginTop: 8 }}>
-                    High PCR → put writing → Buy CE. Low PCR → call writing → Buy PE. Watch the 15-minute change, not a single print.
-                  </p>
-                </section>
               </div>
             </div>
           )}
 
-          <p className="kp-foot">
-            Click the date to pick a session. Keys 1–5 · G grid · A all · P path.
-          </p>
+          <p className="kp-foot">Green ≥ 1.00 Buy CE · Red ≤ 0.80 Buy PE · 1–5 index · G grid · A all · P path</p>
         </div>
       </div>
     </div>
