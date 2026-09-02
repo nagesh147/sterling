@@ -222,12 +222,12 @@ const CSS = `
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
 .kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:7px 6px;border-radius:3px;min-height:28px}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:7px 8px;font-size:12px;color:var(--k-dim)}
-.kite-pcr .kp-band-extreme-positive{background:#1b5e4a;color:#f4f4f5}
-.kite-pcr .kp-band-highly-positive{background:#2e7a64;color:#f4f4f5}
-.kite-pcr .kp-band-positive{background:#b7d9cf;color:#12332c}
-.kite-pcr .kp-band-negative{background:#e4c4c4;color:#3a1818}
-.kite-pcr .kp-band-highly-negative{background:#c97a7a;color:#1a0c0c}
-.kite-pcr .kp-band-extreme-negative{background:#a33a3a;color:#f4f4f5}
+.kite-pcr .kp-band-extreme-positive{background:var(--k-green);color:var(--k-on-accent)}
+.kite-pcr .kp-band-highly-positive{background:color-mix(in srgb,var(--k-green) 38%, var(--k-surface));color:var(--k-green-deep)}
+.kite-pcr .kp-band-positive{background:var(--k-tint-green);color:var(--k-green-deep)}
+.kite-pcr .kp-band-negative{background:var(--k-tint-red);color:var(--k-red-deep)}
+.kite-pcr .kp-band-highly-negative{background:color-mix(in srgb,var(--k-red) 38%, var(--k-surface));color:var(--k-red-deep)}
+.kite-pcr .kp-band-extreme-negative{background:var(--k-red);color:var(--k-on-accent)}
 .kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
 .kite-pcr .kp-print.kp-band-empty{background:var(--k-surface-hover)}
 .kite-pcr .kp-side{display:flex;flex-direction:column;gap:12px}
