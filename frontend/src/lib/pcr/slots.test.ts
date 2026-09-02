@@ -35,13 +35,18 @@ describe("pcr slots", () => {
   it("colours the screenshot legend bands", () => {
     expect(pcrBand(1.4)).toBe("extreme-positive");
     expect(pcrBand(1.2)).toBe("highly-positive");
-    expect(pcrBand(1)).toBe("positive");
-    expect(pcrBand(0.99)).toBe("negative");
-    expect(pcrBand(0.8)).toBe("highly-negative");
-    expect(pcrBand(0.7)).toBe("highly-negative");
-    expect(pcrBand(0.6)).toBe("extreme-negative");
+    expect(pcrBand(1.05)).toBe("positive");
+    expect(pcrBand(1.04)).toBe("empty");
+    expect(pcrBand(1)).toBe("empty");
+    expect(pcrBand(0.9)).toBe("empty");
+    expect(pcrBand(0.89)).toBe("negative");
+    expect(pcrBand(0.8)).toBe("negative");
+    expect(pcrBand(0.75)).toBe("negative");
+    expect(pcrBand(0.74)).toBe("highly-negative");
+    expect(pcrBand(0.6)).toBe("highly-negative");
+    expect(pcrBand(0.59)).toBe("extreme-negative");
     expect(pcrBand(0.56)).toBe("extreme-negative");
-    expect(bandTitle("extreme-negative")).toBe("Extreme Negative");
+    expect(bandTitle("extreme-negative")).toBe("Crowded calls");
   });
 
   it("rounds to two decimals the way the print does", () => {

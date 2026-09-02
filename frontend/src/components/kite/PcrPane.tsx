@@ -2,20 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { HEAD_METRICS, ROW_METRICS } from "./board/signalRowSpec";
 import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
+  BAND_COPY,
+  FLOW_MOVE_MIN,
   SESSION_CLOSE_MIN,
   SESSION_OPEN_MIN,
   buildGrid,
+  describeFlow,
   expiryKind,
   flowPath,
   formatDelta,
   formatExpiry,
   formatPcr,
+  hhmmToMinutes,
   isValidPrint,
   lastValidSlot,
   liveAction,
   pcrBand,
   putShare,
   readBook,
+  readPcr,
   type PcrAction,
   type Stance,
 } from "../../lib/pcr/slots";
@@ -123,7 +128,7 @@ const CSS = `
 .kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-tabs button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
 .kite-pcr .kp-body{flex:1;padding:10px 16px 16px;overflow:auto}
-.kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;padding:12px}
+.kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:0;padding:12px}
 .kite-pcr .kp-sub{margin:0;font-size:12px;color:var(--k-dim);line-height:1.45}
 .kite-pcr .text-up{color:var(--k-green)}
 .kite-pcr .text-down{color:var(--k-red)}
@@ -136,7 +141,7 @@ const CSS = `
 .kite-pcr .kp-stack{display:flex;flex-direction:column;gap:10px}
 .kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
 .kite-pcr .kp-sheet:not(.kp-sheet-heat){overflow:visible}
-.kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
+.kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px);border-radius:0}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
 .kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
@@ -173,9 +178,12 @@ const CSS = `
 .kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
 .kite-pcr .kp-chg{min-width:5.2ch;text-align:right;font-size:${ROW_METRICS.cellFontSize}px}
 .kite-pcr .kp-sheet-heat col.c-time{width:72px}
-.kite-pcr .kp-heat-row td{padding:2px;text-align:center}
-.kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums}
-.kite-pcr .kp-heat{display:block;width:100%;text-align:center;font-size:12px;font-weight:500;padding:6px 4px;border-radius:2px;min-height:26px;box-sizing:border-box}
+.kite-pcr .kp-sheet-heat.one{width:fit-content;max-width:100%}
+.kite-pcr .kp-sheet-heat.one table{width:auto}
+.kite-pcr .kp-sheet-heat.one col:not(.c-time){width:108px}
+.kite-pcr .kp-heat-row td{padding:0;text-align:center;border-bottom:0}
+.kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums;border-bottom:0}
+.kite-pcr .kp-heat{display:block;width:100%;text-align:center;font-size:12px;font-weight:500;padding:7px 4px;border-radius:0;min-height:26px;box-sizing:border-box}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-band-extreme-positive{background:#1b5e4a;color:#f4f4f5}
 .kite-pcr .kp-band-highly-positive{background:#2e7a64;color:#f4f4f5}
@@ -183,7 +191,23 @@ const CSS = `
 .kite-pcr .kp-band-negative{background:#e4c4c4;color:#3a1818}
 .kite-pcr .kp-band-highly-negative{background:#c97a7a;color:#1a0c0c}
 .kite-pcr .kp-band-extreme-negative{background:#a33a3a;color:#f4f4f5}
-.kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
+.kite-pcr .kp-band-empty{background:transparent;color:var(--k-text)}
+.kite-pcr .kp-notes{display:grid;grid-template-columns:1.15fr .95fr .95fr;gap:10px;margin-top:10px}
+.kite-pcr .kp-read h2{margin:6px 0 4px;font-size:15px;font-weight:600;letter-spacing:-.02em;line-height:1.3}
+.kite-pcr .kp-read .kp-sub{margin:0}
+.kite-pcr .kp-read-play{margin-top:10px;padding:8px 10px;background:var(--k-surface-hover);border:1px solid var(--k-border)}
+.kite-pcr .kp-read-play .kp-play-tag{display:block;font-size:11px;font-weight:600;margin-bottom:2px}
+.kite-pcr .kp-conv{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:12px}
+.kite-pcr .kp-conv .lab{font-size:11px;color:var(--k-dim)}
+.kite-pcr .kp-conv .val{font-size:13px;font-weight:500;margin:2px 0 0}
+.kite-pcr .kp-bar{height:4px;background:var(--k-surface-hover);overflow:hidden;margin-top:6px}
+.kite-pcr .kp-bar>span{display:block;height:100%;background:var(--k-blue)}
+.kite-pcr .kp-tape ul,.kite-pcr .kp-legend ul{list-style:none;margin:8px 0 0;padding:0}
+.kite-pcr .kp-tape li{font-size:12px;margin:0 0 8px;padding:0 0 8px;border-bottom:1px solid var(--k-border);line-height:1.4}
+.kite-pcr .kp-tape li:last-child{margin:0;padding:0;border:0}
+.kite-pcr .kp-tape b{font-weight:600}
+.kite-pcr .kp-legend li{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;margin:0 0 7px;color:var(--k-text)}
+.kite-pcr .kp-swatch{flex:0 0 12px;width:12px;height:12px;margin-top:3px}
 .kite-pcr .kp-foot{margin:10px 0 0;font-size:11px;color:var(--k-dim)}
 .kite-pcr .kp-path-svg{width:100%;height:220px}
 .kite-pcr .kp-path-pcr{fill:none;stroke:var(--k-blue);stroke-width:2}
@@ -196,6 +220,7 @@ const CSS = `
 .kite-pcr .kp-empty{padding:28px 8px;text-align:center;color:var(--k-dim);font-size:13px}
 @media (max-width:980px){
   .kite-pcr .kp-head,.kite-pcr .kp-body{padding-left:10px;padding-right:10px}
+  .kite-pcr .kp-notes{grid-template-columns:1fr}
 }
 `;
 
@@ -336,6 +361,21 @@ export function PcrPane() {
   const cols = showAll ? PCR_INDICES : PCR_INDICES.filter((u) => u.id === index);
   const sumRows = showAll ? deskRows : deskRows.filter((r) => r.id === index);
   const heatSlots = showAll ? axis : grid;
+  const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
+  const tape = useMemo(() => {
+    const src = showAll ? PCR_INDICES : PCR_INDICES.filter((u) => u.id === index);
+    const out: { id: string; name: string; action: PcrAction; why: string; clock: string; hhmm: string }[] = [];
+    for (const u of src) {
+      const row = (metricBoards?.oi[u.id] ?? []);
+      for (const s of row) {
+        if (s.delta == null || Math.abs(s.delta) < FLOW_MOVE_MIN) continue;
+        if (!isValidPrint(s.pcr, "oi")) continue;
+        const line = describeFlow(u.short, s.hhmm, s.pcr, s.delta, "oi");
+        out.push({ id: `${u.id}-${s.hhmm}`, name: line.name, action: line.action, why: line.why, clock: line.clock, hhmm: line.hhmm });
+      }
+    }
+    return out.sort((a, b) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm)).slice(0, 8);
+  }, [metricBoards, showAll, index]);
 
   return (
     <div className="kite-pcr">
@@ -445,7 +485,7 @@ export function PcrPane() {
                 </table>
               </div>
 
-              <div className="kp-sheet kp-sheet-heat">
+              <div className={`kp-sheet kp-sheet-heat${showAll ? "" : " one"}`}>
                 <table>
                   <colgroup>
                     <col className="c-time" />
@@ -482,6 +522,66 @@ export function PcrPane() {
           ) : (
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
+
+          {payload ? (
+            <div className="kp-notes">
+              <div className="kp-card kp-read">
+                <p className="kp-kicker">Read · {PCR_INDICES.find((u) => u.id === index)?.short}</p>
+                <h2>{insight.headline}</h2>
+                <p className="kp-sub">{insight.reason}</p>
+                <div className="kp-read-play">
+                  <span className={`kp-play-tag kp-act ${ideaKind(insight.action)}`}>{insight.action}</span>
+                  <p className="kp-sub">{insight.play}</p>
+                </div>
+                <div className="kp-conv">
+                  <div>
+                    <div className="lab">Bias</div>
+                    <div className={`val ${insight.bias === "Bullish" ? "text-up" : insight.bias === "Bearish" ? "text-down" : ""}`}>{insight.bias}</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="lab">Conviction {insight.conviction}</div>
+                    <div className="kp-bar"><span style={{ width: `${insight.conviction}%` }} /></div>
+                  </div>
+                  <div>
+                    <div className="lab">Regime</div>
+                    <div className="val">{insight.regime}</div>
+                  </div>
+                </div>
+              </div>
+              <aside className="kp-card kp-tape">
+                <p className="kp-kicker">Flow tape</p>
+                {tape.length ? (
+                  <ul>
+                    {tape.map((e) => (
+                      <li key={e.id}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <b>{e.name} · <span className={`kp-act ${ideaKind(e.action)}`}>{e.action}</span></b>
+                          <span className="kp-sub">{e.clock}</span>
+                        </div>
+                        <div className="kp-sub" style={{ marginTop: 3 }}>{e.why}</div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="kp-sub" style={{ marginTop: 10 }}>Quiet book — no 6-tick PCR jumps yet.</p>
+                )}
+              </aside>
+              <section className="kp-card kp-legend" aria-label="How to read PCR">
+                <p className="kp-kicker">How to read PCR</p>
+                <ul>
+                  {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
+                    <li key={id}>
+                      <i className={`kp-swatch kp-band-${id}`} />
+                      {BAND_COPY[id].hint}
+                    </li>
+                  ))}
+                </ul>
+                <p className="kp-sub" style={{ marginTop: 8 }}>
+                  OI PCR is put open interest ÷ call open interest on the front weekly expiry (monthly when that is the listed series). Watch the 15-minute change, not a single print.
+                </p>
+              </section>
+            </div>
+          ) : null}
 
           <p className="kp-foot">All five, or one index. Path is PCR vs spot. 1–5 index · A all · P path</p>
         </div>
