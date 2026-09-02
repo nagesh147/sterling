@@ -6,6 +6,7 @@ import {
   SESSION_OPEN_MIN,
   bandTitle,
   buildGrid,
+  describeFlow,
   expiryKind,
   formatDelta,
   formatDeskStamp,
@@ -337,20 +338,13 @@ export function PcrPane() {
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
   const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
   const tape = useMemo(() => {
-    const out: { id: string; title: string; detail: string; up: boolean; hhmm: string }[] = [];
+    const out: { id: string; title: string; detail: string; up: boolean; hhmm: string; action: string }[] = [];
     for (const u of PCR_INDICES) {
       const row = boards?.[u.id] ?? [];
       for (const s of row) {
         if (s.delta == null || Math.abs(s.delta) < 0.06) continue;
-        out.push({
-          id: `${u.id}-${s.hhmm}`,
-          hhmm: s.hhmm,
-          title: `${u.short} PCR ${s.delta > 0 ? "+" : ""}${s.delta.toFixed(2)}`,
-          detail: s.delta > 0
-            ? `Puts thickening at ${s.hhmm} — print ${formatPcr(s.pcr)}.`
-            : `Calls taking share at ${s.hhmm} — print ${formatPcr(s.pcr)}.`,
-          up: s.delta > 0,
-        });
+        const line = describeFlow(u.short, s.hhmm, s.pcr, s.delta);
+        out.push({ id: `${u.id}-${s.hhmm}`, hhmm: s.hhmm, ...line });
       }
     }
     return out.slice(-8).reverse();
@@ -578,16 +572,16 @@ export function PcrPane() {
                     <ul>
                       {tape.map((e) => (
                         <li key={e.id}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
                             <b className={e.up ? "text-up" : "text-down"}>{e.title}</b>
-                            <span className="kp-muted" style={{ fontVariantNumeric: "tabular-nums", fontSize: 11 }}>{e.hhmm}</span>
+                            <span className={`kp-play-tag ${e.up ? "text-up" : "text-down"}`}>{e.action}</span>
                           </div>
                           <div className="kp-sub" style={{ marginTop: 4 }}>{e.detail}</div>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="kp-sub" style={{ marginTop: 10 }}>Quiet book — no 6-tick PCR jumps yet.</p>
+                    <p className="kp-sub" style={{ marginTop: 10 }}>No big PCR jump this session yet.</p>
                   )}
                 </aside>
                 <section className="kp-card kp-legend" aria-label="How to read PCR">

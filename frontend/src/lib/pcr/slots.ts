@@ -74,6 +74,17 @@ export function formatDeskStamp(iso: string, hhmm?: string | null): string {
   return `${String(d).padStart(2, "0")} ${MONTHS[m - 1]} ${y} ${String(h12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${ap}`;
 }
 
+/** `15:15` → `03:15 PM` */
+export function formatHhmm12(hhmm: string): string {
+  const [hRaw, mRaw] = hhmm.split(":");
+  const hour = Number(hRaw);
+  const minute = Number(mRaw);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return hhmm;
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  const ap = hour < 12 ? "AM" : "PM";
+  return `${String(h12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${ap}`;
+}
+
 export function shiftSession(iso: string, dir: -1 | 1): string {
   let cur = iso.slice(0, 10);
   for (let i = 0; i < 14; i++) {
@@ -319,6 +330,31 @@ export function compareShot(
 }
 
 export type PcrAction = "Buy PE" | "Buy CE" | "Stand aside";
+
+export function describeFlow(
+  name: string,
+  hhmm: string,
+  pcr: number | null,
+  delta: number,
+): { title: string; detail: string; action: Exclude<PcrAction, "Stand aside">; up: boolean } {
+  const clock = formatHhmm12(hhmm);
+  const print = pcr != null && Number.isFinite(pcr) ? pcr.toFixed(2) : "—";
+  const move = `${delta > 0 ? "+" : ""}${delta.toFixed(2)}`;
+  if (delta > 0) {
+    return {
+      up: true,
+      action: "Buy CE",
+      title: `${name} · Buy CE`,
+      detail: `PCR rose ${move} at ${clock}, now ${print}. More puts than calls — dips usually get bought. Prefer CE.`,
+    };
+  }
+  return {
+    up: false,
+    action: "Buy PE",
+    title: `${name} · Buy PE`,
+    detail: `PCR fell ${move} at ${clock}, now ${print}. More calls than puts — upside is being sold. Prefer PE.`,
+  };
+}
 
 export type PcrRead = {
   headline: string;

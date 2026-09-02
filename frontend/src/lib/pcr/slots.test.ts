@@ -5,6 +5,7 @@ import {
   bandTitle,
   buildGrid,
   compareShot,
+  describeFlow,
   formatPcr,
   hhmmToMinutes,
   isValidPrint,
@@ -135,6 +136,17 @@ describe("pcr slots", () => {
     expect(isValidPrint(0)).toBe(false);
     expect(isValidPrint(0.74)).toBe(true);
     expect(isValidPrint(-2.32)).toBe(false);
+  });
+
+  it("says Buy CE or Buy PE in plain language on the flow tape", () => {
+    const ce = describeFlow("Midcap", "14:45", 1.21, 0.11);
+    expect(ce.action).toBe("Buy CE");
+    expect(ce.detail).toMatch(/rose/i);
+    expect(ce.detail).not.toMatch(/thickening|taking share/i);
+    const pe = describeFlow("Midcap", "15:15", 1.12, -0.08);
+    expect(pe.action).toBe("Buy PE");
+    expect(pe.title).toMatch(/Buy PE/);
+    expect(pe.detail).toMatch(/fell/i);
   });
 
   it("has a mark for every cash slot on the snapshot", () => {
