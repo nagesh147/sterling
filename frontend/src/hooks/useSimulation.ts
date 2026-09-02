@@ -288,8 +288,25 @@ export function useSimulation() {
     }
   };
 
-  return { ...store, start, stop, pause, resume, setSpeed, stepBars, jumpStart, jumpEnd };
+  const syncStatus = async () => {
+    try {
+      const res = await fetch('/api/v1/simulation/status');
+      if (res.ok) {
+        const status: SimStatus = await res.json();
+        setStatus(status);
+        if (status.state === 'running' || status.state === 'paused') {
+          startPolling();
+        }
+        return status;
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  return { ...store, start, stop, pause, resume, setSpeed, stepBars, jumpStart, jumpEnd, syncStatus };
 }
+
+export { startPolling, stopPolling };
 
 // ── Polling for status updates ──
 let pollInterval: ReturnType<typeof setInterval> | null = null;

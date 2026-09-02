@@ -113,10 +113,11 @@ export function SimulationBar() {
   const stratDropdownRef = useRef<HTMLDivElement>(null);
   const legsDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Default expandable drawer to open whenever dock opens
+  // Default expandable drawer to open & sync status whenever dock opens
   useEffect(() => {
     if (barOpen) {
       setIsExpanded(true);
+      sim.syncStatus();
     }
   }, [barOpen]);
 

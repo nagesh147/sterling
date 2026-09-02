@@ -8,7 +8,7 @@ past trading days as if they were live.
 import asyncio
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel
 from app.core.logging import get_logger
 
@@ -1062,10 +1062,12 @@ async def _hydrate_missing_candles(
                 accounts = exchange_account_store.list_accounts()
                 zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
                 if zerodha_acct and zerodha_acct.access_token:
+                    kc = KiteClient(api_key=getattr(zerodha_acct, "api_key", "") or "", access_token=zerodha_acct.access_token)
                     try:
                         from zoneinfo import ZoneInfo
                         ist_tz = ZoneInfo("Asia/Kolkata")
                     except ImportError:
+                        from datetime import timezone, timedelta
                         ist_tz = timezone(timedelta(hours=5, minutes=30))
                     from_str = datetime.fromtimestamp(start_epoch, tz=ist_tz).strftime("%Y-%m-%d %H:%M:%S")
                     to_str = datetime.fromtimestamp(end_epoch, tz=ist_tz).strftime("%Y-%m-%d %H:%M:%S")

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SimulationBar, SimulationFooterButton } from '../SimulationBar';
 import { useSimulationStore } from '../../../hooks/useSimulation';
@@ -54,8 +54,10 @@ describe('SimulationBar Component', () => {
     });
   });
 
-  it('renders date, time inputs, and speed pills when open', () => {
-    render(<SimulationBar />);
+  it('renders date, time inputs, and speed pills when open', async () => {
+    await act(async () => {
+      render(<SimulationBar />);
+    });
 
     // Date and time controls
     expect(screen.getByDisplayValue('2026-08-28')).toBeInTheDocument();
@@ -68,22 +70,30 @@ describe('SimulationBar Component', () => {
     expect(screen.getByText('50×')).toBeInTheDocument();
   });
 
-  it('allows selecting speed', () => {
-    render(<SimulationBar />);
+  it('allows selecting speed', async () => {
+    await act(async () => {
+      render(<SimulationBar />);
+    });
     const speed100Btn = screen.getByText('100×');
-    fireEvent.click(speed100Btn);
+    await act(async () => {
+      fireEvent.click(speed100Btn);
+    });
 
     expect(useSimulationStore.getState().speed).toBe(100);
   });
 
-  it('renders footer replay button and toggles bar open state', () => {
+  it('renders footer replay button and toggles bar open state', async () => {
     useSimulationStore.setState({ barOpen: false });
-    render(<SimulationFooterButton />);
+    await act(async () => {
+      render(<SimulationFooterButton />);
+    });
 
     const replayBtn = screen.getByRole('button', { name: /REPLAY/i });
     expect(replayBtn).toBeInTheDocument();
 
-    fireEvent.click(replayBtn);
+    await act(async () => {
+      fireEvent.click(replayBtn);
+    });
     expect(useSimulationStore.getState().barOpen).toBe(true);
   });
 });
