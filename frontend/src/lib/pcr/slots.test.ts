@@ -7,6 +7,7 @@ import {
   compareShot,
   describeFlow,
   buildIdea,
+  liveAction,
   readBook,
   formatPcr,
   hhmmToMinutes,
@@ -168,7 +169,7 @@ describe("pcr slots", () => {
     expect(board.idea?.why).toMatch(/volume/i);
   });
 
-  it("aligns volume and ΔOI to the same print as the OI book", () => {
+  it("does not keep a 2:45 CE as live when the last OI print is 0.85", () => {
     const slot = (
       hhmm: string,
       pcr: number,
@@ -176,27 +177,27 @@ describe("pcr slots", () => {
       band: "highly-negative" | "negative" | "positive" | "highly-positive",
     ) => ({ hhmm, label: hhmm, minutes: 0, pcr, delta, band, live: false });
     const oi = [
-      slot("09:30", 0.80, -0.10, "highly-negative"),
-      slot("15:15", 0.76, -0.07, "highly-negative"),
+      slot("14:45", 1.20, 0.14, "highly-positive"),
+      slot("15:15", 0.85, -0.05, "negative"),
     ];
     const volume = [
-      slot("09:30", 0.89, -0.06, "negative"),
-      slot("15:15", 1.05, 0.04, "positive"),
+      slot("14:45", 1.10, 0.08, "positive"),
+      slot("15:15", 0.91, -0.04, "negative"),
     ];
     const doi = [
       slot("14:45", 1.20, 0.14, "highly-positive"),
-      slot("15:15", 1.18, -0.02, "positive"),
+      slot("15:15", 0.88, -0.10, "negative"),
     ];
     const read = readBook("Nifty", oi, volume, doi);
-    expect(read.book?.action).toBe("Buy PE");
     expect(read.book?.hhmm).toBe("15:15");
+    expect(read.book?.action).toBe("Wait");
+    expect(read.book?.to).toBe(0.85);
     expect(read.volume?.hhmm).toBe("15:15");
-    expect(read.volume?.action).toBe("Buy CE");
-    expect(read.volumeStance).toBe("fights");
+    expect(read.volumeStance).toBe("quiet");
     expect(read.deltaOi?.hhmm).toBe("15:15");
-    expect(read.deltaOi?.action).toBe("Buy CE");
-    expect(read.deltaStance).toBe("fights");
-    expect(read.note).toMatch(/Stay with the OI book/);
+    expect(liveAction(0.85)).toBe("Wait");
+    expect(liveAction(1.2)).toBe("Buy CE");
+    expect(liveAction(0.76)).toBe("Buy PE");
   });
 
   it("picks one Sensex idea and ignores false CE jumps", () => {

@@ -16,7 +16,6 @@ import {
   pcrBand,
   putShare,
   readBook,
-  readPcr,
   shiftSession,
   type PcrAction,
   type Stance,
@@ -146,7 +145,7 @@ function BookPanel({
           {book.note ? <p className="kp-skip">{book.note}</p> : null}
           {earlier.length ? (
             <div className="kp-ev">
-              <p className="kp-ev-lab">Earlier OI</p>
+              <p className="kp-ev-lab">Earlier OI — not live</p>
               {earlier.map((e) => (
                 <div key={e.hhmm} className="kp-ev-row">
                   <span className="kp-ev-clock">{e.clock}</span>
@@ -441,10 +440,6 @@ export function PcrPane() {
     current != null && prev?.pcr != null ? Math.round((current - prev.pcr) * 100) / 100 : (lastFilled?.delta ?? null);
   const band = lastFilled?.band ?? (current != null ? pcrBand(current) : "empty");
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
-  const insight = useMemo(
-    () => readPcr(metricBoards?.oi[index] ?? [], series?.spot.changePer ?? null),
-    [metricBoards, index, series?.spot.changePer],
-  );
   const ideaName = PCR_INDICES.find((u) => u.id === index)?.short ?? index;
   const book = useMemo(
     () => readBook(
@@ -538,16 +533,16 @@ export function PcrPane() {
           {hasSeries ? (
             <section className="kp-strip">
               <div>
-                <div className={`kp-strip-pcr kp-band-${band}`}>{formatPcr(current) || "—"}</div>
-                <p className="kp-kicker" style={{ marginTop: 6 }}>
-                  {metric === "volume" ? "Volume PCR" : metric === "changeOi" ? "ΔOI PCR" : "OI PCR"}
-                </p>
+                <div className={`kp-strip-pcr kp-band-${book.book?.to != null ? pcrBand(book.book.to) : band}`}>
+                  {book.book?.to != null ? formatPcr(book.book.to) : formatPcr(current) || "—"}
+                </div>
+                <p className="kp-kicker" style={{ marginTop: 6 }}>OI PCR</p>
               </div>
               <div className="kp-strip-read">
                 <div className={`kp-strip-act ${book.book?.action === "Buy CE" ? "text-up" : book.book?.action === "Buy PE" ? "text-down" : ""}`}>
-                  {book.book?.action ?? insight.action}
+                  {book.book?.action ?? "Wait"}
                 </div>
-                <p>{book.book?.why ?? insight.play}</p>
+                <p>{book.book?.why ?? "Waiting on the OI print."}</p>
               </div>
               <dl className="kp-strip-stats">
                 <div>

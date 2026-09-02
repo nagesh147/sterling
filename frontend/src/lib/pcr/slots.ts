@@ -449,13 +449,53 @@ export function lastFilledSlot(slots: PcrSlot[]): PcrSlot | undefined {
   return [...slots].reverse().find((s) => s.pcr != null);
 }
 
-/** Last print on this series, even when the 15-minute jump is small. */
+export function lastValidSlot(slots: PcrSlot[], metric: PcrMetric = "oi"): PcrSlot | undefined {
+  const m: PcrMetric = metric === "changeOi" ? "changeOi" : "oi";
+  return [...slots].reverse().find((s) => isValidPrint(s.pcr, m));
+}
+
+/** Live overlay: CE only at ≥ 1.20, PE only at ≤ 0.80. The middle is Wait. */
+export function liveAction(pcr: number | null): PcrAction {
+  if (pcr == null || !Number.isFinite(pcr)) return "Wait";
+  if (pcr >= 1.2) return "Buy CE";
+  if (pcr <= 0.8) return "Buy PE";
+  return "Wait";
+}
+
+function liveWhy(metric: PcrMetric, action: PcrAction, pcr: number): string {
+  if (action === "Wait") {
+    if (metric === "volume") return "Volume PCR is mixed this print.";
+    if (metric === "changeOi") return "ΔOI PCR is mixed this print.";
+    return `OI PCR ${pcr.toFixed(2)} is inside 0.80–1.20. No CE/PE overlay — trade the index.`;
+  }
+  if (action === "Buy CE") {
+    if (metric === "volume") return "Put volume is heavy. Dips usually get bought.";
+    if (metric === "changeOi") return "This bar added more puts than calls. That is not the OI book.";
+    return "Puts are being sold. Dips usually get bought.";
+  }
+  if (metric === "volume") return "Call volume is heavy. Upside looks capped.";
+  if (metric === "changeOi") return "This bar added more calls than puts. That is not the OI book.";
+  return "Calls now more than puts. Skip CE.";
+}
+
+/** Last print on this series — valid prints only, live 0.80 / 1.20 gates. */
 export function lineAt(name: string, slot: PcrSlot, metric: PcrMetric): FlowLine | null {
-  if (slot.pcr == null) return null;
+  const m: PcrMetric = metric === "changeOi" ? "changeOi" : "oi";
+  if (slot.pcr == null || !isValidPrint(slot.pcr, m)) return null;
   const delta = slot.delta ?? 0;
-  if (Math.abs(delta) >= FLOW_MOVE_MIN) return describeFlow(name, slot.hhmm, slot.pcr, delta, metric);
-  const nudge = slot.pcr >= CE_PCR_MIN ? FLOW_MOVE_MIN : slot.pcr <= PE_PCR_MAX ? -FLOW_MOVE_MIN : 0.01;
-  return describeFlow(name, slot.hhmm, slot.pcr, nudge, metric);
+  const to = roundPcr(slot.pcr);
+  const from = roundPcr(to - delta);
+  const action = liveAction(slot.pcr);
+  return {
+    name,
+    hhmm: slot.hhmm,
+    clock: formatHhmm12(slot.hhmm),
+    from,
+    to,
+    move: delta,
+    action,
+    why: liveWhy(metric, action, to),
+  };
 }
 
 export type Stance = "agrees" | "fights" | "quiet";
@@ -479,7 +519,7 @@ export type BookRead = {
  * Volume and ΔOI are scored on that same clock — they may agree, fight, or stay quiet.
  */
 export function readBook(name: string, oi: PcrSlot[], volume: PcrSlot[], changeOi: PcrSlot[]): BookRead {
-  const last = lastFilledSlot(oi);
+  const last = lastValidSlot(oi, "oi");
   const book = last ? lineAt(name, last, "oi") : null;
   const hhmm = last?.hhmm;
   const volSlot = hhmm ? volume.find((s) => s.hhmm === hhmm) : undefined;
@@ -489,7 +529,7 @@ export function readBook(name: string, oi: PcrSlot[], volume: PcrSlot[], changeO
   const volumeStance = stanceOf(book?.action ?? "Wait", vol?.action ?? "Wait");
   const deltaStance = stanceOf(book?.action ?? "Wait", doi?.action ?? "Wait");
   let note: string | null = null;
-  if (book?.action === "Wait") note = "OI PCR is between 0.90 and 1.00. No CE or PE from the book.";
+  if (book?.action === "Wait") note = "OI PCR is inside 0.80–1.20. No CE/PE overlay.";
   else if (volumeStance === "fights" && deltaStance === "fights") {
     note = "Volume and ΔOI disagree with OI this print. Stay with the OI book.";
   } else if (deltaStance === "fights") {
@@ -574,7 +614,7 @@ export function readPcr(slots: PcrSlot[], spotChg: number | null): PcrRead {
       play: "Prefer CE on pullbacks. Avoid shorts / PE while PCR holds ≥ 1.20.",
     };
   }
-  if (pcr <= 0.75) {
+  if (pcr <= 0.8) {
     return {
       bias: "Bearish",
       headline: "Call load is heavy",
@@ -592,7 +632,7 @@ export function readPcr(slots: PcrSlot[], spotChg: number | null): PcrRead {
     conviction: clamp(Math.round(40 + Math.abs(pcr - 1) * 90), 28, 70),
     regime: "Range",
     action: "Wait",
-    play: "No CE/PE overlay. Trade the index until PCR leaves the 0.75–1.20 band.",
+    play: "No CE/PE overlay. PCR is inside 0.80–1.20. Trade the index.",
   };
 }
 
