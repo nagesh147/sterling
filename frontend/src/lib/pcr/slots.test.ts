@@ -154,6 +154,19 @@ describe("pcr slots", () => {
     expect(slipped.action).toBe("Wait");
   });
 
+  it("writes volume PCR copy separately from OI", () => {
+    const ce = describeFlow("Nifty", "14:45", 1.20, 0.14, "volume");
+    expect(ce.action).toBe("Buy CE");
+    expect(ce.why).toMatch(/volume/i);
+    const pe = describeFlow("Nifty", "11:30", 0.76, -0.08, "volume");
+    expect(pe.action).toBe("Buy PE");
+    expect(pe.why).toMatch(/call volume|calls traded/i);
+    const board = buildIdea("Nifty", [
+      { hhmm: "14:45", label: "14.45", minutes: 885, pcr: 1.20, delta: 0.14, band: "highly-positive" as const, live: false },
+    ], "volume");
+    expect(board.idea?.why).toMatch(/volume/i);
+  });
+
   it("picks one Sensex idea and ignores false CE jumps", () => {
     const slots = [
       { hhmm: "10:30", label: "10.30", minutes: 630, pcr: 0.87, delta: 0.09, band: "negative" as const, live: false },
