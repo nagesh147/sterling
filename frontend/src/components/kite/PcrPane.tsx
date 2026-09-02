@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { HEAD_METRICS, ROW_METRICS } from "../board/signalRowSpec";
 import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
   SESSION_CLOSE_MIN,
@@ -152,22 +152,25 @@ const CSS = `
 .kite-pcr .kp-book col.c-pc{width:64px}
 .kite-pcr .kp-book col.c-exp{width:88px}
 .kite-pcr .kp-book col.c-pain{width:88px}
-.kite-pcr .kp-book tbody th{font-weight:500;color:var(--k-text);font-size:13px}
-.kite-pcr .kp-book thead th,.kite-pcr .kp-book tbody td{padding:9px 10px;white-space:nowrap}
+.kite-pcr .kp-book tbody th{font-weight:600;color:var(--k-text);font-size:${ROW_METRICS.instrumentFontSize}px}
+.kite-pcr .kp-book thead th{font-size:${HEAD_METRICS.fontSize}px;font-weight:${HEAD_METRICS.fontWeight};letter-spacing:${HEAD_METRICS.letterSpacing};text-transform:${HEAD_METRICS.textTransform};padding:${HEAD_METRICS.padding};color:var(--k-dim)}
+.kite-pcr .kp-book thead th,.kite-pcr .kp-book tbody td{white-space:nowrap}
+.kite-pcr .kp-book tbody td{font-size:${ROW_METRICS.cellFontSize}px;font-weight:400;padding:0 10px;height:${ROW_METRICS.legHeight}px}
+.kite-pcr .kp-book tbody th{padding:0 10px;height:${ROW_METRICS.legHeight}px}
 .kite-pcr .kp-book thead th{text-align:left}
 .kite-pcr .kp-book tbody td{text-align:left}
 .kite-pcr .kp-book thead th.num,.kite-pcr .kp-book tbody td.num{text-align:right}
 .kite-pcr .kp-book thead th.mid,.kite-pcr .kp-book tbody td.mid{text-align:center}
-.kite-pcr .kp-pcr{font-size:15px;font-weight:600;letter-spacing:-.02em}
-.kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.kite-pcr .kp-pcr{font-size:${ROW_METRICS.cellFontSize}px;font-weight:400;letter-spacing:0}
+.kite-pcr .kp-play{font-weight:400;letter-spacing:0;white-space:nowrap;font-size:${ROW_METRICS.cellFontSize}px}
 .kite-pcr .kp-play-cell{position:relative}
-.kite-pcr .kp-tip{display:none;position:absolute;left:8px;top:calc(100% - 2px);z-index:6;background:var(--k-surface);border:1px solid var(--k-border);color:var(--k-text);padding:5px 8px;font-size:11px;font-weight:400;white-space:nowrap;border-radius:3px;box-shadow:0 6px 16px rgba(0,0,0,.18);pointer-events:none}
+.kite-pcr .kp-tip{display:none;position:absolute;left:8px;top:calc(100% - 2px);z-index:6;background:var(--k-surface);border:1px solid var(--k-border);color:var(--k-text);padding:5px 8px;font-size:${ROW_METRICS.cellFontSize}px;font-weight:400;white-space:nowrap;border-radius:3px;box-shadow:0 6px 16px rgba(0,0,0,.18);pointer-events:none}
 .kite-pcr .kp-play-cell:hover .kp-tip{display:block}
 .kite-pcr .kp-book tbody tr:last-child .kp-tip{top:auto;bottom:calc(100% - 2px)}
-.kite-pcr .kp-move{font-size:12px;color:var(--k-dim)}
-.kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px}
+.kite-pcr .kp-move{font-size:${ROW_METRICS.cellFontSize}px;color:var(--k-text)}
+.kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px;font-size:${ROW_METRICS.cellFontSize}px}
 .kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
-.kite-pcr .kp-chg{min-width:5.2ch;text-align:right;font-size:12px}
+.kite-pcr .kp-chg{min-width:5.2ch;text-align:right;font-size:${ROW_METRICS.cellFontSize}px}
 .kite-pcr .kp-sheet-heat col.c-time{width:72px}
 .kite-pcr .kp-heat-row td{padding:2px;text-align:center}
 .kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums}
