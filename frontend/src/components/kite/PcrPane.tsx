@@ -136,14 +136,12 @@ const CSS = `
 .kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
 .kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap;cursor:pointer}
+.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
 .kite-pcr thead th[data-on="true"]{color:var(--k-orange);font-weight:600}
 .kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:8px 10px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
 .kite-pcr tbody td{padding:8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
-.kite-pcr .kp-book tbody tr{cursor:pointer}
-.kite-pcr .kp-book tbody tr:hover{background:var(--k-surface-hover)}
 .kite-pcr .kp-book tbody tr[data-on="true"]{background:color-mix(in srgb,var(--k-orange) 8%, var(--k-surface))}
 .kite-pcr .kp-book tbody th{font-weight:500;color:var(--k-text);font-size:13px}
 .kite-pcr .kp-book tbody td{text-align:left;padding:10px;white-space:nowrap}
@@ -316,10 +314,6 @@ export function PcrPane() {
   const cols = showAll ? PCR_INDICES : PCR_INDICES.filter((u) => u.id === index);
   const sumRows = showAll ? deskRows : deskRows.filter((r) => r.id === index);
   const heatSlots = showAll ? axis : grid;
-  const pickIndex = (id: PcrIndex) => {
-    setIndex(id);
-    if (view === "board") setView("grid");
-  };
 
   return (
     <div className="kite-pcr">
@@ -380,7 +374,7 @@ export function PcrPane() {
                     {sumRows.map((row) => {
                       const kind = ideaKind(row.action);
                       return (
-                        <tr key={row.id} data-on={index === row.id} onClick={() => pickIndex(row.id)}>
+                        <tr key={row.id} data-on={!showAll && index === row.id}>
                           <th>{row.name}</th>
                           <td>
                             <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
@@ -421,7 +415,7 @@ export function PcrPane() {
                     <tr>
                       <th>Time</th>
                       {cols.map((u) => (
-                        <th key={u.id} data-on={index === u.id} onClick={() => pickIndex(u.id)}>{u.short}</th>
+                        <th key={u.id} data-on={!showAll && index === u.id}>{u.short}</th>
                       ))}
                     </tr>
                   </thead>
@@ -432,7 +426,7 @@ export function PcrPane() {
                         {cols.map((u) => {
                           const s = boards?.[u.id]?.[row];
                           return (
-                            <td key={u.id} onClick={() => pickIndex(u.id)}>
+                            <td key={u.id}>
                               <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
                                 {s?.pcr == null ? "" : formatPcr(s.pcr)}
                               </span>
