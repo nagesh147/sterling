@@ -358,6 +358,46 @@ export function flowPath(line: Pick<FlowLine, "from" | "to">): string {
  * A 15-min PCR jump is only a CE/PE ticket if the *level* agrees.
  * PCR 0.63 ticking up is still more calls than puts — not a CE buy.
  */
+function flowWhy(
+  metric: PcrMetric,
+  key: "ceHard" | "ce" | "waitUpMid" | "waitUp" | "peHard" | "pe" | "waitDownHigh" | "waitDown",
+): string {
+  if (metric === "volume") {
+    return {
+      ceHard: "Put volume is heavier. Dips usually get bought.",
+      ce: "More puts traded than calls. Prefer CE.",
+      waitUpMid: "Volume PCR went up, but calls still trade more. Not a CE yet.",
+      waitUp: "Volume PCR went up, still more call trades. Do not buy CE.",
+      peHard: "Call volume is heavier. Upside looks capped.",
+      pe: "More calls traded than puts. Prefer PE.",
+      waitDownHigh: "Put volume cooled off. Don't chase CE.",
+      waitDown: "Volume PCR slipped. No clear CE or PE yet.",
+    }[key];
+  }
+  if (metric === "changeOi") {
+    return {
+      ceHard: "This bar added more puts than calls. That is not the OI book.",
+      ce: "This bar added more puts than calls. That is not the OI book.",
+      waitUpMid: "ΔOI ticked up. Not a CE vs the OI book.",
+      waitUp: "ΔOI ticked up, still more new calls. Ignore vs the book.",
+      peHard: "This bar added more calls than puts. That is not the OI book.",
+      pe: "This bar added more calls than puts. That is not the OI book.",
+      waitDownHigh: "ΔOI put flow cooled. Don't chase CE.",
+      waitDown: "ΔOI PCR mixed this bar.",
+    }[key];
+  }
+  return {
+    ceHard: "Puts are being sold. Dips usually get bought.",
+    ce: "Puts now more than calls. Buy CE on a dip.",
+    waitUpMid: "PCR went up, but calls are still more. Not a CE yet.",
+    waitUp: "PCR went up, still more calls than puts. Do not buy CE.",
+    peHard: "Calls are being sold. Upside looks capped.",
+    pe: "Calls now more than puts. Skip CE.",
+    waitDownHigh: "Puts cooled off. Don't chase CE.",
+    waitDown: "PCR slipped. No clear CE or PE yet.",
+  }[key];
+}
+
 export function describeFlow(
   name: string,
   hhmm: string,
@@ -369,60 +409,19 @@ export function describeFlow(
   const to = pcr != null && Number.isFinite(pcr) ? roundPcr(pcr) : null;
   const from = to != null ? roundPcr(to - delta) : null;
   const n = to ?? 0;
-  const vol = metric === "volume";
   const base = { name, hhmm, clock, from, to, move: delta };
 
   if (delta > 0) {
-    if (n >= 1.2) {
-      return {
-        ...base,
-        action: "Buy CE",
-        why: vol ? "Put volume is heavier. Dips usually get bought." : "Puts are being sold. Dips usually get bought.",
-      };
-    }
-    if (n >= CE_PCR_MIN) {
-      return {
-        ...base,
-        action: "Buy CE",
-        why: vol ? "More puts traded than calls. Prefer CE." : "Puts now more than calls. Buy CE on a dip.",
-      };
-    }
-    if (n >= 0.85) {
-      return {
-        ...base,
-        action: "Wait",
-        why: vol ? "Volume PCR went up, but calls still trade more. Not a CE yet." : "PCR went up, but calls are still more. Not a CE yet.",
-      };
-    }
-    return {
-      ...base,
-      action: "Wait",
-      why: vol ? "Volume PCR went up, still more call trades. Do not buy CE." : "PCR went up, still more calls than puts. Do not buy CE.",
-    };
+    if (n >= 1.2) return { ...base, action: "Buy CE", why: flowWhy(metric, "ceHard") };
+    if (n >= CE_PCR_MIN) return { ...base, action: "Buy CE", why: flowWhy(metric, "ce") };
+    if (n >= 0.85) return { ...base, action: "Wait", why: flowWhy(metric, "waitUpMid") };
+    return { ...base, action: "Wait", why: flowWhy(metric, "waitUp") };
   }
 
-  if (n <= 0.7) {
-    return {
-      ...base,
-      action: "Buy PE",
-      why: vol ? "Call volume is heavier. Upside looks capped." : "Calls are being sold. Upside looks capped.",
-    };
-  }
-  if (n <= PE_PCR_MAX) {
-    return {
-      ...base,
-      action: "Buy PE",
-      why: vol ? "More calls traded than puts. Prefer PE." : "Calls now more than puts. Skip CE.",
-    };
-  }
-  if (n >= 1.2) {
-    return { ...base, action: "Wait", why: vol ? "Put volume cooled off. Don't chase CE." : "Puts cooled off. Don't chase CE." };
-  }
-  return {
-    ...base,
-    action: "Wait",
-    why: vol ? "Volume PCR slipped. No clear CE or PE yet." : "PCR slipped. No clear CE or PE yet.",
-  };
+  if (n <= 0.7) return { ...base, action: "Buy PE", why: flowWhy(metric, "peHard") };
+  if (n <= PE_PCR_MAX) return { ...base, action: "Buy PE", why: flowWhy(metric, "pe") };
+  if (n >= 1.2) return { ...base, action: "Wait", why: flowWhy(metric, "waitDownHigh") };
+  return { ...base, action: "Wait", why: flowWhy(metric, "waitDown") };
 }
 
 export type IdeaBoard = {
@@ -444,6 +443,61 @@ export function buildIdea(name: string, slots: PcrSlot[], metric: PcrMetric = "o
   const idea = (trades[0] ?? [...moves].sort(newest)[0]) ?? null;
   const earlier = trades.filter((m) => !(idea && m.hhmm === idea.hhmm && m.name === idea.name)).slice(0, 4);
   return { idea, earlier, skipped };
+}
+
+export function lastFilledSlot(slots: PcrSlot[]): PcrSlot | undefined {
+  return [...slots].reverse().find((s) => s.pcr != null);
+}
+
+/** Last print on this series, even when the 15-minute jump is small. */
+export function lineAt(name: string, slot: PcrSlot, metric: PcrMetric): FlowLine | null {
+  if (slot.pcr == null) return null;
+  const delta = slot.delta ?? 0;
+  if (Math.abs(delta) >= FLOW_MOVE_MIN) return describeFlow(name, slot.hhmm, slot.pcr, delta, metric);
+  const nudge = slot.pcr >= CE_PCR_MIN ? FLOW_MOVE_MIN : slot.pcr <= PE_PCR_MAX ? -FLOW_MOVE_MIN : 0.01;
+  return describeFlow(name, slot.hhmm, slot.pcr, nudge, metric);
+}
+
+export type Stance = "agrees" | "fights" | "quiet";
+
+export function stanceOf(book: PcrAction, other: PcrAction): Stance {
+  if (book === "Wait" || other === "Wait") return "quiet";
+  return book === other ? "agrees" : "fights";
+}
+
+export type BookRead = {
+  book: FlowLine | null;
+  volume: FlowLine | null;
+  deltaOi: FlowLine | null;
+  volumeStance: Stance;
+  deltaStance: Stance;
+  note: string | null;
+};
+
+/**
+ * One verdict: OI PCR at the latest print is the book.
+ * Volume and ΔOI are scored on that same clock — they may agree, fight, or stay quiet.
+ */
+export function readBook(name: string, oi: PcrSlot[], volume: PcrSlot[], changeOi: PcrSlot[]): BookRead {
+  const last = lastFilledSlot(oi);
+  const book = last ? lineAt(name, last, "oi") : null;
+  const hhmm = last?.hhmm;
+  const volSlot = hhmm ? volume.find((s) => s.hhmm === hhmm) : undefined;
+  const doiSlot = hhmm ? changeOi.find((s) => s.hhmm === hhmm) : undefined;
+  const vol = volSlot ? lineAt(name, volSlot, "volume") : null;
+  const doi = doiSlot ? lineAt(name, doiSlot, "changeOi") : null;
+  const volumeStance = stanceOf(book?.action ?? "Wait", vol?.action ?? "Wait");
+  const deltaStance = stanceOf(book?.action ?? "Wait", doi?.action ?? "Wait");
+  let note: string | null = null;
+  if (book?.action === "Wait") note = "OI PCR is between 0.90 and 1.00. No CE or PE from the book.";
+  else if (volumeStance === "fights" && deltaStance === "fights") {
+    note = "Volume and ΔOI disagree with OI this print. Stay with the OI book.";
+  } else if (deltaStance === "fights") {
+    note = "ΔOI disagrees this print. New positions lean the other way — stay with the OI book.";
+  } else if (volumeStance === "fights") {
+    note = "Volume disagrees this print. Trades lean the other way — stay with the OI book.";
+  }
+  return { book, volume: vol, deltaOi: doi, volumeStance, deltaStance, note };
 }
 
 export type PcrRead = {
