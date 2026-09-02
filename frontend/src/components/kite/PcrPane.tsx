@@ -114,12 +114,13 @@ const CSS = `
 .kite-pcr .kp-seg{display:flex;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
 .kite-pcr .kp-seg button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-seg button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
-.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:4px;padding-bottom:8px}
+.kite-pcr .kp-nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding-bottom:8px}
+.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:4px}
 .kite-pcr .kp-idx button{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:3px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-idx button[data-on="true"]{border-color:var(--k-orange);color:var(--k-orange);font-weight:500}
-.kite-pcr .kp-tabs{display:flex;gap:12px;padding-bottom:8px}
-.kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 0 6px;font-size:12px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
-.kite-pcr .kp-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange);font-weight:500}
+.kite-pcr .kp-tabs{display:flex;margin-left:auto;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
+.kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
+.kite-pcr .kp-tabs button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
 .kite-pcr .kp-body{flex:1;padding:10px 16px 16px;overflow:auto}
 .kite-pcr .kp-card{border:1px solid var(--k-border);background:var(--k-surface);border-radius:4px;padding:12px}
 .kite-pcr .kp-sub{margin:0;font-size:12px;color:var(--k-dim);line-height:1.45}
@@ -328,25 +329,27 @@ export function PcrPane() {
           <div className="kp-head-row">
             <h1 className="kp-title">PCR Desk</h1>
           </div>
-          <div className="kp-idx" role="tablist" aria-label="Underlying">
-            <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
-            {PCR_INDICES.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                role="tab"
-                data-on={view !== "board" && index === u.id}
-                onClick={() => { setIndex(u.id); setView(view === "path" ? "path" : "grid"); }}
-              >
-                {u.short}
-              </button>
-            ))}
-            <button type="button" role="tab" data-on={view === "path"} onClick={() => setView("path")}>Path</button>
-          </div>
-          <div className="kp-tabs" role="tablist" aria-label="PCR metric">
-            {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
-              <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
-            ))}
+          <div className="kp-nav">
+            <div className="kp-idx" role="tablist" aria-label="Underlying">
+              <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
+              {PCR_INDICES.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  role="tab"
+                  data-on={view !== "board" && index === u.id}
+                  onClick={() => { setIndex(u.id); setView(view === "path" ? "path" : "grid"); }}
+                >
+                  {u.short}
+                </button>
+              ))}
+              <button type="button" role="tab" data-on={view === "path"} onClick={() => setView("path")}>Path</button>
+            </div>
+            <div className="kp-tabs" role="tablist" aria-label="PCR metric">
+              {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
+                <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
+              ))}
+            </div>
           </div>
         </header>
 
