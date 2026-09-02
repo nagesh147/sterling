@@ -22,8 +22,8 @@ export function SimulationSummary() {
     <div className="sim-summary-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sim-summary-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: k.text, margin: 0 }}>Simulation Complete</h2>
-          <span style={{ fontSize: 12, color: k.dim }}>{date} ({startTime} – {endTime})</span>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: k.text, margin: 0, letterSpacing: '0.02em' }}>Simulation Complete</h2>
+          <span style={{ fontSize: 11, color: k.dim, fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: 'tabular-nums' }}>{date} ({startTime} – {endTime})</span>
         </div>
 
         {/* Stats Grid */}
@@ -50,14 +50,15 @@ export function SimulationSummary() {
         <ExecutedTradesTable trades={stats.trades || []} />
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {stats.events.length > 0 && (
             <button
               onClick={() => exportSignalsToCSV(stats.events, date)}
               style={{
-                padding: '8px 14px', background: `color-mix(in srgb, ${k.green} 15%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${k.green} 30%, transparent)`,
-                borderRadius: 6, color: k.green, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                padding: '6px 12px', background: `color-mix(in srgb, ${k.green} 10%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${k.green} 25%, transparent)`,
+                borderRadius: 3, color: k.green, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'inherit', letterSpacing: '0.02em',
               }}
             >
               📥 Export Signals CSV
@@ -67,9 +68,10 @@ export function SimulationSummary() {
             <button
               onClick={() => exportTradesToCSV(stats.trades || [], date)}
               style={{
-                padding: '8px 14px', background: `color-mix(in srgb, ${k.cyan} 15%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${k.cyan} 30%, transparent)`,
-                borderRadius: 6, color: k.cyan, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                padding: '6px 12px', background: `color-mix(in srgb, ${k.blue} 10%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${k.blue} 25%, transparent)`,
+                borderRadius: 3, color: k.blue, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'inherit', letterSpacing: '0.02em',
               }}
             >
               📥 Export Trades CSV
@@ -78,8 +80,9 @@ export function SimulationSummary() {
           <button
             onClick={onClose}
             style={{
-              padding: '8px 14px', background: 'transparent', border: `1px solid ${k.border}`,
-              borderRadius: 6, color: k.text, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              padding: '6px 12px', background: 'transparent', border: `1px solid ${k.border}`,
+              borderRadius: 3, color: k.text, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit',
             }}
           >
             Close
@@ -87,9 +90,10 @@ export function SimulationSummary() {
           <button
             onClick={() => { onClose(); useSimulationStore.getState().setBarOpen(true); }}
             style={{
-              padding: '8px 14px', background: `color-mix(in srgb, ${k.cyan} 15%, transparent)`,
-              border: `1px solid color-mix(in srgb, ${k.cyan} 30%, transparent)`,
-              borderRadius: 6, color: k.cyan, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              padding: '6px 12px', background: `color-mix(in srgb, ${k.blue} 10%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${k.blue} 25%, transparent)`,
+              borderRadius: 3, color: k.blue, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', letterSpacing: '0.02em',
             }}
           >
             Replay Again
@@ -178,7 +182,7 @@ function StrategyTable({ events, trades }: { events: any[]; trades: any[] }) {
 
   return (
     <>
-      <h3 style={{ fontSize: 12, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontWeight: 600 }}>Strategy Breakdown</h3>
+      <h3 style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10, fontWeight: 600 }}>Strategy Breakdown</h3>
       <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse', marginBottom: 24 }}>
         <thead>
           <tr style={{ borderBottom: `1px solid ${k.border}`, color: k.dim }}>
@@ -212,9 +216,9 @@ function StrategyTable({ events, trades }: { events: any[]; trades: any[] }) {
 
 function StatBox({ label, value, color = k.text }: { label: string; value: string | number; color?: string }) {
   return (
-    <div style={{ background: k.surface, padding: '12px', borderRadius: 8, border: `1px solid ${k.border}` }}>
-      <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color }}>{value}</div>
+    <div style={{ background: k.surface, padding: '10px 12px', borderRadius: 4, border: `1px solid ${k.border}` }}>
+      <div style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
   );
 }
@@ -249,8 +253,8 @@ function EquityCurveSparkline({ trades }: { trades: any[] }) {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Equity Curve Sparkline (Realized P&L ₹)</div>
-      <div style={{ background: k.surface, padding: '8px 12px', borderRadius: 8, border: `1px solid ${k.border}` }}>
+      <div style={{ fontSize: 8.5, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, fontWeight: 600 }}>Equity Curve Sparkline (Realized P&L ₹)</div>
+      <div style={{ background: k.surface, padding: '8px 12px', borderRadius: 4, border: `1px solid ${k.border}` }}>
         <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <polyline fill="none" stroke={color} strokeWidth="2" points={pointsSvg} strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -264,8 +268,8 @@ function ExecutedTradesTable({ trades }: { trades: any[] }) {
 
   return (
     <>
-      <h3 style={{ fontSize: 12, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontWeight: 600 }}>Executed Trades Log</h3>
-      <div style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 24, borderRadius: 6, border: `1px solid ${k.border}` }}>
+      <h3 style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10, fontWeight: 600 }}>Executed Trades Log</h3>
+      <div style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 20, borderRadius: 4, border: `1px solid ${k.border}` }}>
         <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${k.border}`, color: k.dim, position: 'sticky', top: 0, background: k.surface }}>
@@ -285,7 +289,7 @@ function ExecutedTradesTable({ trades }: { trades: any[] }) {
               const isWin = tr.status === 'WIN';
               return (
                 <tr key={tr.trade_id} style={{ borderBottom: `1px solid color-mix(in srgb, ${k.text} 6%, transparent)` }}>
-                  <td style={{ padding: '6px 8px', fontFamily: 'monospace', color: k.cyan, fontWeight: 600 }}>{tr.trade_id}</td>
+                  <td style={{ padding: '6px 8px', fontFamily: "'JetBrains Mono', monospace", color: k.blue, fontWeight: 600, fontSize: 10 }}>{tr.trade_id}</td>
                   <td style={{ padding: '6px 8px', color: k.dim }}>{tr.entry_time_iso}</td>
                   <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>[{tr.strategy.toUpperCase()}]</td>
                   <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>{tr.symbol}</td>
@@ -294,8 +298,10 @@ function ExecutedTradesTable({ trades }: { trades: any[] }) {
                   <td style={{ padding: '6px 8px', color: k.text }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
                   <td style={{ padding: '6px 8px' }}>
                     <span style={{
-                      padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700,
-                      background: isWin ? `color-mix(in srgb, ${k.green} 15%, transparent)` : `color-mix(in srgb, ${k.red} 15%, transparent)`,
+                      padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+                      fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.5px',
+                      background: isWin ? `color-mix(in srgb, ${k.green} 12%, transparent)` : `color-mix(in srgb, ${k.red} 12%, transparent)`,
+                      border: `1px solid ${isWin ? `color-mix(in srgb, ${k.green} 25%, transparent)` : `color-mix(in srgb, ${k.red} 25%, transparent)`}`,
                       color: isWin ? k.green : k.red,
                     }}>
                       {tr.status}
