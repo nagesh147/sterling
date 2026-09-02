@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HEAD_METRICS, ROW_METRICS } from "./board/signalRowSpec";
 import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
@@ -22,10 +22,12 @@ import {
   readBook,
   readPcr,
   type PcrAction,
+  type PcrRead,
   type Stance,
 } from "../../lib/pcr/slots";
 import {
   PCR_INDICES,
+  type PcrBand,
   type PcrDeskPayload,
   type PcrIndex,
   type PcrMetric,
@@ -65,6 +67,228 @@ function playHint(action: PcrAction): string {
   if (action === "Buy PE") return "Skip CE";
   if (action === "Buy CE") return "Skip PE";
   return "0.80–1.20";
+}
+
+function bandLine(band: PcrBand): string {
+  if (band === "extreme-positive") return "extreme positive";
+  if (band === "highly-positive") return "highly positive";
+  if (band === "positive") return "constructive";
+  if (band === "negative") return "mild bearish";
+  if (band === "highly-negative") return "highly negative";
+  if (band === "extreme-negative") return "crowded calls";
+  return "balanced";
+}
+
+function expiryLong(expiryIso: string, kind: "weekly" | "monthly" | "today"): string {
+  if (!expiryIso) return "—";
+  const [y, m, d] = expiryIso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return formatExpiry(expiryIso);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dt.getUTCDay()];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+  const k = kind === "today" ? "Today" : kind === "monthly" ? "Monthly" : "Weekly";
+  return `${k} · ${wd}, ${d} ${months[m - 1]}`;
+}
+
+const PREF_KEY = "sterling.pcr.desk.v1";
+
+const TILE_FIELDS = [
+  { id: "print", label: "PCR print" },
+  { id: "stamp", label: "Time / band" },
+  { id: "split", label: "Puts / Calls" },
+  { id: "headline", label: "Headline" },
+  { id: "reason", label: "Read" },
+  { id: "play", label: "Play" },
+  { id: "bias", label: "Bias" },
+  { id: "conviction", label: "Conviction" },
+  { id: "regime", label: "Regime" },
+  { id: "delta", label: "Δ 15m" },
+  { id: "spot", label: "Spot" },
+  { id: "pain", label: "Max pain" },
+  { id: "expiry", label: "Expiry" },
+  { id: "putOi", label: "Put OI" },
+  { id: "callOi", label: "Call OI" },
+] as const;
+
+const SECTIONS = [
+  { id: "book", label: "Book" },
+  { id: "heat", label: "Heat" },
+  { id: "tape", label: "Flow tape" },
+  { id: "legend", label: "How to read" },
+  { id: "read", label: "Read card" },
+] as const;
+
+const TABLE_COLS = [
+  { id: "play", label: "Play" },
+  { id: "pcr", label: "OI PCR" },
+  { id: "move", label: "Move" },
+  { id: "vol", label: "Vol" },
+  { id: "doi", label: "ΔOI" },
+  { id: "spot", label: "Spot" },
+  { id: "pc", label: "P/C" },
+  { id: "expiry", label: "Expiry" },
+  { id: "pain", label: "Pain" },
+] as const;
+
+type TileField = (typeof TILE_FIELDS)[number]["id"];
+type SectionId = (typeof SECTIONS)[number]["id"];
+type ColId = (typeof TABLE_COLS)[number]["id"];
+type Layout = "table" | "tiles";
+
+type Prefs = {
+  layout: Layout;
+  sections: Record<SectionId, boolean>;
+  tile: Record<TileField, boolean>;
+  cols: Record<ColId, boolean>;
+};
+
+const DEFAULT_PREFS: Prefs = {
+  layout: "tiles",
+  sections: { book: true, heat: true, tape: true, legend: true, read: true },
+  tile: Object.fromEntries(TILE_FIELDS.map((f) => [f.id, true])) as Prefs["tile"],
+  cols: Object.fromEntries(TABLE_COLS.map((c) => [c.id, true])) as Prefs["cols"],
+};
+
+function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(PREF_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    const p = JSON.parse(raw) as Partial<Prefs>;
+    return {
+      layout: p.layout === "table" ? "table" : "tiles",
+      sections: { ...DEFAULT_PREFS.sections, ...p.sections },
+      tile: { ...DEFAULT_PREFS.tile, ...p.tile },
+      cols: { ...DEFAULT_PREFS.cols, ...p.cols },
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+type DeskRow = {
+  id: PcrIndex;
+  name: string;
+  pcr: number | null;
+  action: PcrAction;
+  why: string;
+  path: string;
+  move: number | null;
+  vol: Stance;
+  doi: Stance;
+  spot: number | null;
+  spotChg: number | null;
+  delta: number | null;
+  putPct: number | null;
+  expiry: string;
+  expiryLong: string;
+  maxPain: number | null;
+  hhmm: string;
+  band: PcrBand;
+  insight: PcrRead;
+};
+
+function IndexTile({ row, show }: { row: DeskRow; show: (id: TileField) => boolean }) {
+  const put = row.putPct == null ? null : Math.round(row.putPct * 100);
+  const call = put == null ? null : 100 - put;
+  const kind = ideaKind(row.action);
+  return (
+    <article className="kp-tile">
+      <div className="kp-tile-top">
+        <span className="kp-tile-name">{row.name}</span>
+        {show("play") ? <span className={`kp-tile-tag kp-act ${kind}`}>{row.action}</span> : null}
+      </div>
+      {show("print") ? (
+        <div className={`kp-tile-pcr kp-band-${row.band}`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</div>
+      ) : null}
+      {show("stamp") ? (
+        <p className="kp-sub">{row.hhmm || "—"}{row.band !== "empty" || row.pcr != null ? ` · ${bandLine(row.band)}` : ""}</p>
+      ) : null}
+      {show("split") && put != null ? (
+        <div className="kp-split-wrap">
+          <div className="kp-split-lab"><span>Puts {put}%</span><span>Calls {call}%</span></div>
+          <div className="kp-split">
+            <span className="kp-split-put" style={{ width: `${put}%` }} />
+            <span className="kp-split-call" style={{ width: `${call}%` }} />
+          </div>
+        </div>
+      ) : null}
+      {show("headline") ? <h2>{row.insight.headline}</h2> : null}
+      {show("reason") ? <p className="kp-sub">{row.insight.reason}</p> : null}
+      {show("play") ? (
+        <div className="kp-read-play">
+          <span className={`kp-play-tag kp-act ${ideaKind(row.insight.action)}`}>{row.insight.action}</span>
+          <p className="kp-sub">{row.insight.play}</p>
+        </div>
+      ) : null}
+      {(show("bias") || show("conviction") || show("regime")) ? (
+        <div className="kp-conv">
+          {show("bias") ? (
+            <div>
+              <div className="lab">Bias</div>
+              <div className={`val ${row.insight.bias === "Bullish" ? "text-up" : row.insight.bias === "Bearish" ? "text-down" : ""}`}>{row.insight.bias}</div>
+            </div>
+          ) : null}
+          {show("conviction") ? (
+            <div style={{ flex: 1 }}>
+              <div className="lab">Conviction {row.insight.conviction}</div>
+              <div className="kp-bar"><span style={{ width: `${row.insight.conviction}%` }} /></div>
+            </div>
+          ) : null}
+          {show("regime") ? (
+            <div>
+              <div className="lab">Regime</div>
+              <div className="val">{row.insight.regime}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="kp-stats">
+        {show("delta") ? (
+          <div>
+            <div className="lab">Δ 15m</div>
+            <div className={`val ${(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""}`}>{formatDelta(row.delta)}</div>
+          </div>
+        ) : null}
+        {show("spot") ? (
+          <div>
+            <div className="lab">Spot</div>
+            <div className="val">
+              {fmtLtp(row.spot)}
+              {row.spotChg != null ? (
+                <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
+                  {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {show("pain") ? (
+          <div>
+            <div className="lab">Max pain</div>
+            <div className="val">{fmtLtp(row.maxPain)}</div>
+          </div>
+        ) : null}
+        {show("expiry") ? (
+          <div>
+            <div className="lab">Expiry</div>
+            <div className="val">{row.expiryLong}</div>
+          </div>
+        ) : null}
+        {show("putOi") ? (
+          <div>
+            <div className="lab">Put OI</div>
+            <div className="val">—</div>
+          </div>
+        ) : null}
+        {show("callOi") ? (
+          <div>
+            <div className="lab">Call OI</div>
+            <div className="val">—</div>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
 }
 
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
@@ -218,6 +442,31 @@ const CSS = `
 .kite-pcr .kp-key-spot{background:var(--k-green)}
 .kite-pcr .kp-muted{color:var(--k-dim)}
 .kite-pcr .kp-empty{padding:28px 8px;text-align:center;color:var(--k-dim);font-size:13px}
+.kite-pcr .kp-tools{position:relative}
+.kite-pcr .kp-gear{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-dim);width:28px;height:28px;cursor:pointer;font-family:inherit;font-size:14px}
+.kite-pcr .kp-gear[data-on="true"]{color:var(--k-orange);border-color:var(--k-orange)}
+.kite-pcr .kp-prefs{position:absolute;right:0;top:34px;z-index:30;width:272px;background:var(--k-surface);border:1px solid var(--k-border);padding:10px 12px;box-shadow:0 10px 24px rgba(0,0,0,.22)}
+.kite-pcr .kp-prefs h3{margin:10px 0 6px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--k-dim);font-weight:600}
+.kite-pcr .kp-prefs h3:first-child{margin-top:0}
+.kite-pcr .kp-prefs label{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;cursor:pointer;color:var(--k-text)}
+.kite-pcr .kp-prefs input{margin:0;accent-color:var(--k-orange)}
+.kite-pcr .kp-prefs .kp-pref-row{display:flex;gap:6px;margin-bottom:4px}
+.kite-pcr .kp-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+.kite-pcr .kp-tiles.one{grid-template-columns:minmax(280px,420px)}
+.kite-pcr .kp-tile{border:1px solid var(--k-border);background:var(--k-surface);padding:14px;display:flex;flex-direction:column;gap:8px}
+.kite-pcr .kp-tile-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.kite-pcr .kp-tile-name{font-size:13px;font-weight:600}
+.kite-pcr .kp-tile-tag{font-size:11px;font-weight:600;letter-spacing:.04em}
+.kite-pcr .kp-tile-pcr{font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1;padding:6px 10px;align-self:flex-start}
+.kite-pcr .kp-tile h2{margin:4px 0 0;font-size:15px;font-weight:600;letter-spacing:-.02em;line-height:1.3}
+.kite-pcr .kp-split-wrap{margin:2px 0 4px}
+.kite-pcr .kp-split-lab{display:flex;justify-content:space-between;font-size:11px;font-variant-numeric:tabular-nums;color:var(--k-dim);margin-bottom:4px}
+.kite-pcr .kp-split{display:flex;height:4px;overflow:hidden;background:var(--k-surface-hover)}
+.kite-pcr .kp-split-put{background:var(--k-green)}
+.kite-pcr .kp-split-call{background:var(--k-red)}
+.kite-pcr .kp-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-top:6px}
+.kite-pcr .kp-stats .lab{font-size:11px;color:var(--k-dim)}
+.kite-pcr .kp-stats .val{font-size:13px;font-variant-numeric:tabular-nums;margin-top:2px}
 @media (max-width:980px){
   .kite-pcr .kp-head,.kite-pcr .kp-body{padding-left:10px;padding-right:10px}
   .kite-pcr .kp-notes{grid-template-columns:1fr}
@@ -233,6 +482,27 @@ export function PcrPane() {
   const [now, setNow] = useState<Date | null>(null);
   const [liveIso, setLiveIso] = useState("");
   const [sessionIso, setSessionIso] = useState("");
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const prefsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
+  }, [prefs]);
+
+  useEffect(() => {
+    if (!prefsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (prefsRef.current && !prefsRef.current.contains(e.target as Node)) setPrefsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPrefsOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [prefsOpen]);
 
   useEffect(() => {
     const tick = () => {
@@ -338,6 +608,8 @@ export function PcrPane() {
         ? `${kind === "today" ? "Today" : kind === "weekly" ? "Wk" : "Mo"} ${formatExpiry(row.expiry)}`
         : "—";
       const action = book.book?.action ?? liveAction(pcr);
+      const insight = readPcr(oi, row?.spot.changePer ?? null);
+      const band = last?.band ?? pcrBand(pcr);
       return {
         id: u.id,
         name: u.short,
@@ -353,7 +625,11 @@ export function PcrPane() {
         delta,
         putPct: putShare(pcr),
         expiry,
+        expiryLong: row ? expiryLong(row.expiry, kind) : "—",
         maxPain: row?.spot.maxPain ?? null,
+        hhmm: last?.hhmm ?? "",
+        band,
+        insight,
       };
     });
   }, [metricBoards, payload, sessionIso, todayIso]);
@@ -376,6 +652,13 @@ export function PcrPane() {
     }
     return out.sort((a, b) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm)).slice(0, 8);
   }, [metricBoards, showAll, index]);
+  const showSec = (id: SectionId) => prefs.sections[id];
+  const showTile = (id: TileField) => prefs.tile[id];
+  const showCol = (id: ColId) => prefs.cols[id];
+  const toggleSec = (id: SectionId) => setPrefs((p) => ({ ...p, sections: { ...p.sections, [id]: !p.sections[id] } }));
+  const toggleTile = (id: TileField) => setPrefs((p) => ({ ...p, tile: { ...p.tile, [id]: !p.tile[id] } }));
+  const toggleCol = (id: ColId) => setPrefs((p) => ({ ...p, cols: { ...p.cols, [id]: !p.cols[id] } }));
+  const notesOn = (prefs.layout === "table" && showSec("read")) || showSec("tape") || showSec("legend");
 
   return (
     <div className="kite-pcr">
@@ -384,6 +667,50 @@ export function PcrPane() {
         <header className="kp-head">
           <div className="kp-head-row">
             <h1 className="kp-title">PCR Desk</h1>
+            <div className="kp-tools" ref={prefsRef}>
+              <div className="kp-seg" role="tablist" aria-label="Layout">
+                <button type="button" data-on={prefs.layout === "tiles"} onClick={() => setPrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
+                <button type="button" data-on={prefs.layout === "table"} onClick={() => setPrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
+              </div>
+              <button type="button" className="kp-gear" data-on={prefsOpen} aria-expanded={prefsOpen} aria-label="Display settings" onClick={() => setPrefsOpen((v) => !v)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                </svg>
+              </button>
+              {prefsOpen ? (
+                <div className="kp-prefs" role="dialog" aria-label="Display settings">
+                  <h3>Show</h3>
+                  {SECTIONS.filter((s) => prefs.layout === "table" || s.id !== "read").map((s) => (
+                    <label key={s.id}>
+                      <input type="checkbox" checked={prefs.sections[s.id]} onChange={() => toggleSec(s.id)} />
+                      {s.label}
+                    </label>
+                  ))}
+                  {prefs.layout === "tiles" ? (
+                    <>
+                      <h3>On each tile</h3>
+                      {TILE_FIELDS.map((f) => (
+                        <label key={f.id}>
+                          <input type="checkbox" checked={prefs.tile[f.id]} onChange={() => toggleTile(f.id)} />
+                          {f.label}
+                        </label>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <h3>Table columns</h3>
+                      {TABLE_COLS.map((c) => (
+                        <label key={c.id}>
+                          <input type="checkbox" checked={prefs.cols[c.id]} onChange={() => toggleCol(c.id)} />
+                          {c.label}
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="kp-nav">
             <div className="kp-idx" role="tablist" aria-label="Underlying">
@@ -416,170 +743,180 @@ export function PcrPane() {
             <Path slots={grid} marks={series.marks} />
           ) : sumRows.length ? (
             <div className="kp-stack">
-              <div className="kp-sheet">
-                <table className="kp-book">
-                  <colgroup>
-                    <col className="c-idx" />
-                    <col className="c-play" />
-                    <col className="c-pcr" />
-                    <col className="c-move" />
-                    <col className="c-st" />
-                    <col className="c-st" />
-                    <col className="c-spot" />
-                    <col className="c-pc" />
-                    <col className="c-exp" />
-                    <col className="c-pain" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Index</th>
-                      <th>Play</th>
-                      <th className="num">OI PCR</th>
-                      <th className="num">Move</th>
-                      <th className="mid">Vol</th>
-                      <th className="mid">ΔOI</th>
-                      <th className="num">Spot</th>
-                      <th className="mid">P/C</th>
-                      <th>Expiry</th>
-                      <th className="num">Pain</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sumRows.map((row) => {
-                      const kind = ideaKind(row.action);
-                      return (
-                        <tr key={row.id}>
-                          <th>{row.name}</th>
-                          <td className="kp-play-cell">
-                            <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
-                            <span className="kp-tip">{playHint(row.action)}</span>
-                          </td>
-                          <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
-                          <td className="kp-move num">
-                            {row.path}
-                            {row.move != null ? (
-                              <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
-                                {" "}{moveTxt(row.move)}
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className={`kp-st ${row.vol} mid`}>{stanceLab(row.vol)}</td>
-                          <td className={`kp-st ${row.doi} mid`}>{stanceLab(row.doi)}</td>
-                          <td className="num">
-                            <span className="kp-spot">
-                              <span className="ltp">{fmtLtp(row.spot)}</span>
-                              {row.spotChg != null ? (
-                                <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
-                                  {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
-                                </span>
-                              ) : null}
-                            </span>
-                          </td>
-                          <td className="mid">{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td>
-                          <td>{row.expiry}</td>
-                          <td className="num">{fmtLtp(row.maxPain)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {showSec("book") && prefs.layout === "tiles" ? (
+                <div className={`kp-tiles${showAll ? "" : " one"}`}>
+                  {sumRows.map((row) => <IndexTile key={row.id} row={row} show={showTile} />)}
+                </div>
+              ) : null}
 
-              <div className={`kp-sheet kp-sheet-heat${showAll ? "" : " one"}`}>
-                <table>
-                  <colgroup>
-                    <col className="c-time" />
-                    {cols.map((u) => <col key={u.id} />)}
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      {cols.map((u) => (
-                        <th key={u.id} data-on={!showAll && index === u.id}>{u.short}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {heatSlots.map((slot, row) => (
-                      <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
-                        <th>{slot.hhmm}</th>
-                        {cols.map((u) => {
-                          const s = boards?.[u.id]?.[row];
-                          return (
-                            <td key={u.id}>
-                              <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
-                                {s?.pcr == null ? "" : formatPcr(s.pcr)}
-                              </span>
-                            </td>
-                          );
-                        })}
+              {showSec("book") && prefs.layout === "table" ? (
+                <div className="kp-sheet">
+                  <table className="kp-book">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        {showCol("play") ? <th>Play</th> : null}
+                        {showCol("pcr") ? <th className="num">OI PCR</th> : null}
+                        {showCol("move") ? <th className="num">Move</th> : null}
+                        {showCol("vol") ? <th className="mid">Vol</th> : null}
+                        {showCol("doi") ? <th className="mid">ΔOI</th> : null}
+                        {showCol("spot") ? <th className="num">Spot</th> : null}
+                        {showCol("pc") ? <th className="mid">P/C</th> : null}
+                        {showCol("expiry") ? <th>Expiry</th> : null}
+                        {showCol("pain") ? <th className="num">Pain</th> : null}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {sumRows.map((row) => {
+                        const kind = ideaKind(row.action);
+                        return (
+                          <tr key={row.id}>
+                            <th>{row.name}</th>
+                            {showCol("play") ? (
+                              <td className="kp-play-cell">
+                                <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
+                                <span className="kp-tip">{playHint(row.action)}</span>
+                              </td>
+                            ) : null}
+                            {showCol("pcr") ? <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td> : null}
+                            {showCol("move") ? (
+                              <td className="kp-move num">
+                                {row.path}
+                                {row.move != null ? (
+                                  <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
+                                    {" "}{moveTxt(row.move)}
+                                  </span>
+                                ) : null}
+                              </td>
+                            ) : null}
+                            {showCol("vol") ? <td className={`kp-st ${row.vol} mid`}>{stanceLab(row.vol)}</td> : null}
+                            {showCol("doi") ? <td className={`kp-st ${row.doi} mid`}>{stanceLab(row.doi)}</td> : null}
+                            {showCol("spot") ? (
+                              <td className="num">
+                                <span className="kp-spot">
+                                  <span className="ltp">{fmtLtp(row.spot)}</span>
+                                  {row.spotChg != null ? (
+                                    <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
+                                      {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </td>
+                            ) : null}
+                            {showCol("pc") ? <td className="mid">{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td> : null}
+                            {showCol("expiry") ? <td>{row.expiry}</td> : null}
+                            {showCol("pain") ? <td className="num">{fmtLtp(row.maxPain)}</td> : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {showSec("heat") ? (
+                <div className={`kp-sheet kp-sheet-heat${showAll ? "" : " one"}`}>
+                  <table>
+                    <colgroup>
+                      <col className="c-time" />
+                      {cols.map((u) => <col key={u.id} />)}
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        {cols.map((u) => (
+                          <th key={u.id} data-on={!showAll && index === u.id}>{u.short}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {heatSlots.map((slot, row) => (
+                        <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
+                          <th>{slot.hhmm}</th>
+                          {cols.map((u) => {
+                            const s = boards?.[u.id]?.[row];
+                            return (
+                              <td key={u.id}>
+                                <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
+                                  {s?.pcr == null ? "" : formatPcr(s.pcr)}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
-          {payload ? (
+          {payload && notesOn ? (
             <div className="kp-notes">
-              <div className="kp-card kp-read">
-                <p className="kp-kicker">Read · {PCR_INDICES.find((u) => u.id === index)?.short}</p>
-                <h2>{insight.headline}</h2>
-                <p className="kp-sub">{insight.reason}</p>
-                <div className="kp-read-play">
-                  <span className={`kp-play-tag kp-act ${ideaKind(insight.action)}`}>{insight.action}</span>
-                  <p className="kp-sub">{insight.play}</p>
+              {prefs.layout === "table" && showSec("read") ? (
+                <div className="kp-card kp-read">
+                  <p className="kp-kicker">Read · {PCR_INDICES.find((u) => u.id === index)?.short}</p>
+                  <h2>{insight.headline}</h2>
+                  <p className="kp-sub">{insight.reason}</p>
+                  <div className="kp-read-play">
+                    <span className={`kp-play-tag kp-act ${ideaKind(insight.action)}`}>{insight.action}</span>
+                    <p className="kp-sub">{insight.play}</p>
+                  </div>
+                  <div className="kp-conv">
+                    <div>
+                      <div className="lab">Bias</div>
+                      <div className={`val ${insight.bias === "Bullish" ? "text-up" : insight.bias === "Bearish" ? "text-down" : ""}`}>{insight.bias}</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="lab">Conviction {insight.conviction}</div>
+                      <div className="kp-bar"><span style={{ width: `${insight.conviction}%` }} /></div>
+                    </div>
+                    <div>
+                      <div className="lab">Regime</div>
+                      <div className="val">{insight.regime}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="kp-conv">
-                  <div>
-                    <div className="lab">Bias</div>
-                    <div className={`val ${insight.bias === "Bullish" ? "text-up" : insight.bias === "Bearish" ? "text-down" : ""}`}>{insight.bias}</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="lab">Conviction {insight.conviction}</div>
-                    <div className="kp-bar"><span style={{ width: `${insight.conviction}%` }} /></div>
-                  </div>
-                  <div>
-                    <div className="lab">Regime</div>
-                    <div className="val">{insight.regime}</div>
-                  </div>
-                </div>
-              </div>
-              <aside className="kp-card kp-tape">
-                <p className="kp-kicker">Flow tape</p>
-                {tape.length ? (
+              ) : null}
+              {showSec("tape") ? (
+                <aside className="kp-card kp-tape">
+                  <p className="kp-kicker">Flow tape</p>
+                  {tape.length ? (
+                    <ul>
+                      {tape.map((e) => (
+                        <li key={e.id}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <b>{e.name} · <span className={`kp-act ${ideaKind(e.action)}`}>{e.action}</span></b>
+                            <span className="kp-sub">{e.clock}</span>
+                          </div>
+                          <div className="kp-sub" style={{ marginTop: 3 }}>{e.why}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="kp-sub" style={{ marginTop: 10 }}>Quiet book — no 6-tick PCR jumps yet.</p>
+                  )}
+                </aside>
+              ) : null}
+              {showSec("legend") ? (
+                <section className="kp-card kp-legend" aria-label="How to read PCR">
+                  <p className="kp-kicker">How to read PCR</p>
                   <ul>
-                    {tape.map((e) => (
-                      <li key={e.id}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                          <b>{e.name} · <span className={`kp-act ${ideaKind(e.action)}`}>{e.action}</span></b>
-                          <span className="kp-sub">{e.clock}</span>
-                        </div>
-                        <div className="kp-sub" style={{ marginTop: 3 }}>{e.why}</div>
+                    {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
+                      <li key={id}>
+                        <i className={`kp-swatch kp-band-${id}`} />
+                        {BAND_COPY[id].hint}
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="kp-sub" style={{ marginTop: 10 }}>Quiet book — no 6-tick PCR jumps yet.</p>
-                )}
-              </aside>
-              <section className="kp-card kp-legend" aria-label="How to read PCR">
-                <p className="kp-kicker">How to read PCR</p>
-                <ul>
-                  {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
-                    <li key={id}>
-                      <i className={`kp-swatch kp-band-${id}`} />
-                      {BAND_COPY[id].hint}
-                    </li>
-                  ))}
-                </ul>
-                <p className="kp-sub" style={{ marginTop: 8 }}>
-                  OI PCR is put open interest ÷ call open interest on the front weekly expiry (monthly when that is the listed series). Watch the 15-minute change, not a single print.
-                </p>
-              </section>
+                  <p className="kp-sub" style={{ marginTop: 8 }}>
+                    OI PCR is put open interest ÷ call open interest on the front weekly expiry (monthly when that is the listed series). Watch the 15-minute change, not a single print.
+                  </p>
+                </section>
+              ) : null}
             </div>
           ) : null}
 
