@@ -105,6 +105,31 @@ export function SimulationBar() {
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
   const [viewMode, setViewMode] = useState<'docked' | 'half' | 'maximized'>('docked');
+  const [dockHeight, setDockHeight] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startY = e.clientY;
+    const startHeight = dockHeight || (viewMode === 'maximized' ? window.innerHeight * 0.8 : viewMode === 'half' ? window.innerHeight * 0.5 : 320);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = startY - moveEvent.clientY;
+      const newHeight = Math.max(160, Math.min(window.innerHeight - 80, startHeight + deltaY));
+      setDockHeight(newHeight);
+      setIsExpanded(true);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   const [showStratDropdown, setShowStratDropdown] = useState(false);
   const [showLegsDropdown, setShowLegsDropdown] = useState(false);
@@ -471,11 +496,21 @@ export function SimulationBar() {
         className="sim-bar-wrapper kw-pane" 
         data-open={barOpen}
         style={{
-          height: viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : 'auto',
+          height: isExpanded
+            ? (viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : dockHeight ? `${dockHeight}px` : 'auto')
+            : 'auto',
           maxHeight: viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : 'none',
-          transition: 'height 0.25s ease, max-height 0.25s ease',
+          transition: isResizing ? 'none' : 'height 0.25s ease, max-height 0.25s ease',
         }}
       >
+        {/* Top Drag Resizer Handle */}
+        <div 
+          className="sim-dock-resizer"
+          data-active={isResizing}
+          onMouseDown={handleResizeStart}
+          title="Drag up/down to resize Market Replay Dock height"
+        />
+
         {/* Sterling Dock Shell Header Bar */}
         <div
           style={{
@@ -491,7 +526,12 @@ export function SimulationBar() {
           }}
         >
           {/* Drag Handle & Icon */}
-          <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: 'var(--k-faint-2)', flexShrink: 0 }}>
+          <span 
+            aria-hidden="true" 
+            onMouseDown={handleResizeStart}
+            style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: 'var(--k-faint-2)', flexShrink: 0, cursor: 'ns-resize' }}
+            title="Drag to resize dock"
+          >
             {Array.from({ length: 6 }).map((_, index) => <span key={index} style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'currentColor' }} />)}
           </span>
           <span style={{ color: 'var(--k-blue)', display: 'inline-flex' }}>⚡</span>
@@ -534,7 +574,10 @@ export function SimulationBar() {
               className="kw-pane-control"
               title="Half Screen View"
               aria-label="Half Screen View"
-              onClick={() => setViewMode(viewMode === 'half' ? 'docked' : 'half')}
+              onClick={() => {
+                setIsExpanded(true);
+                setViewMode(viewMode === 'half' ? 'docked' : 'half');
+              }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M3 4h9v16H3z" fill="currentColor" opacity=".14" stroke="none"/></svg>
             </button>
@@ -545,7 +588,10 @@ export function SimulationBar() {
               className="kw-pane-control"
               title="Maximize Dock View"
               aria-label="Maximize Dock View"
-              onClick={() => setViewMode(viewMode === 'maximized' ? 'docked' : 'maximized')}
+              onClick={() => {
+                setIsExpanded(true);
+                setViewMode(viewMode === 'maximized' ? 'docked' : 'maximized');
+              }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
             </button>
