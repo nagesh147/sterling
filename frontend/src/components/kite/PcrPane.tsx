@@ -12,6 +12,7 @@ import {
   formatDeskStamp,
   formatExpiry,
   formatPcr,
+  hhmmToMinutes,
   isValidPrint,
   metricValue,
   pcrBand,
@@ -213,9 +214,20 @@ const CSS = `
 .kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
 .kite-pcr .kp-print.kp-band-empty{background:var(--k-surface-hover)}
 .kite-pcr .kp-side{display:flex;flex-direction:column;gap:12px}
-.kite-pcr .kp-tape li{font-size:13px;margin:0 0 10px;padding:0 0 10px;border-bottom:1px solid var(--k-border);line-height:1.4}
-.kite-pcr .kp-tape li:last-child{margin:0;padding:0;border:0}
-.kite-pcr .kp-tape ul,.kite-pcr .kp-legend ul{list-style:none;margin:10px 0 0;padding:0}
+.kite-pcr .kp-tape-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:4px}
+.kite-pcr .kp-tape-rule{margin:6px 0 0;font-size:12px;color:var(--k-dim);line-height:1.4}
+.kite-pcr .kp-ticket{display:grid;grid-template-columns:76px 1fr;gap:4px 10px;padding:12px 0;border-bottom:1px solid var(--k-border)}
+.kite-pcr .kp-ticket:last-child{border-bottom:0;padding-bottom:0}
+.kite-pcr .kp-ticket-act{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:6px 8px;border-radius:3px;text-align:center;align-self:start;line-height:1.2}
+.kite-pcr .kp-ticket-act.ce{background:color-mix(in srgb,var(--k-green) 16%, transparent);color:var(--k-green)}
+.kite-pcr .kp-ticket-act.pe{background:color-mix(in srgb,var(--k-red) 16%, transparent);color:var(--k-red)}
+.kite-pcr .kp-ticket-act.wait{background:var(--k-surface-hover);color:var(--k-dim)}
+.kite-pcr .kp-ticket-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.kite-pcr .kp-ticket-name{font-size:13px;font-weight:500}
+.kite-pcr .kp-ticket-clock{font-size:11px;color:var(--k-dim);font-variant-numeric:tabular-nums}
+.kite-pcr .kp-ticket-move{font-size:12px;font-variant-numeric:tabular-nums;color:var(--k-dim);margin-top:1px}
+.kite-pcr .kp-ticket-why{font-size:13px;color:var(--k-text);line-height:1.4;margin-top:4px}
+.kite-pcr .kp-tape ul,.kite-pcr .kp-legend ul{list-style:none;margin:4px 0 0;padding:0}
 .kite-pcr .kp-legend li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--k-dim);line-height:1.45;margin:0 0 8px}
 .kite-pcr .kp-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0;margin-top:3px;display:inline-block}
 .kite-pcr .kp-foot{margin:16px 0 0;font-size:11px;color:var(--k-dim)}
@@ -246,6 +258,7 @@ export function PcrPane() {
   const [liveIso, setLiveIso] = useState("");
   const [sessionIso, setSessionIso] = useState("");
   const [followLive, setFollowLive] = useState(true);
+  const [tapeAll, setTapeAll] = useState(false);
 
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -338,17 +351,21 @@ export function PcrPane() {
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
   const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
   const tape = useMemo(() => {
-    const out: { id: string; title: string; detail: string; up: boolean; hhmm: string; action: string }[] = [];
-    for (const u of PCR_INDICES) {
+    const src = tapeAll ? PCR_INDICES : PCR_INDICES.filter((u) => u.id === index);
+    const out: { id: string; action: ReturnType<typeof describeFlow>["action"]; name: string; clock: string; from: number | null; to: number | null; move: number; why: string; minutes: number }[] = [];
+    for (const u of src) {
       const row = boards?.[u.id] ?? [];
       for (const s of row) {
         if (s.delta == null || Math.abs(s.delta) < 0.06) continue;
         const line = describeFlow(u.short, s.hhmm, s.pcr, s.delta);
-        out.push({ id: `${u.id}-${s.hhmm}`, hhmm: s.hhmm, ...line });
+        out.push({ id: `${u.id}-${s.hhmm}`, minutes: hhmmToMinutes(s.hhmm), ...line });
       }
     }
-    return out.slice(-8).reverse();
-  }, [boards]);
+    const trades = out.filter((e) => e.action !== "Stand aside");
+    const watch = out.filter((e) => e.action === "Stand aside");
+    const pick = (trades.length ? trades : watch).sort((a, b) => b.minutes - a.minutes);
+    return pick.slice(0, 6);
+  }, [boards, index, tapeAll]);
   const putPct = putShare(current);
   const live = payload?.source === "live" && viewingLive;
   const expiryLabel = series
@@ -567,21 +584,42 @@ export function PcrPane() {
 
               <div className="kp-side">
                 <aside className="kp-card kp-tape">
-                  <p className="kp-kicker">Flow tape</p>
+                  <div className="kp-tape-head">
+                    <div>
+                      <p className="kp-kicker">What to buy</p>
+                      <p className="kp-tape-rule">CE if PCR rises through 1.00. PE if PCR falls through 0.90.</p>
+                    </div>
+                    <div className="kp-seg" role="tablist" aria-label="Tape scope">
+                      <button type="button" data-on={!tapeAll} onClick={() => setTapeAll(false)}>This index</button>
+                      <button type="button" data-on={tapeAll} onClick={() => setTapeAll(true)}>All</button>
+                    </div>
+                  </div>
                   {tape.length ? (
                     <ul>
-                      {tape.map((e) => (
-                        <li key={e.id}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                            <b className={e.up ? "text-up" : "text-down"}>{e.title}</b>
-                            <span className={`kp-play-tag ${e.up ? "text-up" : "text-down"}`}>{e.action}</span>
-                          </div>
-                          <div className="kp-sub" style={{ marginTop: 4 }}>{e.detail}</div>
-                        </li>
-                      ))}
+                      {tape.map((e) => {
+                        const kind = e.action === "Buy CE" ? "ce" : e.action === "Buy PE" ? "pe" : "wait";
+                        const fromTxt = e.from == null ? "—" : e.from.toFixed(2);
+                        const toTxt = e.to == null ? "—" : e.to.toFixed(2);
+                        const move = `${e.move > 0 ? "+" : ""}${e.move.toFixed(2)}`;
+                        return (
+                          <li key={e.id} className="kp-ticket">
+                            <span className={`kp-ticket-act ${kind}`}>{e.action}</span>
+                            <div>
+                              <div className="kp-ticket-top">
+                                <span className="kp-ticket-name">{e.name}</span>
+                                <span className="kp-ticket-clock">{e.clock}</span>
+                              </div>
+                              <div className="kp-ticket-move">{fromTxt} → {toTxt} ({move})</div>
+                              <div className="kp-ticket-why">{e.why}</div>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
-                    <p className="kp-sub" style={{ marginTop: 10 }}>No big PCR jump this session yet.</p>
+                    <p className="kp-sub" style={{ marginTop: 12 }}>
+                      No CE or PE signal yet. Need PCR above 1.00 and rising for CE, or below 0.90 and falling for PE.
+                    </p>
                   )}
                 </aside>
                 <section className="kp-card kp-legend" aria-label="How to read PCR">

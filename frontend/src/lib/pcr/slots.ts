@@ -331,29 +331,54 @@ export function compareShot(
 
 export type PcrAction = "Buy PE" | "Buy CE" | "Stand aside";
 
-export function describeFlow(
-  name: string,
-  hhmm: string,
-  pcr: number | null,
-  delta: number,
-): { title: string; detail: string; action: Exclude<PcrAction, "Stand aside">; up: boolean } {
+export type FlowLine = {
+  action: PcrAction;
+  name: string;
+  hhmm: string;
+  clock: string;
+  from: number | null;
+  to: number | null;
+  move: number;
+  why: string;
+};
+
+/**
+ * A 15-min PCR jump is only a CE/PE ticket if the *level* agrees.
+ * PCR 0.63 ticking up is still call-heavy — not a CE buy.
+ */
+export function describeFlow(name: string, hhmm: string, pcr: number | null, delta: number): FlowLine {
   const clock = formatHhmm12(hhmm);
-  const print = pcr != null && Number.isFinite(pcr) ? pcr.toFixed(2) : "—";
-  const move = `${delta > 0 ? "+" : ""}${delta.toFixed(2)}`;
+  const to = pcr != null && Number.isFinite(pcr) ? roundPcr(pcr) : null;
+  const from = to != null ? roundPcr(to - delta) : null;
+  const fromTxt = from == null ? "—" : from.toFixed(2);
+  const toTxt = to == null ? "—" : to.toFixed(2);
+  const n = to ?? 0;
+  const path = `${fromTxt} → ${toTxt}`;
+  const base = { name, hhmm, clock, from, to, move: delta };
+
   if (delta > 0) {
-    return {
-      up: true,
-      action: "Buy CE",
-      title: `${name} · Buy CE`,
-      detail: `PCR rose ${move} at ${clock}, now ${print}. More puts than calls — dips usually get bought. Prefer CE.`,
-    };
+    if (n >= 1.2) {
+      return { ...base, action: "Buy CE", why: `Puts jumped (${path}). Dips are likely bought.` };
+    }
+    if (n >= 1) {
+      return { ...base, action: "Buy CE", why: `Puts now lead calls (${path}). Buy CE on a dip.` };
+    }
+    if (n >= 0.85) {
+      return { ...base, action: "Stand aside", why: `Puts increased (${path}) but calls still lead. Wait.` };
+    }
+    return { ...base, action: "Stand aside", why: `Puts increased (${path}) — still call-heavy. Do not buy CE.` };
   }
-  return {
-    up: false,
-    action: "Buy PE",
-    title: `${name} · Buy PE`,
-    detail: `PCR fell ${move} at ${clock}, now ${print}. More calls than puts — upside is being sold. Prefer PE.`,
-  };
+
+  if (n <= 0.7) {
+    return { ...base, action: "Buy PE", why: `Calls piled in (${path}). Upside looks capped.` };
+  }
+  if (n <= 0.9) {
+    return { ...base, action: "Buy PE", why: `Calls now lead puts (${path}). Skip CE.` };
+  }
+  if (n >= 1.2) {
+    return { ...base, action: "Stand aside", why: `Puts cooled (${path}). Don't chase CE.` };
+  }
+  return { ...base, action: "Stand aside", why: `PCR slipped (${path}). No clear CE or PE yet.` };
 }
 
 export type PcrRead = {

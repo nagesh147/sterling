@@ -141,12 +141,16 @@ describe("pcr slots", () => {
   it("says Buy CE or Buy PE in plain language on the flow tape", () => {
     const ce = describeFlow("Midcap", "14:45", 1.21, 0.11);
     expect(ce.action).toBe("Buy CE");
-    expect(ce.detail).toMatch(/rose/i);
-    expect(ce.detail).not.toMatch(/thickening|taking share/i);
-    const pe = describeFlow("Midcap", "15:15", 1.12, -0.08);
+    expect(ce.why).toMatch(/Puts/i);
+    expect(ce.why).not.toMatch(/thickening|taking share/i);
+    const pe = describeFlow("Nifty", "15:15", 0.76, -0.07);
     expect(pe.action).toBe("Buy PE");
-    expect(pe.title).toMatch(/Buy PE/);
-    expect(pe.detail).toMatch(/fell/i);
+    expect(pe.clock).toBe("03:15 PM");
+    const fakeCe = describeFlow("Fin", "15:30", 0.63, 0.07);
+    expect(fakeCe.action).toBe("Stand aside");
+    expect(fakeCe.why).toMatch(/call-heavy/i);
+    const slipped = describeFlow("Sensex", "12:45", 0.78, 0.09);
+    expect(slipped.action).toBe("Stand aside");
   });
 
   it("has a mark for every cash slot on the snapshot", () => {
