@@ -358,24 +358,71 @@ export function flowPath(line: Pick<FlowLine, "from" | "to">): string {
  * A 15-min PCR jump is only a CE/PE ticket if the *level* agrees.
  * PCR 0.63 ticking up is still more calls than puts — not a CE buy.
  */
-export function describeFlow(name: string, hhmm: string, pcr: number | null, delta: number): FlowLine {
+export function describeFlow(
+  name: string,
+  hhmm: string,
+  pcr: number | null,
+  delta: number,
+  metric: PcrMetric = "oi",
+): FlowLine {
   const clock = formatHhmm12(hhmm);
   const to = pcr != null && Number.isFinite(pcr) ? roundPcr(pcr) : null;
   const from = to != null ? roundPcr(to - delta) : null;
   const n = to ?? 0;
+  const vol = metric === "volume";
   const base = { name, hhmm, clock, from, to, move: delta };
 
   if (delta > 0) {
-    if (n >= 1.2) return { ...base, action: "Buy CE", why: "Puts are being sold. Dips usually get bought." };
-    if (n >= CE_PCR_MIN) return { ...base, action: "Buy CE", why: "Puts now more than calls. Buy CE on a dip." };
-    if (n >= 0.85) return { ...base, action: "Wait", why: "PCR went up, but calls are still more. Not a CE yet." };
-    return { ...base, action: "Wait", why: "PCR went up, still more calls than puts. Do not buy CE." };
+    if (n >= 1.2) {
+      return {
+        ...base,
+        action: "Buy CE",
+        why: vol ? "Put volume is heavier. Dips usually get bought." : "Puts are being sold. Dips usually get bought.",
+      };
+    }
+    if (n >= CE_PCR_MIN) {
+      return {
+        ...base,
+        action: "Buy CE",
+        why: vol ? "More puts traded than calls. Prefer CE." : "Puts now more than calls. Buy CE on a dip.",
+      };
+    }
+    if (n >= 0.85) {
+      return {
+        ...base,
+        action: "Wait",
+        why: vol ? "Volume PCR went up, but calls still trade more. Not a CE yet." : "PCR went up, but calls are still more. Not a CE yet.",
+      };
+    }
+    return {
+      ...base,
+      action: "Wait",
+      why: vol ? "Volume PCR went up, still more call trades. Do not buy CE." : "PCR went up, still more calls than puts. Do not buy CE.",
+    };
   }
 
-  if (n <= 0.7) return { ...base, action: "Buy PE", why: "Calls are being sold. Upside looks capped." };
-  if (n <= PE_PCR_MAX) return { ...base, action: "Buy PE", why: "Calls now more than puts. Skip CE." };
-  if (n >= 1.2) return { ...base, action: "Wait", why: "Puts cooled off. Don't chase CE." };
-  return { ...base, action: "Wait", why: "PCR slipped. No clear CE or PE yet." };
+  if (n <= 0.7) {
+    return {
+      ...base,
+      action: "Buy PE",
+      why: vol ? "Call volume is heavier. Upside looks capped." : "Calls are being sold. Upside looks capped.",
+    };
+  }
+  if (n <= PE_PCR_MAX) {
+    return {
+      ...base,
+      action: "Buy PE",
+      why: vol ? "More calls traded than puts. Prefer PE." : "Calls now more than puts. Skip CE.",
+    };
+  }
+  if (n >= 1.2) {
+    return { ...base, action: "Wait", why: vol ? "Put volume cooled off. Don't chase CE." : "Puts cooled off. Don't chase CE." };
+  }
+  return {
+    ...base,
+    action: "Wait",
+    why: vol ? "Volume PCR slipped. No clear CE or PE yet." : "PCR slipped. No clear CE or PE yet.",
+  };
 }
 
 export type IdeaBoard = {
@@ -385,11 +432,11 @@ export type IdeaBoard = {
 };
 
 /** Latest CE/PE for an index, with earlier confirming prints. */
-export function buildIdea(name: string, slots: PcrSlot[]): IdeaBoard {
+export function buildIdea(name: string, slots: PcrSlot[], metric: PcrMetric = "oi"): IdeaBoard {
   const moves: FlowLine[] = [];
   for (const s of slots) {
     if (s.delta == null || Math.abs(s.delta) < FLOW_MOVE_MIN) continue;
-    moves.push(describeFlow(name, s.hhmm, s.pcr, s.delta));
+    moves.push(describeFlow(name, s.hhmm, s.pcr, s.delta, metric));
   }
   const newest = (a: FlowLine, b: FlowLine) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm);
   const trades = moves.filter((m) => m.action !== "Wait").sort(newest);

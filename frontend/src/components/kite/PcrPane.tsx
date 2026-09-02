@@ -61,6 +61,82 @@ function moveTxt(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
+function IdeaBlock({
+  title,
+  skipLabel,
+  board,
+  tapeAll,
+  allRows,
+  onPick,
+}: {
+  title: string;
+  skipLabel: string;
+  board: ReturnType<typeof buildIdea>;
+  tapeAll: boolean;
+  allRows: { id: PcrIndex; name: string; idea: ReturnType<typeof buildIdea>["idea"] }[];
+  onPick: (id: PcrIndex) => void;
+}) {
+  return (
+    <div className="kp-idea-sec">
+      <p className="kp-idea-sec-lab">{title}</p>
+      {tapeAll ? (
+        <ul className="kp-all">
+          {allRows.map((row) => {
+            const line = row.idea;
+            const kind = line ? ideaKind(line.action) : "wait";
+            return (
+              <li key={row.id}>
+                <button type="button" className="kp-all-row" onClick={() => onPick(row.id)}>
+                  <span className="kp-all-name">{row.name}</span>
+                  <span className={`kp-all-act ${kind}`}>{line ? line.action : "Wait"}</span>
+                  <span className="kp-all-path">{line ? flowPath(line) : "—"}</span>
+                  <span className="kp-all-clock">{line?.clock ?? ""}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : board.idea ? (
+        <div>
+          <div className={`kp-idea-act ${ideaKind(board.idea.action)}`}>{board.idea.action}</div>
+          <div className="kp-idea-meta">
+            <span>{board.idea.name}</span>
+            <span>{board.idea.clock}</span>
+          </div>
+          <div className="kp-idea-path">
+            {flowPath(board.idea)}
+            <span className={`mv ${(board.idea.move ?? 0) > 0 ? "text-up" : (board.idea.move ?? 0) < 0 ? "text-down" : ""}`}>
+              {moveTxt(board.idea.move)}
+            </span>
+          </div>
+          <p className="kp-idea-why">{board.idea.why}</p>
+          {board.earlier.length ? (
+            <div className="kp-ev">
+              <p className="kp-ev-lab">Earlier today</p>
+              {board.earlier.map((e) => (
+                <div key={e.hhmm} className="kp-ev-row">
+                  <span className="kp-ev-clock">{e.clock}</span>
+                  <span className="kp-ev-path">{flowPath(e)}</span>
+                  <span className={`kp-ev-tag ${ideaKind(e.action)}`}>{ideaTag(e.action)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {board.idea.action !== "Wait" && board.skipped > 0 ? (
+            <p className="kp-skip">
+              {board.skipped} move{board.skipped === 1 ? "" : "s"} skipped — {skipLabel} never crossed 1.00 going up, or 0.90 going down.
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="kp-sub" style={{ marginTop: 8 }}>
+          No 15-minute jump yet. Need {skipLabel} above 1.00 and rising for CE, or below 0.90 and falling for PE.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
   const by = new Map(marks.map((m) => [m.hhmm, m.indexClose]));
   const pts = slots.filter((s) => s.pcr != null);
@@ -169,6 +245,8 @@ const CSS = `
 .kite-pcr .kp-band-empty{background:transparent;color:var(--k-dim)}
 .kite-pcr .kp-side{display:flex;flex-direction:column;gap:10px}
 .kite-pcr .kp-tape-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:6px}
+.kite-pcr .kp-idea-sec+.kp-idea-sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--k-border)}
+.kite-pcr .kp-idea-sec-lab{margin:0 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--k-dim);font-weight:500}
 .kite-pcr .kp-idea-act{margin:2px 0;font-size:20px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
 .kite-pcr .kp-idea-act.ce{color:var(--k-green)}
 .kite-pcr .kp-idea-act.pe{color:var(--k-red)}
@@ -305,16 +383,20 @@ export function PcrPane() {
     viewingLive && nowMin != null && nowMin >= SESSION_OPEN_MIN && nowMin < SESSION_CLOSE_MIN,
   );
   const gridNowMin = viewingLive && inLiveSession ? nowMin : SESSION_CLOSE_MIN;
-  const boards = useMemo(() => {
+  const metricBoards = useMemo(() => {
     if (!payload) return null;
-    const out = {} as Record<PcrIndex, PcrSlot[]>;
-    for (const u of PCR_INDICES) {
-      const row = payload.series[u.id];
-      if (!row) continue;
-      out[u.id] = buildGrid(row.marks, row.latest, gridNowMin, metric);
-    }
-    return out;
-  }, [payload, gridNowMin, metric]);
+    const make = (m: PcrMetric) => {
+      const out = {} as Record<PcrIndex, PcrSlot[]>;
+      for (const u of PCR_INDICES) {
+        const row = payload.series[u.id];
+        if (!row) continue;
+        out[u.id] = buildGrid(row.marks, row.latest, gridNowMin, m);
+      }
+      return out;
+    };
+    return { oi: make("oi"), volume: make("volume"), changeOi: make("changeOi") };
+  }, [payload, gridNowMin]);
+  const boards = metricBoards?.[metric] ?? null;
   const grid = boards?.[index] ?? [];
   const current = livePcr(series, grid, metric);
   const lastFilled = [...grid].reverse().find((s) => s.pcr != null);
@@ -326,11 +408,22 @@ export function PcrPane() {
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
   const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
   const ideaName = PCR_INDICES.find((u) => u.id === index)?.short ?? index;
-  const idea = useMemo(() => buildIdea(ideaName, grid), [ideaName, grid]);
-  const allIdeas = useMemo(() => {
-    if (!tapeAll || !boards) return [];
-    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, boards[u.id] ?? []) }));
-  }, [tapeAll, boards]);
+  const oiIdea = useMemo(
+    () => buildIdea(ideaName, metricBoards?.oi[index] ?? [], "oi"),
+    [ideaName, metricBoards, index],
+  );
+  const volIdea = useMemo(
+    () => buildIdea(ideaName, metricBoards?.volume[index] ?? [], "volume"),
+    [ideaName, metricBoards, index],
+  );
+  const allOi = useMemo(() => {
+    if (!tapeAll || !metricBoards) return [];
+    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, metricBoards.oi[u.id] ?? [], "oi") }));
+  }, [tapeAll, metricBoards]);
+  const allVol = useMemo(() => {
+    if (!tapeAll || !metricBoards) return [];
+    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, metricBoards.volume[u.id] ?? [], "volume") }));
+  }, [tapeAll, metricBoards]);
   const putPct = putShare(current);
   const live = payload?.source === "live" && viewingLive;
   const expiryLabel = series
@@ -516,64 +609,22 @@ export function PcrPane() {
                       <button type="button" data-on={tapeAll} onClick={() => setTapeAll(true)}>All</button>
                     </div>
                   </div>
-                  {tapeAll ? (
-                    <ul className="kp-all">
-                      {allIdeas.map((row) => {
-                        const line = row.idea;
-                        const kind = line ? ideaKind(line.action) : "wait";
-                        return (
-                          <li key={row.id}>
-                            <button
-                              type="button"
-                              className="kp-all-row"
-                              onClick={() => { setIndex(row.id); setTapeAll(false); setView("grid"); }}
-                            >
-                              <span className="kp-all-name">{row.name}</span>
-                              <span className={`kp-all-act ${kind}`}>{line ? line.action : "Wait"}</span>
-                              <span className="kp-all-path">{line ? flowPath(line) : "—"}</span>
-                              <span className="kp-all-clock">{line?.clock ?? ""}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : idea.idea ? (
-                    <div>
-                      <div className={`kp-idea-act ${ideaKind(idea.idea.action)}`}>{idea.idea.action}</div>
-                      <div className="kp-idea-meta">
-                        <span>{idea.idea.name}</span>
-                        <span>{idea.idea.clock}</span>
-                      </div>
-                      <div className="kp-idea-path">
-                        {flowPath(idea.idea)}
-                        <span className={`mv ${(idea.idea.move ?? 0) > 0 ? "text-up" : (idea.idea.move ?? 0) < 0 ? "text-down" : ""}`}>
-                          {moveTxt(idea.idea.move)}
-                        </span>
-                      </div>
-                      <p className="kp-idea-why">{idea.idea.why}</p>
-                      {idea.earlier.length ? (
-                        <div className="kp-ev">
-                          <p className="kp-ev-lab">Earlier today</p>
-                          {idea.earlier.map((e) => (
-                            <div key={e.hhmm} className="kp-ev-row">
-                              <span className="kp-ev-clock">{e.clock}</span>
-                              <span className="kp-ev-path">{flowPath(e)}</span>
-                              <span className={`kp-ev-tag ${ideaKind(e.action)}`}>{ideaTag(e.action)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {idea.idea.action !== "Wait" && idea.skipped > 0 ? (
-                        <p className="kp-skip">
-                          {idea.skipped} move{idea.skipped === 1 ? "" : "s"} skipped — PCR never crossed 1.00 going up, or 0.90 going down.
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="kp-sub" style={{ marginTop: 12 }}>
-                      No 15-minute jump yet. Need PCR above 1.00 and rising for CE, or below 0.90 and falling for PE.
-                    </p>
-                  )}
+                  <IdeaBlock
+                    title="OI PCR"
+                    skipLabel="OI PCR"
+                    board={oiIdea}
+                    tapeAll={tapeAll}
+                    allRows={allOi}
+                    onPick={(id) => { setIndex(id); setMetric("oi"); setTapeAll(false); setView("grid"); }}
+                  />
+                  <IdeaBlock
+                    title="Volume PCR"
+                    skipLabel="Volume PCR"
+                    board={volIdea}
+                    tapeAll={tapeAll}
+                    allRows={allVol}
+                    onPick={(id) => { setIndex(id); setMetric("volume"); setTapeAll(false); setView("grid"); }}
+                  />
                 </aside>
               </div>
             </div>
