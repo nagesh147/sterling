@@ -814,22 +814,23 @@ class SimulationRunner:
 
         signals_to_fire = []
 
-        # 1. SuperTrend (Trend crossover / continuation)
-        if close >= prev_close and (sma5 >= sma20 or close >= float(prev_bar["high"])):
+        # 1. SuperTrend (Trend crossover / expansion)
+        if sma5 > sma20 and close >= float(prev_bar["high"]):
             signals_to_fire.append({
                 "strategy": "supertrend",
                 "direction": "BULLISH",
-                "strength": "STRONG" if (close - opens) >= 0 else "MODERATE",
+                "strength": "STRONG" if (close - opens) >= 0.5 * atr else "MODERATE",
             })
-        elif close < prev_close and (sma5 < sma20 or close <= float(prev_bar["low"])):
+        elif sma5 < sma20 and close <= float(prev_bar["low"]):
             signals_to_fire.append({
                 "strategy": "supertrend",
                 "direction": "BEARISH",
-                "strength": "STRONG" if (opens - close) >= 0 else "MODERATE",
+                "strength": "STRONG" if (opens - close) >= 0.5 * atr else "MODERATE",
             })
 
-        # 2. VCP Squeeze Breakout (Expansion after contraction)
-        if len(history) >= 3 and abs(close - opens) > atr * 0.4:
+        # 2. VCP Squeeze Breakout (Range expansion after contraction)
+        prev_range = float(prev_bar["high"]) - float(prev_bar["low"])
+        if len(history) >= 4 and prev_range < 0.8 * atr and abs(close - opens) > 1.0 * atr:
             signals_to_fire.append({
                 "strategy": "vcp",
                 "direction": "BULLISH" if close >= opens else "BEARISH",
@@ -837,56 +838,72 @@ class SimulationRunner:
             })
 
         # 3. Adaptive Edge (RSI Extreme Reversals)
-        if rsi < 45 and close >= opens:
+        if rsi < 35 and close > opens:
             signals_to_fire.append({
                 "strategy": "adaptive_edge",
                 "direction": "BULLISH",
-                "strength": "MODERATE",
+                "strength": "STRONG" if rsi < 25 else "MODERATE",
             })
-        elif rsi > 55 and close < opens:
+        elif rsi > 65 and close < opens:
             signals_to_fire.append({
                 "strategy": "adaptive_edge",
                 "direction": "BEARISH",
-                "strength": "MODERATE",
+                "strength": "STRONG" if rsi > 75 else "MODERATE",
             })
 
         # 4. Bear to Bearish Breakdown
-        if close < prev_close and (sma5 < sma20 or close < float(prev_bar["low"])):
+        if sma5 < sma20 and close < float(prev_bar["low"]) and close < opens and rsi < 45:
             signals_to_fire.append({
                 "strategy": "bear_to_bearish",
                 "direction": "BEARISH",
                 "strength": "STRONG",
             })
 
-        # 5. ATM Premium Imbalance (Skew Expansion)
-        if len(history) >= 2 and abs(close - opens) > atr * 0.3:
+        # 5. ATM Premium Imbalance (Institutional Skew Expansion)
+        if len(history) >= 3 and abs(close - opens) > 1.2 * atr:
             signals_to_fire.append({
                 "strategy": "atm_imbalance",
                 "direction": "BULLISH" if close >= opens else "BEARISH",
                 "strength": "STRONG",
             })
 
-        # 6. Navigator (AVWAP & Volatility)
-        if len(history) >= 4 and ((sma5 > sma20 and close > opens) or (sma5 < sma20 and close < opens)):
+        # 6. Navigator (AVWAP & Volatility Trend)
+        if len(history) >= 5 and sma5 > sma20 and close > sma5 and rsi > 52:
             signals_to_fire.append({
                 "strategy": "navigator",
-                "direction": "BULLISH" if close >= opens else "BEARISH",
+                "direction": "BULLISH",
+                "strength": "STRONG",
+            })
+        elif len(history) >= 5 and sma5 < sma20 and close < sma5 and rsi < 48:
+            signals_to_fire.append({
+                "strategy": "navigator",
+                "direction": "BEARISH",
                 "strength": "STRONG",
             })
 
-        # 7. Nifty ORB Options (Opening Range Expansion)
-        if len(history) >= 3 and (high > float(prev_bar["high"]) or low < float(prev_bar["low"])):
-            signals_to_fire.append({
-                "strategy": "nifty_orb",
-                "direction": "BULLISH" if close >= opens else "BEARISH",
-                "strength": "STRONG",
-            })
+        # 7. Nifty ORB Options (Opening Range Breakout after 09:30 IST)
+        if len(history) >= 4:
+            first_bars = history[:3]
+            or_high = max(float(b["high"]) for b in first_bars)
+            or_low = min(float(b["low"]) for b in first_bars)
+            if close > or_high and close > opens:
+                signals_to_fire.append({
+                    "strategy": "nifty_orb",
+                    "direction": "BULLISH",
+                    "strength": "STRONG",
+                })
+            elif close < or_low and close < opens:
+                signals_to_fire.append({
+                    "strategy": "nifty_orb",
+                    "direction": "BEARISH",
+                    "strength": "STRONG",
+                })
 
         # Track recent signals per (symbol, strategy) to prevent flood
         if not hasattr(self, '_last_fired'):
             self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
-        current_bar_idx = len(history)
+        current_bar_idx = len(self._candles)
 
         # Emit all generated strategy signals for this bar (or filter by selected strategies)
         cfg_strats = [s.lower() for s in (self._config.strategies if self._config and self._config.strategies else [self._config.strategy if self._config else "all"])]
@@ -901,8 +918,8 @@ class SimulationRunner:
 
             key = (sym, strategy)
             last_dir, last_idx = self._last_fired.get(key, ("", -1))
-            # De-duplicate: do not re-emit identical direction within 3 bars
-            if last_dir == direction and (current_bar_idx - last_idx) < 3:
+            # De-duplicate: do not re-emit identical direction within 6 bars (30 minutes)
+            if last_dir == direction and (current_bar_idx - last_idx) < 6:
                 continue
 
             self._last_fired[key] = (direction, current_bar_idx)
