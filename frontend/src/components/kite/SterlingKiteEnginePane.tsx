@@ -911,6 +911,44 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           const snapTitle = ended
             ? `Past setup (fired at ${entryPx != null ? entryPx.toFixed(2) : '—'}, stop ${slPx != null ? slPx.toFixed(1) : '—'}) — ${liveExited ? 'live premium has fallen through the stop' : "the entry's SuperTrend has since flipped"}, not a live order.`
             : undefined;
+          const legBuy = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            const entryForSl = lastPx || leg.premium_spot || 0;
+            const slPxVal = leg.entry_sl ?? leg.premium_sl;
+            const slPercentage =
+              entryForSl > 0 && slPxVal && slPxVal > 0
+                ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            const tgtPercentage =
+              entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'BUY',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              initialSlPct: slPercentage,
+              initialTgtPct: tgtPercentage,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legSell = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'SELL',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legChart = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg));
+          };
 
           return (
             <div key={leg.option_symbol}>
@@ -1177,6 +1215,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         });
                       })()}
                     </div>
+                  </div>
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
@@ -1237,7 +1276,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
                       {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
-                  </div>
+                  </>
                 )}
               </div>
               {isExp && (() => {

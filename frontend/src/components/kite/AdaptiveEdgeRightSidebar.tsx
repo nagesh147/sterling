@@ -5,11 +5,13 @@ import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
 import { AdaptiveEdgeBoard } from './board/AdaptiveEdgeBoard';
 import { AtmPremiumImbalanceBoard } from './board/AtmPremiumImbalanceBoard';
 import { GammaMoveBoard } from './board/GammaMoveBoard';
+import { BearToBearishBoard } from './board/BearToBearishBoard';
 import { EngineTabs, type EngineTabState } from './board/EngineToolbar';
 import { adaptiveEdgeToBoard } from './board/adaptiveEdgeAdapter';
 import { orbToBoard } from './board/orbAdapter';
 import { atmPremiumImbalanceToBoard } from './board/atmPremiumImbalanceAdapter';
 import { gammaMoveToBoard } from './board/gammaMoveAdapter';
+import { bearToBearishToBoard } from './board/bearToBearishAdapter';
 import { supertrendToBoard } from './board/supertrendAdapter';
 import { ACTIONABLE, type BoardSignal, type EngineId } from './board/boardTypes';
 import { useEngineEnabled } from '../../hooks/useEngineToggles';
@@ -18,6 +20,7 @@ import { useEngineSignals, useEngineConfig } from '../../hooks/useSterlingKiteEn
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
+import { useBearToBearishSnapshot, useBearToBearishConfig } from '../../hooks/useBearToBearish';
 import { useOrbConfig } from '../../hooks/useOrbConfig';
 import { useNavigatorConfig } from '../../hooks/useNavigator';
 import { k, Icons } from '../../styles/kiteUI';
@@ -64,6 +67,13 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   // The same list the "What is running" section writes to, so a tab cannot
   // survive its engine being switched off — nor vanish for any other reason.
   const engineOn = useEngineEnabled();
+  // Every board's Chart column needs this. Four of the five never received it, so
+  // `useBoardRowActions` returned null for the chart cell and the column rendered
+  // empty — present in the picker, headed "Chart", and permanently blank.
+  const openChartFor = React.useCallback(
+    (quoteKey: string) => onOpenChart?.(quoteKey, 'chart'),
+    [onOpenChart],
+  );
 
   // Every board's Chart column needs this. Four of the five never received it, so
   // `useBoardRowActions` returned null for the chart cell and the column rendered
@@ -106,6 +116,8 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   const orb = useOrbSignals(orbEnabled !== false);
   const apiSnapshot = useAtmPremiumImbalanceSnapshot();
   const gmSnapshot = useGammaMoveSnapshot();
+  const btbSnapshot = useBearToBearishSnapshot();
+  const btbConfig = useBearToBearishConfig();
 
   /**
    * The countdown to the next automatic scan, 0..1.
@@ -136,7 +148,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
    * now or in twenty seconds.
    */
   const scanOrder = useMemo<ScannableEngine[]>(() => {
-    const all: ScannableEngine[] = ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge'];
+    const all: ScannableEngine[] = ['supertrend', 'navigator', 'orb', 'gamma_move', 'adaptive_edge', 'bear_to_bearish'];
     const first = all.filter((e) => e === engine);
     return [...first, ...all.filter((e) => e !== engine)];
   }, [engine]);
@@ -163,8 +175,9 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     if (e === 'supertrend') return engineConfig.data?.engine_enabled !== false;
     if (e === 'navigator') return navigatorEnabled;
     if (e === 'orb') return orbEnabled !== false;
+    if (e === 'bear_to_bearish') return btbConfig.data?.enabled !== false;
     return true;
-  }), [scanOrder, rescanStrategies, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled]);
+  }), [scanOrder, rescanStrategies, engineConfig.data?.engine_enabled, navigatorEnabled, orbEnabled, btbConfig.data]);
 
   /**
    * Name what the press will actually run, in the order it will run it.
@@ -194,6 +207,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     const ob = orb.signals.map(orbToBoard);
     const api = atmPremiumImbalanceToBoard(apiSnapshot.data);
     const gm = gammaMoveToBoard(gmSnapshot.data);
+    const btb = bearToBearishToBoard(btbSnapshot.data);
     const live = (list: typeof st) => list.filter((s) => ACTIONABLE.includes(s.status)).length;
     const all: EngineTabState[] = [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
@@ -210,6 +224,9 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
       { id: 'gamma_move',
         running: gmSnapshot.data?.config?.enabled === true,
         live: live(gm), scanned: gm.length },
+      { id: 'bear_to_bearish',
+        running: btbConfig.data?.enabled !== false,
+        live: live(btb), scanned: btb.length },
     // A switched-off engine gets NO TAB now. It used to get one that explained
     // itself, on the reasoning that a missing tab is harder to understand than a
     // stopped one — but that filled the dock with engines the operator had
@@ -230,7 +247,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
       return engineOn[tab.id as keyof typeof engineOn] !== false;
     });
   }, [engineSignals.data, engineConfig.data, snapshot.data, orb.signals, orbEnabled,
-      apiSnapshot.data, gmSnapshot.data, engineOn]);
+      apiSnapshot.data, gmSnapshot.data, btbSnapshot.data, btbConfig.data, engineOn]);
 
   // Switching off the engine you are looking at must move you somewhere real.
   // Without this the dock keeps rendering a board whose tab is gone, which reads

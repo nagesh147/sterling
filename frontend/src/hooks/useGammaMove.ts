@@ -21,6 +21,7 @@ export type Regime = 'up' | 'down' | 'unknown';
  *  side is readable on the other without a translation table to keep in sync. */
 export interface GammaMoveConfig {
   enabled: boolean;
+  auto_execute?: boolean;
   /** Same names, semantics and liquidity boundary as every other engine here. */
   scan_stocks: string[];
   scan_all_stocks: boolean;

@@ -72,6 +72,17 @@ function mockPane() {
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
   }));
+  vi.doMock('../../../hooks/useOrbConfig', () => ({ useOrbConfig: () => ({ data: { config: { enabled: true } } }), useSetOrbConfig: () => ({ mutate: vi.fn() }) }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: true } } } }),
+    useSetNavigatorConfig: () => ({ mutate: vi.fn() }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+    useCancelNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  }));
+  vi.doMock('../../../hooks/useGammaMove', () => ({ useGammaMoveConfig: () => ({ data: { config: { enabled: true } } }), useUpdateGammaMove: () => ({ mutate: vi.fn() }) }));
+  vi.doMock('../../../hooks/useAdaptiveEdge', () => ({ useAdaptiveEdgeEngineConfig: () => ({ data: { config: { enabled: true } } }), useSetAdaptiveEdgeEngineConfig: () => ({ mutate: vi.fn() }) }));
+  vi.doMock('../../../hooks/useAtmPremiumImbalance', () => ({ useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }), useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn() }) }));
+  vi.doMock('../../../hooks/useBearToBearish', () => ({ useBearToBearishConfig: () => ({ data: { enabled: true } }), useUpdateBearToBearishConfig: () => ({ mutate: vi.fn() }) }));
   vi.doMock('../../../hooks/useKite', async () => {
     const actual: any = await vi.importActual('../../../hooks/useKite');
     return { ...actual, useKiteQuote: () => ({ data: { [`NFO:${SYMBOL}`]: { last_price: 1100 } } }) };

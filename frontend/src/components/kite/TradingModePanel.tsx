@@ -6,6 +6,7 @@ import { BORDER, DIM, MUTED, SOFT, Switch, TEXT } from './kiteSettingsPrimitives
 import { PanelCard, PanelSectionHeading } from './config/ConfigPrimitives';
 import { TradingModeControls } from './TradingModeControls';
 import { useEngineToggles } from '../../hooks/useEngineToggles';
+import { useAlgoToggles } from '../../hooks/useAlgoToggles';
 
 /**
  * The two questions that decide whether real money moves — paper or live, and
@@ -23,7 +24,7 @@ import { useEngineToggles } from '../../hooks/useEngineToggles';
  * mentioned the other.
  */
 
-function RunningRow({ label, description, on, children }: {
+export function RunningRow({ label, description, on, children }: {
   label: string;
   description: string;
   on: boolean;
@@ -60,6 +61,8 @@ const RESCANNABLE: Array<{ engine: string; label: string; note: string }> = [
   { engine: 'orb', label: 'ORB + VWAP', note: 'Opening range breakout on the index options' },
   { engine: 'gamma_move', label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
   { engine: 'adaptive_edge', label: 'Adaptive Edge', note: 'Order-flow scalping' },
+  { engine: 'atm_imbalance', label: 'ATM Premium Imbalance', note: 'ATM straddle/strangle premium imbalance scan' },
+  { engine: 'bear_to_bearish', label: 'Bear to Bearish', note: 'PCR short momentum & lower high structure scan' },
 ];
 
 export function TradingModePanel() {
@@ -83,14 +86,6 @@ export function TradingModePanel() {
           description="Which signal engines are active. Turning both off leaves Kite as a normal manual trading platform — market watch, charts and your own orders all still work."
         />
         <div style={{ padding: '2px 18px 16px' }}>
-          {/* Every engine, from one list.
-              SuperTrend had a switch here and Navigator had a "Configure →" link;
-              the other four had nothing at all, so "what is running" answered for
-              two engines out of six and the only way to stop ORB or Gamma Move was
-              to find its own settings page. `useEngineToggles` owns each engine's
-              quirks — SuperTrend's field is `engine_enabled`, Navigator writes
-              under a revision — and the signals dock reads the SAME list to decide
-              which tabs to show, so the two cannot disagree. */}
           {toggles.map((engine) => (
             <RunningRow
               key={engine.id}
@@ -101,9 +96,6 @@ export function TradingModePanel() {
               <Switch
                 checked={engine.enabled}
                 label={engine.label}
-                // Null while the config has not arrived: a toggle needs the
-                // current value to send the opposite of it, and Navigator also
-                // needs the revision it was read at.
                 disabled={!engine.toggle || engine.pending}
                 onChange={() => engine.toggle?.()}
               />
@@ -138,27 +130,30 @@ export function TradingModePanel() {
         />
         <div style={{ padding: '2px 18px 16px', display: 'grid', gap: 2 }}>
           {RESCANNABLE.map(({ engine, label, note }) => {
-            // Absent means included: the map holds only exclusions, so a new
-            // engine is covered from the day it appears rather than silently
-            // missing from every saved map.
-            const on = rescanStrategies[engine] !== false;
+            const isEngineRunning = toggles.find((t) => t.id === engine)?.enabled ?? true;
+            const checked = isEngineRunning && rescanStrategies[engine] !== false;
             return (
               <label
                 key={engine}
-                title={note}
+                title={isEngineRunning ? note : `${label} is turned off above — turn on engine to enable re-scan.`}
                 style={{
                   minHeight: 30, display: 'flex', alignItems: 'center', gap: 8,
-                  color: 'var(--k-text)', fontSize: 11, cursor: 'pointer',
+                  color: isEngineRunning ? 'var(--k-text)' : 'var(--k-dim)',
+                  fontSize: 11, cursor: isEngineRunning ? 'pointer' : 'not-allowed',
+                  opacity: isEngineRunning ? 1 : 0.5,
                 }}
               >
                 <input
                   type="checkbox"
-                  checked={on}
-                  onChange={() => toggleRescanStrategy(engine)}
-                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--k-orange)' }}
+                  checked={checked}
+                  disabled={!isEngineRunning}
+                  onChange={() => isEngineRunning && toggleRescanStrategy(engine)}
+                  style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--k-orange)', cursor: isEngineRunning ? 'pointer' : 'not-allowed' }}
                 />
                 <span style={{ fontWeight: 600 }}>{label}</span>
-                <span style={{ color: 'var(--k-dim)', fontSize: 10 }}>{note}</span>
+                <span style={{ color: 'var(--k-dim)', fontSize: 10 }}>
+                  {isEngineRunning ? note : '(Disabled — strategy engine is turned off)'}
+                </span>
               </label>
             );
           })}

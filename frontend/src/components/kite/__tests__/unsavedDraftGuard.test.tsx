@@ -120,14 +120,14 @@ describe('the settings hub asks before discarding a draft', () => {
   const openSuperTrend = async () => {
     const { ConnectPane } = await import('../ConnectPane');
     render(<ConnectPane />);
-    fireEvent.click(screen.getByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i })[0]);
     expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
   };
 
   it('does not ask when nothing is pending', async () => {
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true) as unknown as ReturnType<typeof vi.fn>;
     await openSuperTrend();
-    fireEvent.click(screen.getByRole('button', { name: /Notifications\s*Kite Telegram alerts/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe('the settings hub asks before discarding a draft', () => {
     await openSuperTrend();
     setDraftDirty('supertrend', true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Notifications\s*Kite Telegram alerts/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe('the settings hub asks before discarding a draft', () => {
     await openSuperTrend();
     setDraftDirty('supertrend', true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Notifications\s*Kite Telegram alerts/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();

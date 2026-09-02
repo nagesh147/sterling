@@ -2,6 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { AdaptiveEdgeSetupChart } from './AdaptiveEdgeSetupChart';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
 import { k, tint } from '../../styles/kiteUI';
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { KiteActionButtons } from './KiteActionButtons';
+import { ColumnsMenu } from './board/BoardFilters';
 import type {
   AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
@@ -590,7 +593,21 @@ export interface AdaptiveEdgeRow {
   side?: 'BUY' | 'SELL';
 }
 
-const COLUMNS = ['Instrument', 'Type', 'Exc.', 'Leg', 'Entry', 'SL', 'TSL', 'Exit', 'LTP', 'Time', 'Status'];
+const ALL_COLUMNS: Array<{ id: string; label: string }> = [
+  { id: 'instrument', label: 'Instrument' },
+  { id: 'type', label: 'Type' },
+  { id: 'exc', label: 'Exc.' },
+  { id: 'leg', label: 'Leg' },
+  { id: 'entry', label: 'Entry' },
+  { id: 'sl', label: 'SL' },
+  { id: 'tsl', label: 'TSL' },
+  { id: 'exit', label: 'Exit' },
+  { id: 'ltp', label: 'LTP' },
+  { id: 'time', label: 'Time' },
+  { id: 'status', label: 'Status' },
+  { id: 'trade', label: 'Trade' },
+  { id: 'chart', label: 'Chart' },
+];
 
 interface UnderlyingGroup {
   underlying: string;
@@ -648,6 +665,7 @@ export function AdaptiveEdgePanel({
   selectedId,
   onSelect,
   onInspectSymbol,
+  onOpenChart,
   inlineExpand = false,
   scanning = false,
   scanningLabel,
@@ -659,15 +677,40 @@ export function AdaptiveEdgePanel({
   selectedId?: string | null;
   onSelect?: (row: AdaptiveEdgeRow) => void;
   onInspectSymbol?: (symbol: string) => void;
+  onOpenChart?: (quoteKey: string) => void;
   inlineExpand?: boolean;
   scanning?: boolean;
   scanningLabel?: string;
   pendingSymbols?: string[];
   isFetching?: boolean;
 }) {
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+
+  const toggleCol = (id: string) => {
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const columnChoices = useMemo(() => {
+    return ALL_COLUMNS.filter((c) => c.id !== 'instrument' && c.id !== 'status').map((c) => ({
+      id: c.id,
+      label: c.label,
+      on: !hiddenCols.has(c.id),
+      toggle: () => toggleCol(c.id),
+    }));
+  }, [hiddenCols]);
+
+  const visibleCols = useMemo(() => {
+    return ALL_COLUMNS.filter((c) => !hiddenCols.has(c.id));
+  }, [hiddenCols]);
 
   const handleCopy = (e: React.MouseEvent, instrument: string, id: string) => {
     e.stopPropagation();
@@ -815,103 +858,121 @@ export function AdaptiveEdgePanel({
           </td>
 
           {/* 2. Type & Mode */}
-          <td style={{ padding: '8px 12px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
-              <span
-                style={{
-                  fontWeight: 600,
-                  fontSize: 10,
-                  padding: '2px 5px',
-                  borderRadius: 2,
-                  background: isCE ? `${k.green}18` : `${k.red}18`,
-                  color: isCE ? k.green : k.red,
-                  border: `1px solid ${isCE ? `${k.green}40` : `${k.red}40`}`,
-                  display: 'inline-block',
-                }}
-              >
-                {row.optionType || 'CE'}
-              </span>
-              <span
-                title={badge.title}
-                style={{
-                  fontSize: 9.5,
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  padding: '2px 5px',
-                  borderRadius: 2,
-                  background: badge.bg,
-                  color: badge.color,
-                  border: badge.border,
-                  whiteSpace: 'nowrap',
-                  display: 'inline-block',
-                }}
-              >
-                {badge.label}
-              </span>
-            </div>
-          </td>
-
-          {/* 3. Exchange */}
-          <td style={{ padding: '8px 12px', color: k.dim, fontSize: 11, fontWeight: 400 }}>
-            {row.exchange}
-          </td>
-
-          {/* 4. Leg & Option Strike */}
-          <td style={{ padding: '8px 12px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 11, color: k.dim, fontWeight: 400 }}>
-                {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
-              </span>
-            </div>
-          </td>
-
-          {/* 5. Entry & MTM */}
-          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-            <div style={{ fontSize: 11, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: k.text }}>
-              {fmt(row.entry)}
-            </div>
-            {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  fontVariantNumeric: 'tabular-nums',
-                  marginTop: 1,
-                  color: isProfit ? k.green : k.red,
-                }}
-              >
-                <span>
-                  ({entryDiff > 0 ? '+' : ''}
-                  {fmt(entryDiff)})
+          {!hiddenCols.has('type') && (
+            <td style={{ padding: '8px 12px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    fontSize: 10,
+                    padding: '2px 5px',
+                    borderRadius: 2,
+                    background: isCE ? `${k.green}18` : `${k.red}18`,
+                    color: isCE ? k.green : k.red,
+                    border: `1px solid ${isCE ? `${k.green}40` : `${k.red}40`}`,
+                    display: 'inline-block',
+                  }}
+                >
+                  {row.optionType || 'CE'}
+                </span>
+                <span
+                  title={badge.title}
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    padding: '2px 5px',
+                    borderRadius: 2,
+                    background: badge.bg,
+                    color: badge.color,
+                    border: badge.border,
+                    whiteSpace: 'nowrap',
+                    display: 'inline-block',
+                  }}
+                >
+                  {badge.label}
                 </span>
               </div>
-            )}
-          </td>
+            </td>
+          )}
+
+          {/* 3. Exchange */}
+          {!hiddenCols.has('exc') && (
+            <td style={{ padding: '8px 12px', color: k.dim, fontSize: 11, fontWeight: 400 }}>
+              {row.exchange}
+            </td>
+          )}
+
+          {/* 4. Leg & Option Strike */}
+          {!hiddenCols.has('leg') && (
+            <td style={{ padding: '8px 12px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 11, color: k.dim, fontWeight: 400 }}>
+                  {row.moneyness || (row.strike ? `₹${row.strike}` : 'SPOT')}
+                </span>
+              </div>
+            </td>
+          )}
+
+          {/* 5. Entry & MTM */}
+          {!hiddenCols.has('entry') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              <div style={{ fontSize: 11, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: k.text }}>
+                {fmt(row.entry)}
+              </div>
+              {entryDiff != null && Math.abs(entryDiff) > 0.001 && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                    marginTop: 1,
+                    color: isProfit ? k.green : k.red,
+                  }}
+                >
+                  <span>
+                    ({entryDiff > 0 ? '+' : ''}
+                    {fmt(entryDiff)})
+                  </span>
+                </div>
+              )}
+            </td>
+          )}
 
           {/* 6. Stop Loss (SL) */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
-            {fmt(row.sl)}
-          </td>
+          {!hiddenCols.has('sl') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
+              {fmt(row.sl)}
+            </td>
+          )}
 
           {/* 7. Trailing Stop (TSL) */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 500 }}>
-            {fmt(row.tsl)}
-          </td>
+          {!hiddenCols.has('tsl') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 500 }}>
+              {fmt(row.tsl)}
+            </td>
+          )}
 
           {/* 8. Exit Price */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
-            {fmt(row.exit)}
-          </td>
+          {!hiddenCols.has('exit') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: k.dim, fontSize: 10.5, fontWeight: 400 }}>
+              {fmt(row.exit)}
+            </td>
+          )}
 
           {/* 9. Current LTP */}
-          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: k.text, fontSize: 13 }}>
-            {fmt(liveLtp)}
-          </td>
+          {!hiddenCols.has('ltp') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: k.text, fontSize: 13 }}>
+              {fmt(liveLtp)}
+            </td>
+          )}
 
           {/* 10. Timestamp */}
-          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: k.dim, fontWeight: 400 }}>
-            {when(row.entryTime)}
-          </td>
+          {!hiddenCols.has('time') && (
+            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', fontSize: 11, color: k.dim, fontWeight: 400 }}>
+              {when(row.entryTime)}
+            </td>
+          )}
 
           {/* 11. Status */}
           <td style={{ padding: '8px 12px' }}>
@@ -936,12 +997,59 @@ export function AdaptiveEdgePanel({
               </span>
             </div>
           </td>
+
+          {/* 12. Trade (Buy / Sell Buttons) */}
+          {!hiddenCols.has('trade') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              <KiteActionButtons
+                onBuy={(e) => {
+                  e.stopPropagation();
+                  openOrderWindow({
+                    symbol: row.instrument,
+                    exchange: row.exchange || 'NFO',
+                    initialSide: 'BUY',
+                    lotSize: row.lotSize || 1,
+                    lastPrice: liveLtp || row.entry || 0,
+                    tag: 'ADAPTIVE_EDGE',
+                  });
+                }}
+                onSell={(e) => {
+                  e.stopPropagation();
+                  openOrderWindow({
+                    symbol: row.instrument,
+                    exchange: row.exchange || 'NFO',
+                    initialSide: 'SELL',
+                    lotSize: row.lotSize || 1,
+                    lastPrice: liveLtp || row.entry || 0,
+                    tag: 'ADAPTIVE_EDGE',
+                  });
+                }}
+                buyDisabled={!row.open}
+                sellDisabled={!row.open}
+                disabledHint="This position is closed"
+              />
+            </td>
+          )}
+
+          {/* 13. Chart Button */}
+          {!hiddenCols.has('chart') && (
+            <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              <KiteActionButtons
+                onChart={(e) => {
+                  e.stopPropagation();
+                  const quoteKey = `${row.exchange || 'NFO'}:${row.instrument}`;
+                  if (onOpenChart) onOpenChart(quoteKey);
+                  else if (onInspectSymbol) onInspectSymbol(row.underlying || row.instrument);
+                }}
+              />
+            </td>
+          )}
         </tr>
 
         {/* Expanded Row Detail Drawer (Right Sidebar Mode) */}
         {isExpanded && (
           <tr key={`${row.id}-details`} style={{ background: k.surface, borderBottom: `2px solid ${k.border}` }}>
-            <td colSpan={COLUMNS.length} style={{ padding: '12px 16px 16px', background: k.surface }}>
+            <td colSpan={visibleCols.length} style={{ padding: '12px 16px 16px', background: k.surface }}>
               <div
                 style={{
                   display: 'flex',
@@ -1099,23 +1207,26 @@ export function AdaptiveEdgePanel({
 
   return (
     <div style={{ overflow: 'auto', minHeight: 0, height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 12px', borderBottom: `1px solid ${k.border}`, background: k.surface }}>
+        <ColumnsMenu items={columnChoices} onShowAll={() => setHiddenCols(new Set())} />
+      </div>
       <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12, fontFamily: k.fontFamily }}>
         <thead>
           <tr style={{ background: k.bg, borderBottom: `1px solid ${k.border}`, position: 'sticky', top: 0, zIndex: 5 }}>
-            {COLUMNS.map((label) => (
+            {visibleCols.map((col) => (
               <th
-                key={label}
+                key={col.id}
                 style={{
                   padding: '12px 16px',
                   color: k.dim,
                   fontSize: 12,
                   fontWeight: 400,
                   borderBottom: `1px solid ${k.border}`,
-                  textAlign: ['Entry', 'SL', 'TSL', 'Exit', 'LTP'].includes(label) ? 'right' : 'left',
+                  textAlign: ['Entry', 'SL', 'TSL', 'Exit', 'LTP', 'Trade', 'Chart'].includes(col.label) ? 'right' : 'left',
                   whiteSpace: 'nowrap',
                 }}
               >
-                {label}
+                {col.label}
               </th>
             ))}
           </tr>
@@ -1141,7 +1252,7 @@ export function AdaptiveEdgePanel({
                     transition: 'background 0.12s ease',
                   }}
                 >
-                  <td colSpan={COLUMNS.length} style={{ padding: '8px 12px' }}>
+                  <td colSpan={visibleCols.length} style={{ padding: '8px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                       {/* Left: Expand toggle, Icon, Underlying Symbol, Direction, Spot */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1218,7 +1329,7 @@ export function AdaptiveEdgePanel({
           {/* ── IN-TABLE LIVE SCANNING PROGRESS ROW (WHEN SIGNALS ALREADY LOADED) ── */}
           {rows.length > 0 && (scanning || isFetching || (pendingSymbols && pendingSymbols.length > 0)) && (
             <tr style={{ background: 'var(--k-surface)', borderTop: `1px dashed ${k.blue}60`, borderBottom: `1px solid ${k.border}` }}>
-              <td colSpan={COLUMNS.length} style={{ padding: '12px 16px' }}>
+              <td colSpan={visibleCols.length} style={{ padding: '12px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                   {/* Left: Animated Pulse indicator & Status */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 260 }}>
@@ -1293,7 +1404,7 @@ export function AdaptiveEdgePanel({
           {!rows.length && (scanning || isFetching || (pendingSymbols && pendingSymbols.length > 0)) ? (
             <tr>
               <td
-                colSpan={COLUMNS.length}
+                colSpan={visibleCols.length}
                 style={{
                   padding: 48,
                   textAlign: 'center',
@@ -1359,7 +1470,7 @@ export function AdaptiveEdgePanel({
           ) : !rows.length ? (
             <tr>
               <td
-                colSpan={COLUMNS.length}
+                colSpan={visibleCols.length}
                 style={{
                   padding: 36,
                   textAlign: 'center',

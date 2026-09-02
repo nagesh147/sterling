@@ -5,6 +5,7 @@ const KEY = ['nifty-orb-options-config'];
 
 export interface OrbConfig {
   enabled: boolean;
+  auto_execute?: boolean;
   underlying: string;
   scan_indices: string[];
   scan_stocks: string[];

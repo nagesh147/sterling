@@ -57,10 +57,9 @@ export function FilterToggle({ on, label, hint, onChange }: {
  * can fill is a control for nothing, and listing all fifteen on a board that
  * shows nine invites a user to switch on a column that then does not appear.
  *
- * The row identity columns are not offered: a board with no instrument and no
- * status is not a board.
+ * The row identity symbol column is locked; all other columns (including Status) can be toggled.
  */
-const LOCKED: readonly ColumnId[] = ['instrument', 'status'];
+const LOCKED: readonly ColumnId[] = ['instrument'];
 
 export interface ColumnChoice {
   id: string;

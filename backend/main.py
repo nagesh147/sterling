@@ -1923,6 +1923,12 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.pcr import router as pcr_router
     app.include_router(pcr_router, prefix="/api/v1")
 
+    from app.api.v1.endpoints.bear_to_bearish import router as bear_to_bearish_router
+    app.include_router(bear_to_bearish_router, prefix="/api/v1")
+
+    from app.api.v1.endpoints.simulation import router as simulation_router
+    app.include_router(simulation_router, prefix="/api/v1")
+
     return app
 
 

@@ -24,6 +24,7 @@ import { AdaptiveEdgeSettingsPanel } from './AdaptiveEdgeSettingsPanel';
 import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPanel';
 import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
 import { GammaMoveSettingsPanel } from './GammaMoveSettingsPanel';
+import { BearToBearishSettingsPanel } from './BearToBearishSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -852,6 +853,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   orbOptions: <Icons.Chart />,
   atmPremiumImbalance: <Icons.Chart />,
   gammaMove: <Icons.Pulse />,
+  bearToBearish: <Icons.Pulse />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -883,6 +885,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Buys whichever at-the-money leg is cheaper at the session open and exits at the entry fill plus a fixed target. Reverse-engineered from recordings and not yet validated, so it stays paper-only until the readiness gate passes.' },
   { id: 'gammaMove', label: 'Gamma Move', eyebrow: 'OI unwind at a level, buy the gamma', group: 'Signal engines',
     pageDescription: 'Buys the option that writers are covering: an F&O stock at a support or resistance level, the highest open-interest strike there, entered when open interest falls while volume and premium rise on the same 15-minute bar. Held one to two sessions. Calibrated against real market data, which found the entry trigger alone has no edge — the level filter is where it is — so it stays paper-only until the readiness gate passes.' },
+  { id: 'bearToBearish', label: 'Bear to Bearish', eyebrow: 'PCR short momentum, Lower High structure', group: 'Signal engines',
+    pageDescription: 'Short momentum setup triggered when Put-Call Ratio drops below 0.60 ceiling alongside 5m Lower High candle structure across Indian index options.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -1127,6 +1131,12 @@ export function ConnectPane() {
             {section === 'gammaMove' && (
               <>
                 <GammaMoveSettingsPanel />
+              </>
+            )}
+
+            {section === 'bearToBearish' && (
+              <>
+                <BearToBearishSettingsPanel />
               </>
             )}
 

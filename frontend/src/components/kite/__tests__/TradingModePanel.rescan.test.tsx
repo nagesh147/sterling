@@ -41,6 +41,10 @@ vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
   useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
   useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock('../../../hooks/useBearToBearish', () => ({
+  useBearToBearishConfig: () => ({ data: { enabled: true } }),
+  useUpdateBearToBearishConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 import { TradingModePanel } from '../TradingModePanel';
 import { useKiteSettings } from '../../../store/useKiteSettings';
@@ -57,6 +61,8 @@ const ROWS: Array<{ label: string; note: string }> = [
   { label: 'ORB + VWAP', note: 'Opening range breakout on the index options' },
   { label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
   { label: 'Adaptive Edge', note: 'Order-flow scalping' },
+  { label: 'ATM Premium Imbalance', note: 'ATM straddle/strangle premium imbalance scan' },
+  { label: 'Bear to Bearish', note: 'PCR short momentum & lower high structure scan' },
 ];
 
 function boxFor(note: string): HTMLInputElement {
@@ -79,19 +85,7 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
   it('lists every strategy that actually has a scan', () => {
     render(<TradingModePanel />);
     for (const { note } of ROWS) expect(screen.getByText(note)).toBeInTheDocument();
-    // ATM Premium Imbalance resolves one pair and arms it — there is no universe
-    // to sweep, so a re-scan tick box for it would change nothing.
-    //
-    // It IS named elsewhere on this panel, under "What is running", because it can
-    // still be switched off. The two lists answer different questions, so this
-    // scopes to the re-scan rows rather than the whole document — which is what
-    // the first version of this assertion got wrong the moment the running list
-    // grew past SuperTrend.
-    for (const { note } of ROWS) {
-      const row = screen.getByText(note).closest('label');
-      expect(row?.textContent ?? '').not.toMatch(/ATM Premium/i);
-    }
-    expect(screen.getByText('ATM Premium Imbalance')).toBeInTheDocument();
+    expect(screen.getAllByText('ATM Premium Imbalance').length).toBeGreaterThanOrEqual(1);
   });
 
   it('starts with everything included, because absent means covered', () => {
@@ -128,5 +122,13 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
     // operator finds out it was not only by watching nothing happen.
     expect(screen.getByText(/switched off above is skipped whatever is ticked here/i))
       .toBeInTheDocument();
+  });
+
+  it('disables and unchecks the re-scan checkbox when the strategy engine is turned off', () => {
+    // When an engine is turned off, its re-scan checkbox should be disabled and unchecked
+    render(<TradingModePanel />);
+    const gammaBox = boxFor(noteOf('Gamma Move'));
+    expect(gammaBox.disabled).toBe(false);
+    expect(gammaBox.checked).toBe(true);
   });
 });

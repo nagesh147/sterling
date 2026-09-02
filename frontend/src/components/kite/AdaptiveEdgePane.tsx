@@ -612,6 +612,7 @@ export function AdaptiveEdgePane({
                   setInspectSymbol(sym);
                   setViewMode('charts');
                 }}
+                onOpenChart={(quoteKey) => onOpenChart?.(quoteKey, 'chart')}
                 scanning={isScanning}
                 pendingSymbols={pendingSymbols}
                 isFetching={isFetching}

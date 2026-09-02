@@ -1,5 +1,7 @@
 import React from 'react';
 import { useOrbSignals } from '../hooks/useOrbSignals';
+import { KiteActionButtons } from './kite/KiteActionButtons';
+import { useOrderWindowStore } from '../store/useOrderWindowStore';
 
 const cell: React.CSSProperties = { padding: '8px 9px', borderBottom: '1px solid var(--t-border)', fontSize: 10, whiteSpace: 'nowrap' };
 
@@ -13,7 +15,8 @@ function blockedByGate(rows: { state: string; reason: string | null }[]) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-export function NiftyOrbSignalsTable() {
+export function NiftyOrbSignalsTable({ onOpenChart }: { onOpenChart?: (quoteKey: string) => void } = {}) {
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const { signals: rows, isLoading, error } = useOrbSignals(true);
   const gates = blockedByGate(rows);
   const live = rows.filter(r => r.state === 'SIGNAL').length;
@@ -39,7 +42,7 @@ export function NiftyOrbSignalsTable() {
         </div>
       )}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'monospace' }}>
-        <thead><tr>{['Instrument', 'State', 'Direction', 'Spot', 'ORB', 'VWAP', 'Vol', 'Option', 'Strike', 'Expiry', 'Entry', 'SL', 'Target', 'Qty', 'Stop Risk', 'Max Loss', 'Quote Age', 'Data', 'Why'].map(x => <th key={x} style={{ ...cell, textAlign: 'left', color: 'var(--t-dim)', fontWeight: 500 }}>{x}</th>)}</tr></thead>
+        <thead><tr>{['Instrument', 'State', 'Direction', 'Spot', 'ORB', 'VWAP', 'Vol', 'Option', 'Strike', 'Expiry', 'Entry', 'SL', 'Target', 'Qty', 'Stop Risk', 'Max Loss', 'Quote Age', 'Data', 'Why', 'Trade', 'Chart'].map(x => <th key={x} style={{ ...cell, textAlign: 'left', color: 'var(--t-dim)', fontWeight: 500 }}>{x}</th>)}</tr></thead>
         <tbody>{rows.map(row => (
           <tr key={row.id}>
             <td style={{ ...cell, color: 'var(--t-bright)', fontWeight: 600 }}>{row.underlying}</td>
@@ -73,6 +76,31 @@ export function NiftyOrbSignalsTable() {
             </td>
             <td style={cell}>{row.dataSource || '—'}</td>
             <td style={{ ...cell, whiteSpace: 'normal', minWidth: 190, color: 'var(--t-dim)' }}>{row.reason || '—'}</td>
+            <td style={{ ...cell, textAlign: 'right' }}>
+              <KiteActionButtons
+                onBuy={() => openOrderWindow({
+                  symbol: row.optionSymbol || row.underlying,
+                  exchange: 'NFO',
+                  initialSide: 'BUY',
+                  lotSize: row.quantity || 1,
+                  lastPrice: row.optionPremium || row.spot || 0,
+                  tag: 'ORB',
+                })}
+                onSell={() => openOrderWindow({
+                  symbol: row.optionSymbol || row.underlying,
+                  exchange: 'NFO',
+                  initialSide: 'SELL',
+                  lotSize: row.quantity || 1,
+                  lastPrice: row.optionPremium || row.spot || 0,
+                  tag: 'ORB',
+                })}
+              />
+            </td>
+            <td style={{ ...cell, textAlign: 'right' }}>
+              <KiteActionButtons
+                onChart={() => onOpenChart?.(`NFO:${row.optionSymbol || row.underlying}`)}
+              />
+            </td>
           </tr>
         ))}</tbody>
       </table>

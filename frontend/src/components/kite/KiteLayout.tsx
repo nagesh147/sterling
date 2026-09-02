@@ -6,6 +6,8 @@ import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
+import { SimulationBar, SimulationFooterButton, SimulationFooterBadge } from './SimulationBar';
+import { SimulationSummary } from './SimulationSummary';
 import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
@@ -698,6 +700,8 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
+      <SimulationBar />
+      <SimulationSummary />
       <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
@@ -714,7 +718,9 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
         </div>
 
-        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, maxWidth: '48%', overflow: 'hidden' }}>
+        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
+          <SimulationFooterButton />
+          <SimulationFooterBadge />
           {macOn ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
           ) : minimizedAvailable.length > 0 ? (

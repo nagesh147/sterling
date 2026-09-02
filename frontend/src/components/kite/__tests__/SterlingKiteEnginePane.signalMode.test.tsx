@@ -72,11 +72,7 @@ async function renderPane() {
 }
 
 function openSignalModeMenu() {
-  // Located by title, which now begins with the control's NAME. The name used to
-  // render outside the chip as separate coloured text; it moved inside, and the
-  // title became "<NAME> — <what it changes>" so hovering still explains the
-  // control rather than just repeating its value.
-  fireEvent.click(screen.getByTitle(/^VIEW —/));
+  fireEvent.click(screen.getByTitle(/^VIEW — A local lens/));
 }
 
 describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {
