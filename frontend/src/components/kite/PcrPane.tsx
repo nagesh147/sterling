@@ -108,6 +108,9 @@ const CSS = `
 .kite-pcr .kp-seg{display:flex;border:1px solid var(--k-border);background:var(--k-surface);border-radius:3px;overflow:hidden;height:28px}
 .kite-pcr .kp-seg button{border:0;background:none;color:var(--k-dim);padding:0 10px;font-size:12px;cursor:pointer;font-family:inherit}
 .kite-pcr .kp-seg button[data-on="true"]{background:var(--k-surface-hover);color:var(--k-text);font-weight:500}
+.kite-pcr .kp-idx{display:flex;flex-wrap:wrap;gap:4px;padding-bottom:8px}
+.kite-pcr .kp-idx button{border:1px solid var(--k-border);background:var(--k-surface);color:var(--k-text);border-radius:3px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+.kite-pcr .kp-idx button[data-on="true"]{border-color:var(--k-orange);color:var(--k-orange);font-weight:500}
 .kite-pcr .kp-tabs{display:flex;gap:12px;padding-bottom:8px}
 .kite-pcr .kp-tabs button{border:0;background:none;color:var(--k-dim);padding:0 0 6px;font-size:12px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent}
 .kite-pcr .kp-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange);font-weight:500}
@@ -220,8 +223,10 @@ export function PcrPane() {
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const map: Record<string, PcrIndex> = { "1": "NIFTY", "2": "BANKNIFTY", "3": "FINNIFTY", "4": "SENSEX", "5": "MIDCPNIFTY" };
       const pick = map[e.key];
-      if (pick) setIndex(pick);
-      if (e.key === "g" || e.key === "G") setView("grid");
+      if (pick) {
+        setIndex(pick);
+        setView("grid");
+      }
       if (e.key === "a" || e.key === "A") setView("board");
       if (e.key === "p" || e.key === "P") setView("path");
     };
@@ -292,6 +297,14 @@ export function PcrPane() {
       };
     });
   }, [metricBoards, payload, sessionIso, todayIso]);
+  const showAll = view === "board";
+  const cols = showAll ? PCR_INDICES : PCR_INDICES.filter((u) => u.id === index);
+  const sumRows = showAll ? deskRows : deskRows.filter((r) => r.id === index);
+  const heatSlots = showAll ? axis : grid;
+  const pickIndex = (id: PcrIndex) => {
+    setIndex(id);
+    if (view === "board") setView("grid");
+  };
 
   return (
     <div className="kite-pcr">
@@ -302,11 +315,23 @@ export function PcrPane() {
             <h1 className="kp-title">PCR Desk</h1>
             <div className="kp-tools">
               <div className="kp-seg" role="tablist" aria-label="View">
-                <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
-                <button type="button" role="tab" data-on={view === "grid"} onClick={() => setView("grid")}>Grid</button>
                 <button type="button" role="tab" data-on={view === "path"} onClick={() => setView("path")}>Path</button>
               </div>
             </div>
+          </div>
+          <div className="kp-idx" role="tablist" aria-label="Underlying">
+            <button type="button" role="tab" data-on={view === "board"} onClick={() => setView("board")}>All</button>
+            {PCR_INDICES.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                role="tab"
+                data-on={view !== "board" && index === u.id}
+                onClick={() => { setIndex(u.id); setView(view === "path" ? "path" : "grid"); }}
+              >
+                {u.short}
+              </button>
+            ))}
           </div>
           <div className="kp-tabs" role="tablist" aria-label="PCR metric">
             {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
@@ -320,48 +345,17 @@ export function PcrPane() {
 
           {view === "path" && series ? (
             <Path slots={grid} marks={series.marks} />
-          ) : view === "grid" ? (
-            <div className="kp-sheet">
-              {grid.length ? (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th style={{ textAlign: "center" }}>PCR</th>
-                      <th style={{ textAlign: "right" }}>Δ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {grid.map((slot) => (
-                      <tr key={slot.hhmm} data-live={slot.live}>
-                        <th>{slot.hhmm}</th>
-                        <td>
-                          <span className={`kp-heat kp-band-${slot.band}`}>{slot.pcr == null ? "" : formatPcr(slot.pcr)}</span>
-                        </td>
-                        <td>
-                          <span className={`kp-delta ${(slot.delta ?? 0) > 0 ? "text-up" : (slot.delta ?? 0) < 0 ? "text-down" : ""}`}>
-                            {formatDelta(slot.delta)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="kp-empty">No prints for this session.</div>
-              )}
-            </div>
-          ) : deskRows.length ? (
+          ) : sumRows.length ? (
             <div className="kp-sheet">
               <table>
                 <thead>
                   <tr>
                     <th> </th>
-                    {PCR_INDICES.map((u) => (
+                    {cols.map((u) => (
                       <th
                         key={u.id}
                         data-on={index === u.id}
-                        onClick={() => setIndex(u.id)}
+                        onClick={() => pickIndex(u.id)}
                       >
                         {u.short}
                       </th>
@@ -371,10 +365,10 @@ export function PcrPane() {
                 <tbody>
                   <tr className="kp-sum">
                     <th>Play</th>
-                    {deskRows.map((row) => {
+                    {sumRows.map((row) => {
                       const kind = ideaKind(row.action);
                       return (
-                        <td key={row.id} onClick={() => setIndex(row.id)}>
+                        <td key={row.id} onClick={() => pickIndex(row.id)}>
                           <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
                           <span className="kp-why">{row.why}</span>
                         </td>
@@ -383,16 +377,16 @@ export function PcrPane() {
                   </tr>
                   <tr className="kp-sum">
                     <th>OI PCR</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => setIndex(row.id)}>
+                    {sumRows.map((row) => (
+                      <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => pickIndex(row.id)}>
                         {row.pcr != null ? formatPcr(row.pcr) : "—"}
                       </td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>Move</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} className="kp-move" onClick={() => setIndex(row.id)}>
+                    {sumRows.map((row) => (
+                      <td key={row.id} className="kp-move" onClick={() => pickIndex(row.id)}>
                         {row.path}
                         {row.move != null ? (
                           <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
@@ -404,20 +398,20 @@ export function PcrPane() {
                   </tr>
                   <tr className="kp-sum">
                     <th>Vol</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => setIndex(row.id)}>{stanceLab(row.vol)}</td>
+                    {sumRows.map((row) => (
+                      <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.vol)}</td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>ΔOI</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => setIndex(row.id)}>{stanceLab(row.doi)}</td>
+                    {sumRows.map((row) => (
+                      <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.doi)}</td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>Spot</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} onClick={() => setIndex(row.id)}>
+                    {sumRows.map((row) => (
+                      <td key={row.id} onClick={() => pickIndex(row.id)}>
                         {fmtLtp(row.spot)}
                         {row.spotChg != null ? (
                           <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
@@ -429,39 +423,39 @@ export function PcrPane() {
                   </tr>
                   <tr className="kp-sum">
                     <th>Δ 15m</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => setIndex(row.id)}>
+                    {sumRows.map((row) => (
+                      <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => pickIndex(row.id)}>
                         {formatDelta(row.delta)}
                       </td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>Puts / Calls</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} onClick={() => setIndex(row.id)}>
+                    {sumRows.map((row) => (
+                      <td key={row.id} onClick={() => pickIndex(row.id)}>
                         {row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}
                       </td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>Expiry</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} onClick={() => setIndex(row.id)}>{row.expiry}</td>
+                    {sumRows.map((row) => (
+                      <td key={row.id} onClick={() => pickIndex(row.id)}>{row.expiry}</td>
                     ))}
                   </tr>
                   <tr className="kp-sum">
                     <th>Max pain</th>
-                    {deskRows.map((row) => (
-                      <td key={row.id} onClick={() => setIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
+                    {sumRows.map((row) => (
+                      <td key={row.id} onClick={() => pickIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
                     ))}
                   </tr>
-                  {axis.map((slot, row) => (
+                  {heatSlots.map((slot, row) => (
                     <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
                       <th>{slot.hhmm}</th>
-                      {PCR_INDICES.map((u) => {
+                      {cols.map((u) => {
                         const s = boards?.[u.id]?.[row];
                         return (
-                          <td key={u.id} onClick={() => setIndex(u.id)}>
+                          <td key={u.id} onClick={() => pickIndex(u.id)}>
                             <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
                               {s?.pcr == null ? "" : formatPcr(s.pcr)}
                             </span>
@@ -477,7 +471,7 @@ export function PcrPane() {
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
-          <p className="kp-foot">Play is OI PCR. Heat below is the 15-minute table. 1–5 index · A all · G grid · P path</p>
+          <p className="kp-foot">All five, or one index. Play is OI PCR. 1–5 index · A all · P path</p>
         </div>
       </div>
     </div>
