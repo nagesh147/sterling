@@ -41,10 +41,10 @@ export function SimulationSummary() {
         </div>
 
         {/* Cumulative Equity Curve Sparkline */}
-        <EquityCurveSparkline events={stats.events} />
+        <EquityCurveSparkline trades={stats.trades || []} />
 
         {/* Strategy Breakdown */}
-        <StrategyTable events={stats.events} />
+        <StrategyTable events={stats.events} trades={stats.trades || []} />
 
         {/* Executed Trades Table */}
         <ExecutedTradesTable trades={stats.trades || []} />
@@ -155,18 +155,26 @@ function exportSignalsToCSV(events: any[], date: string) {
   URL.revokeObjectURL(url);
 }
 
-function StrategyTable({ events }: { events: { strategy: string; direction: string }[] }) {
+function StrategyTable({ events, trades }: { events: any[]; trades: any[] }) {
   const breakdown = useMemo(() => {
-    const map = new Map<string, { count: number; wins: number; losses: number }>();
-    events.forEach(ev => {
-      const s = map.get(ev.strategy) || { count: 0, wins: 0, losses: 0 };
+    const map = new Map<string, { count: number; wins: number; losses: number; pnl: number }>();
+    
+    (events || []).forEach(ev => {
+      const s = map.get(ev.strategy) || { count: 0, wins: 0, losses: 0, pnl: 0 };
       s.count++;
-      if (ev.direction === 'BULLISH') s.wins++;
-      else s.losses++;
       map.set(ev.strategy, s);
     });
+
+    (trades || []).forEach(tr => {
+      const s = map.get(tr.strategy) || { count: 0, wins: 0, losses: 0, pnl: 0 };
+      if (tr.status === 'WIN') s.wins++;
+      else if (tr.status === 'LOSS') s.losses++;
+      s.pnl += (tr.pnl_usd || 0);
+      map.set(tr.strategy, s);
+    });
+
     return Array.from(map.entries()).map(([name, data]) => ({ name, ...data }));
-  }, [events]);
+  }, [events, trades]);
 
   return (
     <>
@@ -178,19 +186,23 @@ function StrategyTable({ events }: { events: { strategy: string; direction: stri
             <th style={{ padding: '6px 0', fontWeight: 500 }}>Signals</th>
             <th style={{ padding: '6px 0', fontWeight: 500 }}>Wins</th>
             <th style={{ padding: '6px 0', fontWeight: 500 }}>Losses</th>
+            <th style={{ padding: '6px 0', fontWeight: 500, textAlign: 'right' }}>Realized P&L</th>
           </tr>
         </thead>
         <tbody>
           {breakdown.map(s => (
             <tr key={s.name} style={{ borderBottom: `1px solid ${k.border}` }}>
-              <td style={{ padding: '8px 0', color: k.text, fontWeight: 600 }}>{s.name}</td>
+              <td style={{ padding: '8px 0', color: k.text, fontWeight: 600 }}>[{s.name.toUpperCase()}]</td>
               <td style={{ padding: '8px 0', color: k.text }}>{s.count}</td>
-              <td style={{ padding: '8px 0', color: k.green }}>{s.wins}</td>
-              <td style={{ padding: '8px 0', color: k.red }}>{s.losses}</td>
+              <td style={{ padding: '8px 0', color: k.green, fontWeight: 600 }}>{s.wins}</td>
+              <td style={{ padding: '8px 0', color: k.red, fontWeight: 600 }}>{s.losses}</td>
+              <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 700, color: s.pnl >= 0 ? k.green : k.red }}>
+                {s.pnl >= 0 ? '+' : ''}₹{s.pnl.toFixed(2)}
+              </td>
             </tr>
           ))}
           {breakdown.length === 0 && (
-            <tr><td colSpan={4} style={{ padding: '12px 0', color: k.dim, textAlign: 'center' }}>No strategies triggered</td></tr>
+            <tr><td colSpan={5} style={{ padding: '12px 0', color: k.dim, textAlign: 'center' }}>No strategies triggered</td></tr>
           )}
         </tbody>
       </table>
@@ -207,18 +219,16 @@ function StatBox({ label, value, color = k.text }: { label: string; value: strin
   );
 }
 
-function EquityCurveSparkline({ events }: { events: any[] }) {
+function EquityCurveSparkline({ trades }: { trades: any[] }) {
   const equityPoints = useMemo(() => {
     let pnl = 0;
     const points = [0];
-    events.forEach(ev => {
-      const isWin = ev.direction === 'BULLISH';
-      const change = isWin ? Math.abs(ev.target - ev.entry) : -Math.abs(ev.entry - ev.stop);
-      pnl += change;
+    (trades || []).forEach(tr => {
+      pnl += (tr.pnl_usd || 0);
       points.push(pnl);
     });
     return points;
-  }, [events]);
+  }, [trades]);
 
   if (equityPoints.length < 2) return null;
 
@@ -239,7 +249,7 @@ function EquityCurveSparkline({ events }: { events: any[] }) {
 
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Equity Curve Sparkline</div>
+      <div style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>Equity Curve Sparkline (Realized P&L ₹)</div>
       <div style={{ background: k.surface, padding: '8px 12px', borderRadius: 8, border: `1px solid ${k.border}` }}>
         <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <polyline fill="none" stroke={color} strokeWidth="2" points={pointsSvg} strokeLinecap="round" strokeLinejoin="round" />
