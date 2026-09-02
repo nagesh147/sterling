@@ -52,7 +52,13 @@ function moveTxt(n: number): string {
 function stanceLab(s: Stance): string {
   if (s === "agrees") return "agrees";
   if (s === "fights") return "fights";
-  return "quiet";
+  return "—";
+}
+
+function playHint(action: PcrAction): string {
+  if (action === "Buy PE") return "Skip CE";
+  if (action === "Buy CE") return "Skip PE";
+  return "0.80–1.20";
 }
 
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
@@ -129,18 +135,24 @@ const CSS = `
 .kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
 .kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 8px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap;cursor:pointer}
+.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap;cursor:pointer}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
 .kite-pcr thead th[data-on="true"]{color:var(--k-orange);font-weight:600}
 .kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:8px 10px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
-.kite-pcr tbody td{padding:8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:top;text-align:center}
+.kite-pcr tbody td{padding:8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
-.kite-pcr .kp-sum td{padding:8px 8px}
-.kite-pcr .kp-pcr{font-size:16px;font-weight:600;letter-spacing:-.02em}
+.kite-pcr .kp-book tbody tr{cursor:pointer}
+.kite-pcr .kp-book tbody tr:hover{background:var(--k-surface-hover)}
+.kite-pcr .kp-book tbody tr[data-on="true"]{background:color-mix(in srgb,var(--k-orange) 8%, var(--k-surface))}
+.kite-pcr .kp-book tbody th{font-weight:500;color:var(--k-text);font-size:13px}
+.kite-pcr .kp-book tbody td{text-align:left;padding:10px;white-space:nowrap}
+.kite-pcr .kp-book thead th{text-align:left;cursor:default}
+.kite-pcr .kp-pcr{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
-.kite-pcr .kp-why{display:block;margin-top:2px;font-size:11px;font-weight:400;color:var(--k-dim);line-height:1.35}
-.kite-pcr .kp-move{white-space:nowrap;font-size:12px}
-.kite-pcr .kp-heat-row td{padding:2px}
+.kite-pcr .kp-why{display:block;margin-top:1px;font-size:11px;font-weight:400;color:var(--k-dim)}
+.kite-pcr .kp-move{white-space:nowrap;font-size:12px;color:var(--k-dim)}
+.kite-pcr .kp-chg{margin-left:6px;font-size:12px}
+.kite-pcr .kp-heat-row td{padding:2px;text-align:center}
 .kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums}
 .kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:5px 4px;border-radius:2px;min-height:24px}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
@@ -277,7 +289,7 @@ export function PcrPane() {
       const row = payload?.series[u.id];
       const kind = row ? expiryKind(row.expiry, sessionIso || todayIso) : "weekly";
       const expiry = row
-        ? `${kind === "today" ? "Today" : kind === "weekly" ? "Weekly" : "Monthly"} · ${formatExpiry(row.expiry)}`
+        ? `${kind === "today" ? "Today" : kind === "weekly" ? "Wk" : "Mo"} ${formatExpiry(row.expiry)}`
         : "—";
       const action = book.book?.action ?? liveAction(pcr);
       return {
@@ -350,102 +362,56 @@ export function PcrPane() {
           ) : sumRows.length ? (
             <div className="kp-stack">
               <div className="kp-sheet">
-                <table>
+                <table className="kp-book">
                   <thead>
                     <tr>
-                      <th>Book</th>
-                      {cols.map((u) => (
-                        <th key={u.id} data-on={index === u.id} onClick={() => pickIndex(u.id)}>{u.short}</th>
-                      ))}
+                      <th>Index</th>
+                      <th>Play</th>
+                      <th>OI PCR</th>
+                      <th>Move</th>
+                      <th>Vol</th>
+                      <th>ΔOI</th>
+                      <th>Spot</th>
+                      <th>P/C</th>
+                      <th>Expiry</th>
+                      <th>Pain</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="kp-sum">
-                      <th>Play</th>
-                      {sumRows.map((row) => {
-                        const kind = ideaKind(row.action);
-                        return (
-                          <td key={row.id} onClick={() => pickIndex(row.id)}>
+                    {sumRows.map((row) => {
+                      const kind = ideaKind(row.action);
+                      return (
+                        <tr key={row.id} data-on={index === row.id} onClick={() => pickIndex(row.id)}>
+                          <th>{row.name}</th>
+                          <td>
                             <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
-                            <span className="kp-why">{row.why}</span>
+                            <span className="kp-why">{playHint(row.action)}</span>
                           </td>
-                        );
-                      })}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>OI PCR</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => pickIndex(row.id)}>
-                          {row.pcr != null ? formatPcr(row.pcr) : "—"}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Move</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} className="kp-move" onClick={() => pickIndex(row.id)}>
-                          {row.path}
-                          {row.move != null ? (
-                            <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
-                              {" "}{moveTxt(row.move)}
-                            </span>
-                          ) : null}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Vol</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.vol)}</td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>ΔOI</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.doi)}</td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Spot</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} onClick={() => pickIndex(row.id)}>
-                          {fmtLtp(row.spot)}
-                          {row.spotChg != null ? (
-                            <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
-                              {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
-                            </span>
-                          ) : null}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Δ 15m</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => pickIndex(row.id)}>
-                          {formatDelta(row.delta)}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Puts / Calls</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} onClick={() => pickIndex(row.id)}>
-                          {row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Expiry</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} onClick={() => pickIndex(row.id)}>{row.expiry}</td>
-                      ))}
-                    </tr>
-                    <tr className="kp-sum">
-                      <th>Max pain</th>
-                      {sumRows.map((row) => (
-                        <td key={row.id} onClick={() => pickIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
-                      ))}
-                    </tr>
+                          <td className={`kp-pcr kp-act ${kind}`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
+                          <td className="kp-move">
+                            {row.path}
+                            {row.move != null ? (
+                              <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
+                                {" "}{moveTxt(row.move)}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className={`kp-st ${row.vol}`}>{stanceLab(row.vol)}</td>
+                          <td className={`kp-st ${row.doi}`}>{stanceLab(row.doi)}</td>
+                          <td>
+                            {fmtLtp(row.spot)}
+                            {row.spotChg != null ? (
+                              <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
+                                {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td>
+                          <td>{row.expiry}</td>
+                          <td>{fmtLtp(row.maxPain)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
