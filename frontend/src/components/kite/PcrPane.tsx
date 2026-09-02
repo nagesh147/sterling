@@ -55,6 +55,12 @@ function stanceLab(s: Stance): string {
   return "—";
 }
 
+function playHint(action: PcrAction): string {
+  if (action === "Buy PE") return "Skip CE";
+  if (action === "Buy CE") return "Skip PE";
+  return "0.80–1.20";
+}
+
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
   const by = new Map(marks.map((m) => [m.hhmm, m.indexClose]));
   const pts = slots.filter((s) => s.pcr != null);
@@ -128,6 +134,7 @@ const CSS = `
 .kite-pcr .kp-st.quiet{color:var(--k-dim)}
 .kite-pcr .kp-stack{display:flex;flex-direction:column;gap:10px}
 .kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
+.kite-pcr .kp-sheet:not(.kp-sheet-heat){overflow:visible}
 .kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
 .kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
@@ -153,6 +160,10 @@ const CSS = `
 .kite-pcr .kp-book thead th.mid,.kite-pcr .kp-book tbody td.mid{text-align:center}
 .kite-pcr .kp-pcr{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.kite-pcr .kp-play-cell{position:relative}
+.kite-pcr .kp-tip{display:none;position:absolute;left:8px;top:calc(100% - 2px);z-index:6;background:var(--k-surface);border:1px solid var(--k-border);color:var(--k-text);padding:5px 8px;font-size:11px;font-weight:400;white-space:nowrap;border-radius:3px;box-shadow:0 6px 16px rgba(0,0,0,.18);pointer-events:none}
+.kite-pcr .kp-play-cell:hover .kp-tip{display:block}
+.kite-pcr .kp-book tbody tr:last-child .kp-tip{top:auto;bottom:calc(100% - 2px)}
 .kite-pcr .kp-move{font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px}
 .kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
@@ -395,8 +406,9 @@ export function PcrPane() {
                       return (
                         <tr key={row.id}>
                           <th>{row.name}</th>
-                          <td>
+                          <td className="kp-play-cell">
                             <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
+                            <span className="kp-tip">{playHint(row.action)}</span>
                           </td>
                           <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
                           <td className="kp-move num">
