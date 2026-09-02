@@ -135,25 +135,39 @@ const CSS = `
 .kite-pcr .kp-stack{display:flex;flex-direction:column;gap:10px}
 .kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
 .kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
-.kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
 .kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
 .kite-pcr thead th[data-on="true"]{color:var(--k-orange);font-weight:600}
 .kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:8px 10px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
-.kite-pcr tbody td{padding:8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
+.kite-pcr tbody td{padding:8px 10px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
-.kite-pcr .kp-book tbody tr[data-on="true"]{background:color-mix(in srgb,var(--k-orange) 8%, var(--k-surface))}
+.kite-pcr .kp-book col.c-idx{width:72px}
+.kite-pcr .kp-book col.c-play{width:92px}
+.kite-pcr .kp-book col.c-pcr{width:76px}
+.kite-pcr .kp-book col.c-move{width:148px}
+.kite-pcr .kp-book col.c-st{width:64px}
+.kite-pcr .kp-book col.c-spot{width:148px}
+.kite-pcr .kp-book col.c-pc{width:64px}
+.kite-pcr .kp-book col.c-exp{width:88px}
+.kite-pcr .kp-book col.c-pain{width:88px}
 .kite-pcr .kp-book tbody th{font-weight:500;color:var(--k-text);font-size:13px}
-.kite-pcr .kp-book tbody td{text-align:left;padding:10px;white-space:nowrap}
-.kite-pcr .kp-book thead th{text-align:left;cursor:default}
+.kite-pcr .kp-book thead th,.kite-pcr .kp-book tbody td{padding:9px 10px;white-space:nowrap}
+.kite-pcr .kp-book thead th{text-align:left}
+.kite-pcr .kp-book tbody td{text-align:left}
+.kite-pcr .kp-book thead th.num,.kite-pcr .kp-book tbody td.num{text-align:right}
+.kite-pcr .kp-book thead th.mid,.kite-pcr .kp-book tbody td.mid{text-align:center}
 .kite-pcr .kp-pcr{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
 .kite-pcr .kp-why{display:block;margin-top:1px;font-size:11px;font-weight:400;color:var(--k-dim)}
-.kite-pcr .kp-move{white-space:nowrap;font-size:12px;color:var(--k-dim)}
-.kite-pcr .kp-chg{margin-left:6px;font-size:12px}
+.kite-pcr .kp-move{font-size:12px;color:var(--k-dim)}
+.kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px}
+.kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
+.kite-pcr .kp-chg{min-width:5.2ch;text-align:right;font-size:12px}
+.kite-pcr .kp-sheet-heat col.c-time{width:72px}
 .kite-pcr .kp-heat-row td{padding:2px;text-align:center}
 .kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums}
-.kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:5px 4px;border-radius:2px;min-height:24px}
+.kite-pcr .kp-heat{display:block;width:100%;text-align:center;font-size:12px;font-weight:500;padding:6px 4px;border-radius:2px;min-height:26px;box-sizing:border-box}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-band-extreme-positive{background:#1b5e4a;color:#f4f4f5}
 .kite-pcr .kp-band-highly-positive{background:#2e7a64;color:#f4f4f5}
@@ -356,32 +370,44 @@ export function PcrPane() {
             <div className="kp-stack">
               <div className="kp-sheet">
                 <table className="kp-book">
+                  <colgroup>
+                    <col className="c-idx" />
+                    <col className="c-play" />
+                    <col className="c-pcr" />
+                    <col className="c-move" />
+                    <col className="c-st" />
+                    <col className="c-st" />
+                    <col className="c-spot" />
+                    <col className="c-pc" />
+                    <col className="c-exp" />
+                    <col className="c-pain" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>Index</th>
                       <th>Play</th>
-                      <th>OI PCR</th>
-                      <th>Move</th>
-                      <th>Vol</th>
-                      <th>ΔOI</th>
-                      <th>Spot</th>
-                      <th>P/C</th>
+                      <th className="num">OI PCR</th>
+                      <th className="num">Move</th>
+                      <th className="mid">Vol</th>
+                      <th className="mid">ΔOI</th>
+                      <th className="num">Spot</th>
+                      <th className="mid">P/C</th>
                       <th>Expiry</th>
-                      <th>Pain</th>
+                      <th className="num">Pain</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sumRows.map((row) => {
                       const kind = ideaKind(row.action);
                       return (
-                        <tr key={row.id} data-on={!showAll && index === row.id}>
+                        <tr key={row.id}>
                           <th>{row.name}</th>
                           <td>
                             <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
                             <span className="kp-why">{playHint(row.action)}</span>
                           </td>
-                          <td className={`kp-pcr kp-act ${kind}`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
-                          <td className="kp-move">
+                          <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
+                          <td className="kp-move num">
                             {row.path}
                             {row.move != null ? (
                               <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
@@ -389,19 +415,21 @@ export function PcrPane() {
                               </span>
                             ) : null}
                           </td>
-                          <td className={`kp-st ${row.vol}`}>{stanceLab(row.vol)}</td>
-                          <td className={`kp-st ${row.doi}`}>{stanceLab(row.doi)}</td>
-                          <td>
-                            {fmtLtp(row.spot)}
-                            {row.spotChg != null ? (
-                              <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
-                                {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
-                              </span>
-                            ) : null}
+                          <td className={`kp-st ${row.vol} mid`}>{stanceLab(row.vol)}</td>
+                          <td className={`kp-st ${row.doi} mid`}>{stanceLab(row.doi)}</td>
+                          <td className="num">
+                            <span className="kp-spot">
+                              <span className="ltp">{fmtLtp(row.spot)}</span>
+                              {row.spotChg != null ? (
+                                <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
+                                  {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                                </span>
+                              ) : null}
+                            </span>
                           </td>
-                          <td>{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td>
+                          <td className="mid">{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td>
                           <td>{row.expiry}</td>
-                          <td>{fmtLtp(row.maxPain)}</td>
+                          <td className="num">{fmtLtp(row.maxPain)}</td>
                         </tr>
                       );
                     })}
@@ -411,6 +439,10 @@ export function PcrPane() {
 
               <div className="kp-sheet kp-sheet-heat">
                 <table>
+                  <colgroup>
+                    <col className="c-time" />
+                    {cols.map((u) => <col key={u.id} />)}
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>Time</th>
