@@ -55,12 +55,6 @@ function stanceLab(s: Stance): string {
   return "—";
 }
 
-function playHint(action: PcrAction): string {
-  if (action === "Buy PE") return "Skip CE";
-  if (action === "Buy CE") return "Skip PE";
-  return "0.80–1.20";
-}
-
 function Path({ slots, marks }: { slots: PcrSlot[]; marks: { hhmm: string; indexClose: number }[] }) {
   const by = new Map(marks.map((m) => [m.hhmm, m.indexClose]));
   const pts = slots.filter((s) => s.pcr != null);
@@ -159,7 +153,6 @@ const CSS = `
 .kite-pcr .kp-book thead th.mid,.kite-pcr .kp-book tbody td.mid{text-align:center}
 .kite-pcr .kp-pcr{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
-.kite-pcr .kp-why{display:block;margin-top:1px;font-size:11px;font-weight:400;color:var(--k-dim)}
 .kite-pcr .kp-move{font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px}
 .kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
@@ -404,7 +397,6 @@ export function PcrPane() {
                           <th>{row.name}</th>
                           <td>
                             <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
-                            <span className="kp-why">{playHint(row.action)}</span>
                           </td>
                           <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
                           <td className="kp-move num">
