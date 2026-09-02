@@ -11,6 +11,7 @@ import {
   metricValue,
   pcrBand,
   putShare,
+  readPcr,
 } from '../../lib/pcr/slots';
 import { PCR_INDICES, type PcrDeskPayload, type PcrIndex, type PcrMetric, type PcrSeries, type PcrSlot } from '../../lib/pcr/types';
 import { formatIstIsoDate, getIstParts } from '../../lib/astro/time';
@@ -145,6 +146,15 @@ const CSS = `
 .kp-legend li{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.55;margin:3px 0}
 .kp-swatch{width:14px;height:14px;border-radius:2px;flex-shrink:0;display:inline-block;border:1px solid rgba(0,0,0,.08)}
 .kp-legend p{margin:12px 0 0;font-size:12px;color:var(--k-dim);line-height:1.5}
+.kp-feed{font-size:11px;color:var(--k-green);font-weight:500;margin-left:8px}
+.kp-read{margin:0 0 16px;max-width:560px}
+.kp-read h3{margin:0 0 4px;font-size:16px;font-weight:500}
+.kp-read p{margin:0;font-size:13px;color:var(--k-dim);line-height:1.5}
+.kp-tape{margin:16px 0 0;max-width:560px}
+.kp-tape h3{margin:0 0 8px;font-size:13px;font-weight:500;color:var(--k-dim)}
+.kp-tape ul{margin:0;padding:0;list-style:none}
+.kp-tape li{font-size:13px;line-height:1.45;margin:4px 0;color:var(--k-text)}
+.kp-tape .text-up,.kp-tape .text-down{font-weight:500}
 @media (max-width:800px){
   .kite-pcr .ko-head,.kite-pcr .ko-body{padding-left:16px;padding-right:16px}
   .kp-now{grid-template-columns:1fr;gap:12px}
@@ -208,13 +218,32 @@ export function PcrPane() {
   const band = (grid.find((s) => s.live) ?? lastFilled)?.band ?? "empty";
   const sessionIso = series?.spot.timestamp?.slice(0, 10) ?? "";
   const kindNow = series ? expiryKind(series.expiry, sessionIso || (now ? formatIstIsoDate(now) : "2026-08-27")) : "weekly";
+  const insight = useMemo(
+    () => readPcr(grid, series?.spot.changePer ?? null),
+    [grid, series?.spot.changePer],
+  );
+  const tape = useMemo(() => {
+    const out: { id: string; title: string; up: boolean }[] = [];
+    for (const u of PCR_INDICES) {
+      const row = boards?.[u.id] ?? [];
+      for (const s of row) {
+        if (s.delta == null || Math.abs(s.delta) < 0.06) continue;
+        out.push({
+          id: `${u.id}-${s.hhmm}`,
+          title: `${u.short} ${s.delta > 0 ? "+" : ""}${s.delta.toFixed(2)} at ${s.label} → ${formatPcr(s.pcr)}`,
+          up: s.delta > 0,
+        });
+      }
+    }
+    return out.slice(-8).reverse();
+  }, [boards]);
 
   return (
     <div className="kite-pcr"><style>{CSS}</style>
       <div className="ko kp">
       <div className="ko-head">
         <div className="ko-title-row">
-          <h2>PCR</h2>
+          <h2>PCR {payload?.source === "live" ? <span className="kp-feed">Live F&O</span> : null}</h2>
           <div className="kp-clock">{stamp ? `${stamp} IST` : ""}</div>
         </div>
         <div className="ko-tabs-row">
@@ -291,6 +320,15 @@ export function PcrPane() {
           <p className="ko-sub">Loading put-call prints…</p>
         )}
 
+        {series ? (
+          <div className="kp-read">
+            <h3>{insight.headline}</h3>
+            <p>
+              {insight.bias} · {insight.reason}
+            </p>
+          </div>
+        ) : null}
+
         <div className="kp-metric" role="tablist" aria-label="PCR metric">
           {(
             [
@@ -362,6 +400,17 @@ export function PcrPane() {
             </table>
           </div>
         )}
+
+        {tape.length ? (
+          <div className="kp-tape">
+            <h3>Flow tape</h3>
+            <ul>
+              {tape.map((e) => (
+                <li key={e.id} className={e.up ? "text-up" : "text-down"}>{e.title}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <section className="kp-legend" aria-label="How to read PCR">
           <h3>How to read Put Call Ratio (PCR)</h3>

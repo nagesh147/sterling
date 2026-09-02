@@ -10,6 +10,7 @@ import {
   overlayShot,
   pcrBand,
   putShare,
+  readPcr,
   roundPcr,
   slotLabel,
 } from "./slots";
@@ -86,6 +87,34 @@ describe("pcr slots", () => {
   it("keeps put share in (0,1) from PCR", () => {
     expect(Number(putShare(1)?.toFixed(2))).toBe(0.5);
     expect(putShare(0.59) ?? 0).toBeLessThan(0.4);
+  });
+
+  it("reads put writing vs protective buying from PCR vs spot", () => {
+    expect(readPcr([], null).headline).toBe("Waiting for the open print");
+    const rising = [
+      { hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.80, delta: null, band: "highly-negative" as const, live: false },
+      { hhmm: "09:30", label: "9.30", minutes: 570, pcr: 0.90, delta: 0.10, band: "negative" as const, live: false },
+      { hhmm: "09:45", label: "9.45", minutes: 585, pcr: 0.98, delta: 0.08, band: "negative" as const, live: true },
+    ];
+    expect(readPcr(rising, -0.4)).toMatchObject({ bias: "Bearish", headline: "Puts being bought into weakness" });
+    expect(readPcr(rising, 0.3)).toMatchObject({ bias: "Bullish", headline: "Put writing on the bounce" });
+    const falling = [
+      { hhmm: "09:15", label: "9.15", minutes: 555, pcr: 1.05, delta: null, band: "positive" as const, live: false },
+      { hhmm: "09:30", label: "9.30", minutes: 570, pcr: 0.95, delta: -0.10, band: "negative" as const, live: true },
+    ];
+    expect(readPcr(falling, 0.5).headline).toBe("Calls chasing the rally");
+    expect(readPcr(
+      [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 1.35, delta: null, band: "highly-positive" as const, live: true }],
+      0,
+    ).headline).toBe("Put writers in control");
+    expect(readPcr(
+      [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.62, delta: null, band: "highly-negative" as const, live: true }],
+      0,
+    ).headline).toBe("Call load is heavy");
+    expect(readPcr(
+      [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.95, delta: null, band: "negative" as const, live: true }],
+      0,
+    ).bias).toBe("Balanced");
   });
 
   it("has a mark for every cash slot on the snapshot", () => {
