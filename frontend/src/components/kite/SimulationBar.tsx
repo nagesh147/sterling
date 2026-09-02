@@ -250,7 +250,7 @@ export function SimulationBar() {
             <div className="sim-drawer-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Strategies Multi-Select */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   ⚡ SELECT STRATEGIES TO REPLAY ({sim.selectedStrategies.includes('all') ? 'ALL' : sim.selectedStrategies.length})
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -261,7 +261,7 @@ export function SimulationBar() {
                         key={s.key}
                         className="sim-speed-pill"
                         data-active={isSelected}
-                        style={{ height: 26, padding: '0 10px', fontSize: 10, borderRadius: 13 }}
+                        style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                         onClick={() => sim.toggleStrategy(s.key)}
                         disabled={simActive}
                       >
@@ -274,7 +274,7 @@ export function SimulationBar() {
 
               {/* Moneyness / Strike Selection */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   🎯 MONEYNESS & STRIKE SELECTION
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -290,7 +290,7 @@ export function SimulationBar() {
                       key={m.key}
                       className="sim-speed-pill"
                       data-active={sim.moneyness === m.key}
-                      style={{ height: 26, padding: '0 10px', fontSize: 10, borderRadius: 13 }}
+                      style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                       onClick={() => sim.setMoneyness(m.key)}
                       disabled={simActive}
                     >
@@ -302,7 +302,7 @@ export function SimulationBar() {
 
               {/* Position Sizing (Lots) */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                   📦 POSITION SIZING (LOTS)
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -311,7 +311,7 @@ export function SimulationBar() {
                       key={l}
                       className="sim-speed-pill"
                       data-active={sim.lots === l}
-                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                       onClick={() => sim.setLots(l)}
                       disabled={simActive}
                     >
@@ -429,7 +429,7 @@ export function SimulationBar() {
                         const isWin = tr.status === 'WIN';
                         return (
                           <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--k-text) 6%, transparent)' }}>
-                            <td style={{ padding: '6px 4px', fontFamily: 'monospace', color: 'var(--k-cyan)', fontWeight: 600 }}>{tr.trade_id}</td>
+                            <td style={{ padding: '6px 4px', fontFamily: "'JetBrains Mono', monospace", color: 'var(--k-blue)', fontWeight: 600, fontSize: 10 }}>{tr.trade_id}</td>
                             <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.entry_time_iso} → {tr.exit_time_iso}</td>
                             <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--k-text)' }}>[{tr.strategy.toUpperCase()}]</td>
                             <td style={{ padding: '6px 4px', color: 'var(--k-text)', fontWeight: 600 }}>{tr.symbol}</td>
@@ -438,11 +438,14 @@ export function SimulationBar() {
                             <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
                             <td style={{ padding: '6px 4px' }}>
                               <span style={{
-                                padding: '2px 6px',
-                                borderRadius: 4,
+                                padding: '1px 6px',
+                                borderRadius: 3,
                                 fontSize: 9,
                                 fontWeight: 700,
-                                background: isWin ? 'color-mix(in srgb, var(--k-green) 15%, transparent)' : 'color-mix(in srgb, var(--k-red) 15%, transparent)',
+                                fontFamily: "'JetBrains Mono', monospace",
+                                letterSpacing: '0.5px',
+                                background: isWin ? 'color-mix(in srgb, var(--k-green) 10%, transparent)' : 'color-mix(in srgb, var(--k-red) 10%, transparent)',
+                                border: `1px solid ${isWin ? 'color-mix(in srgb, var(--k-green) 25%, transparent)' : 'color-mix(in srgb, var(--k-red) 25%, transparent)'}`,
                                 color: isWin ? 'var(--k-green)' : 'var(--k-red)',
                               }}>
                                 {tr.status}
@@ -491,13 +494,13 @@ export function SimulationBar() {
           <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: 'var(--k-faint-2)', flexShrink: 0 }}>
             {Array.from({ length: 6 }).map((_, index) => <span key={index} style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'currentColor' }} />)}
           </span>
-          <span style={{ color: 'var(--k-cyan)', display: 'inline-flex' }}>⚡</span>
+          <span style={{ color: 'var(--k-blue)', display: 'inline-flex' }}>⚡</span>
 
           {/* Title & Status */}
-          <span style={{ fontSize: 11, fontWeight: 650, color: 'var(--k-text)', letterSpacing: '.01em' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-text)', letterSpacing: '.02em' }}>
             MARKET REPLAY ENGINE
           </span>
-          <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--k-dim)', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--k-dim)', fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: 'tabular-nums' }}>
             [{sim.status.current_time_iso || '09:15:00'} IST · {sim.speed}× SPEED]
           </span>
 
@@ -507,7 +510,7 @@ export function SimulationBar() {
             <button
               type="button"
               className="kw-pane-control"
-              style={{ width: 'auto', padding: '0 6px', fontSize: 10, fontWeight: 700, color: isExpanded ? 'var(--k-cyan)' : 'var(--k-dim)' }}
+              style={{ width: 'auto', padding: '0 6px', fontSize: 10, fontWeight: 700, color: isExpanded ? 'var(--k-blue)' : 'var(--k-dim)' }}
               onClick={() => setIsExpanded(!isExpanded)}
               title="Toggle Expandable Dock Panel"
             >
@@ -572,7 +575,7 @@ export function SimulationBar() {
           <div className="sim-date-group">
             <button
               className="sim-speed-pill"
-              style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-cyan)', color: 'var(--k-cyan)', background: 'color-mix(in srgb, var(--k-cyan) 12%, transparent)' }}
+              style={{ height: 24, padding: '0 8px', fontSize: 10, borderColor: 'color-mix(in srgb, var(--k-blue) 30%, transparent)', color: 'var(--k-blue)', background: 'color-mix(in srgb, var(--k-blue) 8%, transparent)' }}
               onClick={() => { setActiveDockTab('config'); setIsExpanded(!isExpanded); }}
               disabled={simActive}
               title="Configure Strategies, Moneyness & Lots"
@@ -584,7 +587,7 @@ export function SimulationBar() {
             <div ref={stratDropdownRef} style={{ position: 'relative' }}>
               <button
                 className="sim-speed-pill"
-                style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
+                style={{ height: 24, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowStratDropdown(!showStratDropdown);
@@ -605,7 +608,7 @@ export function SimulationBar() {
                     zIndex: 10000,
                     width: 230,
                     padding: 8,
-                    borderRadius: 8,
+                    borderRadius: 4,
                     border: '1px solid var(--k-border-strong-3)',
                     background: 'var(--k-surface-3)',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
@@ -615,7 +618,7 @@ export function SimulationBar() {
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     Select Strategies:
                   </div>
                   <button
@@ -658,7 +661,7 @@ export function SimulationBar() {
             <div ref={legsDropdownRef} style={{ position: 'relative' }}>
               <button
                 className="sim-speed-pill"
-                style={{ height: 26, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
+                style={{ height: 24, padding: '0 8px', fontSize: 10, borderColor: 'var(--k-border-strong-3)' }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowLegsDropdown(!showLegsDropdown);
@@ -676,10 +679,10 @@ export function SimulationBar() {
                     position: 'absolute',
                     top: 32,
                     left: 0,
-                    zIndex: 10000,
+                    zIndex: 9999,
                     width: 220,
                     padding: 8,
-                    borderRadius: 8,
+                    borderRadius: 4,
                     border: '1px solid var(--k-border-strong-3)',
                     background: 'var(--k-surface-3)',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.65)',
@@ -689,7 +692,7 @@ export function SimulationBar() {
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div style={{ fontSize: 9.5, fontWeight: 750, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--k-dim)', padding: '2px 4px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     Select Option Legs:
                   </div>
                   {[
@@ -810,7 +813,7 @@ export function SimulationBar() {
 
             <button
               className="sim-speed-pill"
-              style={{ color: 'var(--k-cyan)', borderColor: 'var(--k-cyan)', background: isExpanded ? 'color-mix(in srgb, var(--k-cyan) 20%, transparent)' : undefined }}
+              style={{ color: 'var(--k-blue)', borderColor: 'color-mix(in srgb, var(--k-blue) 30%, transparent)', background: isExpanded ? 'color-mix(in srgb, var(--k-blue) 12%, transparent)' : undefined }}
               onClick={() => setIsExpanded(!isExpanded)}
               title={isExpanded ? 'Collapse Dock' : 'Expand Dock'}
             >
@@ -850,7 +853,7 @@ export function SimulationBar() {
               {activeDockTab === 'signals' && sim.status.stats.events.length > 0 && (
                 <button
                   className="sim-speed-pill"
-                  style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)' }}
+                  style={{ height: 20, padding: '0 6px', fontSize: 9, borderColor: 'color-mix(in srgb, var(--k-green) 30%, transparent)', color: 'var(--k-green)', background: 'color-mix(in srgb, var(--k-green) 8%, transparent)' }}
                   onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}
                 >
                   📥 Export Signals CSV
@@ -859,7 +862,7 @@ export function SimulationBar() {
               {activeDockTab === 'trades' && (sim.status.stats.trades || []).length > 0 && (
                 <button
                   className="sim-speed-pill"
-                  style={{ height: 22, padding: '0 8px', fontSize: 9, borderColor: 'var(--k-green)', color: 'var(--k-green)' }}
+                  style={{ height: 20, padding: '0 6px', fontSize: 9, borderColor: 'color-mix(in srgb, var(--k-green) 30%, transparent)', color: 'var(--k-green)', background: 'color-mix(in srgb, var(--k-green) 8%, transparent)' }}
                   onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}
                 >
                   📥 Export Trades CSV
@@ -873,14 +876,14 @@ export function SimulationBar() {
             {activeDockTab === 'config' && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     ⚡ ACTIVE REPLAY STRATEGIES (MULTI-SELECT)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     <button
                       className="sim-speed-pill"
                       data-active={sim.selectedStrategies.includes('all')}
-                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                       onClick={() => sim.toggleStrategy('all')}
                       disabled={simActive}
                     >
@@ -893,7 +896,7 @@ export function SimulationBar() {
                           key={strat.id}
                           className="sim-speed-pill"
                           data-active={isSel}
-                          style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                          style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                           onClick={() => sim.toggleStrategy(strat.id)}
                           disabled={simActive}
                         >
@@ -905,14 +908,14 @@ export function SimulationBar() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--k-cyan)', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--k-blue)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                     🎯 STRIKE MONEYNESS LEGS (MULTI-SELECT)
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                     <button
                       className="sim-speed-pill"
                       data-active={sim.selectedMoneyness.includes('ALL')}
-                      style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                      style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                       onClick={() => sim.toggleMoneyness('ALL')}
                       disabled={simActive}
                     >
@@ -931,7 +934,7 @@ export function SimulationBar() {
                           key={leg.id}
                           className="sim-speed-pill"
                           data-active={isSel}
-                          style={{ height: 26, padding: '0 10px', fontSize: 10 }}
+                          style={{ height: 24, padding: '0 8px', fontSize: 10 }}
                           onClick={() => sim.toggleMoneyness(leg.id)}
                           disabled={simActive}
                         >
@@ -1001,7 +1004,7 @@ export function SimulationBar() {
                       const isWin = tr.status === 'WIN';
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--k-text) 6%, transparent)' }}>
-                          <td style={{ padding: '6px 4px', fontFamily: 'monospace', color: 'var(--k-cyan)', fontWeight: 600 }}>{tr.trade_id}</td>
+                          <td style={{ padding: '6px 4px', fontFamily: "'JetBrains Mono', monospace", color: 'var(--k-blue)', fontWeight: 600, fontSize: 10 }}>{tr.trade_id}</td>
                           <td style={{ padding: '6px 4px', color: 'var(--k-dim)' }}>{tr.entry_time_iso} → {tr.exit_time_iso}</td>
                           <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--k-text)' }}>[{tr.strategy.toUpperCase()}]</td>
                           <td style={{ padding: '6px 4px', color: 'var(--k-text)', fontWeight: 600 }}>{tr.symbol}</td>
@@ -1010,11 +1013,14 @@ export function SimulationBar() {
                           <td style={{ padding: '6px 4px', color: 'var(--k-text)' }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
                           <td style={{ padding: '6px 4px' }}>
                             <span style={{
-                              padding: '2px 6px',
-                              borderRadius: 4,
+                              padding: '1px 6px',
+                              borderRadius: 3,
                               fontSize: 9,
                               fontWeight: 700,
-                              background: isWin ? 'color-mix(in srgb, var(--k-green) 15%, transparent)' : 'color-mix(in srgb, var(--k-red) 15%, transparent)',
+                              fontFamily: "'JetBrains Mono', monospace",
+                              letterSpacing: '0.5px',
+                              background: isWin ? 'color-mix(in srgb, var(--k-green) 10%, transparent)' : 'color-mix(in srgb, var(--k-red) 10%, transparent)',
+                              border: `1px solid ${isWin ? 'color-mix(in srgb, var(--k-green) 25%, transparent)' : 'color-mix(in srgb, var(--k-red) 25%, transparent)'}`,
                               color: isWin ? 'var(--k-green)' : 'var(--k-red)',
                             }}>
                               {tr.status}
@@ -1050,14 +1056,13 @@ export function SimulationFooterButton() {
       data-active={barOpen || active} 
       onClick={() => setBarOpen(!barOpen)}
       style={{
-        background: active ? 'color-mix(in srgb, var(--k-cyan) 18%, transparent)' : undefined,
-        borderColor: active ? 'var(--k-cyan)' : undefined,
-        color: active ? 'var(--k-cyan)' : 'var(--k-ink-3)',
-        boxShadow: active ? '0 0 10px color-mix(in srgb, var(--k-cyan) 30%, transparent)' : undefined,
+        background: active ? 'color-mix(in srgb, var(--k-blue) 10%, transparent)' : undefined,
+        borderColor: active ? 'color-mix(in srgb, var(--k-blue) 30%, transparent)' : undefined,
+        color: active ? 'var(--k-blue)' : 'var(--k-ink-3)',
         fontWeight: 700,
       }}
     >
-      <span style={{ color: active ? 'var(--k-cyan)' : 'var(--k-brand)', display: 'inline-flex', fontSize: 11 }}>
+      <span style={{ color: active ? 'var(--k-blue)' : 'var(--k-brand)', display: 'inline-flex', fontSize: 11 }}>
         {active ? '⚡' : '▶'}
       </span>
       REPLAY DOCK {active ? `(${status.current_time_iso || 'RUNNING'})` : ''}
@@ -1074,19 +1079,19 @@ export function SimulationFooterBadge() {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 5,
-        height: 22,
-        padding: '0 8px',
-        borderRadius: 6,
-        background: 'color-mix(in srgb, var(--k-cyan, #22d3ee) 12%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--k-cyan, #22d3ee) 40%, transparent)',
-        color: 'var(--k-cyan, #22d3ee)',
-        fontSize: 9.5,
-        fontWeight: 800,
-        letterSpacing: '.04em',
+        gap: 4,
+        height: 20,
+        padding: '0 6px',
+        borderRadius: 4,
+        background: 'color-mix(in srgb, var(--k-blue) 8%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--k-blue) 30%, transparent)',
+        color: 'var(--k-blue)',
+        fontSize: 8.5,
+        fontWeight: 700,
+        letterSpacing: '.05em',
       }}
     >
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--k-cyan)', boxShadow: '0 0 6px var(--k-cyan)' }} />
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--k-blue)' }} />
       REPLAYING
     </span>
   );
