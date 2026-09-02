@@ -6,6 +6,7 @@ import {
   buildGrid,
   compareShot,
   describeFlow,
+  buildIdea,
   formatPcr,
   hhmmToMinutes,
   isValidPrint,
@@ -103,7 +104,7 @@ describe("pcr slots", () => {
 
   it("reads put writing vs protective buying from PCR vs spot", () => {
     expect(readPcr([], null).headline).toBe("Waiting for the open print");
-    expect(readPcr([], null).action).toBe("Stand aside");
+    expect(readPcr([], null).action).toBe("Wait");
     const rising = [
       { hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.80, delta: null, band: "highly-negative" as const, live: false },
       { hhmm: "09:30", label: "9.30", minutes: 570, pcr: 0.90, delta: 0.10, band: "negative" as const, live: false },
@@ -127,7 +128,7 @@ describe("pcr slots", () => {
     expect(readPcr(
       [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.95, delta: null, band: "negative" as const, live: true }],
       0,
-    ).action).toBe("Stand aside");
+    ).action).toBe("Wait");
   });
 
   it("formats the desk stamp as 02 Sept 2026 09:15 AM", () => {
@@ -142,15 +143,36 @@ describe("pcr slots", () => {
     const ce = describeFlow("Midcap", "14:45", 1.21, 0.11);
     expect(ce.action).toBe("Buy CE");
     expect(ce.why).toMatch(/Puts/i);
-    expect(ce.why).not.toMatch(/thickening|taking share/i);
+    expect(ce.why).not.toMatch(/thickening|taking share|call-heavy/i);
     const pe = describeFlow("Nifty", "15:15", 0.76, -0.07);
     expect(pe.action).toBe("Buy PE");
     expect(pe.clock).toBe("03:15 PM");
     const fakeCe = describeFlow("Fin", "15:30", 0.63, 0.07);
-    expect(fakeCe.action).toBe("Stand aside");
-    expect(fakeCe.why).toMatch(/call-heavy/i);
+    expect(fakeCe.action).toBe("Wait");
+    expect(fakeCe.why).toMatch(/more calls than puts/i);
     const slipped = describeFlow("Sensex", "12:45", 0.78, 0.09);
-    expect(slipped.action).toBe("Stand aside");
+    expect(slipped.action).toBe("Wait");
+  });
+
+  it("picks one Sensex idea and ignores false CE jumps", () => {
+    const slots = [
+      { hhmm: "10:30", label: "10.30", minutes: 630, pcr: 0.87, delta: 0.09, band: "negative" as const, live: false },
+      { hhmm: "10:45", label: "10.45", minutes: 645, pcr: 0.97, delta: 0.09, band: "negative" as const, live: false },
+      { hhmm: "11:15", label: "11.15", minutes: 675, pcr: 0.80, delta: -0.12, band: "highly-negative" as const, live: false },
+      { hhmm: "12:45", label: "12.45", minutes: 765, pcr: 0.78, delta: 0.09, band: "highly-negative" as const, live: false },
+      { hhmm: "15:15", label: "15.15", minutes: 915, pcr: 0.88, delta: -0.07, band: "negative" as const, live: false },
+    ];
+    const board = buildIdea("Sensex", slots);
+    expect(board.idea?.action).toBe("Buy PE");
+    expect(board.idea?.hhmm).toBe("15:15");
+    expect(board.idea?.why).not.toMatch(/Buy PE/);
+    expect(board.earlier.map((e) => e.hhmm)).toEqual(["11:15"]);
+    expect(board.skipped).toBe(3);
+    const fin = buildIdea("Fin", [
+      { hhmm: "15:30", label: "15.30", minutes: 930, pcr: 0.63, delta: 0.07, band: "extreme-negative" as const, live: true },
+    ]);
+    expect(fin.idea?.action).toBe("Wait");
+    expect(fin.earlier).toEqual([]);
   });
 
   it("has a mark for every cash slot on the snapshot", () => {
