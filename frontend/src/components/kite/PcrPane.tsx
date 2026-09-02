@@ -125,7 +125,9 @@ const CSS = `
 .kite-pcr .kp-st.agrees{color:var(--k-green)}
 .kite-pcr .kp-st.fights{color:var(--k-red)}
 .kite-pcr .kp-st.quiet{color:var(--k-dim)}
-.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface);max-height:calc(100vh - 160px)}
+.kite-pcr .kp-stack{display:flex;flex-direction:column;gap:10px}
+.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
+.kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 8px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap;cursor:pointer}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
@@ -346,132 +348,143 @@ export function PcrPane() {
           {view === "path" && series ? (
             <Path slots={grid} marks={series.marks} />
           ) : sumRows.length ? (
-            <div className="kp-sheet">
-              <table>
-                <thead>
-                  <tr>
-                    <th> </th>
-                    {cols.map((u) => (
-                      <th
-                        key={u.id}
-                        data-on={index === u.id}
-                        onClick={() => pickIndex(u.id)}
-                      >
-                        {u.short}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="kp-sum">
-                    <th>Play</th>
-                    {sumRows.map((row) => {
-                      const kind = ideaKind(row.action);
-                      return (
-                        <td key={row.id} onClick={() => pickIndex(row.id)}>
-                          <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
-                          <span className="kp-why">{row.why}</span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>OI PCR</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => pickIndex(row.id)}>
-                        {row.pcr != null ? formatPcr(row.pcr) : "—"}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Move</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} className="kp-move" onClick={() => pickIndex(row.id)}>
-                        {row.path}
-                        {row.move != null ? (
-                          <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
-                            {" "}{moveTxt(row.move)}
-                          </span>
-                        ) : null}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Vol</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.vol)}</td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>ΔOI</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.doi)}</td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Spot</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} onClick={() => pickIndex(row.id)}>
-                        {fmtLtp(row.spot)}
-                        {row.spotChg != null ? (
-                          <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
-                            {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
-                          </span>
-                        ) : null}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Δ 15m</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => pickIndex(row.id)}>
-                        {formatDelta(row.delta)}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Puts / Calls</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} onClick={() => pickIndex(row.id)}>
-                        {row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Expiry</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} onClick={() => pickIndex(row.id)}>{row.expiry}</td>
-                    ))}
-                  </tr>
-                  <tr className="kp-sum">
-                    <th>Max pain</th>
-                    {sumRows.map((row) => (
-                      <td key={row.id} onClick={() => pickIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
-                    ))}
-                  </tr>
-                  {heatSlots.map((slot, row) => (
-                    <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
-                      <th>{slot.hhmm}</th>
-                      {cols.map((u) => {
-                        const s = boards?.[u.id]?.[row];
+            <div className="kp-stack">
+              <div className="kp-sheet">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Book</th>
+                      {cols.map((u) => (
+                        <th key={u.id} data-on={index === u.id} onClick={() => pickIndex(u.id)}>{u.short}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="kp-sum">
+                      <th>Play</th>
+                      {sumRows.map((row) => {
+                        const kind = ideaKind(row.action);
                         return (
-                          <td key={u.id} onClick={() => pickIndex(u.id)}>
-                            <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
-                              {s?.pcr == null ? "" : formatPcr(s.pcr)}
-                            </span>
+                          <td key={row.id} onClick={() => pickIndex(row.id)}>
+                            <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
+                            <span className="kp-why">{row.why}</span>
                           </td>
                         );
                       })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                    <tr className="kp-sum">
+                      <th>OI PCR</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => pickIndex(row.id)}>
+                          {row.pcr != null ? formatPcr(row.pcr) : "—"}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Move</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} className="kp-move" onClick={() => pickIndex(row.id)}>
+                          {row.path}
+                          {row.move != null ? (
+                            <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
+                              {" "}{moveTxt(row.move)}
+                            </span>
+                          ) : null}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Vol</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.vol)}</td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>ΔOI</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => pickIndex(row.id)}>{stanceLab(row.doi)}</td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Spot</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} onClick={() => pickIndex(row.id)}>
+                          {fmtLtp(row.spot)}
+                          {row.spotChg != null ? (
+                            <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
+                              {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                            </span>
+                          ) : null}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Δ 15m</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => pickIndex(row.id)}>
+                          {formatDelta(row.delta)}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Puts / Calls</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} onClick={() => pickIndex(row.id)}>
+                          {row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Expiry</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} onClick={() => pickIndex(row.id)}>{row.expiry}</td>
+                      ))}
+                    </tr>
+                    <tr className="kp-sum">
+                      <th>Max pain</th>
+                      {sumRows.map((row) => (
+                        <td key={row.id} onClick={() => pickIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="kp-sheet kp-sheet-heat">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      {cols.map((u) => (
+                        <th key={u.id} data-on={index === u.id} onClick={() => pickIndex(u.id)}>{u.short}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {heatSlots.map((slot, row) => (
+                      <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
+                        <th>{slot.hhmm}</th>
+                        {cols.map((u) => {
+                          const s = boards?.[u.id]?.[row];
+                          return (
+                            <td key={u.id} onClick={() => pickIndex(u.id)}>
+                              <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
+                                {s?.pcr == null ? "" : formatPcr(s.pcr)}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
-          <p className="kp-foot">All five, or one index. Play is OI PCR. 1–5 index · A all · P path</p>
+          <p className="kp-foot">Book is OI PCR. Heat is the 15-minute table. 1–5 index · A all · P path</p>
         </div>
       </div>
     </div>
