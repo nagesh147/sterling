@@ -7,11 +7,13 @@ import {
   compareShot,
   formatPcr,
   hhmmToMinutes,
+  isValidPrint,
   overlayShot,
   pcrBand,
   putShare,
   readPcr,
   roundPcr,
+  formatDeskStamp,
   slotLabel,
 } from "./slots";
 import { PCR_SNAPSHOT, snapshotSeries } from "./snapshot";
@@ -100,13 +102,14 @@ describe("pcr slots", () => {
 
   it("reads put writing vs protective buying from PCR vs spot", () => {
     expect(readPcr([], null).headline).toBe("Waiting for the open print");
+    expect(readPcr([], null).action).toBe("Stand aside");
     const rising = [
       { hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.80, delta: null, band: "highly-negative" as const, live: false },
       { hhmm: "09:30", label: "9.30", minutes: 570, pcr: 0.90, delta: 0.10, band: "negative" as const, live: false },
       { hhmm: "09:45", label: "9.45", minutes: 585, pcr: 0.98, delta: 0.08, band: "negative" as const, live: true },
     ];
-    expect(readPcr(rising, -0.4)).toMatchObject({ bias: "Bearish", headline: "Puts being bought into weakness" });
-    expect(readPcr(rising, 0.3)).toMatchObject({ bias: "Bullish", headline: "Put writing on the bounce" });
+    expect(readPcr(rising, -0.4)).toMatchObject({ bias: "Bearish", headline: "Puts being bought into weakness", action: "Buy PE" });
+    expect(readPcr(rising, 0.3)).toMatchObject({ bias: "Bullish", headline: "Put writing on the bounce", action: "Buy CE" });
     const falling = [
       { hhmm: "09:15", label: "9.15", minutes: 555, pcr: 1.05, delta: null, band: "positive" as const, live: false },
       { hhmm: "09:30", label: "9.30", minutes: 570, pcr: 0.95, delta: -0.10, band: "negative" as const, live: true },
@@ -115,15 +118,23 @@ describe("pcr slots", () => {
     expect(readPcr(
       [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 1.35, delta: null, band: "highly-positive" as const, live: true }],
       0,
-    ).headline).toBe("Put writers in control");
+    )).toMatchObject({ headline: "Put writers in control", action: "Buy CE" });
     expect(readPcr(
       [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.62, delta: null, band: "highly-negative" as const, live: true }],
       0,
-    ).headline).toBe("Call load is heavy");
+    )).toMatchObject({ headline: "Call load is heavy", action: "Buy PE" });
     expect(readPcr(
       [{ hhmm: "09:15", label: "9.15", minutes: 555, pcr: 0.95, delta: null, band: "negative" as const, live: true }],
       0,
-    ).bias).toBe("Balanced");
+    ).action).toBe("Stand aside");
+  });
+
+  it("formats the desk stamp as 02 Sept 2026 09:15 AM", () => {
+    expect(formatDeskStamp("2026-09-02", "09:15")).toBe("02 Sept 2026 09:15 AM");
+    expect(formatDeskStamp("2026-09-02", "15:30")).toBe("02 Sept 2026 03:30 PM");
+    expect(isValidPrint(0)).toBe(false);
+    expect(isValidPrint(0.74)).toBe(true);
+    expect(isValidPrint(-2.32)).toBe(false);
   });
 
   it("has a mark for every cash slot on the snapshot", () => {
