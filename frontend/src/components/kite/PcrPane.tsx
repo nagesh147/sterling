@@ -122,19 +122,21 @@ const CSS = `
 .kite-pcr .kp-st.agrees{color:var(--k-green)}
 .kite-pcr .kp-st.fights{color:var(--k-red)}
 .kite-pcr .kp-st.quiet{color:var(--k-dim)}
-.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
+.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface);max-height:calc(100vh - 160px)}
 .kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.kite-pcr thead th{background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:left;border-bottom:1px solid var(--k-border);white-space:nowrap}
-.kite-pcr tbody th{padding:10px;font-size:13px;font-weight:500;color:var(--k-text);text-align:left;background:transparent;border-bottom:1px solid var(--k-border);white-space:nowrap}
-.kite-pcr tbody td{padding:10px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:top}
-.kite-pcr tbody tr{cursor:pointer}
-.kite-pcr tbody tr:hover{background:var(--k-surface-hover)}
-.kite-pcr tbody tr[data-on="true"]{background:color-mix(in srgb,var(--k-orange) 8%, var(--k-surface))}
+.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 8px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap;cursor:pointer}
+.kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
+.kite-pcr thead th[data-on="true"]{color:var(--k-orange);font-weight:600}
+.kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:8px 10px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
+.kite-pcr tbody td{padding:8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:top;text-align:center}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
+.kite-pcr .kp-sum td{padding:8px 8px}
 .kite-pcr .kp-pcr{font-size:16px;font-weight:600;letter-spacing:-.02em}
 .kite-pcr .kp-play{font-weight:600;letter-spacing:-.02em;white-space:nowrap}
-.kite-pcr .kp-why{display:block;margin-top:3px;font-size:12px;font-weight:400;color:var(--k-dim);line-height:1.35;max-width:240px}
-.kite-pcr .kp-move{white-space:nowrap}
+.kite-pcr .kp-why{display:block;margin-top:2px;font-size:11px;font-weight:400;color:var(--k-dim);line-height:1.35}
+.kite-pcr .kp-move{white-space:nowrap;font-size:12px}
+.kite-pcr .kp-heat-row td{padding:2px}
+.kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums}
 .kite-pcr .kp-heat{display:block;text-align:center;font-size:12px;font-weight:500;padding:5px 4px;border-radius:2px;min-height:24px}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-band-extreme-positive{background:#1b5e4a;color:#f4f4f5}
@@ -249,6 +251,7 @@ export function PcrPane() {
   }, [payload, gridNowMin]);
   const boards = metricBoards?.[metric] ?? null;
   const grid = boards?.[index] ?? [];
+  const axis = boards?.NIFTY ?? boards?.[PCR_INDICES[0].id] ?? [];
 
   const deskRows = useMemo(() => {
     if (!metricBoards) return [];
@@ -305,13 +308,11 @@ export function PcrPane() {
               </div>
             </div>
           </div>
-          {view !== "board" ? (
-            <div className="kp-tabs" role="tablist" aria-label="PCR metric">
-              {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
-              ))}
-            </div>
-          ) : null}
+          <div className="kp-tabs" role="tablist" aria-label="PCR metric">
+            {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
+            ))}
+          </div>
         </header>
 
         <div className="kp-body">
@@ -355,61 +356,120 @@ export function PcrPane() {
               <table>
                 <thead>
                   <tr>
-                    <th>Index</th>
-                    <th>OI PCR</th>
-                    <th>Play</th>
-                    <th>Move</th>
-                    <th>Vol</th>
-                    <th>ΔOI</th>
-                    <th>Spot</th>
-                    <th>Δ 15m</th>
-                    <th>Puts / Calls</th>
-                    <th>Expiry</th>
-                    <th>Max pain</th>
+                    <th> </th>
+                    {PCR_INDICES.map((u) => (
+                      <th
+                        key={u.id}
+                        data-on={index === u.id}
+                        onClick={() => setIndex(u.id)}
+                      >
+                        {u.short}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {deskRows.map((row) => {
-                    const kind = ideaKind(row.action);
-                    return (
-                      <tr
-                        key={row.id}
-                        data-on={index === row.id}
-                        onClick={() => setIndex(row.id)}
-                      >
-                        <th>{row.name}</th>
-                        <td className={`kp-pcr kp-act ${kind}`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td>
-                        <td>
+                  <tr className="kp-sum">
+                    <th>Play</th>
+                    {deskRows.map((row) => {
+                      const kind = ideaKind(row.action);
+                      return (
+                        <td key={row.id} onClick={() => setIndex(row.id)}>
                           <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
                           <span className="kp-why">{row.why}</span>
                         </td>
-                        <td className="kp-move">
-                          {row.path}
-                          {row.move != null ? (
-                            <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
-                              {" "}{moveTxt(row.move)}
+                      );
+                    })}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>OI PCR</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} className={`kp-pcr kp-act ${ideaKind(row.action)}`} onClick={() => setIndex(row.id)}>
+                        {row.pcr != null ? formatPcr(row.pcr) : "—"}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Move</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} className="kp-move" onClick={() => setIndex(row.id)}>
+                        {row.path}
+                        {row.move != null ? (
+                          <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
+                            {" "}{moveTxt(row.move)}
+                          </span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Vol</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} className={`kp-st ${row.vol}`} onClick={() => setIndex(row.id)}>{stanceLab(row.vol)}</td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>ΔOI</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} className={`kp-st ${row.doi}`} onClick={() => setIndex(row.id)}>{stanceLab(row.doi)}</td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Spot</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} onClick={() => setIndex(row.id)}>
+                        {fmtLtp(row.spot)}
+                        {row.spotChg != null ? (
+                          <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
+                            {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                          </span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Δ 15m</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""} onClick={() => setIndex(row.id)}>
+                        {formatDelta(row.delta)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Puts / Calls</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} onClick={() => setIndex(row.id)}>
+                        {row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Expiry</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} onClick={() => setIndex(row.id)}>{row.expiry}</td>
+                    ))}
+                  </tr>
+                  <tr className="kp-sum">
+                    <th>Max pain</th>
+                    {deskRows.map((row) => (
+                      <td key={row.id} onClick={() => setIndex(row.id)}>{fmtLtp(row.maxPain)}</td>
+                    ))}
+                  </tr>
+                  {axis.map((slot, row) => (
+                    <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
+                      <th>{slot.hhmm}</th>
+                      {PCR_INDICES.map((u) => {
+                        const s = boards?.[u.id]?.[row];
+                        return (
+                          <td key={u.id} onClick={() => setIndex(u.id)}>
+                            <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
+                              {s?.pcr == null ? "" : formatPcr(s.pcr)}
                             </span>
-                          ) : null}
-                        </td>
-                        <td className={`kp-st ${row.vol}`}>{stanceLab(row.vol)}</td>
-                        <td className={`kp-st ${row.doi}`}>{stanceLab(row.doi)}</td>
-                        <td>
-                          {fmtLtp(row.spot)}
-                          {row.spotChg != null ? (
-                            <span className={row.spotChg >= 0 ? "text-up" : "text-down"}>
-                              {" "}{row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className={(row.delta ?? 0) > 0 ? "text-up" : (row.delta ?? 0) < 0 ? "text-down" : ""}>
-                          {formatDelta(row.delta)}
-                        </td>
-                        <td>{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)} / ${100 - Math.round(row.putPct * 100)}`}</td>
-                        <td>{row.expiry}</td>
-                        <td>{fmtLtp(row.maxPain)}</td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -417,7 +477,7 @@ export function PcrPane() {
             <p className="kp-sub">{payload ? "No F&O prints yet this session." : "Loading put-call prints…"}</p>
           )}
 
-          <p className="kp-foot">OI PCR ≤ 0.80 Buy PE · ≥ 1.20 Buy CE · else Wait. Click a row · 1–5 index · A all · G grid · P path</p>
+          <p className="kp-foot">Play is OI PCR. Heat below is the 15-minute table. 1–5 index · A all · G grid · P path</p>
         </div>
       </div>
     </div>
