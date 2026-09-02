@@ -7,6 +7,7 @@ import {
   compareShot,
   describeFlow,
   buildIdea,
+  readBook,
   formatPcr,
   hhmmToMinutes,
   isValidPrint,
@@ -165,6 +166,37 @@ describe("pcr slots", () => {
       { hhmm: "14:45", label: "14.45", minutes: 885, pcr: 1.20, delta: 0.14, band: "highly-positive" as const, live: false },
     ], "volume");
     expect(board.idea?.why).toMatch(/volume/i);
+  });
+
+  it("aligns volume and ΔOI to the same print as the OI book", () => {
+    const slot = (
+      hhmm: string,
+      pcr: number,
+      delta: number,
+      band: "highly-negative" | "negative" | "positive" | "highly-positive",
+    ) => ({ hhmm, label: hhmm, minutes: 0, pcr, delta, band, live: false });
+    const oi = [
+      slot("09:30", 0.80, -0.10, "highly-negative"),
+      slot("15:15", 0.76, -0.07, "highly-negative"),
+    ];
+    const volume = [
+      slot("09:30", 0.89, -0.06, "negative"),
+      slot("15:15", 1.05, 0.04, "positive"),
+    ];
+    const doi = [
+      slot("14:45", 1.20, 0.14, "highly-positive"),
+      slot("15:15", 1.18, -0.02, "positive"),
+    ];
+    const read = readBook("Nifty", oi, volume, doi);
+    expect(read.book?.action).toBe("Buy PE");
+    expect(read.book?.hhmm).toBe("15:15");
+    expect(read.volume?.hhmm).toBe("15:15");
+    expect(read.volume?.action).toBe("Buy CE");
+    expect(read.volumeStance).toBe("fights");
+    expect(read.deltaOi?.hhmm).toBe("15:15");
+    expect(read.deltaOi?.action).toBe("Buy CE");
+    expect(read.deltaStance).toBe("fights");
+    expect(read.note).toMatch(/Stay with the OI book/);
   });
 
   it("picks one Sensex idea and ignores false CE jumps", () => {

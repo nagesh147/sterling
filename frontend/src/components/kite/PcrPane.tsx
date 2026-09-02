@@ -15,9 +15,11 @@ import {
   metricValue,
   pcrBand,
   putShare,
+  readBook,
   readPcr,
   shiftSession,
   type PcrAction,
+  type Stance,
 } from "../../lib/pcr/slots";
 import {
   PCR_INDICES,
@@ -61,28 +63,52 @@ function moveTxt(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 }
 
-function IdeaBlock({
-  title,
-  skipLabel,
-  board,
+function stanceLab(s: Stance): string {
+  if (s === "agrees") return "agrees";
+  if (s === "fights") return "fights";
+  return "quiet";
+}
+
+function EvidenceRow({
+  label,
+  line,
+  stance,
+}: {
+  label: string;
+  line: ReturnType<typeof readBook>["volume"];
+  stance: Stance | "book";
+}) {
+  const kind = stance === "book" ? "agrees" : stance;
+  return (
+    <div className={`kp-evd ${kind}`}>
+      <span className="kp-evd-lab">{label}</span>
+      <span className="kp-evd-path">{line ? flowPath(line) : "—"}</span>
+      <span className={`kp-evd-tag ${line ? ideaKind(line.action) : "wait"}`}>{line ? ideaTag(line.action) : "—"}</span>
+      <span className="kp-evd-st">{stance === "book" ? "the book" : stanceLab(stance)}</span>
+    </div>
+  );
+}
+
+function BookPanel({
+  book,
+  earlier,
   tapeAll,
   allRows,
   onPick,
 }: {
-  title: string;
-  skipLabel: string;
-  board: ReturnType<typeof buildIdea>;
+  book: ReturnType<typeof readBook>;
+  earlier: ReturnType<typeof buildIdea>["earlier"];
   tapeAll: boolean;
-  allRows: { id: PcrIndex; name: string; idea: ReturnType<typeof buildIdea>["idea"] }[];
+  allRows: { id: PcrIndex; name: string; book: ReturnType<typeof readBook> }[];
   onPick: (id: PcrIndex) => void;
 }) {
+  const idea = book.book;
   return (
-    <div className="kp-idea-sec">
-      <p className="kp-idea-sec-lab">{title}</p>
+    <div>
       {tapeAll ? (
         <ul className="kp-all">
           {allRows.map((row) => {
-            const line = row.idea;
+            const line = row.book.book;
             const kind = line ? ideaKind(line.action) : "wait";
             return (
               <li key={row.id}>
@@ -90,30 +116,38 @@ function IdeaBlock({
                   <span className="kp-all-name">{row.name}</span>
                   <span className={`kp-all-act ${kind}`}>{line ? line.action : "Wait"}</span>
                   <span className="kp-all-path">{line ? flowPath(line) : "—"}</span>
-                  <span className="kp-all-clock">{line?.clock ?? ""}</span>
+                  <span className="kp-all-clock">
+                    Vol {stanceLab(row.book.volumeStance)} · ΔOI {stanceLab(row.book.deltaStance)}
+                  </span>
                 </button>
               </li>
             );
           })}
         </ul>
-      ) : board.idea ? (
+      ) : idea ? (
         <div>
-          <div className={`kp-idea-act ${ideaKind(board.idea.action)}`}>{board.idea.action}</div>
+          <div className={`kp-idea-act ${ideaKind(idea.action)}`}>{idea.action}</div>
           <div className="kp-idea-meta">
-            <span>{board.idea.name}</span>
-            <span>{board.idea.clock}</span>
+            <span>{idea.name} · OI book</span>
+            <span>{idea.clock}</span>
           </div>
           <div className="kp-idea-path">
-            {flowPath(board.idea)}
-            <span className={`mv ${(board.idea.move ?? 0) > 0 ? "text-up" : (board.idea.move ?? 0) < 0 ? "text-down" : ""}`}>
-              {moveTxt(board.idea.move)}
+            {flowPath(idea)}
+            <span className={`mv ${(idea.move ?? 0) > 0 ? "text-up" : (idea.move ?? 0) < 0 ? "text-down" : ""}`}>
+              {moveTxt(idea.move)}
             </span>
           </div>
-          <p className="kp-idea-why">{board.idea.why}</p>
-          {board.earlier.length ? (
+          <p className="kp-idea-why">{idea.why}</p>
+          <div className="kp-evd-wrap">
+            <EvidenceRow label="OI PCR" line={idea} stance="book" />
+            <EvidenceRow label="Volume" line={book.volume} stance={book.volumeStance} />
+            <EvidenceRow label="ΔOI" line={book.deltaOi} stance={book.deltaStance} />
+          </div>
+          {book.note ? <p className="kp-skip">{book.note}</p> : null}
+          {earlier.length ? (
             <div className="kp-ev">
-              <p className="kp-ev-lab">Earlier today</p>
-              {board.earlier.map((e) => (
+              <p className="kp-ev-lab">Earlier OI</p>
+              {earlier.map((e) => (
                 <div key={e.hhmm} className="kp-ev-row">
                   <span className="kp-ev-clock">{e.clock}</span>
                   <span className="kp-ev-path">{flowPath(e)}</span>
@@ -122,15 +156,10 @@ function IdeaBlock({
               ))}
             </div>
           ) : null}
-          {board.idea.action !== "Wait" && board.skipped > 0 ? (
-            <p className="kp-skip">
-              {board.skipped} move{board.skipped === 1 ? "" : "s"} skipped — {skipLabel} never crossed 1.00 going up, or 0.90 going down.
-            </p>
-          ) : null}
         </div>
       ) : (
         <p className="kp-sub" style={{ marginTop: 8 }}>
-          No 15-minute jump yet. Need {skipLabel} above 1.00 and rising for CE, or below 0.90 and falling for PE.
+          Waiting on the OI print. Volume and ΔOI do not issue a CE/PE on their own.
         </p>
       )}
     </div>
@@ -265,6 +294,12 @@ const CSS = `
 .kite-pcr .kp-ev-tag.ce{color:var(--k-green)}
 .kite-pcr .kp-ev-tag.pe{color:var(--k-red)}
 .kite-pcr .kp-skip{margin:10px 0 0;font-size:12px;color:var(--k-dim);line-height:1.4}
+.kite-pcr .kp-evd-wrap{margin-top:12px;padding-top:10px;border-top:1px solid var(--k-border)}
+.kite-pcr .kp-evd{display:grid;grid-template-columns:64px 1fr auto auto;gap:8px;align-items:baseline;padding:6px 0;font-size:12px;font-variant-numeric:tabular-nums}
+.kite-pcr .kp-evd-lab{color:var(--k-dim)}
+.kite-pcr .kp-evd-st{font-size:11px;color:var(--k-dim)}
+.kite-pcr .kp-evd.agrees .kp-evd-st{color:var(--k-green)}
+.kite-pcr .kp-evd.fights .kp-evd-st{color:var(--k-red)}
 .kite-pcr .kp-all{list-style:none;margin:8px 0 0;padding:0}
 .kite-pcr .kp-all-row{display:grid;grid-template-columns:64px 72px 1fr auto;gap:8px;align-items:baseline;width:100%;text-align:left;border:0;background:none;color:inherit;padding:10px 0;border-bottom:1px solid var(--k-border);cursor:pointer;font-family:inherit;font-size:13px;font-variant-numeric:tabular-nums}
 .kite-pcr .kp-all-row:hover{background:var(--k-surface-hover)}
@@ -406,23 +441,31 @@ export function PcrPane() {
     current != null && prev?.pcr != null ? Math.round((current - prev.pcr) * 100) / 100 : (lastFilled?.delta ?? null);
   const band = lastFilled?.band ?? (current != null ? pcrBand(current) : "empty");
   const kindNow = series ? expiryKind(series.expiry, sessionIso || todayIso) : "weekly";
-  const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
+  const insight = useMemo(
+    () => readPcr(metricBoards?.oi[index] ?? [], series?.spot.changePer ?? null),
+    [metricBoards, index, series?.spot.changePer],
+  );
   const ideaName = PCR_INDICES.find((u) => u.id === index)?.short ?? index;
-  const oiIdea = useMemo(
-    () => buildIdea(ideaName, metricBoards?.oi[index] ?? [], "oi"),
+  const book = useMemo(
+    () => readBook(
+      ideaName,
+      metricBoards?.oi[index] ?? [],
+      metricBoards?.volume[index] ?? [],
+      metricBoards?.changeOi[index] ?? [],
+    ),
     [ideaName, metricBoards, index],
   );
-  const volIdea = useMemo(
-    () => buildIdea(ideaName, metricBoards?.volume[index] ?? [], "volume"),
-    [ideaName, metricBoards, index],
+  const oiEarlier = useMemo(
+    () => buildIdea(ideaName, metricBoards?.oi[index] ?? [], "oi").earlier.filter((e) => e.hhmm !== book.book?.hhmm),
+    [ideaName, metricBoards, index, book.book?.hhmm],
   );
-  const allOi = useMemo(() => {
+  const allBooks = useMemo(() => {
     if (!tapeAll || !metricBoards) return [];
-    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, metricBoards.oi[u.id] ?? [], "oi") }));
-  }, [tapeAll, metricBoards]);
-  const allVol = useMemo(() => {
-    if (!tapeAll || !metricBoards) return [];
-    return PCR_INDICES.map((u) => ({ id: u.id, name: u.short, ...buildIdea(u.short, metricBoards.volume[u.id] ?? [], "volume") }));
+    return PCR_INDICES.map((u) => ({
+      id: u.id,
+      name: u.short,
+      book: readBook(u.short, metricBoards.oi[u.id] ?? [], metricBoards.volume[u.id] ?? [], metricBoards.changeOi[u.id] ?? []),
+    }));
   }, [tapeAll, metricBoards]);
   const putPct = putShare(current);
   const live = payload?.source === "live" && viewingLive;
@@ -494,12 +537,17 @@ export function PcrPane() {
 
           {hasSeries ? (
             <section className="kp-strip">
-              <div className={`kp-strip-pcr kp-band-${band}`}>{formatPcr(current) || "—"}</div>
+              <div>
+                <div className={`kp-strip-pcr kp-band-${band}`}>{formatPcr(current) || "—"}</div>
+                <p className="kp-kicker" style={{ marginTop: 6 }}>
+                  {metric === "volume" ? "Volume PCR" : metric === "changeOi" ? "ΔOI PCR" : "OI PCR"}
+                </p>
+              </div>
               <div className="kp-strip-read">
-                <div className={`kp-strip-act ${insight.action === "Buy CE" ? "text-up" : insight.action === "Buy PE" ? "text-down" : ""}`}>
-                  {insight.action}
+                <div className={`kp-strip-act ${book.book?.action === "Buy CE" ? "text-up" : book.book?.action === "Buy PE" ? "text-down" : ""}`}>
+                  {book.book?.action ?? insight.action}
                 </div>
-                <p>{insight.play}</p>
+                <p>{book.book?.why ?? insight.play}</p>
               </div>
               <dl className="kp-strip-stats">
                 <div>
@@ -609,28 +657,19 @@ export function PcrPane() {
                       <button type="button" data-on={tapeAll} onClick={() => setTapeAll(true)}>All</button>
                     </div>
                   </div>
-                  <IdeaBlock
-                    title="OI PCR"
-                    skipLabel="OI PCR"
-                    board={oiIdea}
+                  <BookPanel
+                    book={book}
+                    earlier={oiEarlier}
                     tapeAll={tapeAll}
-                    allRows={allOi}
+                    allRows={allBooks}
                     onPick={(id) => { setIndex(id); setMetric("oi"); setTapeAll(false); setView("grid"); }}
-                  />
-                  <IdeaBlock
-                    title="Volume PCR"
-                    skipLabel="Volume PCR"
-                    board={volIdea}
-                    tapeAll={tapeAll}
-                    allRows={allVol}
-                    onPick={(id) => { setIndex(id); setMetric("volume"); setTapeAll(false); setView("grid"); }}
                   />
                 </aside>
               </div>
             </div>
           )}
 
-          <p className="kp-foot">Green ≥ 1.00 Buy CE · Red ≤ 0.80 Buy PE · 1–5 index · G grid · A all · P path</p>
+          <p className="kp-foot">OI PCR is the book. Volume and ΔOI only agree or fight that print. 1–5 index · G grid · A all · P path</p>
         </div>
       </div>
     </div>
