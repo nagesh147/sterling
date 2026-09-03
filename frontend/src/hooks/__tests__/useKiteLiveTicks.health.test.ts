@@ -59,6 +59,14 @@ describe('feed health', () => {
     expect(handler.indexOf('_lastFrameAt = Date.now();'))
       .toBeLessThan(handler.indexOf('if (changed) _notify();'));
   });
+
+  it('accepts string instrument tokens on the wire', () => {
+    const src = readSource();
+    const handler = codeOnly(
+      src.slice(src.indexOf('socket.onmessage'), src.indexOf('socket.onclose')),
+    );
+    expect(handler).toContain('Number(tick?.instrument_token)');
+  });
 });
 
 /**

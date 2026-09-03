@@ -19,6 +19,7 @@ import {
   roundPcr,
   formatDeskStamp,
   slotLabel,
+  ticksToMarks,
 } from "./slots";
 import { PCR_SNAPSHOT, snapshotSeries } from "./snapshot";
 import { PCR_INDICES } from "./types";
@@ -231,5 +232,23 @@ describe("pcr slots", () => {
       expect(PCR_SNAPSHOT[id].marks.length, id).toBe(26);
     }
     expect(hhmmToMinutes("09:15")).toBe(555);
+  });
+
+  it("buckets 1-minute prints onto the 15-minute clock", () => {
+    const ticks = Array.from({ length: 22 }, (_, i) => {
+      const minute = 10 + i;
+      return {
+        time: `2026-09-03T09:${String(minute).padStart(2, "0")}:00`,
+        pcr: 0.7,
+        volumePcr: 1,
+        changeOiPcr: 0.3,
+        indexClose: 23900 + minute,
+        expiry: "2026-09-08",
+      };
+    });
+    const marks = ticksToMarks(ticks);
+    const by = Object.fromEntries(marks.map((m) => [m.hhmm, m]));
+    expect(by["09:15"]?.indexClose).toBe(23915);
+    expect(by["09:30"]?.indexClose).toBe(23930);
   });
 });
