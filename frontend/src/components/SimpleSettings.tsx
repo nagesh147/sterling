@@ -6,6 +6,8 @@ import { useSterlingEngineConfig, useSetSterlingEngineConfig } from '../hooks/us
 import { api } from '../utils/api';
 import { useDailyLossConfig, useUpdateDailyLossConfig } from '../hooks/useRiskConfig';
 import { FontPicker } from './FontPicker';
+import { useKiteSettings } from '../store/useKiteSettings';
+import type { NavItem } from './kite/KiteLayout';
 
 interface TelegramConfig {
   bot_token_set: boolean;
@@ -1222,6 +1224,7 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-bright)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>DISPLAY</span>
           </div>
+          <DefaultPageLoadSectionPicker />
           <CryptoTabToggle />
         </div>
 
