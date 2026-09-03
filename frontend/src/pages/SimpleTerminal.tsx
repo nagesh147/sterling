@@ -26,6 +26,7 @@ import { ThemeToggle } from '../components/kite/ThemeToggle';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
+import { useKiteSettings } from '../store/useKiteSettings';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { SterlingLogo } from '../components/SterlingLogo';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -187,7 +188,7 @@ export function SimpleTerminal() {
   const setSterlingV2 = useSetSterlingV2();
   const [activeTopTab, setActiveTopTab] = useState<TopTab>('kite');
   const [activeSection, setActiveSection] = useState<TabId>('sterlingEngine');
-  const [kiteNav, setKiteNav] = useState<NavItem>('dashboard');
+  const [kiteNav, setKiteNav] = useState<NavItem>(() => useKiteSettings.getState().defaultSection || 'dashboard');
   const { data: kiteStatus } = useKiteStatus();
 
   const handleKiteNav = (nav: NavItem) => {

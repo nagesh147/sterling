@@ -30,6 +30,7 @@ import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { BasketPane } from './BasketPane';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { useKiteSettings } from '../../store/useKiteSettings';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
 import {
@@ -92,7 +93,7 @@ function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange:
 }
 
 export function KiteTab() {
-  const [nav, setNav] = useState<NavItem>('dashboard');
+  const [nav, setNav] = useState<NavItem>(() => useKiteSettings.getState().defaultSection || 'dashboard');
   const [moreTab, setMoreTab] = useState<MoreTab>('bids');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);

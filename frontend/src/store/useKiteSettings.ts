@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { KiteBrandIcon, KiteBrandIconSize } from '../utils/kiteBrandIcon';
+import type { NavItem } from '../components/kite/KiteLayout';
 
 export type LoaderStyle = 'ubuntu' | 'mac' | 'material' | 'windows' | 'gnome' | 'kde' | 'minimal' | 'classic' | 'off';
 
@@ -12,6 +13,8 @@ export type MotionStyle = Exclude<LoaderStyle, 'classic' | 'off'>;
 type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showExchange' | 'showLeg';
 
 export interface KiteSettingsState {
+  defaultSection: NavItem;
+  setDefaultSection: (section: NavItem) => void;
   macKite: boolean;
   loaderStyle: LoaderStyle;
   brandIcon: KiteBrandIcon;
@@ -130,6 +133,8 @@ export type BoardCapabilityKey = 'boardDragColumns' | 'boardRowScroll' | 'boardR
 export const useKiteSettings = create<KiteSettingsState>()(
   persist(
     (set) => ({
+      defaultSection: 'dashboard',
+      setDefaultSection: (section) => set({ defaultSection: section }),
       macKite: false,
       loaderStyle: 'ubuntu',
       brandIcon: 'phoenix',
@@ -198,6 +203,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       })),
       showAllSignalCols: () => set({ hiddenSignalCols: [] }),
       resetSignalTableSettings: () => set({
+        defaultSection: 'dashboard',
         boardDragColumns: true,
         boardRowScroll: true,
         boardRowActions: true,
@@ -217,7 +223,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-      version: 8,
+      version: 9,
       migrate: (persisted: any) => {
         const loaderStyle = (() => {
           const legacy = persisted?.loaderStyle;
@@ -288,6 +294,13 @@ export const useKiteSettings = create<KiteSettingsState>()(
           } catch { /* storage unavailable — the default stands */ }
           next = { ...next, signalViewLayout: adopted };
         }
+
+        // v9 adds defaultSection setting.
+        const validSections: NavItem[] = ['dashboard', 'astro', 'pcr', 'orders', 'holdings', 'positions', 'more', 'data', 'adaptiveEdge', 'backtest', 'connect', 'help'];
+        if (!next.defaultSection || !validSections.includes(next.defaultSection)) {
+          next = { ...next, defaultSection: 'dashboard' };
+        }
+
         return next;
       },
     },
