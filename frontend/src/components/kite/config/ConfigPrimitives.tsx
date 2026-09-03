@@ -216,19 +216,17 @@ export function SettingsDraftBar({
       role="region"
       aria-label="Unsaved settings changes"
       style={{
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 1000,
-        width: 'calc(100% - 64px)',
-        maxWidth: 1000,
+        position: 'sticky',
+        bottom: 16,
+        zIndex: 100,
+        width: '100%',
         boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 12,
         padding: '12px 20px',
+        margin: '16px 0 0',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
         borderRadius: 9,
@@ -260,7 +258,7 @@ export function SettingsDraftBar({
                 boxShadow: saving ? 'none' : `0 0 0 3px ${AMBER}25`,
               }}
             />
-            {saving ? 'Saving changes…' : 'Unsaved changes in this section'}
+            {saving ? 'Saving…' : 'Unsaved changes'}
           </span>
         )}
       </div>
