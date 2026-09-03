@@ -94,6 +94,6 @@ class BearToBearishSnapshot:
     config: Dict[str, Any] = field(default_factory=dict)
     next_scan_ms: int = 0
     auto_scan: bool = True
-    market_open: bool = True
+    market_open: bool = False
     is_paper: bool = True
     auto_execute: bool = False

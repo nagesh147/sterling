@@ -23,7 +23,7 @@ async def snapshot() -> Dict[str, Any]:
         return simulation_runner.get_bear_to_bearish_snapshot()
 
     snap = get_snapshot()
-    if not snap.rows:
+    if not snap.rows and snap.market_open:
         snap = await run_scan()
     return {
         "generated_ms": snap.generated_ms,

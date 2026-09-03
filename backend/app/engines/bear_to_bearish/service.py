@@ -12,6 +12,7 @@ from app.engines.bear_to_bearish.models import (
     PcrPoint,
 )
 from app.engines.bear_to_bearish.strategy import evaluate_bear_to_bearish
+from app.services.kite_engine.market_hours import is_market_open
 
 log = get_logger(__name__)
 
@@ -87,19 +88,20 @@ async def run_scan() -> BearToBearishSnapshot:
     global _LAST_SNAPSHOT
     now_ms = int(time.time() * 1000)
     cfg = get_config()
+    open_state = is_market_open()
 
     rows: List[BearToBearishSignal] = []
     pcr_dict: Dict[str, List[Dict[str, float]]] = {}
 
-    if not cfg.enabled:
+    if not cfg.enabled or not open_state:
         _LAST_SNAPSHOT = BearToBearishSnapshot(
             generated_ms=now_ms,
             scanning=False,
-            scanning_label="",
-            rows=[],
-            pcr_history={},
+            scanning_label="Market closed" if not open_state else "Engine disabled",
+            rows=[] if not open_state else (_LAST_SNAPSHOT.rows if _LAST_SNAPSHOT else []),
+            pcr_history={} if not open_state else (_LAST_SNAPSHOT.pcr_history if _LAST_SNAPSHOT else {}),
             config=cfg.model_dump(),
-            market_open=True,
+            market_open=open_state,
             auto_execute=cfg.auto_execute,
         )
         return _LAST_SNAPSHOT
@@ -165,7 +167,7 @@ async def run_scan() -> BearToBearishSnapshot:
         config=cfg.model_dump(),
         next_scan_ms=now_ms + 60000,
         auto_scan=True,
-        market_open=True,
+        market_open=open_state,
         is_paper=True,
         auto_execute=cfg.auto_execute,
     )
@@ -173,15 +175,22 @@ async def run_scan() -> BearToBearishSnapshot:
 
 
 def get_snapshot() -> BearToBearishSnapshot:
+    open_state = is_market_open()
     if _LAST_SNAPSHOT is None:
         now_ms = int(time.time() * 1000)
         return BearToBearishSnapshot(
             generated_ms=now_ms,
             scanning=False,
-            scanning_label="",
+            scanning_label="Market closed" if not open_state else "",
             rows=[],
             pcr_history={},
             config=_CONFIG.model_dump(),
+            market_open=open_state,
             auto_execute=_CONFIG.auto_execute,
         )
+    _LAST_SNAPSHOT.market_open = open_state
+    if not open_state:
+        # Outside market hours, do not return synthetic live signals
+        _LAST_SNAPSHOT.rows = []
+        _LAST_SNAPSHOT.scanning_label = "Market closed"
     return _LAST_SNAPSHOT
