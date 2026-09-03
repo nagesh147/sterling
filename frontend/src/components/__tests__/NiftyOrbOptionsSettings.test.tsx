@@ -170,6 +170,10 @@ describe('NiftyOrbOptionsSettings — saving', () => {
     serverConfig = { ...DEFAULTS, enabled: true, volume_multiplier: 1.4 };
     render(<NiftyOrbOptionsSettings />);
 
+    // Click the changed badge so draft state is active and draft bar is visible
+    const badge = screen.getByRole('button', { name: /changed · default 1.15/ });
+    fireEvent.click(badge);
+
     // Reset is destructive, so the bar asks for a second, confirming click.
     fireEvent.click(screen.getByRole('button', { name: /Reset to defaults/i }));
     fireEvent.click(screen.getByRole('button', { name: /Click again to confirm reset/i }));

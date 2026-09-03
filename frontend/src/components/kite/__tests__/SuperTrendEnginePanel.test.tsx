@@ -42,6 +42,7 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   usePatchEngineConfig: () => ({ mutate: setCfgMutate, isPending: false }),
   useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useRunScan: () => ({ mutate: runScanMutate, isPending: false }),
+  useExpiryCalendar: () => ({ data: null, isLoading: false, isError: false }),
   useStockRegistry: () => ({
     data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE', label: 'RELIANCE' }] }],
   }),

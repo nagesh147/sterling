@@ -273,6 +273,41 @@ export function ContractsGroup({
       </Field>
 
       {dteMin !== undefined && dteMax !== undefined && (
+        <ExpirySettingsGroup
+          dteMin={dteMin}
+          dteMax={dteMax}
+          avoidExpiryDay={avoidExpiryDay}
+          dteDefaults={dteDefaults}
+          dteNote={dteNote}
+          onChange={onChange}
+        />
+      )}
+
+      <ConfigNote>
+        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
+        Whether stocks are scanned at all is under Instruments.
+      </ConfigNote>
+    </>
+  );
+}
+
+export function ExpirySettingsGroup({
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote, onChange,
+}: {
+  dteMin?: number;
+  dteMax?: number;
+  avoidExpiryDay?: boolean;
+  dteDefaults?: { min?: number; max?: number };
+  dteNote?: React.ReactNode;
+  onChange: (next: {
+    expiry_dte_min?: number;
+    expiry_dte_max?: number;
+    avoid_expiry_day?: boolean;
+  }) => void;
+}) {
+  return (
+    <>
+      {dteMin !== undefined && dteMax !== undefined && (
         <>
           <NumberField
             label="Minimum days to expiry"
@@ -301,11 +336,6 @@ export function ContractsGroup({
           {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
         </>
       )}
-
-      <ConfigNote>
-        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
-        Whether stocks are scanned at all is under Instruments.
-      </ConfigNote>
     </>
   );
 }

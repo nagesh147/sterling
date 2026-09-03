@@ -114,9 +114,18 @@ function seriesPosition(kind: ExpirySeriesKind, rank: number): string {
   return 'Fourth listed';
 }
 
+function computeDte(expiryIso?: string, asOfIso?: string): number {
+  if (!expiryIso) return 0;
+  const expMs = Date.parse(expiryIso);
+  const nowMs = asOfIso ? Date.parse(asOfIso) : Date.now();
+  if (isNaN(expMs) || isNaN(nowMs)) return 0;
+  return Math.max(0, Math.round((expMs - nowMs) / 86_400_000));
+}
+
 function ExactExpiryCard({
   option,
   kind,
+  asOf,
   active,
   lockSelected,
   disabled,
@@ -124,6 +133,7 @@ function ExactExpiryCard({
 }: {
   option: ExpirySeriesOption;
   kind: ExpirySeriesKind;
+  asOf?: string;
   active: boolean;
   lockSelected: boolean;
   disabled: boolean;
@@ -189,21 +199,47 @@ function ExactExpiryCard({
       </span>
 
       <span className="sk-expiry-contracts" style={{ display: 'grid', gap: 5 }}>
-        {option.contracts.map((contract) => (
-          <span key={`${contract.owner}-${contract.expiry}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: k.text, fontSize: 11, fontWeight: 700 }}>
-              {contract.owner}
-              {contract.month && (
-                <span style={{ marginLeft: 5, color: 'var(--k-ink-6)', fontSize: 9.5, fontWeight: 700 }}>
-                  {contract.month}
+        {option.contracts.map((contract) => {
+          const dte = computeDte(contract.expiry, asOf);
+          const dteText = dte === 0 ? '(today)' : `(${dte} day${dte === 1 ? '' : 's'})`;
+          return (
+            <span key={`${contract.owner}-${contract.expiry}`} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: k.text, fontSize: 11, fontWeight: 700 }}>
+                {contract.owner}
+                {contract.month && (
+                  <span style={{ marginLeft: 5, color: 'var(--k-ink-6)', fontSize: 9.5, fontWeight: 700 }}>
+                    {contract.month}
+                  </span>
+                )}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <time dateTime={contract.expiry} style={{ color: active ? '#b95020' : 'var(--k-ink-4)', fontSize: 10.5, fontWeight: active ? 700 : 560, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  {contract.date} <span style={{ color: active ? '#c26233' : 'var(--k-dim)', fontWeight: 500, fontSize: 9.5 }}>{dteText}</span>
+                </time>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 15,
+                    height: 15,
+                    borderRadius: '50%',
+                    background: kind === 'weekly' ? '#eef4fb' : '#f4f4f5',
+                    border: `1px solid ${kind === 'weekly' ? '#cbe0f7' : '#e4e4e7'}`,
+                    color: kind === 'weekly' ? 'var(--k-blue-kite, #2563eb)' : '#71717a',
+                    fontSize: 9,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                  title={kind === 'weekly' ? 'Weekly contract' : 'Monthly contract'}
+                >
+                  {kind === 'weekly' ? 'w' : 'm'}
                 </span>
-              )}
+              </span>
             </span>
-            <time dateTime={contract.expiry} style={{ color: active ? '#b95020' : 'var(--k-ink-4)', fontSize: 10.5, fontWeight: active ? 700 : 560, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-              {contract.date}
-            </time>
-          </span>
-        ))}
+          );
+        })}
       </span>
     </button>
   );
@@ -284,6 +320,7 @@ export function ExpiryGroup({
                 key={`${kind}-${option.rank}`}
                 option={option}
                 kind={kind}
+                asOf={asOf}
                 active={active}
                 lockSelected={active && selectedOptions.length === 1}
                 disabled={disabled}
