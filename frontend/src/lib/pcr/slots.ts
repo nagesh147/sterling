@@ -134,7 +134,7 @@ export function ticksToMarks(ticks: PcrTick[]): PcrMark[] {
   for (const tick of ticks) by.set(hhmmFromTime(tick.time), tick);
   const marks: PcrMark[] = [];
   for (const hhmm of SLOT_HHMM) {
-    const hit = by.get(hhmm) ?? nearestAfter(by, hhmm, 2);
+    const hit = by.get(hhmm) ?? nearestAfter(by, hhmm, 14);
     if (!hit) continue;
     marks.push({
       hhmm,
@@ -149,8 +149,8 @@ export function ticksToMarks(ticks: PcrTick[]): PcrMark[] {
 
 function nearestAfter(by: Map<string, PcrTick>, hhmm: string, windowMin: number): PcrTick | null {
   const start = hhmmToMinutes(hhmm);
-  for (let i = 1; i <= windowMin; i++) {
-    const hit = by.get(minutesToHhmm(start + i));
+  for (let i = 0; i <= windowMin; i++) {
+    const hit = by.get(minutesToHhmm(start - i)) ?? (i === 0 ? null : by.get(minutesToHhmm(start + i)));
     if (hit) return hit;
   }
   return null;

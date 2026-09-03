@@ -15,7 +15,7 @@ const STREAM_WS_PATH = '/api/v1/stream/ws';
 const BASE_DELAY = 2_000;
 const MAX_DELAY = 30_000;
 const RECONCILE_DEBOUNCE = 250;
-const UI_NOTIFY_MS = 1_000;
+const UI_NOTIFY_MS = 250;
 const INTERACTION_GRACE_MS = 180;
 
 type BrowserLocation = Pick<Location, 'protocol' | 'host'>;
@@ -234,10 +234,12 @@ function _connect() {
       if (message.type !== 'kite_ticks' || !Array.isArray(message.ticks)) return;
       let changed = false;
       for (const tick of message.ticks as KiteTick[]) {
-        if (typeof tick?.instrument_token !== 'number') continue;
-        const previous = _tickByToken.get(tick.instrument_token);
-        if (sameVisibleTick(previous, tick)) continue;
-        _tickByToken.set(tick.instrument_token, tick);
+        const token = Number(tick?.instrument_token);
+        if (!Number.isFinite(token) || token <= 0) continue;
+        const previous = _tickByToken.get(token);
+        const next = { ...tick, instrument_token: token };
+        if (sameVisibleTick(previous, next)) continue;
+        _tickByToken.set(token, next);
         changed = true;
       }
       // Stamped on every tick frame, changed or not: an unchanged frame still

@@ -11,8 +11,12 @@ function snapshotPayload(): PcrDeskPayload {
 }
 
 export function sessionIsoOf(payload: PcrDeskPayload): string {
-  const ts = payload.series?.NIFTY?.spot?.timestamp || payload.asOf || "";
-  return ts.slice(0, 10);
+  const asOf = payload.asOf || "";
+  const ts = payload.series?.NIFTY?.spot?.timestamp || "";
+  // asOf is the scrape clock; prefer it so a stale spot.timestamp cannot pin
+  // the desk to yesterday while today's prints are already in the payload.
+  const raw = asOf || ts;
+  return raw.slice(0, 10);
 }
 
 function readBooks(): Record<string, PcrDeskPayload> {

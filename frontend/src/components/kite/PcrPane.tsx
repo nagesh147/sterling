@@ -29,6 +29,8 @@ import {
   type PcrSlot,
 } from "../../lib/pcr/types";
 import { formatIstIsoDate, getIstParts } from "../../lib/astro/time";
+import { useKiteQuote } from "../../hooks/useKite";
+import { underlyingQuoteKey } from "./board/boardTypes";
 import { PCR_CSS } from "./pcrCss";
 import {
   IndexTile, Path, ideaKind, playHint, moveTxt, stanceLab, fmtLtp, nowMinutes,
@@ -104,7 +106,7 @@ export function PcrPane() {
         });
     };
     load();
-    const id = window.setInterval(load, 30_000);
+    const id = window.setInterval(load, 8_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -128,6 +130,8 @@ export function PcrPane() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const kiteSyms = useMemo(() => PCR_INDICES.map((u) => underlyingQuoteKey(u.id)), []);
+  const { data: liveQuotes } = useKiteQuote(kiteSyms, true, 3_000);
   const todayIso = now ? formatIstIsoDate(now) : liveIso;
   const series = payload?.series[index];
   const nowMin = now ? nowMinutes(now) : null;
@@ -167,6 +171,13 @@ export function PcrPane() {
           ? Math.round((pcr - prev.pcr) * 100) / 100
           : (last?.delta ?? null);
       const row = payload?.series[u.id];
+      const q = liveQuotes?.[underlyingQuoteKey(u.id)];
+      const liveLtp = typeof q?.last_price === "number" && q.last_price > 0 ? q.last_price : null;
+      const close = typeof q?.ohlc?.close === "number" && q.ohlc.close > 0 ? q.ohlc.close : null;
+      const liveChg =
+        liveLtp != null && close != null
+          ? Math.round(((liveLtp - close) / close) * 10000) / 100
+          : (typeof q?.change === "number" ? q.change : null);
       const kind = row ? expiryKind(row.expiry, sessionIso || todayIso) : "weekly";
       const expiry = row
         ? `${kind === "today" ? "Today" : kind === "weekly" ? "Wk" : "Mo"} ${formatExpiry(row.expiry)}`
@@ -184,8 +195,8 @@ export function PcrPane() {
         move: book.book?.move ?? delta,
         vol: book.volumeStance,
         doi: book.deltaStance,
-        spot: row?.spot.ltp ?? null,
-        spotChg: row?.spot.changePer ?? null,
+        spot: liveLtp ?? row?.spot.ltp ?? null,
+        spotChg: liveChg ?? row?.spot.changePer ?? null,
         delta,
         putPct: putShare(pcr),
         expiry,
@@ -196,7 +207,7 @@ export function PcrPane() {
         insight,
       };
     });
-  }, [metricBoards, payload, sessionIso, todayIso]);
+  }, [metricBoards, payload, sessionIso, todayIso, liveQuotes]);
   const showAll = picked.length === PCR_INDICES.length;
   const cols = PCR_INDICES.filter((u) => picked.includes(u.id));
   const sumRows = deskRows.filter((r) => picked.includes(r.id));

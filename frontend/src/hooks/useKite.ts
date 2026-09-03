@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { underlyingSpotKey } from '../utils/computeGreeks';
-import { registerTokens, getTick, useTickVersion } from './useKiteLiveTicks';
+import { registerTokens, getTick, useTickVersion, tickFeedAgeMs } from './useKiteLiveTicks';
 import { notifyOrder } from '../store/useKiteNotifications';
 import { authConnecting, authIdle } from '../store/useAuthFeedback';
 import type {
@@ -719,6 +719,20 @@ export function useKiteInstrumentExpiries(symbols: string[]) {
 // Live prices now arrive over the tick WebSocket (useKiteLiveTicks); REST runs
 // only as a slow cold-start/fallback heartbeat + symbol→token resolver.
 const LIVE_HEARTBEAT_MS = 30_000;
+const STALE_HEARTBEAT_MS = 3_000;
+const LIVE_FEED_AGE_MS = 8_000;
+
+function quoteHeartbeatMs(requested: number): number {
+  const age = tickFeedAgeMs();
+  if (age != null && age < LIVE_FEED_AGE_MS) return requested;
+  return Math.min(requested, STALE_HEARTBEAT_MS);
+}
+
+function instrumentTokenOf(row: unknown): number | undefined {
+  const raw = (row as { instrument_token?: unknown } | undefined)?.instrument_token;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
 
 // Module-level symbol→token cache, learned from the instrument_token in REST
 // responses. Persists across renders/remounts so tokens resolve once, not per
@@ -739,8 +753,8 @@ function useKiteLive(
   const tokenBySym = useMemo(() => {
     const map: Record<string, number> = {};
     for (const s of symbols) {
-      const fromRest = rest?.[s]?.instrument_token;
-      if (typeof fromRest === 'number') _symTokenCache.set(s, fromRest);
+      const fromRest = instrumentTokenOf(rest?.[s]);
+      if (fromRest != null) _symTokenCache.set(s, fromRest);
       const t = _symTokenCache.get(s);
       if (t != null) map[s] = t;
     }
@@ -790,7 +804,7 @@ export function useKiteQuote(symbols: string[], enabled = true, heartbeatMs = LI
     queryKey: ['kite-quote', syms.join(',')],
     queryFn: () => api.get(`${K}/quote?${iParams(syms)}`),
     enabled: enabled && syms.length > 0,
-    refetchInterval: heartbeatMs,
+    refetchInterval: () => quoteHeartbeatMs(heartbeatMs),
   });
   const data = useKiteLive(syms, q.data, mode);
   return { ...q, data };
@@ -885,7 +899,7 @@ export function useKiteLtp(symbols: string[], enabled = true) {
     queryKey: ['kite-ltp', syms.join(',')],
     queryFn: () => api.get(`${K}/ltp?${iParams(syms)}`),
     enabled: enabled && syms.length > 0,
-    refetchInterval: LIVE_HEARTBEAT_MS,
+    refetchInterval: () => quoteHeartbeatMs(LIVE_HEARTBEAT_MS),
   });
   const data = useKiteLive(syms, q.data) as Record<string, { last_price?: number; instrument_token?: number }>;
   return { ...q, data };
