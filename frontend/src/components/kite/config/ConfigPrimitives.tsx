@@ -208,6 +208,7 @@ export function SettingsDraftBar({
   const AMBER = '#b06a13';
 
   const [bounds, setBounds] = useState<{ left: number; width: number } | null>(null);
+  const [highlighted, setHighlighted] = useState(false);
 
   useEffect(() => {
     if (!dirty) return;
@@ -220,9 +221,15 @@ export function SettingsDraftBar({
       }
     };
 
+    const onHighlight = () => {
+      setHighlighted(true);
+      setTimeout(() => setHighlighted(false), 1800);
+    };
+
     updateBounds();
     window.addEventListener('resize', updateBounds);
     window.addEventListener('scroll', updateBounds, true);
+    window.addEventListener('sterling-highlight-draft-bar', onHighlight);
 
     let observer: ResizeObserver | null = null;
     const el = document.querySelector('.kite-settings-content-wrapper');
@@ -234,6 +241,7 @@ export function SettingsDraftBar({
     return () => {
       window.removeEventListener('resize', updateBounds);
       window.removeEventListener('scroll', updateBounds, true);
+      window.removeEventListener('sterling-highlight-draft-bar', onHighlight);
       if (observer) observer.disconnect();
     };
   }, [dirty]);
@@ -246,11 +254,14 @@ export function SettingsDraftBar({
       id="settings-draft-bar"
       role="region"
       aria-label="Unsaved settings changes"
+      tabIndex={-1}
       style={{
         position: 'fixed',
         bottom: 48,
         left: bounds ? bounds.left : '50%',
-        transform: bounds ? undefined : 'translateX(-50%)',
+        transform: bounds
+          ? (highlighted ? 'scale(1.025)' : undefined)
+          : (highlighted ? 'translateX(-50%) scale(1.025)' : 'translateX(-50%)'),
         width: bounds ? bounds.width : 'calc(100vw - 284px)',
         maxWidth: 1000,
         zIndex: 1000,
@@ -261,10 +272,14 @@ export function SettingsDraftBar({
         gap: 16,
         padding: '14px 22px',
         background: 'var(--k-bg)',
-        border: `1px solid ${BORDER}`,
+        border: highlighted ? `2px solid ${ORANGE}` : `1px solid ${BORDER}`,
         borderRadius: 10,
-        boxShadow: '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        boxShadow: highlighted
+          ? `0 0 0 5px ${ORANGE}40, 0 14px 38px rgba(0, 0, 0, 0.32)`
+          : '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08)',
         backdropFilter: 'blur(12px)',
+        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        outline: 'none',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -957,24 +957,22 @@ export function ConnectPane() {
     // now, so a click on the rail can discard a page of edits the user believes
     // are still pending.
     if (next !== section && hasUnsavedDraft()) {
-      if (mainRef.current && typeof mainRef.current.scrollTo === 'function') {
-        try {
-          mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-        } catch {
-          // JSDOM environment fallback
-        }
-      }
+      window.dispatchEvent(new CustomEvent('sterling-highlight-draft-bar'));
       const draftBarEl = document.getElementById('settings-draft-bar');
-      if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
-        try {
-          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        } catch {
-          // JSDOM environment fallback
+      if (draftBarEl) {
+        if (typeof draftBarEl.scrollIntoView === 'function') {
+          try {
+            draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } catch {
+            // JSDOM environment fallback
+          }
+        }
+        const applyBtn = draftBarEl.querySelector('button');
+        if (applyBtn && typeof applyBtn.focus === 'function') {
+          applyBtn.focus();
         }
       }
-      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
-        return;
-      }
+      return;
     }
     setSection(next);
     localStorage.setItem('kite_connect_section', next);
