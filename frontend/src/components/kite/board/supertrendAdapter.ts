@@ -339,7 +339,9 @@ function supertrendSignalToBoard(
     },
     direction: row.direction,
     status,
-    atMs: row.timestamp_ms ?? null,
+    atMs: parseTimestampMs(
+      row.timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at ?? (row as any).entered_at ?? (row as any).session_date ?? legs[0]?.atMs
+    ),
     // The live underlying where we have it; the scan's spot otherwise.
     underlyingPrice: opts.spotOf?.(row.underlying) ?? (row.spot > 0 ? row.spot : null),
     levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },

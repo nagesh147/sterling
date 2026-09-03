@@ -1160,6 +1160,8 @@ export function SignalBoard({
 
   const effectiveNowMs = nowMs ?? Date.now();
 
+  const days = groupByDay(signals, { liveFirst, nowMs: effectiveNowMs, hoistToday: hoistLiveFromToday });
+
   const isDayExpanded = (key: string): boolean => {
     if (userToggledDays.has(key)) {
       return userToggledDays.get(key)!;
@@ -1167,14 +1169,35 @@ export function SignalBoard({
     const todayKey = sessionDayKey(effectiveNowMs);
     const yesterdayKey = shiftSessionDay(todayKey, -1);
     const label = sessionDayLabel(key, effectiveNowMs);
-    return (
+    if (
       key === todayKey ||
       key === yesterdayKey ||
       key === LIVE_BUCKET ||
       label === 'Today' ||
       label === 'Yesterday' ||
       label === 'Live now'
+    ) {
+      return true;
+    }
+    // If there is no Today and no Yesterday group, but the first group has
+    // actionable setups, expand it so candidates are visible without extra clicks.
+    const hasRecentGroup = days.some(
+      (d) =>
+        d.key === todayKey ||
+        d.key === yesterdayKey ||
+        d.key === LIVE_BUCKET ||
+        sessionDayLabel(d.key, effectiveNowMs) === 'Today' ||
+        sessionDayLabel(d.key, effectiveNowMs) === 'Yesterday' ||
+        sessionDayLabel(d.key, effectiveNowMs) === 'Live now'
     );
+    if (!hasRecentGroup && days.length > 0 && days[0].key === key) {
+      const firstGroup = days[0];
+      const hasActionable = firstGroup.signals.some((s) => ACTIONABLE.includes(s.status));
+      if (hasActionable) {
+        return true;
+      }
+    }
+    return false;
   };
 
   const toggleDay = (key: string) => {
@@ -1184,8 +1207,6 @@ export function SignalBoard({
       return next;
     });
   };
-
-  const days = groupByDay(signals, { liveFirst, nowMs: effectiveNowMs, hoistToday: hoistLiveFromToday });
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -1284,7 +1305,8 @@ export function SignalBoard({
           key === shiftSessionDay(sessionDayKey(effectiveNowMs), -1) ||
           key === LIVE_BUCKET ||
           sessionDayLabel(key, effectiveNowMs) === 'Today' ||
-          sessionDayLabel(key, effectiveNowMs) === 'Yesterday';
+          sessionDayLabel(key, effectiveNowMs) === 'Yesterday' ||
+          days[0]?.key === key;
 
         const renderSignalGroup = (groupRows: BoardSignal[]) => {
           return groupRows.map((signal, i) => {
@@ -1449,11 +1471,7 @@ export function SignalBoard({
                 >
                   ›
                 </span>
-                <span>
-                  {key === LIVE_BUCKET
-                    ? (rows.length > 0 && rows.every((s) => s.atMs != null && sessionDayKey(s.atMs) === sessionDayKey(effectiveNowMs)) ? 'Today' : 'Today')
-                    : sessionDayLabel(key, nowMs ?? effectiveNowMs)}
-                </span>
+                <span>{sessionDayLabel(key, nowMs ?? effectiveNowMs)}</span>
               </div>
               <span style={{ fontWeight: 500 }}>{rows.length}</span>
             </div>
