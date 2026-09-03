@@ -118,23 +118,47 @@ export const DEFAULT_PREFS: Prefs = {
   path: false,
 };
 
+function clonePrefs(p: Prefs): Prefs {
+  return {
+    layout: p.layout,
+    sections: { ...p.sections },
+    tile: { ...p.tile },
+    cols: { ...p.cols },
+    indices: [...p.indices],
+    path: p.path,
+  };
+}
+
+export function normalizeIndices(raw: unknown): PcrIndex[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_PREFS.indices];
+  return DEFAULT_PREFS.indices.filter((id) => (raw as unknown[]).includes(id));
+}
+
+export function savePrefs(p: Prefs): void {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify(p));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
 export function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREF_KEY);
-    if (!raw) return DEFAULT_PREFS;
+    if (!raw) return clonePrefs(DEFAULT_PREFS);
     const p = JSON.parse(raw) as Partial<Prefs>;
     return {
       layout: p.layout === "table" ? "table" : "tiles",
       sections: { ...DEFAULT_PREFS.sections, ...p.sections },
       tile: { ...DEFAULT_PREFS.tile, ...p.tile },
       cols: { ...DEFAULT_PREFS.cols, ...p.cols },
-      indices: Array.isArray(p.indices) && p.indices.length
-        ? DEFAULT_PREFS.indices.filter((id) => (p.indices as string[]).includes(id))
+      indices: Object.prototype.hasOwnProperty.call(p, "indices")
+        ? normalizeIndices(p.indices)
         : [...DEFAULT_PREFS.indices],
       path: Boolean(p.path),
     };
   } catch {
-    return DEFAULT_PREFS;
+    return clonePrefs(DEFAULT_PREFS);
   }
 }
 
