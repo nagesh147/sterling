@@ -55,11 +55,9 @@ export function NiftyOrbOptionsSettings() {
   const cfg = draft ?? server ?? null;
   const isDraftDirty = draft != null && server != null
     && (Object.keys(draft) as (keyof OrbConfig)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
-  const isNonDefault = defaults != null && server != null
-    && (Object.keys(defaults) as (keyof OrbConfig)[]).some((key) => key !== 'enabled' && JSON.stringify(server[key]) !== JSON.stringify(defaults[key]));
-  const dirty = isDraftDirty || isNonDefault;
+  const dirty = isDraftDirty;
 
-  useUnsavedDraftGuard('orbOptions', isDraftDirty);
+  useUnsavedDraftGuard('orbOptions', dirty);
 
   const patch = React.useCallback((next: Partial<OrbConfig>) => {
     setDraft((prev) => ({ ...(prev ?? server!), ...next }));
