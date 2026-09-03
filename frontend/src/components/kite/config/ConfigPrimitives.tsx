@@ -213,17 +213,26 @@ export function SettingsDraftBar({
   return (
     <div
       id="settings-draft-bar"
+      role="region"
+      aria-label="Unsaved settings changes"
       style={{
+        position: 'fixed',
+        bottom: 24,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-        padding: '12px 16px',
-        marginBottom: 16,
+        gap: 10,
+        padding: '10px 18px',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
-        borderRadius: 9,
-        boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+        borderRadius: 12,
+        boxShadow: '0 8px 28px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        maxWidth: 'calc(100vw - 48px)',
+        width: 'max-content',
+        boxSizing: 'border-box',
+        backdropFilter: 'blur(8px)',
       }}
     >
       {showDraftActions && (
@@ -233,20 +242,22 @@ export function SettingsDraftBar({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 7,
               color: saving ? MUTED : AMBER,
-              fontSize: 10.5,
+              fontSize: 11,
               fontWeight: 700,
               marginRight: 4,
+              whiteSpace: 'nowrap',
             }}
           >
             <span
               aria-hidden
               style={{
-                width: 6,
-                height: 6,
+                width: 7,
+                height: 7,
                 borderRadius: '50%',
                 background: saving ? '#c2c2c2' : AMBER,
+                boxShadow: saving ? 'none' : `0 0 0 3px ${AMBER}25`,
               }}
             />
             {saving ? 'Saving…' : 'Unsaved changes'}
@@ -267,6 +278,8 @@ export function SettingsDraftBar({
               cursor: saving || applyDisabled ? 'default' : 'pointer',
               fontFamily: 'inherit',
               opacity: saving || applyDisabled ? 0.5 : 1,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
             }}
           >
             Apply changes
@@ -285,13 +298,14 @@ export function SettingsDraftBar({
               fontWeight: 700,
               cursor: 'pointer',
               fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
             }}
           >
             Discard draft
           </button>
         </>
       )}
-      <div style={{ flex: 1 }} />
+      <div style={{ width: 1, height: 16, background: BORDER, margin: '0 2px' }} />
       <button
         type="button"
         onClick={onReset}
@@ -306,6 +320,7 @@ export function SettingsDraftBar({
           fontWeight: 700,
           cursor: 'pointer',
           fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
         }}
       >
         {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}

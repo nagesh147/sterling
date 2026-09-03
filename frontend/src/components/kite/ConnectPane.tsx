@@ -967,7 +967,7 @@ export function ConnectPane() {
       const draftBarEl = document.getElementById('settings-draft-bar');
       if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
         try {
-          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
         } catch {
           // JSDOM environment fallback
         }
@@ -986,17 +986,10 @@ export function ConnectPane() {
       if (next) select(next);
     };
     const onScrollToDraft = () => {
-      if (mainRef.current && typeof mainRef.current.scrollTo === 'function') {
-        try {
-          mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-        } catch {
-          // JSDOM environment fallback
-        }
-      }
       const draftBarEl = document.getElementById('settings-draft-bar');
       if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
         try {
-          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
         } catch {
           // JSDOM environment fallback
         }
