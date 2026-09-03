@@ -176,6 +176,7 @@ export function SuperTrendSharedBoard({
       // "Live now" hid those headings — a morning scan then read as one live
       // pile even when every print was from today.
       liveFirst={false}
+      hoistLiveFromToday={true}
       // Trade and chart are COLUMNS now, shared with every other board, so the
       // picker can switch either off.
       renderTrade={rowActions.renderTrade}
