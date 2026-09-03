@@ -81,3 +81,21 @@ def test_atm_strike_steps():
     assert sensex.strike == 80200.0
     assert sensex.lot_size == 10
 
+
+@pytest.mark.asyncio
+async def test_bear_to_bearish_market_closed(monkeypatch):
+    from app.engines.bear_to_bearish.service import run_scan, get_snapshot
+
+    # Simulate market closed
+    monkeypatch.setattr("app.engines.bear_to_bearish.service.is_market_open", lambda: False)
+
+    snap = await run_scan()
+    assert snap.market_open is False
+    assert snap.scanning_label == "Market closed"
+    assert len(snap.rows) == 0
+
+    current = get_snapshot()
+    assert current.market_open is False
+    assert len(current.rows) == 0
+
+
