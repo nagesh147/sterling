@@ -14,6 +14,7 @@
  */
 import type { AdaptiveEdgeRow } from '../AdaptiveEdgePanel';
 import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 
 /**
  * A tradable price, or nothing.
@@ -161,7 +162,9 @@ export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
     },
     direction,
     status: status(row),
-    atMs: ms(row.entryTime) ?? ms(row.observationTime) ?? (row as any).timestamp_ms ?? null,
+    atMs: parseTimestampMs(
+      row.entryTime ?? row.observationTime ?? (row as any).timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at ?? (row as any).session_date
+    ),
     levels: {
       ltp: price(row.ltp),
       entry: price(row.entry),
