@@ -1079,9 +1079,9 @@ export function ConnectPane() {
 
         <main ref={mainRef} style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '24px 32px 48px', background: 'var(--k-bg)',
+          padding: '24px 32px 116px', background: 'var(--k-bg)',
         }}>
-          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
             {section === 'account' && (
               <>
                 {isLoading && <div style={S.hint}>Loading accounts…</div>}
