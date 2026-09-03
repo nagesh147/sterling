@@ -1437,7 +1437,11 @@ export function SignalBoard({
                 >
                   ›
                 </span>
-                <span>{sessionDayLabel(key, nowMs ?? effectiveNowMs)}</span>
+                <span>
+                  {key === LIVE_BUCKET
+                    ? (rows.length > 0 && rows.every((s) => sessionDayKey(s.atMs) === sessionDayKey(effectiveNowMs)) ? 'Today' : 'Live now')
+                    : sessionDayLabel(key, nowMs ?? effectiveNowMs)}
+                </span>
               </div>
               <span style={{ fontWeight: 500 }}>{rows.length}</span>
             </div>

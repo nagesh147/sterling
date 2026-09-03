@@ -219,6 +219,7 @@ describe('day order, without the band', () => {
         onToggle={() => {}}
       />,
     );
+    fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     expect(body.indexOf('SYMNEW')).toBeGreaterThanOrEqual(0);
     expect(body.indexOf('SYMNEW'), 'newest first').toBeLessThan(body.indexOf('SYMOLD'));
