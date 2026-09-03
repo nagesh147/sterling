@@ -81,7 +81,7 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
     },
     direction: row.direction || 'short',
     status: st,
-    atMs: row.timestamp_ms || Date.now(),
+    atMs: row.timestamp_ms || (row as any).at_ms || ((row as any).created_at ? new Date((row as any).created_at).getTime() : null),
     levels: {
       ltp,
       entry,
