@@ -15,12 +15,12 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  parentStamp, sessionDayDate, sessionDayKey, stamp, trailBreached,
+  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
-  EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
+  DAY_HEAD_METRICS, EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
   SIGNAL_LEFT_COLUMNS, SIGNAL_RIGHT_COLUMNS, instrumentFlex,
 } from './signalRowSpec';
 import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
@@ -1231,13 +1231,29 @@ export function SignalBoard({
 
       {days.map(({ key, signals: rows }) => (
         <section key={key}>
-          {/* The day band is gone.
-              It printed "LIVE NOW / 8 signals" above each group — a whole row of
-              furniture restating what the rows already carry. Every row shows its
-              own date and time in the Time column, so the band was spending
-              vertical space on a heading you can read off the row beneath it.
-              The GROUPING stays: rows are still bucketed by trading day, live
-              first, so the order is unchanged and only the label is gone. */}
+          <div
+            className="sb-day"
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              padding: DAY_HEAD_METRICS.padding,
+              background: k.surface,
+              borderBottom: `1px solid ${k.border}`,
+              fontSize: DAY_HEAD_METRICS.fontSize,
+              fontWeight: DAY_HEAD_METRICS.fontWeight,
+              letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+              textTransform: DAY_HEAD_METRICS.textTransform,
+              color: k.dim,
+            }}
+          >
+            <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
+            <span style={{ fontWeight: 500 }}>{rows.length}</span>
+          </div>
           {sortSignals(rows, sort).map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {
