@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BORDER, DIM, MUTED, ORANGE, SOFT, TEXT,
 } from '../kiteSettingsPrimitives';
@@ -207,6 +207,37 @@ export function SettingsDraftBar({
   const RED = 'var(--k-red-brick)';
   const AMBER = '#b06a13';
 
+  const [bounds, setBounds] = useState<{ left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!dirty) return;
+
+    const updateBounds = () => {
+      const el = document.querySelector('.kite-settings-content-wrapper');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setBounds({ left: rect.left, width: rect.width });
+      }
+    };
+
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    window.addEventListener('scroll', updateBounds, true);
+
+    let observer: ResizeObserver | null = null;
+    const el = document.querySelector('.kite-settings-content-wrapper');
+    if (el && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateBounds);
+      observer.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateBounds);
+      window.removeEventListener('scroll', updateBounds, true);
+      if (observer) observer.disconnect();
+    };
+  }, [dirty]);
+
   if (!dirty) return null;
   const showDraftActions = hasDraft !== undefined ? hasDraft : true;
 
@@ -216,22 +247,24 @@ export function SettingsDraftBar({
       role="region"
       aria-label="Unsaved settings changes"
       style={{
-        position: 'sticky',
+        position: 'fixed',
         bottom: 16,
-        zIndex: 100,
-        width: '100%',
+        left: bounds ? bounds.left : '50%',
+        transform: bounds ? undefined : 'translateX(-50%)',
+        width: bounds ? bounds.width : 'calc(100vw - 284px)',
+        maxWidth: 1000,
+        zIndex: 1000,
         boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 16,
         padding: '14px 22px',
-        margin: '20px 0 0',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
-        borderRadius: 9,
-        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08)',
-        backdropFilter: 'blur(10px)',
+        borderRadius: 10,
+        boxShadow: '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        backdropFilter: 'blur(12px)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
