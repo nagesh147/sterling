@@ -289,23 +289,30 @@ export const STATUS_RANK: Record<BoardStatus, number> = {
   armed: 0, running: 1, weakening: 2, watching: 3, ended: 4, error: 5,
 };
 
+/** Robustly convert a timestamp value (ms, sec, ISO string, etc.) into epoch ms. */
+export function parseTimestampMs(atMs: any): number | null {
+  if (atMs == null) return null;
+  if (typeof atMs === 'number') {
+    if (!Number.isFinite(atMs) || atMs <= 0) return null;
+    if (atMs < 1e11) return atMs * 1000; // seconds to ms
+    return atMs;
+  }
+  if (typeof atMs === 'string') {
+    const num = Number(atMs);
+    if (!isNaN(num) && num > 0) {
+      if (num < 1e11) return num * 1000;
+      return num;
+    }
+    const parsed = Date.parse(atMs);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
 export function sessionDayKey(atMs: number | string | null | undefined): string {
-  if (atMs == null) return 'unknown';
-  let ms: number;
-  if (typeof atMs === 'number') {
-    ms = atMs;
-  } else if (typeof atMs === 'string') {
-    const parsed = Number(atMs);
-    if (!isNaN(parsed) && parsed > 0) {
-      ms = parsed;
-    } else {
-      ms = Date.parse(atMs);
-    }
-  } else {
-    return 'unknown';
-  }
-  if (!Number.isFinite(ms) || isNaN(ms)) return 'unknown';
+  const ms = parseTimestampMs(atMs);
+  if (ms == null) return 'unknown';
   const ist = new Date(ms + (5 * 60 + 30) * 60_000);
   return ist.toISOString().slice(0, 10);
 }
