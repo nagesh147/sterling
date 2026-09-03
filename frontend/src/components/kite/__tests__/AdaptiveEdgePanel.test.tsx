@@ -339,4 +339,35 @@ describe('AdaptiveEdgePanel', () => {
     expect(screen.getByText('BANKNIFTY')).toBeInTheDocument();
     expect(screen.getByText('FINNIFTY')).toBeInTheDocument();
   });
+
+  it('renders day group headers and supports collapsing and expanding by day', () => {
+    const todayRow = {
+      ...rowsFromSnapshot(snapshot)[0],
+      id: 'today-row',
+      entryTime: new Date().toISOString(),
+      open: true,
+    };
+    const olderRow = {
+      ...rowsFromSnapshot(snapshot)[1],
+      id: 'older-row',
+      entryTime: '2026-08-01T10:00:00Z',
+      open: false,
+    };
+
+    render(<AdaptiveEdgePanel rows={[todayRow, olderRow]} />);
+
+    // Day headers are present
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getByText('Older')).toBeInTheDocument();
+
+    // Today is expanded by default
+    expect(screen.getByText(todayRow.instrument)).toBeInTheDocument();
+
+    // Older closed position is collapsed by default
+    expect(screen.queryByText(olderRow.instrument)).toBeNull();
+
+    // Clicking Older expands its group
+    fireEvent.click(screen.getByText('Older'));
+    expect(screen.getByText(olderRow.instrument)).toBeInTheDocument();
+  });
 });

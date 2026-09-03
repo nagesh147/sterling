@@ -17,6 +17,7 @@ from app.services.kite_engine.greeks import (
 )
 from app.services.kite_engine.strikes import chain_rows_for, filter_liquid_contracts, pick_strikes
 from .protection import get_horizon_protection_policy
+from .research_session import session_date_ist
 
 AE_DEFAULT_LADDER = ("ITM2", "ITM1", "ATM", "OTM1", "OTM2")
 ALLOWED_MONEYNESS = {
@@ -777,6 +778,10 @@ def build_snapshot_signals(
                 "spot_exit": spot_exit,
                 "spot_sl": spot_sl,
                 "spot_tsl": spot_tsl,
+                "session_date": (
+                    raw.get("session_date")
+                    or (session_date_ist(str(raw["entry_time"])) if raw.get("entry_time") else None)
+                ),
                 "entry_time": raw.get("entry_time"),
                 "exit_time": raw.get("exit_time"),
                 "score": _num(raw.get("entry_score")),
@@ -855,6 +860,10 @@ def build_snapshot_signals(
                 "spot_exit": None if open_row else (_num(row.get("exit_price")) or current_spot),
                 "spot_sl": policy_sl,
                 "spot_tsl": policy_tsl,
+                "session_date": (
+                    row.get("session_date")
+                    or (session_date_ist(_iso_from_ms(row.get("timestamp_ms"))) if row.get("timestamp_ms") else None)
+                ),
                 "entry_time": _iso_from_ms(row.get("timestamp_ms")),
                 "exit_time": None if open_row else _iso_from_ms(row.get("timestamp_ms")),
                 "score": _num(row.get("score")) or _num(row.get("entry_score")) or 0.82,

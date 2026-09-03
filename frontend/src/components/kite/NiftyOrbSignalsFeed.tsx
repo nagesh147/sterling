@@ -171,6 +171,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
         sort={sort}
         onSortChange={setSort}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel="No tradable ORB setup right now. The universe is being scanned — the list below says what each underlying is waiting on."
       />
 
