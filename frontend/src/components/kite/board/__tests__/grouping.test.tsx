@@ -236,18 +236,13 @@ describe('dates and day order', () => {
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    // The row carries its own date, and that is now the ONLY place it appears:
-    // the day band that used to repeat it above each group is gone. The text
-    // still comes from `sessionDayDate`, so a row and the day grouping cannot
-    // disagree about what a date looks like.
+    const header = screen.getByText('Older');
+    fireEvent.click(header);
     expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
     expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
   });
 
   it('orders day sections latest to oldest', () => {
-    // Asserted on ROW ORDER rather than on section headings. The headings are
-    // gone -- each row states its own date now -- but the ORDER they described is
-    // behaviour and still has to hold, so the assertion moved rather than went.
     render(
       <SignalBoard
         signals={[
@@ -261,6 +256,8 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
+    fireEvent.click(screen.getByText('Yesterday'));
+    fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     const at = (sym: string) => body.indexOf(sym);
     expect(at('SYMnew')).toBeGreaterThanOrEqual(0);
