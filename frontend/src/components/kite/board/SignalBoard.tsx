@@ -14,7 +14,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
@@ -1156,7 +1156,29 @@ export function SignalBoard({
     gap: ROW_METRICS.gap,
     reserve: ACTION_RESERVE,
   });
-  const days = groupByDay(signals, { liveFirst, nowMs, hoistToday: hoistLiveFromToday });
+
+  const [userToggledDays, setUserToggledDays] = React.useState<Map<string, boolean>>(new Map());
+
+  const effectiveNowMs = nowMs ?? Date.now();
+
+  const isDayExpanded = (key: string): boolean => {
+    if (userToggledDays.has(key)) {
+      return userToggledDays.get(key)!;
+    }
+    const todayKey = sessionDayKey(effectiveNowMs);
+    const label = sessionDayLabel(key, effectiveNowMs);
+    return key === todayKey || key === LIVE_BUCKET || label === 'Today' || label === 'Live now';
+  };
+
+  const toggleDay = (key: string) => {
+    setUserToggledDays((prev) => {
+      const next = new Map(prev);
+      next.set(key, !isDayExpanded(key));
+      return next;
+    });
+  };
+
+  const days = groupByDay(signals, { liveFirst, nowMs: effectiveNowMs, hoistToday: hoistLiveFromToday });
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -1197,15 +1219,11 @@ export function SignalBoard({
               <button
                 type="button"
                 className="sb-head"
-                // aria-sort belongs on the header cell, and it is how a screen
-                // reader announces which column the board is ordered by.
                 aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                 onClick={() => onSortChange?.(nextSort(sort, col.id))}
                 disabled={!onSortChange}
                 style={{
                   border: 'none', background: 'transparent', padding: 0, font: 'inherit',
-                  // Same track as the row's cell, or the heading drifts off the
-                  // numbers it names.
                   flex: col.id === 'instrument' ? instrumentFlex() : `0 0 ${col.width}px`,
                   width: col.id === 'instrument' ? undefined : col.width,
                   minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
@@ -1227,21 +1245,13 @@ export function SignalBoard({
               </button>
             </Tip>
           );
-          // Undragged, the heading renders exactly as before -- no wrapper at
-          // all, so a board that does not offer reordering is byte-identical to
-          // what it was.
           if (!onReorderColumn) return heading;
           return (
             <DraggableColHeader
               key={col.id}
               colKey={col.id}
-              // One run of columns, so every heading may be dropped anywhere.
-              // SuperTrend's table keeps two runs and passes the run's name.
               group="board"
               width={col.width}
-              // The instrument is flex-sized and declares `width: 0`, so it must
-              // hand the wrapper its flex instead — otherwise a 200px label ends
-              // up inside a 0px box and paints over its neighbour.
               flex={col.id === 'instrument' ? instrumentFlex() : undefined}
               minWidth={col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : undefined}
               reorder={(_group, fromKey, toKey) => onReorderColumn(fromKey as ColumnId, toKey as ColumnId)}
@@ -1250,8 +1260,7 @@ export function SignalBoard({
             </DraggableColHeader>
           );
         })}
-        {/* The actions track. Reserved only when the rows actually carry actions,
-            so a board without them does not grow a phantom column. */}
+
         {renderRowActions && (
           <span style={{ flexShrink: 0, width: EDGE_METRICS.actionsWidth }} />
         )}
@@ -1262,6 +1271,8 @@ export function SignalBoard({
         const weeklySignals = sorted.filter(isWeeklySignal);
         const monthlySignals = sorted.filter((s) => !isWeeklySignal(s));
         const hasBoth = weeklySignals.length > 0 && monthlySignals.length > 0;
+        const expandedDay = isDayExpanded(key);
+        const isTodayGroup = key === sessionDayKey(effectiveNowMs) || key === LIVE_BUCKET || sessionDayLabel(key, effectiveNowMs) === 'Today';
 
         const renderSignalGroup = (groupRows: BoardSignal[]) => {
           return groupRows.map((signal, i) => {
@@ -1271,7 +1282,7 @@ export function SignalBoard({
               return (
                 <React.Fragment key={signal.id}>
                   <Row
-                    nowMs={nowMs}
+                    nowMs={effectiveNowMs}
                     signal={signal}
                     columns={cols}
                     open={openId === signal.id}
@@ -1301,7 +1312,11 @@ export function SignalBoard({
                 </React.Fragment>
               );
             }
-            const expanded = !(collapsedGroups?.has(signal.id) ?? false);
+            // For Today: default expanded unless in collapsedGroups.
+            // For past days: default collapsed unless in collapsedGroups as false.
+            const expanded = isTodayGroup
+              ? !(collapsedGroups?.has(signal.id) ?? false)
+              : (collapsedGroups?.has(signal.id) === false);
             const legMarks = markLegs(legs);
             const sortedLegs = sortSignals(legs, sort);
             const weeklyLegs = sortedLegs.filter(isWeeklySignal);
@@ -1316,11 +1331,11 @@ export function SignalBoard({
                   expanded={expanded}
                   onToggle={() => onToggleGroup?.(signal.id)}
                   onOpenDetail={onOpenDetail}
-                  nowMs={nowMs}
+                  nowMs={effectiveNowMs}
                 />
                 {expanded && !hasBothLegs && sortedLegs.map((leg) => (
                   <Row
-                    nowMs={nowMs}
+                    nowMs={effectiveNowMs}
                     key={leg.id}
                     marks={legMarks.get(leg.id)}
                     signal={leg}
@@ -1341,7 +1356,7 @@ export function SignalBoard({
                   <React.Fragment>
                     {weeklyLegs.map((leg) => (
                       <Row
-                        nowMs={nowMs}
+                        nowMs={effectiveNowMs}
                         key={leg.id}
                         marks={legMarks.get(leg.id)}
                         signal={leg}
@@ -1361,7 +1376,7 @@ export function SignalBoard({
                     <div style={{ height: 6, background: 'transparent' }} />
                     {monthlyLegs.map((leg) => (
                       <Row
-                        nowMs={nowMs}
+                        nowMs={effectiveNowMs}
                         key={leg.id}
                         marks={legMarks.get(leg.id)}
                         signal={leg}
@@ -1389,6 +1404,7 @@ export function SignalBoard({
           <section key={key}>
             <div
               className="sb-day"
+              onClick={() => toggleDay(key)}
               style={{
                 position: 'sticky',
                 top: 0,
@@ -1405,31 +1421,48 @@ export function SignalBoard({
                 letterSpacing: DAY_HEAD_METRICS.letterSpacing,
                 textTransform: DAY_HEAD_METRICS.textTransform,
                 color: k.dim,
+                cursor: 'pointer',
+                userSelect: 'none',
               }}
             >
-              <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    display: 'inline-block',
+                    transform: expandedDay ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s ease',
+                  }}
+                >
+                  ›
+                </span>
+                <span>{sessionDayLabel(key, nowMs ?? effectiveNowMs)}</span>
+              </div>
               <span style={{ fontWeight: 500 }}>{rows.length}</span>
             </div>
 
-            {!hasBoth ? (
-              renderSignalGroup(sorted)
-            ) : (
-              <React.Fragment>
-                {/* WEEKLY SIGNALS */}
-                {renderSignalGroup(weeklySignals)}
+            {expandedDay && (
+              !hasBoth ? (
+                renderSignalGroup(sorted)
+              ) : (
+                <React.Fragment>
+                  {/* WEEKLY SIGNALS */}
+                  {renderSignalGroup(weeklySignals)}
 
-                {/* SMALL TRANSPARENT SPACE / LINE SEPARATOR BETWEEN WEEKLY AND MONTHLY SIGNALS */}
-                <div
-                  style={{
-                    height: 10,
-                    background: 'transparent',
-                    borderTop: `1px solid ${k.border}`,
-                  }}
-                />
+                  {/* SMALL TRANSPARENT SPACE / LINE SEPARATOR BETWEEN WEEKLY AND MONTHLY SIGNALS */}
+                  <div
+                    style={{
+                      height: 10,
+                      background: 'transparent',
+                      borderTop: `1px solid ${k.border}`,
+                    }}
+                  />
 
-                {/* MONTHLY SIGNALS */}
-                {renderSignalGroup(monthlySignals)}
-              </React.Fragment>
+                  {/* MONTHLY SIGNALS */}
+                  {renderSignalGroup(monthlySignals)}
+                </React.Fragment>
+              )
             )}
           </section>
         );
