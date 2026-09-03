@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey } from './board/boardTypes';
+import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
@@ -2123,9 +2123,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       Today: [], Yesterday: [], Older: [],
     };
     for (const r of history) {
-      const rawTs = (r as any).timestamp_ms ?? (r as any).timestamp ?? (r as any).time ?? (r as any).atMs;
+      const rawTs = parseTimestampMs(
+        (r as any).timestamp_ms ?? (r as any).timestamp ?? (r as any).time ?? (r as any).atMs ?? (r as any).created_at ?? (r as any).session_date
+      );
       const day = sessionDayKey(rawTs);
-      if (day === todayKey || day === 'unknown') groups.Today.push(r);
+      if (day === todayKey) groups.Today.push(r);
       else if (day === yesterdayKey) groups.Yesterday.push(r);
       else groups.Older.push(r);
     }
