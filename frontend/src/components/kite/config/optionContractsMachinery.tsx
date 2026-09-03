@@ -158,52 +158,52 @@ function ExactExpiryCard({
       }}
       style={{
         minWidth: 0,
-        display: 'grid',
-        gridTemplateColumns: '18px 92px minmax(0, 1fr)',
-        gap: 10,
-        alignItems: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
         textAlign: 'left',
-        padding: '9px 11px',
-        border: 'none',
-        borderBottom: `1px solid ${k.border}`,
-        borderRadius: 0,
-        background: active ? '#fff8f4' : 'var(--k-bg)',
+        padding: '11px 13px',
+        border: `1px solid ${active ? 'color-mix(in srgb, var(--k-orange) 45%, var(--k-border))' : 'var(--k-border)'}`,
+        borderRadius: 8,
+        background: active ? 'color-mix(in srgb, var(--k-orange) 6%, var(--k-bg))' : 'var(--k-bg)',
         color: k.text,
-        boxShadow: active ? `inset 3px 0 ${k.orange}` : 'none',
+        boxShadow: active ? `inset 0 0 0 1px ${k.orange}` : 'none',
         fontFamily: 'inherit',
         cursor: disabled ? 'wait' : lockSelected ? 'not-allowed' : 'pointer',
-        opacity: disabled ? .62 : 1,
-        transition: 'background .14s ease, box-shadow .14s ease',
+        opacity: disabled ? 0.62 : 1,
+        transition: 'background .14s ease, border-color .14s ease, box-shadow .14s ease',
       }}
     >
-      <span aria-hidden style={{
-        width: 16,
-        height: 16,
-        flexShrink: 0,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 4,
-        border: `1px solid ${active ? k.orange : '#cfcfcf'}`,
-        background: active ? k.orange : 'var(--k-bg)',
-        color: 'var(--k-bg)',
-        fontSize: 10,
-        fontWeight: 800,
-        lineHeight: 1,
-      }}>
-        {active ? '✓' : ''}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span aria-hidden style={{
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 4,
+          border: `1px solid ${active ? k.orange : '#cfcfcf'}`,
+          background: active ? k.orange : 'var(--k-bg)',
+          color: 'var(--k-bg)',
+          fontSize: 10,
+          fontWeight: 800,
+          lineHeight: 1,
+        }}>
+          {active ? '✓' : ''}
+        </span>
 
-      <span className="sk-expiry-position" style={{ color: active ? '#b95020' : 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: '.045em', textTransform: 'uppercase' }}>
-        {seriesPosition(kind, option.rank)}
-      </span>
+        <span className="sk-expiry-position" style={{ color: active ? '#b95020' : 'var(--k-ink-5)', fontSize: 9.5, fontWeight: 750, letterSpacing: '.045em', textTransform: 'uppercase' }}>
+          {seriesPosition(kind, option.rank)}
+        </span>
+      </div>
 
-      <span className="sk-expiry-contracts" style={{ display: 'grid', gap: 5 }}>
+      <div className="sk-expiry-contracts" style={{ display: 'grid', gap: 5, width: '100%', marginTop: 2 }}>
         {option.contracts.map((contract) => {
           const dte = computeDte(contract.expiry, asOf);
           const dteText = dte === 0 ? '(today)' : `(${dte} day${dte === 1 ? '' : 's'})`;
           return (
-            <span key={`${contract.owner}-${contract.expiry}`} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <div key={`${contract.owner}-${contract.expiry}`} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, width: '100%' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: k.text, fontSize: 11, fontWeight: 700 }}>
                 {contract.owner}
                 {contract.month && (
@@ -212,7 +212,7 @@ function ExactExpiryCard({
                   </span>
                 )}
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                 <time dateTime={contract.expiry} style={{ color: active ? '#b95020' : 'var(--k-ink-4)', fontSize: 10.5, fontWeight: active ? 700 : 560, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                   {contract.date} <span style={{ color: active ? '#c26233' : 'var(--k-dim)', fontWeight: 500, fontSize: 9.5 }}>{dteText}</span>
                 </time>
@@ -237,10 +237,10 @@ function ExactExpiryCard({
                   {kind === 'weekly' ? 'w' : 'm'}
                 </span>
               </span>
-            </span>
+            </div>
           );
         })}
-      </span>
+      </div>
     </button>
   );
 }
@@ -312,7 +312,15 @@ export function ExpiryGroup({
       </div>
 
       {options.length ? (
-        <div style={{ display: 'grid', background: 'var(--k-bg)' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+            gap: 10,
+            padding: 12,
+            background: 'var(--k-bg)',
+          }}
+        >
           {options.map((option) => {
             const active = values.includes(option.rank);
             return (
