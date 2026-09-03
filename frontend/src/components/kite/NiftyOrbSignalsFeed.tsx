@@ -93,7 +93,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
   // a market with no setups — the failure mode this panel is named for.
   const rows = React.useMemo(() => signals.map(orbToBoard), [signals]);
   const promoted = React.useMemo(
-    () => rows.filter((s) => ACTIONABLE.includes(s.status) || s.status === 'error'),
+    () => rows.filter((s) => ACTIONABLE.includes(s.status) || s.status === 'error' || s.status === 'ended'),
     [rows],
   );
   const tradable = React.useMemo(
@@ -101,7 +101,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
     [promoted],
   );
   const blocked = promoted.length - tradable.length;
-  const view = useBoardView(promoted, { storageKey: 'orb' });
+  const view = useBoardView(promoted, { endedByDefault: true, storageKey: 'orb' });
 
   if (config.isLoading) return <p style={{ padding: 12, margin: 0, fontSize: 11, color: k.dim }}>Loading ORB configuration…</p>;
 
