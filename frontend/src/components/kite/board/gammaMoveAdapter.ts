@@ -211,7 +211,7 @@ function toSignal(row: GammaSignalRow, cfg: GammaMoveSnapshot['config'],
     // put in the book at entry.
     direction: 'long',
     status: STATE_TO_STATUS[row.state] ?? 'watching',
-    atMs: row.at_ms || null,
+    atMs: row.at_ms || (row as any).timestamp_ms || (row as any).entered_ms || null,
     levels: {
       ltp: price(lv.ltp),
       // The REAL fill once there is one. Showing the intended entry beside a

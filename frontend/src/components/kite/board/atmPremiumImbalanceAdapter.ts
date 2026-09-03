@@ -218,7 +218,7 @@ export function atmPremiumImbalanceToBoard(
     instrument: instrument(session, leg),
     direction: 'long',                       // it only ever buys an option
     status: status(session),
-    atMs: session.session_open_ms ?? null,
+    atMs: session.session_open_ms ?? (session as any).timestamp_ms ?? (session.session_date ? new Date(session.session_date).getTime() : null),
     levels: {
       ltp: price(leg?.ltp),
       entry,
