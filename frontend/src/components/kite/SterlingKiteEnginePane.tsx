@@ -33,6 +33,8 @@ import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
+import { useEffectiveNowMs } from '../../hooks/useSimulation';
+
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 import { PaneHeaderActions } from './PaneHeaderActions';
@@ -2063,6 +2065,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       return next;
     });
   };
+  const effectiveNowMs = useEffectiveNowMs();
 
   const groupedRows = React.useMemo(() => {
     const buckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
@@ -2072,9 +2075,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     // now" bucket re-sorted alphabetically straight afterwards — which is why
     // the search bar's sort buttons appeared to do nothing on this board even
     // once they were reading the right value.
-    const chgPctOf = (row: EngineSignalRow): number => {
-      const q = quotes?.[underlyingQuoteKey(row.underlying)];
-      const base = s.chgType === 'close' ? q?.ohlc?.close : q?.ohlc?.open;
+    const chgPctOf = (r: EngineSignalRow): number => {
+      const exch = r.exchange || 'NSE';
+      let sym = r.underlying;
+      if (sym === 'MIDCPNIFTY') sym = 'NIFTY MID SELECT';
+      const q = quotes?.[`${exch}:${sym}`];
+      const base = q?.ohlc?.close || q?.net_change;
       if (q && base) return ((q.last_price - base) / base) * 100;
       return Number.NEGATIVE_INFINITY;  // unknown sorts last, never in the middle
     };
@@ -2111,8 +2117,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
     }
 
-    const nowMs = Date.now();
-    const todayKey = sessionDayKey(nowMs);
+    const todayKey = sessionDayKey(effectiveNowMs);
     const yesterdayKey = shiftSessionDay(todayKey, -1);
     const groups: Record<string, typeof filteredRows> = {
       Today: [], Yesterday: [], Older: [],
@@ -2690,7 +2695,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             originalEntryMs={originalEntryMs}
             onSelectSignal={onSelectSignal}
             onOpenChart={onOpenChart ? (symbol, tab) => onOpenChart(symbol, tab, cfg?.trail_target) : undefined}
-            nowMs={Date.now()}
+            nowMs={effectiveNowMs}
             signalMode={signalMode}
           />
         ) : (
