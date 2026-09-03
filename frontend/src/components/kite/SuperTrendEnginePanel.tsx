@@ -105,15 +105,6 @@ export function SuperTrendEnginePanel() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={saving}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name="SuperTrend"
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
@@ -235,6 +226,15 @@ export function SuperTrendEnginePanel() {
           </ConfigNote>
         </Section>
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={saving}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
 
       <style>{`
         @media (max-width: 640px) {

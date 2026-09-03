@@ -216,24 +216,22 @@ export function SettingsDraftBar({
       role="region"
       aria-label="Unsaved settings changes"
       style={{
-        position: 'fixed',
-        bottom: 24,
-        left: 'calc(220px + (100vw - 220px) / 2)',
-        transform: 'translateX(-50%)',
-        zIndex: 1000,
-        width: 'calc(100vw - 284px)',
-        maxWidth: 1000,
+        position: 'sticky',
+        bottom: 16,
+        zIndex: 100,
+        width: '100%',
         boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 16,
-        padding: '14px 24px',
+        padding: '14px 22px',
+        margin: '20px 0 0',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
-        borderRadius: 12,
-        boxShadow: '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.1)',
-        backdropFilter: 'blur(12px)',
+        borderRadius: 9,
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        backdropFilter: 'blur(10px)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

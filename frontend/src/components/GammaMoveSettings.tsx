@@ -136,15 +136,6 @@ export function GammaMoveSettings() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={setCfg.isPending}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name={strategy.name}
         tagline={strategy.tagline}
@@ -557,6 +548,15 @@ export function GammaMoveSettings() {
           />
         </Field>
       </AdvancedSection>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={setCfg.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
     </>
   );
 }

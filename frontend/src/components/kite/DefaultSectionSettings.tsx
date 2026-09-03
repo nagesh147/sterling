@@ -54,14 +54,6 @@ export function DefaultSectionSettings() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <section style={{ margin: '0 0 16px', padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
         <div style={{ color: 'var(--k-ink-5)', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
           DEFAULT PAGE LOAD SECTION
@@ -106,6 +98,14 @@ export function DefaultSectionSettings() {
           })}
         </div>
       </section>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
     </>
   );
 }

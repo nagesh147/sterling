@@ -160,15 +160,6 @@ export function AtmPremiumImbalanceSettings() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={setCfg.isPending}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name={strategy.name}
         tagline={strategy.tagline}
@@ -726,6 +717,15 @@ export function AtmPremiumImbalanceSettings() {
           <span style={{ color: DIM, fontSize: 12 }}>{cfg.session_start} – {cfg.session_end}</span>
         </Field>
       </AdvancedSection>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={setCfg.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
     </>
   );
 }

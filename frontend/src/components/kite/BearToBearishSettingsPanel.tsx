@@ -64,14 +64,6 @@ export function BearToBearishSettingsPanel() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={updateMutation.isPending}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-      />
-
       <PanelCard>
         <EnginePowerHeader
           name="Bear to Bearish"
@@ -197,6 +189,14 @@ export function BearToBearishSettingsPanel() {
           </Field>
         </Section>
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={updateMutation.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+      />
     </>
   );
 }

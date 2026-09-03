@@ -122,16 +122,6 @@ export function NiftyOrbOptionsSettings() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        hasDraft={isDraftDirty}
-        saving={setCfg.isPending}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name="ORB + VWAP Options"
         tagline="Opening-range breakout confirmed by VWAP. Buys calls on LONG and puts on SHORT — never sells."
@@ -416,6 +406,16 @@ export function NiftyOrbOptionsSettings() {
           </Section>
         </AdvancedSection>
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        hasDraft={isDraftDirty}
+        saving={setCfg.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
 
       <style>{`
         @media (max-width: 640px) {
