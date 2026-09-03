@@ -119,6 +119,11 @@ class SimulationRunner:
         self._seek_requested_epoch: Optional[float] = None
         self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
+    def _get_sim_now_ms(self) -> int:
+        if self._current_sim_epoch > 0:
+            return int(self._current_sim_epoch * 1000)
+        return int(time.time() * 1000)
+
     @property
     def status(self) -> SimStatus:
         return SimStatus(
@@ -244,7 +249,14 @@ class SimulationRunner:
         instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "TATASTEEL", "HDFCBANK", "ICICIBANK"]
 
         self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Zerodha Kite API..."
-        await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
+        warmup_start = start_epoch - 7200
+        await _hydrate_missing_candles(instruments, res, warmup_start, end_epoch)
+
+        # Pre-seed indicator history with pre-session bars so indicators are ready at 09:15 AM
+        self._bar_history = {}
+        for sym in instruments:
+            prior_candles = ohlcv_get(sym, res, limit=50, since=warmup_start)
+            self._bar_history[sym] = [{**c, "symbol": sym, "resolution": res} for c in prior_candles if c["time"] < start_epoch]
 
         # Fetch candles for each instrument from local store
         all_bars: List[Dict[str, Any]] = []
@@ -350,9 +362,11 @@ class SimulationRunner:
         """Return signals formatted for /api/v1/directional/signals matching the active simulation date."""
         cfg = self._config
         sim_date = cfg.date if cfg else "2026-08-28"
+        now_ms = self._get_sim_now_ms()
 
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             signals.append({
                 "underlying": ev.instrument,
                 "has_options": True,
@@ -382,7 +396,7 @@ class SimulationRunner:
                 "rec_leverage": 10,
                 "futures_symbol": f"{ev.instrument}FUT",
                 "fresh": True,
-                "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else int(time.time() * 1000),
+                "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms,
                 "simulated_date": sim_date,
                 "simulated_time": ev.time_iso,
             })
@@ -390,14 +404,14 @@ class SimulationRunner:
         return {
             "signals": signals,
             "count": len(signals),
-            "timestamp": int(time.time()),
+            "timestamp": int(now_ms / 1000),
             "mode": "simulation",
             "simulated_date": sim_date,
         }
 
     def get_kite_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for Kite Engine signal responses during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         KITE_TOKENS: Dict[str, int] = {
             "NIFTY": 256265,
             "BANKNIFTY": 260101,
@@ -410,9 +424,11 @@ class SimulationRunner:
         }
         cfg_lots = max(1, self._config.lots) if self._config else 1
         cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
+        sim_date = self._config.date if self._config else "2026-08-28"
 
         rows = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             direction_str = "long" if is_long else "short"
@@ -441,7 +457,7 @@ class SimulationRunner:
                     "option_type": opt_type,
                     "option_symbol": f"{ev.instrument}26AUG{int(s_val)}{opt_type}",
                     "strike": s_val,
-                    "expiry": "2026-08-28",
+                    "expiry": sim_date,
                     "premium_spot": round(ev.entry * 0.02, 2),
                     "premium_sl": round(ev.entry * 0.015, 2),
                     "entry_sl": round(ev.entry * 0.01, 2),
@@ -484,9 +500,10 @@ class SimulationRunner:
 
     def get_scalping_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/sterling-engine/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "signal_id": f"sim_{ev.instrument}_{ev.time_iso}",
@@ -508,9 +525,10 @@ class SimulationRunner:
 
     def get_v2_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/sterling-v2/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "id": f"sim_v2_{ev.instrument}_{ev.time_iso}",
@@ -527,9 +545,10 @@ class SimulationRunner:
 
     def get_navigator_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/navigator/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         items = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             items.append({
                 "event_id": f"nav_sim_{ev.instrument}_{ev.time_iso}",
@@ -545,9 +564,10 @@ class SimulationRunner:
 
     def get_adaptive_edge_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for Adaptive Edge UI during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         candidates = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             opt_type = "CE" if is_long else "PE"
@@ -570,7 +590,7 @@ class SimulationRunner:
                 "promotion_gate_reason": None,
             },
             "scan": {
-                "underlyings": len(set(ev.instrument for ev in self._stats.events)) or 1,
+                "underlyings": len(set(ev.instrument for ev in current_events)) or 1,
                 "chains_read": 8,
                 "listed": 40,
                 "tradeable": 25,
@@ -590,8 +610,9 @@ class SimulationRunner:
 
     def get_atm_imbalance_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for ATM Premium Imbalance strategy during simulation."""
-        now_ms = int(time.time() * 1000)
-        first_event = self._stats.events[0] if self._stats.events else None
+        now_ms = self._get_sim_now_ms()
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        first_event = current_events[0] if current_events else None
         sym = first_event.instrument if first_event else "NIFTY"
         price = first_event.entry if first_event else 24175.0
         strike_val = round(price / 50.0) * 50.0
@@ -611,7 +632,7 @@ class SimulationRunner:
                 "enabled": True,
                 "underlying": sym,
                 "expiry_policy": "SAME_DAY",
-                "explicit_expiry": "2026-08-28",
+                "explicit_expiry": self._config.date if self._config else "2026-08-28",
                 "strike_policy": "ATM",
                 "session_start": "09:15:00",
                 "session_end": "15:30:00",
@@ -637,13 +658,13 @@ class SimulationRunner:
                 "phase": "ARMED",
                 "halt_reason": None,
                 "underlying": sym,
-                "expiry": "2026-08-28",
+                "expiry": self._config.date if self._config else "2026-08-28",
                 "strike": strike_val,
                 "quantity": 25,
                 "execution_mode": "paper",
                 "quote_mode": "SYNCHRONIZED",
                 "protection_mode": "RESTING_TARGET_LIMIT",
-                "trades_taken": len(self._stats.events),
+                "trades_taken": len(current_events),
                 "legs": {
                     "CE": {
                         "instrument_id": f"NSE:{sym}26AUG{int(strike_val)}CE",
@@ -685,9 +706,10 @@ class SimulationRunner:
 
     def get_bear_to_bearish_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for Bear to Bearish Strategy during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         rows = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             if ev.direction.upper() in ("BEARISH", "SHORT", "SELL") or ev.strategy == "bear_to_bearish":
                 ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
                 strike_val = round(ev.entry / 50.0) * 50.0
@@ -714,7 +736,7 @@ class SimulationRunner:
                     "reason": "PCR breakdown below 0.80 + Lower-high structure breach",
                     "option_type": "PE",
                     "strike": strike_val,
-                    "expiry": "2026-08-28",
+                    "expiry": self._config.date if self._config else "2026-08-28",
                     "lot_size": 25 if ev.instrument == "NIFTY" else 15,
                     "quote_key": f"NSE:{ev.instrument}",
                 })
@@ -737,9 +759,10 @@ class SimulationRunner:
 
     def get_nifty_orb_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/nifty-orb-options/scan during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "symbol": ev.instrument,
@@ -757,6 +780,7 @@ class SimulationRunner:
             "count": len(signals),
             "signals": signals,
         }
+
 
     def _evaluate_bar(self, bar: Dict, bar_dt):
         """Evaluate strategy signals on every replay bar.

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useReducer, useState } from 'react';
+import { useEffectiveNowMs } from '../../hooks/useSimulation';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
@@ -95,7 +96,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     return () => clearInterval(id);
   }, []);
   // One clock per render, so every day heading in a paint agrees on "today".
-  const nowMs = Date.now();
+  const nowMs = useEffectiveNowMs();
 
   const snapshot = useAdaptiveEdgeSnapshot();
   const engineSignals = useEngineSignals();
