@@ -50,6 +50,8 @@ def test_contract_publishes_defaults_and_discloses_non_parity_fields():
     assert body["defaults"]["spurt_rvol"] == 3.0
     assert body["defaults"]["strong_rvol"] == 5.0
     assert body["defaults"]["explosive_rvol"] == 10.0
+    assert body["live_scan_defaults"]["max_candidates"] == 250
+    assert "Kite NFO" in body["live_universe"]
     assert "not implemented" in body["tier_score"]
     assert (
         "proprietary numeric strength-score weights"
@@ -110,4 +112,5 @@ def test_live_scan_passes_only_validated_advisory_configuration(monkeypatch):
     assert observed["uid"] == "tenant-a"
     assert observed["scan_config"].symbols == ("RELIANCE",)
     assert observed["scan_config"].include_watch is True
+    assert observed["scan_config"].max_candidates == 250
     assert observed["signal_config"].baseline_sessions == 10

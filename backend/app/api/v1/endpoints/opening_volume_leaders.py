@@ -41,7 +41,7 @@ class OpeningVolumeLiveScanRequest(BaseModel):
     symbols: list[str] = Field(default_factory=list)
     scan_all_stocks: bool = True
     include_watch: bool = False
-    max_candidates: int = 40
+    max_candidates: int = 250
     concurrency: int = 3
     history_calendar_days: int = 45
     config: dict = Field(default_factory=dict)
@@ -52,6 +52,10 @@ async def contract() -> dict:
     return {
         "strategy": STRATEGY_CONTRACT,
         "defaults": OpeningVolumeConfig().__dict__,
+        "live_scan_defaults": LiveLeaderScanConfig().__dict__,
+        "live_universe": (
+            "current Kite NFO CE/PE underlyings intersected with current NSE cash equities"
+        ),
         "tier_score": "not implemented: source weights are not observable",
     }
 

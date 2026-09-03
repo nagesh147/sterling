@@ -670,7 +670,7 @@ def scan_leaders(
 
 STRATEGY_CONTRACT = {
     "id": "opening_volume_leaders",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "execution": "advisory_only",
     "documented_rules": [
         "completed 09:15 one-minute candle",
@@ -689,5 +689,8 @@ STRATEGY_CONTRACT = {
         "proprietary numeric strength-score weights",
         "proprietary late-entry numeric thresholds",
         "private COMBO predicate beyond observable card behaviour",
+        "experimental Momentum Lab and five-minute-hold model",
+        "seven-factor conviction score and sector-tailwind model",
+        "option selection, premium, and lot-cost presentation",
     ],
 }

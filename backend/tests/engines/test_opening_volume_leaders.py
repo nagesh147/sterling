@@ -132,6 +132,177 @@ def test_documented_rvol_boundaries_are_inclusive(rvol, expected):
     assert classify_tier(rvol) is expected
 
 
+@pytest.mark.parametrize(
+    (
+        "symbol",
+        "opening_volume",
+        "displayed_baseline",
+        "direction",
+        "price",
+        "orb_minute",
+        "tier",
+        "combo",
+    ),
+    [
+        (
+            "GODREJCP",
+            170_249,
+            9_603,
+            LeaderDirection.DOWN,
+            870.0,
+            16,
+            LeaderTier.EXPLOSIVE,
+            True,
+        ),
+        (
+            "RBLBANK",
+            795_733,
+            61_187,
+            LeaderDirection.UP,
+            399.75,
+            16,
+            LeaderTier.EXPLOSIVE,
+            True,
+        ),
+        (
+            "SOLARINDS",
+            13_631,
+            2_121,
+            LeaderDirection.UP,
+            20_985.0,
+            16,
+            LeaderTier.STRONG,
+            True,
+        ),
+        (
+            "INOXWIND",
+            781_916,
+            154_578,
+            LeaderDirection.UP,
+            71.73,
+            16,
+            LeaderTier.STRONG,
+            False,
+        ),
+        (
+            "PAGEIND",
+            1_025,
+            245,
+            LeaderDirection.UP,
+            35_985.0,
+            23,
+            LeaderTier.SPURT,
+            False,
+        ),
+    ],
+)
+def test_reference_leader_cards_preserve_tier_direction_and_event_times(
+    symbol,
+    opening_volume,
+    displayed_baseline,
+    direction,
+    price,
+    orb_minute,
+    tier,
+    combo,
+):
+    """Lock the five observed cards without claiming hidden score parity.
+
+    Displayed volume baselines are integer-rounded, so the test verifies the
+    stable classification boundaries and event times rather than a proprietary
+    two-decimal display calculation.
+    """
+
+    rows = [
+        _bar(
+            day,
+            time(9, 15),
+            open_=price,
+            high=price,
+            low=price,
+            close=price,
+            volume=displayed_baseline,
+        )
+        for day in _prior_sessions(10)
+    ]
+    if direction is LeaderDirection.UP:
+        opening = _bar(
+            SESSION,
+            time(9, 15),
+            open_=price,
+            high=price * 1.02,
+            low=price * 0.995,
+            close=price * 1.015,
+            volume=opening_volume,
+        )
+    else:
+        opening = _bar(
+            SESSION,
+            time(9, 15),
+            open_=price,
+            high=price * 1.005,
+            low=price * 0.98,
+            close=price * 0.985,
+            volume=opening_volume,
+        )
+    rows.append(opening)
+    midpoint = (opening.high + opening.low) / 2.0
+    for minute in range(16, orb_minute):
+        rows.append(
+            _bar(
+                SESSION,
+                time(9, minute),
+                open_=midpoint,
+                high=opening.high,
+                low=opening.low,
+                close=midpoint,
+                volume=1.0,
+            )
+        )
+    if direction is LeaderDirection.UP:
+        break_high = opening.high * 1.001
+        rows.append(
+            _bar(
+                SESSION,
+                time(9, orb_minute),
+                open_=midpoint,
+                high=break_high,
+                low=midpoint,
+                close=break_high,
+                volume=1.0,
+            )
+        )
+    else:
+        break_low = opening.low * 0.999
+        rows.append(
+            _bar(
+                SESSION,
+                time(9, orb_minute),
+                open_=midpoint,
+                high=midpoint,
+                low=break_low,
+                close=break_low,
+                volume=1.0,
+            )
+        )
+
+    observed_at = datetime(2026, 9, 3, 9, orb_minute + 1, tzinfo=IST)
+    signal = evaluate_leader(
+        symbol,
+        rows,
+        as_of=observed_at,
+        average_turnover_inr=25_000_000.0,
+    )
+
+    assert signal.rvol == pytest.approx(opening_volume / displayed_baseline)
+    assert signal.direction is direction
+    assert signal.tier is tier
+    assert signal.signal_time.time() == time(9, 15)
+    assert signal.orb_break_time is not None
+    assert signal.orb_break_time.time() == time(9, orb_minute)
+    assert signal.combo is combo
+
+
 def test_rvol_uses_only_the_same_minute_from_the_last_ten_prior_sessions():
     rows = _history(prior_count=11, current_open_volume=500.0)
     oldest = _prior_sessions(11)[0]

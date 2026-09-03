@@ -19,10 +19,11 @@ from app.engines.opening_volume_leaders import (
     evaluate_leader,
     rank_leaders,
 )
-from app.services.kite_engine.stock_registry import CURATED_STOCK_NAMES
 
 _HISTORY_CACHE_TTL_SECONDS = 45.0
 _HISTORY_CALL_SPACING_SECONDS = 0.36
+_INSTRUMENT_MASTER_LIMIT = 100_000
+_FNO_OPTION_TYPES = {"CE", "PE"}
 _history_cache: dict[tuple[str, str, int, int, datetime], tuple[float, list[Bar]]] = {}
 
 
@@ -57,13 +58,13 @@ class LiveLeaderScanConfig:
     symbols: tuple[str, ...] = ()
     scan_all_stocks: bool = True
     include_watch: bool = False
-    max_candidates: int = 40
+    max_candidates: int = 250
     concurrency: int = 3
     history_calendar_days: int = 45
 
     def validate(self) -> LiveLeaderScanConfig:
-        if self.max_candidates < 1 or self.max_candidates > 100:
-            raise ValueError("max_candidates must be between 1 and 100")
+        if self.max_candidates < 1 or self.max_candidates > 500:
+            raise ValueError("max_candidates must be between 1 and 500")
         if self.concurrency < 1 or self.concurrency > 8:
             raise ValueError("concurrency must be between 1 and 8")
         if self.history_calendar_days < 30 or self.history_calendar_days > 60:
@@ -73,23 +74,71 @@ class LiveLeaderScanConfig:
         return self
 
 
-def _normalize_universe(config: LiveLeaderScanConfig) -> list[str]:
-    allowed = tuple(dict.fromkeys(symbol.upper() for symbol in CURATED_STOCK_NAMES))
-    allowed_set = set(allowed)
-    if config.scan_all_stocks:
-        return list(allowed[: config.max_candidates])
-    requested = list(
-        dict.fromkeys(
-            symbol.strip().upper() for symbol in config.symbols if symbol.strip()
-        )
+def _normalize_requested_symbols(symbols: Sequence[str]) -> list[str]:
+    return list(
+        dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip())
     )
-    unsupported = [symbol for symbol in requested if symbol not in allowed_set]
+
+
+async def _discover_fno_equity_symbols(client) -> list[str]:
+    """Return current single-stock F&O underlyings from Kite's instrument masters.
+
+    The NFO dump alone also contains index options.  Requiring an exact NSE cash
+    equity row removes those indices and any stale/non-cash derivative names
+    without relying on a hardcoded symbol list.
+    """
+
+    nfo_rows, nse_rows = await asyncio.gather(
+        client.search_instruments("", "NFO", limit=_INSTRUMENT_MASTER_LIMIT),
+        client.search_instruments("", "NSE", limit=_INSTRUMENT_MASTER_LIMIT),
+    )
+    option_underlyings = {
+        str(row.get("name") or "").strip().upper()
+        for row in nfo_rows or []
+        if str(row.get("instrument_type") or "").strip().upper() in _FNO_OPTION_TYPES
+        and str(row.get("name") or "").strip()
+    }
+    cash_equities = {
+        str(row.get("tradingsymbol") or "").strip().upper()
+        for row in nse_rows or []
+        if str(row.get("instrument_type") or "").strip().upper() == "EQ"
+        and str(row.get("tradingsymbol") or "").strip()
+    }
+    symbols = sorted(option_underlyings & cash_equities)
+    if not symbols:
+        raise RuntimeError(
+            "Kite instrument masters returned no NSE cash equities with NFO options"
+        )
+    return symbols
+
+
+async def _resolve_universe(
+    client,
+    config: LiveLeaderScanConfig,
+) -> tuple[list[str], dict[str, object]]:
+    available = await _discover_fno_equity_symbols(client)
+    available_set = set(available)
+    if config.scan_all_stocks:
+        requested = available
+        source = "kite_nfo_options_intersect_nse_equities"
+    else:
+        requested = _normalize_requested_symbols(config.symbols)
+        source = "explicit_current_fno_equities"
+    unsupported = [symbol for symbol in requested if symbol not in available_set]
     if unsupported:
         raise ValueError(
-            "symbols outside Sterling's curated high-liquidity universe: "
+            "symbols are not current NSE cash equities with NFO options: "
             + ", ".join(sorted(unsupported))
         )
-    return requested[: config.max_candidates]
+    selected = requested[: config.max_candidates]
+    return selected, {
+        "source": source,
+        "available_fno_equity_count": len(available),
+        "requested_count": len(requested),
+        "selected_count": len(selected),
+        "truncated": len(selected) < len(requested),
+        "symbols": selected,
+    }
 
 
 def _bar_from_kite(row: Sequence[Any]) -> Bar:
@@ -185,7 +234,7 @@ async def scan_kite_leaders(
     scan_config: LiveLeaderScanConfig | None = None,
     signal_config: OpeningVolumeConfig | None = None,
 ) -> dict:
-    """Scan Sterling's safe F&O-equity universe without placing any orders."""
+    """Scan current broker-listed F&O equities without placing any orders."""
 
     scan_config = (scan_config or LiveLeaderScanConfig()).validate()
     signal_config = (signal_config or OpeningVolumeConfig()).validate()
@@ -193,7 +242,6 @@ async def scan_kite_leaders(
     if not normalized_uid:
         raise ValueError("authenticated user is required")
     observed_at = _as_ist(as_of or datetime.now(IST))
-    symbols = _normalize_universe(scan_config)
 
     from app.services.exchanges.kite import accounts
     from app.services.nifty_orb_scanner import _kite_instrument
@@ -202,6 +250,7 @@ async def scan_kite_leaders(
     if not account:
         raise RuntimeError("no active Kite account")
     client = await accounts.acquire_client(account)
+    symbols, universe = await _resolve_universe(client, scan_config)
     semaphore = asyncio.Semaphore(scan_config.concurrency)
 
     async def evaluate(symbol: str) -> tuple[LeaderSignal | None, str | None]:
@@ -250,6 +299,7 @@ async def scan_kite_leaders(
     return {
         "strategy": STRATEGY_CONTRACT,
         "as_of": observed_at.isoformat(),
+        "universe": universe,
         "universe_count": len(symbols),
         "evaluated_count": len(evaluated),
         "leader_count": len(leaders),
