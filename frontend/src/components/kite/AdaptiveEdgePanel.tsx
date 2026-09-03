@@ -5,6 +5,8 @@ import { k, tint } from '../../styles/kiteUI';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { KiteActionButtons } from './KiteActionButtons';
 import { ColumnsMenu } from './board/BoardFilters';
+import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { sessionDayKey, shiftSessionDay, parseTimestampMs } from './board/boardTypes';
 import type {
   AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
@@ -454,7 +456,8 @@ function optionRow(signal: AdaptiveEdgeSignal, leg: AdaptiveEdgeOptionLeg, index
     cvd: signal.cvd,
     whyClosed: why,
     resolutionReason: leg.resolution_reason ?? null,
-    observationTime: parsedMs(signal.entry_time) ?? Date.now(),
+    sessionDate: (signal as any).session_date ?? (leg as any).session_date ?? null,
+    observationTime: parsedMs(signal.entry_time) ?? parsedMs((signal as any).session_date) ?? 0,
     featureQuality: open ? 'OPEN' : 'FLAT',
     decision: open ? 'HOLD' : 'EXIT',
     entryMode: signal.entry_mode ?? 'MICRO',
@@ -506,7 +509,8 @@ function legacyLegRow(leg: AdaptiveEdgeLeg, index: number, symbol: string): Adap
     cvd: leg.entry_cvd ?? null,
     whyClosed: whyClosed(leg),
     resolutionReason: null,
-    observationTime: parsedMs(leg.entry_time) ?? Date.now(),
+    sessionDate: leg.session_date ?? null,
+    observationTime: parsedMs(leg.entry_time) ?? parsedMs(leg.session_date) ?? 0,
     featureQuality: open ? 'OPEN' : 'FLAT',
     decision: open ? 'HOLD' : 'EXIT',
     entryMode: eMode,
@@ -565,6 +569,7 @@ export interface AdaptiveEdgeRow {
   lotSize?: number | null;
   entryTime: string | null;
   exitTime: string | null;
+  sessionDate?: string | null;
   open: boolean;
   tapeSymbol: string;
   underlying: string;
@@ -730,7 +735,18 @@ export function AdaptiveEdgePanel({
     });
   };
 
-  const groups = useMemo(() => {
+  const effectiveNowMs = useEffectiveNowMs();
+  const todayKey = sessionDayKey(effectiveNowMs);
+  const yesterdayKey = shiftSessionDay(todayKey, -1);
+
+  interface DayBucket {
+    label: 'Today' | 'Yesterday' | 'Older';
+    key: string;
+    rows: AdaptiveEdgeRow[];
+    groups: UnderlyingGroup[];
+  }
+
+  const dayBuckets = useMemo<DayBucket[]>(() => {
     const isIndexSym = (sym: string) => {
       const s = sym.toUpperCase();
       return (
@@ -742,25 +758,82 @@ export function AdaptiveEdgePanel({
       );
     };
 
-    const map = new Map<string, UnderlyingGroup>();
+    const bucketMap: Record<'Today' | 'Yesterday' | 'Older', AdaptiveEdgeRow[]> = {
+      Today: [],
+      Yesterday: [],
+      Older: [],
+    };
 
-    rows.forEach((r) => {
-      const u = r.underlying;
-      if (!map.has(u)) {
-        map.set(u, {
-          underlying: u,
-          isIndex: isIndexSym(u),
-          rows: [],
-          origin: r.origin,
-          optionType: r.optionType,
-          spotEntry: r.spotEntry,
-        });
-      }
-      map.get(u)!.rows.push(r);
+    for (const r of rows) {
+      const rawTs = parseTimestampMs(
+        r.entryTime ?? r.sessionDate ?? (r as any).session_date ?? r.observationTime ?? (r as any).timestamp_ms ?? (r as any).timestamp
+      );
+      const day = sessionDayKey(rawTs);
+      if (day === todayKey) bucketMap.Today.push(r);
+      else if (day === yesterdayKey) bucketMap.Yesterday.push(r);
+      else bucketMap.Older.push(r);
+    }
+
+    const out: DayBucket[] = [];
+    for (const label of ['Today', 'Yesterday', 'Older'] as const) {
+      const dRows = bucketMap[label];
+      if (!dRows.length) continue;
+
+      const map = new Map<string, UnderlyingGroup>();
+      dRows.forEach((r) => {
+        const u = r.underlying;
+        if (!map.has(u)) {
+          map.set(u, {
+            underlying: u,
+            isIndex: isIndexSym(u),
+            rows: [],
+            origin: r.origin,
+            optionType: r.optionType,
+            spotEntry: r.spotEntry,
+          });
+        }
+        map.get(u)!.rows.push(r);
+      });
+
+      out.push({
+        label,
+        key: label === 'Today' ? todayKey : label === 'Yesterday' ? yesterdayKey : 'older',
+        rows: dRows,
+        groups: Array.from(map.values()),
+      });
+    }
+    return out;
+  }, [rows, todayKey, yesterdayKey]);
+
+  const [userToggledDays, setUserToggledDays] = useState<Map<string, boolean>>(() => new Map());
+  const toggleDay = (label: string) => {
+    setUserToggledDays((prev) => {
+      const next = new Map(prev);
+      const current = isDayExpanded(label);
+      next.set(label, !current);
+      return next;
     });
+  };
 
-    return Array.from(map.values());
-  }, [rows]);
+  const isDayExpanded = (label: string): boolean => {
+    if (userToggledDays.has(label)) {
+      return userToggledDays.get(label)!;
+    }
+    if (label === 'Today' || label === 'Yesterday') {
+      return true;
+    }
+    // Older expands by default if it contains active open setups
+    const olderBucket = dayBuckets.find((b) => b.label === 'Older');
+    if (olderBucket && olderBucket.rows.some((r) => r.open)) {
+      return true;
+    }
+    // Auto-expand first group if Today and Yesterday are empty
+    const hasRecent = dayBuckets.some((b) => b.label === 'Today' || b.label === 'Yesterday');
+    if (!hasRecent && dayBuckets.length > 0 && dayBuckets[0].label === label) {
+      return true;
+    }
+    return false;
+  };
 
   const renderRow = (row: AdaptiveEdgeRow, rIdx: number) => {
     const selected = row.id === selectedId;
@@ -1232,96 +1305,134 @@ export function AdaptiveEdgePanel({
           </tr>
         </thead>
         <tbody>
-          {groups.map((grp) => {
-            const isCollapsed = collapsedGroups.has(grp.underlying);
-            const spotQuoteKey = `NSE:${grp.underlying}`;
-            const spotQ = quotes?.[spotQuoteKey] || quotes?.[grp.underlying];
-            const spotPx = spotQ?.last_price ?? grp.spotEntry;
-            const isBull = grp.optionType === 'CE';
-
+          {dayBuckets.map((bucket) => {
+            const isDayOpen = isDayExpanded(bucket.label);
             return (
-              <React.Fragment key={grp.underlying}>
-                {/* Master Stock / Index Header Card Row */}
+              <React.Fragment key={`day-bucket-${bucket.label}`}>
+                {/* Master Day Header Row */}
                 <tr
-                  onClick={() => toggleGroup(grp.underlying)}
+                  onClick={() => toggleDay(bucket.label)}
                   style={{
                     background: k.surface,
                     borderTop: `1px solid ${k.border}`,
                     borderBottom: `1px solid ${k.border}`,
                     cursor: 'pointer',
-                    transition: 'background 0.12s ease',
+                    userSelect: 'none',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 6,
                   }}
                 >
                   <td colSpan={visibleCols.length} style={{ padding: '8px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                      {/* Left: Expand toggle, Icon, Underlying Symbol, Direction, Spot */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 10, color: k.dim, userSelect: 'none', width: 14 }}>
-                          {isCollapsed ? '▶' : '▼'}
-                        </span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: k.text, letterSpacing: -0.2 }}>
-                          {grp.isIndex ? '🏛️' : '🏢'} {grp.underlying}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            padding: '1px 5px',
-                            borderRadius: 3,
-                            background: isBull ? `${k.green}18` : `${k.red}18`,
-                            color: isBull ? k.green : k.red,
-                            border: `1px solid ${isBull ? `${k.green}40` : `${k.red}40`}`,
-                          }}
-                        >
-                          {isBull ? '▲ BULLISH (CE)' : '▼ BEARISH (PE)'}
-                        </span>
-                        {spotPx != null && (
-                          <span style={{ fontSize: 11, color: k.dim, display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                            <span>Spot:</span>
-                            <span style={{ fontWeight: 500, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
-                              ₹{spotPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </span>
-                        )}
-                        <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: k.surfaceHover, color: k.dim, border: `1px solid ${k.border}` }}>
-                          {grp.rows.length} {grp.rows.length === 1 ? 'Option Leg' : 'Option Strikes'}
-                        </span>
-                      </div>
-
-                      {/* Right: Quick Chart Inspector Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {onInspectSymbol && (
-                          <button
-                            type="button"
-                            title={`Open Market Profile & Order Flow charts for ${grp.underlying}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onInspectSymbol(grp.underlying);
-                            }}
-                            style={{
-                              border: `1px solid ${k.border}`,
-                              background: k.bg,
-                              color: k.blue,
-                              borderRadius: 3,
-                              padding: '2px 8px',
-                              fontSize: 10.5,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <span>🌊</span> View Profile & Footprints
-                          </button>
-                        )}
+                        <span style={{ fontSize: 10, color: k.dim, width: 12 }}>
+                          {isDayOpen ? '▼' : '▶'}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: k.text, textTransform: 'uppercase' }}>
+                          {bucket.label}
+                        </span>
                       </div>
+                      <span style={{ fontSize: 11, color: k.dim, fontWeight: 500 }}>
+                        {bucket.rows.length}
+                      </span>
                     </div>
                   </td>
                 </tr>
 
-                {/* Sub-Rows: Option Strikes belonging to this stock/index */}
-                {!isCollapsed && grp.rows.map((r, rIdx) => renderRow(r, rIdx))}
+                {isDayOpen && bucket.groups.map((grp) => {
+                  const isCollapsed = collapsedGroups.has(grp.underlying);
+                  const spotQuoteKey = `NSE:${grp.underlying}`;
+                  const spotQ = quotes?.[spotQuoteKey] || quotes?.[grp.underlying];
+                  const spotPx = spotQ?.last_price ?? grp.spotEntry;
+                  const isBull = grp.optionType === 'CE';
+
+                  return (
+                    <React.Fragment key={`${bucket.label}-${grp.underlying}`}>
+                      {/* Master Stock / Index Header Card Row */}
+                      <tr
+                        onClick={() => toggleGroup(grp.underlying)}
+                        style={{
+                          background: k.surface,
+                          borderTop: `1px solid ${k.border}`,
+                          borderBottom: `1px solid ${k.border}`,
+                          cursor: 'pointer',
+                          transition: 'background 0.12s ease',
+                        }}
+                      >
+                        <td colSpan={visibleCols.length} style={{ padding: '8px 12px 8px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                            {/* Left: Expand toggle, Icon, Underlying Symbol, Direction, Spot */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 10, color: k.dim, userSelect: 'none', width: 14 }}>
+                                {isCollapsed ? '▶' : '▼'}
+                              </span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: k.text, letterSpacing: -0.2 }}>
+                                {grp.isIndex ? '🏛️' : '🏢'} {grp.underlying}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  padding: '1px 5px',
+                                  borderRadius: 3,
+                                  background: isBull ? `${k.green}18` : `${k.red}18`,
+                                  color: isBull ? k.green : k.red,
+                                  border: `1px solid ${isBull ? `${k.green}40` : `${k.red}40`}`,
+                                }}
+                              >
+                                {isBull ? '▲ BULLISH (CE)' : '▼ BEARISH (PE)'}
+                              </span>
+                              {spotPx != null && (
+                                <span style={{ fontSize: 11, color: k.dim, display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                                  <span>Spot:</span>
+                                  <span style={{ fontWeight: 500, color: k.text, fontVariantNumeric: 'tabular-nums' }}>
+                                    ₹{spotPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </span>
+                              )}
+                              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: k.surfaceHover, color: k.dim, border: `1px solid ${k.border}` }}>
+                                {grp.rows.length} {grp.rows.length === 1 ? 'Option Leg' : 'Option Strikes'}
+                              </span>
+                            </div>
+
+                            {/* Right: Quick Chart Inspector Button */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {onInspectSymbol && (
+                                <button
+                                  type="button"
+                                  title={`Open Market Profile & Order Flow charts for ${grp.underlying}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onInspectSymbol(grp.underlying);
+                                  }}
+                                  style={{
+                                    border: `1px solid ${k.border}`,
+                                    background: k.bg,
+                                    color: k.blue,
+                                    borderRadius: 3,
+                                    padding: '2px 8px',
+                                    fontSize: 10.5,
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <span>🌊</span> View Profile & Footprints
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Sub-Rows: Option Strikes belonging to this stock/index */}
+                      {!isCollapsed && grp.rows.map((r, rIdx) => renderRow(r, rIdx))}
+                    </React.Fragment>
+                  );
+                })}
               </React.Fragment>
             );
           })}
