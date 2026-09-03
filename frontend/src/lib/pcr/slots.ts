@@ -102,19 +102,20 @@ export function pcrBand(n: number | null): PcrBand {
   if (n == null || !Number.isFinite(n)) return "empty";
   if (n >= 1.4) return "extreme-positive";
   if (n >= 1.2) return "highly-positive";
-  if (n >= 1) return "positive";
-  if (n <= 0.6) return "extreme-negative";
-  if (n <= 0.8) return "highly-negative";
-  return "negative";
+  if (n >= 1.05) return "positive";
+  if (n >= 0.9) return "empty";
+  if (n >= 0.75) return "negative";
+  if (n >= 0.6) return "highly-negative";
+  return "extreme-negative";
 }
 
 export const BAND_COPY: Record<Exclude<PcrBand, "empty">, { title: string; hint: string }> = {
-  "extreme-positive": { title: "Extreme Positive", hint: "1.40 and above — Bullish" },
-  "highly-positive": { title: "Highly Positive", hint: "1.20 and above — Bullish" },
-  positive: { title: "Positive", hint: "1 and above — Bullish" },
-  negative: { title: "Negative", hint: "1 and below — Bearish" },
-  "highly-negative": { title: "Highly Negative", hint: "0.80 and below — Bearish" },
-  "extreme-negative": { title: "Extreme Negative", hint: "0.60 and below — Bearish" },
+  "extreme-positive": { title: "Crowded puts", hint: "PCR ≥ 1.40 — crowded puts. Support is thick; fade panic only with spot confirmation." },
+  "highly-positive": { title: "Bullish skew", hint: "PCR 1.20–1.39 — bullish skew. Dips tend to get bought while this holds." },
+  positive: { title: "Constructive", hint: "PCR 1.05–1.19 — constructive. Puts still outweigh calls." },
+  negative: { title: "Mild bearish", hint: "PCR 0.75–0.89 — mild bearish skew. Upside is being sold." },
+  "highly-negative": { title: "Ceiling", hint: "PCR 0.60–0.74 — ceiling forming. Rallies often fail until PCR mean-reverts." },
+  "extreme-negative": { title: "Crowded calls", hint: "PCR < 0.60 — crowded calls. Either a melt-up squeeze or a sharp mean-revert." },
 };
 
 export function bandTitle(band: PcrBand): string {
