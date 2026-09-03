@@ -226,7 +226,7 @@ async def _held_contract_body(
         us.diag.deriv_resolved += 1
         try:
             candles = drop_forming(await scanner_obj._fetch_candles(
-                client, us, pick.token, pick.option_symbol))
+                client, us, pick.token, pick.option_symbol), allow_forming=True)
         except Exception:  # noqa: BLE001
             us.diag.deriv_no_data += 1
             continue
