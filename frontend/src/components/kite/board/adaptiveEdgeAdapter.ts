@@ -161,7 +161,7 @@ export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
     },
     direction,
     status: status(row),
-    atMs: ms(row.entryTime) ?? row.observationTime ?? null,
+    atMs: ms(row.entryTime) ?? ms(row.observationTime) ?? (row as any).timestamp_ms ?? null,
     levels: {
       ltp: price(row.ltp),
       entry: price(row.entry),

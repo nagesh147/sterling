@@ -126,7 +126,6 @@ describe('sorting on the rendered board', () => {
         liveFirst={false}
       />,
     );
-    fireEvent.click(screen.getByText('Yesterday'));
     const text = document.body.textContent ?? '';
     // The day bands are gone -- each row carries its own date now -- so this
     // reads the property off the ROWS. That is the property that mattered all
