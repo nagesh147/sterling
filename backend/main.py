@@ -1912,6 +1912,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.navigator import router as navigator_router
     app.include_router(navigator_router, prefix="/api/v1")
 
+    # Advisory 09:15 same-minute relative-volume leader scanner.
+    from app.api.v1.endpoints.opening_volume_leaders import router as opening_volume_leaders_router
+    app.include_router(opening_volume_leaders_router, prefix="/api/v1")
+
     from app.api.v1.endpoints.adaptive_edge import router as adaptive_edge_router
     app.include_router(adaptive_edge_router, prefix="/api/v1")
 
