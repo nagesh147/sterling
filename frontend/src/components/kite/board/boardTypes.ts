@@ -356,7 +356,7 @@ export function shiftSessionDay(key: string, days: number): string {
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
 export function sessionDayLabel(key: string, nowMs: number): string {
-  if (key === LIVE_BUCKET) return 'Live now';
+  if (key === LIVE_BUCKET) return 'Today';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
