@@ -1,5 +1,5 @@
 import { formatDelta, formatExpiry, formatPcr, type PcrAction, type PcrRead, type Stance } from "../../lib/pcr/slots";
-import { type PcrBand, type PcrIndex, type PcrSlot } from "../../lib/pcr/types";
+import { type PcrBand, type PcrIndex, type PcrSlot, PCR_INDICES } from "../../lib/pcr/types";
 import { getIstParts } from "../../lib/astro/time";
 
 export function nowMinutes(now: Date): number {
@@ -105,6 +105,8 @@ export type Prefs = {
   sections: Record<SectionId, boolean>;
   tile: Record<TileField, boolean>;
   cols: Record<ColId, boolean>;
+  indices: PcrIndex[];
+  path: boolean;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -112,6 +114,8 @@ export const DEFAULT_PREFS: Prefs = {
   sections: { book: true, heat: true, tape: true, legend: true, read: true },
   tile: Object.fromEntries(TILE_FIELDS.map((f) => [f.id, true])) as Prefs["tile"],
   cols: Object.fromEntries(TABLE_COLS.map((c) => [c.id, true])) as Prefs["cols"],
+  indices: PCR_INDICES.map((u) => u.id),
+  path: false,
 };
 
 export function loadPrefs(): Prefs {
@@ -124,6 +128,10 @@ export function loadPrefs(): Prefs {
       sections: { ...DEFAULT_PREFS.sections, ...p.sections },
       tile: { ...DEFAULT_PREFS.tile, ...p.tile },
       cols: { ...DEFAULT_PREFS.cols, ...p.cols },
+      indices: Array.isArray(p.indices) && p.indices.length
+        ? DEFAULT_PREFS.indices.filter((id) => (p.indices as string[]).includes(id))
+        : [...DEFAULT_PREFS.indices],
+      path: Boolean(p.path),
     };
   } catch {
     return DEFAULT_PREFS;

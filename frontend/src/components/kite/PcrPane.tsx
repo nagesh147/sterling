@@ -35,14 +35,12 @@ import { PCR_CSS } from "./pcrCss";
 import {
   IndexTile, Path, ideaKind, playHint, moveTxt, stanceLab, fmtLtp, nowMinutes,
   type DeskRow, type TileField, type SectionId, type ColId, type Prefs,
-  TILE_FIELDS, SECTIONS, TABLE_COLS, loadPrefs, PREF_KEY, expiryLong,
+  SECTIONS, TABLE_COLS, loadPrefs, PREF_KEY, expiryLong,
 } from "./pcrWidgets";
 
 export function PcrPane() {
   const [payload, setPayload] = useState<PcrDeskPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<PcrIndex[]>(() => PCR_INDICES.map((u) => u.id));
-  const [pathOn, setPathOn] = useState(false);
   const [index, setIndex] = useState<PcrIndex>("NIFTY");
   const [metric, setMetric] = useState<PcrMetric>("oi");
   const [now, setNow] = useState<Date | null>(null);
@@ -121,10 +119,13 @@ export function PcrPane() {
       const pick = map[e.key];
       if (pick) {
         setIndex(pick);
-        setPicked((cur) => cur.includes(pick) ? cur.filter((id) => id !== pick) : [...cur, pick]);
+        setPrefs((p) => {
+          const on = p.indices.includes(pick);
+          return { ...p, indices: on ? p.indices.filter((id) => id !== pick) : [...p.indices, pick] };
+        });
       }
-      if (e.key === "a" || e.key === "A") setPicked(PCR_INDICES.map((u) => u.id));
-      if (e.key === "p" || e.key === "P") setPathOn((v) => !v);
+      if (e.key === "a" || e.key === "A") setPrefs((p) => ({ ...p, indices: PCR_INDICES.map((u) => u.id) }));
+      if (e.key === "p" || e.key === "P") setPrefs((p) => ({ ...p, path: !p.path }));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -208,6 +209,8 @@ export function PcrPane() {
       };
     });
   }, [metricBoards, payload, sessionIso, todayIso, liveQuotes]);
+  const picked = prefs.indices;
+  const pathOn = prefs.path;
   const showAll = picked.length === PCR_INDICES.length;
   const cols = PCR_INDICES.filter((u) => picked.includes(u.id));
   const sumRows = deskRows.filter((r) => picked.includes(r.id));
@@ -228,11 +231,17 @@ export function PcrPane() {
     return out.sort((a, b) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm)).slice(0, 8);
   }, [metricBoards, cols]);
   const showSec = (id: SectionId) => prefs.sections[id];
-  const showTile = (id: TileField) => prefs.tile[id];
+  const showTile = (id: TileField) => prefs.tile[id] !== false;
   const showCol = (id: ColId) => prefs.cols[id];
   const toggleSec = (id: SectionId) => setPrefs((p) => ({ ...p, sections: { ...p.sections, [id]: !p.sections[id] } }));
-  const toggleTile = (id: TileField) => setPrefs((p) => ({ ...p, tile: { ...p.tile, [id]: !p.tile[id] } }));
   const toggleCol = (id: ColId) => setPrefs((p) => ({ ...p, cols: { ...p.cols, [id]: !p.cols[id] } }));
+  const toggleIndex = (id: PcrIndex) => {
+    setIndex(id);
+    setPrefs((p) => {
+      const on = p.indices.includes(id);
+      return { ...p, indices: on ? p.indices.filter((x) => x !== id) : [...p.indices, id] };
+    });
+  };
   const notesOn = (prefs.layout === "table" && showSec("read")) || showSec("tape") || showSec("legend");
 
   return (
@@ -242,68 +251,70 @@ export function PcrPane() {
         <header className="kp-head">
           <div className="kp-head-row">
             <h1 className="kp-title">PCR Desk</h1>
-            <div className="kp-tools" ref={prefsRef}>
-              <div className="kp-seg" role="tablist" aria-label="Layout">
-                <button type="button" data-on={prefs.layout === "tiles"} onClick={() => setPrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
-                <button type="button" data-on={prefs.layout === "table"} onClick={() => setPrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
-              </div>
-              <button type="button" className="kp-gear" data-on={prefsOpen} aria-expanded={prefsOpen} aria-label="Display settings" onClick={() => setPrefsOpen((v) => !v)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-                </svg>
-              </button>
-              {prefsOpen ? (
-                <div className="kp-prefs" role="dialog" aria-label="Display settings">
-                  <h3>Show</h3>
-                  {SECTIONS.filter((s) => prefs.layout === "table" || s.id !== "read").map((s) => (
-                    <label key={s.id}>
-                      <input type="checkbox" checked={prefs.sections[s.id]} onChange={() => toggleSec(s.id)} />
-                      {s.label}
-                    </label>
-                  ))}
-                  {prefs.layout === "tiles" ? (
-                    <>
-                      <h3>On each tile</h3>
-                      {TILE_FIELDS.map((f) => (
-                        <label key={f.id}>
-                          <input type="checkbox" checked={prefs.tile[f.id]} onChange={() => toggleTile(f.id)} />
-                          {f.label}
-                        </label>
-                      ))}
-                    </>
-                  ) : (
-                    <>
-                      <h3>Table columns</h3>
-                      {TABLE_COLS.map((c) => (
-                        <label key={c.id}>
-                          <input type="checkbox" checked={prefs.cols[c.id]} onChange={() => toggleCol(c.id)} />
-                          {c.label}
-                        </label>
-                      ))}
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="kp-nav">
-            <div className="kp-idx" role="group" aria-label="Underlying">
-              <button type="button" role="switch" aria-pressed={showAll} data-on={showAll} onClick={() => setPicked((cur) => cur.length === PCR_INDICES.length ? [] : PCR_INDICES.map((u) => u.id))}>All</button>
-              {PCR_INDICES.map((u) => {
-                const on = picked.includes(u.id);
-                return (
-                  <button key={u.id} type="button" role="switch" aria-pressed={on} data-on={on} onClick={() => { setIndex(u.id); setPicked((cur) => cur.includes(u.id) ? cur.filter((id) => id !== u.id) : [...cur, u.id]); }}>
-                    {u.short}
-                  </button>
-                );
-              })}
-              <button type="button" role="switch" aria-pressed={pathOn} data-on={pathOn} onClick={() => setPathOn((v) => !v)}>Path</button>
-            </div>
             <div className="kp-tabs" role="tablist" aria-label="PCR metric">
               {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
                 <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
               ))}
+            </div>
+            <div className="kp-tools" ref={prefsRef}>
+              <button type="button" className="kp-gear" data-on={prefsOpen} aria-expanded={prefsOpen} aria-label="Settings" onClick={() => setPrefsOpen((v) => !v)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M4 7h10" />
+                  <circle cx="16.5" cy="7" r="2.2" />
+                  <path d="M20 12H10" />
+                  <circle cx="7.5" cy="12" r="2.2" />
+                  <path d="M4 17h10" />
+                  <circle cx="16.5" cy="17" r="2.2" />
+                </svg>
+              </button>
+              {prefsOpen ? (
+                <div className="kp-prefs" role="dialog" aria-label="Settings">
+                  <div className="kp-prefs-head">
+                    <strong>Settings</strong>
+                    <button type="button" className="kp-prefs-x" aria-label="Close settings" onClick={() => setPrefsOpen(false)}>×</button>
+                  </div>
+                  <div className="kp-prefs-body">
+                    <h3>Layout</h3>
+                    <div className="kp-pref-chips" role="tablist" aria-label="Layout">
+                      <button type="button" data-on={prefs.layout === "tiles"} onClick={() => setPrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
+                      <button type="button" data-on={prefs.layout === "table"} onClick={() => setPrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
+                    </div>
+                    <h3>Indices</h3>
+                    <div className="kp-pref-chips" role="group" aria-label="Indices">
+                      <button type="button" data-on={showAll} onClick={() => setPrefs((p) => ({ ...p, indices: showAll ? [] : PCR_INDICES.map((u) => u.id) }))}>All</button>
+                      {PCR_INDICES.map((u) => (
+                        <button key={u.id} type="button" data-on={picked.includes(u.id)} onClick={() => toggleIndex(u.id)}>{u.short}</button>
+                      ))}
+                    </div>
+                    <h3>View</h3>
+                    <div className="kp-pref-chips">
+                      <button type="button" data-on={pathOn} onClick={() => setPrefs((p) => ({ ...p, path: !p.path }))}>Path</button>
+                    </div>
+                    <h3>Show</h3>
+                    <div className="kp-pref-grid">
+                      {SECTIONS.filter((s) => prefs.layout === "table" || s.id !== "read").map((s) => (
+                        <label key={s.id}>
+                          <input type="checkbox" checked={prefs.sections[s.id]} onChange={() => toggleSec(s.id)} />
+                          {s.label}
+                        </label>
+                      ))}
+                    </div>
+                    {prefs.layout === "table" ? (
+                      <>
+                        <h3>Columns</h3>
+                        <div className="kp-pref-grid">
+                          {TABLE_COLS.map((c) => (
+                            <label key={c.id}>
+                              <input type="checkbox" checked={prefs.cols[c.id]} onChange={() => toggleCol(c.id)} />
+                              {c.label}
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
@@ -500,7 +511,7 @@ export function PcrPane() {
               ) : null}
             </div>
           ) : null}
-          <p className="kp-foot">Toggle any index. Path is PCR vs spot. 1–5 toggle · A all · P path</p>
+          <p className="kp-foot">Settings → Indices to pick Nifty / Bank / Fin / Sensex / Midcap. 1–5 toggle · A all · P path</p>
         </div>
       </div>
     </div>
