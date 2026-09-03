@@ -30,30 +30,30 @@ export const PCR_CSS = `
 .kite-pcr .kp-st.fights{color:var(--k-red)}
 .kite-pcr .kp-st.quiet{color:var(--k-dim)}
 .kite-pcr .kp-stack{display:flex;flex-direction:column;gap:10px}
-.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);border-radius:4px;background:var(--k-surface)}
+.kite-pcr .kp-sheet{overflow:auto;border:1px solid var(--k-border);background:var(--k-surface);width:fit-content;max-width:100%}
 .kite-pcr .kp-sheet:not(.kp-sheet-heat){overflow:visible}
-.kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px);border-radius:0}
-.kite-pcr table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
-.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
+.kite-pcr .kp-sheet-heat{max-height:calc(100vh - 280px)}
+.kite-pcr table{width:auto;border-collapse:collapse;font-variant-numeric:tabular-nums;table-layout:fixed}
+.kite-pcr thead th{position:sticky;top:0;z-index:2;background:var(--k-surface);color:var(--k-dim);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;text-align:center;border-bottom:1px solid var(--k-border);white-space:nowrap}
 .kite-pcr thead th:first-child{text-align:left;cursor:default;position:sticky;left:0;z-index:3}
 .kite-pcr thead th[data-on="true"]{color:var(--k-orange);font-weight:600}
-.kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:8px 10px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
-.kite-pcr tbody td{padding:8px 10px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
+.kite-pcr tbody th{position:sticky;left:0;z-index:1;padding:6px 8px;font-size:12px;font-weight:400;color:var(--k-dim);text-align:left;background:var(--k-surface);border-bottom:1px solid var(--k-border);white-space:nowrap}
+.kite-pcr tbody td{padding:6px 8px;font-size:13px;border-bottom:1px solid var(--k-border);vertical-align:middle;text-align:center}
 .kite-pcr tbody tr[data-live="true"] th{color:var(--k-orange);font-weight:600}
-.kite-pcr .kp-book col.c-idx{width:72px}
-.kite-pcr .kp-book col.c-play{width:92px}
-.kite-pcr .kp-book col.c-pcr{width:76px}
-.kite-pcr .kp-book col.c-move{width:148px}
-.kite-pcr .kp-book col.c-st{width:64px}
-.kite-pcr .kp-book col.c-spot{width:148px}
-.kite-pcr .kp-book col.c-pc{width:64px}
-.kite-pcr .kp-book col.c-exp{width:88px}
-.kite-pcr .kp-book col.c-pain{width:88px}
+.kite-pcr .kp-book col.c-idx{width:56px}
+.kite-pcr .kp-book col.c-play{width:64px}
+.kite-pcr .kp-book col.c-pcr{width:52px}
+.kite-pcr .kp-book col.c-move{width:118px}
+.kite-pcr .kp-book col.c-st{width:48px}
+.kite-pcr .kp-book col.c-spot{width:112px}
+.kite-pcr .kp-book col.c-pc{width:48px}
+.kite-pcr .kp-book col.c-exp{width:68px}
+.kite-pcr .kp-book col.c-pain{width:60px}
 .kite-pcr .kp-book tbody th{font-weight:600;color:var(--k-text);font-size:${ROW_METRICS.instrumentFontSize}px}
 .kite-pcr .kp-book thead th{font-size:${HEAD_METRICS.fontSize}px;font-weight:${HEAD_METRICS.fontWeight};letter-spacing:${HEAD_METRICS.letterSpacing};text-transform:${HEAD_METRICS.textTransform};padding:${HEAD_METRICS.padding};color:var(--k-dim)}
 .kite-pcr .kp-book thead th,.kite-pcr .kp-book tbody td{white-space:nowrap}
-.kite-pcr .kp-book tbody td{font-size:${ROW_METRICS.cellFontSize}px;font-weight:400;padding:0 10px;height:${ROW_METRICS.legHeight}px}
-.kite-pcr .kp-book tbody th{padding:0 10px;height:${ROW_METRICS.legHeight}px}
+.kite-pcr .kp-book tbody td{font-size:${ROW_METRICS.cellFontSize}px;font-weight:400;padding:0 8px;height:${ROW_METRICS.legHeight}px}
+.kite-pcr .kp-book tbody th{padding:0 8px;height:${ROW_METRICS.legHeight}px}
 .kite-pcr .kp-book thead th{text-align:left}
 .kite-pcr .kp-book tbody td{text-align:left}
 .kite-pcr .kp-book thead th.num,.kite-pcr .kp-book tbody td.num{text-align:right}
@@ -65,15 +65,14 @@ export const PCR_CSS = `
 .kite-pcr .kp-play-cell:hover .kp-tip{display:block}
 .kite-pcr .kp-book tbody tr:last-child .kp-tip{top:auto;bottom:calc(100% - 2px)}
 .kite-pcr .kp-move{font-size:${ROW_METRICS.cellFontSize}px;color:var(--k-text)}
-.kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:8px;font-size:${ROW_METRICS.cellFontSize}px}
-.kite-pcr .kp-spot .ltp{min-width:8.5ch;text-align:right}
-.kite-pcr .kp-chg{min-width:5.2ch;text-align:right;font-size:${ROW_METRICS.cellFontSize}px}
-.kite-pcr .kp-sheet-heat col.c-time{width:72px}
-.kite-pcr .kp-sheet-heat.one{width:fit-content;max-width:100%}
-.kite-pcr .kp-sheet-heat.one table{width:auto}
-.kite-pcr .kp-sheet-heat.one col:not(.c-time){width:108px}
+.kite-pcr .kp-spot{display:flex;justify-content:flex-end;align-items:baseline;gap:6px;font-size:${ROW_METRICS.cellFontSize}px}
+.kite-pcr .kp-spot .ltp{min-width:7.5ch;text-align:right}
+.kite-pcr .kp-chg{min-width:4.8ch;text-align:right;font-size:${ROW_METRICS.cellFontSize}px}
+.kite-pcr .kp-sheet-heat col.c-time{width:52px}
+.kite-pcr .kp-sheet-heat col:not(.c-time){width:64px}
+.kite-pcr .kp-sheet-heat.one col:not(.c-time){width:64px}
 .kite-pcr .kp-heat-row td{padding:0;text-align:center;border-bottom:0}
-.kite-pcr .kp-heat-row th{padding:4px 10px;font-variant-numeric:tabular-nums;border-bottom:0}
+.kite-pcr .kp-heat-row th{padding:4px 8px;font-variant-numeric:tabular-nums;border-bottom:0}
 .kite-pcr .kp-heat{display:block;width:100%;text-align:center;font-size:12px;font-weight:500;padding:7px 4px;border-radius:0;min-height:26px;box-sizing:border-box}
 .kite-pcr .kp-delta{display:block;text-align:right;padding:5px 6px;font-size:12px;color:var(--k-dim)}
 .kite-pcr .kp-band-extreme-positive{background:#1b5e4a;color:#f4f4f5}
