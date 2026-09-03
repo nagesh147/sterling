@@ -163,7 +163,7 @@ export function adaptiveEdgeLegToBoard(row: AdaptiveEdgeRow): BoardSignal {
     direction,
     status: status(row),
     atMs: parseTimestampMs(
-      row.entryTime ?? row.observationTime ?? (row as any).timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at ?? (row as any).session_date
+      row.entryTime ?? row.sessionDate ?? (row as any).session_date ?? row.observationTime ?? (row as any).timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at
     ),
     levels: {
       ltp: price(row.ltp),

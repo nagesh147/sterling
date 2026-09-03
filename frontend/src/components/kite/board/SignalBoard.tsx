@@ -17,6 +17,7 @@ import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, shiftSessionDay, stamp, trailBreached,
 } from './boardTypes';
+import type { BoardDayMove, BoardOrigin, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
   DAY_HEAD_METRICS, EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
@@ -1040,7 +1041,7 @@ function Row({
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
+  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = false,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
   renderTrade, renderChart,
 }: {
