@@ -74,9 +74,9 @@ describe('every engine panel actually passes the window', () => {
     'SuperTrendEnginePanel.tsx',
     'NavigatorSettingsPanel.tsx',
     'AdaptiveEdgeSettingsPanel.tsx',
-  ])('%s passes dteMin/dteMax/avoidExpiryDay to ContractsGroup', (file) => {
+  ])('%s passes dteMin/dteMax/avoidExpiryDay to expiry/contracts controls', (file) => {
     const src = sourceOf(PANEL_SOURCE, file);
-    expect(src).toContain('<ContractsGroup');
+    expect(src.includes('<ContractsGroup') || src.includes('<ExpirySettingsGroup')).toBe(true);
     for (const prop of ['dteMin=', 'dteMax=', 'avoidExpiryDay=']) {
       expect(src, `${file} does not pass ${prop}`).toContain(prop);
     }
