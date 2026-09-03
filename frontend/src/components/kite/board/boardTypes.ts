@@ -363,7 +363,7 @@ export function shiftSessionDay(key: string, days: number): string {
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
 export function sessionDayLabel(key: string, nowMs: number): string {
-  if (key === LIVE_BUCKET) return 'Today';
+  if (key === LIVE_BUCKET) return 'Live now';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
@@ -424,20 +424,13 @@ export function groupByDay(
   const yesterdayKey = todayKey ? shiftSessionDay(todayKey, -1) : null;
   for (const s of signals) {
     const day = sessionDayKey(s.atMs);
-    // Hoist only what day grouping would actually bury. A live row from today
-    // is already in the first section, so lifting it out gains nothing and
-    // costs it its date heading; a live row from last Tuesday would otherwise
-    // sit below days of closed history, which is the case the bucket exists
-    // for. Without a clock, fall back to hoisting every live row.
     const buried = todayKey == null || day !== todayKey;
-    // `hoistToday` implies `liveFirst`. Asking for today's live rows to be
-    // lifted out IS asking for a live bucket, and gating one on the other meant
-    // a caller could pass `hoistToday` alone and get no live section at all —
-    // silently, because the prop was accepted and simply had no effect. That is
-    // how SuperTrend's shared board lost its "Active now" heading: the wrapper
-    // passed `hoistLiveFromToday` and never `liveFirst`.
-    const wantsLive = liveFirst || hoistToday;
-    if (wantsLive && (hoistToday || buried) && ACTIONABLE.includes(s.status)) {
+    // An armed setup is an intraday trigger condition for its own session day.
+    // An armed setup from an older day never entered and is not a running position.
+    // Only positions that are actually running or weakening can be hoisted across days.
+    const isOldRunning = buried && (s.status === 'running' || s.status === 'weakening');
+    const isTodayActionable = !buried && ACTIONABLE.includes(s.status);
+    if ((hoistToday && (isTodayActionable || isOldRunning)) || (liveFirst && isOldRunning)) {
       push(LIVE_BUCKET, s);
       continue;
     }
