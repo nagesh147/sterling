@@ -216,34 +216,36 @@ export function SettingsDraftBar({
       role="region"
       aria-label="Unsaved settings changes"
       style={{
-        position: 'sticky',
-        bottom: 16,
-        zIndex: 100,
-        width: '100%',
+        position: 'fixed',
+        bottom: 24,
+        left: 'calc(220px + (100vw - 220px) / 2)',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        width: 'calc(100vw - 284px)',
+        maxWidth: 1000,
         boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
-        padding: '12px 20px',
-        margin: '16px 0 0',
+        gap: 16,
+        padding: '14px 24px',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
-        borderRadius: 9,
-        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08)',
-        backdropFilter: 'blur(8px)',
+        borderRadius: 12,
+        boxShadow: '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.1)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {showDraftActions && (
           <span
             aria-live="polite"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 9,
               color: saving ? MUTED : AMBER,
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: 700,
               whiteSpace: 'nowrap',
             }}
@@ -263,7 +265,7 @@ export function SettingsDraftBar({
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {showDraftActions && (
           <>
             <button
@@ -275,15 +277,15 @@ export function SettingsDraftBar({
                 border: 'none',
                 background: ORANGE,
                 color: 'var(--k-bg)',
-                borderRadius: 7,
-                padding: '8px 18px',
+                borderRadius: 8,
+                padding: '9px 20px',
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: saving || applyDisabled ? 'default' : 'pointer',
                 fontFamily: 'inherit',
                 opacity: saving || applyDisabled ? 0.5 : 1,
                 whiteSpace: 'nowrap',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.14)',
               }}
             >
               Apply changes
@@ -296,8 +298,8 @@ export function SettingsDraftBar({
                 border: `1px solid ${BORDER}`,
                 background: 'var(--k-bg)',
                 color: MUTED,
-                borderRadius: 7,
-                padding: '7.5px 14px',
+                borderRadius: 8,
+                padding: '8.5px 16px',
                 fontSize: 11.5,
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -309,7 +311,7 @@ export function SettingsDraftBar({
             </button>
           </>
         )}
-        <div style={{ width: 1, height: 18, background: BORDER, margin: '0 2px' }} />
+        <div style={{ width: 1, height: 20, background: BORDER, margin: '0 4px' }} />
         <button
           type="button"
           onClick={onReset}
@@ -318,8 +320,8 @@ export function SettingsDraftBar({
             border: `1px solid ${BORDER}`,
             background: 'var(--k-bg)',
             color: resetConfirm ? RED : MUTED,
-            borderRadius: 7,
-            padding: '7.5px 14px',
+            borderRadius: 8,
+            padding: '8.5px 16px',
             fontSize: 11.5,
             fontWeight: 700,
             cursor: 'pointer',
