@@ -229,7 +229,9 @@ function StrikeGroupCard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span
-            aria-hidden
+            role="checkbox"
+            aria-checked={isChecked}
+            aria-label={group.label}
             style={{
               width: 16,
               height: 16,
@@ -322,7 +324,8 @@ export function ContractsGroup({
   return (
     <>
       <Field
-        label="Strike range & legs"
+        label="Strike range"
+        hint="Select moneyness and number of legs per group"
         wide
       >
         <div
@@ -341,6 +344,29 @@ export function ContractsGroup({
               onUpdateStrikes={(next) => onChange({ strike_moneyness: next })}
             />
           ))}
+        </div>
+      </Field>
+
+      <Field label="Index expiries" hint="Contract cycles scanned for indices.">
+        <div style={{ display: 'flex', gap: 16 }}>
+          <CheckOption
+            label="Weekly"
+            checked={indexExpiries.includes('weekly')}
+            onChange={() => onChange({
+              scan_expiries_indices: indexExpiries.includes('weekly')
+                ? (indexExpiries.filter((x) => x !== 'weekly').length ? indexExpiries.filter((x) => x !== 'weekly') : ['weekly'])
+                : [...indexExpiries, 'weekly'],
+            })}
+          />
+          <CheckOption
+            label="Monthly"
+            checked={indexExpiries.includes('monthly')}
+            onChange={() => onChange({
+              scan_expiries_indices: indexExpiries.includes('monthly')
+                ? (indexExpiries.filter((x) => x !== 'monthly').length ? indexExpiries.filter((x) => x !== 'monthly') : ['monthly'])
+                : [...indexExpiries, 'monthly'],
+            })}
+          />
         </div>
       </Field>
 
