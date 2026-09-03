@@ -39,12 +39,18 @@ describe('trading-day grouping', () => {
 
   it('labels today, yesterday and older days', () => {
     expect(sessionDayLabel(sessionDayKey(NOW), NOW)).toBe('Today');
-    // Only today is named in words; every other day gets a real date, because
-    // "Yesterday" is useful for one day and then has to be converted by the reader.
-    expect(sessionDayLabel(sessionDayKey(NOW - 86_400_000), NOW)).toMatch(/^\w{3},? \d+ \w{3}$/);
-    // ...and a day from another year says so, which "20 Aug" would not.
-    expect(sessionDayLabel(sessionDayKey(NOW - 400 * 86_400_000), NOW)).toMatch(/\d{4}$/);
-    expect(sessionDayLabel('2026-08-13', NOW)).toMatch(/13 Aug/);
+    expect(sessionDayLabel(sessionDayKey(NOW - 86_400_000), NOW)).toBe('Yesterday');
+    expect(sessionDayLabel('older', NOW)).toBe('Older');
+  });
+
+  it('collapses anything before yesterday into Older', () => {
+    const days = groupByDay([
+      signal({ id: 'today', atMs: NOW }),
+      signal({ id: 'yest', atMs: NOW - 86_400_000 }),
+      signal({ id: 'old', atMs: NOW - 3 * 86_400_000 }),
+    ], { nowMs: NOW });
+    expect(days.map((d) => d.key)).toEqual(['2026-08-21', '2026-08-20', 'older']);
+    expect(days[2].signals.map((s) => s.id)).toEqual(['old']);
   });
 
   it('orders days newest first and rows newest first inside a day', () => {

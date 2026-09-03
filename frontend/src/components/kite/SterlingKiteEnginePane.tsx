@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, sessionDayLabel, underlyingQuoteKey } from './board/boardTypes';
+import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
@@ -2111,36 +2111,21 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
     }
 
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    // Only today is named in words. "Yesterday" is useful for exactly one day
-    // and then becomes something the reader has to convert, so it carries its
-    // real date instead — worded by the board's own formatter so the two
-    // surfaces cannot disagree about what a date looks like.
-    //
-    // The three that follow are RANGES spanning many days, not single days, so
-    // there is no date to put in their place. They stay as they are.
-    const yesterdayLabel = sessionDayLabel(
-      sessionDayKey(todayStart - 86_400_000), todayStart,
-    );
+    const nowMs = Date.now();
+    const todayKey = sessionDayKey(nowMs);
+    const yesterdayKey = shiftSessionDay(todayKey, -1);
     const groups: Record<string, typeof filteredRows> = {
-      "Today": [], [yesterdayLabel]: [], "Last week": [], "Last 15 days": [], "Older": [],
+      Today: [], Yesterday: [], Older: [],
     };
     for (const r of history) {
-      const d = new Date(r.timestamp_ms);
-      const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      const diffDays = Math.round((todayStart - startOfDay) / (1000 * 60 * 60 * 24));
-      let label = "";
-      if (diffDays === 0) label = "Today";
-      else if (diffDays === 1) label = yesterdayLabel;
-      else if (diffDays >= 2 && diffDays <= 7) label = "Last week";
-      else if (diffDays >= 8 && diffDays <= 15) label = "Last 15 days";
-      else label = "Older";
-      groups[label].push(r);
+      const day = sessionDayKey(r.timestamp_ms);
+      if (day === todayKey) groups.Today.push(r);
+      else if (day === yesterdayKey) groups.Yesterday.push(r);
+      else groups.Older.push(r);
     }
-    for (const label of ["Today", yesterdayLabel, "Last week", "Last 15 days", "Older"]) {
+    for (const label of ['Today', 'Yesterday', 'Older'] as const) {
       if (groups[label].length) {
-        buckets.push({ label: `${label} (ended)`, rows: applyUserSort(groups[label]) });
+        buckets.push({ label, rows: applyUserSort(groups[label]) });
       }
     }
     if (!showEnded) return buckets.filter(b => b.active);
