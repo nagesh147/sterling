@@ -248,7 +248,7 @@ export function SettingsDraftBar({
       aria-label="Unsaved settings changes"
       style={{
         position: 'fixed',
-        bottom: 16,
+        bottom: 48,
         left: bounds ? bounds.left : '50%',
         transform: bounds ? undefined : 'translateX(-50%)',
         width: bounds ? bounds.width : 'calc(100vw - 284px)',
