@@ -256,7 +256,6 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
-    fireEvent.click(screen.getByText('Yesterday'));
     fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     const at = (sym: string) => body.indexOf(sym);
