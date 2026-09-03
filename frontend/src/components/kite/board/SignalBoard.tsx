@@ -15,7 +15,7 @@ import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
   ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
+  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, shiftSessionDay, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -1166,8 +1166,16 @@ export function SignalBoard({
       return userToggledDays.get(key)!;
     }
     const todayKey = sessionDayKey(effectiveNowMs);
+    const yesterdayKey = shiftSessionDay(todayKey, -1);
     const label = sessionDayLabel(key, effectiveNowMs);
-    return key === todayKey || key === LIVE_BUCKET || label === 'Today' || label === 'Live now';
+    return (
+      key === todayKey ||
+      key === yesterdayKey ||
+      key === LIVE_BUCKET ||
+      label === 'Today' ||
+      label === 'Yesterday' ||
+      label === 'Live now'
+    );
   };
 
   const toggleDay = (key: string) => {
@@ -1272,7 +1280,12 @@ export function SignalBoard({
         const monthlySignals = sorted.filter((s) => !isWeeklySignal(s));
         const hasBoth = weeklySignals.length > 0 && monthlySignals.length > 0;
         const expandedDay = isDayExpanded(key);
-        const isTodayGroup = key === sessionDayKey(effectiveNowMs) || key === LIVE_BUCKET || sessionDayLabel(key, effectiveNowMs) === 'Today';
+        const isRecentGroup =
+          key === sessionDayKey(effectiveNowMs) ||
+          key === shiftSessionDay(sessionDayKey(effectiveNowMs), -1) ||
+          key === LIVE_BUCKET ||
+          sessionDayLabel(key, effectiveNowMs) === 'Today' ||
+          sessionDayLabel(key, effectiveNowMs) === 'Yesterday';
 
         const renderSignalGroup = (groupRows: BoardSignal[]) => {
           return groupRows.map((signal, i) => {
@@ -1312,9 +1325,9 @@ export function SignalBoard({
                 </React.Fragment>
               );
             }
-            // For Today: default expanded unless in collapsedGroups.
-            // For past days: default collapsed unless in collapsedGroups as false.
-            const expanded = isTodayGroup
+            // For Today and Yesterday: default expanded unless in collapsedGroups.
+            // For older days: default collapsed unless in collapsedGroups as false.
+            const expanded = isRecentGroup
               ? !(collapsedGroups?.has(signal.id) ?? false)
               : (collapsedGroups?.has(signal.id) === false);
             const legMarks = markLegs(legs);
@@ -1439,7 +1452,7 @@ export function SignalBoard({
                 </span>
                 <span>
                   {key === LIVE_BUCKET
-                    ? (rows.length > 0 && rows.every((s) => sessionDayKey(s.atMs) === sessionDayKey(effectiveNowMs)) ? 'Today' : 'Live now')
+                    ? (rows.length > 0 && rows.every((s) => s.atMs != null && sessionDayKey(s.atMs) === sessionDayKey(effectiveNowMs)) ? 'Today' : 'Today')
                     : sessionDayLabel(key, nowMs ?? effectiveNowMs)}
                 </span>
               </div>
