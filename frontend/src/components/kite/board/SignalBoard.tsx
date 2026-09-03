@@ -27,7 +27,35 @@ import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
 import { useKiteSettings } from '../../../store/useKiteSettings';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
-import { InstrumentLabel } from '../InstrumentLabel';
+import { InstrumentLabel, parseInstrument } from '../InstrumentLabel';
+
+/**
+ * Determines whether a signal or contract leg belongs to a Weekly option series.
+ */
+export function isWeeklySignal(signal: BoardSignal): boolean {
+  if (signal.instrument?.symbol) {
+    const parsed = parseInstrument(signal.instrument.symbol);
+    if (parsed?.isWeekly !== undefined) return parsed.isWeekly;
+  }
+  if (signal.instrument?.expiry) {
+    const exp = signal.instrument.expiry.toLowerCase();
+    if (exp.includes('weekly') || exp.includes('w')) return true;
+  }
+  if (signal.children && signal.children.length > 0) {
+    for (const child of signal.children) {
+      if (child.instrument?.symbol) {
+        const parsed = parseInstrument(child.instrument.symbol);
+        if (parsed?.isWeekly !== undefined) return parsed.isWeekly;
+      }
+      if (child.instrument?.expiry) {
+        const exp = child.instrument.expiry.toLowerCase();
+        if (exp.includes('weekly') || exp.includes('w')) return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
@@ -1229,43 +1257,16 @@ export function SignalBoard({
         )}
       </div>
 
-      {days.map(({ key, signals: rows }) => (
-        <section key={key}>
-          <div
-            className="sb-day"
-            style={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              padding: DAY_HEAD_METRICS.padding,
-              background: k.surface,
-              borderBottom: `1px solid ${k.border}`,
-              fontSize: DAY_HEAD_METRICS.fontSize,
-              fontWeight: DAY_HEAD_METRICS.fontWeight,
-              letterSpacing: DAY_HEAD_METRICS.letterSpacing,
-              textTransform: DAY_HEAD_METRICS.textTransform,
-              color: k.dim,
-            }}
-          >
-            <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
-            <span style={{ fontWeight: 500 }}>{rows.length}</span>
-          </div>
-          {sortSignals(rows, sort).map((signal, i) => {
+      {days.map(({ key, signals: rows }) => {
+        const sorted = sortSignals(rows, sort);
+        const weeklySignals = sorted.filter(isWeeklySignal);
+        const monthlySignals = sorted.filter((s) => !isWeeklySignal(s));
+        const hasBoth = weeklySignals.length > 0 && monthlySignals.length > 0;
+
+        const renderSignalGroup = (groupRows: BoardSignal[]) => {
+          return groupRows.map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {
-              // An EMPTY ARRAY is not the same as no array.
-              //
-              // ORB, Gamma Move and the ATM bot leave `children` undefined —
-              // their signals are one instrument and always were. SuperTrend
-              // sets it to the contracts it resolved, so an empty array means it
-              // wanted contracts and found none: an expired series, a strike
-              // that is not listed, a filter that excluded everything. Those two
-              // cases look identical after `?? []`, which is why this checks the
-              // field itself.
               const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
               return (
                 <React.Fragment key={signal.id}>
@@ -1283,11 +1284,6 @@ export function SignalBoard({
                     renderTrade={renderTrade}
                     renderChart={renderChart}
                   />
-                  {/* The engine knows why it found nothing, so it says so in the
-                      row rather than behind a click. A parent with nothing under
-                      it otherwise reads like a loading state, and an operator
-                      scanning for something to trade should not have to open a
-                      row to learn there is nothing in it. */}
                   {resolvedNothing && (
                     <div
                       style={{
@@ -1305,13 +1301,13 @@ export function SignalBoard({
                 </React.Fragment>
               );
             }
-            // A parent's chevron shows its contracts, not its own detail —
-            // the thing behind a signal with eighteen strikes is the strikes.
-            // Its full record is still one click away on the symbol.
             const expanded = !(collapsedGroups?.has(signal.id) ?? false);
-            // Best-of comparisons are only meaningful between the strikes of
-            // one idea, so they are computed per group, never board-wide.
             const legMarks = markLegs(legs);
+            const sortedLegs = sortSignals(legs, sort);
+            const weeklyLegs = sortedLegs.filter(isWeeklySignal);
+            const monthlyLegs = sortedLegs.filter((l) => !isWeeklySignal(l));
+            const hasBothLegs = weeklyLegs.length > 0 && monthlyLegs.length > 0;
+
             return (
               <React.Fragment key={signal.id}>
                 <GroupHeader
@@ -1322,7 +1318,7 @@ export function SignalBoard({
                   onOpenDetail={onOpenDetail}
                   nowMs={nowMs}
                 />
-                {expanded && sortSignals(legs, sort).map((leg) => (
+                {expanded && !hasBothLegs && sortedLegs.map((leg) => (
                   <Row
                     nowMs={nowMs}
                     key={leg.id}
@@ -1341,11 +1337,103 @@ export function SignalBoard({
                     renderChart={renderChart}
                   />
                 ))}
+                {expanded && hasBothLegs && (
+                  <React.Fragment>
+                    {weeklyLegs.map((leg) => (
+                      <Row
+                        nowMs={nowMs}
+                        key={leg.id}
+                        marks={legMarks.get(leg.id)}
+                        signal={leg}
+                        columns={cols}
+                        open={openId === leg.id}
+                        onToggle={() => onToggle(leg.id)}
+                        renderDetail={renderDetail}
+                        onOpenDetail={onOpenDetail}
+                        striped={false}
+                        depth={1}
+                        rowScroll={rowScroll}
+                        renderRowActions={renderRowActions}
+                        renderTrade={renderTrade}
+                        renderChart={renderChart}
+                      />
+                    ))}
+                    <div style={{ height: 6, background: 'transparent' }} />
+                    {monthlyLegs.map((leg) => (
+                      <Row
+                        nowMs={nowMs}
+                        key={leg.id}
+                        marks={legMarks.get(leg.id)}
+                        signal={leg}
+                        columns={cols}
+                        open={openId === leg.id}
+                        onToggle={() => onToggle(leg.id)}
+                        renderDetail={renderDetail}
+                        onOpenDetail={onOpenDetail}
+                        striped={false}
+                        depth={1}
+                        rowScroll={rowScroll}
+                        renderRowActions={renderRowActions}
+                        renderTrade={renderTrade}
+                        renderChart={renderChart}
+                      />
+                    ))}
+                  </React.Fragment>
+                )}
               </React.Fragment>
             );
-          })}
-        </section>
-      ))}
+          });
+        };
+
+        return (
+          <section key={key}>
+            <div
+              className="sb-day"
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: DAY_HEAD_METRICS.padding,
+                background: k.surface,
+                borderBottom: `1px solid ${k.border}`,
+                fontSize: DAY_HEAD_METRICS.fontSize,
+                fontWeight: DAY_HEAD_METRICS.fontWeight,
+                letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+                textTransform: DAY_HEAD_METRICS.textTransform,
+                color: k.dim,
+              }}
+            >
+              <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
+              <span style={{ fontWeight: 500 }}>{rows.length}</span>
+            </div>
+
+            {!hasBoth ? (
+              renderSignalGroup(sorted)
+            ) : (
+              <React.Fragment>
+                {/* WEEKLY SIGNALS */}
+                {renderSignalGroup(weeklySignals)}
+
+                {/* SMALL TRANSPARENT SPACE / LINE SEPARATOR BETWEEN WEEKLY AND MONTHLY SIGNALS */}
+                <div
+                  style={{
+                    height: 10,
+                    background: 'transparent',
+                    borderTop: `1px solid ${k.border}`,
+                  }}
+                />
+
+                {/* MONTHLY SIGNALS */}
+                {renderSignalGroup(monthlySignals)}
+              </React.Fragment>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
