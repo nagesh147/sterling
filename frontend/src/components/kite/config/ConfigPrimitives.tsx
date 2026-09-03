@@ -221,110 +221,117 @@ export function SettingsDraftBar({
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 1000,
+        width: 'calc(100% - 64px)',
+        maxWidth: 1000,
+        boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '10px 18px',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '12px 20px',
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
-        borderRadius: 12,
-        boxShadow: '0 8px 28px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08)',
-        maxWidth: 'calc(100vw - 48px)',
-        width: 'max-content',
-        boxSizing: 'border-box',
+        borderRadius: 9,
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08)',
         backdropFilter: 'blur(8px)',
       }}
     >
-      {showDraftActions && (
-        <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {showDraftActions && (
           <span
             aria-live="polite"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 7,
+              gap: 8,
               color: saving ? MUTED : AMBER,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: 700,
-              marginRight: 4,
               whiteSpace: 'nowrap',
             }}
           >
             <span
               aria-hidden
               style={{
-                width: 7,
-                height: 7,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
                 background: saving ? '#c2c2c2' : AMBER,
                 boxShadow: saving ? 'none' : `0 0 0 3px ${AMBER}25`,
               }}
             />
-            {saving ? 'Saving…' : 'Unsaved changes'}
+            {saving ? 'Saving changes…' : 'Unsaved changes in this section'}
           </span>
-          <button
-            type="button"
-            onClick={onApply}
-            disabled={saving || applyDisabled}
-            title={applyTitle}
-            style={{
-              border: 'none',
-              background: ORANGE,
-              color: 'var(--k-bg)',
-              borderRadius: 7,
-              padding: '8px 16px',
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: saving || applyDisabled ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              opacity: saving || applyDisabled ? 0.5 : 1,
-              whiteSpace: 'nowrap',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-            }}
-          >
-            Apply changes
-          </button>
-          <button
-            type="button"
-            onClick={onDiscard}
-            disabled={saving}
-            style={{
-              border: `1px solid ${BORDER}`,
-              background: 'var(--k-bg)',
-              color: MUTED,
-              borderRadius: 7,
-              padding: '7px 12px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Discard draft
-          </button>
-        </>
-      )}
-      <div style={{ width: 1, height: 16, background: BORDER, margin: '0 2px' }} />
-      <button
-        type="button"
-        onClick={onReset}
-        disabled={saving}
-        style={{
-          border: `1px solid ${BORDER}`,
-          background: 'var(--k-bg)',
-          color: resetConfirm ? RED : MUTED,
-          borderRadius: 7,
-          padding: '7px 12px',
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
-      </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {showDraftActions && (
+          <>
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={saving || applyDisabled}
+              title={applyTitle}
+              style={{
+                border: 'none',
+                background: ORANGE,
+                color: 'var(--k-bg)',
+                borderRadius: 7,
+                padding: '8px 18px',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: saving || applyDisabled ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: saving || applyDisabled ? 0.5 : 1,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+              }}
+            >
+              Apply changes
+            </button>
+            <button
+              type="button"
+              onClick={onDiscard}
+              disabled={saving}
+              style={{
+                border: `1px solid ${BORDER}`,
+                background: 'var(--k-bg)',
+                color: MUTED,
+                borderRadius: 7,
+                padding: '7.5px 14px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Discard draft
+            </button>
+          </>
+        )}
+        <div style={{ width: 1, height: 18, background: BORDER, margin: '0 2px' }} />
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={saving}
+          style={{
+            border: `1px solid ${BORDER}`,
+            background: 'var(--k-bg)',
+            color: resetConfirm ? RED : MUTED,
+            borderRadius: 7,
+            padding: '7.5px 14px',
+            fontSize: 11.5,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
+        </button>
+      </div>
     </div>
   );
 }

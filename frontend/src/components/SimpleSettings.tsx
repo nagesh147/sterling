@@ -1177,54 +1177,6 @@ export function AIGatekeeperToggle({ chipStyle }: { chipStyle?: React.CSSPropert
   );
 }
 
-// ── Default Page Load Section Picker ─────────────────────────────────────────
-function DefaultPageLoadSectionPicker() {
-  const defaultSection = useKiteSettings((s) => s.defaultSection || 'dashboard');
-  const setDefaultSection = useKiteSettings((s) => s.setDefaultSection);
-
-  const options: Array<{ value: NavItem; label: string }> = [
-    { value: 'dashboard', label: 'Dashboard' },
-    { value: 'positions', label: 'Positions' },
-    { value: 'orders', label: 'Orders' },
-    { value: 'holdings', label: 'Holdings' },
-    { value: 'astro', label: 'Astrology' },
-    { value: 'pcr', label: 'PCR' },
-    { value: 'adaptiveEdge', label: 'Adaptive Edge' },
-    { value: 'backtest', label: 'Backtest' },
-    { value: 'data', label: 'Data' },
-    { value: 'connect', label: 'Connect' },
-    { value: 'more', label: 'More' },
-    { value: 'help', label: 'Help' },
-  ];
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 11, color: 'var(--t-dim)', marginBottom: 6 }}>Default Section on Load:</div>
-      <select
-        value={defaultSection}
-        onChange={(e) => setDefaultSection(e.target.value as NavItem)}
-        style={{
-          width: '100%',
-          padding: '6px 10px',
-          background: 'var(--t-bg2)',
-          border: '1px solid var(--t-border)',
-          borderRadius: 4,
-          color: 'var(--t-bright)',
-          fontSize: 11,
-          fontFamily: 'inherit',
-          cursor: 'pointer',
-        }}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
@@ -1279,6 +1231,53 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
         <TelegramSection />
       </div>
     </>
+  );
+}
+
+function DefaultPageLoadSectionPicker() {
+  const defaultSection = useKiteSettings((s) => s.defaultSection || 'dashboard');
+  const setDefaultSection = useKiteSettings((s) => s.setDefaultSection);
+
+  const options: Array<{ value: NavItem; label: string }> = [
+    { value: 'dashboard', label: 'Dashboard' },
+    { value: 'positions', label: 'Positions' },
+    { value: 'orders', label: 'Orders' },
+    { value: 'holdings', label: 'Holdings' },
+    { value: 'astro', label: 'Astrology' },
+    { value: 'pcr', label: 'PCR' },
+    { value: 'adaptiveEdge', label: 'Adaptive Edge' },
+    { value: 'backtest', label: 'Backtest' },
+    { value: 'data', label: 'Data' },
+    { value: 'connect', label: 'Connect' },
+    { value: 'more', label: 'More' },
+    { value: 'help', label: 'Help' },
+  ];
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: 'var(--t-dim)', marginBottom: 6 }}>Default Section on Load:</div>
+      <select
+        value={defaultSection}
+        onChange={(e) => setDefaultSection(e.target.value as NavItem)}
+        style={{
+          width: '100%',
+          padding: '6px 10px',
+          background: 'var(--t-bg2)',
+          border: '1px solid var(--t-border)',
+          borderRadius: 4,
+          color: 'var(--t-bright)',
+          fontSize: 11,
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+        }}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
