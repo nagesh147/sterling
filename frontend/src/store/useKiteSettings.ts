@@ -296,7 +296,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
         }
 
         // v9 adds defaultSection setting.
-        const validSections: NavItem[] = ['dashboard', 'astro', 'pcr', 'orders', 'holdings', 'positions', 'more', 'data', 'adaptiveEdge', 'backtest', 'connect', 'help'];
+        const validSections: NavItem[] = ['dashboard', 'astro', 'pcr', 'openingLeaders', 'orders', 'holdings', 'positions', 'more', 'data', 'adaptiveEdge', 'backtest', 'connect', 'help'];
         if (!next.defaultSection || !validSections.includes(next.defaultSection)) {
           next = { ...next, defaultSection: 'dashboard' };
         }

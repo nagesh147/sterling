@@ -11,6 +11,7 @@ const OPTIONS: Array<{ value: NavItem; label: string; desc: string }> = [
   { value: 'holdings', label: 'Holdings', desc: 'Long-term portfolio & equity holdings' },
   { value: 'astro', label: 'Astrology', desc: 'Financial astrology & planetary cycles' },
   { value: 'pcr', label: 'PCR', desc: 'Put-Call Ratio analysis' },
+  { value: 'openingLeaders', label: 'Opening Leaders', desc: '09:15 relative-volume signals & ORB confirmation' },
   { value: 'adaptiveEdge', label: 'Adaptive Edge', desc: 'Adaptive Edge score & structure' },
   { value: 'backtest', label: 'Backtest', desc: 'Historical candle & strategy backtest' },
   { value: 'data', label: 'Data', desc: 'Offline data lake & downloads' },

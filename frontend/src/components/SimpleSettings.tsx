@@ -1245,6 +1245,7 @@ function DefaultPageLoadSectionPicker() {
     { value: 'holdings', label: 'Holdings' },
     { value: 'astro', label: 'Astrology' },
     { value: 'pcr', label: 'PCR' },
+    { value: 'openingLeaders', label: 'Opening Leaders' },
     { value: 'adaptiveEdge', label: 'Adaptive Edge' },
     { value: 'backtest', label: 'Backtest' },
     { value: 'data', label: 'Data' },

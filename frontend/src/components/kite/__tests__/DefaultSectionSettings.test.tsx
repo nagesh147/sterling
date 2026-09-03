@@ -36,5 +36,14 @@ describe('DefaultSectionSettings', () => {
 
     expect(useKiteSettings.getState().defaultSection).toBe('orders');
   });
-});
 
+  it('offers Opening Leaders as a default section', () => {
+    render(<DefaultSectionSettings />);
+
+    const openingLeadersRadio = screen.getByLabelText(/Opening Leaders/i) as HTMLInputElement;
+    fireEvent.click(openingLeadersRadio);
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+
+    expect(useKiteSettings.getState().defaultSection).toBe('openingLeaders');
+  });
+});

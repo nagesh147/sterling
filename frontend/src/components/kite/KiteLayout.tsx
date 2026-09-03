@@ -33,7 +33,7 @@ import {
 } from './workspaceLayout';
 import { paneActionsSlotId } from './PaneHeaderActions';
 
-export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
+export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'openingLeaders' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
@@ -124,6 +124,7 @@ function titleCase(value: string): string {
   if (value === 'backtest') return 'Backtest';
   if (value === 'astro') return 'Astrology';
   if (value === 'pcr') return 'PCR';
+  if (value === 'openingLeaders') return 'Opening Leaders';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
