@@ -9,7 +9,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard, visibleColumns, COLUMNS } from '../SignalBoard';
-import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, type BoardSignal, type BoardStatus } from '../boardTypes';
+import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
 import { supertrendToBoard } from '../supertrendAdapter';
 import type { EngineSignalRow, OptionLeg } from '../../../../types/kiteEngine';
 
@@ -339,5 +339,30 @@ describe('groupByDay hoistToday', () => {
     );
     expect(days[0].key).toBe(LIVE_BUCKET);
     expect(days[0].signals.map((x) => x.id).sort()).toEqual(['new', 'old']);
+  });
+
+  it('does not hoist past days armed setups into live bucket or today', () => {
+    // 28 Aug armed setup evaluated on 4 Sep before market open
+    const days = groupByDay(
+      [s('old_armed', NOW_ - 6 * DAY, 'armed')],
+      { liveFirst: true, nowMs: NOW_ },
+    );
+    expect(days.map((d) => d.key)).not.toContain(LIVE_BUCKET);
+    expect(days[0].key).toBe('older');
+    expect(sessionDayLabel(days[0].key, NOW_)).toBe('Older');
+  });
+
+  it('renders Older heading for past setups and does not render Today when market has not opened', () => {
+    render(
+      <SignalBoard
+        signals={[s('aug28', NOW_ - 6 * DAY, 'armed')]}
+        columns={['instrument', 'time']}
+        nowMs={NOW_}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText('Older')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
   });
 });
