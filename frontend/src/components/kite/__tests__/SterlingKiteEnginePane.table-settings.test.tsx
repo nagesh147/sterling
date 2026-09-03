@@ -162,7 +162,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show recent signals' }));
 
     expect(localStorage.getItem('kite_st_show_ended')).toBe('true');
-    expect(screen.getByText('Today (ended)')).toBeInTheDocument();
+    expect(screen.getByText('Today')).toBeInTheDocument();
   });
 
   it('keeps active spot candidate legs visible when ended legs are hidden', () => {

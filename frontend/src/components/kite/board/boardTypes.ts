@@ -324,28 +324,34 @@ export function sessionDayDate(key: string, nowMs: number): string {
 /** The bucket live positions float into, ahead of every dated one. */
 export const LIVE_BUCKET = 'live';
 
+/** Everything older than yesterday, in one section. */
+export const OLDER_BUCKET = 'older';
+
+/** Shift an IST `YYYY-MM-DD` key by whole calendar days. */
+export function shiftSessionDay(key: string, days: number): string {
+  if (key === LIVE_BUCKET || key === OLDER_BUCKET || key === 'unknown') return key;
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return key;
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
 /**
- * "Today" / "Thu 14 Aug" / "Thu 14 Aug 2025" — on the IST trading day.
+ * "Today" / "Yesterday" / "Older" / "Thu 14 Aug" — on the IST trading day.
  *
- * Only today is named in words. Everything else gets a real date, because
- * relative wording stops being an answer almost immediately: "Yesterday" is
- * useful for exactly one day and then becomes a thing the reader has to convert,
- * and on a board that keeps history most rows are not from either of the two
- * days it can describe.
- *
- * The year appears only when it is not the current one. "Thu 14 Aug" is
- * unambiguous within a year and adding 2026 to every row of a board someone is
- * watching live is noise; leaving it off a row from last year is a real
- * ambiguity, so that case says it.
+ * Today and yesterday are named. Everything older than that is one "Older"
+ * bucket, because a date per day on a multi-week board is a log, not a scan.
  *
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
 export function sessionDayLabel(key: string, nowMs: number): string {
   if (key === LIVE_BUCKET) return 'Live now';
+  if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
   const today = sessionDayKey(nowMs);
   if (key === today) return 'Today';
+  if (key === shiftSessionDay(today, -1)) return 'Yesterday';
   const [y, m, d] = key.split('-').map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d))
     .toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
@@ -353,7 +359,7 @@ export function sessionDayLabel(key: string, nowMs: number): string {
 }
 
 /**
- * Groups signals into trading days, newest day first, newest row first.
+ * Groups signals into Today, Yesterday and Older, newest first inside each.
  *
  * Undated rows sort last rather than being dropped — an engine that failed to
  * stamp a signal still has something to say.
@@ -398,6 +404,7 @@ export function groupByDay(
     else buckets.set(key, [s]);
   };
   const todayKey = nowMs == null ? null : sessionDayKey(nowMs);
+  const yesterdayKey = todayKey ? shiftSessionDay(todayKey, -1) : null;
   for (const s of signals) {
     const day = sessionDayKey(s.atMs);
     // Hoist only what day grouping would actually bury. A live row from today
@@ -413,9 +420,26 @@ export function groupByDay(
     // how SuperTrend's shared board lost its "Active now" heading: the wrapper
     // passed `hoistLiveFromToday` and never `liveFirst`.
     const wantsLive = liveFirst || hoistToday;
-    push(wantsLive && (hoistToday || buried) && ACTIONABLE.includes(s.status) ? LIVE_BUCKET : day, s);
+    if (wantsLive && (hoistToday || buried) && ACTIONABLE.includes(s.status)) {
+      push(LIVE_BUCKET, s);
+      continue;
+    }
+    if (todayKey && day !== 'unknown') {
+      if (day === todayKey) push(todayKey, s);
+      else if (day === yesterdayKey) push(yesterdayKey, s);
+      else push(OLDER_BUCKET, s);
+      continue;
+    }
+    push(day, s);
   }
-  const rank = (key: string) => (key === LIVE_BUCKET ? 0 : key === 'unknown' ? 2 : 1);
+  const rank = (key: string) => {
+    if (key === LIVE_BUCKET) return 0;
+    if (todayKey && key === todayKey) return 1;
+    if (yesterdayKey && key === yesterdayKey) return 2;
+    if (key === OLDER_BUCKET) return 3;
+    if (key === 'unknown') return 5;
+    return 4;
+  };
   return [...buckets.entries()]
     .sort((a, b) => rank(a[0]) - rank(b[0]) || b[0].localeCompare(a[0]))
     .map(([key, list]) => ({
