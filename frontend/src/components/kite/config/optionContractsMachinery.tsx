@@ -247,7 +247,6 @@ function ExactExpiryCard({
 
 export function ExpiryGroup({
   title,
-  description,
   values,
   choices,
   entries,
@@ -277,7 +276,6 @@ export function ExpiryGroup({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderBottom: options.length ? '1px solid #ededed' : 'none' }}>
         <span style={{ minWidth: 0, flex: 1 }}>
           <strong style={{ display: 'block', color: k.text, fontSize: 11.5, fontWeight: 750 }}>{title}</strong>
-          <span style={{ display: 'block', marginTop: 3, color: 'var(--k-ink-6)', fontSize: 9.5, lineHeight: 1.4 }}>{description}</span>
         </span>
         {options.length > 0 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
@@ -356,9 +354,7 @@ export function selectedEntries(
   selected: string[],
 ): ExpiryCalendarEntry[] {
   const wanted = new Set(selected.map((name) => name.trim().toUpperCase()));
-  return entries.filter((entry) => (
-    wanted.has(entry.name.toUpperCase()) || wanted.has(entry.display_name.toUpperCase())
-  ));
+  return entries.filter((entry) => wanted.has(entry.name.trim().toUpperCase()));
 }
 
 
