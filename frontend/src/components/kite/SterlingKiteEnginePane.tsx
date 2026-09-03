@@ -2118,8 +2118,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       Today: [], Yesterday: [], Older: [],
     };
     for (const r of history) {
-      const day = sessionDayKey(r.timestamp_ms);
-      if (day === todayKey) groups.Today.push(r);
+      const rawTs = (r as any).timestamp_ms ?? (r as any).timestamp ?? (r as any).time ?? (r as any).atMs;
+      const day = sessionDayKey(rawTs);
+      if (day === todayKey || day === 'unknown') groups.Today.push(r);
       else if (day === yesterdayKey) groups.Yesterday.push(r);
       else groups.Older.push(r);
     }

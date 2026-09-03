@@ -290,13 +290,23 @@ export const STATUS_RANK: Record<BoardStatus, number> = {
 };
 
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
-export function sessionDayKey(atMs: number | null): string {
-  // Non-finite as well as null. `Date.parse` returns NaN for any format it does
-  // not recognise, `??` does not catch NaN, and `new Date(NaN).toISOString()`
-  // throws RangeError — so one unparseable timestamp upstream would take the
-  // whole board down rather than render one bad cell.
-  if (atMs == null || !Number.isFinite(atMs)) return 'unknown';
-  const ist = new Date(atMs + (5 * 60 + 30) * 60_000);
+export function sessionDayKey(atMs: number | string | null | undefined): string {
+  if (atMs == null) return 'unknown';
+  let ms: number;
+  if (typeof atMs === 'number') {
+    ms = atMs;
+  } else if (typeof atMs === 'string') {
+    const parsed = Number(atMs);
+    if (!isNaN(parsed) && parsed > 0) {
+      ms = parsed;
+    } else {
+      ms = Date.parse(atMs);
+    }
+  } else {
+    return 'unknown';
+  }
+  if (!Number.isFinite(ms) || isNaN(ms)) return 'unknown';
+  const ist = new Date(ms + (5 * 60 + 30) * 60_000);
   return ist.toISOString().slice(0, 10);
 }
 
