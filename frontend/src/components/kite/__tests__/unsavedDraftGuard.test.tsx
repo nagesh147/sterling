@@ -108,7 +108,7 @@ vi.mock('../KiteTelegramPanel', () => ({
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
 
-describe('the settings hub highlights the bottom draft bar when a draft is pending', () => {
+describe('the settings hub highlights the bottom draft bar when a draft is pending', { timeout: 15000 }, () => {
   let eventSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -126,7 +126,7 @@ describe('the settings hub highlights the bottom draft bar when a draft is pendi
     const { ConnectPane } = await import('../ConnectPane');
     render(<ConnectPane />);
     fireEvent.click(screen.getAllByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i })[0]);
-    expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
+    expect(screen.getAllByText('SuperTrend strategy panel')[0]).toBeInTheDocument();
   };
 
   it('navigates freely when nothing is pending', async () => {

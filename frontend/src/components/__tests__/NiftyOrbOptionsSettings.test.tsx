@@ -170,6 +170,9 @@ describe('NiftyOrbOptionsSettings — saving', () => {
     serverConfig = { ...DEFAULTS, enabled: true, volume_multiplier: 1.4 };
     render(<NiftyOrbOptionsSettings />);
 
+    const input = screen.getByDisplayValue('1.4');
+    fireEvent.change(input, { target: { value: '1.5' } });
+
     // Reset is destructive, so the bar asks for a second, confirming click.
     fireEvent.click(screen.getByRole('button', { name: /Reset to defaults/i }));
     fireEvent.click(screen.getByRole('button', { name: /Click again to confirm reset/i }));

@@ -253,7 +253,7 @@ export function GammaMoveSettings() {
           value={cfg.strike_window_pct} defaultValue={defaults.strike_window_pct}
           onChange={(v) => patch({ strike_window_pct: v })} min={0.1} max={10} step={0.1} suffix="%"
         />
-        <Field label="Expiry" hint="Which listed contract the signal is expressed through. Weekly and monthly are separated by the venue calendar, not by DTE guesswork.">
+        <Field label="Expiry">
           <ChoiceRow
             value={cfg.expiry_selection}
             options={EXPIRY_SELECTION_OPTIONS}

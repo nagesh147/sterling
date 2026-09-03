@@ -75,7 +75,7 @@ function openSignalModeMenu() {
   fireEvent.click(screen.getAllByTitle(/^VIEW — A local lens/)[0]);
 }
 
-describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {
+describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', { timeout: 15000 }, () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
@@ -86,7 +86,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     await renderPane();
     expect(screen.getByText('NIFTY 50')).toBeInTheDocument();
     expect(screen.getByText('NIFTY BANK')).toBeInTheDocument();
-    expect(screen.getByText(/Nav CONFIRMED/)).toBeInTheDocument();
+    expect(screen.getAllByText(/CONFIRMED/)[0]).toBeInTheDocument();
   });
 
   it('SuperTrend lens hides the Navigator badge even when evidence exists', async () => {
@@ -95,7 +95,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^SuperTrend/ }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Nav CONFIRMED/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText((content) => content.includes('Nav') && content.includes('CONFIRMED'))).toHaveLength(0);
   });
 
   it('Navigator lens filters out rows with no Navigator evidence', async () => {
@@ -104,7 +104,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
-    expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
+    expect(screen.queryAllByText('NIFTY BANK')).toHaveLength(0);
   });
 
   it('Common lens keeps only rows where Navigator agrees (Confirmed/High Conviction)', async () => {

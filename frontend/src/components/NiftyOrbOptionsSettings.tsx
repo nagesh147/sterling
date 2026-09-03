@@ -6,7 +6,7 @@ import {
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
 import { useUnsavedDraftGuard } from './kite/config/unsavedDraftGuard';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
-import { InstrumentsGroup } from './kite/config/ScanSettings';
+import { ExpirySettingsGroup, InstrumentsGroup } from './kite/config/ScanSettings';
 
 /**
  * ORB + VWAP options settings.
@@ -180,30 +180,116 @@ export function NiftyOrbOptionsSettings() {
           summary={`${cfg.option_moneyness}${cfg.option_moneyness === 'ATM' ? '' : ` ×${cfg.option_steps_itm}`} · ${cfg.expiry_selection} · ${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
           defaultOpen
           persistKey="orb-contracts">
-          <Field label="Moneyness" hint="An unavailable moneyness is refused, not silently swapped for the nearest strike." wide
-            badge={defBadge('option_moneyness')}>
-            <ChoiceRow
-              value={cfg.option_moneyness}
-              options={MONEYNESS_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-              onChange={(v) => patch({ option_moneyness: v })}
-            />
+          <Field label="Moneyness & legs" wide badge={defBadge('option_moneyness')}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, width: '100%' }}>
+              {MONEYNESS_OPTIONS.map((o) => {
+                const isSelected = cfg.option_moneyness === o.value;
+                const activeSteps = isSelected ? (o.value === 'ATM' ? 1 : num('option_steps_itm')) : 0;
+                return (
+                  <div
+                    key={o.value}
+                    style={{
+                      padding: '9px 11px',
+                      border: `1px solid ${isSelected ? 'color-mix(in srgb, #2563eb 40%, transparent)' : 'var(--k-border, #e5e7eb)'}`,
+                      borderRadius: 8,
+                      background: isSelected ? 'color-mix(in srgb, #2563eb 5%, var(--k-bg))' : 'var(--k-bg)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    <div
+                      onClick={() => patch({ option_moneyness: o.value })}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span
+                          aria-hidden
+                          style={{
+                            width: 16,
+                            height: 16,
+                            flexShrink: 0,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: 4,
+                            border: isSelected ? '1px solid #2563eb' : '1px solid #d1d5db',
+                            background: isSelected ? '#2563eb' : 'var(--k-bg)',
+                            color: '#ffffff',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                        >
+                          {isSelected ? '✓' : ''}
+                        </span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: isSelected ? 'var(--k-text)' : 'var(--k-ink-3)' }}>
+                          {o.label}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)' }}>
+                        {o.value === 'ATM' ? 'δ ≈ 0.50' : o.value === 'ITM' ? 'δ ≈ 0.60+' : 'δ ≈ 0.35'}
+                      </span>
+                    </div>
+
+                    {o.value !== 'ATM' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingTop: 1 }}>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--k-dim)', marginRight: 2 }}>
+                          Legs:
+                        </span>
+                        {[1, 2, 3, 4, 5].map((step) => {
+                          const isStepActive = isSelected && activeSteps === step;
+                          return (
+                            <button
+                              key={step}
+                              type="button"
+                              onClick={() => {
+                                patch({ option_moneyness: o.value, option_steps_itm: step });
+                              }}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                border: isStepActive ? '1px solid #2563eb' : '1px solid var(--k-border, #e5e7eb)',
+                                background: isStepActive ? '#2563eb' : 'var(--k-bg)',
+                                color: isStepActive ? '#ffffff' : 'var(--k-ink-3)',
+                                fontSize: 9.5,
+                                fontWeight: isStepActive ? 700 : 500,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all 0.12s ease',
+                              }}
+                            >
+                              {step} {step === 1 ? 'leg' : 'legs'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)', paddingTop: 1 }}>
+                        1 leg (ATM)
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </Field>
-          {cfg.option_moneyness !== 'ATM' && (
-            <NumberField
-              label={`${cfg.option_moneyness} steps`}
-              hint="How many strikes away from the money."
-              value={num('option_steps_itm')} defaultValue={def('option_steps_itm')}
-              onChange={(v) => patch({ option_steps_itm: v })} min={1} max={5} suffix="strikes"
-            />
-          )}
-          <Field label="Expiry" hint="Weekly and monthly are separated by the venue calendar, not by DTE guesswork." wide
-            badge={defBadge('expiry_selection')}>
+
+          <Field label="Expiry" wide badge={defBadge('expiry_selection')}>
             <ChoiceRow
               value={cfg.expiry_selection}
               options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
               onChange={(v) => patch({ expiry_selection: v })}
             />
           </Field>
+
           <NumberField
             label="Minimum days to expiry" value={num('expiry_dte_min')} defaultValue={def('expiry_dte_min')}
             onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={365} suffix="days"

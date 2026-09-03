@@ -19,7 +19,7 @@ import {
 import type { EngineConfigModel } from '../../../types/kiteEngine';
 import { formatExpiryDate } from '../expiryCalendarPresentation';
 import {
-  CONTRACT_PICKER_CSS, ExpiryGroup, MONTHLY_RANKS, WEEKLY_RANKS,
+  CONTRACT_PICKER_CSS, ExpiryGroup, IndexExpirySection, MONTHLY_RANKS, WEEKLY_RANKS,
   selectedEntries, useContractSelection,
   type ContractSelectionConfig,
 } from './optionContractsMachinery';
@@ -77,7 +77,7 @@ export function OptionContractsPicker({ config, onSave, saving, title }: {
   return (
     <section
       aria-label="Option contract expiries"
-      style={{ marginBottom: 16, padding: 18, background: k.bg, border: `1px solid ${k.border}`, borderRadius: 9 }}
+      style={{ marginTop: 16, marginBottom: 12, padding: 0 }}
     >
       <style>{CONTRACT_PICKER_CSS}</style>
 
@@ -110,18 +110,6 @@ export function OptionContractsPicker({ config, onSave, saving, title }: {
         )}
       </header>
 
-      <p style={{ margin: '0 0 12px', fontSize: 10.5, color: k.dim, lineHeight: 1.5 }}>
-        One row is the same listed position across your selected instruments; the exact exchange date can differ
-        between them. Expired contracts drop automatically, and dates are never inferred from weekdays or holidays.
-      </p>
-
-      {calendar.data && (
-        <p style={{ margin: '0 0 10px', fontSize: 9.5, color: k.dim }}>
-          Kite instruments · as of {formatExpiryDate(calendar.data.as_of, calendar.data.as_of)}
-          {calendar.isFetching && <span aria-live="polite" style={{ marginLeft: 8, color: k.orange }}>Refreshing…</span>}
-        </p>
-      )}
-
       {calendar.isLoading && !calendar.data && (
         <p role="status" style={{ margin: 0, padding: 12, border: `1px solid ${k.border}`, borderRadius: 8, color: k.dim, fontSize: 10.5 }}>
           Loading exact dates from Kite instruments…
@@ -142,42 +130,18 @@ export function OptionContractsPicker({ config, onSave, saving, title }: {
       )}
 
       {calendar.data && (
-        <div style={{ display: 'grid', gap: 9 }}>
-          <ExpiryGroup
-            title="Weekly indices"
-            description="Exact weekly contracts for the selected indices."
-            kind="weekly"
-            choices={WEEKLY_RANKS}
-            entries={indexEntries}
-            asOf={calendar.data.as_of}
-            values={cfg.scan_weekly_series_indices ?? WEEKLY_RANKS}
-            disabled={setConfig.isPending}
-            onChange={(values) => save({ scan_weekly_series_indices: values })}
-          />
-          <ExpiryGroup
-            title="Monthly indices"
-            description="Current and next listed index month."
-            kind="monthly"
-            choices={MONTHLY_RANKS}
-            entries={indexEntries}
-            asOf={calendar.data.as_of}
-            values={cfg.scan_monthly_series_indices ?? MONTHLY_RANKS}
-            disabled={setConfig.isPending}
-            onChange={(values) => save({ scan_monthly_series_indices: values })}
-          />
-          <ExpiryGroup
-            title="Monthly stocks"
-            description={`${stockEntries.length} selected F&O stock${stockEntries.length === 1 ? '' : 's'}, grouped by exact date.`}
-            kind="monthly"
-            choices={MONTHLY_RANKS}
-            entries={stockEntries}
-            asOf={calendar.data.as_of}
-            collapseStocks
-            values={cfg.scan_monthly_series_stocks ?? MONTHLY_RANKS}
-            disabled={setConfig.isPending}
-            onChange={(values) => save({ scan_monthly_series_stocks: values })}
-          />
-        </div>
+        <IndexExpirySection
+          indexEntries={indexEntries}
+          stockEntries={stockEntries}
+          asOf={calendar.data.as_of}
+          weeklyValues={cfg.scan_weekly_series_indices ?? WEEKLY_RANKS}
+          monthlyValues={cfg.scan_monthly_series_indices ?? MONTHLY_RANKS}
+          stockValues={cfg.scan_monthly_series_stocks ?? MONTHLY_RANKS}
+          disabled={setConfig.isPending}
+          onChangeWeekly={(values) => save({ scan_weekly_series_indices: values })}
+          onChangeMonthly={(values) => save({ scan_monthly_series_indices: values })}
+          onChangeStocks={(values) => save({ scan_monthly_series_stocks: values })}
+        />
       )}
     </section>
   );

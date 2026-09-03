@@ -210,7 +210,7 @@ export function AtmPremiumImbalanceSettings() {
         persistKey="api-contracts"
         defaultOpen
       >
-        <Field label="Expiry" hint="Same-day refuses to arm if nothing expires today." wide>
+        <Field label="Expiry" wide>
           <ChoiceRow
             value={cfg.expiry_policy}
             options={EXPIRY_OPTIONS}
@@ -230,11 +230,54 @@ export function AtmPremiumImbalanceSettings() {
             />
           </Field>
         )}
-        <Field
-          label="Strike"
-          hint="Nearest listed strike to the index price. Ties break to the lower strike, so replay is deterministic."
-        >
-          <span style={{ color: DIM, fontSize: 12 }}>ATM (nearest listed)</span>
+        <Field label="Strike & legs" wide>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, width: '100%' }}>
+            <div
+              style={{
+                padding: '9px 11px',
+                border: '1px solid color-mix(in srgb, #2563eb 40%, transparent)',
+                borderRadius: 8,
+                background: 'color-mix(in srgb, #2563eb 5%, var(--k-bg))',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 16,
+                      height: 16,
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 4,
+                      border: '1px solid #2563eb',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✓
+                  </span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--k-text)' }}>
+                    ATM
+                  </span>
+                </div>
+                <span style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)' }}>
+                  δ ≈ 0.50
+                </span>
+              </div>
+              <div style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)', paddingTop: 1 }}>
+                1 leg (ATM nearest listed)
+              </div>
+            </div>
+          </div>
         </Field>
         <NumberField
           label="Minimum days to expiry"
