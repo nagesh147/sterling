@@ -17,6 +17,7 @@ import {
   ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT, DIM,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './kite/config/unsavedDraftGuard';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
 
 /**
@@ -120,6 +121,8 @@ export function AtmPremiumImbalanceSettings() {
   const dirty = draft != null && server != null
     && (Object.keys(draft) as (keyof AtmPremiumImbalanceConfig)[])
       .some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
+
+  useUnsavedDraftGuard('atmPremiumImbalance', dirty);
 
   const patch = React.useCallback((next: Partial<AtmPremiumImbalanceConfig>) => {
     setDraft((prev) => ({ ...(prev ?? server!), ...next }));

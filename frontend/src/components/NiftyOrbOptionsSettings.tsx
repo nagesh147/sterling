@@ -4,6 +4,7 @@ import {
   BORDER, ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './kite/config/unsavedDraftGuard';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
 import { InstrumentsGroup } from './kite/config/ScanSettings';
 
@@ -52,8 +53,13 @@ export function NiftyOrbOptionsSettings() {
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
   const cfg = draft ?? server ?? null;
-  const dirty = draft != null && server != null
+  const isDraftDirty = draft != null && server != null
     && (Object.keys(draft) as (keyof OrbConfig)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
+  const isNonDefault = defaults != null && server != null
+    && (Object.keys(defaults) as (keyof OrbConfig)[]).some((key) => key !== 'enabled' && JSON.stringify(server[key]) !== JSON.stringify(defaults[key]));
+  const dirty = isDraftDirty || isNonDefault;
+
+  useUnsavedDraftGuard('orbOptions', isDraftDirty);
 
   const patch = React.useCallback((next: Partial<OrbConfig>) => {
     setDraft((prev) => ({ ...(prev ?? server!), ...next }));
@@ -118,6 +124,7 @@ export function NiftyOrbOptionsSettings() {
     <>
       <SettingsDraftBar
         dirty={dirty}
+        hasDraft={isDraftDirty}
         saving={setCfg.isPending}
         onApply={handleApply}
         onDiscard={handleDiscard}

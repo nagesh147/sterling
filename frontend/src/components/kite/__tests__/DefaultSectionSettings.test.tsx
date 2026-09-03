@@ -22,6 +22,7 @@ describe('DefaultSectionSettings', () => {
 
     const positionsRadio = screen.getByLabelText(/Positions/i) as HTMLInputElement;
     fireEvent.click(positionsRadio);
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
 
     expect(useKiteSettings.getState().defaultSection).toBe('positions');
   });
@@ -31,6 +32,7 @@ describe('DefaultSectionSettings', () => {
 
     const ordersRadio = screen.getByLabelText(/Orders/i) as HTMLInputElement;
     fireEvent.click(ordersRadio);
+    fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
 
     expect(useKiteSettings.getState().defaultSection).toBe('orders');
   });

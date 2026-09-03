@@ -41,7 +41,8 @@ import {
 } from './KiteStartupSurfaces';
 import { KiteInteractionMotion } from './KiteInteractionMotion';
 import { k } from '../../styles/kiteUI';
-import type { SignalChartData } from '../../types/kiteEngine';
+import { type SignalChartData } from '../../types/kiteEngine';
+import { hasUnsavedDraft } from './config/unsavedDraftGuard';
 import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 import { AdaptiveEdgePane } from './AdaptiveEdgePane';
 import { UnifiedBacktestPane } from '../backtest/UnifiedBacktestPane';
@@ -117,6 +118,12 @@ export function KiteTab() {
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 
   const handleNavClick = (n: NavItem) => {
+    if (n !== nav && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('kite-scroll-to-draft-bar'));
+      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+        return;
+      }
+    }
     closeChartView();
     setNav(n);
     setSetupView(null);

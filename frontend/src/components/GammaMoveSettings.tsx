@@ -15,6 +15,7 @@ import {
   ChoiceRow, Field, NumberField, Section, Switch, DIM,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './kite/config/unsavedDraftGuard';
 import { InstrumentsGroup } from './kite/config/ScanSettings';
 import { OptionContractsPicker } from './kite/config/OptionContractsPicker';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
@@ -100,6 +101,8 @@ export function GammaMoveSettings() {
   const dirty = draft != null && server != null
     && (Object.keys(draft) as (keyof GammaMoveConfig)[])
       .some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
+
+  useUnsavedDraftGuard('gammaMove', dirty);
 
   const patch = React.useCallback((next: Partial<GammaMoveConfig>) => {
     setDraft((prev) => ({ ...(prev ?? server!), ...next }));

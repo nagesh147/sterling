@@ -192,6 +192,7 @@ export function SettingsDraftBar({
   resetConfirm = false,
   applyDisabled = false,
   applyTitle,
+  hasDraft,
 }: {
   dirty: boolean;
   saving?: boolean;
@@ -201,26 +202,31 @@ export function SettingsDraftBar({
   resetConfirm?: boolean;
   applyDisabled?: boolean;
   applyTitle?: string;
+  hasDraft?: boolean;
 }) {
   const RED = 'var(--k-red-brick)';
   const AMBER = '#b06a13';
 
+  if (!dirty) return null;
+  const showDraftActions = hasDraft !== undefined ? hasDraft : true;
+
   return (
     <div
+      id="settings-draft-bar"
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         flexWrap: 'wrap',
-        padding: dirty ? '12px 16px' : '8px 16px',
+        padding: '12px 16px',
         marginBottom: 16,
         background: 'var(--k-bg)',
         border: `1px solid ${BORDER}`,
         borderRadius: 9,
-        boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+        boxShadow: '0 1px 4px rgba(0,0,0,.06)',
       }}
     >
-      {dirty && (
+      {showDraftActions && (
         <>
           <span
             aria-live="polite"

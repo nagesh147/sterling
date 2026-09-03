@@ -948,6 +948,7 @@ export function ConnectPane() {
   const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
   const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
   const select = (next: ConnectSection) => {
     // Only ONE section is mounted at a time, so navigating away unmounts the panel
@@ -955,9 +956,25 @@ export function ConnectPane() {
     // every control wrote through immediately, but these pages are draft-and-Apply
     // now, so a click on the rail can discard a page of edits the user believes
     // are still pending.
-    if (next !== section && hasUnsavedDraft()
-        && !window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
-      return;
+    if (next !== section && hasUnsavedDraft()) {
+      if (mainRef.current && typeof mainRef.current.scrollTo === 'function') {
+        try {
+          mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
+        try {
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+        return;
+      }
     }
     setSection(next);
     localStorage.setItem('kite_connect_section', next);
@@ -968,9 +985,30 @@ export function ConnectPane() {
       const next = resolveSectionId((event as CustomEvent<string>).detail);
       if (next) select(next);
     };
+    const onScrollToDraft = () => {
+      if (mainRef.current && typeof mainRef.current.scrollTo === 'function') {
+        try {
+          mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
+        try {
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+    };
     window.addEventListener('kite-connect-section', onOpen);
-    return () => window.removeEventListener('kite-connect-section', onOpen);
-  }, []);
+    window.addEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    return () => {
+      window.removeEventListener('kite-connect-section', onOpen);
+      window.removeEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    };
+  }, [section]);
 
   return (
     <div className="kite-settings-hub" style={{
@@ -1049,7 +1087,7 @@ export function ConnectPane() {
           })}
         </nav>
 
-        <main style={{
+        <main ref={mainRef} style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
           padding: '24px 32px 48px', background: 'var(--k-bg)',
         }}>

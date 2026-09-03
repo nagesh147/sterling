@@ -27,6 +27,7 @@ import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
 import { useKiteSettings } from '../store/useKiteSettings';
+import { hasUnsavedDraft } from '../components/kite/config/unsavedDraftGuard';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { SterlingLogo } from '../components/SterlingLogo';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -192,6 +193,12 @@ export function SimpleTerminal() {
   const { data: kiteStatus } = useKiteStatus();
 
   const handleKiteNav = (nav: NavItem) => {
+    if (nav !== kiteNav && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('kite-scroll-to-draft-bar'));
+      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+        return;
+      }
+    }
     setKiteNav(nav);
     window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: nav }));
   };

@@ -116,7 +116,7 @@ describe('NavigatorSettingsPanel', () => {
     // the clean state is the quiet one, and the absence of the unsaved warning
     // is what carries the meaning. Reset stays reachable either way.
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Reset to defaults/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reset to defaults/i })).not.toBeInTheDocument();
   });
 
   it('does not autosave — toggling shows Unsaved changes and requires Apply', () => {
@@ -212,6 +212,7 @@ describe('NavigatorSettingsPanel', () => {
 
   it('reset requires a confirmation click before firing', () => {
     render(<NavigatorSettingsPanel />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Value-Flow Navigator engine' }));
     const resetBtn = screen.getByRole('button', { name: /Reset to defaults/i });
     fireEvent.click(resetBtn);
     expect(resetConfig).not.toHaveBeenCalled();
