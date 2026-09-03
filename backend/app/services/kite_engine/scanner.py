@@ -67,9 +67,9 @@ PlaceCb = Callable[[EngineSignalRow, UniverseItem], Awaitable[None]]
 
 
 # ── pure helpers (unit-tested) ──────────────────────────────────────────────
-def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Candle]:
-    """Drop the last bar if its 1H period has not closed yet."""
-    if not candles:
+def drop_forming(candles: List[Candle], now_ms: Optional[int] = None, *, allow_forming: bool = False) -> List[Candle]:
+    """Drop the last bar if its 1H period has not closed yet, unless allow_forming=True."""
+    if not candles or allow_forming:
         return candles
     now_ms = now_ms if now_ms is not None else int(time.time() * 1000)
     if candles[-1].timestamp_ms + _TF_MS > now_ms:
@@ -762,7 +762,7 @@ class KiteEngineScanner:
                         candles = await self._fetch_candles(
                             client, us, int(leg.token), leg.option_symbol)
                     candidates = [
-                        candle for candle in drop_forming(candles)
+                        candle for candle in drop_forming(candles, allow_forming=True)
                         if int(candle.timestamp_ms) <= int(row.timestamp_ms)
                     ]
                     if candidates:
@@ -878,7 +878,7 @@ class KiteEngineScanner:
                     log_cb(f"Scanning spot: {item.name} ({item.exchange})")
                 async with sem:
                     try:
-                        candles = drop_forming(await self._fetch_1h(client, us, item))
+                        candles = drop_forming(await self._fetch_1h(client, us, item), allow_forming=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine scan candle fail %s: %s", item.name, exc)
                         _no_data(item)
@@ -947,7 +947,7 @@ class KiteEngineScanner:
                 async with sem:
                     try:
                         under = drop_forming(await self._fetch_candles(
-                            client, us, item.token, item.tradingsymbol))
+                            client, us, item.token, item.tradingsymbol), allow_forming=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine deriv spot-anchor fail %s: %s", item.name, exc)
                         under = []
@@ -1013,7 +1013,7 @@ class KiteEngineScanner:
                     async with sem:
                         try:
                             oc = drop_forming(await self._fetch_candles(
-                                client, us, pick.token, pick.option_symbol))
+                                client, us, pick.token, pick.option_symbol), allow_forming=True)
                         except Exception as exc:  # noqa: BLE001
                             log.warning("kite-engine deriv chart fail %s: %s", pick.option_symbol, exc)
                             diag.deriv_no_data += 1
@@ -1105,7 +1105,7 @@ class KiteEngineScanner:
                     log_cb(f"Scanning confluence: {item.name} ({item.exchange})")
                 async with sem:
                     try:
-                        candles = drop_forming(await self._fetch_1h(client, us, item))
+                        candles = drop_forming(await self._fetch_1h(client, us, item), allow_forming=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine confluence candle fail %s: %s", item.name, exc)
                         _no_data(item)
@@ -1150,7 +1150,7 @@ class KiteEngineScanner:
                         async with sem:
                             try:
                                 oc = drop_forming(await self._fetch_candles(
-                                    client, us, pick.token, pick.option_symbol))
+                                    client, us, pick.token, pick.option_symbol), allow_forming=True)
                             except Exception as exc:  # noqa: BLE001
                                 log.warning("kite-engine confluence chart fail %s: %s",
                                             pick.option_symbol, exc)
