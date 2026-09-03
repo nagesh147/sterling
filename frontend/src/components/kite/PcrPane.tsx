@@ -35,7 +35,7 @@ import { PCR_CSS } from "./pcrCss";
 import {
   IndexTile, Path, ideaKind, playHint, moveTxt, stanceLab, fmtLtp, nowMinutes,
   type DeskRow, type TileField, type SectionId, type ColId, type Prefs,
-  SECTIONS, TABLE_COLS, loadPrefs, PREF_KEY, expiryLong,
+  SECTIONS, TABLE_COLS, loadPrefs, savePrefs, expiryLong,
 } from "./pcrWidgets";
 
 export function PcrPane() {
@@ -49,10 +49,13 @@ export function PcrPane() {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const prefsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
-  }, [prefs]);
+  const writePrefs = (fn: (p: Prefs) => Prefs) => {
+    setPrefs((p) => {
+      const next = fn(p);
+      savePrefs(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!prefsOpen) return;
@@ -119,13 +122,13 @@ export function PcrPane() {
       const pick = map[e.key];
       if (pick) {
         setIndex(pick);
-        setPrefs((p) => {
+        writePrefs((p) => {
           const on = p.indices.includes(pick);
           return { ...p, indices: on ? p.indices.filter((id) => id !== pick) : [...p.indices, pick] };
         });
       }
-      if (e.key === "a" || e.key === "A") setPrefs((p) => ({ ...p, indices: PCR_INDICES.map((u) => u.id) }));
-      if (e.key === "p" || e.key === "P") setPrefs((p) => ({ ...p, path: !p.path }));
+      if (e.key === "a" || e.key === "A") writePrefs((p) => ({ ...p, indices: PCR_INDICES.map((u) => u.id) }));
+      if (e.key === "p" || e.key === "P") writePrefs((p) => ({ ...p, path: !p.path }));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -233,11 +236,11 @@ export function PcrPane() {
   const showSec = (id: SectionId) => prefs.sections[id];
   const showTile = (id: TileField) => prefs.tile[id] !== false;
   const showCol = (id: ColId) => prefs.cols[id];
-  const toggleSec = (id: SectionId) => setPrefs((p) => ({ ...p, sections: { ...p.sections, [id]: !p.sections[id] } }));
-  const toggleCol = (id: ColId) => setPrefs((p) => ({ ...p, cols: { ...p.cols, [id]: !p.cols[id] } }));
+  const toggleSec = (id: SectionId) => writePrefs((p) => ({ ...p, sections: { ...p.sections, [id]: !p.sections[id] } }));
+  const toggleCol = (id: ColId) => writePrefs((p) => ({ ...p, cols: { ...p.cols, [id]: !p.cols[id] } }));
   const toggleIndex = (id: PcrIndex) => {
     setIndex(id);
-    setPrefs((p) => {
+    writePrefs((p) => {
       const on = p.indices.includes(id);
       return { ...p, indices: on ? p.indices.filter((x) => x !== id) : [...p.indices, id] };
     });
@@ -276,19 +279,19 @@ export function PcrPane() {
                   <div className="kp-prefs-body">
                     <h3>Layout</h3>
                     <div className="kp-pref-chips" role="tablist" aria-label="Layout">
-                      <button type="button" data-on={prefs.layout === "tiles"} onClick={() => setPrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
-                      <button type="button" data-on={prefs.layout === "table"} onClick={() => setPrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
+                      <button type="button" data-on={prefs.layout === "tiles"} onClick={() => writePrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
+                      <button type="button" data-on={prefs.layout === "table"} onClick={() => writePrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
                     </div>
                     <h3>Indices</h3>
                     <div className="kp-pref-chips" role="group" aria-label="Indices">
-                      <button type="button" data-on={showAll} onClick={() => setPrefs((p) => ({ ...p, indices: showAll ? [] : PCR_INDICES.map((u) => u.id) }))}>All</button>
+                      <button type="button" data-on={showAll} onClick={() => writePrefs((p) => ({ ...p, indices: showAll ? [] : PCR_INDICES.map((u) => u.id) }))}>All</button>
                       {PCR_INDICES.map((u) => (
                         <button key={u.id} type="button" data-on={picked.includes(u.id)} onClick={() => toggleIndex(u.id)}>{u.short}</button>
                       ))}
                     </div>
                     <h3>View</h3>
                     <div className="kp-pref-chips">
-                      <button type="button" data-on={pathOn} onClick={() => setPrefs((p) => ({ ...p, path: !p.path }))}>Path</button>
+                      <button type="button" data-on={pathOn} onClick={() => writePrefs((p) => ({ ...p, path: !p.path }))}>Path</button>
                     </div>
                     <h3>Show</h3>
                     <div className="kp-pref-grid">
