@@ -342,3 +342,21 @@ function stopPolling() {
 // Convenience selectors
 export const useSimActive = () => useSimulationStore(s => s.status.state !== 'idle');
 export const useSimBarOpen = () => useSimulationStore(s => s.barOpen);
+
+export function getSimNowMs(status: SimStatus): number | null {
+  if (status.state === 'idle' || !status.config?.date || !status.current_time_iso) {
+    return null;
+  }
+  const dateStr = status.config.date;
+  const timeStr = status.current_time_iso;
+  const isoStr = `${dateStr}T${timeStr}+05:30`;
+  const ms = Date.parse(isoStr);
+  return isNaN(ms) ? null : ms;
+}
+
+export function useEffectiveNowMs(): number {
+  const status = useSimulationStore((s) => s.status);
+  const simMs = getSimNowMs(status);
+  return simMs ?? Date.now();
+}
+

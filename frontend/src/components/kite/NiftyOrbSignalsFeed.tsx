@@ -1,4 +1,7 @@
 import React from 'react';
+import { useEffectiveNowMs } from '../../hooks/useSimulation';
+
+
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useOrbConfig, useSetOrbEnabled } from '../../hooks/useOrbConfig';
 import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';
@@ -76,7 +79,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
   const [quietOverride, setQuietOverride] = React.useState<boolean | null>(null);
   // Read once per render rather than per row, so every day label in one paint
   // agrees about when "today" is.
-  const nowMs = Date.now();
+  const nowMs = useEffectiveNowMs();
 
   // Every hook below runs before the first early return. Putting useBoardView
   // after the loading guard would change the hook count between renders — the
