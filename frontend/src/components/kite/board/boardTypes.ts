@@ -362,17 +362,19 @@ export function shiftSessionDay(key: string, days: number): string {
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
-export function sessionDayLabel(key: string, nowMs: number): string {
+export function sessionDayLabel(key: string, nowMs?: number): string {
   if (key === LIVE_BUCKET) return 'Live now';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
-  const today = sessionDayKey(nowMs);
-  if (key === today) return 'Today';
-  if (key === shiftSessionDay(today, -1)) return 'Yesterday';
+  if (nowMs != null) {
+    const today = sessionDayKey(nowMs);
+    if (key === today) return 'Today';
+    if (key === shiftSessionDay(today, -1)) return 'Yesterday';
+  }
   const [y, m, d] = key.split('-').map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d))
     .toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
-  return `${weekday}, ${sessionDayDate(key, nowMs)}`;
+  return `${weekday}, ${sessionDayDate(key, nowMs ?? Date.now())}`;
 }
 
 /**
