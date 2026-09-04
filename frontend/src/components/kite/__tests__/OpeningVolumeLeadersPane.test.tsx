@@ -312,7 +312,7 @@ describe('OpeningVolumeLeadersPane', () => {
     expect(screen.getByText('explosive')).toBeInTheDocument();
     expect(screen.getByText('Sterling Combo')).toBeInTheDocument();
     expect(screen.getAllByText(/71–73/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/20 \/ 20 · pass/i)).toBeInTheDocument();
+    expect(screen.getByText(/20\.0 \/ 20\.0 · pass/i)).toBeInTheDocument();
     expect(screen.getByText(/09:15 IST/)).toBeInTheDocument();
     expect(screen.getByText(/09:16 IST/)).toBeInTheDocument();
     expect(screen.getByText('140:70')).toBeInTheDocument();

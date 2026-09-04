@@ -87,8 +87,9 @@ describe('AdaptiveEdgeSettingsPanel', () => {
     expect(screen.getByText('Trail tightness')).toBeInTheDocument();
     expect(screen.getByText('Exit rule')).toBeInTheDocument();
     expect(screen.getByText('Spot')).toBeInTheDocument();
-    expect(screen.getByText('Strike range')).toBeInTheDocument();
-    expect(screen.getByText('Index expiries')).toBeInTheDocument();
+    expect(screen.getByText('Strike range & legs')).toBeInTheDocument();
+    expect(screen.getByText('Minimum days to expiry')).toBeInTheDocument();
+    expect(screen.getByText('Maximum days to expiry')).toBeInTheDocument();
     expect(screen.getByText('Stop points')).toBeInTheDocument();
     expect(screen.getByText('Daily drawdown circuit breaker')).toBeInTheDocument();
     expect(screen.getByLabelText('Enable daily drawdown circuit breaker')).toBeInTheDocument();

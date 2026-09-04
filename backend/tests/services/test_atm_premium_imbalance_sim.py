@@ -16,7 +16,16 @@ import app.services.atm_premium_imbalance_runner as R
 import app.services.atm_premium_imbalance_sim as S
 
 IST = timezone(timedelta(hours=5, minutes=30))
-DAY = date(2026, 8, 21)
+
+
+def _latest_completed_weekday() -> date:
+    day = datetime.now(IST).date() - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+DAY = _latest_completed_weekday()
 
 
 def _pair(lot=20):
@@ -165,7 +174,8 @@ async def test_nothing_is_traded_before_the_bell(wired):
     s = R.active_session("u1")
     open_ms = s.strategy.session_open_ms
     opened = datetime.fromtimestamp(open_ms / 1000, tz=IST)
-    assert opened.strftime("%Y-%m-%d %H:%M") == "2026-08-21 09:15"
+    assert opened.date() == DAY
+    assert opened.strftime("%H:%M") == "09:15"
     assert s.strategy._entry_ts_ms >= open_ms
 
 
@@ -384,11 +394,9 @@ async def test_a_skipped_day_is_reported_not_silently_stepped_over(wired, monkey
     Without this the replay quietly moves back a day and the operator reads
     numbers off a session they did not ask for.
     """
-    # This is what happened for real: 2026-08-21 rate-limited, so the replay
-    # quietly used 2026-08-20 instead.
+    # Model a rate limit on the requested day and a valid preceding session.
     import app.services.atm_premium_imbalance_replay as replay
-    from datetime import date as _date
-    earlier = _date(2026, 8, 20)
+    earlier = DAY - timedelta(days=1)
 
     async def flaky(uid, token, day):
         if day >= DAY:
@@ -501,4 +509,3 @@ async def test_the_clock_starts_a_quarter_minute_before_the_bell(wired, monkeypa
     first = datetime.fromtimestamp(min(seen) / 1000, tz=IST)
     assert first.strftime("%H:%M:%S") == "09:14:59"        # last pre-open second
     assert S.PRE_OPEN_SECONDS == 15
-
