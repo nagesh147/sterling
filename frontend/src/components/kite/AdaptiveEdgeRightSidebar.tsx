@@ -305,7 +305,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
           <SterlingKiteEngineWithExpiry onSelectSignal={onSelectSignal} onOpenChart={onOpenChart} />
         )}
         {engine === 'adaptive_edge' && <AdaptiveEdgeBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />}
-        {engine === 'orb' && <NiftyOrbSignalsFeed onOpenChart={openChartFor} onOpenDetail={onOpenBoardDetail} />}
+        {engine === 'orb' && <NiftyOrbSignalsFeed onOpenChart={openChartFor} onOpenDetail={onOpenBoardDetail} nowMs={nowMs} />}
         {engine === 'atm_premium_imbalance' && (
           <AtmPremiumImbalanceBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
