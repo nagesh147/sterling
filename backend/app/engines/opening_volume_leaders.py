@@ -10,10 +10,10 @@ copying its UI or pretending to know its private scoring weights:
 * track the first later breach of that candle's high or low; and
 * expose, rather than silently discard, liquidity and candle-quality failures.
 
-This module is pure and advisory-only.  It performs no broker I/O or order
-submission; broker option quotes and risk-plan presentation are attached by the
-service/UI layers.  The proprietary site's exact numeric strength-score and
-unpublished conviction predicates are deliberately not fabricated here.
+This module is pure and performs no broker I/O or order submission. Broker
+quotes, the transparent Sterling decision model, and guarded execution are
+separate service layers. The proprietary site's unpublished score remains
+distinct from Sterling's inspectable replacement.
 """
 
 from __future__ import annotations
@@ -1046,8 +1046,8 @@ def scan_leaders(
 
 STRATEGY_CONTRACT = {
     "id": "opening_volume_leaders",
-    "version": "1.2.0",
-    "execution": "advisory_only",
+    "version": "1.3.0",
+    "execution": "guarded_account_mode",
     "documented_rules": [
         "completed 09:15 one-minute candle",
         "same-symbol 09:15 volume mean over 10 prior sessions",
@@ -1079,13 +1079,16 @@ STRATEGY_CONTRACT = {
             "non-expired listed expiry"
         ),
         "50-DMA and 52-week evidence use prior completed Kite daily candles",
+        "0-100 Sterling score publishes every component, lower/upper bounds, and evidence coverage",
+        "seven-factor Sterling conviction uses explicit repeat-volume, follow-through, RSI, and sector thresholds",
+        "Sterling Momentum Box X/Y and COMBO predicates are versioned and inspectable",
+        "automatic execution requires all strategy, account, quote, sizing, idempotency, and protection gates",
     ],
     "unknown_and_omitted": [
-        "proprietary numeric strength-score weights",
-        "private COMBO predicate beyond observable card behaviour",
-        "server-side Momentum Lab entry-price and Box X/Box Y predicates",
-        "unpublished thresholds for repeat-volume, follow-through, RSI zone, and sector tailwind",
-        "complete seven-factor conviction score because four predicates are underdetermined",
+        "ORION proprietary numeric strength-score weights; Sterling publishes a separate replacement",
+        "ORION private COMBO predicate; Sterling publishes a separate replacement",
+        "ORION server-side Momentum Lab predicates; Sterling publishes separate Box X/Y rules",
+        "ORION unpublished conviction thresholds; Sterling publishes explicit local thresholds",
         "NIFTY 200/500 membership without a current authoritative constituent feed",
     ],
 }

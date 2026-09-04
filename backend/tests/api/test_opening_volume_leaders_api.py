@@ -54,15 +54,54 @@ def test_contract_publishes_defaults_and_discloses_non_parity_fields():
     assert body["defaults"]["preferred_orb_distance_pct"] == 0.5
     assert body["defaults"]["max_orb_distance_pct"] == 1.0
     assert body["defaults"]["max_stop_distance_pct"] == 1.5
-    assert body["strategy"]["version"] == "1.2.0"
+    assert body["decision_defaults"]["trade_score"] == 55.0
+    assert body["decision_defaults"]["conviction_required"] == 5
+    assert body["decision_defaults"]["repeat_volume_ratio"] == 0.5
+    assert sum(body["decision_weights"].values()) == 100.0
+    assert body["strategy"]["version"] == "1.3.0"
     assert body["live_scan_defaults"]["max_candidates"] == 250
     assert "Kite NFO" in body["live_universe"]
-    assert "not implemented" in body["tier_score"]
+    assert "transparent bounded score" in body["tier_score"]
     assert "causal replay without live-quote leakage" in body["parity"]["evidence_backed"]
     assert (
-        "proprietary numeric strength-score weights"
-        in body["strategy"]["unknown_and_omitted"]
+        any(
+            "ORION proprietary numeric strength-score weights" in item
+            for item in body["strategy"]["unknown_and_omitted"]
+        )
     )
+
+
+def test_compare_endpoint_aggregates_multiple_sessions_without_private_fields():
+    rows = [
+        {
+            "session_date": "2026-09-02",
+            "symbol": "AAA",
+            "direction": "UP",
+            "tier": "strong",
+            "rvol": 5.0,
+            "signal_time": "09:15",
+            "orb_break_time": "09:16",
+            "combo": True,
+        },
+        {
+            "session_date": "2026-09-03",
+            "symbol": "BBB",
+            "direction": "DOWN",
+            "tier": "explosive",
+            "rvol": 11.0,
+            "signal_time": "09:15",
+            "orb_break_time": "09:18",
+            "combo": False,
+        },
+    ]
+    response = client().post(
+        "/api/v1/opening-volume-leaders/compare",
+        json={"orion_rows": rows, "sterling_rows": rows},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["summary"]["session_count"] == 2
+    assert response.json()["summary"]["exact_match"] is True
 
 
 def test_supplied_bar_evaluation_returns_the_causal_signal_contract():

@@ -235,6 +235,27 @@ def test_breadth_uses_the_documented_one_point_five_ratio():
     assert breadth["participation"] == "strong_green"
 
 
+def test_sector_tailwind_uses_explicit_mapping_and_never_guesses_membership():
+    signal = evaluate_leader(
+        "UP",
+        _bars(),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=25_000_000.0,
+    )
+    rows = [
+        signal,
+        replace(signal, symbol="UP2", day_change_pct=1.0),
+        replace(signal, symbol="UNKNOWN", day_change_pct=1.0),
+    ]
+
+    result = service._sector_alignments(
+        rows,
+        {"UP": "BANKS", "UP2": "BANKS"},
+    )
+
+    assert result == {"UP": True, "UP2": True, "UNKNOWN": None}
+
+
 def test_playbook_keeps_private_gates_unverified():
     signal = evaluate_leader(
         "RELIANCE",
@@ -416,7 +437,7 @@ async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypat
         ),
     )
 
-    assert result["strategy"]["execution"] == "advisory_only"
+    assert result["strategy"]["execution"] == "guarded_account_mode"
     assert result["universe"]["source"] == "explicit_current_fno_equities"
     assert result["universe"]["available_fno_equity_count"] == 1
     assert result["universe_count"] == 1
@@ -424,6 +445,10 @@ async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypat
     assert result["leader_count"] == 1
     assert result["leaders"][0]["symbol"] == "RELIANCE"
     assert result["leaders"][0]["tier"] == "strong"
+    assert result["leaders"][0]["decision"]["model"] == (
+        "sterling_opening_decision_v1"
+    )
+    assert result["leaders"][0]["decision"]["execution_eligible"] is False
     assert result["leaders"][0]["live_price"] is None
     assert (
         result["leaders"][0]["option_status"]

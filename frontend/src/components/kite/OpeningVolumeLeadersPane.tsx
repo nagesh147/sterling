@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   useOpeningVolumeContract,
+  useOpeningExecutionConfig,
+  useExecuteOpeningVolumeScan,
   useOpeningVolumeScan,
+  useUpdateOpeningExecutionConfig,
+  type OpeningVolumeScanRequest,
   type OpeningLeaderDirection,
   type OpeningLeaderSignal,
   type OpeningLeaderTier,
@@ -188,7 +192,10 @@ function SignalCard({
 
       <div className="ovl-badges">
         <span className="ovl-badge" data-tier={signal.tier}>{signal.tier}</span>
-        {signal.combo && <span className="ovl-badge" data-combo="true">Combo</span>}
+        {signal.decision.sterling_combo && <span className="ovl-badge" data-combo="true">Sterling Combo</span>}
+        <span className="ovl-badge" data-combo={signal.decision.score.trade ? 'true' : undefined}>Score {formatNumber(signal.decision.score.lower_bound, 0)}–{formatNumber(signal.decision.score.upper_bound, 0)}</span>
+        <span className="ovl-badge">Conviction {signal.decision.conviction.passed}/7</span>
+        <span className="ovl-badge" data-combo={signal.decision.momentum.box_y ? 'true' : undefined}>Box {signal.decision.momentum.box_y ? 'Y' : signal.decision.momentum.box_x ? 'X' : '—'}</span>
         <span className="ovl-badge" data-gate={signal.playbook.known_gate_status}>{label(signal.playbook.known_gate_status)}</span>
         {signal.orb_fresh && <span className="ovl-badge" data-combo="true">Fresh ORB</span>}
         {signal.chase_state === 'chase' && <span className="ovl-badge" data-warning="true">Chase &gt;1%</span>}
@@ -258,8 +265,25 @@ function SignalCard({
           <div><span>From 52W high</span><strong>{formatPct(signal.market_context.distance_from_52w_high_pct ?? null)}</strong></div>
           <div><span>Daily context</span><strong>{label(signal.market_context.status)}</strong></div>
           <div><span>Repeat day</span><strong>{signal.consecutive_leader_days == null ? 'Unknown' : 'Day ' + signal.consecutive_leader_days}</strong></div>
+          <div><span>Sterling score</span><strong>{formatNumber(signal.decision.score.lower_bound, 0)}–{formatNumber(signal.decision.score.upper_bound, 0)} · {formatNumber(signal.decision.score.coverage_pct, 0)}% evidence</strong></div>
+          <div><span>Conviction</span><strong>{signal.decision.conviction.passed}/7 passed · {signal.decision.conviction.known}/7 known</strong></div>
+          <div><span>Momentum</span><strong>Box X {signal.decision.momentum.box_x ? 'PASS' : 'FAIL'} · Box Y {signal.decision.momentum.box_y ? 'PASS' : 'FAIL'}</strong></div>
           {signal.liquidity_reasons.length > 0 && <div className="ovl-reason">{signal.liquidity_reasons.join(' · ')}</div>}
         </div>
+        <details className="ovl-details">
+          <summary>Score formula · earned / possible points</summary>
+          <div className="ovl-detail-grid">
+            {signal.decision.score.components.map((component) => (
+              <div key={component.name}>
+                <span>{label(component.name)}</span>
+                <strong>
+                  {formatNumber(component.earned, 1)} / {formatNumber(component.weight, 1)}
+                  {' · '}{component.status}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </details>
         {(signal.playbook.known_gate_blockers.length > 0 || signal.playbook.known_gate_cautions.length > 0) && (
           <div className="ovl-gates">
             {signal.playbook.known_gate_blockers.map((item) => <p key={item} data-kind="block">Block · {item}</p>)}
@@ -267,7 +291,7 @@ function SignalCard({
           </div>
         )}
         <RiskPlan signal={signal} capital={capital} />
-        <p className="ovl-private">Private gates still unverified: {signal.playbook.unverified_private_gates.join(' · ')}. This card never treats them as passed.</p>
+        <p className="ovl-private">{signal.decision.provenance}. ORION-private fields remain unverified: {signal.playbook.unverified_private_gates.join(' · ')}.</p>
       </details>
     </article>
   );
@@ -280,6 +304,9 @@ export interface OpeningVolumeLeadersPaneProps {
 export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPaneProps) {
   const contract = useOpeningVolumeContract();
   const scan = useOpeningVolumeScan();
+  const executionConfigQuery = useOpeningExecutionConfig();
+  const updateExecutionConfig = useUpdateOpeningExecutionConfig();
+  const executeScan = useExecuteOpeningVolumeScan();
   const [scope, setScope] = useState<Scope>('all');
   const [symbolsText, setSymbolsText] = useState('');
   const [includeWatch, setIncludeWatch] = useState(false);
@@ -343,6 +370,18 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
   const contractError = contract.error instanceof Error ? contract.error.message : null;
   const scanError = scan.error instanceof Error ? scan.error.message : null;
   const sourceLabel = data?.universe.source.replace(/_/g, ' ') ?? 'Current Kite F&O equities';
+  const executionConfig = updateExecutionConfig.data?.config ?? executionConfigQuery.data?.config;
+
+  const executionRequest = (): OpeningVolumeScanRequest => ({
+    symbols: scope === 'custom' ? parseSymbols(symbolsText) : [],
+    scan_all_stocks: scope === 'all',
+    include_watch: false,
+    include_weak: false,
+    max_candidates: maxCandidates,
+    concurrency: 3,
+    history_calendar_days: 45,
+    config: {},
+  });
 
   return (
     <main className="ovl-root">
@@ -356,12 +395,90 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
             <div className="ovl-contract" aria-label="Strategy contract">
               <span><strong>{version ? `Contract v${version}` : 'Loading contract'}</strong></span>
               <span>SPURT 3× · STRONG 5× · EXPLOSIVE 10×</span>
-              <span>No proprietary score</span>
+              <span>Transparent bounded Sterling score</span>
               {contractError && <span title={contractError}>Contract metadata unavailable</span>}
             </div>
           </div>
-          <span className="ovl-advisory" title="ORION itself is a signal scanner and does not submit broker orders."><i />Scanner only · manual execution</span>
+          <span className="ovl-advisory" title="Orders remain controlled by the shared Kite auto-execute switch. Paper/live follows the connected Kite account."><i />{executionConfig?.enabled ? 'Strategy enabled' : 'Strategy disabled'}</span>
         </header>
+
+        <section className="ovl-panel" aria-label="Opening leader execution controls">
+          <div className="ovl-toolbar">
+            <div className="ovl-control">
+              <span>Guarded execution</span>
+              <strong>{executionConfig?.enabled ? 'Enabled' : 'Disabled'}</strong>
+            </div>
+            <label className="ovl-check">
+              <input
+                type="checkbox"
+                aria-label="Enable Opening Leaders automatic execution"
+                checked={executionConfig?.enabled ?? false}
+                disabled={!executionConfig || updateExecutionConfig.isPending}
+                onChange={(event) => updateExecutionConfig.mutate({ enabled: event.target.checked })}
+              />
+              Allow shared Kite auto-execute to trade eligible Sterling Combo signals
+            </label>
+            <label className="ovl-control">
+              <span>Minimum score</span>
+              <select
+                aria-label="Opening Leaders minimum execution score"
+                className="ovl-select"
+                value={executionConfig?.min_score ?? 55}
+                disabled={!executionConfig || updateExecutionConfig.isPending}
+                onChange={(event) => updateExecutionConfig.mutate({ min_score: Number(event.target.value) })}
+              >
+                {[55, 65, 75].map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="ovl-control">
+              <span>Conviction</span>
+              <select
+                aria-label="Opening Leaders minimum conviction"
+                className="ovl-select"
+                value={executionConfig?.min_conviction ?? 5}
+                disabled={!executionConfig || updateExecutionConfig.isPending}
+                onChange={(event) => updateExecutionConfig.mutate({ min_conviction: Number(event.target.value) })}
+              >
+                {[5, 6, 7].map((value) => <option key={value} value={value}>{value}/7</option>)}
+              </select>
+            </label>
+            <label className="ovl-control">
+              <span>Risk / trade</span>
+              <select
+                aria-label="Opening Leaders risk per trade"
+                className="ovl-select"
+                value={executionConfig?.risk_pct ?? 1}
+                disabled={!executionConfig || updateExecutionConfig.isPending}
+                onChange={(event) => updateExecutionConfig.mutate({ risk_pct: Number(event.target.value) })}
+              >
+                {[0.5, 1].map((value) => <option key={value} value={value}>{value}%</option>)}
+              </select>
+            </label>
+            <label className="ovl-control">
+              <span>Daily limit</span>
+              <select
+                aria-label="Opening Leaders daily trade limit"
+                className="ovl-select"
+                value={executionConfig?.max_trades_per_day ?? 2}
+                disabled={!executionConfig || updateExecutionConfig.isPending}
+                onChange={(event) => updateExecutionConfig.mutate({ max_trades_per_day: Number(event.target.value) })}
+              >
+                {[1, 2].map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="ovl-scan"
+              disabled={!executionConfig?.enabled || executeScan.isPending || replayMode || (scope === 'custom' && parseSymbols(symbolsText).length === 0)}
+              onClick={() => executeScan.mutate(executionRequest())}
+            >
+              {executeScan.isPending ? 'Validating & executing…' : 'Execute eligible now'}
+            </button>
+          </div>
+          <p className="ovl-private">Requires Kite auto-execute on, score ≥{executionConfig?.min_score ?? 55}, conviction ≥{executionConfig?.min_conviction ?? 5}/7, fresh Box Y, a non-expiry contract, a fresh executable quote, affordable risk size, and successful stop/target protection. Paper/live follows the connected Kite account.</p>
+          {executeScan.data && <p className="ovl-private">Last execution: {label(executeScan.data.execution.status)}{executeScan.data.execution.reason ? ` · ${executeScan.data.execution.reason}` : ''}</p>}
+          {executeScan.error && <p role="alert" className="ovl-form-error">Execution failed: {executeScan.error.message}</p>}
+        </section>
 
         <section className="ovl-panel" aria-label="Opening leader scan controls">
           <div className="ovl-toolbar">
@@ -435,7 +552,7 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
           <section className="ovl-panel ovl-progress" aria-live="polite">
             <span className="ovl-spinner" />
             <strong>Reading the opening candle history</strong>
-            <p>The full-universe scan is broker-rate-limited and can take about 1–2 minutes. This page does not place or prepare any order.</p>
+            <p>The full-universe scan is broker-rate-limited and can take about 1–2 minutes. Scanning never places an order; only the separate guarded execution control can submit an eligible signal when shared Kite auto-execute is on.</p>
           </section>
         )}
 

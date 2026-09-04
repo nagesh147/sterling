@@ -3,13 +3,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpeningVolumeLeadersPane } from '../OpeningVolumeLeadersPane';
 
-const { mutate, contractResult, scanResult } = vi.hoisted(() => ({
+const { mutate, contractResult, scanResult, executionConfigResult, updateExecutionResult, executeResult } = vi.hoisted(() => ({
   mutate: vi.fn(),
   contractResult: {
     current: {
       data: {
-        strategy: { version: '1.2.0' },
-        tier_score: 'not implemented: source weights are not observable',
+        strategy: { version: '1.3.0' },
+        tier_score: 'Sterling transparent bounded score',
       },
       error: null,
     } as Record<string, unknown>,
@@ -22,11 +22,26 @@ const { mutate, contractResult, scanResult } = vi.hoisted(() => ({
       mutate: vi.fn(),
     } as Record<string, unknown>,
   },
+  executionConfigResult: {
+    current: {
+      data: { config: { enabled: true, min_score: 55, min_conviction: 5 } },
+      error: null,
+    } as Record<string, unknown>,
+  },
+  updateExecutionResult: {
+    current: { data: undefined, error: null, isPending: false, mutate: vi.fn() } as Record<string, unknown>,
+  },
+  executeResult: {
+    current: { data: undefined, error: null, isPending: false, mutate: vi.fn() } as Record<string, unknown>,
+  },
 }));
 
 vi.mock('../../../hooks/useOpeningVolumeLeaders', () => ({
   useOpeningVolumeContract: () => contractResult.current,
   useOpeningVolumeScan: () => scanResult.current,
+  useOpeningExecutionConfig: () => executionConfigResult.current,
+  useUpdateOpeningExecutionConfig: () => updateExecutionResult.current,
+  useExecuteOpeningVolumeScan: () => executeResult.current,
 }));
 
 const signal = (over: Record<string, unknown> = {}) => ({
@@ -102,6 +117,7 @@ const signal = (over: Record<string, unknown> = {}) => ({
     breadth_alignment: 'aligned',
     recommended_risk_pct: 0.5,
     primary_gate_complete: false,
+    sterling_gate_complete: false,
     unverified_private_gates: ['ORION score >=55', 'ORION conviction >=5/7'],
     entry_reference: '09:15 ORB boundary',
     staged_entry_pct: [30, 30, 40],
@@ -109,6 +125,40 @@ const signal = (over: Record<string, unknown> = {}) => ({
     daily_loss_cap_r: 2,
     weekly_loss_cap_r: 4,
     max_open_positions: 2,
+  },
+  decision: {
+    model: 'sterling_opening_decision_v1',
+    provenance: 'Sterling-owned transparent replacement; not ORION proprietary parity',
+    score: {
+      lower_bound: 71,
+      upper_bound: 73,
+      coverage_pct: 98,
+      trade_threshold: 55,
+      special_threshold: 75,
+      trade: true,
+      special: false,
+      components: [
+        { name: 'rvol', weight: 20, earned: 20, status: 'pass', rule: 'test' },
+      ],
+    },
+    conviction: {
+      passed: 5,
+      known: 6,
+      total: 7,
+      required: 5,
+      factors: {},
+      rules: {},
+    },
+    momentum: {
+      box_x: true,
+      box_y: false,
+      state: 'setup',
+      box_x_rule: 'test',
+      box_y_rule: 'test',
+    },
+    sterling_combo: true,
+    combo_rule: 'test',
+    execution_eligible: false,
   },
   market_context: {
     status: 'available',
@@ -143,7 +193,7 @@ const signal = (over: Record<string, unknown> = {}) => ({
 });
 
 const response = (over: Record<string, unknown> = {}) => ({
-  strategy: { version: '1.2.0' },
+  strategy: { version: '1.3.0' },
   as_of: '2026-09-03T09:24:00+05:30',
   universe: {
     source: 'kite_nfo_options_intersect_nse_equities',
@@ -188,14 +238,15 @@ const response = (over: Record<string, unknown> = {}) => ({
 describe('OpeningVolumeLeadersPane', () => {
   beforeEach(() => {
     mutate.mockReset();
+    (updateExecutionResult.current.mutate as ReturnType<typeof vi.fn>).mockReset();
     scanResult.current = { data: undefined, error: null, isPending: false, mutate };
   });
 
-  it('starts in an explicit manual scanner-only state', () => {
+  it('shows the strategy power state without a separate paper/live mode', () => {
     render(<OpeningVolumeLeadersPane />);
     expect(screen.getByText('Opening Leaders')).toBeInTheDocument();
-    expect(screen.getByText(/Scanner only/i)).toBeInTheDocument();
-    expect(screen.getByText(/No proprietary score/i)).toBeInTheDocument();
+    expect(screen.getByText(/Strategy enabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/Transparent bounded Sterling score/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Run opening scan/i })).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
   });
@@ -216,6 +267,19 @@ describe('OpeningVolumeLeadersPane', () => {
       history_calendar_days: 45,
       config: {},
     });
+  });
+
+  it('publishes editable fail-closed execution thresholds', () => {
+    render(<OpeningVolumeLeadersPane />);
+    fireEvent.change(screen.getByLabelText(/minimum execution score/i), {
+      target: { value: '65' },
+    });
+    fireEvent.change(screen.getByLabelText(/minimum conviction/i), {
+      target: { value: '6' },
+    });
+
+    expect(updateExecutionResult.current.mutate).toHaveBeenCalledWith({ min_score: 65 });
+    expect(updateExecutionResult.current.mutate).toHaveBeenCalledWith({ min_conviction: 6 });
   });
 
   it('does not send an empty custom-symbol scan', () => {
@@ -246,7 +310,9 @@ describe('OpeningVolumeLeadersPane', () => {
     expect(screen.getByText('GODREJCP')).toBeInTheDocument();
     expect(screen.getByText('17.73×')).toBeInTheDocument();
     expect(screen.getByText('explosive')).toBeInTheDocument();
-    expect(screen.getByText('Combo')).toBeInTheDocument();
+    expect(screen.getByText('Sterling Combo')).toBeInTheDocument();
+    expect(screen.getAllByText(/71–73/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/20 \/ 20 · pass/i)).toBeInTheDocument();
     expect(screen.getByText(/09:15 IST/)).toBeInTheDocument();
     expect(screen.getByText(/09:16 IST/)).toBeInTheDocument();
     expect(screen.getByText('140:70')).toBeInTheDocument();

@@ -1,4 +1,4 @@
-"""Kite runtime adapter for the advisory opening-volume leader engine."""
+"""Kite runtime adapter for the opening-volume leader engine."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from app.engines.nifty_orb_options import Bar
+from app.engines.opening_volume_decision import build_opening_decision
 from app.engines.opening_volume_leaders import (
     ChaseState,
     EntryPhase,
@@ -70,6 +71,7 @@ class LiveLeaderScanConfig:
     max_candidates: int = 250
     concurrency: int = 3
     history_calendar_days: int = 45
+    sector_by_symbol: dict[str, str] | None = None
 
     def validate(self) -> LiveLeaderScanConfig:
         if self.max_candidates < 1 or self.max_candidates > 500:
@@ -80,6 +82,10 @@ class LiveLeaderScanConfig:
             raise ValueError("history_calendar_days must be between 30 and 60")
         if not self.scan_all_stocks and not self.symbols:
             raise ValueError("select symbols or enable scan_all_stocks")
+        if self.sector_by_symbol is not None:
+            for symbol, sector in self.sector_by_symbol.items():
+                if not str(symbol).strip() or not str(sector).strip():
+                    raise ValueError("sector_by_symbol requires non-empty symbols and sectors")
         return self
 
 
@@ -360,6 +366,51 @@ def _breadth(signals: Sequence[LeaderSignal]) -> dict[str, object]:
     }
 
 
+def _sector_alignments(
+    signals: Sequence[LeaderSignal],
+    sector_by_symbol: dict[str, str] | None,
+    *,
+    ratio: float = 1.5,
+) -> dict[str, bool | None]:
+    """Evaluate sector tailwind only when an explicit sector map is supplied."""
+
+    if not sector_by_symbol:
+        return {signal.symbol: None for signal in signals}
+    normalized = {
+        str(symbol).strip().upper(): str(sector).strip().upper()
+        for symbol, sector in sector_by_symbol.items()
+        if str(symbol).strip() and str(sector).strip()
+    }
+    counts: dict[str, list[int]] = {}
+    for signal in signals:
+        sector = normalized.get(signal.symbol)
+        if sector is None or signal.day_change_pct is None:
+            continue
+        bucket = counts.setdefault(sector, [0, 0])
+        if signal.day_change_pct > 0:
+            bucket[0] += 1
+        elif signal.day_change_pct < 0:
+            bucket[1] += 1
+    result: dict[str, bool | None] = {}
+    for signal in signals:
+        sector = normalized.get(signal.symbol)
+        if sector is None or sector not in counts or signal.direction is LeaderDirection.NEUTRAL:
+            result[signal.symbol] = None
+            continue
+        advances, declines = counts[sector]
+        if advances + declines == 0:
+            result[signal.symbol] = None
+        elif signal.direction is LeaderDirection.UP:
+            result[signal.symbol] = bool(
+                advances > 0 and (declines == 0 or advances >= declines * ratio)
+            )
+        else:
+            result[signal.symbol] = bool(
+                declines > 0 and (advances == 0 or declines >= advances * ratio)
+            )
+    return result
+
+
 def _playbook_context(
     signal: LeaderSignal,
     breadth: dict[str, object],
@@ -607,20 +658,31 @@ def _signal_payload(
     option_payloads: dict[str, dict[str, object]],
     live_prices: dict[str, float],
     daily_contexts: dict[str, dict[str, object]],
+    sector_alignments: dict[str, bool | None],
 ) -> dict:
     payload = signal.to_dict()
     payload["live_price"] = live_prices.get(signal.symbol)
     payload["price_source"] = (
         "kite_live_quote" if signal.symbol in live_prices else "latest_completed_minute"
     )
-    payload["playbook"] = _playbook_context(signal, breadth)
-    payload["market_context"] = daily_contexts.get(
+    playbook = _playbook_context(signal, breadth)
+    market_context = daily_contexts.get(
         signal.symbol,
         {
             "status": "unavailable",
             "source": "Kite daily context unavailable",
         },
     )
+    decision = build_opening_decision(
+        signal,
+        breadth_alignment=str(playbook["breadth_alignment"]),
+        market_context=market_context,
+        sector_alignment=sector_alignments.get(signal.symbol),
+    )
+    playbook["sterling_gate_complete"] = decision["execution_eligible"]
+    payload["playbook"] = playbook
+    payload["market_context"] = market_context
+    payload["decision"] = decision
     payload.update(
         option_payloads.get(
             signal.symbol,
@@ -725,6 +787,10 @@ async def scan_kite_leaders(
         symbols and len(evaluated) / len(symbols) >= 0.90
     )
     breadth["source"] = "successfully evaluated current F&O cash equities"
+    sector_alignments = _sector_alignments(
+        evaluated,
+        scan_config.sector_by_symbol,
+    )
     candidates = [
         *leaders,
         *(watch if scan_config.include_watch else []),
@@ -814,6 +880,7 @@ async def scan_kite_leaders(
                 option_payloads,
                 live_prices,
                 daily_contexts,
+                sector_alignments,
             )
             for signal in leaders
         ],
@@ -824,6 +891,7 @@ async def scan_kite_leaders(
                 option_payloads,
                 live_prices,
                 daily_contexts,
+                sector_alignments,
             )
             for signal in watch
         ]
@@ -836,6 +904,7 @@ async def scan_kite_leaders(
                 option_payloads,
                 live_prices,
                 daily_contexts,
+                sector_alignments,
             )
             for signal in weak
         ]

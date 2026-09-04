@@ -35,6 +35,7 @@ export interface OpeningLeaderPlaybook {
   breadth_alignment: 'aligned' | 'neutral' | 'against';
   recommended_risk_pct: number;
   primary_gate_complete: false;
+  sterling_gate_complete: boolean;
   unverified_private_gates: string[];
   entry_reference: string;
   staged_entry_pct: [number, number, number];
@@ -42,6 +43,45 @@ export interface OpeningLeaderPlaybook {
   daily_loss_cap_r: number;
   weekly_loss_cap_r: number;
   max_open_positions: number;
+}
+
+export interface OpeningLeaderDecision {
+  model: string;
+  provenance: string;
+  score: {
+    lower_bound: number;
+    upper_bound: number;
+    coverage_pct: number;
+    trade_threshold: number;
+    special_threshold: number;
+    trade: boolean;
+    special: boolean;
+    components: Array<{
+      name: string;
+      weight: number;
+      earned: number;
+      status: 'pass' | 'fail' | 'neutral' | 'unknown';
+      rule: string;
+    }>;
+  };
+  conviction: {
+    passed: number;
+    known: number;
+    total: 7;
+    required: number;
+    factors: Record<string, boolean | null>;
+    rules: Record<string, string>;
+  };
+  momentum: {
+    box_x: boolean;
+    box_y: boolean;
+    state: 'ready' | 'setup' | 'blocked';
+    box_x_rule: string;
+    box_y_rule: string;
+  };
+  sterling_combo: boolean;
+  combo_rule: string;
+  execution_eligible: boolean;
 }
 
 export interface OpeningLeaderMarketContext {
@@ -127,18 +167,21 @@ export interface OpeningLeaderSignal {
   option: OpeningLeaderOption | null;
   option_status: string;
   option_rule: string;
+  decision: OpeningLeaderDecision;
 }
 
 export interface OpeningVolumeContract {
   strategy: {
     id: string;
     version: string;
-    execution: 'advisory_only' | string;
+    execution: 'guarded_account_mode' | string;
     documented_rules: string[];
     local_transparent_rules: string[];
     unknown_and_omitted: string[];
   };
   defaults: Record<string, number>;
+  decision_defaults: Record<string, number>;
+  decision_weights: Record<string, number>;
   live_scan_defaults: Record<string, unknown>;
   live_universe: string;
   tier_score: string;
@@ -159,6 +202,30 @@ export interface OpeningVolumeScanRequest {
   history_calendar_days: number;
   as_of?: string;
   config: Record<string, number>;
+  sector_by_symbol?: Record<string, string>;
+}
+
+export interface OpeningExecutionConfig {
+  enabled: boolean;
+  min_score: number;
+  min_conviction: number;
+  max_trades_per_day: number;
+  risk_pct: number;
+  max_lots: number;
+  max_quote_staleness_s: number;
+  max_spread_pct: number;
+  max_underlying_drift_pct: number;
+  min_dte: number;
+}
+
+export interface OpeningExecutionResponse {
+  scan: OpeningVolumeScanResponse;
+  execution: {
+    status: string;
+    reason?: string;
+    count?: number;
+    executed: Array<Record<string, unknown>>;
+  };
 }
 
 export interface OpeningVolumeScanResponse {
@@ -214,5 +281,28 @@ export function useOpeningVolumeContract() {
 export function useOpeningVolumeScan() {
   return useMutation<OpeningVolumeScanResponse, Error, OpeningVolumeScanRequest>({
     mutationFn: (request) => api.post<OpeningVolumeScanResponse>(`${ROOT}/scan`, request),
+  });
+}
+
+export function useOpeningExecutionConfig() {
+  return useQuery<{ config: OpeningExecutionConfig }>({
+    queryKey: ['opening-volume-leaders-execution-config'],
+    queryFn: () => api.get<{ config: OpeningExecutionConfig }>(`${ROOT}/execution-config`),
+  });
+}
+
+export function useUpdateOpeningExecutionConfig() {
+  return useMutation<
+    { config: OpeningExecutionConfig },
+    Error,
+    Partial<OpeningExecutionConfig>
+  >({
+    mutationFn: (request) => api.put<{ config: OpeningExecutionConfig }>(`${ROOT}/execution-config`, request),
+  });
+}
+
+export function useExecuteOpeningVolumeScan() {
+  return useMutation<OpeningExecutionResponse, Error, OpeningVolumeScanRequest>({
+    mutationFn: (request) => api.post<OpeningExecutionResponse>(`${ROOT}/execute`, request),
   });
 }
