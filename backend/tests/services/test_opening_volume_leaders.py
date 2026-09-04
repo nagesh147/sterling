@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from app.engines.nifty_orb_options import Bar
+from app.engines.opening_volume_leaders import LeaderDirection, evaluate_leader
 from app.services import opening_volume_leaders as service
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -84,6 +86,20 @@ def _bars() -> list[Bar]:
 def test_live_config_rejects_an_empty_custom_universe():
     with pytest.raises(ValueError, match="select symbols"):
         service.LiveLeaderScanConfig(scan_all_stocks=False).validate()
+
+
+@pytest.mark.asyncio
+async def test_runtime_rejects_weekends_and_preopen_before_broker_io():
+    with pytest.raises(ValueError, match="weekday"):
+        await service.scan_kite_leaders(
+            "tenant-a",
+            as_of=datetime(2026, 9, 5, 10, 0, tzinfo=IST),
+        )
+    with pytest.raises(ValueError, match="not complete"):
+        await service.scan_kite_leaders(
+            "tenant-a",
+            as_of=datetime(2026, 9, 4, 9, 15, tzinfo=IST),
+        )
 
 
 @pytest.mark.asyncio
@@ -193,6 +209,167 @@ async def test_history_cache_rolls_forward_when_another_minute_completes(monkeyp
     service._history_cache.clear()
 
 
+def test_breadth_uses_the_documented_one_point_five_ratio():
+    signal = evaluate_leader(
+        "UP",
+        _bars(),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=25_000_000.0,
+    )
+    breadth = service._breadth(
+        [
+            signal,
+            replace(signal, symbol="UP2", day_change_pct=1.0),
+            replace(signal, symbol="UP3", day_change_pct=2.0),
+            replace(
+                signal,
+                symbol="DOWN",
+                direction=LeaderDirection.DOWN,
+                day_change_pct=-1.0,
+            ),
+        ]
+    )
+
+    assert breadth["mood"] == "bullish"
+    assert breadth["green_pct"] == pytest.approx(75.0)
+    assert breadth["participation"] == "strong_green"
+
+
+def test_playbook_keeps_private_gates_unverified():
+    signal = evaluate_leader(
+        "RELIANCE",
+        _bars(),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=25_000_000.0,
+    )
+    context = service._playbook_context(
+        signal,
+        {
+            "mood": "bullish",
+        },
+    )
+
+    assert context["breadth_alignment"] == "aligned"
+    assert context["primary_gate_complete"] is False
+    assert context["unverified_private_gates"] == [
+        "ORION score >=55",
+        "ORION conviction >=5/7",
+        "ORION hidden amber/LATE predicates",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_best_option_is_nearest_directional_strike_with_risk_levels():
+    signal = evaluate_leader(
+        "RELIANCE",
+        _bars(),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=25_000_000.0,
+    )
+
+    class QuoteClient:
+        async def get_quote(self, keys):
+            assert keys == ["NFO:RELIANCE26SEP115CE"]
+            return {
+                keys[0]: {
+                    "last_price": 50.0,
+                    "depth": {
+                        "buy": [{"price": 49.5}],
+                        "sell": [{"price": 50.5}],
+                    },
+                }
+            }
+
+    nfo_rows = [
+        {
+            "name": "RELIANCE",
+            "instrument_type": option_type,
+            "exchange": "NFO",
+            "tradingsymbol": f"RELIANCE26SEP{strike}{option_type}",
+            "expiry": "2026-09-24",
+            "strike": strike,
+            "lot_size": 250,
+        }
+        for option_type in ("CE", "PE")
+        for strike in (110, 115)
+    ]
+    result = await service._best_option_payloads(
+        QuoteClient(),
+        [signal],
+        nfo_rows,
+        session_date=date(2026, 9, 3),
+        spot_prices={"RELIANCE": 112.8},
+    )
+    option = result["RELIANCE"]["option"]
+
+    assert option is not None
+    assert option["tradingsymbol"] == "RELIANCE26SEP115CE"
+    assert option["option_type"] == "CE"
+    assert option["lot_cost"] == pytest.approx(12_500.0)
+    assert option["premium_stop_price"] == pytest.approx(35.0)
+    assert option["premium_target_price"] == pytest.approx(75.0)
+    assert option["premium_risk_per_lot"] == pytest.approx(3_750.0)
+
+
+@pytest.mark.asyncio
+async def test_daily_market_context_excludes_forming_day(monkeypatch):
+    signal = evaluate_leader(
+        "RELIANCE",
+        _bars(),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=25_000_000.0,
+    )
+    sessions = _sessions(60, date(2026, 9, 3))
+    candles = [
+        [
+            datetime.combine(session, time(0), tzinfo=IST).isoformat(),
+            90.0,
+            120.0 + index,
+            80.0,
+            100.0 + index / 10,
+            1_000.0,
+        ]
+        for index, session in enumerate(sessions)
+    ]
+    candles.append(
+        [
+            "2026-09-03T00:00:00+05:30",
+            1.0,
+            9_999.0,
+            1.0,
+            9_999.0,
+            1.0,
+        ]
+    )
+
+    class DailyClient:
+        async def get_historical(self, token, interval, *_args):
+            assert token == 123
+            assert interval == "day"
+            return {"candles": candles}
+
+    async def no_wait():
+        return None
+
+    service._daily_cache.clear()
+    monkeypatch.setattr(service._historical_pacer, "wait", no_wait)
+    context = await service._daily_market_context(
+        DailyClient(),
+        uid="tenant-a",
+        symbol="RELIANCE",
+        token=123,
+        signal=signal,
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+    )
+
+    assert context["status"] == "available"
+    assert context["daily_session_count"] == 60
+    assert context["sma_50"] is not None
+    assert context["high_52w"] < 9_999.0
+    assert context["trend_50dma_aligned"] is True
+    service._daily_cache.clear()
+
+
 @pytest.mark.asyncio
 async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypatch):
     from app.services import nifty_orb_scanner
@@ -247,6 +424,11 @@ async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypat
     assert result["leader_count"] == 1
     assert result["leaders"][0]["symbol"] == "RELIANCE"
     assert result["leaders"][0]["tier"] == "strong"
+    assert result["leaders"][0]["live_price"] is None
+    assert (
+        result["leaders"][0]["option_status"]
+        == "historical_quote_unavailable"
+    )
     assert result["failures"] == []
 
 

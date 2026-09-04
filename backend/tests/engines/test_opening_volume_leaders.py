@@ -7,11 +7,13 @@ import pytest
 from app.engines.nifty_orb_options import Bar
 from app.engines.opening_volume_leaders import (
     CandleQuality,
+    ChaseState,
     EntryPhase,
     LeaderDirection,
     LeaderTier,
     LiquidityState,
     OpeningVolumeConfig,
+    ValidationState,
     classify_tier,
     evaluate_leader,
     rank_leaders,
@@ -551,6 +553,120 @@ def test_entry_phase_exposes_the_documented_clock_without_suppressing_cards():
     )
     assert signal.entry_phase is EntryPhase.NO_NEW_ENTRY
     assert signal.is_leader is True
+
+
+def test_documented_entry_distance_freshness_and_stop_are_explicit():
+    signal = evaluate_leader(
+        "TEST",
+        _history(prior_count=12),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=20_000_000.0,
+    )
+
+    assert signal.orb_break_level == pytest.approx(102.5)
+    assert signal.orb_age_minutes == 1
+    assert signal.orb_fresh is True
+    assert signal.orb_distance_pct == pytest.approx((103.0 / 102.5 - 1) * 100)
+    assert signal.chase_state is ChaseState.PREFERRED
+    assert signal.protective_stop_price == pytest.approx(99.5)
+    assert signal.stop_distance_pct == pytest.approx((102.5 - 99.5) / 102.5 * 100)
+    assert signal.stop_too_wide is True
+    assert signal.hold_5m_status is ValidationState.PENDING
+    assert signal.move_1pct_within_60m is None
+
+
+def test_five_minute_hold_and_one_percent_follow_through_use_orb_reference():
+    rows = _history(prior_count=12)
+    for minute in range(17, 22):
+        rows.append(
+            _bar(
+                SESSION,
+                time(9, minute),
+                open_=103.0,
+                high=104.0,
+                low=102.7,
+                close=103.4,
+                volume=50.0,
+            )
+        )
+    signal = evaluate_leader(
+        "TEST",
+        rows,
+        as_of=datetime(2026, 9, 3, 9, 22, tzinfo=IST),
+        average_turnover_inr=20_000_000.0,
+    )
+
+    assert signal.hold_5m_status is ValidationState.PASS
+    assert signal.hold_5m_check_time is not None
+    assert signal.hold_5m_check_time.time() == time(9, 21)
+    assert signal.hold_5m_price == pytest.approx(103.4)
+    assert signal.move_1pct_within_60m is True
+    assert signal.move_1pct_time is not None
+    assert signal.move_1pct_time.time() == time(9, 17)
+    assert signal.orb_fresh is False
+    assert signal.chase_state is ChaseState.CAUTION
+
+
+def test_third_consecutive_leader_day_is_causal_and_not_assumed_when_unknown():
+    sessions = _prior_sessions(12)
+    rows: list[Bar] = []
+    for index, session in enumerate(sessions):
+        volume = 1_000.0 if index >= 10 else 100.0
+        rows.extend(
+            [
+                _bar(session, time(9, 15), volume=volume),
+                _bar(session, time(15, 29), close=100.0),
+            ]
+        )
+    rows.extend(_history(prior_count=0, current_open_volume=1_000.0)[-2:])
+    repeated = evaluate_leader(
+        "TEST",
+        rows,
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=20_000_000.0,
+    )
+    unknown = evaluate_leader(
+        "TEST",
+        _history(prior_count=10),
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        average_turnover_inr=20_000_000.0,
+    )
+
+    assert repeated.consecutive_leader_days == 3
+    assert repeated.third_day_repeat is True
+    assert unknown.consecutive_leader_days is None
+    assert unknown.third_day_repeat is None
+
+
+def test_vwap_previous_day_break_and_rsi_are_evidence_not_a_private_score():
+    rows = _history(prior_count=12)
+    for minute in range(17, 31):
+        price = 103.0 + (minute - 16) * 0.1
+        rows.append(
+            _bar(
+                SESSION,
+                time(9, minute),
+                open_=price - 0.1,
+                high=price + 0.2,
+                low=price - 0.2,
+                close=price,
+                volume=100.0,
+            )
+        )
+    signal = evaluate_leader(
+        "TEST",
+        rows,
+        as_of=datetime(2026, 9, 3, 9, 31, tzinfo=IST),
+        average_turnover_inr=20_000_000.0,
+    )
+    payload = signal.to_dict()
+
+    assert signal.intraday_vwap is not None
+    assert signal.vwap_aligned is True
+    assert signal.previous_day_high == pytest.approx(101.0)
+    assert signal.pdh_pdl_break_aligned is True
+    assert signal.rsi_14_1m is not None
+    assert "score" not in payload
 
 
 def test_utc_input_is_normalized_to_the_ist_session():

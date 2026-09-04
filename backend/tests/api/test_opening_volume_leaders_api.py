@@ -50,9 +50,15 @@ def test_contract_publishes_defaults_and_discloses_non_parity_fields():
     assert body["defaults"]["spurt_rvol"] == 3.0
     assert body["defaults"]["strong_rvol"] == 5.0
     assert body["defaults"]["explosive_rvol"] == 10.0
+    assert body["defaults"]["orb_fresh_minutes"] == 5
+    assert body["defaults"]["preferred_orb_distance_pct"] == 0.5
+    assert body["defaults"]["max_orb_distance_pct"] == 1.0
+    assert body["defaults"]["max_stop_distance_pct"] == 1.5
+    assert body["strategy"]["version"] == "1.2.0"
     assert body["live_scan_defaults"]["max_candidates"] == 250
     assert "Kite NFO" in body["live_universe"]
     assert "not implemented" in body["tier_score"]
+    assert "causal replay without live-quote leakage" in body["parity"]["evidence_backed"]
     assert (
         "proprietary numeric strength-score weights"
         in body["strategy"]["unknown_and_omitted"]
@@ -90,8 +96,13 @@ def test_evaluation_rejects_an_empty_bar_set_before_engine_work():
 def test_live_scan_passes_only_validated_advisory_configuration(monkeypatch):
     observed = {}
 
-    async def fake_scan(uid, *, scan_config, signal_config):
-        observed.update(uid=uid, scan_config=scan_config, signal_config=signal_config)
+    async def fake_scan(uid, *, as_of, scan_config, signal_config):
+        observed.update(
+            uid=uid,
+            as_of=as_of,
+            scan_config=scan_config,
+            signal_config=signal_config,
+        )
         return {"leader_count": 0, "leaders": [], "failures": []}
 
     monkeypatch.setattr(
@@ -105,12 +116,15 @@ def test_live_scan_passes_only_validated_advisory_configuration(monkeypatch):
             "scan_all_stocks": False,
             "symbols": ["RELIANCE"],
             "include_watch": True,
+            "as_of": "2026-09-03T09:24:00+05:30",
         },
     )
 
     assert response.status_code == 200
     assert observed["uid"] == "tenant-a"
+    assert observed["as_of"].isoformat() == "2026-09-03T09:24:00+05:30"
     assert observed["scan_config"].symbols == ("RELIANCE",)
     assert observed["scan_config"].include_watch is True
+    assert observed["scan_config"].include_weak is False
     assert observed["scan_config"].max_candidates == 250
     assert observed["signal_config"].baseline_sessions == 10

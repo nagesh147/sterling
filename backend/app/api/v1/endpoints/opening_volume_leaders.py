@@ -41,9 +41,11 @@ class OpeningVolumeLiveScanRequest(BaseModel):
     symbols: list[str] = Field(default_factory=list)
     scan_all_stocks: bool = True
     include_watch: bool = False
+    include_weak: bool = False
     max_candidates: int = 250
     concurrency: int = 3
     history_calendar_days: int = 45
+    as_of: datetime | None = None
     config: dict = Field(default_factory=dict)
 
 
@@ -57,6 +59,29 @@ async def contract() -> dict:
             "current Kite NFO CE/PE underlyings intersected with current NSE cash equities"
         ),
         "tier_score": "not implemented: source weights are not observable",
+        "parity": {
+            "evidence_backed": [
+                "opening RVOL tiers and direction",
+                "first ORB event and freshness",
+                "breadth mood and participation",
+                "liquidity gate and time windows",
+                "chase, stop-distance, repeat-day and risk warnings",
+                "live nearest-strike option presentation",
+                "causal replay without live-quote leakage",
+            ],
+            "transparent_local": [
+                "candle-quality thresholds",
+                "COMBO approximation",
+                "ORB-boundary follow-through reference",
+                "one-minute RSI evidence",
+            ],
+            "insufficient_evidence": [
+                "0-100 score weights",
+                "complete seven-factor conviction predicate",
+                "Momentum Lab server-side Box X/Box Y rules",
+                "sector-tailwind model",
+            ],
+        },
     }
 
 
@@ -103,6 +128,7 @@ async def scan(
             symbols=tuple(body.symbols),
             scan_all_stocks=body.scan_all_stocks,
             include_watch=body.include_watch,
+            include_weak=body.include_weak,
             max_candidates=body.max_candidates,
             concurrency=body.concurrency,
             history_calendar_days=body.history_calendar_days,
@@ -112,6 +138,7 @@ async def scan(
 
         return await scan_kite_leaders(
             str(user.user_id),
+            as_of=body.as_of,
             scan_config=scan_config,
             signal_config=signal_config,
         )

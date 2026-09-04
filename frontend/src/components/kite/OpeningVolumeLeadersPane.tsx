@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   useOpeningVolumeContract,
   useOpeningVolumeScan,
@@ -10,7 +10,7 @@ import { OPENING_VOLUME_LEADERS_CSS } from './openingVolumeLeadersCss';
 
 type Scope = 'all' | 'custom';
 type DirectionFilter = 'ALL' | OpeningLeaderDirection;
-type TierFilter = 'all' | Exclude<OpeningLeaderTier, 'weak'>;
+type TierFilter = 'all' | OpeningLeaderTier;
 
 const TIER_ORDER: Array<{ id: TierFilter; label: string }> = [
   { id: 'all', label: 'All tiers' },
@@ -18,6 +18,7 @@ const TIER_ORDER: Array<{ id: TierFilter; label: string }> = [
   { id: 'strong', label: 'Strong' },
   { id: 'spurt', label: 'Spurt' },
   { id: 'watch', label: 'Watch' },
+  { id: 'weak', label: 'Weak' },
 ];
 
 const TIME_FORMAT = new Intl.DateTimeFormat('en-IN', {
@@ -97,16 +98,74 @@ function Stat({ name, value, detail }: { name: string; value: string | number; d
   );
 }
 
+function followThroughLabel(signal: OpeningLeaderSignal): string {
+  if (signal.move_1pct_within_60m === true) return '+1% hit ' + formatTime(signal.move_1pct_time);
+  if (signal.move_1pct_within_60m === false) return '+1% not reached in 60m';
+  return '+1% / 60m pending';
+}
+
+function RiskPlan({ signal, capital }: { signal: OpeningLeaderSignal; capital: number }) {
+  const riskPct = signal.playbook.recommended_risk_pct;
+  const riskAmount = capital * riskPct / 100;
+  const reference = signal.orb_break_level;
+  const stop = signal.protective_stop_price;
+  const perShareRisk = reference != null && stop != null ? Math.abs(reference - stop) : 0;
+  const quantity = perShareRisk > 0 ? Math.floor(riskAmount / perShareRisk) : 0;
+  const probe = Math.floor(quantity * 0.30);
+  const add = Math.floor(quantity * 0.30);
+  const complete = Math.max(0, quantity - probe - add);
+  const option = signal.option;
+  const optionFitsBudget = option != null && option.lot_cost <= riskAmount;
+
+  return (
+    <div className="ovl-plan">
+      <div className="ovl-plan-head">
+        <strong>Documented risk plan</strong>
+        <span>{formatNumber(riskPct, 1)}% · ₹{formatCompact(riskAmount)} risk</span>
+      </div>
+      <div className="ovl-detail-grid">
+        <div><span>Reference</span><strong>{reference == null ? 'Await ORB' : '₹' + formatNumber(reference)}</strong></div>
+        <div><span>Protective stop</span><strong>{stop == null ? '—' : '₹' + formatNumber(stop)}</strong></div>
+        <div><span>Equity quantity</span><strong>{quantity || '—'}</strong></div>
+        <div><span>30% probe</span><strong>{probe || '—'}</strong></div>
+        <div><span>30% add</span><strong>{add || '—'}</strong></div>
+        <div><span>40% complete</span><strong>{complete || '—'}</strong></div>
+      </div>
+      <p>Book ⅓–½ near 1.5R–2R, move stop to entry after the first scale, trail structure; stop after 2R/day or 4R/week.</p>
+      {option && (
+        <div className="ovl-option" data-warning={option.beginner_expiry_warning || !optionFitsBudget}>
+          <div>
+            <span>Nearest directional option</span>
+            <strong>{option.tradingsymbol}</strong>
+            <small>{option.option_type} · {formatNumber(option.strike, 0)} · {option.expiry} · DTE {option.dte}</small>
+          </div>
+          <div>
+            <span>Premium / lot cost</span>
+            <strong>₹{formatNumber(option.ltp)} / ₹{formatCompact(option.lot_cost)}</strong>
+            <small>30% stop ₹{formatNumber(option.premium_stop_price)} · risk/lot ₹{formatCompact(option.premium_risk_per_lot)} · +50% target ₹{formatNumber(option.premium_target_price)}</small>
+          </div>
+          {(option.beginner_expiry_warning || !optionFitsBudget) && (
+            <p>{option.beginner_expiry_warning ? 'Beginner rule: skip expiry day and the day before. ' : ''}{!optionFitsBudget ? 'One lot exceeds this card’s risk budget.' : ''}</p>
+          )}
+        </div>
+      )}
+      {!option && <p>Option quote: {label(signal.option_status)}.</p>}
+    </div>
+  );
+}
+
 function SignalCard({
   signal,
   rank,
+  capital,
   onOpenChart,
 }: {
   signal: OpeningLeaderSignal;
   rank: number;
+  capital: number;
   onOpenChart?: (symbol: string) => void;
 }) {
-  const priceTone = signal.day_change_pct == null ? undefined : signal.day_change_pct >= 0 ? 'up' : 'down';
+  const shownPrice = signal.live_price ?? signal.current_price;
   const orbSide = signal.orb_break_side ? `${signal.orb_break_side} ${signal.orb_aligned ? '· aligned' : '· counter'}` : 'No confirmed side';
   const moveLabel = signal.direction === 'DOWN' ? 'From high' : 'From low';
   const moveValue = signal.direction === 'DOWN' ? -signal.fall_from_high_pct : signal.rise_from_low_pct;
@@ -130,22 +189,25 @@ function SignalCard({
       <div className="ovl-badges">
         <span className="ovl-badge" data-tier={signal.tier}>{signal.tier}</span>
         {signal.combo && <span className="ovl-badge" data-combo="true">Combo</span>}
-        {signal.passes_quality_filters && <span className="ovl-badge">Quality pass</span>}
-        {signal.orb_immediate && <span className="ovl-badge">09:16 ORB</span>}
+        <span className="ovl-badge" data-gate={signal.playbook.known_gate_status}>{label(signal.playbook.known_gate_status)}</span>
+        {signal.orb_fresh && <span className="ovl-badge" data-combo="true">Fresh ORB</span>}
+        {signal.chase_state === 'chase' && <span className="ovl-badge" data-warning="true">Chase &gt;1%</span>}
+        {signal.rally_aligned && <span className="ovl-badge">Rally ±2%</span>}
+        {signal.third_day_repeat === true && <span className="ovl-badge" data-warning="true">3rd-day repeat</span>}
       </div>
 
       <div className="ovl-tape">
         <div>
-          <span>LTP</span>
-          <strong>₹{formatNumber(signal.current_price)}</strong>
+          <span>{signal.live_price == null ? 'Last minute' : 'Live price'}</span>
+          <strong>₹{formatNumber(shownPrice)}</strong>
         </div>
         <div>
-          <span>Day</span>
-          <strong data-tone={priceTone}>{formatPct(signal.day_change_pct)}</strong>
+          <span>ORB distance</span>
+          <strong data-tone={signal.chase_state === 'chase' ? 'down' : undefined}>{formatPct(signal.orb_distance_pct)}</strong>
         </div>
         <div>
-          <span>{moveLabel}</span>
-          <strong data-tone={moveValue >= 0 ? 'up' : 'down'}>{formatPct(moveValue)}</strong>
+          <span>Stop distance</span>
+          <strong data-tone={signal.stop_too_wide ? 'down' : undefined}>{signal.stop_distance_pct == null ? '—' : formatNumber(signal.stop_distance_pct) + '%'}</strong>
         </div>
       </div>
 
@@ -156,30 +218,56 @@ function SignalCard({
         </div>
         <div className="ovl-event">
           <span>ORB</span>
-          <strong>{formatTime(signal.orb_break_time)} <em>· {orbSide}{signal.orb_cumulative_volume != null ? ` · ${formatCompact(signal.orb_cumulative_volume)} vol` : ''}</em></strong>
+          <strong>{formatTime(signal.orb_break_time)} <em>· {orbSide}{signal.orb_age_minutes != null ? ` · ${signal.orb_age_minutes}m ago` : ''}{signal.orb_cumulative_volume != null ? ` · ${formatCompact(signal.orb_cumulative_volume)} vol` : ''}</em></strong>
+        </div>
+        <div className="ovl-event">
+          <span>Validation</span>
+          <strong>5m hold {label(signal.hold_5m_status)} <em>· {followThroughLabel(signal)}</em></strong>
+        </div>
+        <div className="ovl-event">
+          <span>Context</span>
+          <strong>{label(signal.playbook.breadth_alignment)} breadth <em>· {label(signal.chase_state)} · {moveLabel} {formatPct(moveValue)}</em></strong>
         </div>
       </div>
 
       <div className="ovl-card-foot">
         <span className="ovl-state" data-state={signal.liquidity_state} title={liquidityTitle}><i />Liquidity {signal.liquidity_state}</span>
         {onOpenChart && <button type="button" className="ovl-chart" onClick={() => onOpenChart(signal.symbol)}>Chart</button>}
-        <span className="ovl-quality">{signal.candle_quality} candle · {label(signal.entry_phase)}</span>
+        <span className="ovl-quality">{signal.candle_quality} candle · {formatPct(signal.day_change_pct)} day · {label(signal.entry_phase)}</span>
       </div>
 
       <details className="ovl-details">
-        <summary>Opening candle &amp; filter evidence</summary>
+        <summary>War room · evidence, gates, option &amp; risk</summary>
         <div className="ovl-detail-grid">
           <div><span>Open</span><strong>₹{formatNumber(signal.opening_open)}</strong></div>
           <div><span>High</span><strong>₹{formatNumber(signal.opening_high)}</strong></div>
           <div><span>Low</span><strong>₹{formatNumber(signal.opening_low)}</strong></div>
           <div><span>Close</span><strong>₹{formatNumber(signal.opening_close)}</strong></div>
+          <div><span>Day high / low</span><strong>{formatNumber(signal.session_high)} / {formatNumber(signal.session_low)}</strong></div>
           <div><span>Gap</span><strong>{formatPct(signal.gap_pct)}</strong></div>
           <div><span>Body / range</span><strong>{formatNumber(signal.body_pct)}% / {formatNumber(signal.range_pct)}%</strong></div>
           <div><span>Body fraction</span><strong>{formatNumber(signal.body_fraction * 100, 1)}%</strong></div>
           <div><span>Close location</span><strong>{formatNumber(signal.close_location * 100, 1)}%</strong></div>
           <div><span>Avg turnover</span><strong>{formatTurnover(signal.average_turnover_inr)}</strong></div>
+          <div><span>VWAP</span><strong>{signal.intraday_vwap == null ? '—' : '₹' + formatNumber(signal.intraday_vwap)} · {signal.vwap_aligned == null ? 'unknown' : signal.vwap_aligned ? 'aligned' : 'against'}</strong></div>
+          <div><span>PDH / PDL</span><strong>{formatNumber(signal.previous_day_high)} / {formatNumber(signal.previous_day_low)}</strong></div>
+          <div><span>PDH/PDL break</span><strong>{signal.pdh_pdl_break_aligned == null ? 'Unknown' : signal.pdh_pdl_break_aligned ? 'Aligned' : 'Not aligned'}</strong></div>
+          <div><span>RSI 14 · 1m</span><strong>{formatNumber(signal.rsi_14_1m, 1)}</strong></div>
+          <div><span>50 DMA trend</span><strong>{signal.market_context.sma_50 == null ? '—' : '₹' + formatNumber(signal.market_context.sma_50)} · {signal.market_context.trend_50dma_aligned == null ? 'unknown' : signal.market_context.trend_50dma_aligned ? 'aligned' : 'against'}</strong></div>
+          <div><span>52-week range</span><strong>{formatNumber(signal.market_context.low_52w ?? null)} – {formatNumber(signal.market_context.high_52w ?? null)}</strong></div>
+          <div><span>From 52W high</span><strong>{formatPct(signal.market_context.distance_from_52w_high_pct ?? null)}</strong></div>
+          <div><span>Daily context</span><strong>{label(signal.market_context.status)}</strong></div>
+          <div><span>Repeat day</span><strong>{signal.consecutive_leader_days == null ? 'Unknown' : 'Day ' + signal.consecutive_leader_days}</strong></div>
           {signal.liquidity_reasons.length > 0 && <div className="ovl-reason">{signal.liquidity_reasons.join(' · ')}</div>}
         </div>
+        {(signal.playbook.known_gate_blockers.length > 0 || signal.playbook.known_gate_cautions.length > 0) && (
+          <div className="ovl-gates">
+            {signal.playbook.known_gate_blockers.map((item) => <p key={item} data-kind="block">Block · {item}</p>)}
+            {signal.playbook.known_gate_cautions.map((item) => <p key={item} data-kind="caution">Caution · {item}</p>)}
+          </div>
+        )}
+        <RiskPlan signal={signal} capital={capital} />
+        <p className="ovl-private">Private gates still unverified: {signal.playbook.unverified_private_gates.join(' · ')}. This card never treats them as passed.</p>
       </details>
     </article>
   );
@@ -195,16 +283,27 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
   const [scope, setScope] = useState<Scope>('all');
   const [symbolsText, setSymbolsText] = useState('');
   const [includeWatch, setIncludeWatch] = useState(false);
+  const [includeWeak, setIncludeWeak] = useState(false);
   const [maxCandidates, setMaxCandidates] = useState(250);
   const [formError, setFormError] = useState<string | null>(null);
   const [direction, setDirection] = useState<DirectionFilter>('ALL');
   const [tier, setTier] = useState<TierFilter>('all');
   const [search, setSearch] = useState('');
+  const [capital, setCapital] = useState(100_000);
+  const [replayMode, setReplayMode] = useState(false);
+  const [replayAt, setReplayAt] = useState('');
+  const [autoScan, setAutoScan] = useState(false);
+  const [autoMinutes, setAutoMinutes] = useState(5);
 
-  const runScan = () => {
+  const runScan = useCallback(() => {
+    if (scan.isPending) return;
     const symbols = parseSymbols(symbolsText);
     if (scope === 'custom' && symbols.length === 0) {
       setFormError('Enter at least one current F&O equity symbol.');
+      return;
+    }
+    if (replayMode && !replayAt) {
+      setFormError('Choose an IST replay date and time.');
       return;
     }
     setFormError(null);
@@ -212,16 +311,23 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
       symbols: scope === 'custom' ? symbols : [],
       scan_all_stocks: scope === 'all',
       include_watch: includeWatch,
+      include_weak: includeWeak,
       max_candidates: maxCandidates,
       concurrency: 3,
       history_calendar_days: 45,
+      ...(replayMode ? { as_of: replayAt + (replayAt.length === 16 ? ':00+05:30' : '+05:30') } : {}),
       config: {},
     });
-  };
+  }, [includeWatch, includeWeak, maxCandidates, replayAt, replayMode, scan.isPending, scan.mutate, scope, symbolsText]);
 
   const data = scan.data;
+  useEffect(() => {
+    if (!autoScan || replayMode || !data) return undefined;
+    const timer = window.setInterval(runScan, autoMinutes * 60_000);
+    return () => window.clearInterval(timer);
+  }, [autoMinutes, autoScan, data, replayMode, runScan]);
   const candidates = useMemo(
-    () => data ? [...data.leaders, ...data.watch] : [],
+    () => data ? [...data.leaders, ...data.watch, ...data.weak] : [],
     [data],
   );
   const filtered = useMemo(() => {
@@ -246,7 +352,7 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
           <div>
             <p className="ovl-eyebrow">Opening volume · 1-minute cash candles</p>
             <h1 className="ovl-title">Opening Leaders</h1>
-            <p className="ovl-subtitle">Find F&amp;O stocks whose completed 09:15 volume is abnormal versus the same minute over the prior 10 sessions, then verify direction, liquidity, candle quality, and the first opening-range break.</p>
+            <p className="ovl-subtitle">Find F&amp;O stocks whose completed 09:15 volume is abnormal versus the prior 10 matching opens, then validate breadth, freshness, chase distance, follow-through, liquidity, the nearest option, and documented risk limits.</p>
             <div className="ovl-contract" aria-label="Strategy contract">
               <span><strong>{version ? `Contract v${version}` : 'Loading contract'}</strong></span>
               <span>SPURT 3× · STRONG 5× · EXPLOSIVE 10×</span>
@@ -254,7 +360,7 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
               {contractError && <span title={contractError}>Contract metadata unavailable</span>}
             </div>
           </div>
-          <span className="ovl-advisory"><i />Advisory only</span>
+          <span className="ovl-advisory" title="ORION itself is a signal scanner and does not submit broker orders."><i />Scanner only · manual execution</span>
         </header>
 
         <section className="ovl-panel" aria-label="Opening leader scan controls">
@@ -276,6 +382,26 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
               <input type="checkbox" checked={includeWatch} onChange={(event) => setIncludeWatch(event.target.checked)} />
               Include 2–3× watchlist
             </label>
+            <label className="ovl-check">
+              <input type="checkbox" checked={includeWeak} onChange={(event) => setIncludeWeak(event.target.checked)} />
+              Include below 2×
+            </label>
+            <label className="ovl-check">
+              <input type="checkbox" checked={replayMode} onChange={(event) => setReplayMode(event.target.checked)} />
+              Replay
+            </label>
+            <label className="ovl-check">
+              <input type="checkbox" checked={autoScan} disabled={replayMode} onChange={(event) => setAutoScan(event.target.checked)} />
+              Auto
+            </label>
+            {autoScan && !replayMode && (
+              <label className="ovl-control">
+                <span>Every</span>
+                <select className="ovl-select" aria-label="Auto scan interval" value={autoMinutes} onChange={(event) => setAutoMinutes(Number(event.target.value))}>
+                  {[1, 5, 10].map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}
+                </select>
+              </label>
+            )}
             <button type="button" className="ovl-scan" disabled={scan.isPending} onClick={runScan}>
               {scan.isPending && <span className="ovl-spinner" />}
               {scan.isPending ? 'Scanning…' : data ? 'Run again' : 'Run opening scan'}
@@ -289,6 +415,19 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
               </label>
             </div>
           )}
+          <div className="ovl-scope-input ovl-secondary-controls">
+            {replayMode && (
+              <label className="ovl-control">
+                <span>Replay as of · IST</span>
+                <input className="ovl-input" aria-label="Replay as of" type="datetime-local" value={replayAt} onChange={(event) => setReplayAt(event.target.value)} />
+              </label>
+            )}
+            <label className="ovl-control">
+              <span>Capital for risk plan · INR</span>
+              <input className="ovl-input" aria-label="Risk-plan capital" type="number" min={1000} step={1000} value={capital} onChange={(event) => setCapital(Math.max(0, Number(event.target.value)))} />
+            </label>
+            <small>{autoScan && data && !replayMode ? 'Auto refresh every ' + autoMinutes + ' minutes after this completed scan.' : 'Auto refresh starts only after the first manual scan.'}</small>
+          </div>
           {formError && <p role="alert" className="ovl-form-error">{formError}</p>}
         </section>
 
@@ -315,9 +454,18 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
             <section className="ovl-panel ovl-stats" aria-label="Scan summary">
               <Stat name="Universe" value={`${data.evaluated_count}/${data.universe_count}`} detail={data.universe.truncated ? `${data.universe.available_fno_equity_count} available · capped` : sourceLabel} />
               <Stat name="Leaders" value={data.leader_count} detail="RVOL at or above 3×" />
-              <Stat name="Watch" value={data.watch_count} detail={includeWatch ? '2× to below 3× included' : 'Counted, hidden from cards'} />
+              <Stat name="Watch / weak" value={data.watch_count + ' / ' + data.weak_count} detail={(includeWatch || includeWeak) ? 'Selected lower tiers included' : 'Counted, hidden from cards'} />
               <Stat name="Breadth" value={`${data.breadth.advances}:${data.breadth.declines}`} detail={`A/D ${data.breadth.advance_decline_ratio == null ? '—' : formatNumber(data.breadth.advance_decline_ratio)} · ${data.breadth.unchanged} flat`} />
               <Stat name="As of" value={formatTime(data.as_of).replace(' IST', '')} detail={`${formatDateTime(data.as_of)} · ${data.failures.length} failed`} />
+            </section>
+
+            <section className="ovl-panel ovl-breadth" data-mood={data.breadth.mood} aria-label="Market breadth gate">
+              <div>
+                <span>Market breadth</span>
+                <strong>{label(data.breadth.mood)}</strong>
+              </div>
+              <p>{formatNumber(data.breadth.green_pct, 1)}% advancing · {label(data.breadth.participation)} participation · {formatNumber(data.breadth.coverage_pct, 1)}% universe coverage. Aligned signals use the 1% idea-risk ceiling; neutral breadth halves it; counter-breadth setups are blocked.</p>
+              <small>{data.breadth.mood_rule}</small>
             </section>
 
             <section className="ovl-results" aria-label="Opening volume signals">
@@ -338,7 +486,7 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
               {filtered.length > 0 ? (
                 <div className="ovl-grid">
                   {filtered.map((signal) => (
-                    <SignalCard key={signal.signal_key} signal={signal} rank={candidates.indexOf(signal) + 1} onOpenChart={onOpenChart} />
+                    <SignalCard key={signal.signal_key} signal={signal} rank={candidates.indexOf(signal) + 1} capital={capital} onOpenChart={onOpenChart} />
                   ))}
                 </div>
               ) : (

@@ -10,10 +10,10 @@ copying its UI or pretending to know its private scoring weights:
 * track the first later breach of that candle's high or low; and
 * expose, rather than silently discard, liquidity and candle-quality failures.
 
-This module is pure and advisory-only.  It performs no broker I/O, option
-selection, position sizing, or order submission.  The proprietary site's exact
-numeric strength-score and late-entry formula are not publicly observable, so
-they are deliberately not fabricated here.
+This module is pure and advisory-only.  It performs no broker I/O or order
+submission; broker option quotes and risk-plan presentation are attached by the
+service/UI layers.  The proprietary site's exact numeric strength-score and
+unpublished conviction predicates are deliberately not fabricated here.
 """
 
 from __future__ import annotations
@@ -72,6 +72,23 @@ class EntryPhase(str, Enum):
     CLOSED = "closed"
 
 
+class ChaseState(str, Enum):
+    """Distance of the latest completed price from an aligned ORB trigger."""
+
+    NO_ALIGNED_BREAK = "no_aligned_break"
+    RETEST = "retest"
+    PREFERRED = "preferred"
+    CAUTION = "caution"
+    CHASE = "chase"
+
+
+class ValidationState(str, Enum):
+    PENDING = "pending"
+    PASS = "pass"
+    FAIL = "fail"
+    UNAVAILABLE = "unavailable"
+
+
 @dataclass(frozen=True)
 class OpeningVolumeConfig:
     """Versioned thresholds for the opening-volume signal contract.
@@ -96,6 +113,13 @@ class OpeningVolumeConfig:
     strong_body_fraction: float = 0.60
     moderate_close_location: float = 0.60
     strong_close_location: float = 0.75
+    orb_fresh_minutes: int = 5
+    preferred_orb_distance_pct: float = 0.5
+    max_orb_distance_pct: float = 1.0
+    max_stop_distance_pct: float = 1.5
+    hold_check_minutes: int = 5
+    follow_through_pct: float = 1.0
+    follow_through_minutes: int = 60
 
     def validate(self) -> OpeningVolumeConfig:
         if self.baseline_sessions < 1:
@@ -139,6 +163,24 @@ class OpeningVolumeConfig:
             raise ValueError(
                 "moderate_close_location cannot exceed strong_close_location"
             )
+        if self.orb_fresh_minutes < 0:
+            raise ValueError("orb_fresh_minutes must be non-negative")
+        if self.hold_check_minutes < 1:
+            raise ValueError("hold_check_minutes must be >= 1")
+        if self.follow_through_minutes < 1:
+            raise ValueError("follow_through_minutes must be >= 1")
+        distance_thresholds = (
+            self.preferred_orb_distance_pct,
+            self.max_orb_distance_pct,
+            self.max_stop_distance_pct,
+            self.follow_through_pct,
+        )
+        if not all(isfinite(v) and v >= 0 for v in distance_thresholds):
+            raise ValueError("entry distance thresholds must be finite and non-negative")
+        if self.preferred_orb_distance_pct > self.max_orb_distance_pct:
+            raise ValueError(
+                "preferred_orb_distance_pct cannot exceed max_orb_distance_pct"
+            )
         return self
 
 
@@ -177,6 +219,30 @@ class LeaderSignal:
     orb_aligned: bool
     orb_immediate: bool
     combo: bool
+    session_high: float
+    session_low: float
+    orb_break_level: float | None
+    orb_age_minutes: int | None
+    orb_fresh: bool
+    orb_distance_pct: float | None
+    chase_state: ChaseState
+    protective_stop_price: float | None
+    stop_distance_pct: float | None
+    stop_too_wide: bool | None
+    consecutive_leader_days: int | None
+    third_day_repeat: bool | None
+    hold_5m_status: ValidationState
+    hold_5m_check_time: datetime | None
+    hold_5m_price: float | None
+    move_1pct_within_60m: bool | None
+    move_1pct_time: datetime | None
+    intraday_vwap: float | None
+    vwap_aligned: bool | None
+    previous_day_high: float | None
+    previous_day_low: float | None
+    pdh_pdl_break_aligned: bool | None
+    rsi_14_1m: float | None
+    rally_aligned: bool
     rise_from_low_pct: float
     fall_from_high_pct: float
     is_leader: bool
@@ -206,6 +272,14 @@ class LeaderSignal:
                 if self.orb_break_time
                 else None,
                 "entry_phase": self.entry_phase.value,
+                "chase_state": self.chase_state.value,
+                "hold_5m_status": self.hold_5m_status.value,
+                "hold_5m_check_time": self.hold_5m_check_time.isoformat()
+                if self.hold_5m_check_time
+                else None,
+                "move_1pct_time": self.move_1pct_time.isoformat()
+                if self.move_1pct_time
+                else None,
                 "signal_key": self.signal_key,
             }
         )
@@ -443,6 +517,256 @@ def _first_orb_break(
     return None, None, None, False
 
 
+def _directional_move_pct(
+    price: float,
+    reference: float,
+    direction: LeaderDirection,
+) -> float:
+    if direction is LeaderDirection.DOWN:
+        return (reference - price) / reference * 100.0
+    return (price - reference) / reference * 100.0
+
+
+def _entry_context(
+    rows: Sequence[Bar],
+    opening: Bar,
+    direction: LeaderDirection,
+    orb_side: LeaderDirection | None,
+    orb_time: datetime | None,
+    observed_at: datetime,
+    config: OpeningVolumeConfig,
+) -> dict[str, object]:
+    """Calculate the documented freshness, chase, stop, and follow-through facts.
+
+    ORION does not publish the fill price used by its experimental Momentum Lab.
+    These fields therefore use the visible 09:15 ORB boundary as an explicit,
+    deterministic entry reference rather than inventing a hidden fill.
+    """
+
+    if (
+        orb_time is None
+        or orb_side is None
+        or orb_side is not direction
+        or direction is LeaderDirection.NEUTRAL
+    ):
+        return {
+            "orb_break_level": None,
+            "orb_age_minutes": None,
+            "orb_fresh": False,
+            "orb_distance_pct": None,
+            "chase_state": ChaseState.NO_ALIGNED_BREAK,
+            "protective_stop_price": None,
+            "stop_distance_pct": None,
+            "stop_too_wide": None,
+            "hold_5m_status": ValidationState.UNAVAILABLE,
+            "hold_5m_check_time": None,
+            "hold_5m_price": None,
+            "move_1pct_within_60m": None,
+            "move_1pct_time": None,
+        }
+
+    level = opening.high if direction is LeaderDirection.UP else opening.low
+    stop = opening.low if direction is LeaderDirection.UP else opening.high
+    latest = rows[-1]
+    distance = _directional_move_pct(latest.close, level, direction)
+    if distance < 0:
+        chase_state = ChaseState.RETEST
+    elif distance <= config.preferred_orb_distance_pct:
+        chase_state = ChaseState.PREFERRED
+    elif distance <= config.max_orb_distance_pct:
+        chase_state = ChaseState.CAUTION
+    else:
+        chase_state = ChaseState.CHASE
+
+    age_minutes = max(
+        0,
+        int((_as_ist(observed_at) - _as_ist(orb_time)).total_seconds() // 60),
+    )
+    stop_distance = abs(level - stop) / level * 100.0
+
+    check_time = _as_ist(orb_time).replace(second=0, microsecond=0) + timedelta(
+        minutes=config.hold_check_minutes
+    )
+    check_bar = next(
+        (
+            bar
+            for bar in rows
+            if _as_ist(bar.timestamp).replace(second=0, microsecond=0) == check_time
+        ),
+        None,
+    )
+    if check_bar is not None:
+        held = (
+            check_bar.close >= level
+            if direction is LeaderDirection.UP
+            else check_bar.close <= level
+        )
+        hold_status = ValidationState.PASS if held else ValidationState.FAIL
+        hold_price: float | None = check_bar.close
+    elif _as_ist(observed_at) < check_time + timedelta(minutes=1):
+        hold_status = ValidationState.PENDING
+        hold_price = None
+    else:
+        hold_status = ValidationState.UNAVAILABLE
+        hold_price = None
+
+    follow_deadline = _as_ist(orb_time) + timedelta(
+        minutes=config.follow_through_minutes
+    )
+    target = config.follow_through_pct / 100.0
+    move_time: datetime | None = None
+    for bar in rows:
+        timestamp = _as_ist(bar.timestamp)
+        if timestamp < _as_ist(orb_time) or timestamp > follow_deadline:
+            continue
+        hit = (
+            bar.high >= level * (1.0 + target)
+            if direction is LeaderDirection.UP
+            else bar.low <= level * (1.0 - target)
+        )
+        if hit:
+            move_time = timestamp
+            break
+    if move_time is not None:
+        moved_within_window: bool | None = True
+    elif _as_ist(observed_at) >= follow_deadline + timedelta(minutes=1):
+        moved_within_window = False
+    else:
+        moved_within_window = None
+
+    return {
+        "orb_break_level": level,
+        "orb_age_minutes": age_minutes,
+        "orb_fresh": age_minutes <= config.orb_fresh_minutes,
+        "orb_distance_pct": distance,
+        "chase_state": chase_state,
+        "protective_stop_price": stop,
+        "stop_distance_pct": stop_distance,
+        "stop_too_wide": stop_distance > config.max_stop_distance_pct,
+        "hold_5m_status": hold_status,
+        "hold_5m_check_time": check_time,
+        "hold_5m_price": hold_price,
+        "move_1pct_within_60m": moved_within_window,
+        "move_1pct_time": move_time,
+    }
+
+
+def _repeat_profile(
+    sessions: Mapping[date, Sequence[Bar]],
+    current_date: date,
+    config: OpeningVolumeConfig,
+    current_tier: LeaderTier,
+) -> tuple[int | None, bool | None]:
+    """Return consecutive leader days and the documented third-day trap.
+
+    A definitive negative requires enough older sessions to recompute each
+    preceding day's own ten-session baseline.  Missing history is returned as
+    unknown, never silently treated as a clean first-day setup.
+    """
+
+    leader_tiers = {
+        LeaderTier.SPURT,
+        LeaderTier.STRONG,
+        LeaderTier.EXPLOSIVE,
+    }
+    if current_tier not in leader_tiers:
+        return 0, False
+    dated_openings = [
+        (session, opening)
+        for session in sorted(d for d in sessions if d <= current_date)
+        if (opening := _opening_bar(sessions[session])) is not None
+        and opening.volume > 0
+    ]
+    current_index = next(
+        (
+            index
+            for index, (session, _) in enumerate(dated_openings)
+            if session == current_date
+        ),
+        None,
+    )
+    if current_index is None:
+        return None, None
+
+    streak = 0
+    for index in range(current_index, -1, -1):
+        if index < config.baseline_sessions:
+            return (streak, True) if streak >= 3 else (None, None)
+        baseline = mean(
+            opening.volume
+            for _, opening in dated_openings[
+                index - config.baseline_sessions : index
+            ]
+        )
+        tier = classify_tier(dated_openings[index][1].volume / baseline, config)
+        if tier not in leader_tiers:
+            return streak, streak >= 3
+        streak += 1
+    return (streak, True) if streak >= 3 else (None, None)
+
+
+def _rsi_14(closes: Sequence[float]) -> float | None:
+    if len(closes) < 15:
+        return None
+    gains: list[float] = []
+    losses: list[float] = []
+    for previous, current in pairwise(closes[-15:]):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+    average_gain = mean(gains)
+    average_loss = mean(losses)
+    if average_loss == 0:
+        return 100.0 if average_gain > 0 else 50.0
+    relative_strength = average_gain / average_loss
+    return 100.0 - (100.0 / (1.0 + relative_strength))
+
+
+def _intraday_evidence(
+    current_rows: Sequence[Bar],
+    previous_rows: Sequence[Bar] | None,
+    direction: LeaderDirection,
+) -> dict[str, float | bool | None]:
+    volume = sum(max(bar.volume, 0.0) for bar in current_rows)
+    vwap = (
+        sum(
+            ((bar.high + bar.low + bar.close) / 3.0) * max(bar.volume, 0.0)
+            for bar in current_rows
+        )
+        / volume
+        if volume > 0
+        else None
+    )
+    latest = current_rows[-1]
+    vwap_aligned = (
+        None
+        if vwap is None or direction is LeaderDirection.NEUTRAL
+        else latest.close >= vwap
+        if direction is LeaderDirection.UP
+        else latest.close <= vwap
+    )
+    previous_high = max((bar.high for bar in previous_rows or []), default=None)
+    previous_low = min((bar.low for bar in previous_rows or []), default=None)
+    if (
+        direction is LeaderDirection.NEUTRAL
+        or previous_high is None
+        or previous_low is None
+    ):
+        pdh_pdl_aligned: bool | None = None
+    elif direction is LeaderDirection.UP:
+        pdh_pdl_aligned = max(bar.high for bar in current_rows) > previous_high
+    else:
+        pdh_pdl_aligned = min(bar.low for bar in current_rows) < previous_low
+    return {
+        "intraday_vwap": vwap,
+        "vwap_aligned": vwap_aligned,
+        "previous_day_high": previous_high,
+        "previous_day_low": previous_low,
+        "pdh_pdl_break_aligned": pdh_pdl_aligned,
+        "rsi_14_1m": _rsi_14([bar.close for bar in current_rows]),
+    }
+
+
 def evaluate_leader(
     symbol: str,
     bars: Sequence[Bar],
@@ -563,6 +887,34 @@ def evaluate_leader(
     session_high = max(bar.high for bar in current_rows)
     rise_from_low_pct = (latest.close / session_low - 1.0) * 100.0
     fall_from_high_pct = (session_high - latest.close) / session_high * 100.0
+    entry_context = _entry_context(
+        current_rows,
+        opening,
+        direction,
+        orb_side,
+        orb_time,
+        now,
+        config,
+    )
+    consecutive_days, third_day_repeat = _repeat_profile(
+        sessions,
+        current_date,
+        config,
+        tier,
+    )
+    previous_rows = sessions[prior_sessions[-1]] if prior_sessions else None
+    intraday_evidence = _intraday_evidence(
+        current_rows,
+        previous_rows,
+        direction,
+    )
+    rally_aligned = bool(
+        day_change_pct is not None
+        and (
+            (direction is LeaderDirection.UP and day_change_pct >= 2.0)
+            or (direction is LeaderDirection.DOWN and day_change_pct <= -2.0)
+        )
+    )
 
     return LeaderSignal(
         symbol=normalized_symbol,
@@ -598,6 +950,30 @@ def evaluate_leader(
         orb_aligned=orb_aligned,
         orb_immediate=orb_immediate,
         combo=combo,
+        session_high=session_high,
+        session_low=session_low,
+        orb_break_level=entry_context["orb_break_level"],
+        orb_age_minutes=entry_context["orb_age_minutes"],
+        orb_fresh=bool(entry_context["orb_fresh"]),
+        orb_distance_pct=entry_context["orb_distance_pct"],
+        chase_state=entry_context["chase_state"],
+        protective_stop_price=entry_context["protective_stop_price"],
+        stop_distance_pct=entry_context["stop_distance_pct"],
+        stop_too_wide=entry_context["stop_too_wide"],
+        consecutive_leader_days=consecutive_days,
+        third_day_repeat=third_day_repeat,
+        hold_5m_status=entry_context["hold_5m_status"],
+        hold_5m_check_time=entry_context["hold_5m_check_time"],
+        hold_5m_price=entry_context["hold_5m_price"],
+        move_1pct_within_60m=entry_context["move_1pct_within_60m"],
+        move_1pct_time=entry_context["move_1pct_time"],
+        intraday_vwap=intraday_evidence["intraday_vwap"],
+        vwap_aligned=intraday_evidence["vwap_aligned"],
+        previous_day_high=intraday_evidence["previous_day_high"],
+        previous_day_low=intraday_evidence["previous_day_low"],
+        pdh_pdl_break_aligned=intraday_evidence["pdh_pdl_break_aligned"],
+        rsi_14_1m=intraday_evidence["rsi_14_1m"],
+        rally_aligned=rally_aligned,
         rise_from_low_pct=rise_from_low_pct,
         fall_from_high_pct=fall_from_high_pct,
         is_leader=is_leader,
@@ -670,7 +1046,7 @@ def scan_leaders(
 
 STRATEGY_CONTRACT = {
     "id": "opening_volume_leaders",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "execution": "advisory_only",
     "documented_rules": [
         "completed 09:15 one-minute candle",
@@ -679,18 +1055,37 @@ STRATEGY_CONTRACT = {
         "direction from the 09:15 candle colour",
         "ORB from the 09:15 high/low with first later breach time",
         "Layer-1 price >= INR 100 and 20-session average turnover >= INR 2 crore",
+        "ORB freshness <=5 minutes; preferred entry distance <=0.5%; chase >1%",
+        "default protective stop at the opposite 09:15-candle boundary",
+        "stop distance above about 1.5% is a halve-or-skip warning",
+        "five-minute hold and +1% within 60 minutes are follow-through evidence",
+        "third consecutive leader day is an explicit repeat-day trap",
+        "nearest listed strike in the direction of the signal, with live premium and lot cost",
+        "option premium guide: 30% stop and +50% first target",
+        "risk guide: 1% per aligned idea, 0.5% in neutral breadth, 2R daily and 4R weekly caps",
+        "card evidence includes 50-DMA trend, VWAP, PDH/PDL, RSI, follow-through, repeat volume, and sector",
     ],
     "local_transparent_rules": [
         "candle quality uses configurable body-fraction and close-location thresholds",
         "COMBO approximates a leader with Layer-1 pass and an aligned first ORB break at 09:16",
         "ranking uses tier, combo, quality, RVOL, then symbol",
+        "hold and +1% follow-through use the visible ORB boundary as the entry reference",
+        (
+            "VWAP, previous-day break and one-minute RSI are evidence only and do "
+            "not fabricate a conviction score"
+        ),
+        (
+            "when several option expiries exist, the adapter uses the nearest "
+            "non-expired listed expiry"
+        ),
+        "50-DMA and 52-week evidence use prior completed Kite daily candles",
     ],
     "unknown_and_omitted": [
         "proprietary numeric strength-score weights",
-        "proprietary late-entry numeric thresholds",
         "private COMBO predicate beyond observable card behaviour",
-        "experimental Momentum Lab and five-minute-hold model",
-        "seven-factor conviction score and sector-tailwind model",
-        "option selection, premium, and lot-cost presentation",
+        "server-side Momentum Lab entry-price and Box X/Box Y predicates",
+        "unpublished thresholds for repeat-volume, follow-through, RSI zone, and sector tailwind",
+        "complete seven-factor conviction score because four predicates are underdetermined",
+        "NIFTY 200/500 membership without a current authoritative constituent feed",
     ],
 }
