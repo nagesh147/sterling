@@ -96,7 +96,7 @@ function TradeRecord({ record }: { record?: AtmTradeRecord }) {
 export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail, onOpenChart }: {
   /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
   onOpenChart?: (quoteKey: string) => void;
-  nowMs: number;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
