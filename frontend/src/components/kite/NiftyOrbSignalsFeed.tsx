@@ -59,10 +59,11 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
+export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart, nowMs: nowMsProp }: {
   /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
   onOpenChart?: (quoteKey: string) => void;
   onOpenDetail?: (signal: BoardSignal) => void;
+  nowMs?: number;
 } = {}) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
   const rowActions = useBoardRowActions({ onOpenChart });
@@ -79,7 +80,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
   const [quietOverride, setQuietOverride] = React.useState<boolean | null>(null);
   // Read once per render rather than per row, so every day label in one paint
   // agrees about when "today" is.
-  const nowMs = useEffectiveNowMs();
+  const simulationNowMs = useEffectiveNowMs();
+  const nowMs = nowMsProp ?? simulationNowMs;
 
   // Every hook below runs before the first early return. Putting useBoardView
   // after the loading guard would change the hook count between renders — the
