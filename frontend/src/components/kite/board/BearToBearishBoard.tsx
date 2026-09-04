@@ -31,7 +31,7 @@ export function BearToBearishBoard({
   onOpenChart,
 }: {
   onOpenChart?: (quoteKey: string) => void;
-  nowMs: number;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   const s = useKiteSettings();
