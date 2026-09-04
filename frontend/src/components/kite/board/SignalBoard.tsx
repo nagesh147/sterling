@@ -1128,7 +1128,7 @@ export function SignalBoard({
   renderTrade?: (signal: BoardSignal) => React.ReactNode;
   renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
-  nowMs: number;
+  nowMs?: number;
   emptyLabel?: string;
 }) {
   const wanted = requested ?? BOARD_COLUMNS;
@@ -1168,30 +1168,17 @@ export function SignalBoard({
       return userToggledDays.get(key)!;
     }
     const todayKey = sessionDayKey(effectiveNowMs);
-    const yesterdayKey = shiftSessionDay(todayKey, -1);
     const label = sessionDayLabel(key, effectiveNowMs);
-    if (
-      key === todayKey ||
-      key === yesterdayKey ||
-      key === LIVE_BUCKET ||
-      label === 'Today' ||
-      label === 'Yesterday' ||
-      label === 'Live now'
-    ) {
+    // Today is always expanded by default.
+    if (key === todayKey || label === 'Today') {
       return true;
     }
-    // If there is no Today and no Yesterday group, but the first group has
-    // actionable setups, expand it so candidates are visible without extra clicks.
-    const hasRecentGroup = days.some(
-      (d) =>
-        d.key === todayKey ||
-        d.key === yesterdayKey ||
-        d.key === LIVE_BUCKET ||
-        sessionDayLabel(d.key, effectiveNowMs) === 'Today' ||
-        sessionDayLabel(d.key, effectiveNowMs) === 'Yesterday' ||
-        sessionDayLabel(d.key, effectiveNowMs) === 'Live now'
+    // Yesterday and Older are collapsed by default.
+    // However, if there are NO Today signals at all on the board, auto-expand the first group if it has actionable setups.
+    const hasTodayGroup = days.some(
+      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs) === 'Today',
     );
-    if (!hasRecentGroup && days.length > 0 && days[0].key === key) {
+    if (!hasTodayGroup && days.length > 0 && days[0].key === key) {
       const firstGroup = days[0];
       const hasActionable = firstGroup.signals.some((s) => ACTIONABLE.includes(s.status));
       if (hasActionable) {
@@ -1303,11 +1290,7 @@ export function SignalBoard({
         const expandedDay = isDayExpanded(key);
         const isRecentGroup =
           key === sessionDayKey(effectiveNowMs) ||
-          key === shiftSessionDay(sessionDayKey(effectiveNowMs), -1) ||
-          key === LIVE_BUCKET ||
-          sessionDayLabel(key, effectiveNowMs) === 'Today' ||
-          sessionDayLabel(key, effectiveNowMs) === 'Yesterday' ||
-          days[0]?.key === key;
+          sessionDayLabel(key, effectiveNowMs) === 'Today';
 
         const renderSignalGroup = (groupRows: BoardSignal[]) => {
           return groupRows.map((signal, i) => {
@@ -1440,6 +1423,15 @@ export function SignalBoard({
             <div
               className="sb-day"
               onClick={() => toggleDay(key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleDay(key);
+                }
+              }}
+              aria-expanded={expandedDay}
               style={{
                 position: 'sticky',
                 top: 0,
@@ -1461,24 +1453,31 @@ export function SignalBoard({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                   style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    display: 'inline-block',
-                    transform: expandedDay ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transform: expandedDay ? 'rotate(0deg)' : 'rotate(-90deg)',
                     transition: 'transform 0.15s ease',
+                    color: k.dim,
+                    flexShrink: 0,
                   }}
                 >
-                  ›
-                </span>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
                 <span>{sessionDayLabel(key, nowMs ?? effectiveNowMs)}</span>
               </div>
               <span style={{ fontWeight: 500 }}>{rows.length}</span>
             </div>
 
-            {expandedDay && (
-              !hasBoth ? (
+            <div style={{ display: expandedDay ? 'contents' : 'none' }}>
+              {!hasBoth ? (
                 renderSignalGroup(sorted)
               ) : (
                 <React.Fragment>
@@ -1497,8 +1496,8 @@ export function SignalBoard({
                   {/* MONTHLY SIGNALS */}
                   {renderSignalGroup(monthlySignals)}
                 </React.Fragment>
-              )
-            )}
+              )}
+            </div>
           </section>
         );
       })}
