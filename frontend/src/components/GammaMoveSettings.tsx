@@ -191,6 +191,22 @@ export function GammaMoveSettings() {
       ))}
 
       <Section
+        title="Chart source"
+        description="Which price series Gamma Move reads a setup from."
+        summary="Zerodha Kite"
+        persistKey="gamma-source"
+        defaultOpen
+      >
+        <Field label="Market data" hint="Order execution stays on Zerodha Kite." wide>
+          <ChoiceRow
+            value="kite"
+            options={[{ value: 'kite', label: 'Zerodha Kite', hint: 'Broker candles and option chain snapshots.' }]}
+            onChange={() => {}}
+          />
+        </Field>
+      </Section>
+
+      <Section
         title="Instruments"
         description="The indices and F&amp;O stocks this engine watches."
         summary={cfg.stock_contracts
@@ -242,43 +258,16 @@ export function GammaMoveSettings() {
       <Section
         title="Contracts"
         description="Which strike and expiry the signal is expressed through."
-        summary={`${cfg.strike_window_pct}% of the level · ${cfg.expiry_selection} · `
-          + `${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+        summary={`${cfg.strike_window_pct}% of the level · ${cfg.expiry_selection}`}
         persistKey="gamma-contracts"
         defaultOpen
       >
         <NumberField
-          label="Strike range"
+          label="Strike range & legs"
           hint="How far from the level the heaviest strike may sit. The source allows the strike to be a couple up or down from the exact level."
           value={cfg.strike_window_pct} defaultValue={defaults.strike_window_pct}
           onChange={(v) => patch({ strike_window_pct: v })} min={0.1} max={10} step={0.1} suffix="%"
         />
-        <Field label="Expiry">
-          <ChoiceRow
-            value={cfg.expiry_selection}
-            options={EXPIRY_SELECTION_OPTIONS}
-            onChange={(v) => patch({ expiry_selection: v })}
-          />
-        </Field>
-        <NumberField
-          label="Minimum days to expiry"
-          hint="Contracts closer than this are not eligible."
-          value={cfg.expiry_dte_min} defaultValue={defaults.expiry_dte_min}
-          onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={60} step={1}
-        />
-        <NumberField
-          label="Maximum days to expiry"
-          hint="The source trades only the last week or two of a contract — earlier in the cycle it says open interest does not behave this way. NSE stock options are monthly-only, so this window is roughly the 15th onward."
-          value={cfg.expiry_dte_max} defaultValue={defaults.expiry_dte_max}
-          onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={90} step={1}
-        />
-        <Field label="Expiry day" hint="On expiry day the open-interest signal degenerates into settlement mechanics and the premium is nearly all gamma already — a different trade wearing this one's name.">
-          <Switch
-            checked={cfg.avoid_expiry_day}
-            label="Avoid expiry-day entries"
-            onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
-          />
-        </Field>
         <NumberField
           label="Minimum premium"
           hint={measured('min_option_premium', 'Contracts cheaper than this are skipped.')}
@@ -312,6 +301,41 @@ export function GammaMoveSettings() {
           saving={setCfg.isPending}
           onSave={(p) => patch(p as Partial<GammaMoveConfig>)}
         />
+      </Section>
+
+      <Section
+        title="Expiry"
+        description="Rules governing contract days-to-expiry and settlement dates."
+        summary={`${cfg.expiry_dte_min}–${cfg.expiry_dte_max} DTE · ${cfg.expiry_selection}${cfg.avoid_expiry_day ? ' · avoid expiry day' : ''}`}
+        persistKey="gamma-expiry"
+        defaultOpen
+      >
+        <Field label="Expiry">
+          <ChoiceRow
+            value={cfg.expiry_selection}
+            options={EXPIRY_SELECTION_OPTIONS}
+            onChange={(v) => patch({ expiry_selection: v })}
+          />
+        </Field>
+        <NumberField
+          label="Minimum days to expiry"
+          hint="Contracts closer than this are not eligible."
+          value={cfg.expiry_dte_min} defaultValue={defaults.expiry_dte_min}
+          onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={60} step={1}
+        />
+        <NumberField
+          label="Maximum days to expiry"
+          hint="The source trades only the last week or two of a contract — earlier in the cycle it says open interest does not behave this way. NSE stock options are monthly-only, so this window is roughly the 15th onward."
+          value={cfg.expiry_dte_max} defaultValue={defaults.expiry_dte_max}
+          onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={90} step={1}
+        />
+        <Field label="Expiry day" hint="On expiry day the open-interest signal degenerates into settlement mechanics and the premium is nearly all gamma already — a different trade wearing this one's name.">
+          <Switch
+            checked={cfg.avoid_expiry_day}
+            label="Avoid expiry-day entries"
+            onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
+          />
+        </Field>
       </Section>
 
       <Section

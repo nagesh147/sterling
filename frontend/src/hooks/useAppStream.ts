@@ -47,7 +47,7 @@ let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _reconnectDelay  = BASE_DELAY;
 let _status: StreamStatus = 'disconnected';
 
-let _scalpEnabled = true;  // default true on first load; setCryptoEnabled(false) disconnects
+let _scalpEnabled = false;  // default false; enabled only when scalp_mode is confirmed active
 
 /** Called by scalp mode toggle to enable/disable the SSE connection globally. */
 export function setCryptoEnabled(enabled: boolean) {
@@ -100,28 +100,34 @@ function _connect() {
   });
 
   es.onerror = () => {
-    es.close();
-    _es = null;
-    _setStatus('disconnected');
-    if (_refCount > 0) {
-      _reconnectTimer = setTimeout(() => {
-        _reconnectDelay = Math.min(_reconnectDelay * 2, MAX_DELAY);
-        _connect();
-      }, _reconnectDelay);
-    }
+    _disconnect();
+    _reconnectTimer = setTimeout(() => {
+      _reconnectDelay = Math.min(_reconnectDelay * 1.5, MAX_DELAY);
+      if (_refCount > 0) _connect();
+    }, _reconnectDelay);
   };
 }
 
 function _disconnect() {
-  if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
-  if (_es) { _es.close(); _es = null; }
+  if (_reconnectTimer) {
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer = null;
+  }
+  if (_es) {
+    _es.close();
+    _es = null;
+  }
   _setStatus('disconnected');
 }
 
 // ── public hooks ──────────────────────────────────────────────────────────────
 
 /** Subscribe to one event type from the shared SSE stream. */
-export function useAppStream<T>(event: AppStreamEvent): { data: T | null; status: StreamStatus } {
+export function useAppStream<T>(
+  event: AppStreamEvent,
+  options?: { enabled?: boolean },
+): { data: T | null; status: StreamStatus } {
+  const isEnabled = options?.enabled ?? true;
   const [data, setData]     = useState<T | null>(() => (_latest.get(event) as T) ?? null);
   const [status, setStatus] = useState<StreamStatus>(_status);
   const setDataRef   = useRef(setData);
@@ -130,6 +136,7 @@ export function useAppStream<T>(event: AppStreamEvent): { data: T | null; status
   setStatusRef.current = setStatus;
 
   useEffect(() => {
+    if (!isEnabled) return;
     const dataListener: Listener<T>          = (d) => setDataRef.current(d);
     const statusListener: Listener<StreamStatus> = (s) => setStatusRef.current(s);
 
@@ -149,9 +156,9 @@ export function useAppStream<T>(event: AppStreamEvent): { data: T | null; status
       if (_refCount === 0) _disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event]);
+  }, [event, isEnabled]);
 
-  return { data, status };
+  return { data, status: isEnabled ? status : 'disconnected' };
 }
 
 /** Subscribe to prices only (Record<string, number>). */

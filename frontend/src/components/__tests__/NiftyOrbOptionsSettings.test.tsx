@@ -72,6 +72,9 @@ vi.mock('../../hooks/useOrbConfig', async (importOriginal) => {
 vi.mock('../../hooks/useSterlingKiteEngine', () => ({
   useStockRegistry: () => ({ data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE' }] }] }),
   useEngineConfig: () => ({ data: {} }),
+  useExpiryCalendar: () => ({ data: null, isFetching: false }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn() }),
+  useRunScan: () => ({ mutate: vi.fn() }),
 }));
 
 /** The badge sits in the same field row as its label. */

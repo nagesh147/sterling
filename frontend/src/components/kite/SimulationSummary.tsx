@@ -13,31 +13,70 @@ export function SimulationSummary() {
 
   const stats = status.stats;
   const onClose = () => setShowSummary(false);
+  const trades = stats.trades || [];
+  const frictionMode = status.config?.friction_mode || 'realistic';
 
   const winRate = stats.trades_entered > 0
     ? ((stats.wins / stats.trades_entered) * 100).toFixed(1)
     : '0.0';
 
+  const { profitFactor, maxDrawdown, totalSlippage } = useMemo(() => {
+    let gp = 0;
+    let gl = 0;
+    let peak = 0;
+    let cum = 0;
+    let maxDd = 0;
+    let slip = 0;
+
+    trades.forEach(tr => {
+      const p = tr.pnl_usd || 0;
+      if (p > 0) gp += p;
+      else gl += Math.abs(p);
+
+      cum += p;
+      if (cum > peak) peak = cum;
+      const dd = peak - cum;
+      if (dd > maxDd) maxDd = dd;
+
+      slip += (tr.slippage || 0);
+    });
+
+    const pf = gl > 0 ? (gp / gl).toFixed(2) : (gp > 0 ? '∞' : '0.00');
+    return { profitFactor: pf, maxDrawdown: maxDd, totalSlippage: slip };
+  }, [trades]);
+
   return (
     <div className="sim-summary-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sim-summary-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: k.text, margin: 0, letterSpacing: '0.02em' }}>Simulation Complete</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: k.text, margin: 0, letterSpacing: '0.02em' }}>Simulation Complete</h2>
+            <span style={{
+              fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 4, letterSpacing: '0.04em',
+              background: frictionMode === 'realistic' ? 'rgba(240, 100, 40, 0.12)' : 'var(--k-surface-3)',
+              color: frictionMode === 'realistic' ? k.orange : k.dim,
+              border: `1px solid ${frictionMode === 'realistic' ? k.orange : k.border}`,
+            }}>
+              {frictionMode === 'realistic' ? '⚡ REALISTIC FRICTION' : '🎯 ZERO FRICTION'}
+            </span>
+          </div>
           <span style={{ fontSize: 11, color: k.dim, fontFamily: "'JetBrains Mono', monospace", fontVariantNumeric: 'tabular-nums' }}>{date} ({startTime} – {endTime})</span>
         </div>
 
         {/* Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
           <StatBox label="Signals Fired" value={stats.signals_fired} />
           <StatBox label="Trades Entered" value={stats.trades_entered} />
           <StatBox label="Win Rate" value={`${winRate}%`} color={stats.wins > stats.losses ? k.green : k.text} />
-          <StatBox label="Wins" value={stats.wins} color={k.green} />
-          <StatBox label="Losses" value={stats.losses} color={k.red} />
           <StatBox
-            label="Total P&L"
+            label="Total Realized P&L"
             value={`${stats.pnl > 0 ? '+' : ''}${stats.pnl.toFixed(2)}`}
             color={stats.pnl > 0 ? k.green : stats.pnl < 0 ? k.red : k.text}
           />
+          <StatBox label="Profit Factor" value={profitFactor} color={Number(profitFactor) >= 1.5 || profitFactor === '∞' ? k.green : k.text} />
+          <StatBox label="Max Drawdown" value={`-₹${maxDrawdown.toFixed(2)}`} color={maxDrawdown > 0 ? k.red : k.dim} />
+          <StatBox label="Slippage Drag" value={`-₹${totalSlippage.toFixed(2)}`} color={totalSlippage > 0 ? k.red : k.dim} />
+          <StatBox label="Wins / Losses" value={`${stats.wins}W / ${stats.losses}L`} />
         </div>
 
         {/* Cumulative Equity Curve Sparkline */}
@@ -106,7 +145,12 @@ export function SimulationSummary() {
 
 function exportTradesToCSV(trades: any[], date: string) {
   if (!trades || trades.length === 0) return;
-  const headers = ['Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying', 'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity', 'Entry Price', 'Exit Price', 'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'];
+  const headers = [
+    'Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying',
+    'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity',
+    'Entry Fill', 'Raw Entry', 'Exit Fill', 'Raw Exit', 'Slippage Drag (INR)',
+    'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'
+  ];
   const rows = trades.map(tr => [
     tr.trade_id,
     tr.entry_time_iso,
@@ -120,7 +164,10 @@ function exportTradesToCSV(trades: any[], date: string) {
     tr.lots,
     tr.quantity,
     tr.entry_price,
+    tr.raw_entry ?? tr.entry_price,
     tr.exit_price || '',
+    tr.raw_exit ?? (tr.exit_price || ''),
+    tr.slippage ? tr.slippage.toFixed(2) : '0.00',
     tr.status,
     tr.pnl_usd,
     tr.pnl_pct,
@@ -273,30 +320,62 @@ function ExecutedTradesTable({ trades }: { trades: any[] }) {
         <table style={{ width: '100%', fontSize: 11, textAlign: 'left', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: `1px solid ${k.border}`, color: k.dim, position: 'sticky', top: 0, background: k.surface }}>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>ID</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Time</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Strategy</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Symbol</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Lots</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Entry</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Exit</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Status</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Realized P&L</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>ID</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Entry Time</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Exit Time</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Strategy</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Contract</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Lots (Qty)</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Entry ₹</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Exit ₹</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Slippage</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>Status</th>
+              <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>Realized P&L</th>
             </tr>
           </thead>
           <tbody>
             {trades.map(tr => {
               const isWin = tr.status === 'WIN';
+              const entryTime = tr.entry_time_iso || (tr.timestamp_ms ? new Date(tr.timestamp_ms).toLocaleTimeString('en-IN', { hour12: false }) : '--');
+              const exitTime = tr.exit_time_iso || (tr.status === 'OPEN' ? 'OPEN' : '--');
               return (
                 <tr key={tr.trade_id} style={{ borderBottom: `1px solid color-mix(in srgb, ${k.text} 6%, transparent)` }}>
-                  <td style={{ padding: '6px 8px', fontFamily: "'JetBrains Mono', monospace", color: k.blue, fontWeight: 600, fontSize: 10 }}>{tr.trade_id}</td>
-                  <td style={{ padding: '6px 8px', color: k.dim }}>{tr.entry_time_iso}</td>
-                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>[{tr.strategy.toUpperCase()}]</td>
-                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600 }}>{tr.symbol}</td>
-                  <td style={{ padding: '6px 8px', color: k.dim }}>{tr.lots}L</td>
-                  <td style={{ padding: '6px 8px', color: k.text }}>₹{tr.entry_price}</td>
-                  <td style={{ padding: '6px 8px', color: k.text }}>{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
-                  <td style={{ padding: '6px 8px' }}>
+                  <td style={{ padding: '6px 8px', fontFamily: "'JetBrains Mono', monospace", color: k.blue, fontWeight: 600, fontSize: 10, whiteSpace: 'nowrap' }}>{tr.trade_id}</td>
+                  <td style={{ padding: '6px 8px', fontFamily: "'JetBrains Mono', monospace", color: k.dim, whiteSpace: 'nowrap' }}>{entryTime}</td>
+                  <td style={{ padding: '6px 8px', fontFamily: "'JetBrains Mono', monospace", color: k.dim, whiteSpace: 'nowrap' }}>{exitTime}</td>
+                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600, whiteSpace: 'nowrap' }}>[{(tr.strategy || '').toUpperCase()}]</td>
+                  <td style={{ padding: '6px 8px', color: k.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{tr.symbol}</td>
+                  <td style={{ padding: '6px 8px', color: k.dim, whiteSpace: 'nowrap' }}>{tr.lots}L {tr.quantity ? `(${tr.quantity}Q)` : ''}</td>
+                  <td style={{ padding: '6px 8px', color: k.text, whiteSpace: 'nowrap' }}>
+                    <div>₹{tr.entry_price}</div>
+                    {tr.raw_entry != null && tr.raw_entry !== tr.entry_price && (
+                      <div style={{ fontSize: 9.5, color: k.dim, opacity: 0.8 }} title={`Theoretical Signal: ₹${tr.raw_entry}`}>
+                        raw ₹{tr.raw_entry}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '6px 8px', color: k.text, whiteSpace: 'nowrap' }}>
+                    {tr.exit_price ? (
+                      <>
+                        <div>₹{tr.exit_price}</div>
+                        {tr.raw_exit != null && tr.raw_exit !== tr.exit_price && (
+                          <div style={{ fontSize: 9.5, color: k.dim, opacity: 0.8 }} title={`Theoretical Target/SL: ₹${tr.raw_exit}`}>
+                            raw ₹{tr.raw_exit}
+                          </div>
+                        )}
+                      </>
+                    ) : '--'}
+                  </td>
+                  <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                    {tr.slippage && tr.slippage > 0 ? (
+                      <span style={{ fontSize: 10, color: k.red, fontWeight: 650 }} title="Slippage & bid-ask spread friction deducted from P&L">
+                        -₹{tr.slippage.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: k.dim }}>₹0.00</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
                     <span style={{
                       padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700,
                       fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.5px',
@@ -307,7 +386,7 @@ function ExecutedTradesTable({ trades }: { trades: any[] }) {
                       {tr.status}
                     </span>
                   </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: tr.pnl_usd >= 0 ? k.green : k.red }}>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: tr.pnl_usd >= 0 ? k.green : k.red, whiteSpace: 'nowrap' }}>
                     {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)}
                   </td>
                 </tr>

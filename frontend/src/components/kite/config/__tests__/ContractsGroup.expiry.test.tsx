@@ -71,11 +71,12 @@ describe('every engine panel actually passes the window', () => {
    * component tests above prove the props work; this proves they are supplied.
    */
   it.each([
-    'SuperTrendEnginePanel.tsx',
-    'NavigatorSettingsPanel.tsx',
-    'AdaptiveEdgeSettingsPanel.tsx',
-  ])('%s passes dteMin/dteMax/avoidExpiryDay to expiry/contracts controls', (file) => {
-    const src = sourceOf(PANEL_SOURCE, file);
+    ['SuperTrendEnginePanel.tsx', PANEL_SOURCE],
+    ['NavigatorSettingsPanel.tsx', PANEL_SOURCE],
+    ['AdaptiveEdgeSettingsPanel.tsx', PANEL_SOURCE],
+    ['NiftyOrbOptionsSettings.tsx', ENGINE_SOURCE],
+  ])('%s passes dteMin/dteMax/avoidExpiryDay to expiry/contracts controls', (file, dir) => {
+    const src = sourceOf(dir, file);
     expect(src.includes('<ContractsGroup') || src.includes('<ExpirySettingsGroup')).toBe(true);
     for (const prop of ['dteMin=', 'dteMax=', 'avoidExpiryDay=']) {
       expect(src, `${file} does not pass ${prop}`).toContain(prop);
@@ -85,14 +86,20 @@ describe('every engine panel actually passes the window', () => {
   it.each([
     'GammaMoveSettings.tsx',
     'AtmPremiumImbalanceSettings.tsx',
-    'NiftyOrbOptionsSettings.tsx',
   ])('%s carries the same three labels', (file) => {
-    /* These three build their own Contracts section rather than using
+    /* These build their own Contracts section rather than using
        ContractsGroup — they resolve a single contract rather than a ladder — so
        the shared vocabulary is checked by its wording instead. */
     const src = sourceOf(ENGINE_SOURCE, file);
     for (const label of ['Minimum days to expiry', 'Maximum days to expiry', 'Expiry day']) {
       expect(src, `${file} is missing "${label}"`).toContain(label);
+    }
+  });
+
+  it('BearToBearishSettingsPanel.tsx carries the same three labels', () => {
+    const src = sourceOf(PANEL_SOURCE, 'BearToBearishSettingsPanel.tsx');
+    for (const label of ['Minimum days to expiry', 'Maximum days to expiry', 'Expiry day']) {
+      expect(src, `BearToBearishSettingsPanel.tsx is missing "${label}"`).toContain(label);
     }
   });
 });

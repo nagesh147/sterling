@@ -1043,7 +1043,7 @@ export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
   sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = false,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
-  renderTrade, renderChart,
+  renderTrade, renderChart, collapseOlderDays = false, isHistoricalSim = false,
 }: {
   signals: readonly BoardSignal[];
   /**
@@ -1129,7 +1129,9 @@ export function SignalBoard({
   renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs?: number;
+  isHistoricalSim?: boolean;
   emptyLabel?: string;
+  collapseOlderDays?: boolean;
 }) {
   const wanted = requested ?? BOARD_COLUMNS;
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
@@ -1168,15 +1170,14 @@ export function SignalBoard({
       return userToggledDays.get(key)!;
     }
     const todayKey = sessionDayKey(effectiveNowMs);
-    const label = sessionDayLabel(key, effectiveNowMs);
-    // Today is always expanded by default.
-    if (key === todayKey || label === 'Today') {
+    const label = sessionDayLabel(key, effectiveNowMs, isHistoricalSim);
+    // Today and Yesterday are always expanded by default.
+    if (key === todayKey || label === 'Today' || label === 'Yesterday') {
       return true;
     }
     // Yesterday and Older are collapsed by default.
-    // However, if there are NO Today signals at all on the board, auto-expand the first group if it has actionable setups.
     const hasTodayGroup = days.some(
-      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs) === 'Today',
+      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs, isHistoricalSim) === 'Today',
     );
     if (!hasTodayGroup && days.length > 0 && days[0].key === key) {
       const firstGroup = days[0];
@@ -1290,7 +1291,7 @@ export function SignalBoard({
         const expandedDay = isDayExpanded(key);
         const isRecentGroup =
           key === sessionDayKey(effectiveNowMs) ||
-          sessionDayLabel(key, effectiveNowMs) === 'Today';
+          sessionDayLabel(key, effectiveNowMs, isHistoricalSim) === 'Today';
 
         const renderSignalGroup = (groupRows: BoardSignal[]) => {
           return groupRows.map((signal, i) => {
@@ -1301,6 +1302,7 @@ export function SignalBoard({
                 <React.Fragment key={signal.id}>
                   <Row
                     nowMs={effectiveNowMs}
+                    key={signal.id}
                     signal={signal}
                     columns={cols}
                     open={openId === signal.id}
@@ -1471,13 +1473,13 @@ export function SignalBoard({
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
-                <span>{sessionDayLabel(key, nowMs ?? effectiveNowMs)}</span>
+                <span>{sessionDayLabel(key, effectiveNowMs, isHistoricalSim)}</span>
               </div>
               <span style={{ fontWeight: 500 }}>{rows.length}</span>
             </div>
 
-            <div style={{ display: expandedDay ? 'contents' : 'none' }}>
-              {!hasBoth ? (
+            {expandedDay && (
+              !hasBoth ? (
                 renderSignalGroup(sorted)
               ) : (
                 <React.Fragment>
@@ -1496,8 +1498,8 @@ export function SignalBoard({
                   {/* MONTHLY SIGNALS */}
                   {renderSignalGroup(monthlySignals)}
                 </React.Fragment>
-              )}
-            </div>
+              )
+            )}
           </section>
         );
       })}

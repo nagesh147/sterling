@@ -119,3 +119,9 @@ async def close_current() -> None:
         except Exception as _exc:
             log.debug("suppressed: %s", _exc)
         _adapter = None
+
+
+# Backward-compatible aliases
+start_ws_feed = start_feed
+stop_ws_feed = stop_feed
+

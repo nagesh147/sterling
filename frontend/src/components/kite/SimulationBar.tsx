@@ -817,72 +817,78 @@ export function SimulationBar() {
       {/* Dock Content Panel with Tabs */}
       <div className="sim-dock-panel">
         {/* Tab 1: Split View (Default view) */}
-        <div style={{ display: activeDockTab === 'split' ? 'flex' : 'none', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-          <ConsolidationPnLBar
-            pnl={sim.status.stats.pnl || 0}
-            wins={sim.status.stats.wins}
-            losses={sim.status.stats.losses}
-            trades={sim.status.stats.trades || []}
-            signalsCount={sim.status.stats.signals_fired}
-          />
-          <div className="sim-split-container">
-            <div className="sim-split-col">
-              <div className="sim-split-col-head">
-                <span>⚡ Signals Feed ({sim.status.stats.events.length})</span>
-                {sim.status.stats.events.length > 0 && (
-                  <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export</button>
-                )}
+        {activeDockTab === 'split' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <ConsolidationPnLBar
+              pnl={sim.status.stats.pnl || 0}
+              wins={sim.status.stats.wins}
+              losses={sim.status.stats.losses}
+              trades={sim.status.stats.trades || []}
+              signalsCount={sim.status.stats.signals_fired}
+            />
+            <div className="sim-split-container">
+              <div className="sim-split-col">
+                <div className="sim-split-col-head">
+                  <span>⚡ Signals Feed ({sim.status.stats.events.length})</span>
+                  {sim.status.stats.events.length > 0 && (
+                    <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export</button>
+                  )}
+                </div>
+                <div className="sim-split-col-body">
+                  {renderSignalsTable()}
+                </div>
               </div>
-              <div className="sim-split-col-body">
-                {renderSignalsTable()}
-              </div>
-            </div>
-            <div className="sim-split-col">
-              <div className="sim-split-col-head">
-                <span>💼 Executed Trades ({(sim.status.stats.trades || []).length})</span>
-                {(sim.status.stats.trades || []).length > 0 && (
-                  <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export</button>
-                )}
-              </div>
-              <div className="sim-split-col-body">
-                {renderTradesTable()}
+              <div className="sim-split-col">
+                <div className="sim-split-col-head">
+                  <span>💼 Executed Trades ({(sim.status.stats.trades || []).length})</span>
+                  {(sim.status.stats.trades || []).length > 0 && (
+                    <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export</button>
+                  )}
+                </div>
+                <div className="sim-split-col-body">
+                  {renderTradesTable()}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Tab 2: Signals Tab */}
-        <div style={{ display: activeDockTab === 'signals' ? 'flex' : 'none', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-          <div className="sim-single-tab-head">
-            <span>⚡ Signals Stream ({sim.status.stats.events.length})</span>
-            {sim.status.stats.events.length > 0 && (
-              <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export Signals CSV</button>
-            )}
+        {activeDockTab === 'signals' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <div className="sim-single-tab-head">
+              <span>⚡ Signals Stream ({sim.status.stats.events.length})</span>
+              {sim.status.stats.events.length > 0 && (
+                <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export Signals CSV</button>
+              )}
+            </div>
+            <div className="sim-split-col-body" style={{ flex: 1 }}>
+              {renderSignalsTable()}
+            </div>
           </div>
-          <div className="sim-split-col-body" style={{ flex: 1 }}>
-            {renderSignalsTable()}
-          </div>
-        </div>
+        )}
 
         {/* Tab 3: Trades Tab with Consolidation Bar & Full Table */}
-        <div style={{ display: activeDockTab === 'trades' ? 'flex' : 'none', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-          <ConsolidationPnLBar
-            pnl={sim.status.stats.pnl || 0}
-            wins={sim.status.stats.wins}
-            losses={sim.status.stats.losses}
-            trades={sim.status.stats.trades || []}
-            signalsCount={sim.status.stats.signals_fired}
-          />
-          <div className="sim-single-tab-head">
-            <span>💼 Executed Trades ({(sim.status.stats.trades || []).length})</span>
-            {(sim.status.stats.trades || []).length > 0 && (
-              <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export Trades CSV</button>
-            )}
+        {activeDockTab === 'trades' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <ConsolidationPnLBar
+              pnl={sim.status.stats.pnl || 0}
+              wins={sim.status.stats.wins}
+              losses={sim.status.stats.losses}
+              trades={sim.status.stats.trades || []}
+              signalsCount={sim.status.stats.signals_fired}
+            />
+            <div className="sim-single-tab-head">
+              <span>💼 Executed Trades ({(sim.status.stats.trades || []).length})</span>
+              {(sim.status.stats.trades || []).length > 0 && (
+                <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export Trades CSV</button>
+              )}
+            </div>
+            <div className="sim-split-col-body" style={{ flex: 1 }}>
+              {renderTradesTable()}
+            </div>
           </div>
-          <div className="sim-split-col-body" style={{ flex: 1 }}>
-            {renderTradesTable()}
-          </div>
-        </div>
+        )}
 
         {/* Tab 4: Configuration Tab */}
         <div style={{ display: activeDockTab === 'config' ? 'block' : 'none', height: '100%', overflow: 'auto', padding: '12px 16px' }}>
@@ -1074,7 +1080,7 @@ export function SimulationBar() {
           </div>
         </div>
       </div>
-  );
+    );
 
   if (!barOpen) {
     return null;

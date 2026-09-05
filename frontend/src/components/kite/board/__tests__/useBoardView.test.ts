@@ -27,21 +27,30 @@ function sig(over: Partial<BoardSignal> = {}): BoardSignal {
 
 describe('which filters are offered', () => {
   it('offers neither when there is nothing to filter', () => {
-    const { result } = renderHook(() => useBoardView([sig()]));
-    expect(result.current.offers).toEqual({ ended: false, best: false });
+    const { result } = renderHook(() => useBoardView([sig()], { nowMs: NOW }));
+    expect(result.current.offers).toEqual({ ended: false, best: false, today: false });
   });
 
   it('offers Ended only once something has ended', () => {
-    const { result } = renderHook(() => useBoardView([sig(), sig({ id: 'b', status: 'ended' })]));
+    const { result } = renderHook(() => useBoardView([sig(), sig({ id: 'b', status: 'ended' })], { nowMs: NOW }));
     expect(result.current.offers.ended).toBe(true);
     expect(result.current.counts.ended).toBe(1);
   });
 
   it('offers Best leg only when an underlying has more than one leg', () => {
     const two = [sig({ id: 'a' }), sig({ id: 'b' })];
-    expect(renderHook(() => useBoardView(two)).result.current.offers.best).toBe(true);
+    expect(renderHook(() => useBoardView(two, { nowMs: NOW })).result.current.offers.best).toBe(true);
     const different = [sig({ id: 'a' }), sig({ id: 'b', underlying: 'BANKNIFTY' })];
-    expect(renderHook(() => useBoardView(different)).result.current.offers.best).toBe(false);
+    expect(renderHook(() => useBoardView(different, { nowMs: NOW })).result.current.offers.best).toBe(false);
+  });
+
+  it('offers Today only when older signals exist', () => {
+    const yesterdayMs = NOW - 24 * 3600 * 1000;
+    const sameDay = [sig({ id: 'a', atMs: NOW })];
+    expect(renderHook(() => useBoardView(sameDay, { nowMs: NOW })).result.current.offers.today).toBe(false);
+
+    const withOlder = [sig({ id: 'a', atMs: NOW }), sig({ id: 'b', atMs: yesterdayMs })];
+    expect(renderHook(() => useBoardView(withOlder, { nowMs: NOW })).result.current.offers.today).toBe(true);
   });
 });
 
@@ -132,6 +141,15 @@ describe('filtering', () => {
     const { result } = renderHook(() => useBoardView(rows));
     act(() => result.current.setBestOnly(true));
     expect(result.current.visible).toHaveLength(2);
+  });
+
+  it('filters to today signals when todayOnly is turned on', () => {
+    const yesterdayMs = NOW - 24 * 3600 * 1000;
+    const rows = [sig({ id: 'today', atMs: NOW }), sig({ id: 'old', atMs: yesterdayMs })];
+    const { result } = renderHook(() => useBoardView(rows, { nowMs: NOW }));
+    expect(result.current.visible).toHaveLength(2);
+    act(() => result.current.setTodayOnly(true));
+    expect(result.current.visible.map((s) => s.id)).toEqual(['today']);
   });
 
   it('reports shown against total so a filtered board says so', () => {

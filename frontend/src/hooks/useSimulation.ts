@@ -6,6 +6,7 @@ export type SimState = 'idle' | 'loading' | 'running' | 'paused';
 
 export interface SimSignalEvent {
   time_iso: string;
+  timestamp_ms?: number;
   strategy: string;
   instrument: string;
   direction: string;
@@ -14,7 +15,12 @@ export interface SimSignalEvent {
   stop: number;
   target: number;
   contract?: string;
+  opt_type?: string;
+  strike?: number;
   spot?: number;
+  premium_entry?: number;
+  premium_sl?: number;
+  premium_target?: number;
 }
 
 export interface SimTradeEvent {
@@ -62,6 +68,8 @@ export interface SimStatus {
     speed: number;
     resolution: string;
     instruments: string[];
+    friction_mode?: 'realistic' | 'ideal';
+    slippage_bps?: number;
   } | null;
   current_time_iso: string;
   progress_pct: number;
@@ -134,11 +142,17 @@ export function getLastMarketWorkingDay(refDate: Date = new Date()): string {
   return formatYmd(target.getUTCFullYear(), target.getUTCMonth() + 1, target.getUTCDate());
 }
 
+/**
+ * Returns today's market date in YYYY-MM-DD format (IST).
+ */
 export function getTodayMarketDate(refDate: Date = new Date()): string {
   const ist = getIstDateParts(refDate);
   return formatYmd(ist.year, ist.month, ist.day);
 }
 
+/**
+ * Returns yesterday's date in YYYY-MM-DD format (IST).
+ */
 export function getYesterdayMarketDate(refDate: Date = new Date()): string {
   const ist = getIstDateParts(refDate);
   const d = new Date(Date.UTC(ist.year, ist.month - 1, ist.day, 12, 0, 0));
@@ -215,12 +229,14 @@ export function getDynamicMarketPresets(refDate: Date = new Date()): MarketDateP
   return presets;
 }
 
+export type SimViewMode = 'half' | 'full' | 'fullheight' | 'maximized' | 'fullscreen';
+
 interface SimulationStore {
   // UI state
   barOpen: boolean;
   setBarOpen: (open: boolean) => void;
-  viewMode: 'half' | 'full' | 'fullheight' | 'maximized' | 'fullscreen';
-  setViewMode: (v: 'half' | 'full' | 'fullheight' | 'maximized' | 'fullscreen') => void;
+  viewMode: SimViewMode;
+  setViewMode: (v: SimViewMode) => void;
   activeDockTab: 'config' | 'signals' | 'trades' | 'split';
   setActiveDockTab: (t: 'config' | 'signals' | 'trades' | 'split') => void;
   
@@ -253,6 +269,8 @@ interface SimulationStore {
   setMoneyness: (m: string) => void;
   setSelectedMoneyness: (m: string[]) => void;
   toggleMoneyness: (m: string) => void;
+  frictionMode: 'realistic' | 'ideal';
+  setFrictionMode: (m: 'realistic' | 'ideal') => void;
   
   // Summary modal
   showSummary: boolean;
@@ -294,6 +312,8 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   lots: 1,
   moneyness: 'ATM',
   selectedMoneyness: ['ATM'],
+  frictionMode: 'realistic',
+  setFrictionMode: (frictionMode) => set({ frictionMode }),
   setDate: (date) => set({ date }),
   setEndDate: (endDate) => set({ endDate }),
   setStartTime: (startTime) => set({ startTime }),
@@ -383,6 +403,7 @@ export function useSimulation() {
       lots: store.lots,
       moneyness: store.moneyness,
       friction_mode: store.frictionMode,
+
     };
     clearLocalFeedCache();
     try {
@@ -511,7 +532,6 @@ function stopPolling() {
 // Convenience selectors
 export const useSimActive = () => useSimulationStore(s => s.status.state !== 'idle');
 export const useSimBarOpen = () => useSimulationStore(s => s.barOpen);
-
 export function getSimNowMs(status: SimStatus): number | null {
   if (status.state === 'idle' || !status.config?.date || !status.current_time_iso) {
     return null;
@@ -523,9 +543,13 @@ export function getSimNowMs(status: SimStatus): number | null {
   return isNaN(ms) ? null : ms;
 }
 
+export const useSimNowMs = (): number | null => {
+  const status = useSimulationStore((s) => s.status);
+  return getSimNowMs(status);
+};
+
 export function useEffectiveNowMs(): number {
   const status = useSimulationStore((s) => s.status);
   const simMs = getSimNowMs(status);
   return simMs ?? Date.now();
 }
-
