@@ -5,6 +5,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Literal
@@ -151,25 +152,34 @@ async def stream_sim(request: Request):
 
 @router.get("/available-dates", response_model=AvailableDatesResponse)
 async def available_dates(instrument: str = "NIFTY", resolution: str = "5m"):
-    from app.services.ohlcv_store import get_status
+    # Both the store read and the day walk run in a worker thread. They used to
+    # run inline on the event loop, and the store read was a GROUP BY across all
+    # ~20M candle rows (~7s). For those 7s the loop served nothing: POST /start
+    # from the replay dock's play button sat in the queue, so pressing play
+    # looked like nothing happened at all.
+    return await run_in_threadpool(_available_dates_sync, instrument, resolution)
+
+
+def _available_dates_sync(instrument: str, resolution: str) -> AvailableDatesResponse:
+    from app.services.ohlcv_store import get_symbol_coverage
     from datetime import datetime, timezone, timedelta
 
-    status = get_status()
     dates = set()
     earliest_iso: Optional[str] = None
     latest_iso: Optional[str] = None
 
-    for entry in status:
-        if entry["symbol"].upper() == instrument.upper() and entry["resolution"] == resolution:
-            if entry["earliest"] and entry["latest"]:
-                current = datetime.fromtimestamp(entry["earliest"], tz=timezone.utc)
-                end = datetime.fromtimestamp(entry["latest"], tz=timezone.utc)
-                earliest_iso = current.strftime("%Y-%m-%d")
-                latest_iso = end.strftime("%Y-%m-%d")
-                while current <= end:
-                    if current.weekday() < 5:
-                        dates.add(current.strftime("%Y-%m-%d"))
-                    current += timedelta(days=1)
+    # One indexed lookup for the series actually asked about, instead of
+    # summarising every symbol in the store and then discarding all but one.
+    entry = get_symbol_coverage(instrument.upper(), resolution)
+    if entry and entry["earliest"] and entry["latest"]:
+        current = datetime.fromtimestamp(entry["earliest"], tz=timezone.utc)
+        end = datetime.fromtimestamp(entry["latest"], tz=timezone.utc)
+        earliest_iso = current.strftime("%Y-%m-%d")
+        latest_iso = end.strftime("%Y-%m-%d")
+        while current <= end:
+            if current.weekday() < 5:
+                dates.add(current.strftime("%Y-%m-%d"))
+            current += timedelta(days=1)
 
     source: Literal["store", "fallback"] = "store"
 

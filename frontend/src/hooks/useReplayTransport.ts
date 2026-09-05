@@ -6,10 +6,37 @@ import {
   useReplayStore,
 } from './useReplayStore';
 import { pushReplayToast } from '../components/kite/replay/replayToastBus';
+import { syncReplayStatus } from './useReplayStream';
 
 const API = '/api/v1/simulation';
 
 type ApiError = { code: string; message: string };
+
+/** How long a freshly started replay may stay in `loading` before we say so. */
+const START_CONFIRM_MS = 12000;
+const START_CONFIRM_STEP_MS = 700;
+
+/**
+ * Confirm a started replay actually left `loading`, without the event stream.
+ *
+ * `POST /start` answers `loading`, and the dock renders that as a spinner
+ * captioned "Starting replay". Everything after it used to arrive over SSE (or
+ * the poll the stream hook owns) — so when that channel was dead, the engine
+ * ran happily while the dock sat on "Starting replay" forever. Pressing play
+ * looked like it did nothing, which is exactly how this was reported.
+ *
+ * These fetches belong to the transport, not the stream, so they run even when
+ * the stream is gone. Once the state moves, the stream hook takes over again.
+ */
+async function confirmStarted(): Promise<boolean> {
+  const deadline = Date.now() + START_CONFIRM_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, START_CONFIRM_STEP_MS));
+    const status = await syncReplayStatus();
+    if (status && status.state !== 'loading') return true;
+  }
+  return false;
+}
 
 async function call(path: string, body?: unknown): Promise<ReplayStatus> {
   const res = await fetch(`${API}${path}`, {
@@ -128,6 +155,13 @@ export function useReplayTransport(): ReplayTransport {
       store.setStatus(status);
       queryClient?.invalidateQueries();
       window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
+      if (!(await confirmStarted())) {
+        fail(
+          'start_stalled',
+          'The replay was accepted but never started playing. Check that the engine is running.',
+          () => { void start(); },
+        );
+      }
     } catch (err: any) {
       const api: ApiError = err?.api ?? { code: 'error', message: 'Could not start the replay.' };
 
@@ -144,6 +178,13 @@ export function useReplayTransport(): ReplayTransport {
           store.setStatus(status);
           queryClient?.invalidateQueries();
           window.dispatchEvent(new CustomEvent('sterling-simulation-start'));
+          if (!(await confirmStarted())) {
+            fail(
+              'start_stalled',
+              'The replay was accepted but never started playing. Check that the engine is running.',
+              () => { void start(); },
+            );
+          }
           return;
         } catch (retryErr: any) {
           fail(retryErr?.api?.code ?? 'start_failed', retryErr?.api?.message || 'Could not start the replay.', () => { void start(); });

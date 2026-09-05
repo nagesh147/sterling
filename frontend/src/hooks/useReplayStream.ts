@@ -25,6 +25,8 @@ const SSE_SILENCE_MS = 6000;
  * whose buttons do nothing, which is how this was reported.
  */
 const UNREACHABLE_AFTER = 3;
+/** First reconnect delay, and the value the budget is restored to on success. */
+const INITIAL_BACKOFF_MS = 500;
 let consecutiveFailures = 0;
 
 function noteReachable() {
@@ -134,7 +136,7 @@ export function useReplayStream(enabled: boolean): void {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppedRef = useRef(false);
-  const backoffRef = useRef(500);
+  const backoffRef = useRef(INITIAL_BACKOFF_MS);
 
   useEffect(() => {
     stoppedRef.current = false;
@@ -218,6 +220,16 @@ export function useReplayStream(enabled: boolean): void {
         esRef.current = es;
         armWatchdog();
 
+        // Restore the reconnect budget on every successful open. It used to
+        // only ever double, so a handful of unrelated blips over a long-lived
+        // session permanently exhausted it: the stream stopped being retried
+        // at all and the dock was left on whatever it last heard.
+        es.onopen = () => {
+          backoffRef.current = INITIAL_BACKOFF_MS;
+          noteReachable();
+          armWatchdog();
+        };
+
         es.addEventListener('state', (e) => {
           armWatchdog();
           const d = JSON.parse((e as MessageEvent).data);
@@ -288,9 +300,24 @@ export function useReplayStream(enabled: boolean): void {
     const onVisibility = () => {
       if (document.hidden) {
         clearTimer();
-      } else if (!esRef.current) {
-        void poll();
+        return;
       }
+      // Returning to the foreground always resyncs.
+      //
+      // A hidden tab arms no poll timer (see `schedule`), so the stream is the
+      // only live channel — and a backgrounded EventSource that dies (server
+      // restart, sleep, dropped link) can be left CLOSED without `onerror`
+      // ever reaching us. This used to poll only when `esRef.current` was
+      // empty, so that dead-but-present stream blocked the one resync that
+      // would have noticed: the dock stayed frozen on its last known state,
+      // showing "Pause replay" for a replay that had already finished. The
+      // button then called /pause, the engine answered "not running", and
+      // pressing it looked like it did nothing at all.
+      if (esRef.current && esRef.current.readyState === EventSource.CLOSED) {
+        closeStream();
+        backoffRef.current = INITIAL_BACKOFF_MS;
+      }
+      void poll();
     };
 
     if (enabled) {

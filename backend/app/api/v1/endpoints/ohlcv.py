@@ -6,6 +6,7 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 
 from app.services import ohlcv_store
 from app.services.delta_candle_fetcher import (
@@ -21,7 +22,7 @@ async def get_ohlcv_status():
     return {
         "is_fetching": is_fetching(),
         "last_summary": last_summary(),
-        "coverage": ohlcv_store.get_status(),
+        "coverage": await run_in_threadpool(ohlcv_store.get_status),
         "supported_symbols": SYMBOLS,
         "supported_resolutions": RESOLUTIONS,
         "timestamp_ms": int(time.time() * 1000),

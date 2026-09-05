@@ -138,6 +138,36 @@ def get_earliest_time(symbol: str, resolution: str) -> Optional[int]:
         return None
 
 
+def get_symbol_coverage(symbol: str, resolution: str) -> Optional[Dict]:
+    """Coverage for ONE symbol/resolution, via the (symbol, resolution, time) index.
+
+    `get_status()` is a GROUP BY over the whole table. That table holds ~20M rows,
+    so the full scan costs ~7s — and because callers run it inside an async
+    endpoint it blocks the event loop for that whole time, stalling every other
+    request. When only one series is needed, use this instead: same numbers,
+    index-served, effectively instant.
+    """
+    try:
+        conn = sqlite3.connect(_DB_PATH)
+        row = conn.execute(
+            "SELECT COUNT(*), MIN(time), MAX(time) FROM ohlcv "
+            "WHERE symbol = ? AND resolution = ?",
+            (symbol, resolution),
+        ).fetchone()
+        conn.close()
+    except Exception:
+        return None
+    if not row or not row[0]:
+        return None
+    return {
+        "symbol": symbol,
+        "resolution": resolution,
+        "count": row[0],
+        "earliest": row[1],
+        "latest": row[2],
+    }
+
+
 def get_status() -> List[Dict]:
     """Coverage summary — count, earliest and latest per symbol/resolution."""
     try:

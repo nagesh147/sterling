@@ -439,6 +439,11 @@ class SimulationRunner:
         self._open_by_symbol: Dict[str, List[SimTradeEvent]] = {}
         # Re-entry suppression and the recorded-signal replay path, from main.
         self._active_until_bar: Dict[Tuple[str, str], int] = {}
+        # In-session bars seen per symbol; gates the session-boundary bar.
+        self._in_session_bars: Dict[str, int] = {}
+        # Bumped by every start(). A replay loop that no longer matches this is
+        # a superseded loop and must not touch shared state.
+        self._run_generation: int = 0
         self._recorded_signals: List[Dict[str, Any]] = []
         self._emitted_recorded_keys: set = set()
         self._session_id: Optional[str] = None
@@ -787,6 +792,7 @@ class SimulationRunner:
         self._pause_event.set()
         self._stats = SimStats()
         self._bar_history = {}
+        self._in_session_bars = {}
         self._last_fired = {}
         self._open_by_symbol = {}
         self._session_id = f"{config.date}-{int(time.time())}"
@@ -795,7 +801,8 @@ class SimulationRunner:
         self._bars_played = 0
         self._seek_requested_epoch = None
         self._start_real = time.monotonic()
-        self._task = asyncio.create_task(self._run_loop())
+        self._run_generation += 1
+        self._task = asyncio.create_task(self._run_loop(self._run_generation))
         return self.status
 
     async def stop(self) -> SimStatus:
@@ -1100,7 +1107,7 @@ class SimulationRunner:
         self._stats.trades.append(trade)
         self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
 
-    async def _run_loop(self):
+    async def _run_loop(self, generation: int = 0):
         """Main replay loop — fetch candles, then step through them."""
         from app.services.ohlcv_store import get_candles as ohlcv_get, RESOLUTION_SECONDS
         from datetime import datetime, timezone, timedelta
@@ -1190,6 +1197,7 @@ class SimulationRunner:
 
         # Pre-seed indicator history with pre-session bars so indicators are ready at 09:15 AM
         self._bar_history = {}
+        self._in_session_bars = {}
         for sym in instruments:
             prior_candles = ohlcv_get(sym, res, limit=50, since=warmup_start)
             p_bars = [{**c, "symbol": sym, "resolution": res} for c in prior_candles if c["time"] < start_epoch]
@@ -1254,6 +1262,14 @@ class SimulationRunner:
                 await self._pause_event.wait()
                 if self._stop_requested:
                     break
+                # A superseded loop must not keep writing. Cancellation only
+                # lands at an await, so between `start()` clearing the stop flag
+                # and the old task actually dying, two loops could both advance
+                # `_current_sim_epoch` — the clock jumped forward, then BACKWARD
+                # to the other loop's position, and the session ended early on
+                # whichever `finally` ran first.
+                if generation and generation != self._run_generation:
+                    return
 
                 # Handle seek/rewind requests
                 if self._seek_requested_epoch is not None:
@@ -1283,6 +1299,7 @@ class SimulationRunner:
                     }
                     # Reset bar history and dedup state for clean indicator recalculation
                     self._bar_history = {}
+                    self._in_session_bars = {}
                     self._last_fired = {}
                     self._active_until_bar = {}
 
@@ -1321,7 +1338,7 @@ class SimulationRunner:
         except Exception as exc:
             log.error("Simulation error: %s", exc, exc_info=True)
         finally:
-            if not self._stop_requested:
+            if not self._stop_requested and (not generation or generation == self._run_generation):
                 self._state = SimState.IDLE
                 self._close_all_open("reached session end")
                 self._session_complete = bool(self._stats.events or self._stats.trades)
@@ -1986,6 +2003,22 @@ class SimulationRunner:
         # Keep last 60 bars per instrument
         if len(self._bar_history[sym]) > 60:
             self._bar_history[sym] = self._bar_history[sym][-60:]
+
+        # Do not let the session boundary itself fire a signal.
+        #
+        # Indicator history is pre-seeded with the tail of the PREVIOUS session
+        # so indicators are warm at 09:15. That means the first in-session bar
+        # sits directly after an overnight gap, and every crossover test below
+        # compares history[-1] against history[-2]. The gap flips state on all
+        # instruments simultaneously, so a fresh replay printed one signal per
+        # instrument per strategy — all stamped 09:15:00 — and then went quiet.
+        # Open positions still settle (that happens above, before this gate);
+        # only NEW signals wait for the first fully in-session comparison.
+        if not hasattr(self, "_in_session_bars"):
+            self._in_session_bars: Dict[str, int] = {}
+        self._in_session_bars[sym] = self._in_session_bars.get(sym, 0) + 1
+        if self._in_session_bars[sym] < 2:
+            return
 
         history = self._bar_history[sym]
 
