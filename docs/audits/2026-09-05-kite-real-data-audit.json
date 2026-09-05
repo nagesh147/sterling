@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-05T11:06:32.497872+00:00",
+  "code_base_sha": "c33fd33381e3c2f5265db2233594b68c9d911f12",
+  "verdict": "NO_GO",
+  "data_kind": "cached broker index OHLC; not option execution evidence",
+  "provenance_limit": "Existing kite_data.py cache; no original response receipt or signed acquisition manifest.",
+  "config": {
+    "fast": [
+      21,
+      1.0
+    ],
+    "mid": [
+      14,
+      2.0
+    ],
+    "slow": [
+      7,
+      3.0
+    ],
+    "candle_basis": "heikin_ashi",
+    "trail_target": "fast",
+    "exit_mode": "one_red",
+    "exit_aligned_trail": false,
+    "price_stop_exit": true,
+    "early_lock": false,
+    "early_lock_profit_r": 1.0,
+    "max_contract_staleness_bars": 0,
+    "theta_time_stop": true
+  },
+  "datasets": [
+    {
+      "path": "backend/study/kite_cache/256265_1H.npz",
+      "sha256": "9f2f0d2c51ac26303d2620c2596f7e3230d626647dfecb970da6285b261a2383",
+      "instrument": "NIFTY 50",
+      "bars": 13029,
+      "first_utc": "2019-01-01T03:45:00+00:00",
+      "last_utc": "2026-07-16T09:45:00+00:00",
+      "invalid_bars": 0,
+      "nonincreasing_timestamps": 0,
+      "zero_volume_bars": 13029,
+      "long_transitions": 291,
+      "short_transitions": 280,
+      "prefix_checks": 101,
+      "prefix_violations": 0,
+      "entry_exit_comparisons_240bar_horizon": 571,
+      "exits_changed_raw_vs_ha_extrema": 3,
+      "post_cas_bars": 0
+    },
+    {
+      "path": "backend/study/kite_cache/257801_1H.npz",
+      "sha256": "24ff1c913a85f67fb24a3875d150238e54cc4872cb577253306ef32fb6d365ce",
+      "instrument": "NIFTY FIN SERVICE",
+      "bars": 13029,
+      "first_utc": "2019-01-01T03:45:00+00:00",
+      "last_utc": "2026-07-16T09:45:00+00:00",
+      "invalid_bars": 0,
+      "nonincreasing_timestamps": 0,
+      "zero_volume_bars": 13029,
+      "long_transitions": 290,
+      "short_transitions": 280,
+      "prefix_checks": 101,
+      "prefix_violations": 0,
+      "entry_exit_comparisons_240bar_horizon": 570,
+      "exits_changed_raw_vs_ha_extrema": 4,
+      "post_cas_bars": 0
+    },
+    {
+      "path": "backend/study/kite_cache/260105_1H.npz",
+      "sha256": "c12d20164f745641b4bd64614e8a78bc59b1598d1e2746888ae8a5454e1b5af9",
+      "instrument": "NIFTY BANK",
+      "bars": 13029,
+      "first_utc": "2019-01-01T03:45:00+00:00",
+      "last_utc": "2026-07-16T09:45:00+00:00",
+      "invalid_bars": 0,
+      "nonincreasing_timestamps": 0,
+      "zero_volume_bars": 13029,
+      "long_transitions": 270,
+      "short_transitions": 297,
+      "prefix_checks": 101,
+      "prefix_violations": 0,
+      "entry_exit_comparisons_240bar_horizon": 567,
+      "exits_changed_raw_vs_ha_extrema": 2,
+      "post_cas_bars": 0
+    },
+    {
+      "path": "backend/study/kite_cache/265_1H.npz",
+      "sha256": "8f624ed0ff9f509c8d291984c67d21972b77b7fe35f247b4a048da452f2d5e3f",
+      "instrument": "SENSEX",
+      "bars": 12976,
+      "first_utc": "2019-01-01T03:45:00+00:00",
+      "last_utc": "2026-07-16T09:45:00+00:00",
+      "invalid_bars": 0,
+      "nonincreasing_timestamps": 0,
+      "zero_volume_bars": 12976,
+      "long_transitions": 283,
+      "short_transitions": 284,
+      "prefix_checks": 101,
+      "prefix_violations": 0,
+      "entry_exit_comparisons_240bar_horizon": 567,
+      "exits_changed_raw_vs_ha_extrema": 5,
+      "post_cas_bars": 0
+    }
+  ],
+  "limitations": [
+    "No modeled premiums or generated market prices used.",
+    "Index prices are not executable option/futures prices; no profitability claim.",
+    "No expired option chain, point-in-time universe, bid/ask or fills in these caches.",
+    "No live order submitted; historical defaults not optimized on this sample."
+  ],
+  "total_bars": 52063,
+  "code_sha256": {
+    "app/services/kite_engine/scanner.py": "d373626c8e8367e60c82965b09fa38c54222b1af69b4c04135a5b75595a5a8b6",
+    "app/services/kite_engine/backtest.py": "8fbc2fc75bbedce390dfb8196a7738100e6ab07d2e392f09b6ecfa5367acf92a",
+    "app/engines/sterling_kite_engine/regime.py": "ad9d194af1978890d9661c2c209eacef1e5a08377c7e4e143cdc105a4a219226",
+    "app/engines/sterling_kite_engine/exits.py": "a98d07b00a2e8586e447d54343356195c7038c2b9e49ecdb526eb2e549f5ff58"
+  }
+}

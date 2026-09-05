@@ -198,12 +198,12 @@ class TestBrokerStopWinsThePriceRace:
         assert client.calls.index("cancel") < client.calls.index("sell")
         assert client.cancelled == [555]
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        await confirm_exit('p2', 80)
         assert pos.get("p2", "NIFTY24JUN24000CE").status == pos.CLOSED
 
     @pytest.mark.asyncio
-    async def test_non_price_exit_still_sells_even_if_the_cancel_fails(self):
-        """A red-count / target / expiry exit will NEVER be executed by the GTT, so
-        skipping our own SELL there would leave the position with no exit at all."""
+    async def test_non_price_exit_waits_for_confirmed_stop_cancellation(self):
+        """An active GTT can fire independently while a red-count SELL awaits fill."""
         p = _held("p3", stop=80.0)
         pos.update_health("p3", p.symbol, red_count=3, exit_mode="one_red")
         client = _FakeClient(cancel_error="network unreachable")
@@ -211,9 +211,8 @@ class TestBrokerStopWinsThePriceRace:
         # price is nowhere near the stop, so this can only be the red-count exit
         out = await monitor.on_tick("p3", 777, 150.0, client=client)
 
-        assert out == "NIFTY24JUN24000CE"
-        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
-        assert "red count" in pos.get("p3", "NIFTY24JUN24000CE").exit_reason
+        assert out is None and client.sells == []
+        assert pos.get("p3", "NIFTY24JUN24000CE").status == pos.OPEN
 
     @pytest.mark.asyncio
     async def test_position_with_no_gtt_is_unaffected(self):
@@ -563,6 +562,7 @@ class TestManualOrdersAreProtected:
 
         assert res["status"] == "ok"
         held = pos.get("m-user", "BANKNIFTY26AUG57000CE")
+        await confirm_exit("m-user",320)
         assert held.status == pos.CLOSED
         assert "manual exit" in held.exit_reason
         assert _wired.sells == [("BANKNIFTY26AUG57000CE", "sell", 35)]
@@ -584,7 +584,7 @@ class TestTheExitDecisionUsesIntentNotPrice:
     exits a broker GTT will NEVER perform were exactly the ones it skipped."""
 
     @pytest.mark.asyncio
-    async def test_a_non_price_exit_sells_even_when_the_price_sits_at_the_stop(self):
+    async def test_a_manual_exit_never_races_an_uncancelled_stop(self):
         p = _held("i1", stop=80.0)
         client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
 
@@ -592,8 +592,8 @@ class TestTheExitDecisionUsesIntentNotPrice:
                                            reason="manual exit from the board",
                                            price_stop_exit=False)
 
-        assert sold is True, "the GTT would never perform a manual exit — we must"
-        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        assert sold is False and client.sells == []
+        assert p.status == pos.OPEN and p.gtt_id == 555
 
     @pytest.mark.asyncio
     async def test_a_price_stop_exit_stands_down_while_the_broker_stop_is_active(self):
@@ -617,6 +617,7 @@ class TestTheExitDecisionUsesIntentNotPrice:
 
         assert sold is True, "nothing at the broker was going to exit this position"
         assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        await confirm_exit("i3",80)
         assert pos.get("i3", "NIFTY24JUN24000CE").status == pos.CLOSED
 
     @pytest.mark.asyncio
@@ -704,12 +705,10 @@ class TestManualExitTellsTheTruth:
 
 # ── 8. expiry square-off is not a price exit ──────────────────────────────────
 
-class TestExpirySquareOffAlwaysSells:
+class TestExpirySquareOffCancellationSafety:
     @pytest.mark.asyncio
-    async def test_it_sells_when_both_the_quote_and_the_cancel_fail(self, monkeypatch):
-        """Its LTP fallback IS the stop price, so a quote failure used to turn the
-        square-off into a "price breach" and stand it down. On a physically settled
-        stock option that means taking delivery — lakhs per lot."""
+    async def test_it_defers_and_keeps_exposure_visible_when_cancel_fails(self, monkeypatch):
+        """Expiry urgency cannot authorize a second exit against an active stop."""
         from app.services.kite_engine import service as ksvc
 
         pos.reset("e1")
@@ -723,8 +722,8 @@ class TestExpirySquareOffAlwaysSells:
 
         await ksvc._square_off_expiring(client, "e1")
 
-        assert client.sells == [("TCS26AUG2440CE", "sell", 175)]
-        assert pos.get("e1", "TCS26AUG2440CE").status == pos.CLOSED
+        assert client.sells == []
+        assert pos.get("e1", "TCS26AUG2440CE").status == pos.OPEN
 
 
 # ── 9. the GTT quantity must match what we hold ───────────────────────────────
@@ -888,7 +887,7 @@ class TestNoOrphanedTriggerAfterAnOutsideExit:
     async def test_reconciling_a_broker_exit_fill_clears_the_trigger(self):
         """The exit may have come from a hand-placed SELL or the Kite web order book,
         not from the GTT. Whatever is left resting would sell an option we no longer own."""
-        _held("o1", gtt_id=555)
+        _held("o1", gtt_id=555).exit_order_id = "OTHER-9"  # broker-attributed exit
         client = _FakeClient()
 
         await monitor.on_order_update(
@@ -975,7 +974,7 @@ class TestAMissingTriggerIsProvedNotGuessed:
             "the two confirming reads must both happen, and only after the cheap one fails"
         )
         # then the holdings check, the sell, and the post-sell orphan chase
-        assert client.calls[4:] == ["positions", "sell", "cancel"]
+        assert client.calls[4:] == ["positions", "sell"]  # orphan cleanup waits for confirmed fill
 
     @pytest.mark.asyncio
     async def test_a_filled_exit_in_the_order_book_still_blocks_our_sell(self):
@@ -1183,6 +1182,9 @@ class _QuotelessClient:
 
 
 class _QuotingClient(_QuotelessClient):
+    async def get_margins(self, segment="equity"):
+        return {"available":{"live_balance":5_000_000}}
+
     def __init__(self, ltp: float = 90.0):
         super().__init__()
         self.ltp = ltp
@@ -1228,7 +1230,7 @@ class TestAutoExecNeverOpensAnUnprotectablePosition:
 
         assert len(client.placed) == 1
         sym, side, size, stop_loss = client.placed[0]
-        assert side == "buy" and size == 250
+        assert side == "buy" and size >= 250 and size % 250 == 0
         assert stop_loss is not None and stop_loss > 0, (
             "the resolved premium stop must reach the broker, not None")
 
@@ -2069,7 +2071,7 @@ class TestTheRiskCapBlocksTheEntryNotJustTheSize:
         await service._make_place_cb(_CapitalClient(), "cap2")(_spot_row(), None)
 
         msg = next(e.message for e in state.activity("cap2") if e.kind == "order_blocked")
-        assert "Risk per trade" in msg and "minimum lot" in msg, (
+        assert "broker inputs" in msg and "risk budget" in msg, (
             f"a refusal the user cannot act on is a dead end: {msg}")
 
     @pytest.mark.asyncio
@@ -2101,7 +2103,7 @@ class TestTheRiskCapBlocksTheEntryNotJustTheSize:
         assert len(client.placed) == 1
 
     @pytest.mark.asyncio
-    async def test_unknown_capital_does_not_halt_every_entry(self):
+    async def test_unknown_capital_blocks_entry(self):
         """A failed margins call returns 0. Reading that as "over budget" would turn a
         transient broker outage into a silent stop on all automatic entries — which
         looks exactly like the engine being broken."""
@@ -2117,7 +2119,7 @@ class TestTheRiskCapBlocksTheEntryNotJustTheSize:
         client = _NoMargins(ltp=90.0)
         await service._make_place_cb(client, "cap5")(_spot_row(), None)
 
-        assert len(client.placed) == 1, "a margins outage must not halt entries"
+        assert not client.placed, "unknown capital cannot authorize an entry"
 
 
 # ── 26. the premium translation needs UNDERLYING-domain inputs ────────────────
@@ -2273,7 +2275,7 @@ class TestClosedPositionsAreReconciled:
         assert client.sells == []
 
     @pytest.mark.asyncio
-    async def test_the_exit_price_is_taken_from_the_broker_not_invented(self, monkeypatch):
+    async def test_broker_day_average_cannot_establish_position_pnl(self, monkeypatch):
         from app.services.kite_engine import service as ksvc
 
         self._open("c3")
@@ -2286,7 +2288,8 @@ class TestClosedPositionsAreReconciled:
         await ksvc._reconcile_closed_positions(client, "c3")
 
         # (142.5 − 100.0) × 50
-        assert booked == [pytest.approx(2125.0)]
+        assert booked == []
+        assert any(p.pnl_reconciliation_required for p in pos._load("c3").values())
 
     @pytest.mark.asyncio
     async def test_no_exit_price_means_no_fabricated_pnl(self, monkeypatch):
@@ -2489,10 +2492,11 @@ class TestAFillLandingMidExitIsNotBookedTwice:
             """The broker's own exit fill arrives while we are cancelling its trigger."""
 
             async def delete_gtt(self, tid):
+                p.exit_order_id = "GTT-FILL"  # discovered protective child order
                 await monitor.on_order_update(
                     "mid1", {"tradingsymbol": p.symbol, "status": "COMPLETE",
                              "transaction_type": "SELL", "order_id": "GTT-FILL",
-                             "average_price": 79.0}, client=self)
+                             "average_price": 79.0, "filled_quantity":50}, client=self)
                 return await super().delete_gtt(tid)
 
         client = _RacingClient()
@@ -2503,3 +2507,12 @@ class TestAFillLandingMidExitIsNotBookedTwice:
         assert client.sells == [], "second SELL placed after the position had closed"
         assert len(booked) == 1, f"realized PnL booked {len(booked)} times, expected once"
         assert pos.get("mid1", p.symbol).status == pos.CLOSED
+
+
+@pytest.fixture(autouse=True)
+def _valid_entry_data_for_execution_plumbing(monkeypatch):
+    """Historical row fixtures isolate execution; session gates tested separately."""
+    from app.services.kite_engine import service as execution
+    monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")
+
+from tests.engines.sterling_kite_engine.execution_fixtures import confirm_exit

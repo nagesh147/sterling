@@ -23,7 +23,7 @@ def _candles(close_path, start_ms=0):
     out = []
     for i in range(len(c)):
         hi = max(o[i], c[i]) + 1.0
-        lo = min(o[i], c[i]) - 1.0
+        lo = max(0.01, min(o[i], c[i]) - 1.0)
         out.append(Candle(timestamp_ms=start_ms + i * 3_600_000, open=float(o[i]),
                           high=float(hi), low=float(lo), close=float(c[i]), volume=1.0))
     return out

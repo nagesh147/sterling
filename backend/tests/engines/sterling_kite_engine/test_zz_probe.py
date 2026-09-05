@@ -101,3 +101,10 @@ def test_probe_entry_inside_square_off_window():
         service.is_market_open = orig
     print("fut orders after square-off sweep:", client.fut_placed)
     print("pos after:", [(q.symbol, q.status, q.exit_reason) for q in positions._positions.get(UID, {}).values()])
+
+
+@pytest.fixture(autouse=True)
+def _valid_entry_data_for_execution_plumbing(monkeypatch):
+    """Historical row fixtures isolate execution; session gates tested separately."""
+    from app.services.kite_engine import service as execution
+    monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")

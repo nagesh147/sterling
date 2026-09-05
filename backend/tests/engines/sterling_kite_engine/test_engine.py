@@ -84,7 +84,7 @@ def test_trail_ratchets_only_favorably_and_exits_on_flip():
     # sharp crash → mid SuperTrend flips → exit
     crash = up + list(np.linspace(600, 200, 40))
     m2 = eng.manage(_candles(crash), "X")
-    assert m2 is not None and m2.exit and m2.reason == "one_red_exit"
+    assert m2 is not None and m2.exit and m2.reason.startswith("trail breach")
     assert not eng.has_position("X")
 
 
@@ -113,7 +113,7 @@ def test_manage_exits_on_one_red():
     # crash just enough for 1 red (fast flips first typically)
     crash = up + list(np.linspace(600, 500, 10))
     m = eng.manage(_candles(crash), "X")
-    assert m is not None and m.exit and "one_red" in m.reason
+    assert m is not None and m.exit and m.reason.startswith("trail breach")
 
 
 def test_manage_exits_on_two_red():

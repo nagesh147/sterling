@@ -64,24 +64,33 @@ def trail_exit_index(r, direction: str, entry_i: int, last_idx: int,
     at ``j`` is computed from ``j``'s own high/low, so the bar that breaks the stop
     would also be the bar that moved it.
 
-    Compares against ``basis_high``/``basis_low`` rather than the raw candle: the ST
-    lines are computed on the configured basis (Heikin-Ashi by default), and a raw low
-    is not on the same series as ``l_fast``.
+    HA prices are synthetic indicator inputs. Only raw traded high/low can
+    establish that an order at the previous close's stop could have triggered.
     """
     if not getattr(cfg, "price_stop_exit", True):
         return None
-    if r.basis_low.size <= last_idx or r.basis_high.size <= last_idx:
-        return None  # basis not carried — cannot compare honestly, so do not guess
+    if r.raw_low.size <= last_idx or r.raw_high.size <= last_idx:
+        return None  # raw prices not carried — cannot compare honestly, so do not guess
+    level = trail_level(r, direction, entry_i, entry_i, cfg)
     for j in range(entry_i + 1, last_idx + 1):
-        level = trail_level(r, direction, entry_i, j - 1, cfg)
+        candidate = trail_level(r, direction, entry_i, j - 1, cfg)
+        level = max(level, candidate) if direction == "long" else min(level, candidate)
         if level <= 0:
             continue
         if direction == "long":
-            if float(r.basis_low[j]) <= level:
+            if float(r.raw_low[j]) <= level:
                 return j
-        elif float(r.basis_high[j]) >= level:
+        elif float(r.raw_high[j]) >= level:
             return j
     return None
+
+
+def ratcheted_trail_level(r, direction: str, entry_i: int, at_i: int,
+                         cfg: SterlingKiteEngineConfig) -> float:
+    """Stop standing at a completed bar, including every intervening ratchet."""
+    levels = (trail_level(r, direction, entry_i, j, cfg)
+              for j in range(entry_i, max(entry_i, at_i) + 1))
+    return (max if direction == "long" else min)(levels)
 
 
 def reported_trail_level(r, direction: str, entry_i: int, exit_i: Optional[int],
@@ -98,7 +107,7 @@ def reported_trail_level(r, direction: str, entry_i: int, exit_i: Optional[int],
     quotes ("TSL 163.97" beside "TSL exit ≤ 581.44").
     """
     at = last_idx if exit_i is None else max(int(exit_i) - 1, entry_i)
-    return trail_level(r, direction, entry_i, at, cfg)
+    return ratcheted_trail_level(r, direction, entry_i, at, cfg)
 
 
 def red_count_exit_index(r, direction: str, entry_i: int, last_idx: int,
@@ -161,7 +170,7 @@ def resolve_exit(
         threshold = get_exit_threshold(cfg.exit_mode)
         candidates.append((red_j, f"red count exit {threshold}/{threshold} ({cfg.exit_mode})"))
     if trail_j is not None:
-        level = trail_level(r, direction, entry_i, trail_j - 1, cfg)
+        level = ratcheted_trail_level(r, direction, entry_i, trail_j - 1, cfg)
         side = "≤" if direction == "long" else "≥"
         candidates.append((trail_j, f"trail breach ({side} {level:.2f})"))
     if time_j is not None:
