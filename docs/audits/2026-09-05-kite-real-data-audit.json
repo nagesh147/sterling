@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-05T10:39:45.901483+00:00",
-  "code_base_sha": "ba1996dc78b0e30bac1639617ef54f9f403cd2f4",
+  "generated_at": "2026-09-05T11:06:32.497872+00:00",
+  "code_base_sha": "c33fd33381e3c2f5265db2233594b68c9d911f12",
   "verdict": "NO_GO",
   "data_kind": "cached broker index OHLC; not option execution evidence",
   "provenance_limit": "Existing kite_data.py cache; no original response receipt or signed acquisition manifest.",
@@ -111,8 +111,8 @@
   "total_bars": 52063,
   "code_sha256": {
     "app/services/kite_engine/scanner.py": "d373626c8e8367e60c82965b09fa38c54222b1af69b4c04135a5b75595a5a8b6",
-    "app/services/kite_engine/backtest.py": "5415376b4935e06e5cedee8637561e9e3fd9a4bf85ef5281830010c48b0c53d2",
+    "app/services/kite_engine/backtest.py": "8fbc2fc75bbedce390dfb8196a7738100e6ab07d2e392f09b6ecfa5367acf92a",
     "app/engines/sterling_kite_engine/regime.py": "ad9d194af1978890d9661c2c209eacef1e5a08377c7e4e143cdc105a4a219226",
-    "app/engines/sterling_kite_engine/exits.py": "b2a3ad61387ee74d74e3bec4fea560619c2fdd15768eb7986a68d2e7387abf4a"
+    "app/engines/sterling_kite_engine/exits.py": "a98d07b00a2e8586e447d54343356195c7038c2b9e49ecdb526eb2e549f5ff58"
   }
 }

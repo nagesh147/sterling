@@ -125,6 +125,21 @@ class ExitBroker:
     async def get_positions_raw(self):
         return {'net':[{'tradingsymbol':'OPT','quantity':50}]}
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('direction,quantity',[('long',-50),('short',50)])
+async def test_exit_never_increases_opposite_broker_exposure(direction,quantity):
+    uid='audit_direction_'+direction; positions.reset(uid); monitor.forget_holdings(uid)
+    p=positions.register(positions.OpenPosition(uid=uid,symbol='OPT',exchange='NFO',qty=50,
+        direction=direction,status=positions.OPEN,stop_premium=80))
+    class OppositeBroker(ExitBroker):
+        async def get_positions_raw(self):
+            return {'net':[{'tradingsymbol':'OPT','quantity':quantity}]}
+    broker=OppositeBroker()
+    assert not await monitor._exit_position(broker,uid,p,80)
+    assert broker.calls == 0 and p.status == positions.OPEN
+    assert p.pnl_reconciliation_required
+
 @pytest.mark.asyncio
 async def test_ack_is_not_fill_and_pending_survives_reload(monkeypatch):
     uid='audit_ack'; positions.reset(uid); state.reset(uid)

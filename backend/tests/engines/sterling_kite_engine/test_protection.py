@@ -202,9 +202,8 @@ class TestBrokerStopWinsThePriceRace:
         assert pos.get("p2", "NIFTY24JUN24000CE").status == pos.CLOSED
 
     @pytest.mark.asyncio
-    async def test_non_price_exit_still_sells_even_if_the_cancel_fails(self):
-        """A red-count / target / expiry exit will NEVER be executed by the GTT, so
-        skipping our own SELL there would leave the position with no exit at all."""
+    async def test_non_price_exit_waits_for_confirmed_stop_cancellation(self):
+        """An active GTT can fire independently while a red-count SELL awaits fill."""
         p = _held("p3", stop=80.0)
         pos.update_health("p3", p.symbol, red_count=3, exit_mode="one_red")
         client = _FakeClient(cancel_error="network unreachable")
@@ -212,9 +211,8 @@ class TestBrokerStopWinsThePriceRace:
         # price is nowhere near the stop, so this can only be the red-count exit
         out = await monitor.on_tick("p3", 777, 150.0, client=client)
 
-        assert out == "NIFTY24JUN24000CE"
-        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
-        assert "red count" in pos.get("p3", "NIFTY24JUN24000CE").exit_reason
+        assert out is None and client.sells == []
+        assert pos.get("p3", "NIFTY24JUN24000CE").status == pos.OPEN
 
     @pytest.mark.asyncio
     async def test_position_with_no_gtt_is_unaffected(self):
@@ -586,7 +584,7 @@ class TestTheExitDecisionUsesIntentNotPrice:
     exits a broker GTT will NEVER perform were exactly the ones it skipped."""
 
     @pytest.mark.asyncio
-    async def test_a_non_price_exit_sells_even_when_the_price_sits_at_the_stop(self):
+    async def test_a_manual_exit_never_races_an_uncancelled_stop(self):
         p = _held("i1", stop=80.0)
         client = _FakeClient(cancel_error="gateway timeout", gtt_status="active")
 
@@ -594,8 +592,8 @@ class TestTheExitDecisionUsesIntentNotPrice:
                                            reason="manual exit from the board",
                                            price_stop_exit=False)
 
-        assert sold is True, "the GTT would never perform a manual exit — we must"
-        assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+        assert sold is False and client.sells == []
+        assert p.status == pos.OPEN and p.gtt_id == 555
 
     @pytest.mark.asyncio
     async def test_a_price_stop_exit_stands_down_while_the_broker_stop_is_active(self):
@@ -707,12 +705,10 @@ class TestManualExitTellsTheTruth:
 
 # ── 8. expiry square-off is not a price exit ──────────────────────────────────
 
-class TestExpirySquareOffAlwaysSells:
+class TestExpirySquareOffCancellationSafety:
     @pytest.mark.asyncio
-    async def test_it_sells_when_both_the_quote_and_the_cancel_fail(self, monkeypatch):
-        """Its LTP fallback IS the stop price, so a quote failure used to turn the
-        square-off into a "price breach" and stand it down. On a physically settled
-        stock option that means taking delivery — lakhs per lot."""
+    async def test_it_defers_and_keeps_exposure_visible_when_cancel_fails(self, monkeypatch):
+        """Expiry urgency cannot authorize a second exit against an active stop."""
         from app.services.kite_engine import service as ksvc
 
         pos.reset("e1")
@@ -726,9 +722,8 @@ class TestExpirySquareOffAlwaysSells:
 
         await ksvc._square_off_expiring(client, "e1")
 
-        assert client.sells == [("TCS26AUG2440CE", "sell", 175)]
-        await confirm_exit("e1",80)
-        assert pos.get("e1", "TCS26AUG2440CE").status == pos.CLOSED
+        assert client.sells == []
+        assert pos.get("e1", "TCS26AUG2440CE").status == pos.OPEN
 
 
 # ── 9. the GTT quantity must match what we hold ───────────────────────────────

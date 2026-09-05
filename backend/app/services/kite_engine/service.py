@@ -527,6 +527,10 @@ def _make_place_cb(client, uid: str):
                if p.status in (positions.OPEN, positions.PENDING) or p.pnl_reconciliation_required):
             state.log(uid, "order_blocked", "unreconciled_exit_or_pnl")
             return
+        health_reasons = autoexec_preflight(uid)
+        if health_reasons:
+            state.log(uid, "order_blocked", "; ".join(health_reasons))
+            return
 
         # ── Sterling Value-Flow Navigator gate (additive; a pass-through
         # unless the user explicitly enabled Navigator in `gate` mode).
@@ -834,11 +838,14 @@ def _make_place_cb(client, uid: str):
         # AUTO-EXEC IS UNATTENDED: a position we cannot protect must not be opened at all.
         # (The manual path deliberately does the opposite — the user asked for the fill,
         # and gets an explicit "UNPROTECTED" warning instead of a refusal.)
-        if stop_px <= 0:
+        from math import isfinite
+        inputs_valid = all(isfinite(float(v)) and float(v) > 0
+                           for v in (entry_px, stop_px, trade_lot, qty))
+        stop_valid = stop_px < entry_px if trade_side == "BUY" else stop_px > entry_px
+        if not inputs_valid or not stop_valid or qty % trade_lot != 0:
             state.log(uid, "order_blocked",
-                      f"{row.underlying} {trade_symbol}: NO STOP could be resolved "
-                      f"(premium quote unavailable) — auto-entry skipped rather than "
-                      f"opened unprotected")
+                      f"{row.underlying} {trade_symbol}: invalid execution inputs "
+                      f"(price, protective stop or lot quantity) — auto-entry skipped")
             return
 
         idem = live_safety.make_idempotency_key(uid, trade_symbol, trade_side, qty, row.timestamp_ms)
@@ -867,6 +874,14 @@ def _make_place_cb(client, uid: str):
                 margin_ok = False
             if not margin_ok:
                 state.log(uid, "order_blocked", f"{trade_symbol}: broker_margin_unavailable_or_insufficient")
+                return
+        else:
+            # Fixed-lot sizing still requires actual funding. Unknown capital must
+            # never become an implicit permission to buy one lot.
+            available = await available_fo_capital(client)
+            limit_buffer = 1.003  # highest price used by the stock-option order below
+            if not isfinite(available) or available <= 0 or entry_px * qty * limit_buffer > available:
+                state.log(uid, "order_blocked", f"{trade_symbol}: broker_capital_unavailable_or_insufficient")
                 return
         session_reason = entry_data_block_reason(row, exchange=trade_exchange, buffer_minutes=blk)
         if session_reason:

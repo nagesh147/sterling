@@ -251,7 +251,7 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 _stop_probe: Dict[Tuple[str, str, int], Tuple[float, str]] = {}
 _PROBE_TTL_S = 15.0
 
-#: uid → (read_at, {TRADINGSYMBOL: abs net quantity}). Cached because the exit path is
+#: uid → (read_at, {TRADINGSYMBOL: signed net quantity}). Cached because the exit path is
 #: tick-driven: a collapsing premium can deliver dozens of ticks a second, and one
 #: portfolio read per tick would both add latency to a stop and earn a rate limit.
 #: Short enough that a square-off done in the Kite app is seen within seconds.
@@ -259,8 +259,8 @@ _holdings_probe: Dict[str, Tuple[float, Dict[str, int]]] = {}
 _HOLDINGS_TTL_S = 10.0
 
 
-async def _broker_holding(client, uid: str, symbol: str) -> Optional[int]:
-    """Absolute net quantity the BROKER says we hold of ``symbol``, or None if that
+async def _broker_holding(client, uid: str, symbol: str, direction: str = "long") -> Optional[int]:
+    """Net quantity aligned with the position direction, or None if that
     cannot be determined.
 
     None and 0 mean different things and must not be conflated. 0 is positive evidence
@@ -287,12 +287,13 @@ async def _broker_holding(client, uid: str, symbol: str) -> Optional[int]:
             if not sym:
                 continue
             try:
-                book[sym] = abs(int(row.get("quantity", 0) or 0))
+                book[sym] = int(row.get("quantity", 0) or 0)
             except (TypeError, ValueError):
                 continue
         _holdings_probe[uid] = (now, book)
         cached = _holdings_probe[uid]
-    return cached[1].get(symbol.strip().upper())
+    quantity = cached[1].get(symbol.strip().upper())
+    return None if quantity is None else quantity * (-1 if direction == "short" else 1)
 
 
 def forget_holdings(uid: str = "") -> None:
@@ -340,9 +341,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     """
     # Claim the exit synchronously (single-threaded loop → check-then-add is atomic):
     # if another exit path already holds this claim, or the position is no longer live,
-    # bail without placing a duplicate SELL. The claim is released on placement failure
-    # so a genuine retry can proceed; on success the position ends CLOSED and the status
-    # check keeps any later exit out.
+    # bail without placing a duplicate SELL. An ambiguous submission keeps a persisted
+    # order claim; only an attributable confirmed fill can close the position.
     key = (uid, p.symbol)
     if key in _exiting or p.exit_order_id or p.status not in (pos.OPEN, pos.PENDING):
         return False
@@ -357,10 +357,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # GTT has very likely already fired and its SELL is live at the exchange. Selling
     # again here sells twice and leaves a NAKED SHORT option.
     #
-    # So: cancel first, and only place our own exit if the broker stop is provably out
-    # of the way — or if this exit is NOT a price breach (a red-count, target, expiry
-    # or manual exit will never be executed by the GTT, so we must do it ourselves
-    # even when the cancel could not be confirmed).
+    # Cancel first. Every exit intent can race an independently triggered GTT;
+    # manual/red-count intent does not make an unconfirmed cancellation safe.
     old_gtt = int(p.gtt_id or 0)
     outcome = pstop.CANCELLED
     if p.gtt_id:
@@ -381,28 +379,21 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                           f"{p.symbol}: broker GTT #{p.gtt_id} has TRIGGERED ({outcome}) — "
                           f"its SELL is the exit; not placing a second one. Awaiting its fill.")
                 return False
-            if price_stop_exit and status != pstop.STOP_ABSENT:
-                # Still armed at this very price: it will fire on its own.
+            if status != pstop.STOP_ABSENT:
                 _exiting.discard(key)
                 unverified = status == pstop.STOP_UNVERIFIED
-                state.log(uid, "order_failed" if unverified else "info",
+                state.log(uid, "order_failed",
                           f"{p.symbol}: broker GTT #{p.gtt_id} could not be cancelled "
-                          f"({outcome}) and price is at the stop; the broker says it is "
-                          f"{status} — leaving the exit to it rather than risking a second "
-                          f"SELL." + (" ⚠ COULD NOT VERIFY — check Zerodha now, this position "
+                          f"({outcome}); broker status {status}. Exit deferred until "
+                          f"cancellation or absence is confirmed." + (" ⚠ COULD NOT VERIFY — check Zerodha now, this position "
                                       "may have no stop at all." if unverified else
-                                      " Awaiting its fill."))
+                                      " Broker stop remains active; cancellation must be resolved."))
                 return False
             if status == pstop.STOP_ABSENT:
                 state.log(uid, "order_failed",
                           f"⚠ {p.symbol}: GTT #{p.gtt_id} is NOT at the broker any more "
                           f"({outcome}/{status}) — exiting from here instead of waiting for "
                           f"a fill that is never coming")
-            else:
-                state.log(uid, "info",
-                          f"⚠ {p.symbol}: GTT #{p.gtt_id} cancel unconfirmed ({outcome}/"
-                          f"{status}); exiting anyway — the broker's stop would never "
-                          f"perform this exit ({reason or 'no reason given'})")
 
     # ── never sell what we do not hold ────────────────────────────────────────
     # The last guard, and the only one that depends on neither a postback nor the
@@ -411,7 +402,13 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # (no trigger involved at all, so nothing above notices), an exit whose postback
     # was lost before the next scan's reconcile pass, or a partial exit elsewhere.
     # In each case the alternative is a SELL against nothing: a naked short.
-    held = await _broker_holding(client, uid, p.symbol)
+    held = await _broker_holding(client, uid, p.symbol, p.direction)
+    if held is not None and held < 0:
+        _exiting.discard(key)
+        p.pnl_reconciliation_required = True
+        pos._persist(uid)
+        state.log(uid, "order_failed", f"{p.symbol}: broker exposure direction differs; reconcile before exit")
+        return False
     if held == 0:
         # Positive evidence the position is gone. Self-heal rather than sell.
         _exiting.discard(key)
@@ -419,7 +416,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
             await pstop.cancel_stop_result(client, old_gtt)
         pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
         _stop_probe.pop((uid, p.symbol, old_gtt), None)
-        pos.close(uid, p.symbol, reason="reconciled closed at broker (holds none)")
+        p.pnl_reconciliation_required = True
+        pos.close(uid, p.symbol, reason="reconciled closed at broker (holds none; fills require reconciliation)")
         if p.guard_key:
             state.clear_auto_open(uid, p.guard_key)
         if p.token:
@@ -437,6 +435,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
         # A partial exit happened outside the engine. Sell what is there; selling the
         # registry's larger figure would short the difference.
         was = p.qty
+        p.pnl_reconciliation_required = True
         pos.mark_filled(uid, p.symbol, p.fill_price, filled_qty=held)
         state.log(uid, "info",
                   f"{p.symbol}: broker holds {held} of {was} — exiting {held} "
@@ -471,7 +470,13 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
         result = await place(p.symbol, exit_side, p.qty, exchange=p.exchange,
                              tag=p.exit_tag)
     except Exception as exc:  # noqa: BLE001
-        p.exit_order_id = "unknown"
+        current = pos.get(uid, p.symbol)
+        if current is not None and current.status in (pos.OPEN, pos.PENDING):
+            current.exit_order_id = "unknown"
+            current.exit_tag = p.exit_tag
+            current.exit_requested_ms = p.exit_requested_ms
+            if current is not p:
+                current.pnl_reconciliation_required = True
         pos._persist(uid)
         _exiting.discard(key)
         if old_gtt and outcome == pstop.CANCELLED:

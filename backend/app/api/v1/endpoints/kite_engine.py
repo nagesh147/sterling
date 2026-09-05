@@ -134,17 +134,16 @@ def _gate_autoexec(uid: str, was_on: bool, now_on: bool, force: bool) -> None:
     Turning this on tells an unattended process to open new real-money positions. Doing
     that on top of holdings with no stop, entries whose fill we never confirmed, or a red
     counter that stopped updating is how one unguarded position becomes several. Turning
-    it OFF is never gated, and `force=true` is always available — this is a gate, not a
-    prohibition, and the reasons are returned so the choice is an informed one.
+    it OFF is never gated. The legacy `force` parameter is accepted for API
+    compatibility but cannot bypass unresolved exposure or protection.
     """
-    if not now_on or was_on or force:
+    if not now_on or was_on:
         return
     reasons = service.autoexec_preflight(uid)
     if reasons:
         raise HTTPException(409, {
             "error": "auto_execute_blocked",
-            "message": "Auto-execute was not enabled — resolve these first, "
-                       "or re-send with force=true to override.",
+            "message": "Auto-execute was not enabled — resolve these conditions first.",
             "reasons": reasons,
         })
 

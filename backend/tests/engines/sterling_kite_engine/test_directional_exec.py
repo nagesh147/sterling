@@ -94,6 +94,22 @@ def _future_expiry(days: int = 10) -> str:
     return (date.today() + timedelta(days=days)).isoformat()
 
 
+@pytest.mark.parametrize("balance", [0, 100, float("nan")])
+def test_fixed_lot_mode_never_bypasses_available_capital(balance):
+    client = FakeClient(balance=balance)
+    opened = _run(EngineConfigModel(risk_sizing=False), _bear_row(), client)
+    assert opened == [] and client.opt_placed == []
+
+
+@pytest.mark.parametrize("stop", [120, 130, float("nan"), float("inf")])
+def test_fixed_lot_mode_requires_finite_protective_stop(stop):
+    client = FakeClient()
+    row = _bear_row()
+    row.legs[0].premium_sl = stop
+    opened = _run(EngineConfigModel(risk_sizing=False), row, client)
+    assert opened == [] and client.opt_placed == []
+
+
 def _spot_row_no_premium():
     """A realistic SPOT-source row: attach_strikes produces legs with NO premium
     data (premium_spot/premium_sl unset), so the auto-exec must delta-translate the
