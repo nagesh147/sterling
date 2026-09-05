@@ -296,6 +296,31 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   // One boolean, published by the dock. The layout does not know its modes.
   const isSimFullHeight = useReplayHostHidden();
 
+  /**
+   * "Expand to fill the pane" now maximises the dashboard pane through the
+   * workspace's OWN focus mechanism — the same one every other dock uses.
+   *
+   * Hiding the dashboard's content alone left the pane header, the terminal
+   * dock and both sidebars on screen, so the dock filled a column rather than
+   * the workspace and the surface underneath was still visible.
+   *
+   * A focus the user set by hand is left alone, and only a focus this effect
+   * created is released again.
+   */
+  const replayOwnsFocus = useRef(false);
+  useEffect(() => {
+    if (isSimFullHeight) {
+      setFocus((current) => {
+        if (current) return current;
+        replayOwnsFocus.current = true;
+        return { pane: 'dashboard', mode: 'maximized' };
+      });
+    } else if (replayOwnsFocus.current) {
+      replayOwnsFocus.current = false;
+      setFocus((current) => (current?.pane === 'dashboard' ? null : current));
+    }
+  }, [isSimFullHeight]);
+
   const panes = useMemo<Record<WorkspacePaneId, PaneDefinition>>(() => ({
     watchlist: { id: 'watchlist', title: 'Watchlist', shortTitle: 'Watchlist', accent: '#4f79ce', content: sidebar },
     dashboard: {
