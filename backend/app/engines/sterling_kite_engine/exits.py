@@ -85,6 +85,14 @@ def trail_exit_index(r, direction: str, entry_i: int, last_idx: int,
     return None
 
 
+def ratcheted_trail_level(r, direction: str, entry_i: int, at_i: int,
+                         cfg: SterlingKiteEngineConfig) -> float:
+    """Stop standing at a completed bar, including every intervening ratchet."""
+    levels = (trail_level(r, direction, entry_i, j, cfg)
+              for j in range(entry_i, max(entry_i, at_i) + 1))
+    return (max if direction == "long" else min)(levels)
+
+
 def reported_trail_level(r, direction: str, entry_i: int, exit_i: Optional[int],
                          last_idx: int, cfg: SterlingKiteEngineConfig) -> float:
     """The trail level to SHOW for a row — running or ended.
@@ -99,7 +107,7 @@ def reported_trail_level(r, direction: str, entry_i: int, exit_i: Optional[int],
     quotes ("TSL 163.97" beside "TSL exit ≤ 581.44").
     """
     at = last_idx if exit_i is None else max(int(exit_i) - 1, entry_i)
-    return trail_level(r, direction, entry_i, at, cfg)
+    return ratcheted_trail_level(r, direction, entry_i, at, cfg)
 
 
 def red_count_exit_index(r, direction: str, entry_i: int, last_idx: int,
@@ -162,7 +170,7 @@ def resolve_exit(
         threshold = get_exit_threshold(cfg.exit_mode)
         candidates.append((red_j, f"red count exit {threshold}/{threshold} ({cfg.exit_mode})"))
     if trail_j is not None:
-        level = trail_level(r, direction, entry_i, trail_j - 1, cfg)
+        level = ratcheted_trail_level(r, direction, entry_i, trail_j - 1, cfg)
         side = "≤" if direction == "long" else "≥"
         candidates.append((trail_j, f"trail breach ({side} {level:.2f})"))
     if time_j is not None:

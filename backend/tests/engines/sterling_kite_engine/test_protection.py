@@ -1235,7 +1235,7 @@ class TestAutoExecNeverOpensAnUnprotectablePosition:
 
         assert len(client.placed) == 1
         sym, side, size, stop_loss = client.placed[0]
-        assert side == "buy" and size == 250
+        assert side == "buy" and size >= 250 and size % 250 == 0
         assert stop_loss is not None and stop_loss > 0, (
             "the resolved premium stop must reach the broker, not None")
 

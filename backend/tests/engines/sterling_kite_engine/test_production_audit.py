@@ -92,6 +92,21 @@ def test_synthetic_ha_touch_cannot_trigger_real_stop():
     r.raw_low[1]=89
     assert trail_exit_index(r,'long',0,1,SterlingKiteEngineConfig()) == 1
 
+
+@pytest.mark.parametrize('direction,levels,expected', [
+    ('long',[90.,100.,95.,95.],100.), ('short',[110.,100.,105.,105.],100.)])
+def test_reported_stop_and_exit_reason_keep_intervening_ratchet(direction,levels,expected):
+    from app.engines.sterling_kite_engine.exits import reported_trail_level, resolve_exit
+    r=SimpleNamespace(raw_low=np.array([100.,105.,101.,98.]),
+        raw_high=np.array([100.,95.,99.,102.]),
+        best_trail_line_value=lambda direction,j:levels[j],
+        red_line_count=lambda direction,j:0)
+    cfg=SterlingKiteEngineConfig()
+    assert reported_trail_level(r,direction,0,None,2,cfg) == expected
+    assert reported_trail_level(r,direction,0,3,3,cfg) == expected
+    idx,reason=resolve_exit(r,direction,0,3,cfg,np.zeros(4,dtype=bool),np.zeros(4,dtype=bool))
+    assert idx == 3 and f'{expected:.2f}' in reason
+
 def test_replay_enters_next_raw_open(monkeypatch):
     n=30; o=np.arange(n,dtype=float)+100; c=o+1
     monkeypatch.setattr(bt,'entry_transitions',lambda r:(np.arange(n)==23,np.zeros(n,dtype=bool)))

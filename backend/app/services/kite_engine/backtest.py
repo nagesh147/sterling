@@ -231,8 +231,7 @@ def replay_premium_series(
             exit_i = exit_signal_i
             # Gap-aware stop: resting stop fills no better than the opening gap.
             effective = replace(cfg, exit_mode=exit_mode, trail_target=trail_target)
-            level = max(exits.trail_level(r, "long", signal_i, j, effective)
-                        for j in range(signal_i, exit_i))
+            level = exits.ratcheted_trail_level(r, "long", signal_i, exit_i - 1, effective)
             exit_px = min(float(o[exit_i]), level)
         elif reason == "series end":
             exit_i, exit_px = n - 1, float(c[-1])

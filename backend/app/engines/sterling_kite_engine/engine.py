@@ -17,7 +17,7 @@ from app.engines.common.exit_counter import (
 )
 from app.engines.common.trailing import ratchet_trail
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
-from app.engines.sterling_kite_engine.exits import resolve_exit, trail_level
+from app.engines.sterling_kite_engine.exits import resolve_exit, ratcheted_trail_level, reported_trail_level
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
@@ -113,9 +113,10 @@ class SterlingKiteEngine:
         exit_i, reason = resolve_exit(r, pos.direction, entry_i, i, self.cfg, longs, shorts)
         if exit_i is not None:
             self._positions.pop(underlying, None)
-            return ManageResult(underlying, pos.stop, exit=True, reason=reason,
+            level = reported_trail_level(r, pos.direction, entry_i, exit_i, i, self.cfg)
+            return ManageResult(underlying, ratchet_trail(pos.stop, level, pos.direction), exit=True, reason=reason,
                                 red_count=red_count, green_lines=green_count)
-        level = trail_level(r, pos.direction, entry_i, i, self.cfg)
+        level = ratcheted_trail_level(r, pos.direction, entry_i, i, self.cfg)
         if level > 0:
             pos.stop = ratchet_trail(pos.stop, level, pos.direction)
         return ManageResult(underlying, pos.stop, exit=False,
