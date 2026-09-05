@@ -72,6 +72,9 @@ vi.mock('../../hooks/useOrbConfig', async (importOriginal) => {
 vi.mock('../../hooks/useSterlingKiteEngine', () => ({
   useStockRegistry: () => ({ data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE' }] }] }),
   useEngineConfig: () => ({ data: {} }),
+  useExpiryCalendar: () => ({ data: null, isFetching: false }),
+  usePatchEngineConfig: () => ({ mutate: vi.fn() }),
+  useRunScan: () => ({ mutate: vi.fn() }),
 }));
 
 /** The badge sits in the same field row as its label. */
@@ -169,6 +172,9 @@ describe('NiftyOrbOptionsSettings — saving', () => {
   it('resets to defaults without changing whether the engine is running', () => {
     serverConfig = { ...DEFAULTS, enabled: true, volume_multiplier: 1.4 };
     render(<NiftyOrbOptionsSettings />);
+
+    const input = screen.getByDisplayValue('1.4');
+    fireEvent.change(input, { target: { value: '1.5' } });
 
     // Reset is destructive, so the bar asks for a second, confirming click.
     fireEvent.click(screen.getByRole('button', { name: /Reset to defaults/i }));

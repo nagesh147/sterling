@@ -14,10 +14,10 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
-  type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, shiftSessionDay, stamp, trailBreached,
 } from './boardTypes';
+import type { BoardDayMove, BoardOrigin, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
 import {
   DAY_HEAD_METRICS, EDGE_METRICS, HEAD_METRICS, LEG_BG, LEG_INDENT, PARENT_METRICS, ROW_METRICS,
@@ -27,7 +27,35 @@ import { DraggableColHeader, makeHscrollSync } from './tableMechanics';
 import { useKiteSettings } from '../../../store/useKiteSettings';
 import { fitColumns } from './columnFit';
 import { Tip } from '../InfoTooltip';
-import { InstrumentLabel } from '../InstrumentLabel';
+import { InstrumentLabel, parseInstrument } from '../InstrumentLabel';
+
+/**
+ * Determines whether a signal or contract leg belongs to a Weekly option series.
+ */
+export function isWeeklySignal(signal: BoardSignal): boolean {
+  if (signal.instrument?.symbol) {
+    const parsed = parseInstrument(signal.instrument.symbol);
+    if (parsed?.isWeekly !== undefined) return parsed.isWeekly;
+  }
+  if (signal.instrument?.expiry) {
+    const exp = signal.instrument.expiry.toLowerCase();
+    if (exp.includes('weekly') || exp.includes('w')) return true;
+  }
+  if (signal.children && signal.children.length > 0) {
+    for (const child of signal.children) {
+      if (child.instrument?.symbol) {
+        const parsed = parseInstrument(child.instrument.symbol);
+        if (parsed?.isWeekly !== undefined) return parsed.isWeekly;
+      }
+      if (child.instrument?.expiry) {
+        const exp = child.instrument.expiry.toLowerCase();
+        if (exp.includes('weekly') || exp.includes('w')) return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 export type ColumnId =
   | 'instrument' | 'engine' | 'status' | 'exchange' | 'leg'
@@ -1013,9 +1041,9 @@ function Row({
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
+  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = false,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
-  renderTrade, renderChart,
+  renderTrade, renderChart, collapseOlderDays = false, isHistoricalSim = false,
 }: {
   signals: readonly BoardSignal[];
   /**
@@ -1100,8 +1128,10 @@ export function SignalBoard({
   renderTrade?: (signal: BoardSignal) => React.ReactNode;
   renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
-  nowMs: number;
+  nowMs?: number;
+  isHistoricalSim?: boolean;
   emptyLabel?: string;
+  collapseOlderDays?: boolean;
 }) {
   const wanted = requested ?? BOARD_COLUMNS;
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
@@ -1128,7 +1158,44 @@ export function SignalBoard({
     gap: ROW_METRICS.gap,
     reserve: ACTION_RESERVE,
   });
-  const days = groupByDay(signals, { liveFirst, nowMs, hoistToday: hoistLiveFromToday });
+
+  const [userToggledDays, setUserToggledDays] = React.useState<Map<string, boolean>>(new Map());
+
+  const effectiveNowMs = nowMs ?? Date.now();
+
+  const days = groupByDay(signals, { liveFirst, nowMs: effectiveNowMs, hoistToday: hoistLiveFromToday });
+
+  const isDayExpanded = (key: string): boolean => {
+    if (userToggledDays.has(key)) {
+      return userToggledDays.get(key)!;
+    }
+    const todayKey = sessionDayKey(effectiveNowMs);
+    const label = sessionDayLabel(key, effectiveNowMs, isHistoricalSim);
+    // Today and Yesterday are always expanded by default.
+    if (key === todayKey || label === 'Today' || label === 'Yesterday') {
+      return true;
+    }
+    // Yesterday and Older are collapsed by default.
+    const hasTodayGroup = days.some(
+      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs, isHistoricalSim) === 'Today',
+    );
+    if (!hasTodayGroup && days.length > 0 && days[0].key === key) {
+      const firstGroup = days[0];
+      const hasActionable = firstGroup.signals.some((s) => ACTIONABLE.includes(s.status));
+      if (hasActionable) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const toggleDay = (key: string) => {
+    setUserToggledDays((prev) => {
+      const next = new Map(prev);
+      next.set(key, !isDayExpanded(key));
+      return next;
+    });
+  };
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -1169,15 +1236,11 @@ export function SignalBoard({
               <button
                 type="button"
                 className="sb-head"
-                // aria-sort belongs on the header cell, and it is how a screen
-                // reader announces which column the board is ordered by.
                 aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                 onClick={() => onSortChange?.(nextSort(sort, col.id))}
                 disabled={!onSortChange}
                 style={{
                   border: 'none', background: 'transparent', padding: 0, font: 'inherit',
-                  // Same track as the row's cell, or the heading drifts off the
-                  // numbers it names.
                   flex: col.id === 'instrument' ? instrumentFlex() : `0 0 ${col.width}px`,
                   width: col.id === 'instrument' ? undefined : col.width,
                   minWidth: col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : 0,
@@ -1199,21 +1262,13 @@ export function SignalBoard({
               </button>
             </Tip>
           );
-          // Undragged, the heading renders exactly as before -- no wrapper at
-          // all, so a board that does not offer reordering is byte-identical to
-          // what it was.
           if (!onReorderColumn) return heading;
           return (
             <DraggableColHeader
               key={col.id}
               colKey={col.id}
-              // One run of columns, so every heading may be dropped anywhere.
-              // SuperTrend's table keeps two runs and passes the run's name.
               group="board"
               width={col.width}
-              // The instrument is flex-sized and declares `width: 0`, so it must
-              // hand the wrapper its flex instead — otherwise a 200px label ends
-              // up inside a 0px box and paints over its neighbour.
               flex={col.id === 'instrument' ? instrumentFlex() : undefined}
               minWidth={col.id === 'instrument' ? ROW_METRICS.instrumentMinWidth : undefined}
               reorder={(_group, fromKey, toKey) => onReorderColumn(fromKey as ColumnId, toKey as ColumnId)}
@@ -1222,55 +1277,32 @@ export function SignalBoard({
             </DraggableColHeader>
           );
         })}
-        {/* The actions track. Reserved only when the rows actually carry actions,
-            so a board without them does not grow a phantom column. */}
+
         {renderRowActions && (
           <span style={{ flexShrink: 0, width: EDGE_METRICS.actionsWidth }} />
         )}
       </div>
 
-      {days.map(({ key, signals: rows }) => (
-        <section key={key}>
-          <div
-            className="sb-day"
-            style={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              padding: DAY_HEAD_METRICS.padding,
-              background: k.surface,
-              borderBottom: `1px solid ${k.border}`,
-              fontSize: DAY_HEAD_METRICS.fontSize,
-              fontWeight: DAY_HEAD_METRICS.fontWeight,
-              letterSpacing: DAY_HEAD_METRICS.letterSpacing,
-              textTransform: DAY_HEAD_METRICS.textTransform,
-              color: k.dim,
-            }}
-          >
-            <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
-            <span style={{ fontWeight: 500 }}>{rows.length}</span>
-          </div>
-          {sortSignals(rows, sort).map((signal, i) => {
+      {days.map(({ key, signals: rows }) => {
+        const sorted = sortSignals(rows, sort);
+        const weeklySignals = sorted.filter(isWeeklySignal);
+        const monthlySignals = sorted.filter((s) => !isWeeklySignal(s));
+        const hasBoth = weeklySignals.length > 0 && monthlySignals.length > 0;
+        const expandedDay = isDayExpanded(key);
+        const isRecentGroup =
+          key === sessionDayKey(effectiveNowMs) ||
+          sessionDayLabel(key, effectiveNowMs, isHistoricalSim) === 'Today';
+
+        const renderSignalGroup = (groupRows: BoardSignal[]) => {
+          return groupRows.map((signal, i) => {
             const legs = signal.children ?? [];
             if (!legs.length) {
-              // An EMPTY ARRAY is not the same as no array.
-              //
-              // ORB, Gamma Move and the ATM bot leave `children` undefined —
-              // their signals are one instrument and always were. SuperTrend
-              // sets it to the contracts it resolved, so an empty array means it
-              // wanted contracts and found none: an expired series, a strike
-              // that is not listed, a filter that excluded everything. Those two
-              // cases look identical after `?? []`, which is why this checks the
-              // field itself.
               const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
               return (
                 <React.Fragment key={signal.id}>
                   <Row
-                    nowMs={nowMs}
+                    nowMs={effectiveNowMs}
+                    key={signal.id}
                     signal={signal}
                     columns={cols}
                     open={openId === signal.id}
@@ -1283,11 +1315,6 @@ export function SignalBoard({
                     renderTrade={renderTrade}
                     renderChart={renderChart}
                   />
-                  {/* The engine knows why it found nothing, so it says so in the
-                      row rather than behind a click. A parent with nothing under
-                      it otherwise reads like a loading state, and an operator
-                      scanning for something to trade should not have to open a
-                      row to learn there is nothing in it. */}
                   {resolvedNothing && (
                     <div
                       style={{
@@ -1305,13 +1332,17 @@ export function SignalBoard({
                 </React.Fragment>
               );
             }
-            // A parent's chevron shows its contracts, not its own detail —
-            // the thing behind a signal with eighteen strikes is the strikes.
-            // Its full record is still one click away on the symbol.
-            const expanded = !(collapsedGroups?.has(signal.id) ?? false);
-            // Best-of comparisons are only meaningful between the strikes of
-            // one idea, so they are computed per group, never board-wide.
+            // For Today and Yesterday: default expanded unless in collapsedGroups.
+            // For older days: default collapsed unless in collapsedGroups as false.
+            const expanded = isRecentGroup
+              ? !(collapsedGroups?.has(signal.id) ?? false)
+              : (collapsedGroups?.has(signal.id) === false);
             const legMarks = markLegs(legs);
+            const sortedLegs = sortSignals(legs, sort);
+            const weeklyLegs = sortedLegs.filter(isWeeklySignal);
+            const monthlyLegs = sortedLegs.filter((l) => !isWeeklySignal(l));
+            const hasBothLegs = weeklyLegs.length > 0 && monthlyLegs.length > 0;
+
             return (
               <React.Fragment key={signal.id}>
                 <GroupHeader
@@ -1320,11 +1351,11 @@ export function SignalBoard({
                   expanded={expanded}
                   onToggle={() => onToggleGroup?.(signal.id)}
                   onOpenDetail={onOpenDetail}
-                  nowMs={nowMs}
+                  nowMs={effectiveNowMs}
                 />
-                {expanded && sortSignals(legs, sort).map((leg) => (
+                {expanded && !hasBothLegs && sortedLegs.map((leg) => (
                   <Row
-                    nowMs={nowMs}
+                    nowMs={effectiveNowMs}
                     key={leg.id}
                     marks={legMarks.get(leg.id)}
                     signal={leg}
@@ -1341,11 +1372,137 @@ export function SignalBoard({
                     renderChart={renderChart}
                   />
                 ))}
+                {expanded && hasBothLegs && (
+                  <React.Fragment>
+                    {weeklyLegs.map((leg) => (
+                      <Row
+                        nowMs={effectiveNowMs}
+                        key={leg.id}
+                        marks={legMarks.get(leg.id)}
+                        signal={leg}
+                        columns={cols}
+                        open={openId === leg.id}
+                        onToggle={() => onToggle(leg.id)}
+                        renderDetail={renderDetail}
+                        onOpenDetail={onOpenDetail}
+                        striped={false}
+                        depth={1}
+                        rowScroll={rowScroll}
+                        renderRowActions={renderRowActions}
+                        renderTrade={renderTrade}
+                        renderChart={renderChart}
+                      />
+                    ))}
+                    <div style={{ height: 6, background: 'transparent' }} />
+                    {monthlyLegs.map((leg) => (
+                      <Row
+                        nowMs={effectiveNowMs}
+                        key={leg.id}
+                        marks={legMarks.get(leg.id)}
+                        signal={leg}
+                        columns={cols}
+                        open={openId === leg.id}
+                        onToggle={() => onToggle(leg.id)}
+                        renderDetail={renderDetail}
+                        onOpenDetail={onOpenDetail}
+                        striped={false}
+                        depth={1}
+                        rowScroll={rowScroll}
+                        renderRowActions={renderRowActions}
+                        renderTrade={renderTrade}
+                        renderChart={renderChart}
+                      />
+                    ))}
+                  </React.Fragment>
+                )}
               </React.Fragment>
             );
-          })}
-        </section>
-      ))}
+          });
+        };
+
+        return (
+          <section key={key}>
+            <div
+              className="sb-day"
+              onClick={() => toggleDay(key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleDay(key);
+                }
+              }}
+              aria-expanded={expandedDay}
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: DAY_HEAD_METRICS.padding,
+                background: k.surface,
+                borderBottom: `1px solid ${k.border}`,
+                fontSize: DAY_HEAD_METRICS.fontSize,
+                fontWeight: DAY_HEAD_METRICS.fontWeight,
+                letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+                textTransform: DAY_HEAD_METRICS.textTransform,
+                color: k.dim,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    transform: expandedDay ? 'rotate(0deg)' : 'rotate(-90deg)',
+                    transition: 'transform 0.15s ease',
+                    color: k.dim,
+                    flexShrink: 0,
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span>{sessionDayLabel(key, effectiveNowMs, isHistoricalSim)}</span>
+              </div>
+              <span style={{ fontWeight: 500 }}>{rows.length}</span>
+            </div>
+
+            {expandedDay && (
+              !hasBoth ? (
+                renderSignalGroup(sorted)
+              ) : (
+                <React.Fragment>
+                  {/* WEEKLY SIGNALS */}
+                  {renderSignalGroup(weeklySignals)}
+
+                  {/* SMALL TRANSPARENT SPACE / LINE SEPARATOR BETWEEN WEEKLY AND MONTHLY SIGNALS */}
+                  <div
+                    style={{
+                      height: 10,
+                      background: 'transparent',
+                      borderTop: `1px solid ${k.border}`,
+                    }}
+                  />
+
+                  {/* MONTHLY SIGNALS */}
+                  {renderSignalGroup(monthlySignals)}
+                </React.Fragment>
+              )
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

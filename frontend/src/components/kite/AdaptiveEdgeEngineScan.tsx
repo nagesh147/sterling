@@ -59,7 +59,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-import { useSimActive } from '../../hooks/useSimulation';
+import { useReplayActive as useSimActive } from '../../hooks/useReplayStore';
 
 export function AdaptiveEdgeEngineScan() {
   const isSimActive = useSimActive();

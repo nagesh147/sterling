@@ -22,6 +22,7 @@ import pytest
 
 # (label, module path) for every service that can open a position on its own.
 AUTO_OPENING_PATHS = [
+    ("opening_volume_leaders", "app.services.opening_volume_execution"),
     ("gamma_move", "app.services.gamma_move_runner"),
     ("atm_premium_imbalance", "app.services.atm_premium_imbalance_runner"),
     ("nifty_orb", "app.services.nifty_orb_execution"),
@@ -40,6 +41,7 @@ def test_every_auto_opening_path_consults_auto_execute(label, module_path):
 
 
 CONFIGS = [
+    ("opening_volume_leaders", "app.services.opening_volume_execution", "OpeningExecutionConfig"),
     ("gamma_move", "app.engines.gamma_move.config", "GammaMoveConfig"),
     ("nifty_orb", "app.engines.nifty_orb_options", "StrategyConfig"),
 ]
@@ -95,6 +97,8 @@ def test_every_option_engine_ships_enabled():
     from app.engines.gamma_move import GammaMoveConfig
     from app.engines.atm_premium_imbalance import ATMPremiumImbalanceConfig
     from app.engines.nifty_orb_options import StrategyConfig
+    from app.services.opening_volume_execution import OpeningExecutionConfig
     assert GammaMoveConfig().enabled is True
     assert ATMPremiumImbalanceConfig().enabled is True
     assert StrategyConfig().enabled is True
+    assert OpeningExecutionConfig().enabled is True

@@ -62,3 +62,71 @@ def test_settings_accepts_engine_scope_fields():
     assert saved["scan_stock_contracts"] is False
     assert saved["scan_expiries"] == ["weekly", "monthly"]
     assert put.json()["live_trading"] is False
+
+
+def test_snapshot_returns_simulation_signals_when_active():
+    from app.services.simulation import simulation_runner, SimState, SimSignalEvent
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    client = TestClient(app)
+
+    try:
+        simulation_runner._state = SimState.PAUSED
+        simulation_runner._stats.events = [
+            SimSignalEvent(
+                time_iso="09:14:00",
+                timestamp_ms=1787889240000,
+                strategy="adaptive_edge",
+                instrument="KOTAKBANK",
+                direction="BULLISH",
+                strength="STRONG",
+                entry=1785.45,
+                stop=1763.25,
+                target=1822.45,
+            ),
+            SimSignalEvent(
+                time_iso="09:14:00",
+                timestamp_ms=1787889240000,
+                strategy="adaptive_edge",
+                instrument="AXISBANK",
+                direction="BULLISH",
+                strength="STRONG",
+                entry=1162.30,
+                stop=1148.80,
+                target=1184.80,
+            ),
+            SimSignalEvent(
+                time_iso="09:14:00",
+                timestamp_ms=1787889240000,
+                strategy="adaptive_edge",
+                instrument="SENSEX",
+                direction="BEARISH",
+                strength="STRONG",
+                entry=81342.10,
+                stop=81612.10,
+                target=80892.10,
+            ),
+        ]
+
+        snap = client.get("/api/v1/adaptive-edge/snapshot")
+        assert snap.status_code == 200
+        payload = snap.json()
+        assert payload["label"] == "SIMULATION_REPLAY"
+        assert "signals" in payload
+        assert len(payload["signals"]) == 3
+        underlyings = [s["underlying"] for s in payload["signals"]]
+        assert underlyings == ["KOTAKBANK", "AXISBANK", "SENSEX"]
+        
+        # Verify structure for rowsFromSnapshot
+        for s in payload["signals"]:
+            assert s["scanned"] is True
+            assert len(s["legs"]) > 0
+            for leg in s["legs"]:
+                assert "moneyness" in leg
+                assert "option_type" in leg
+                assert "strike" in leg
+                assert "entry_premium" in leg
+    finally:
+        simulation_runner._state = SimState.IDLE
+        simulation_runner._stats.events = []
+

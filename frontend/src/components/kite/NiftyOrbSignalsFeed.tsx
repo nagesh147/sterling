@@ -1,4 +1,5 @@
 import React from 'react';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useOrbConfig, useSetOrbEnabled } from '../../hooks/useOrbConfig';
 import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';
@@ -56,10 +57,11 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
+export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart, nowMs: nowMsProp }: {
   /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
   onOpenChart?: (quoteKey: string) => void;
   onOpenDetail?: (signal: BoardSignal) => void;
+  nowMs?: number;
 } = {}) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
   const rowActions = useBoardRowActions({ onOpenChart });
@@ -76,7 +78,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
   const [quietOverride, setQuietOverride] = React.useState<boolean | null>(null);
   // Read once per render rather than per row, so every day label in one paint
   // agrees about when "today" is.
-  const nowMs = Date.now();
+  const simulationNowMs = useEffectiveNowMs();
+  const nowMs = nowMsProp ?? simulationNowMs;
 
   // Every hook below runs before the first early return. Putting useBoardView
   // after the loading guard would change the hook count between renders — the
@@ -90,7 +93,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
   // a market with no setups — the failure mode this panel is named for.
   const rows = React.useMemo(() => signals.map(orbToBoard), [signals]);
   const promoted = React.useMemo(
-    () => rows.filter((s) => ACTIONABLE.includes(s.status) || s.status === 'error'),
+    () => rows.filter((s) => ACTIONABLE.includes(s.status) || s.status === 'error' || s.status === 'ended'),
     [rows],
   );
   const tradable = React.useMemo(
@@ -98,7 +101,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
     [promoted],
   );
   const blocked = promoted.length - tradable.length;
-  const view = useBoardView(promoted, { storageKey: 'orb' });
+  const view = useBoardView(promoted, { endedByDefault: true, storageKey: 'orb' });
 
   if (config.isLoading) return <p style={{ padding: 12, margin: 0, fontSize: 11, color: k.dim }}>Loading ORB configuration…</p>;
 
@@ -168,6 +171,8 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart }: {
         sort={sort}
         onSortChange={setSort}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel="No tradable ORB setup right now. The universe is being scanned — the list below says what each underlying is waiting on."
       />
 

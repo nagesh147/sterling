@@ -42,6 +42,7 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   usePatchEngineConfig: () => ({ mutate: setCfgMutate, isPending: false }),
   useResetEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useRunScan: () => ({ mutate: runScanMutate, isPending: false }),
+  useExpiryCalendar: () => ({ data: null, isLoading: false, isError: false }),
   useStockRegistry: () => ({
     data: [{ liquidity: 'Very High', stocks: [{ name: 'RELIANCE', label: 'RELIANCE' }] }],
   }),
@@ -156,7 +157,8 @@ describe('SuperTrendEnginePanel — strategy mechanics only', () => {
     renderPanel();
     fireEvent.click(screen.getByText('Contracts'));
 
-    expect(screen.getByRole('checkbox', { name: /Deep ITM/i })).toBeInTheDocument();
+    expect(screen.getByText('Deep ITM')).toBeInTheDocument();
+    expect(screen.getByTitle('Include 1 leg (ITM5)')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Confluence/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Change in Market & Contracts/ })).not.toBeInTheDocument();
   });

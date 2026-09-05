@@ -107,7 +107,7 @@ function RunCard({ run }: { run: BacktestRun }) {
         <StatBox label="Return" value={`${fmt(s.return_pct, 1)}%`} color={pnlColor} />
         <StatBox label="Win rate" value={`${fmt(s.win_rate * 100, 1)}%`} />
         <StatBox label="Profit factor" value={fmt(s.profit_factor, 2)} />
-        <StatBox label="Sharpe" value={fmt(s.sharpe, 2)} />
+        <StatBox label="Trade return ratio" value={fmt(s.sharpe, 2)} />
         <StatBox label="Max DD" value={`${fmt(s.max_drawdown, 1)}%`} />
         <StatBox label="Expectancy" value={`₹${fmt(s.expectancy)}`} />
         <StatBox label="Total costs" value={`₹${fmt(s.total_costs)}`} color="var(--k-red-crimson)" />

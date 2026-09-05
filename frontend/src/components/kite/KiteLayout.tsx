@@ -6,8 +6,10 @@ import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
-import { SimulationBar, SimulationFooterButton, SimulationFooterBadge } from './SimulationBar';
-import { SimulationSummary } from './SimulationSummary';
+import { ReplayDock } from './replay/ReplayDock';
+import { ReplayFooterChip } from './replay/ReplayFooterChip';
+import { useReplayHostHidden } from '../../hooks/useReplayStore';
+import { FOOTER_HEIGHT } from './layoutConstants';
 import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
@@ -33,7 +35,7 @@ import {
 } from './workspaceLayout';
 import { paneActionsSlotId } from './PaneHeaderActions';
 
-export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
+export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'openingLeaders' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
@@ -124,6 +126,7 @@ function titleCase(value: string): string {
   if (value === 'backtest') return 'Backtest';
   if (value === 'astro') return 'Astrology';
   if (value === 'pcr') return 'PCR';
+  if (value === 'openingLeaders') return 'Opening Leaders';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -290,20 +293,33 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   const resizeRef = useRef<ResizeSession | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // One boolean, published by the dock. The layout does not know its modes.
+  const isSimFullHeight = useReplayHostHidden();
+
   const panes = useMemo<Record<WorkspacePaneId, PaneDefinition>>(() => ({
     watchlist: { id: 'watchlist', title: 'Watchlist', shortTitle: 'Watchlist', accent: '#4f79ce', content: sidebar },
     dashboard: {
       id: 'dashboard', title: titleCase(activeNav), shortTitle: 'Dashboard', accent: 'var(--k-brand)',
       content: (
-        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', scrollbarGutter: 'stable', display: 'flex', flexDirection: 'column' }}>{content}</div>
+        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          {centerTopBar && !isSimFullHeight && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            scrollbarGutter: 'stable',
+            display: isSimFullHeight ? 'none' : 'flex',
+            flexDirection: 'column',
+          }}>
+            {content}
+          </div>
+          <ReplayDock />
         </div>
       ),
     },
     signals: { id: 'signals', title: 'Signals', shortTitle: 'Signals', accent: '#16a066', content: rightSidebar },
     terminal: { id: 'terminal', title: 'Terminal', shortTitle: 'Terminal', accent: '#7d63c5', content: bottomBar },
-  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content]);
+  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content, isSimFullHeight]);
 
   const available = useMemo(() => WORKSPACE_PANES.filter((id) => panes[id].content != null), [panes]);
   const isVisible = useCallback((id: WorkspacePaneId) => available.includes(id) && !layout.minimized.includes(id), [available, layout.minimized]);
@@ -666,8 +682,27 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
       <div ref={workspaceRef} className="mac-canvas" data-testid="kite-workspace" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         {macOn ? (
           <>
-            {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-            <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+            {centerTopBar && !isSimFullHeight && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
+            <MacStageLayout
+              sidebar={sidebar}
+              content={(
+                <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                  <div style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: 'auto',
+                    scrollbarGutter: 'stable',
+                    display: isSimFullHeight ? 'none' : 'flex',
+                    flexDirection: 'column',
+                  }}>
+                    {content}
+                  </div>
+                  <ReplayDock />
+                </div>
+              )}
+              rightSidebar={rightSidebar}
+              bottomBar={bottomBar}
+            />
           </>
         ) : (
           <>
@@ -700,9 +735,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
-      <SimulationBar />
-      <SimulationSummary />
-      <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
+      <footer style={{ position: 'relative', height: FOOTER_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
           {/* Broker state and every strategy, next to the watchlist end of the
@@ -719,8 +752,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         </div>
 
         <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
-          <SimulationFooterButton />
-          <SimulationFooterBadge />
+          <ReplayFooterChip />
           {macOn ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
           ) : minimizedAvailable.length > 0 ? (

@@ -13,9 +13,9 @@ import type { KiteAccount } from '../../types/kite';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
-import { OptionContractsPicker } from './config/OptionContractsPicker';
 import { TickerStripSettings } from './ticker/TickerStripSettings';
 import { DisplayScaleSettings } from './DisplayScaleSettings';
+import { DefaultSectionSettings } from './DefaultSectionSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
@@ -867,8 +867,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Encrypted TrueData credentials for historical and real-time market data.' },
   { id: 'diagnostics', label: 'Feed & API Checklist', eyebrow: 'Kite & TrueData health', group: 'Connection',
     pageDescription: 'Verify broadband connectivity, Zerodha Kite API status, and TrueData market feeds.' },
-  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
-    pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
+  { id: 'mode', label: 'Trading Config', eyebrow: 'Execution, options & engines', group: 'Trading',
+    pageDescription: 'Paper or live execution, options strike profile, spread protections, who places orders, and which engines run.' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
     pageDescription: 'What happens after you place an order.' },
   { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading',
@@ -947,6 +947,7 @@ export function ConnectPane() {
   const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
   const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
   const select = (next: ConnectSection) => {
     // Only ONE section is mounted at a time, so navigating away unmounts the panel
@@ -954,8 +955,22 @@ export function ConnectPane() {
     // every control wrote through immediately, but these pages are draft-and-Apply
     // now, so a click on the rail can discard a page of edits the user believes
     // are still pending.
-    if (next !== section && hasUnsavedDraft()
-        && !window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+    if (next !== section && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('sterling-highlight-draft-bar'));
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl) {
+        if (typeof draftBarEl.scrollIntoView === 'function') {
+          try {
+            draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } catch {
+            // JSDOM environment fallback
+          }
+        }
+        const applyBtn = draftBarEl.querySelector('button');
+        if (applyBtn && typeof applyBtn.focus === 'function') {
+          applyBtn.focus();
+        }
+      }
       return;
     }
     setSection(next);
@@ -967,9 +982,22 @@ export function ConnectPane() {
       const next = resolveSectionId((event as CustomEvent<string>).detail);
       if (next) select(next);
     };
+    const onScrollToDraft = () => {
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
+        try {
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+    };
     window.addEventListener('kite-connect-section', onOpen);
-    return () => window.removeEventListener('kite-connect-section', onOpen);
-  }, []);
+    window.addEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    return () => {
+      window.removeEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    };
+  }, [section]);
 
   return (
     <div className="kite-settings-hub" style={{
@@ -1048,11 +1076,11 @@ export function ConnectPane() {
           })}
         </nav>
 
-        <main style={{
+        <main ref={mainRef} style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '24px 32px 48px', background: 'var(--k-bg)',
+          padding: '24px 32px 116px', background: 'var(--k-bg)',
         }}>
-          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
             {section === 'account' && (
               <>
                 {isLoading && <div style={S.hint}>Loading accounts…</div>}
@@ -1099,7 +1127,6 @@ export function ConnectPane() {
             {section === 'engine' && (
               <>
                 <SuperTrendEnginePanel />
-                <OptionContractsPicker />
               </>
             )}
 
@@ -1167,6 +1194,7 @@ export function ConnectPane() {
 
             {section === 'experience' && (
               <>
+                <DefaultSectionSettings />
                 <DisplayScaleSettings />
                 <MotionStyleSettings />
                 <TickerStripSettings />

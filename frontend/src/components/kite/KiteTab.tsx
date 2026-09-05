@@ -30,6 +30,7 @@ import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { BasketPane } from './BasketPane';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { useKiteSettings } from '../../store/useKiteSettings';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
 import {
@@ -40,12 +41,14 @@ import {
 } from './KiteStartupSurfaces';
 import { KiteInteractionMotion } from './KiteInteractionMotion';
 import { k } from '../../styles/kiteUI';
-import type { SignalChartData } from '../../types/kiteEngine';
+import { type SignalChartData } from '../../types/kiteEngine';
+import { hasUnsavedDraft } from './config/unsavedDraftGuard';
 import { AdaptiveEdgeRightSidebar } from './AdaptiveEdgeRightSidebar';
 import { AdaptiveEdgePane } from './AdaptiveEdgePane';
 import { UnifiedBacktestPane } from '../backtest/UnifiedBacktestPane';
 import { AstroPane } from './AstroPane';
 import { PcrPane } from './PcrPane';
+import { OpeningVolumeLeadersPane } from './OpeningVolumeLeadersPane';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -92,7 +95,7 @@ function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange:
 }
 
 export function KiteTab() {
-  const [nav, setNav] = useState<NavItem>('dashboard');
+  const [nav, setNav] = useState<NavItem>(() => useKiteSettings.getState().defaultSection || 'dashboard');
   const [moreTab, setMoreTab] = useState<MoreTab>('bids');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
@@ -116,6 +119,12 @@ export function KiteTab() {
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 
   const handleNavClick = (n: NavItem) => {
+    if (n !== nav && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('kite-scroll-to-draft-bar'));
+      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+        return;
+      }
+    }
     closeChartView();
     setNav(n);
     setSetupView(null);
@@ -181,6 +190,7 @@ export function KiteTab() {
     if (nav === 'dashboard') content = <KiteDashboard />;
     else if (nav === 'astro') content = <AstroPane />;
     else if (nav === 'pcr') content = <PcrPane />;
+    else if (nav === 'openingLeaders') content = <OpeningVolumeLeadersPane onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />;
     else if (nav === 'orders') content = <OrdersPane onOpenBasket={() => setBasketOpen(true)} />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;

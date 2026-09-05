@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BORDER, DIM, MUTED, ORANGE, SOFT, TEXT,
 } from '../kiteSettingsPrimitives';
@@ -192,6 +192,7 @@ export function SettingsDraftBar({
   resetConfirm = false,
   applyDisabled = false,
   applyTitle,
+  hasDraft,
 }: {
   dirty: boolean;
   saving?: boolean;
@@ -201,109 +202,182 @@ export function SettingsDraftBar({
   resetConfirm?: boolean;
   applyDisabled?: boolean;
   applyTitle?: string;
+  hasDraft?: boolean;
 }) {
   const RED = 'var(--k-red-brick)';
   const AMBER = '#b06a13';
 
+  const [bounds, setBounds] = useState<{ left: number; width: number } | null>(null);
+  const [highlighted, setHighlighted] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) return;
+
+    const updateBounds = () => {
+      const el = document.querySelector('.kite-settings-content-wrapper');
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        setBounds({ left: rect.left, width: rect.width });
+      }
+    };
+
+    const onHighlight = () => {
+      setHighlighted(true);
+      setTimeout(() => setHighlighted(false), 1800);
+    };
+
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    window.addEventListener('scroll', updateBounds, true);
+    window.addEventListener('sterling-highlight-draft-bar', onHighlight);
+
+    let observer: ResizeObserver | null = null;
+    const el = document.querySelector('.kite-settings-content-wrapper');
+    if (el && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateBounds);
+      observer.observe(el);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateBounds);
+      window.removeEventListener('scroll', updateBounds, true);
+      window.removeEventListener('sterling-highlight-draft-bar', onHighlight);
+      if (observer) observer.disconnect();
+    };
+  }, [dirty]);
+
+  if (!dirty) return null;
+  const showDraftActions = hasDraft !== undefined ? hasDraft : true;
+
   return (
     <div
+      id="settings-draft-bar"
+      role="region"
+      aria-label="Unsaved settings changes"
+      tabIndex={-1}
       style={{
+        position: 'fixed',
+        bottom: 48,
+        left: bounds ? bounds.left : '50%',
+        transform: bounds
+          ? (highlighted ? 'scale(1.025)' : undefined)
+          : (highlighted ? 'translateX(-50%) scale(1.025)' : 'translateX(-50%)'),
+        width: bounds ? bounds.width : 'calc(100vw - 284px)',
+        maxWidth: 1000,
+        zIndex: 1000,
+        boxSizing: 'border-box',
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-        padding: dirty ? '12px 16px' : '8px 16px',
-        marginBottom: 16,
+        justifyContent: 'space-between',
+        gap: 16,
+        padding: '14px 22px',
         background: 'var(--k-bg)',
-        border: `1px solid ${BORDER}`,
-        borderRadius: 9,
-        boxShadow: '0 1px 2px rgba(0,0,0,.025)',
+        border: highlighted ? `2px solid ${ORANGE}` : `1px solid ${BORDER}`,
+        borderRadius: 10,
+        boxShadow: highlighted
+          ? `0 0 0 5px ${ORANGE}40, 0 14px 38px rgba(0, 0, 0, 0.32)`
+          : '0 10px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08)',
+        backdropFilter: 'blur(12px)',
+        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        outline: 'none',
       }}
     >
-      {dirty && (
-        <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {showDraftActions && (
           <span
             aria-live="polite"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 9,
               color: saving ? MUTED : AMBER,
-              fontSize: 10.5,
+              fontSize: 12.5,
               fontWeight: 700,
-              marginRight: 4,
+              whiteSpace: 'nowrap',
             }}
           >
             <span
               aria-hidden
               style={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
                 background: saving ? '#c2c2c2' : AMBER,
+                boxShadow: saving ? 'none' : `0 0 0 3px ${AMBER}25`,
               }}
             />
             {saving ? 'Saving…' : 'Unsaved changes'}
           </span>
-          <button
-            type="button"
-            onClick={onApply}
-            disabled={saving || applyDisabled}
-            title={applyTitle}
-            style={{
-              border: 'none',
-              background: ORANGE,
-              color: 'var(--k-bg)',
-              borderRadius: 7,
-              padding: '8px 16px',
-              fontSize: 11.5,
-              fontWeight: 700,
-              cursor: saving || applyDisabled ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              opacity: saving || applyDisabled ? 0.5 : 1,
-            }}
-          >
-            Apply changes
-          </button>
-          <button
-            type="button"
-            onClick={onDiscard}
-            disabled={saving}
-            style={{
-              border: `1px solid ${BORDER}`,
-              background: 'var(--k-bg)',
-              color: MUTED,
-              borderRadius: 7,
-              padding: '7px 12px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            Discard draft
-          </button>
-        </>
-      )}
-      <div style={{ flex: 1 }} />
-      <button
-        type="button"
-        onClick={onReset}
-        disabled={saving}
-        style={{
-          border: `1px solid ${BORDER}`,
-          background: 'var(--k-bg)',
-          color: resetConfirm ? RED : MUTED,
-          borderRadius: 7,
-          padding: '7px 12px',
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-        }}
-      >
-        {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
-      </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {showDraftActions && (
+          <>
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={saving || applyDisabled}
+              title={applyTitle}
+              style={{
+                border: 'none',
+                background: ORANGE,
+                color: 'var(--k-bg)',
+                borderRadius: 8,
+                padding: '9px 20px',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: saving || applyDisabled ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: saving || applyDisabled ? 0.5 : 1,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.14)',
+              }}
+            >
+              Apply changes
+            </button>
+            <button
+              type="button"
+              onClick={onDiscard}
+              disabled={saving}
+              style={{
+                border: `1px solid ${BORDER}`,
+                background: 'var(--k-bg)',
+                color: MUTED,
+                borderRadius: 8,
+                padding: '8.5px 16px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Discard draft
+            </button>
+          </>
+        )}
+        <div style={{ width: 1, height: 20, background: BORDER, margin: '0 4px' }} />
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={saving}
+          style={{
+            border: `1px solid ${BORDER}`,
+            background: 'var(--k-bg)',
+            color: resetConfirm ? RED : MUTED,
+            borderRadius: 8,
+            padding: '8.5px 16px',
+            fontSize: 11.5,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {resetConfirm ? 'Click again to confirm reset' : 'Reset to defaults'}
+        </button>
+      </div>
     </div>
   );
 }

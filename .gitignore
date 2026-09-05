@@ -40,6 +40,8 @@ backups/*.tmp
 backend/sterling_paper.db
 frontend/sterling_paper.db
 backend/sterling.db
+sterling.db
+market_data.db
 backend/server.pid
 *.pyc
 __pycache__/

@@ -62,7 +62,8 @@ async def test_mid_placement_postback_without_avg_price(monkeypatch):
     await monitor._exit_position(_C(), uid, p, 80.0, reason="tick breach")
     print("day pnl:", state.daily_realized_pnl(uid),
           "booked:", pos.get(uid, p.symbol).realized_booked)
-    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
+    assert state.daily_realized_pnl(uid) == 0
+    assert p.status == pos.OPEN and p.exit_order_id
 
 
 # ── H3: re-entry after a booked close books a second time ────────────────────
@@ -74,11 +75,13 @@ async def test_reentry_after_booked_close_books_again(monkeypatch):
                         lambda *a, **k: None)
     p = _mk(uid)
     await monitor._exit_position(_FakeClient(), uid, p, 80.0, reason="r1")
+    await confirm_exit(uid,80)
     assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
     # re-enter the same contract
     p2 = _mk(uid, entry_premium=60, stop_premium=50, order_id="ENTRY-2")
     assert pos.get(uid, p2.symbol).realized_booked is False, "stale claim blocks re-entry"
     await monitor._exit_position(_FakeClient(), uid, p2, 50.0, reason="r2")
+    await confirm_exit(uid,50)
     assert state.daily_realized_pnl(uid) == pytest.approx(-1500.0)
 
 
@@ -129,3 +132,5 @@ async def test_scale_in_during_exit_await(monkeypatch):
     row = pos.get(uid, p.symbol)
     print("qty sold:", 50, "registry qty:", row.qty, "status:", row.status,
           "booked flag:", row.realized_booked, "day pnl:", state.daily_realized_pnl(uid))
+
+from tests.engines.sterling_kite_engine.execution_fixtures import confirm_exit

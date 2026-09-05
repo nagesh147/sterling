@@ -349,6 +349,7 @@ class KiteClient(TradingExchangeAdapter):
         validity: str = K.VALIDITY_DAY, disclosed_quantity: Optional[int] = None,
         validity_ttl: Optional[int] = None, iceberg_legs: Optional[int] = None,
         iceberg_quantity: Optional[int] = None, tag: Optional[str] = None,
+        market_protection: float = -1, allow_amo: bool = True,
     ) -> dict:
         if self._is_paper:
             return {"order_id": "PAPER-" + uuid.uuid4().hex[:12], "paper": True}
@@ -375,6 +376,12 @@ class KiteClient(TradingExchangeAdapter):
             body["iceberg_quantity"] = int(iceberg_quantity)
         if tag:
             body["tag"] = str(tag)[:20]
+        if order_type in (K.ORDER_TYPE_MARKET, K.ORDER_TYPE_SLM):
+            from math import isfinite
+            protection = float(market_protection)
+            if not isfinite(protection) or not (protection == -1 or 0 < protection <= 100):
+                raise KiteOrderError("Market orders require valid price protection.", error_type="InputException")
+            body["market_protection"] = protection
 
         for attempt in range(3):
             await _GLOBAL_KITE_ORDER_LIMITER.acquire()
@@ -385,14 +392,14 @@ class KiteClient(TradingExchangeAdapter):
                 # `switch_to_amo`. Mirror the Kite web app — auto-resubmit the same
                 # order as an After-Market Order (queues for the next session open)
                 # instead of failing the click. Flag the result so the UI can say so.
-                if variety == K.VARIETY_REGULAR and "switch_to_amo" in exc.hints:
+                if allow_amo and variety == K.VARIETY_REGULAR and "switch_to_amo" in exc.hints:
                     await _GLOBAL_KITE_ORDER_LIMITER.acquire()
                     result = await self._auth_post(f"/orders/{K.VARIETY_AMO}", body)
                     if isinstance(result, dict):
                         result["amo"] = True
                     return result
                 # 429 Rate Limit retry
-                if getattr(exc, "status_code", None) == 429 or "429" in str(exc) or "rate" in str(exc).lower():
+                if getattr(exc, "status_code", None) == 429:
                     if attempt < 2:
                         backoff = 0.35 * (2 ** attempt)
                         log.warning("Kite order rate limit hit (429), retrying in %.2fs (attempt %d/3)", backoff, attempt + 1)
@@ -428,6 +435,8 @@ class KiteClient(TradingExchangeAdapter):
             price=limit_price if kite_ot in (K.ORDER_TYPE_LIMIT, K.ORDER_TYPE_SL) else None,
             trigger_price=trigger_price if kite_ot in (K.ORDER_TYPE_SL, K.ORDER_TYPE_SLM) else None,
             validity=validity, tag=kwargs.get("tag"),
+            market_protection=kwargs.get("market_protection", -1),
+            allow_amo=bool(kwargs.get("allow_amo", True)),
         )
 
     async def place_order_option(
@@ -440,7 +449,7 @@ class KiteClient(TradingExchangeAdapter):
         (NIFTY/BANKNIFTY/FINNIFTY + equity options) or BFO for SENSEX/BSE options."""
         return await self.place_order(
             option_symbol, side, size, order_type=order_type, limit_price=limit_price,
-            exchange=exchange, product=K.PRODUCT_NRML, stop_loss=stop_loss, tag=tag,
+            exchange=exchange, product=K.PRODUCT_NRML, stop_loss=stop_loss, tag=tag, allow_amo=False,
         )
 
     async def place_order_future(
@@ -453,7 +462,7 @@ class KiteClient(TradingExchangeAdapter):
         Uses NRML product for overnight carry."""
         return await self.place_order(
             tradingsymbol, side, size, order_type=order_type, limit_price=limit_price,
-            exchange=exchange, product=K.PRODUCT_NRML, tag=tag,
+            exchange=exchange, product=K.PRODUCT_NRML, tag=tag, allow_amo=False,
         )
 
     async def cancel_order(self, order_id: str, product_id: int = 0, variety: str = K.VARIETY_REGULAR) -> dict:

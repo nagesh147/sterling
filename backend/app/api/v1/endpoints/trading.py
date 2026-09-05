@@ -132,8 +132,19 @@ async def get_scalp_mode(request: Request) -> ScalpModeResponse:
 @router.post("/scalp-mode")
 async def set_scalp_mode(body: ScalpModeRequest, request: Request) -> ScalpModeResponse:
     from app.services.db import set_config
+    was_enabled = getattr(request.app.state, "scalp_mode", False)
     request.app.state.scalp_mode = body.enabled
     set_config("scalp_mode", "true" if body.enabled else "false")
+
+    if body.enabled and not was_enabled:
+        starter = getattr(request.app.state, "start_crypto_services", None)
+        if starter:
+            await starter(request.app)
+    elif not body.enabled and was_enabled:
+        stopper = getattr(request.app.state, "stop_crypto_services", None)
+        if stopper:
+            await stopper(request.app)
+
     return ScalpModeResponse(enabled=body.enabled)
 
 

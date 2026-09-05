@@ -316,6 +316,15 @@ def main(argv=None):
                     help="clear a latched kill-switch before this run")
     args = ap.parse_args(argv)
 
+    try:
+        from app.services.db import init as _db_init, get_config as _get_config
+        _db_init()
+        if _get_config("scalp_mode", "false").lower() != "true":
+            print("Crypto / scalp_mode is disabled in Sterling settings — skipping paper trader run.")
+            return
+    except Exception:
+        pass
+
     from study.paper_safety import (run_lock, should_run, update_kill_switch,
                                     apply_kill_switch)
     inception = pd.Timestamp(args.inception)

@@ -284,7 +284,7 @@ export function useSetAtmPremiumImbalanceConfig() {
   });
 }
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useAtmPremiumImbalanceSnapshot(enabled = true, refetchMs = 0) {
   const isSimActive = useSimActive();
@@ -293,7 +293,7 @@ export function useAtmPremiumImbalanceSnapshot(enabled = true, refetchMs = 0) {
     queryFn: () => api.get('/api/v1/config/atm-premium-imbalance/snapshot'),
     enabled,
     staleTime: isSimActive ? 0 : 2000,
-    refetchInterval: isSimActive ? 300 : (refetchMs > 0 ? refetchMs : false),
+    refetchInterval: enabled ? (isSimActive ? 300 : (refetchMs > 0 ? refetchMs : 2000)) : false,
     retry: false,
   });
 }

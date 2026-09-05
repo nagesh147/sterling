@@ -16,6 +16,7 @@
 import type {
   BoardInstrument, BoardOrigin, BoardSection, BoardSignal, BoardStatus,
 } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 import type {
   GammaMoveSnapshot, GammaPositionRow, GammaSignalRow,
 } from '../../../hooks/useGammaMove';
@@ -211,7 +212,9 @@ function toSignal(row: GammaSignalRow, cfg: GammaMoveSnapshot['config'],
     // put in the book at entry.
     direction: 'long',
     status: STATE_TO_STATUS[row.state] ?? 'watching',
-    atMs: row.at_ms || null,
+    atMs: parseTimestampMs(
+      row.at_ms ?? (row as any).timestamp_ms ?? (row as any).entered_ms ?? (row as any).created_at ?? (row as any).timestamp ?? (row as any).session_date
+    ),
     levels: {
       ltp: price(lv.ltp),
       // The REAL fill once there is one. Showing the intended entry beside a

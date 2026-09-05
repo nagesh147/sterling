@@ -108,50 +108,42 @@ vi.mock('../KiteTelegramPanel', () => ({
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
 
-describe('the settings hub asks before discarding a draft', () => {
-  let confirmSpy: ReturnType<typeof vi.fn>;
+describe('the settings hub highlights the bottom draft bar when a draft is pending', { timeout: 15000 }, () => {
+  let eventSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     localStorage.clear();
     resetDraftGuard();
+    eventSpy = vi.fn();
+    window.addEventListener('sterling-highlight-draft-bar', eventSpy);
   });
-  afterEach(() => confirmSpy?.mockRestore());
+
+  afterEach(() => {
+    window.removeEventListener('sterling-highlight-draft-bar', eventSpy);
+  });
 
   const openSuperTrend = async () => {
     const { ConnectPane } = await import('../ConnectPane');
     render(<ConnectPane />);
     fireEvent.click(screen.getAllByRole('button', { name: /SuperTrend\s*Scan, entry & exit/i })[0]);
-    expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
+    expect(screen.getAllByText('SuperTrend strategy panel')[0]).toBeInTheDocument();
   };
 
-  it('does not ask when nothing is pending', async () => {
-    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true) as unknown as ReturnType<typeof vi.fn>;
+  it('navigates freely when nothing is pending', async () => {
     await openSuperTrend();
     fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(eventSpy).not.toHaveBeenCalled();
     expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();
   });
 
-  it('stays put when the user declines', async () => {
-    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false) as unknown as ReturnType<typeof vi.fn>;
+  it('stays put and triggers highlight event when a draft is dirty', async () => {
     await openSuperTrend();
     setDraftDirty('supertrend', true);
 
     fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
 
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalled();
     expect(screen.getByText('SuperTrend strategy panel')).toBeInTheDocument();
     expect(screen.queryByText('Kite alert destinations')).not.toBeInTheDocument();
-  });
-
-  it('navigates when the user accepts the loss', async () => {
-    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true) as unknown as ReturnType<typeof vi.fn>;
-    await openSuperTrend();
-    setDraftDirty('supertrend', true);
-
-    fireEvent.click(screen.getAllByRole('button', { name: /Notifications\s*Kite Telegram alerts/i })[0]);
-
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();
   });
 });

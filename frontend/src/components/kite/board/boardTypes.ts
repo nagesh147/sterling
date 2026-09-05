@@ -289,14 +289,31 @@ export const STATUS_RANK: Record<BoardStatus, number> = {
   armed: 0, running: 1, weakening: 2, watching: 3, ended: 4, error: 5,
 };
 
+/** Robustly convert a timestamp value (ms, sec, ISO string, etc.) into epoch ms. */
+export function parseTimestampMs(atMs: any): number | null {
+  if (atMs == null) return null;
+  if (typeof atMs === 'number') {
+    if (!Number.isFinite(atMs) || atMs <= 0) return null;
+    if (atMs < 1e11) return atMs * 1000; // seconds to ms
+    return atMs;
+  }
+  if (typeof atMs === 'string') {
+    const num = Number(atMs);
+    if (!isNaN(num) && num > 0) {
+      if (num < 1e11) return num * 1000;
+      return num;
+    }
+    const parsed = Date.parse(atMs);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
 /** Midnight-to-midnight bucket key in IST, which is the trading day here. */
-export function sessionDayKey(atMs: number | null): string {
-  // Non-finite as well as null. `Date.parse` returns NaN for any format it does
-  // not recognise, `??` does not catch NaN, and `new Date(NaN).toISOString()`
-  // throws RangeError — so one unparseable timestamp upstream would take the
-  // whole board down rather than render one bad cell.
-  if (atMs == null || !Number.isFinite(atMs)) return 'unknown';
-  const ist = new Date(atMs + (5 * 60 + 30) * 60_000);
+export function sessionDayKey(atMs: number | string | null | undefined): string {
+  const ms = parseTimestampMs(atMs);
+  if (ms == null) return 'unknown';
+  const ist = new Date(ms + (5 * 60 + 30) * 60_000);
   return ist.toISOString().slice(0, 10);
 }
 
@@ -336,26 +353,44 @@ export function shiftSessionDay(key: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+export function formatSessionDay(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return key;
+  const dStr = String(d).padStart(2, '0');
+  const mStr = MONTHS_SHORT[m - 1] ?? '';
+  return `${dStr} ${mStr} ${y}`;
+}
+
 /**
  * "Today" / "Yesterday" / "Older" / "Thu 14 Aug" — on the IST trading day.
  *
  * Today and yesterday are named. Everything older than that is one "Older"
  * bucket, because a date per day on a multi-week board is a log, not a scan.
+ * When playing a historical simulation date, the real date is displayed
+ * instead of "Today" to prevent confusing replay data with the live session.
  *
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
-export function sessionDayLabel(key: string, nowMs: number): string {
+export function sessionDayLabel(key: string, nowMs?: number, isHistoricalSim: boolean = false): string {
   if (key === LIVE_BUCKET) return 'Live now';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
-  const today = sessionDayKey(nowMs);
-  if (key === today) return 'Today';
-  if (key === shiftSessionDay(today, -1)) return 'Yesterday';
+  if (nowMs != null) {
+    const today = sessionDayKey(nowMs);
+    if (key === today) {
+      return isHistoricalSim ? formatSessionDay(key) : 'Today';
+    }
+    if (key === shiftSessionDay(today, -1)) {
+      return isHistoricalSim ? formatSessionDay(key) : 'Yesterday';
+    }
+  }
   const [y, m, d] = key.split('-').map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d))
     .toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
-  return `${weekday}, ${sessionDayDate(key, nowMs)}`;
+  return `${weekday}, ${sessionDayDate(key, nowMs ?? Date.now())}`;
 }
 
 /**
@@ -407,20 +442,13 @@ export function groupByDay(
   const yesterdayKey = todayKey ? shiftSessionDay(todayKey, -1) : null;
   for (const s of signals) {
     const day = sessionDayKey(s.atMs);
-    // Hoist only what day grouping would actually bury. A live row from today
-    // is already in the first section, so lifting it out gains nothing and
-    // costs it its date heading; a live row from last Tuesday would otherwise
-    // sit below days of closed history, which is the case the bucket exists
-    // for. Without a clock, fall back to hoisting every live row.
     const buried = todayKey == null || day !== todayKey;
-    // `hoistToday` implies `liveFirst`. Asking for today's live rows to be
-    // lifted out IS asking for a live bucket, and gating one on the other meant
-    // a caller could pass `hoistToday` alone and get no live section at all —
-    // silently, because the prop was accepted and simply had no effect. That is
-    // how SuperTrend's shared board lost its "Active now" heading: the wrapper
-    // passed `hoistLiveFromToday` and never `liveFirst`.
-    const wantsLive = liveFirst || hoistToday;
-    if (wantsLive && (hoistToday || buried) && ACTIONABLE.includes(s.status)) {
+    // An armed setup is an intraday trigger condition for its own session day.
+    // An armed setup from an older day never entered and is not a running position.
+    // Only positions that are actually running or weakening can be hoisted across days.
+    const isOldRunning = buried && (s.status === 'running' || s.status === 'weakening');
+    const isTodayActionable = !buried && ACTIONABLE.includes(s.status);
+    if ((hoistToday && (isTodayActionable || isOldRunning)) || (liveFirst && isOldRunning)) {
       push(LIVE_BUCKET, s);
       continue;
     }

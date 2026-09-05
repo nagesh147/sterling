@@ -26,7 +26,7 @@ import type { EngineSignalRow } from '../../types/kiteEngine';
  * by moving and nobody had to decide for them which ones to drop.
  */
 export function SuperTrendSharedBoard({
-  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode,
+  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode, isHistoricalSim,
 }: {
   rows: readonly EngineSignalRow[];
   quotes?: Record<string, any>;
@@ -38,6 +38,7 @@ export function SuperTrendSharedBoard({
   nowMs: number;
   /** The lens, so the adapter can suppress a Navigator badge under 'supertrend'. */
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
+  isHistoricalSim?: boolean;
 }) {
   const s = useKiteSettings();
   // The same builder every other board uses, so SuperTrend stops being the only
@@ -169,6 +170,7 @@ export function SuperTrendSharedBoard({
       collapsedGroups={collapsed}
       onToggleGroup={toggleGroup}
       nowMs={nowMs}
+      isHistoricalSim={isHistoricalSim}
       // The three capabilities, from the operator's own Behaviour settings.
       onReorderColumn={s.boardDragColumns ? onReorderColumn : undefined}
       rowScroll={s.boardRowScroll}
@@ -176,6 +178,8 @@ export function SuperTrendSharedBoard({
       // "Live now" hid those headings — a morning scan then read as one live
       // pile even when every print was from today.
       liveFirst={false}
+      hoistLiveFromToday={false}
+      collapseOlderDays={true}
       // Trade and chart are COLUMNS now, shared with every other board, so the
       // picker can switch either off.
       renderTrade={rowActions.renderTrade}

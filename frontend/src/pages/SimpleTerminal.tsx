@@ -26,6 +26,8 @@ import { ThemeToggle } from '../components/kite/ThemeToggle';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
+import { useKiteSettings } from '../store/useKiteSettings';
+import { hasUnsavedDraft } from '../components/kite/config/unsavedDraftGuard';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { SterlingLogo } from '../components/SterlingLogo';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -187,10 +189,16 @@ export function SimpleTerminal() {
   const setSterlingV2 = useSetSterlingV2();
   const [activeTopTab, setActiveTopTab] = useState<TopTab>('kite');
   const [activeSection, setActiveSection] = useState<TabId>('sterlingEngine');
-  const [kiteNav, setKiteNav] = useState<NavItem>('dashboard');
+  const [kiteNav, setKiteNav] = useState<NavItem>(() => useKiteSettings.getState().defaultSection || 'dashboard');
   const { data: kiteStatus } = useKiteStatus();
 
   const handleKiteNav = (nav: NavItem) => {
+    if (nav !== kiteNav && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('kite-scroll-to-draft-bar'));
+      if (!window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+        return;
+      }
+    }
     setKiteNav(nav);
     window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: nav }));
   };
@@ -292,6 +300,7 @@ export function SimpleTerminal() {
                   { id: 'dashboard' as const, label: 'Dashboard' },
                   { id: 'astro' as const, label: 'Astrology' },
                   { id: 'pcr' as const, label: 'PCR' },
+                  { id: 'openingLeaders' as const, label: 'Opening Leaders' },
                   { id: 'orders' as const, label: 'Orders' },
                   { id: 'holdings' as const, label: 'Holdings' },
                   { id: 'positions' as const, label: 'Positions' },

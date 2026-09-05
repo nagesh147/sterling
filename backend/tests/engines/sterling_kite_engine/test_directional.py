@@ -214,7 +214,7 @@ class TestFuturesSizer:
             available_capital=100_000.0, risk_pct=1.0, max_lots=10,
             allow_min_lot_over_risk=True,
         )
-        assert allowed.blocked is False and allowed.lots == 1
+        assert allowed.blocked is True and allowed.lots == 0  # override cannot fund margin
 
 
 # ── 6. validator clamping ────────────────────────────────────────────────────

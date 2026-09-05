@@ -258,13 +258,16 @@ export function useGammaMoveConfig() {
   });
 }
 
+import { useReplayActive as useSimActive } from './useReplayStore';
+
 export function useGammaMoveSnapshot(enabled = true, refetchInterval = 0) {
+  const isSimActive = useSimActive();
   return useQuery<GammaMoveSnapshot>({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => api.get(`${BASE}/snapshot`),
     enabled,
-    staleTime: 2000,
-    refetchInterval: refetchInterval || false,
+    staleTime: isSimActive ? 0 : 2000,
+    refetchInterval: enabled ? (isSimActive ? 300 : (refetchInterval || 2000)) : false,
   });
 }
 

@@ -147,6 +147,8 @@ class OpenPositionRecord(BaseModel):
     opened_ms: int = 0
     exit_reason: str = ""
     order_id: str = ""
+    exit_pending: bool = False
+    pnl_reconciliation_required: bool = False
     exit_mode: str = "one_red"  # the exit counter rule active when this position was opened (remembers choice for display + audit)
     current_red_count: int = 0
     exit_threshold: int = 1  # 1/2/3 based on exit_mode at last update; used for health display
@@ -468,7 +470,7 @@ class EngineConfigModel(BaseModel):
     adx_min: Optional[float] = None          # minimum ADX to allow entry (e.g. 20)
     atr_pct_min: Optional[float] = None      # minimum ATR percentile (e.g. 50)
     # ── Session / liquidity entry gates (auto-exec; opt-in, default off) ──────
-    # Block NEW auto-exec entries in the last N minutes before the 15:30 close so a
+    # Block NEW auto-exec entries in the last N minutes before the applicable continuous close so a
     # fresh late-session signal doesn't enter straight into an overnight index gap
     # (there is no INR daily-loss breaker behind an overnight hold). 0 = off.
     block_entry_minutes_before_close: int = 0

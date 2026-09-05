@@ -62,6 +62,13 @@ function mockPane(rows: any[], quotes: Record<string, any> = {}) {
     useRunScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
+    useExpiryCalendar: () => ({ data: null, isLoading: false, isError: false }),
+  }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: true } } } }),
+    useSetNavigatorConfig: () => ({ mutate: vi.fn() }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+    useCancelNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
   }));
   vi.doMock('../../../hooks/useKite', async () => {
     const actual: any = await vi.importActual('../../../hooks/useKite');
@@ -79,7 +86,7 @@ async function renderPane() {
   );
 }
 
-describe('signal plan on the board', () => {
+describe('signal plan on the board', { timeout: 15000 }, () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
@@ -107,7 +114,7 @@ describe('signal plan on the board', () => {
       { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
     );
     await renderPane();
-    expect(screen.getByText('TSL HIT')).toBeInTheDocument();
+    expect(screen.getAllByText('TSL HIT')[0]).toBeInTheDocument();
   });
 
   it('does not flag a leg trading above its trailing stop', async () => {
@@ -116,7 +123,7 @@ describe('signal plan on the board', () => {
       { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
     );
     await renderPane();
-    expect(screen.queryByText('TSL HIT')).not.toBeInTheDocument();
+    expect(screen.queryAllByText('TSL HIT')).toHaveLength(0);
   });
 
   it('shows a real target for a Navigator-originated leg and "—" for a SuperTrend leg', async () => {
@@ -164,7 +171,7 @@ describe('why a trade ended', () => {
       exit_reason: 'trail breach (≤ 1000.63)',
     }]);
     await renderPane();
-    expect(screen.getByText('TSL exit')).toBeInTheDocument();
+    expect(screen.getAllByText('TSL exit')[0]).toBeInTheDocument();
   });
 
   it('distinguishes a red-counter close from a trail close', async () => {

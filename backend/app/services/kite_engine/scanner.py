@@ -42,7 +42,7 @@ from app.services.kite_engine.strikes import (
     ExpiryType, OptionPick, chain_rows_for, filter_liquid_contracts, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
-from app.services.kite_engine import state
+from app.services.kite_engine import state, market_hours
 
 log = get_logger(__name__)
 
@@ -67,14 +67,40 @@ PlaceCb = Callable[[EngineSignalRow, UniverseItem], Awaitable[None]]
 
 
 # ── pure helpers (unit-tested) ──────────────────────────────────────────────
-def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Candle]:
-    """Drop the last bar if its 1H period has not closed yet."""
-    if not candles:
-        return candles
+def drop_forming(candles: List[Candle], now_ms: Optional[int] = None, *,
+                 allow_forming: bool = False, exchange: str | None = None,
+                 cas_eligible: bool = False) -> List[Candle]:
+    """Use only finalized raw bars; exclude auctions from continuous signals.
+
+    Final session bars can be shorter than one hour. The optional forming mode
+    is for display callers only and is never used in the execution scan.
+    Invalid/order-inconsistent data fails closed instead of being repaired.
+    """
+    import math
     now_ms = now_ms if now_ms is not None else int(time.time() * 1000)
-    if candles[-1].timestamp_ms + _TF_MS > now_ms:
-        return candles[:-1]
-    return candles
+    previous = -1
+    out = []
+    for bar in candles:
+        ts = bar.timestamp_ms
+        values = (bar.open, bar.high, bar.low, bar.close, bar.volume)
+        if (ts <= previous or not all(math.isfinite(v) for v in values)
+                or min(values[:4]) <= 0 or bar.volume < 0
+                or bar.low > min(bar.open, bar.close)
+                or bar.high < max(bar.open, bar.close)):
+            return []
+        previous = ts
+        end_ms = ts + _TF_MS
+        start = datetime.fromtimestamp(ts / 1000, _IST)
+        if exchange is not None and start.date() >= market_hours.CAS_START:
+            close = market_hours.continuous_close(start.date(), exchange,
+                                                 cas_eligible=cas_eligible)
+            if not (datetime.min.replace(hour=9, minute=15).time() <= start.time() < close):
+                continue
+            end = datetime.combine(start.date(), close, tzinfo=_IST)
+            end_ms = min(end_ms, int(end.timestamp() * 1000))
+        if ts <= now_ms and (allow_forming or end_ms <= now_ms):
+            out.append(bar)
+    return out
 
 
 def _exit_state_str(r, direction: str, last_idx: int, cfg: SterlingKiteEngineConfig) -> str:
@@ -762,7 +788,7 @@ class KiteEngineScanner:
                         candles = await self._fetch_candles(
                             client, us, int(leg.token), leg.option_symbol)
                     candidates = [
-                        candle for candle in drop_forming(candles)
+                        candle for candle in drop_forming(candles, exchange=row.exchange)
                         if int(candle.timestamp_ms) <= int(row.timestamp_ms)
                     ]
                     if candidates:
@@ -878,7 +904,7 @@ class KiteEngineScanner:
                     log_cb(f"Scanning spot: {item.name} ({item.exchange})")
                 async with sem:
                     try:
-                        candles = drop_forming(await self._fetch_1h(client, us, item))
+                        candles = drop_forming(await self._fetch_1h(client, us, item), now_ms, exchange="NSE" if item.option_exchange == "NFO" else "BSE", cas_eligible=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine scan candle fail %s: %s", item.name, exc)
                         _no_data(item)
@@ -947,7 +973,7 @@ class KiteEngineScanner:
                 async with sem:
                     try:
                         under = drop_forming(await self._fetch_candles(
-                            client, us, item.token, item.tradingsymbol))
+                            client, us, item.token, item.tradingsymbol), now_ms, exchange="NSE" if item.option_exchange == "NFO" else "BSE", cas_eligible=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine deriv spot-anchor fail %s: %s", item.name, exc)
                         under = []
@@ -1013,7 +1039,7 @@ class KiteEngineScanner:
                     async with sem:
                         try:
                             oc = drop_forming(await self._fetch_candles(
-                                client, us, pick.token, pick.option_symbol))
+                                client, us, pick.token, pick.option_symbol), now_ms, exchange=item.option_exchange)
                         except Exception as exc:  # noqa: BLE001
                             log.warning("kite-engine deriv chart fail %s: %s", pick.option_symbol, exc)
                             diag.deriv_no_data += 1
@@ -1105,7 +1131,7 @@ class KiteEngineScanner:
                     log_cb(f"Scanning confluence: {item.name} ({item.exchange})")
                 async with sem:
                     try:
-                        candles = drop_forming(await self._fetch_1h(client, us, item))
+                        candles = drop_forming(await self._fetch_1h(client, us, item), now_ms, exchange="NSE" if item.option_exchange == "NFO" else "BSE", cas_eligible=True)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("kite-engine confluence candle fail %s: %s", item.name, exc)
                         _no_data(item)
@@ -1150,7 +1176,7 @@ class KiteEngineScanner:
                         async with sem:
                             try:
                                 oc = drop_forming(await self._fetch_candles(
-                                    client, us, pick.token, pick.option_symbol))
+                                    client, us, pick.token, pick.option_symbol), now_ms, exchange=item.option_exchange)
                             except Exception as exc:  # noqa: BLE001
                                 log.warning("kite-engine confluence chart fail %s: %s",
                                             pick.option_symbol, exc)

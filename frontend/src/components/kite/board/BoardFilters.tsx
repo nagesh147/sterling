@@ -12,6 +12,8 @@ import React from 'react';
 import { COLUMNS, type ColumnId } from './SignalBoard';
 import { k, tint } from '../../../styles/kiteUI';
 import type { BoardView } from './useBoardView';
+import { useSimNowMs } from '../../../hooks/useReplayStore';
+import { sessionDayKey } from './boardTypes';
 
 /**
  * A local view filter.
@@ -196,6 +198,8 @@ export function BoardFilters({ view, columns, children }: {
   children?: React.ReactNode;
 }) {
   const { counts } = view;
+  const simNowMs = useSimNowMs();
+  const isHistoricalSim = simNowMs != null && sessionDayKey(simNowMs) !== sessionDayKey(Date.now());
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
@@ -225,6 +229,14 @@ export function BoardFilters({ view, columns, children }: {
           label="BEST LEG"
           hint="Show only the nearest-the-money leg of each underlying — the one whose premium tracks the thesis most directly. A local filter."
           onChange={() => view.setBestOnly(!view.bestOnly)}
+        />
+      )}
+      {view.offers.today && (
+        <FilterToggle
+          on={view.todayOnly}
+          label={isHistoricalSim ? 'SIM DATE ONLY' : 'TODAY ONLY'}
+          hint={isHistoricalSim ? 'Show only signals from the simulation date.' : 'Show only signals generated today. Hides historical setups from yesterday and older sessions.'}
+          onChange={() => view.setTodayOnly(!view.todayOnly)}
         />
       )}
       {view.offers.ended && (

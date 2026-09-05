@@ -12,6 +12,7 @@
  */
 import type { OrbFeedEntry } from '../../../utils/niftyOrbSignalAdapter';
 import type { BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 
 /** A tradable price, or nothing. A zero premium is not a level. */
 const price = (v: number | null | undefined): number | null =>
@@ -52,9 +53,9 @@ function status(entry: OrbFeedEntry): BoardStatus {
 }
 
 function atMs(entry: OrbFeedEntry): number | null {
-  if (!entry.timestamp) return null;
-  const ms = new Date(entry.timestamp).getTime();
-  return Number.isNaN(ms) ? null : ms;
+  return parseTimestampMs(
+    entry.timestamp ?? (entry as any).timestamp_ms ?? (entry as any).atMs ?? (entry as any).time ?? (entry as any).created_at ?? (entry as any).session_date
+  );
 }
 
 /**

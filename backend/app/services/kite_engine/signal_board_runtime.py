@@ -205,7 +205,8 @@ async def _rebuild_retained_confluence(
             continue
         try:
             underlying = scanner_mod.drop_forming(
-                await self._fetch_1h(client, us, item)
+                await self._fetch_1h(client, us, item),
+                allow_forming=True,
             )
         except Exception as exc:  # noqa: BLE001
             scanner_mod.log.warning(
@@ -275,7 +276,8 @@ async def _rebuild_retained_confluence(
                         option_history = scanner_mod.drop_forming(
                             await self._fetch_candles(
                                 client, us, pick.token, pick.option_symbol
-                            )
+                            ),
+                            allow_forming=True,
                         )
                     except Exception as exc:  # noqa: BLE001
                         scanner_mod.log.warning(
