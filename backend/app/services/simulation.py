@@ -34,7 +34,18 @@ class SimConfig(BaseModel):
     strategies: List[str] = ["all"]    # list of selected strategies
     lots: int = 1                      # number of option/futures lots
     moneyness: str = "ATM"             # "ATM", "ITM1", "ITM2", "OTM1", "OTM2", "ALL"
-    friction_mode: str = "realistic"   # "realistic" (with slippage) or "ideal"
+
+    # ── Execution friction ────────────────────────────────────────────────
+    # These are read by `_apply_friction`. Until 2026-09 they were declared
+    # here and consumed nowhere, while the UI rendered a slippage column and
+    # a "SLIPPAGE DRAG" metric against them — so the dock reported ₹0.00 of
+    # execution cost for every strategy. The values below are echoed back on
+    # `SimStatus.config`, which is what lets the client verify the engine
+    # actually honoured what it asked for.
+    friction_mode: str = "realistic"   # "realistic" (spread + slippage) or "ideal"
+    index_spread_pct: float = 0.50     # round-trip bid/ask spread, index options
+    stock_spread_pct: float = 1.50     # round-trip bid/ask spread, stock options
+    slippage_pct: float = 0.25         # additional adverse fill, each leg
 
 
 class SimSignalEvent(BaseModel):
@@ -47,6 +58,12 @@ class SimSignalEvent(BaseModel):
     entry: float
     stop: float
     target: float
+    # The option leg this signal would be expressed through. `None` for a pure
+    # spot signal; the UI falls back to `instrument` in that case.
+    contract: Optional[str] = None
+    spot: Optional[float] = None
+    strike: Optional[float] = None
+    opt_type: Optional[str] = None
 
 
 class SimTradeEvent(BaseModel):
@@ -70,6 +87,12 @@ class SimTradeEvent(BaseModel):
     pnl_usd: float = 0.0
     pnl_pct: float = 0.0
     duration_mins: int = 0
+    # Theoretical prices before execution friction. `None` when the replay ran
+    # in "ideal" mode — which is not the same as zero, and the UI renders the
+    # difference (an em dash vs a ₹0.00).
+    raw_entry: Optional[float] = None
+    raw_exit: Optional[float] = None
+    slippage: Optional[float] = None
 
 
 class SimStats(BaseModel):
@@ -80,6 +103,26 @@ class SimStats(BaseModel):
     pnl: float = 0.0
     events: List[SimSignalEvent] = []
     trades: List[SimTradeEvent] = []
+    # Total INR drag across all trades. `None` means friction was not modelled
+    # at all; 0.0 would mean it was modelled and happened to be free.
+    slippage_total: Optional[float] = None
+
+
+class SimCapabilities(BaseModel):
+    """What this build of the runner can actually do.
+
+    The client renders optional columns, sections and controls off this rather
+    than off whether a sampled row happened to carry a value. That inversion is
+    the structural fix for a whole class of defect where the UI advertised a
+    capability the engine did not have.
+    """
+    friction: bool = True
+    contract_on_signal: bool = True
+    absolute_seek: bool = True
+    stream: bool = False
+    delta_status: bool = True
+    multi_day: bool = False
+    resolutions: List[str] = ["1m", "5m", "15m"]
 
 
 class SimStatus(BaseModel):
@@ -93,6 +136,121 @@ class SimStatus(BaseModel):
     elapsed_real_s: float = 0.0
     status_message: str = ""
     last_signal: Optional[SimSignalEvent] = None
+    capabilities: SimCapabilities = SimCapabilities()
+    events_total: int = 0
+    trades_total: int = 0
+
+
+INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"}
+
+# Strike step per underlying. Anything not listed falls back to a percentage of
+# spot, rounded to a sane increment.
+STRIKE_STEP = {
+    "NIFTY": 50.0, "BANKNIFTY": 100.0, "FINNIFTY": 50.0,
+    "MIDCPNIFTY": 25.0, "SENSEX": 100.0, "BANKEX": 100.0,
+}
+
+# How far each moneyness label sits from ATM, in strike steps. Positive moves
+# the strike in the direction that makes a CE cheaper (further out of the money).
+MONEYNESS_OFFSET = {"ATM": 0, "ITM1": -1, "ITM2": -2, "OTM1": 1, "OTM2": 2}
+
+
+def _is_index(symbol: str) -> bool:
+    return symbol.upper() in INDEX_SYMBOLS
+
+
+def _strike_step(symbol: str, spot: float) -> float:
+    step = STRIKE_STEP.get(symbol.upper())
+    if step:
+        return step
+    # Stocks: ~1% of spot, snapped to a familiar increment.
+    for candidate in (2.5, 5.0, 10.0, 20.0, 50.0, 100.0):
+        if spot * 0.01 <= candidate:
+            return candidate
+    return 100.0
+
+
+def _pick_moneyness(config: Optional["SimConfig"]) -> str:
+    """The first concrete leg the user asked for.
+
+    `moneyness` may be "ALL" or a comma-joined list; a contract has to be one
+    strike, so take the first concrete entry and fall back to ATM.
+    """
+    raw = (config.moneyness if config else "ATM") or "ATM"
+    for part in str(raw).split(","):
+        key = part.strip().upper()
+        if key in MONEYNESS_OFFSET:
+            return key
+    return "ATM"
+
+
+def _option_contract(
+    symbol: str,
+    spot: float,
+    direction: str,
+    config: Optional["SimConfig"] = None,
+) -> Dict[str, Any]:
+    """Resolve the option leg a signal on `symbol` at `spot` would be taken through.
+
+    Returns the tradeable name, its strike, CE/PE, the lot size and an
+    approximate premium. Used for BOTH the signal event and the trade, so the
+    contract a user sees in the signals feed is the one the trade reports.
+    """
+    opt_type = "CE" if direction in ("BULLISH", "LONG") else "PE"
+    step = _strike_step(symbol, spot)
+    atm = round(spot / step) * step
+
+    # An OTM call is a HIGHER strike; an OTM put is a LOWER one.
+    offset = MONEYNESS_OFFSET.get(_pick_moneyness(config), 0)
+    signed = offset if opt_type == "CE" else -offset
+    strike = max(step, atm + signed * step)
+
+    lot_size = 25 if _is_index(symbol) else 15
+    # Rough premium: ~2% of spot at ATM, decaying as the strike moves away.
+    intrinsic = max(0.0, (spot - strike) if opt_type == "CE" else (strike - spot))
+    extrinsic = max(0.05, spot * 0.02 - abs(strike - atm) * 0.35)
+    premium = round(intrinsic + extrinsic, 2)
+
+    return {
+        "contract": f"{symbol.upper()}26AUG{int(strike)}{opt_type}",
+        "strike": float(strike),
+        "opt_type": opt_type,
+        "lot_size": lot_size,
+        "premium": premium,
+    }
+
+
+def _apply_friction(
+    raw_entry: float,
+    raw_exit: float,
+    symbol: str,
+    config: Optional["SimConfig"],
+) -> Tuple[float, float, str]:
+    """Fill prices after bid/ask spread and slippage.
+
+    You buy at the ask and sell at the bid, and each leg suffers an additional
+    adverse slippage. Returns `(fill_entry, fill_exit, mode)`.
+
+    In "ideal" mode the fills ARE the theoretical prices — that is a modelled
+    zero, and the caller distinguishes it from "not modelled" by whether
+    friction ran at all.
+    """
+    mode = (config.friction_mode if config else "realistic") or "realistic"
+    if mode == "ideal":
+        return raw_entry, raw_exit, "ideal"
+
+    spread_pct = (config.index_spread_pct if config else 0.50) if _is_index(symbol) \
+        else (config.stock_spread_pct if config else 1.50)
+    slip_pct = (config.slippage_pct if config else 0.25)
+
+    half_spread = spread_pct / 200.0     # round-trip pct → one-sided fraction
+    slip = slip_pct / 100.0
+    adverse = half_spread + slip
+
+    fill_entry = round(raw_entry * (1.0 + adverse), 2)
+    # A fill can be pushed to zero but never below it.
+    fill_exit = round(max(0.05, raw_exit * (1.0 - adverse)), 2)
+    return fill_entry, fill_exit, "realistic"
 
 
 class SimulationRunner:
@@ -121,6 +279,23 @@ class SimulationRunner:
         self._seek_requested_epoch: Optional[float] = None
         self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
+    def _recompute_totals(self) -> None:
+        """Re-derive every aggregate from the trade ledger.
+
+        Called after appending a trade and after a seek truncates the ledger, so
+        the two paths can never drift. `slippage_total` stays `None` when no
+        trade carried friction — "not modelled" and "modelled as zero" are
+        different answers and the UI renders them differently.
+        """
+        trades = self._stats.trades
+        self._stats.signals_fired = len(self._stats.events)
+        self._stats.trades_entered = len(trades)
+        self._stats.wins = len([tr for tr in trades if tr.status == "WIN"])
+        self._stats.losses = len([tr for tr in trades if tr.status == "LOSS"])
+        self._stats.pnl = round(sum(tr.pnl_usd for tr in trades), 2)
+        drag = [tr.slippage for tr in trades if tr.slippage is not None]
+        self._stats.slippage_total = round(sum(drag), 2) if drag else None
+
     def _get_sim_now_ms(self) -> int:
         if self._current_sim_epoch > 0:
             return int(self._current_sim_epoch * 1000)
@@ -128,6 +303,40 @@ class SimulationRunner:
 
     @property
     def status(self) -> SimStatus:
+        return self.status_since()
+
+    def status_since(
+        self,
+        since_events: Optional[int] = None,
+        since_trades: Optional[int] = None,
+    ) -> SimStatus:
+        """Current status, optionally carrying only rows the client has not seen.
+
+        The full payload is O(session): a day of replay re-sends every signal and
+        every trade on every poll. With offsets the client appends instead, and
+        `events_total` / `trades_total` let it notice a reset (a seek truncates
+        the ledger, so a total that went DOWN means "discard and refetch").
+        """
+        stats = self._stats
+        if since_events is None and since_trades is None:
+            payload = stats
+        else:
+            ev_from = max(0, since_events or 0)
+            tr_from = max(0, since_trades or 0)
+            # A truncation (seek/restart) invalidates the client's offsets.
+            if ev_from > len(stats.events) or tr_from > len(stats.trades):
+                ev_from = tr_from = 0
+            payload = SimStats(
+                signals_fired=stats.signals_fired,
+                trades_entered=stats.trades_entered,
+                wins=stats.wins,
+                losses=stats.losses,
+                pnl=stats.pnl,
+                events=stats.events[ev_from:],
+                trades=stats.trades[tr_from:],
+                slippage_total=stats.slippage_total,
+            )
+
         return SimStatus(
             state=self._state,
             config=self._config,
@@ -135,11 +344,18 @@ class SimulationRunner:
             progress_pct=self._progress,
             bars_played=self._bars_played,
             bars_total=self._bars_total,
-            stats=self._stats,
+            stats=payload,
             elapsed_real_s=round(time.monotonic() - self._start_real, 1) if self._start_real else 0,
             status_message=self._status_message,
             last_signal=self._last_signal,
+            capabilities=self.capabilities,
+            events_total=len(stats.events),
+            trades_total=len(stats.trades),
         )
+
+    @property
+    def capabilities(self) -> SimCapabilities:
+        return SimCapabilities()
 
     async def start(self, config: SimConfig) -> SimStatus:
         if self._state in (SimState.RUNNING, SimState.LOADING, SimState.PAUSED):
@@ -201,6 +417,54 @@ class SimulationRunner:
         self._seek_requested_epoch = target
         return self.status
 
+    def seek_to(
+        self,
+        bar_index: Optional[int] = None,
+        to_pct: Optional[float] = None,
+        to_time: Optional[str] = None,
+    ) -> SimStatus:
+        """Absolute seek, so a timeline drag commits as ONE request.
+
+        A relative `bars_offset` forces the client either to issue a request per
+        pointer move or to compute an offset from a `bars_played` that is moving
+        underneath it. All three forms below clamp into the session.
+        """
+        if self._state == SimState.IDLE or self._end_epoch <= self._start_epoch:
+            return self.status
+
+        span = float(self._end_epoch - self._start_epoch)
+        target: Optional[float] = None
+
+        if bar_index is not None and self._candles:
+            idx = max(0, min(len(self._candles) - 1, int(bar_index)))
+            target = float(self._candles[idx]["time"])
+        elif to_pct is not None:
+            pct = max(0.0, min(100.0, float(to_pct)))
+            target = self._start_epoch + span * (pct / 100.0)
+        elif to_time is not None:
+            parts = [int(x) for x in str(to_time).split(":")]
+            while len(parts) < 3:
+                parts.append(0)
+            from datetime import datetime, timezone, timedelta
+            try:
+                from zoneinfo import ZoneInfo
+                ist = ZoneInfo("Asia/Kolkata")
+            except ImportError:
+                ist = timezone(timedelta(hours=5, minutes=30))
+            base = datetime.fromtimestamp(self._start_epoch, tz=ist)
+            target = datetime(
+                base.year, base.month, base.day,
+                parts[0], parts[1], parts[2], tzinfo=ist,
+            ).timestamp()
+
+        if target is None:
+            return self.status
+
+        self._seek_requested_epoch = max(
+            float(self._start_epoch), min(float(self._end_epoch), target)
+        )
+        return self.status
+
     def jump_start(self) -> SimStatus:
         if self._start_epoch > 0:
             self._seek_requested_epoch = float(self._start_epoch)
@@ -233,6 +497,22 @@ class SimulationRunner:
             day = datetime.strptime(cfg.date, "%Y-%m-%d")
         except ValueError:
             log.error("Invalid simulation date: %s", cfg.date)
+            self._status_message = f"Invalid session date: {cfg.date}"
+            self._state = SimState.IDLE
+            return
+
+        # The loop derives start/end from `cfg.date` alone, so a differing
+        # `end_date` would silently replay one day while the UI claimed a range.
+        # Refuse it out loud instead; `capabilities.multi_day` advertises this.
+        if cfg.end_date and cfg.end_date != cfg.date:
+            log.warning(
+                "Multi-day replay requested (%s..%s) but the runner replays a single session.",
+                cfg.date, cfg.end_date,
+            )
+            self._status_message = (
+                f"Multi-day ranges are not supported yet ({cfg.date} to {cfg.end_date}). "
+                "Replay one session at a time."
+            )
             self._state = SimState.IDLE
             return
 
@@ -326,11 +606,7 @@ class SimulationRunner:
                     target_ms = int(target * 1000)
                     self._stats.events = [ev for ev in self._stats.events if ev.timestamp_ms <= target_ms]
                     self._stats.trades = [tr for tr in self._stats.trades if tr.timestamp_ms <= target_ms]
-                    self._stats.signals_fired = len(self._stats.events)
-                    self._stats.trades_entered = len(self._stats.trades)
-                    self._stats.wins = len([tr for tr in self._stats.trades if tr.status == "WIN"])
-                    self._stats.losses = len([tr for tr in self._stats.trades if tr.status == "LOSS"])
-                    self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
+                    self._recompute_totals()
                     self._last_signal = self._stats.events[-1] if self._stats.events else None
                     # Reset bar history and dedup state for clean indicator recalculation
                     self._bar_history = {}
@@ -982,6 +1258,7 @@ class SimulationRunner:
                 stop = round(close + 1.5 * atr, 2)
                 target = round(close - 2.5 * atr, 2)
 
+            leg = _option_contract(sym, close, direction, self._config)
             event = SimSignalEvent(
                 time_iso=bar_dt.strftime("%H:%M:%S"),
                 timestamp_ms=int(bar_dt.timestamp() * 1000),
@@ -992,6 +1269,10 @@ class SimulationRunner:
                 entry=round(close, 2),
                 stop=stop,
                 target=target,
+                contract=leg["contract"],
+                spot=round(close, 2),
+                strike=leg["strike"],
+                opt_type=leg["opt_type"],
             )
             self._stats.signals_fired += 1
             self._stats.events.append(event)
@@ -1039,27 +1320,47 @@ class SimulationRunner:
                     # Neither hit — treat as scratch/loss based on actual P&L
                     won = (exit_close > close) if direction == "BULLISH" else (exit_close < close)
 
-                if won:
-                    self._stats.wins += 1
-                else:
-                    self._stats.losses += 1
-
-                # Construct detailed SimTradeEvent with correct option PnL
+                # Construct detailed SimTradeEvent with correct option PnL.
+                # The leg is the SAME one the signal reported, so the contract a
+                # user reads in the signals feed is the contract that traded.
                 cfg_lots = max(1, self._config.lots) if self._config else 1
-                opt_type = "CE" if direction == "BULLISH" else "PE"
-                atm_strike = round(close / 50.0) * 50.0
-                lot_size = 25 if "NIFTY" in sym else 15
+                opt_type = leg["opt_type"]
+                atm_strike = leg["strike"]
+                lot_size = leg["lot_size"]
                 qty = cfg_lots * lot_size
-                entry_p = round(close * 0.02, 2)  # approx option premium
+                raw_entry_p = leg["premium"]
                 spot_move = exit_close - close if direction == "BULLISH" else close - exit_close
                 # Option premium moves ~40-60% of spot move (delta approximation)
                 premium_move = round(spot_move * 0.50, 2)
-                exit_p = round(max(0.05, entry_p + premium_move), 2)
+                raw_exit_p = round(max(0.05, raw_entry_p + premium_move), 2)
+
+                # Fills, after bid/ask spread and slippage. P&L is computed from
+                # the FILLS, never from the theoretical prices.
+                entry_p, exit_p, friction_mode = _apply_friction(
+                    raw_entry_p, raw_exit_p, sym, self._config
+                )
+                slippage_inr = round(
+                    (entry_p - raw_entry_p) * qty + (raw_exit_p - exit_p) * qty, 2
+                )
+                if friction_mode == "ideal":
+                    trade_raw_entry = None
+                    trade_raw_exit = None
+                    trade_slippage = None
+                else:
+                    trade_raw_entry = raw_entry_p
+                    trade_raw_exit = raw_exit_p
+                    trade_slippage = max(0.0, slippage_inr)
+
                 pnl_per_unit = exit_p - entry_p
                 pnl_usd_val = round(pnl_per_unit * qty, 2)
                 pnl_pct_val = round((pnl_per_unit / entry_p) * 100.0, 2) if entry_p > 0 else 0.0
                 dur_mins = bars_held * 5  # each bar is 5m
                 exit_dt = bar_dt + timedelta(minutes=dur_mins)
+
+                # Friction can flip a marginal winner into a loser. The status has
+                # to follow the money that was actually made, not the spot move
+                # that was predicted — otherwise the win rate and the P&L disagree.
+                won = pnl_usd_val > 0
 
                 trade = SimTradeEvent(
                     trade_id=f"TRD-{1000 + len(self._stats.trades) + 1}",
@@ -1067,7 +1368,7 @@ class SimulationRunner:
                     exit_time_iso=exit_dt.strftime("%H:%M:%S"),
                     timestamp_ms=int(bar_dt.timestamp() * 1000),
                     strategy=strategy,
-                    symbol=f"{sym}26AUG{int(atm_strike)}{opt_type}",
+                    symbol=leg["contract"],
                     underlying=sym,
                     direction="BUY",
                     opt_type=opt_type,
@@ -1082,9 +1383,16 @@ class SimulationRunner:
                     pnl_usd=pnl_usd_val,
                     pnl_pct=pnl_pct_val,
                     duration_mins=dur_mins,
+                    raw_entry=trade_raw_entry,
+                    raw_exit=trade_raw_exit,
+                    slippage=trade_slippage,
                 )
+                if won:
+                    self._stats.wins += 1
+                else:
+                    self._stats.losses += 1
                 self._stats.trades.append(trade)
-                self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
+                self._recompute_totals()
 
 
 def _generate_warmup_candles(symbol: str, res: str, start_epoch: int, count: int = 20, res_sec: int = 300) -> List[Dict[str, Any]]:
