@@ -76,6 +76,14 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     [onOpenChart],
   );
 
+  // Every board's Chart column needs this. Four of the five never received it, so
+  // `useBoardRowActions` returned null for the chart cell and the column rendered
+  // empty — present in the picker, headed "Chart", and permanently blank.
+  const openChartFor = React.useCallback(
+    (quoteKey: string) => onOpenChart?.(quoteKey, 'chart'),
+    [onOpenChart],
+  );
+
   /**
    * Rescan and the board settings, for every engine.
    *
@@ -311,9 +319,6 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         )}
         {engine === 'gamma_move' && (
           <GammaMoveBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
-        )}
-        {engine === 'bear_to_bearish' && (
-          <BearToBearishBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
       </div>
     </div>

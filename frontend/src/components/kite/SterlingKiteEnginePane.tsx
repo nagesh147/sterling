@@ -244,6 +244,15 @@ function signalColShown(
   col: { key: string; visibleWhen: SignalColVisibility },
   premiumAvailable: boolean,
   hidden: readonly string[],
+  /**
+   * Whether the row is carrying its order buttons.
+   *
+   * Trade and Chart answer to TWO controls: the column picker, and the older
+   * "order buttons in the row" switch whose description promises they MOVE into
+   * the expanded row rather than disappear. Either one can withhold them, and
+   * both the header and the cells go through this function — which is the only
+   * reason the headings can be trusted to sit over their own columns.
+   */
   rowActionsOn = true,
 ): boolean {
   if (!rowActionsOn && (col.key === 'trade' || col.key === 'chart')) return false;
@@ -1094,19 +1103,51 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     relocation. A control that quietly disappears is bad
                     anywhere; on the path that places a real order it is worse. */}
                 {!isExp && (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
-                    {/* NOT gated on `boardRowActions` any more. That gate wrapped this
-                        whole block, so switching the row's order buttons off also took
-                        Chg., Chg.%, LTP and Time with it — and the relocated cluster
-                        below, whose whole purpose is to appear when the setting is off,
-                        sat INSIDE the gate and could therefore never render. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
+                  {/* NOT gated on `boardRowActions` any more. That gate wrapped this
+                      whole block, so switching the row's order buttons off also took
+                      Chg., Chg.%, LTP and Time with it — and the relocated cluster
+                      below, whose whole purpose is to appear when the setting is off,
+                      sat INSIDE the gate and could therefore never render. */}
                     
-                    
-
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       {(() => {
+                  const legBuy = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        const entryForSl = lastPx || leg.premium_spot || 0;
+                        const slPxVal = leg.entry_sl ?? leg.premium_sl;
+                        const slPercentage =
+                          entryForSl > 0 && slPxVal && slPxVal > 0
+                            ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        const tgtPercentage =
+                          entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                            ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                            : undefined;
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'BUY',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          initialSlPct: slPercentage,
+                          initialTgtPct: tgtPercentage,
+                          tag: 'SUPERTREND',
+                        });
+                      };
+                  const legSell = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'SELL',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                          tag: 'SUPERTREND',
+                        });
+                      };
+                  const legChart = (e: React.MouseEvent) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); };
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
@@ -1166,7 +1207,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
-                          if (!s.boardRowActions && (key === 'trade' || key === 'chart')) return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
                           if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                           return (
