@@ -73,7 +73,6 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
         liveFirst={false}
         collapseOlderDays={true}
         nowMs={nowMs}
-        liveFirst={false}
         hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total

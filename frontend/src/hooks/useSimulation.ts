@@ -269,8 +269,6 @@ interface SimulationStore {
   setMoneyness: (m: string) => void;
   setSelectedMoneyness: (m: string[]) => void;
   toggleMoneyness: (m: string) => void;
-  frictionMode: 'realistic' | 'ideal';
-  setFrictionMode: (m: 'realistic' | 'ideal') => void;
   
   // Summary modal
   showSummary: boolean;
@@ -312,8 +310,6 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   lots: 1,
   moneyness: 'ATM',
   selectedMoneyness: ['ATM'],
-  frictionMode: 'realistic',
-  setFrictionMode: (frictionMode) => set({ frictionMode }),
   setDate: (date) => set({ date }),
   setEndDate: (endDate) => set({ endDate }),
   setStartTime: (startTime) => set({ startTime }),

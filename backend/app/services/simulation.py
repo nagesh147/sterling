@@ -6,6 +6,7 @@ configurable speeds, allowing users to watch strategies execute on
 past trading days as if they were live.
 """
 import asyncio
+from datetime import datetime
 import time
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
