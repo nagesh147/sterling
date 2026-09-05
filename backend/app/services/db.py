@@ -143,6 +143,8 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             observed_quantity INTEGER NOT NULL DEFAULT 0,
             observed_value REAL NOT NULL DEFAULT 0,
             reconciliation_required INTEGER NOT NULL DEFAULT 0,
+            projection_pending INTEGER NOT NULL DEFAULT 0,
+            projection_version INTEGER NOT NULL DEFAULT 0,
             created_ms      INTEGER NOT NULL,
             updated_ms      INTEGER NOT NULL
         )
@@ -155,6 +157,8 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         ("observed_quantity", "INTEGER NOT NULL DEFAULT 0"),
         ("observed_value", "REAL NOT NULL DEFAULT 0"),
         ("reconciliation_required", "INTEGER NOT NULL DEFAULT 0"),
+        ("projection_pending", "INTEGER NOT NULL DEFAULT 0"),
+        ("projection_version", "INTEGER NOT NULL DEFAULT 0"),
     ):
         if name not in journal_columns:
             conn.execute(f"ALTER TABLE kite_order_intents ADD COLUMN {name} {declaration}")

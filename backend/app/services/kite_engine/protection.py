@@ -265,6 +265,15 @@ async def arm_position(
     Never raises: an order is already live at this point, so a failure here must be
     logged and reported, not thrown at a caller that can no longer undo the trade.
     """
+    if getattr(client, "_is_paper", True) is False:
+        from app.services.kite_engine import order_journal
+        from app.services.kite_engine.execution_lifecycle import account_id, register_pending
+        intent = order_journal.find(uid=uid, account_id=account_id(client), order_id=str(order_id))
+        if intent is None:
+            raise ValueError("live_entry_missing_durable_intent")
+        p = register_pending(intent, str(order_id))
+        return ArmResult(position=p, stop_premium=stop_premium, target_premium=0.0,
+                         gtt_id=p.gtt_id, subscribed=False, stale_gtt=p.protection_pending)
     # ── never leave a previous GTT for this symbol armed ──────────────────────
     # `positions.register` overwrites by symbol, so re-entering a contract we already
     # have a registry row for would drop the old `gtt_id` and arm a SECOND trigger for

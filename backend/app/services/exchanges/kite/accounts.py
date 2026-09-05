@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import time
 import uuid
+import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -433,31 +434,47 @@ def build_client(a: _Account):
     )
     client._account_id = str(a.id)
     client._kite_user_id = str(a.kite_user_id or "")
+    client._account_generation = _client_identity(a)
     return client
 
 
 # ─── Cached clients (warm instrument dump + connection pool, per account) ──────
 # One live KiteClient per account, reused across requests so its InstrumentCache
-# (1h TTL) and httpx connection pool stay warm. Rebuilt only when credentials or
-# the access token rotate — validated against the *encrypted* fields so the hot
-# path never decrypts. This is the fix for instrument search taking minutes
+# (1h TTL) and httpx connection pool stay warm. Identity changes (including paper
+# mode) rebuild the client. Compare encrypted fields so the hot path never
+# decrypts. This is the fix for instrument search taking minutes
 # (every request used to rebuild the client and re-fetch the full dump).
-_client_cache: Dict[str, Tuple[str, str, "object"]] = {}  # id -> (api_key, token_enc, client)
+_client_cache: Dict[str, Tuple[str, "object"]] = {}  # id -> (identity, client)
+
+
+def _client_identity(a: _Account) -> str:
+    """Fingerprint execution mode and encrypted credential identity without logging secrets."""
+    values = (a.id, a.user_id, a.api_key, a.api_secret_enc, a.access_token_enc,
+              str(a.is_paper), a.kite_user_id)
+    return hashlib.sha256(repr(values).encode()).hexdigest()
+
+
+def client_is_current(client, *, user_id: str) -> bool:
+    """Verify a retained client still owns the account's current execution identity."""
+    account = get(user_id, str(getattr(client, "_account_id", "") or ""))
+    return bool(account is not None and
+                getattr(client, "_account_generation", "") == _client_identity(account))
 
 
 async def acquire_client(a: _Account):
     """Return a warm KiteClient for the account, reusing its instrument cache and
-    connection pool. Rebuilt only when api_key / access token change."""
+    connection pool. Execution mode and every credential/owner change rebuild it."""
     cached = _client_cache.get(a.id)
-    if cached is not None and cached[0] == a.api_key and cached[1] == a.access_token_enc:
-        return cached[2]
+    identity = _client_identity(a)
+    if cached is not None and cached[0] == identity:
+        return cached[1]
     if cached is not None:                      # credentials rotated — drop the stale client
         try:
-            await cached[2].close()
+            await cached[1].close()
         except Exception as _exc:# noqa: BLE001
             log.debug("suppressed: %s", _exc)
     client = build_client(a)
-    _client_cache[a.id] = (a.api_key, a.access_token_enc, client)
+    _client_cache[a.id] = (identity, client)
     return client
 
 
@@ -466,7 +483,7 @@ async def release_client(account_id: str) -> None:
     cached = _client_cache.pop(account_id, None)
     if cached is not None:
         try:
-            await cached[2].close()
+            await cached[1].close()
         except Exception as _exc:# noqa: BLE001
             log.debug("suppressed: %s", _exc)
 

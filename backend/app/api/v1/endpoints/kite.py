@@ -962,6 +962,20 @@ async def place_order(body: PlaceOrderRequest, user: UserContext = Depends(get_c
     is_opt_sell = is_opt and str(body.transaction_type).upper() == "SELL"
 
     async def _do(c):
+        if getattr(c, "_is_paper", True) is False and str(body.exchange).upper() in {"NFO", "BFO"}:
+            from app.services.kite_engine import service as engine_service
+            if (not is_opt or body.variety != "regular" or body.product != "NRML"
+                    or body.order_type not in {"MARKET", "LIMIT"} or body.validity != "DAY"
+                    or body.trigger_price or body.disclosed_quantity or body.iceberg_legs):
+                raise HTTPException(423, detail="Unsupported live engine order; use the validated strategy path")
+            result = await engine_service.place_manual_order(
+                user.user_id, body.tradingsymbol, body.transaction_type, body.quantity,
+                body.exchange, order_type=body.order_type, limit_price=body.price or 0)
+            if result.get("status") == "blocked":
+                raise HTTPException(423, detail=result.get("reason"))
+            if result.get("status") == "error":
+                raise HTTPException(502, detail=result.get("message"))
+            return result
         disarm_note = ""
         if is_opt_sell:
             # Before the sell, not after: a GTT left resting once the user is flat is a
@@ -1332,4 +1346,3 @@ async def get_kite_diagnostics_summary(
         "is_paper": bool(acct.is_paper) if acct else True,
         "has_credentials": bool(acct and acct.has_credentials),
     }
-

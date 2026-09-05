@@ -260,9 +260,10 @@ def test_the_evidence_record_documents_the_percent_buffer():
     are still explained rather than quietly deleted — a reader needs to know the
     points value is a coincidence, not an alternative.
     """
+    from pathlib import Path
     from app.engines.atm_premium_imbalance import CONTRACT_VERSION
     assert CONTRACT_VERSION == "A230.4"
-    prov = open("../docs/strategy/atm-premium-imbalance/A232_PARAMETER_PROVENANCE.md").read()
+    prov = (Path(__file__).resolve().parents[4] / "docs/strategy/atm-premium-imbalance/A232_PARAMETER_PROVENANCE.md").read_text()
     assert "10.0%" in prov                      # the settled value
     assert "OBSERVED" in prov
     assert "416.9" in prov and "113.1" in prov  # the identity that settles it
@@ -403,4 +404,3 @@ def test_put_side_conformance_marks_the_unknown_fields_unverified():
     assert report["mismatch"] == 0
     assert report["match"] == 3
     assert report["unverified"] >= 8          # strike, exit, points, pnl, ...
-

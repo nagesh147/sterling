@@ -116,6 +116,10 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         symbol = str(order.get("tradingsymbol", "")).strip()
         if not symbol:
             return
+        if client is not None and getattr(client, "_is_paper", True) is False:
+            from app.services.kite_engine.execution_lifecycle import consume_order
+            if await consume_order(client, uid, order):
+                return
         p = pos.get(uid, symbol)
         if p is None:
             return  # not one of ours
@@ -124,12 +128,6 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         oid = str(order.get("order_id", "")).strip()
         exit_side = "SELL" if p.direction == "long" else "BUY"  # side that CLOSES us
         is_entry = bool(oid) and oid == str(p.order_id)
-        intent = None
-        try:
-            intent = order_journal.find(uid=uid, order_id=oid,
-                                        tag=str(order.get("tag") or ""))
-        except Exception:
-            pass
 
         # Only matched strategy exits may consume quantity. Unattributed external
         # sells require broker-position reconciliation; a symbol match is insufficient.
@@ -212,8 +210,6 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             state.log(uid, "info",
                       f"Fill confirmed: {symbol} @ ₹{avg:.2f}{qty_note} (#{oid})")
             await _resize_broker_stop(client, uid, p, old_qty)
-            if intent and intent.state in order_journal.UNRESOLVED:
-                order_journal.transition(intent.intent_key, "FILLED", order_id=oid)
         elif status in _DEAD_STATUSES and is_entry:
             if filled > 0:
                 # PARTIALLY filled then cancelled: we DO hold something. Treating this
@@ -227,8 +223,6 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
                           f"{filled} qty @ ₹{avg:.2f}; protection kept on the filled part")
                 # …and resized to it. The GTT was armed for the full intended size.
                 await _resize_broker_stop(client, uid, p, old_qty)
-                if intent and intent.state in order_journal.UNRESOLVED:
-                    order_journal.transition(intent.intent_key, "PARTIAL", order_id=oid)
                 return
             # Nothing filled → the position does not exist. Any protective GTT armed for
             # it is now an ORPHAN: a resting SELL with nothing to sell, which opens a
@@ -247,8 +241,6 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
                           f"⚠ {symbol} never filled and its GTT #{p.gtt_id} was left armed "
                           f"(no broker client on this postback path) — cancel it in Zerodha")
             pos.mark_rejected(uid, symbol, reason=str(order.get("status_message") or status))
-            if intent and intent.state in order_journal.UNRESOLVED:
-                order_journal.transition(intent.intent_key, status, order_id=oid)
             # Entry never filled → release the auto-open guard so the slot can re-enter.
             if p.guard_key:
                 state.clear_auto_open(uid, p.guard_key)
@@ -264,15 +256,14 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 _stop_probe: Dict[Tuple[str, str, int], Tuple[float, str]] = {}
 _PROBE_TTL_S = 15.0
 
-#: uid → (read_at, {TRADINGSYMBOL: signed net quantity}). Cached because the exit path is
-#: tick-driven: a collapsing premium can deliver dozens of ticks a second, and one
-#: portfolio read per tick would both add latency to a stop and earn a rate limit.
-#: Short enough that a square-off done in the Kite app is seen within seconds.
-_holdings_probe: Dict[str, Tuple[float, Dict[str, int]]] = {}
+#: Account/credential/venue/product scoped snapshots. Live exits bypass the cache.
+_holdings_probe: Dict[tuple, Tuple[float, Dict[str, int]]] = {}
 _HOLDINGS_TTL_S = 10.0
 
 
-async def _broker_holding(client, uid: str, symbol: str, direction: str = "long") -> Optional[int]:
+async def _broker_holding(client, uid: str, symbol: str, direction: str = "long", *,
+                          exchange: str = "NFO", product: str = "NRML",
+                          fresh: bool = False) -> Optional[int]:
     """Net quantity aligned with the position direction, or None if that
     cannot be determined.
 
@@ -280,31 +271,55 @@ async def _broker_holding(client, uid: str, symbol: str, direction: str = "long"
     that the position is gone — Kite keeps a squared-off row in ``net`` with
     ``quantity: 0`` for the rest of the day. None means the question was not answered:
     the read failed, or the symbol has no row at all, which is what a position carried
-    from a previous day looks like. Only 0 may stop an exit.
+    from a previous day looks like. Live exits require a fresh, fully attributed row.
     """
     now = time.monotonic()
-    cached = _holdings_probe.get(uid)
+    is_live = getattr(client, "_is_paper", True) is False
+    account_id = str(getattr(client, "_account_id", "") or "")
+    if is_live and not account_id:
+        return None
+    cache_key = (uid, account_id or id(client),
+                 str(getattr(client, "_account_generation", "")), exchange, product)
+    cached = None if fresh else _holdings_probe.get(cache_key)
     if cached is None or now - cached[0] > _HOLDINGS_TTL_S:
         try:
             raw = await client.get_positions_raw()
-        except Exception as exc:  # noqa: BLE001 — an unreachable portfolio must not block an exit
+        except Exception as exc:  # noqa: BLE001
             log.debug("kite holdings probe failed for %s: %s", uid, exc)
             return None
         if not isinstance(raw, dict) or not isinstance(raw.get("net"), list):
             return None
         book: Dict[str, int] = {}
+        ambiguous = set()
         for row in raw["net"]:
             if not isinstance(row, dict):
                 continue
             sym = str(row.get("tradingsymbol", "")).strip().upper()
             if not sym:
                 continue
-            try:
-                book[sym] = int(row.get("quantity", 0) or 0)
-            except (TypeError, ValueError):
+            venue = row.get("exchange")
+            broker_product = row.get("product")
+            if (venue != exchange and (is_live or venue is not None)) or (
+                    broker_product != product and (is_live or broker_product is not None)):
                 continue
-        _holdings_probe[uid] = (now, book)
-        cached = _holdings_probe[uid]
+            try:
+                from math import isfinite
+                quantity = float(row["quantity"])
+                if not isfinite(quantity) or not quantity.is_integer():
+                    raise ValueError("invalid_position_quantity")
+            except (TypeError, ValueError):
+                ambiguous.add(sym)
+                continue
+            except KeyError:
+                ambiguous.add(sym)
+                continue
+            if sym in book:
+                ambiguous.add(sym)
+            book[sym] = int(quantity)
+        for sym in ambiguous:
+            book.pop(sym, None)
+        _holdings_probe[cache_key] = (now, book)
+        cached = _holdings_probe[cache_key]
     quantity = cached[1].get(symbol.strip().upper())
     return None if quantity is None else quantity * (-1 if direction == "short" else 1)
 
@@ -312,7 +327,9 @@ async def _broker_holding(client, uid: str, symbol: str, direction: str = "long"
 def forget_holdings(uid: str = "") -> None:
     """Drop the cached portfolio read — after our own order changes it, and in tests."""
     if uid:
-        _holdings_probe.pop(uid, None)
+        for key in list(_holdings_probe):
+            if key[0] == uid:
+                _holdings_probe.pop(key, None)
     else:
         _holdings_probe.clear()
 
@@ -362,6 +379,61 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     _exiting.add(key)
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
+    is_live = getattr(client, "_is_paper", True) is False
+    product = str(getattr(p, "product", "NRML") or "NRML")
+    if is_live:
+        from app.services.exchanges.kite import accounts as kite_accounts
+        account_id = str(getattr(client, "_account_id", "") or "")
+        if (not account_id or account_id != str(getattr(p, "account_id", "") or "")
+                or product != "NRML"
+                or (getattr(client, "_account_generation", "")
+                    and not kite_accounts.client_is_current(client, user_id=uid))):
+            _exiting.discard(key)
+            state.log(uid, "order_failed", f"{p.symbol}: exit account identity unverified; protection retained")
+            return False
+        try:
+            pos.persist_strict(uid)
+        except Exception:
+            _exiting.discard(key)
+            state.log(uid, "order_failed", f"{p.symbol}: durable position storage unavailable; protection retained")
+            return False
+        if bool(getattr(p, "entry_pending", False)):
+            # A parent order can refill exposure after our exit. Cancellation ACK
+            # alone is insufficient: consume the broker's final cumulative fill.
+            try:
+                if not p.order_id:
+                    raise ValueError("entry_order_id_missing")
+                try:
+                    await client.cancel_order(p.order_id)
+                except Exception:
+                    pass  # It may have filled before cancellation; history decides.
+                history = await client.get_order_history(p.order_id)
+                last = (history or [])[-1]
+                if (not isinstance(last, dict)
+                        or str(last.get("order_id") or "") != str(p.order_id)
+                        or last.get("tradingsymbol") != p.symbol
+                        or last.get("exchange") != p.exchange
+                        or last.get("product") != product
+                        or last.get("transaction_type") != ("BUY" if p.direction == "long" else "SELL")
+                        or str(last.get("status") or "").upper() not in {"COMPLETE", "CANCELLED", "REJECTED"}):
+                    raise ValueError("entry_remainder_unresolved")
+                await on_order_update(uid, last, client=client)
+                current = pos.get(uid, p.symbol)
+                if (current is None or current.status not in (pos.OPEN, pos.PENDING)
+                        or current.qty <= 0 or bool(getattr(current, "entry_pending", False))):
+                    _exiting.discard(key)
+                    return False
+                p = current
+            except Exception:
+                _exiting.discard(key)
+                state.log(uid, "order_failed", f"{p.symbol}: entry remainder cancellation unconfirmed; protection retained")
+                return False
+        held = await _broker_holding(client, uid, p.symbol, p.direction,
+                                     exchange=p.exchange, product=product, fresh=True)
+        if held is None or held < 0:
+            _exiting.discard(key)
+            state.log(uid, "order_failed", f"{p.symbol}: fresh matching broker exposure unavailable; protection retained")
+            return False
 
     # ── the broker's stop gets out of the way FIRST ────────────────────────────
     # `_exiting` only serialises OUR coroutines; Zerodha's GTT engine never takes it.
@@ -415,7 +487,17 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # (no trigger involved at all, so nothing above notices), an exit whose postback
     # was lost before the next scan's reconcile pass, or a partial exit elsewhere.
     # In each case the alternative is a SELL against nothing: a naked short.
-    held = await _broker_holding(client, uid, p.symbol, p.direction)
+    held = await _broker_holding(client, uid, p.symbol, p.direction,
+                                 exchange=p.exchange, product=product, fresh=is_live)
+    if held is None and is_live:
+        _exiting.discard(key)
+        if old_gtt and outcome == pstop.CANCELLED:
+            pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
+            if hasattr(p, "protection_pending"):
+                p.protection_pending = False  # cancellation is confirmed; recovery may re-arm
+        pos._persist(uid)
+        state.log(uid, "order_failed", f"{p.symbol}: broker exposure changed or became unavailable while preparing exit; reconciliation required")
+        return False
     if held is not None and held < 0:
         _exiting.discard(key)
         p.pnl_reconciliation_required = True
@@ -472,12 +554,25 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
 
     # Persist the in-flight claim before the network await. A timeout is ambiguous:
     # retain this claim and reconcile instead of retrying a possibly accepted SELL.
+    if (is_live and getattr(client, "_account_generation", "")
+            and not kite_accounts.client_is_current(client, user_id=uid)):
+        _exiting.discard(key)
+        state.log(uid, "order_failed", f"{p.symbol}: account execution identity changed during exit preparation")
+        return False
     from uuid import uuid4
     p.exit_tag = "kx" + uuid4().hex[:18]  # Kite permits at most 20 alphanumeric chars
     p.exit_requested_ms = int(time.time() * 1000)
     p.exit_order_id = "submitting"
     p.exit_reason = reason or f"trail breach @ {ltp:.2f}"
-    pos._persist(uid)
+    try:
+        if is_live:
+            pos.persist_strict(uid)
+        else:
+            pos._persist(uid)
+    except Exception:
+        _exiting.discard(key)
+        state.log(uid, "order_failed", f"{p.symbol}: exit intent persistence failed; no order sent")
+        return False
     try:
         place = client.place_order_future if is_futures else client.place_order_option
         result = await place(p.symbol, exit_side, p.qty, exchange=p.exchange,

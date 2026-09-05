@@ -384,7 +384,9 @@ def test_adx_filter_allows_strong_trend():
 # ── drawdown breaker (opt-in, fail-safe) ─────────────────────────────────────
 
 def test_breaker_halts_after_drawdown():
-    client = FakeClient()
+    # Keep the broker observation at the drawdown being tested; the normal
+    # high-capital fixture would recover above the seeded peak during entry.
+    client = FakeClient(balance=800_000.0)
     cfg = EngineConfigModel(directional_mode=True, vehicle="otm_options", wire_risk_infra=True)
     # seed the per-user breaker peak high, then drop the value below halt threshold
     state.drawdown_multiplier(UID, 1_000_000.0)   # peak

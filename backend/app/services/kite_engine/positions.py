@@ -121,6 +121,11 @@ class OpenPosition:
     exit_requested_ms: int = 0
     exit_order_id: str = ""       # submitting/unknown/actual ID; never implies filled
     exit_fills: Dict[str, int] = field(default_factory=dict)  # cumulative broker fills
+    account_id: str = ""
+    product: str = "NRML"
+    entry_requested_qty: int = 0
+    entry_pending: bool = False
+    protection_pending: bool = False  # unknown GTT submission outcome: never retry blindly
 
     # derived threshold from exit_mode for convenience in responses/UI
 
@@ -204,6 +209,17 @@ def _persist(uid: str) -> None:
         db.set_config(f"kite_engine_positions_{uid}", json.dumps(rows))
     except Exception:
         pass
+
+
+def persist_strict(uid: str) -> None:
+    """Durably project live execution state; failure must block follow-on effects."""
+    if not db.is_available():
+        raise RuntimeError("position_store_unavailable")
+    rows = [asdict(p) for p in _load(uid).values()]
+    with db._conn() as conn:
+        conn.execute("PRAGMA synchronous=FULL")
+        conn.execute("INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+                     (f"kite_engine_positions_{uid}", json.dumps(rows, allow_nan=False)))
 
 
 # ── registry API ─────────────────────────────────────────────────────────────

@@ -60,7 +60,8 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
 
 
 async def place_manual_order(uid: str, option_symbol: str, side: str,
-                             quantity: int, exchange: str = "NFO") -> dict:
+                             quantity: int, exchange: str = "NFO", *,
+                             order_type: str = "MARKET", limit_price: float = 0) -> dict:
     """Shared manual BUY/SELL path used by BOTH the detail-panel REST endpoint and
     the Telegram bot, so they apply the identical live-safety gate + idempotency and
     place through the same warm client. Returns a status dict (never raises):
@@ -83,6 +84,8 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     from app.services.exchanges.kite import accounts as kite_accounts
     from app.services.exchanges.kite.errors import KiteError
 
+    if side.upper() not in {"BUY", "SELL"} or quantity <= 0:
+        return {"status": "blocked", "reason": "invalid_side_or_quantity"}
     norm = "buy" if side.upper() == "BUY" else "sell"
     idem = live_safety.make_idempotency_key(uid, option_symbol, side.upper(), quantity)
     # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
@@ -99,6 +102,11 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     if not acct:
         return {"status": "error", "message": "No active Kite account."}
     client = await kite_accounts.acquire_client(acct)
+    is_live = getattr(client, "_is_paper", True) is False
+    if is_live and norm == "buy":
+        async with _entry_locks.setdefault(uid, asyncio.Lock()):
+            return await _place_live_manual_buy(client, uid, option_symbol, quantity,
+                                                 exchange, order_type, limit_price)
 
     # ── a manual SELL of something we hold is an EXIT ──────────────────────────
     # Routing it through the monitor takes the same `_exiting` claim an automatic
@@ -107,6 +115,9 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     # exactly once, instead of the position lingering "open" after a manual close.
     if norm == "sell":
         held = positions.get(uid, option_symbol)
+        if is_live and (held is None or held.status not in (positions.OPEN, positions.PENDING)
+                        or held.exchange != exchange or int(quantity) != int(held.qty)):
+            return {"status": "blocked", "reason": "manual_exit_requires_exact_tracked_holding"}
         if held is not None and held.status in (positions.OPEN, positions.PENDING):
             # The exit price is only used for the activity line and the realized-PnL
             # figure that feeds the INR daily-loss breaker. Passing the STOP there books
@@ -137,15 +148,12 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
                                     "stop may already be selling it, or another exit is in "
                                     "flight. Check Zerodha, then retry."),
                         "protected": False, "protection": "position still open"}
-            live_safety.record_idempotency(idem, held.order_id or "manual-exit")
+            live_safety.record_idempotency(idem, held.exit_order_id or "manual-exit")
             # `_exit_position` always exits the WHOLE tracked position — a GTT-protected
             # holding cannot be part-sold without re-arming the trigger for the remainder,
             # which it does not do. Say so rather than let a smaller requested quantity
             # imply a partial close happened.
-            note = ("" if int(quantity) >= int(held.qty or 0) else
-                    f" — the whole tracked position ({held.qty} qty) was closed, not the "
-                    f"{quantity} requested")
-            return {"status": "ok", "order_id": held.order_id or "",
+            return {"status": "ok", "order_id": held.exit_order_id or "",
                     "message": "Exit submitted; awaiting broker fill confirmation",
                     "protected": False, "protection": "exit pending broker confirmation"}
 
@@ -176,6 +184,93 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
         client, uid, option_symbol=option_symbol, exchange=exchange,
         quantity=quantity, order_id=oid, plan=plan)
     return {"status": "ok", "order_id": oid, "message": "Order submitted", **armed}
+
+
+async def _place_live_manual_buy(client, uid, symbol, quantity, exchange, order_type, limit_price):
+    """Manual live entries share durable submission and require a fresh server plan."""
+    from math import isfinite
+    from app.services.kite_engine.execution_lifecycle import account_id, register_pending
+
+    intent = None
+    try:
+        cfg = state.get_config(uid)
+        reasons = autoexec_preflight(uid)
+        if reasons:
+            raise ValueError("; ".join(reasons))
+        if not cfg.protect_manual_orders:
+            raise ValueError("live_manual_protection_required")
+        plan = protection.plan_for_symbol(uid, symbol)
+        if not plan or not plan.live or not plan.protectable or plan.exchange != exchange:
+            raise ValueError("fresh_protectable_plan_required")
+        # Manual requests use the same completed-bar freshness/session gate as auto entries.
+        rows = [r for r in protection._rows_for(uid)
+                if any(getattr(l, "option_symbol", "") == symbol for l in (r.legs or []))]
+        row = next((r for r in rows if not entry_data_block_reason(
+            r, exchange=exchange, buffer_minutes=cfg.block_entry_minutes_before_close)), None)
+        if row is None:
+            raise ValueError("stale_or_closed_manual_signal")
+        prior = positions.get(uid, symbol)
+        if prior and prior.status in (positions.OPEN, positions.PENDING):
+            raise ValueError("live_scale_in_blocked")
+        if plan.lot_size <= 0 or quantity % plan.lot_size or quantity > cfg.max_lots * plan.lot_size:
+            raise ValueError("invalid_live_lot_quantity")
+        if order_type not in {"MARKET", "LIMIT"}:
+            raise ValueError("unsupported_engine_order_type")
+        key = f"{exchange}:{symbol}"
+        quote = await client.get_ltp([key])
+        premium = float((quote or {}).get(key, {}).get("last_price") or 0)
+        if not isfinite(premium) or not 0 < plan.stop_premium < premium:
+            raise ValueError("live_quote_or_stop_invalid")
+        ceiling = float(limit_price) if order_type == "LIMIT" else premium * 1.003
+        if not isfinite(ceiling) or ceiling <= plan.stop_premium:
+            raise ValueError("invalid_entry_price")
+        available = await available_fo_capital(client)
+        required = ceiling * quantity
+        if not isfinite(available) or available <= 0 or required > available:
+            raise ValueError("broker_capital_unavailable_or_insufficient")
+        if (ceiling - plan.stop_premium) * quantity > available * cfg.risk_pct / 100:
+            raise ValueError("manual_entry_exceeds_risk_budget")
+        if cfg.max_daily_loss_pct is not None:
+            day_pnl = state.daily_realized_pnl(uid)
+            if day_pnl < 0 and -day_pnl >= available * cfg.max_daily_loss_pct / 100:
+                raise ValueError("daily_loss_limit")
+        reason = entry_data_block_reason(row, exchange=exchange,
+                                         buffer_minutes=cfg.block_entry_minutes_before_close)
+        if reason:
+            raise ValueError(reason)
+        from app.services.exchanges.kite import accounts
+        if not accounts.client_is_current(client, user_id=uid):
+            raise ValueError("account_changed_before_submission")
+        payload = dict(symbol=symbol, exchange=exchange, lot_size=plan.lot_size,
+                       entry_premium=premium, stop_premium=plan.stop_premium,
+                       direction=plan.direction, signal_direction=plan.signal_direction,
+                       underlying=plan.underlying, token=plan.token, entry_spot=plan.entry_spot,
+                       entry_delta=plan.entry_delta, strike=plan.strike, expiry=plan.expiry,
+                       target_premium=plan.target_premium, stop_mode=cfg.stop_mode,
+                       exit_mode=cfg.exit_mode)
+        intent = order_journal.reserve(uid=uid, account_id=account_id(client),
+            strategy_id="sterling-kite", generation_id="manual-v1",
+            signal_id=f"{row.source}:{row.timestamp_ms}:{row.direction}",
+            exchange=exchange, symbol=symbol, side="BUY", quantity=quantity, payload=payload,
+            capital_required=required, available_capital=available)
+        if not order_journal.claim_submission(intent.intent_key):
+            return {"status": "blocked", "reason": "durable_entry_already_reserved_or_submitted"}
+    except Exception as exc:
+        return {"status": "blocked", "reason": str(exc)}
+    try:
+        # Bounded LIMIT price makes the reserved premium an actual upper bound.
+        result = await client.place_order_option(symbol, "buy", quantity, exchange=exchange,
+            order_type="limit_order", limit_price=round(ceiling, 2), tag=intent.tag)
+        oid = str((result or {}).get("order_id") or "")
+        if not oid:
+            raise RuntimeError("missing_order_id")
+        intent = order_journal.transition(intent.intent_key, "SUBMITTED", order_id=oid)
+        register_pending(intent, oid)
+        return {"status": "ok", "order_id": oid, "protected": False,
+                "protection": "awaiting confirmed fill", "message": "Entry submitted; fill pending"}
+    except Exception as exc:
+        order_journal.transition(intent.intent_key, "UNKNOWN", error=type(exc).__name__)
+        return {"status": "error", "message": "Entry outcome uncertain; broker reconciliation required"}
 
 
 async def arm_manual_option_buy(client, uid: str, *, option_symbol: str, exchange: str,
@@ -891,13 +986,22 @@ def _make_place_cb(client, uid: str):
         if getattr(client, "_is_paper", True) is False:
             try:
                 import hashlib, json
+                from app.services.kite_engine.execution_lifecycle import account_id
+                from app.services.exchanges.kite import accounts
+                if not accounts.client_is_current(client, user_id=uid):
+                    raise ValueError("account_changed_before_submission")
+                held = positions.get(uid, trade_symbol)
+                if held and held.status in (positions.PENDING, positions.OPEN):
+                    raise ValueError("live_scale_in_blocked")
                 generation = hashlib.sha256(
                     json.dumps(cfg.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()[:16]
                 intent = order_journal.reserve(
-                    uid=uid, account_id=str(getattr(client, "_account_id", "") or uid),
+                    uid=uid, account_id=account_id(client),
                     strategy_id="sterling-kite", generation_id=generation,
                     signal_id=f"{row.source}:{row.timestamp_ms}:{row.direction}",
-                    exchange=trade_exchange, symbol=trade_symbol, side=trade_side, quantity=qty,
+                    exchange=trade_exchange, symbol=trade_symbol, side=trade_side.upper(), quantity=qty,
+                    capital_required=(required_margin if use_futures else entry_px * qty * limit_buffer),
+                    available_capital=available,
                     payload=dict(symbol=trade_symbol, exchange=trade_exchange, quantity=qty,
                         lot_size=trade_lot, entry_premium=entry_px, stop_premium=stop_px,
                         direction=pos_direction, signal_direction=signal_dir, vehicle=vehicle_label,
@@ -908,7 +1012,8 @@ def _make_place_cb(client, uid: str):
                 if intent.state != "RESERVED":
                     state.log(uid, "order_blocked", f"{trade_symbol}: durable intent already {intent.state}")
                     return
-                intent = order_journal.transition(intent.intent_key, "SUBMITTING")
+                if not order_journal.claim_submission(intent.intent_key):
+                    return
             except Exception as exc:
                 state.log(uid, "order_blocked", f"{trade_symbol}: durable order reservation failed: {exc}")
                 return
@@ -1017,6 +1122,12 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
     all take their normal path, including cancelling a GTT armed against an entry that
     never filled.
     """
+    if getattr(client, "_is_paper", True) is False:
+        from app.services.kite_engine.execution_lifecycle import recover
+        try:
+            await recover(client, uid)
+        except Exception as exc:
+            state.log(uid, "order_failed", f"Durable entry recovery failed: {type(exc).__name__}")
     now_ms = int(datetime.now(_IST).timestamp() * 1000)
     for p in positions.open_positions(uid):
         exit_id = p.exit_order_id
@@ -1042,7 +1153,7 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
             positions._persist(uid)
             await monitor.on_order_update(uid, matches[0], client=client)
             continue
-        if not exit_id and (p.status != positions.PENDING or not order_id):
+        if not exit_id and (p.status != positions.PENDING and not p.entry_pending or not order_id):
             continue
         if not exit_id and now_ms - int(p.opened_ms or 0) < _PENDING_GRACE_MS:
             continue
@@ -1317,6 +1428,7 @@ def autoexec_preflight(uid: str) -> List[str]:
         pending_intents = order_journal.unresolved(uid)
     except Exception:
         pending_intents = []
+        reasons.append("Durable order journal unavailable; reconciliation cannot be verified")
     if pending_intents:
         reasons.append("Unresolved durable order intents: " +
                        ", ".join(i.symbol for i in pending_intents[:5]))
@@ -1330,6 +1442,9 @@ def autoexec_preflight(uid: str) -> List[str]:
     uncertain_exits = [p.symbol for p in live if p.exit_order_id]
     if uncertain_exits:
         reasons.append("Exit confirmation pending: " + ", ".join(uncertain_exits))
+    unknown_protection = [p.symbol for p in live if p.protection_pending]
+    if unknown_protection:
+        reasons.append("Broker protection reconciliation required: " + ", ".join(unknown_protection))
 
     unprotected = [p.symbol for p in live
                    if p.status == positions.OPEN and float(p.stop_premium or 0.0) <= 0]
