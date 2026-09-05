@@ -157,6 +157,8 @@ async def test_auto_exec_one_position_guard():
     placed = []
 
     class C:
+        async def get_margins(self,*a):
+            return {"available":{"live_balance":1_000_000}}
         async def place_order_option(self, sym, side, size, **kw):
             placed.append((sym, size))
             return {"order_id": "O-" + sym}

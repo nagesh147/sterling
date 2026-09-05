@@ -129,7 +129,7 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         matched_exit = bool(oid) and (
             oid == p.exit_order_id or (
                 p.exit_order_id in {"submitting", "unknown"}
-                and order.get("tag") == f"trailexit:{symbol}"))
+                and order.get("tag") == (p.exit_tag or f"trailexit:{symbol}")))
         if matched_exit and status in _DEAD_STATUSES and not order.get("filled_quantity"):
             p.exit_order_id = ""
             pos._persist(uid)
@@ -160,7 +160,7 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
                 await _resize_broker_stop(client, uid, p, old_qty)
                 state.log(uid, "info", f"{symbol}: partial exit, {p.qty} qty remains; PnL reconciliation required")
                 return
-            pos.close(uid, symbol, reason=f"broker exit fill @ ₹{avg:.2f}")
+            pos.close(uid, symbol, reason=f"{p.exit_reason or 'broker exit'}; fill @ ₹{avg:.2f}")
             if prior == 0 and len(p.exit_fills) == 1:
                 _record_realized(uid, p, avg)
             # The exit may have come from somewhere other than the GTT — a hand-placed
@@ -460,12 +460,16 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
 
     # Persist the in-flight claim before the network await. A timeout is ambiguous:
     # retain this claim and reconcile instead of retrying a possibly accepted SELL.
+    from uuid import uuid4
+    p.exit_tag = "kx" + uuid4().hex[:18]  # Kite permits at most 20 alphanumeric chars
+    p.exit_requested_ms = int(time.time() * 1000)
     p.exit_order_id = "submitting"
+    p.exit_reason = reason or f"trail breach @ {ltp:.2f}"
     pos._persist(uid)
     try:
         place = client.place_order_future if is_futures else client.place_order_option
         result = await place(p.symbol, exit_side, p.qty, exchange=p.exchange,
-                             tag=f"trailexit:{p.symbol}")
+                             tag=p.exit_tag)
     except Exception as exc:  # noqa: BLE001
         p.exit_order_id = "unknown"
         pos._persist(uid)
@@ -477,8 +481,15 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
         return False
     oid = str((result or {}).get("order_id") or "")
     # A fill postback may have completed while place() was awaiting.
-    if p.status in (pos.OPEN, pos.PENDING):
-        p.exit_order_id = oid or "unknown"
+    current = pos.get(uid, p.symbol)
+    if current is not None and current.status in (pos.OPEN, pos.PENDING):
+        if current is not p:
+            # A scale-in/replacement raced the network call: preserve pending exit
+            # ownership on the row that actually survives in the registry.
+            current.pnl_reconciliation_required = True
+            current.exit_tag = p.exit_tag
+            current.exit_requested_ms = p.exit_requested_ms
+        current.exit_order_id = oid or "unknown"
         pos._persist(uid)
     _exiting.discard(key)
     forget_holdings(uid)

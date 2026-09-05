@@ -117,6 +117,8 @@ class OpenPosition:
     #: happens at exit, and a position that already closed is never exited again.
     realized_booked: bool = False
     pnl_reconciliation_required: bool = False
+    exit_tag: str = ""
+    exit_requested_ms: int = 0
     exit_order_id: str = ""       # submitting/unknown/actual ID; never implies filled
     exit_fills: Dict[str, int] = field(default_factory=dict)  # cumulative broker fills
 

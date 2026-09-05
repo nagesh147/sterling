@@ -46,6 +46,9 @@ class FakeClient:
         self.ltp_by_symbol = ltp_by_symbol or {}
         self.ltp_missing = ltp_missing
 
+    async def order_margins(self, orders):
+        return [{"total": 1000 * o["quantity"]} for o in orders]
+
     async def get_margins(self, seg=None):
         return {"available": {"live_balance": self.balance}}
 
@@ -426,6 +429,7 @@ def test_minutes_to_close():
 
 def test_session_gate_blocks_entry_near_close(monkeypatch):
     client = FakeClient()
+    monkeypatch.setattr(service,"entry_data_block_reason",lambda *a,**kw:"entry_close_buffer")
     monkeypatch.setattr(service.market_hours, "minutes_to_close", lambda *a, **k: 3.0)
     open_pos = _run(EngineConfigModel(block_entry_minutes_before_close=5), _bear_row("spot"), client)
     assert open_pos == [] and not client.opt_placed
@@ -441,7 +445,7 @@ def test_session_gate_off_by_default(monkeypatch):
 # ── option-leg liquidity gate ─────────────────────────────────────────────────
 
 def test_passes_liquidity_predicate():
-    assert service._passes_liquidity(None, 5.0, 100)[0] is True   # no quote → fail-open
+    assert service._passes_liquidity(None, 5.0, 100)[0] is False  # enabled gate needs evidence
     wide = {"depth": {"buy": [{"price": 90}], "sell": [{"price": 110}]}, "oi": 500}
     ok, why = service._passes_liquidity(wide, 5.0, 100)
     assert not ok and "spread" in why                              # 20% spread
@@ -692,6 +696,7 @@ def test_square_off_expiring_exits_position(monkeypatch):
     client = FakeClient()
     asyncio.run(service._square_off_expiring(client, UID))
     p = positions.get(UID, "NIFTY25JUL24000CE")
+    asyncio.run(confirm_exit(UID, 520))
     assert p.status == positions.CLOSED
     assert client.opt_placed and client.opt_placed[0]["side"] == "sell"
 
@@ -741,6 +746,7 @@ def test_time_stop_squares_off_aged_position(monkeypatch):
     client = FakeClient()
     asyncio.run(service._time_stop_positions(client, UID))
     p = positions.get(UID, "NIFTY25JUL24000CE")
+    asyncio.run(confirm_exit(UID, 520))
     assert p.status == positions.CLOSED
     assert client.opt_placed and client.opt_placed[0]["side"] == "sell"
 
@@ -785,3 +791,5 @@ def _valid_entry_data_for_execution_plumbing(monkeypatch):
     """Historical row fixtures isolate execution; session gates tested separately."""
     from app.services.kite_engine import service as execution
     monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")
+
+from tests.engines.sterling_kite_engine.execution_fixtures import confirm_exit

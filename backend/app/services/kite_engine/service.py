@@ -974,7 +974,26 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
         exit_id = p.exit_order_id
         order_id = exit_id if exit_id and exit_id not in {"submitting", "unknown"} else p.order_id
         if exit_id in {"submitting", "unknown"}:
-            continue  # requires matching the uncertain request in broker order book
+            # A unique persisted client tag identifies an accepted-but-timed-out
+            # request without guessing from symbol/side or resubmitting it.
+            if not p.exit_tag:
+                continue  # legacy ambiguous request needs operator reconciliation
+            try:
+                book = await client.get_orders()
+                matches = [o for o in book if isinstance(o, dict)
+                           and o.get("tag") == p.exit_tag
+                           and o.get("tradingsymbol") == p.symbol
+                           and o.get("exchange", p.exchange) == p.exchange
+                           and o.get("transaction_type") == ("SELL" if p.direction == "long" else "BUY")
+                           and o.get("order_id")]
+            except Exception:
+                continue
+            if len(matches) != 1:
+                continue  # absence/ambiguity does not authorize a retry
+            p.exit_order_id = str(matches[0]["order_id"])
+            positions._persist(uid)
+            await monitor.on_order_update(uid, matches[0], client=client)
+            continue
         if not exit_id and (p.status != positions.PENDING or not order_id):
             continue
         if not exit_id and now_ms - int(p.opened_ms or 0) < _PENDING_GRACE_MS:

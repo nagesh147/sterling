@@ -161,3 +161,23 @@ def test_statutory_stt_change_is_date_effective():
 @pytest.mark.parametrize("quote", [None, {}, {"oi":float("nan")}, {"oi":100,"depth":{"buy":[{"price":110}],"sell":[{"price":100}]}}])
 def test_enabled_liquidity_gate_fails_closed(quote):
     assert service._passes_liquidity(quote,5,100)[0] is False
+
+@pytest.mark.asyncio
+async def test_accepted_exit_timeout_recovers_by_unique_tag_without_resend():
+    uid='audit_timeout'; positions.reset(uid); state.reset(uid)
+    p=positions.register(positions.OpenPosition(uid=uid,symbol='OPT',exchange='NFO',qty=50,
+        entry_premium=100,fill_price=100,stop_premium=80,status=positions.OPEN,order_id='entry'))
+    class AcceptedTimeout(ExitBroker):
+        async def place_order_option(self,*a,**kw):
+            self.calls+=1
+            self.tag=kw['tag']
+            raise TimeoutError('response lost after acceptance')
+        async def get_orders(self):
+            return [dict(tag=self.tag,tradingsymbol='OPT',exchange='NFO',transaction_type='SELL',
+                order_id='accepted-exit',status='COMPLETE',filled_quantity=50,average_price=82)]
+    broker=AcceptedTimeout()
+    assert not await monitor._exit_position(broker,uid,p,80)
+    assert p.exit_order_id == 'unknown' and len(p.exit_tag) == 20 and p.exit_tag.isalnum()
+    await service._reconcile_pending_positions(broker,uid)
+    assert p.status == positions.CLOSED and broker.calls == 1
+    assert state.daily_realized_pnl(uid) == -900
