@@ -82,11 +82,11 @@ class TestCSVExport:
 class TestConftestExchangeIsolation:
     """Verify exchange store resets between tests."""
 
-    def test_exchange_store_has_delta_india(self, client):
+    def test_exchange_store_has_zerodha(self, client):
         from app.services import exchange_account_store as eas
         configs = eas.list_exchanges()
         names = [c.name for c in configs]
-        assert "delta_india" in names
+        assert "zerodha" in names
 
     def test_exchange_store_fresh_each_test_a(self, client):
         from app.services import exchange_account_store as eas
@@ -100,7 +100,7 @@ class TestConftestExchangeIsolation:
         # If isolation works, OKX from previous test should NOT be here
         from app.services import exchange_account_store as eas
         names = [c.name for c in eas.list_exchanges()]
-        # Only delta_india default — no OKX from previous test
+        # Only the zerodha default — crypto adapters are gone from this build
         assert names.count("okx") == 0
 
     def test_account_endpoints_use_active_exchange(self, client):
@@ -108,4 +108,4 @@ class TestConftestExchangeIsolation:
         assert resp.status_code == 200
         data = resp.json()
         assert data["active"] is True
-        assert data["exchange_name"] == "delta_india"
+        assert data["exchange_name"] == "zerodha"

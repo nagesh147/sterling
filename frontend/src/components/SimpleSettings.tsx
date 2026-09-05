@@ -413,28 +413,6 @@ function TelegramSection() {
         Configure separately for Kite (Indian markets) and Crypto (Delta Exchange).
       </div>
 
-      {/* Kite / Crypto toggle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-        <span style={{ fontSize: 9, color: 'var(--t-dim)', fontWeight: 500 }}>NOTIFY FOR</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['kite', 'crypto', 'both'] as const).map(mode => {
-            const savedMode = localStorage.getItem('tg_notify_mode') || 'crypto';
-            return (
-              <button key={mode}
-                onClick={() => localStorage.setItem('tg_notify_mode', mode)}
-                style={{
-                  fontSize: 9, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-                  cursor: 'pointer', border: `1px solid ${savedMode === mode ? 'var(--t-blue)44' : 'var(--t-border)'}`,
-                  background: savedMode === mode ? 'var(--t-blue)11' : 'var(--t-bg2)',
-                  color: savedMode === mode ? 'var(--t-blue)' : 'var(--t-dim)',
-                  transition: 'all .14s ease',
-                }}
-              >{mode === 'kite' ? 'KITE' : mode === 'crypto' ? 'CRYPTO' : 'BOTH'}</button>
-            );
-          })}
-        </div>
-      </div>
-
       {needsToken && (
         <div style={{ marginBottom: 10, padding: '6px 10px', background: 'var(--t-bg2)', border: '1px solid var(--t-amber)33', borderRadius: 4, fontSize: 10, color: 'var(--t-amber)' }}>
           Enter bot token to enable Telegram alerts
@@ -1180,10 +1158,6 @@ export function AIGatekeeperToggle({ chipStyle }: { chipStyle?: React.CSSPropert
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
-  const { data: scalpData } = useScalpMode();
-  const setScalpMode = useSetScalpMode();
-  const scalpOn = scalpData?.enabled ?? false;
-  const scalpPending = setScalpMode.isPending;
 
   return (
     <>
@@ -1194,38 +1168,12 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
           <button onClick={onClose} style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 4, color: 'var(--t-dim)', cursor: 'pointer', fontSize: 12, padding: '3px 8px', lineHeight: 1 }}>✕</button>
         </div>
 
-        {/* ── Crypto engine kill switch ── */}
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-bright)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>CRYPTO ENGINES</span>
-            <div style={{ width: 9, height: 9, borderRadius: '50%', background: scalpOn ? 'var(--t-green)' : 'var(--t-dim)' }} />
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.6, marginBottom: 14 }}>
-            Master kill‑switch for all Delta Exchange crypto engines, sensors, and background scans (Sterling, Grok, V2, derivatives scanner, IV stream, live tickers).
-            <br /><br />
-            <strong style={{ color: scalpOn ? 'var(--t-green)' : 'var(--t-red)' }}>{scalpOn ? '▶ Running' : '■ Stopped'}</strong> — {scalpOn ? 'all crypto processes are active. Background tasks poll and scan.' : 'no crypto tasks run. Only the Kite engine (Indian markets) remains active.'}
-          </div>
-          <button
-            onClick={() => setScalpMode.mutate(!scalpOn)}
-            disabled={scalpPending}
-            style={{
-              width: '100%', padding: '8px 0', borderRadius: 5, border: `1px solid ${scalpOn ? 'var(--t-red)44' : 'var(--t-green)44'}`,
-              background: scalpOn ? 'var(--t-red)11' : 'var(--t-green)11',
-              color: scalpOn ? 'var(--t-red)' : 'var(--t-green)',
-              cursor: scalpPending ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.08em', textTransform: 'uppercase', opacity: scalpPending ? 0.6 : 1, transition: 'all .15s ease',
-            }}>
-            {scalpPending ? '…' : scalpOn ? '⏸ STOP ALL CRYPTO ENGINES' : '▶ START CRYPTO ENGINES'}
-          </button>
-        </div>
-
         {/* ── UI preferences ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-bright)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>DISPLAY</span>
           </div>
           <DefaultPageLoadSectionPicker />
-          <CryptoTabToggle />
         </div>
 
         <TelegramSection />
@@ -1282,47 +1230,3 @@ function DefaultPageLoadSectionPicker() {
   );
 }
 
-function CryptoTabToggle() {
-  const [showCrypto, setShowCrypto] = useState(() => {
-    const stored = localStorage.getItem('sterling_show_crypto_tab');
-    return stored === null ? true : stored === 'true';
-  });
-
-  const handleToggle = () => {
-    const newValue = !showCrypto;
-    setShowCrypto(newValue);
-    localStorage.setItem('sterling_show_crypto_tab', String(newValue));
-  };
-
-  return (
-    <div style={{
-      padding: '12px 14px', borderRadius: 6,
-      background: 'var(--t-bg2)',
-      border: '1px solid var(--t-border)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--t-bright)' }}>Show Crypto Tab</span>
-        <button
-          onClick={handleToggle}
-          style={{
-            background: showCrypto ? 'var(--t-blue)22' : 'var(--t-bg)',
-            color: showCrypto ? 'var(--t-blue)' : 'var(--t-dim)',
-            border: `1px solid ${showCrypto ? 'var(--t-blue)66' : 'var(--t-border)'}`,
-            padding: '4px 10px',
-            borderRadius: 4,
-            fontSize: 10,
-            cursor: 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          {showCrypto ? 'ON' : 'OFF'}
-        </button>
-      </div>
-      <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.6 }}>
-        {showCrypto
-          ? 'Crypto tab is visible in the header. Toggle off to hide Sterling, Grok, V2, and other crypto features.'
-          : 'Crypto tab is hidden. Toggle on to access Sterling, Grok, V2, and other crypto features.'}
-      </div>
-    </div>
-  );
-}

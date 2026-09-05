@@ -114,11 +114,15 @@ def _load_from_db() -> List[ExchangeConfig]:
 
 # ─── Bootstrap ────────────────────────────────────────────────────────────────
 
+# Indian/Kite-only build: the seeded default must be an exchange the adapter
+# factory still supports. It seeded `delta_india` after the crypto adapters were
+# removed, so `_build_raw` raised `Unsupported exchange: delta_india` during
+# startup and the API never came up at all.
 _DEFAULTS = [
     ExchangeConfig(
-        id="delta_india_default",
-        name="delta_india",
-        display_name="Delta Exchange India",
+        id="zerodha_default",
+        name="zerodha",
+        display_name="Zerodha / Kite Connect",
         api_key="DUMMY_API_KEY_REPLACE_WITH_REAL_KEY",
         api_secret="DUMMY_API_SECRET_REPLACE_WITH_REAL_SECRET_00000000000000",
         is_paper=True,

@@ -13,7 +13,7 @@ class InstrumentMeta(BaseModel):
     preferred_dte_max: int = 15
     force_exit_dte: int = 3
     has_options: bool = True
-    exchange: str = "delta_india"
+    exchange: str = "zerodha"
     exchange_currency: str
     perp_symbol: str
     index_name: str

@@ -205,7 +205,7 @@ class TestFullPipeline:
     def test_exchange_delta_active_on_boot(self, client):
         resp = client.get("/api/v1/account/info")
         assert resp.json()["active"] is True
-        assert resp.json()["exchange_name"] == "delta_india"
+        assert resp.json()["exchange_name"] == "zerodha"
 
     def test_alert_lifecycle(self, client):
         # Create → Check → Triggered → Dismiss
@@ -240,4 +240,4 @@ class TestFullPipeline:
     def test_supported_exchanges_complete(self, client):
         data = client.get("/api/v1/exchanges/supported").json()
         names = {e["name"] for e in data["exchanges"]}
-        assert {"delta_india", "zerodha", "deribit", "okx"} <= names
+        assert {"zerodha"} <= names

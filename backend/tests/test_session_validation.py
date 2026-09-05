@@ -211,10 +211,10 @@ class TestCISmoke:
         data = client.get("/api/v1/directional/watchlist").json()
         assert data["count"] >= 4
 
-    def test_delta_india_account_active(self, client):
+    def test_zerodha_account_active(self, client):
         info = client.get("/api/v1/account/info").json()
         assert info["active"] is True
-        assert info["exchange_name"] == "delta_india"
+        assert info["exchange_name"] == "zerodha"
 
     def test_paper_balances_available(self, client):
         data = client.get("/api/v1/account/balances").json()

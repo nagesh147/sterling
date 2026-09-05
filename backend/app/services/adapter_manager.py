@@ -49,7 +49,21 @@ async def init(
     global _adapter, _data_source, _raw_adapter
     from app.services.cache import CachingAdapter
     from app.services.retry import RetryingAdapter
-    raw = _build_raw(exchange, api_key, api_secret)
+    # A legacy crypto account row left in the database (delta_india, okx, ...)
+    # must not take the whole API down on an Indian-only build. `_build_raw`
+    # raises for anything but zerodha, and startup called it with whatever the
+    # persisted active account said — so one stale row meant
+    # "Application startup failed. Exiting." and no backend at all.
+    try:
+        raw = _build_raw(exchange, api_key, api_secret)
+    except ValueError:
+        log.warning(
+            "Ignoring unsupported persisted exchange %r; falling back to zerodha.",
+            exchange,
+        )
+        exchange = "zerodha"
+        raw = _build_raw(exchange, api_key, api_secret)
+
     _adapter = CachingAdapter(RetryingAdapter(raw))
     _data_source = exchange.lower()
     _raw_adapter = raw
