@@ -113,10 +113,15 @@ class ExitBroker:
 @pytest.mark.asyncio
 async def test_ack_is_not_fill_and_pending_survives_reload(monkeypatch):
     uid='audit_ack'; positions.reset(uid); state.reset(uid)
+    persisted={}
+    monkeypatch.setattr(positions.db,'set_config',lambda key,value:persisted.__setitem__(key,value))
+    monkeypatch.setattr(positions.db,'get_config',lambda key:persisted.get(key))
     p=positions.register(positions.OpenPosition(uid=uid,symbol='OPT',exchange='NFO',qty=50,
         entry_premium=100,fill_price=100,stop_premium=80,status=positions.OPEN,order_id='entry'))
     broker=ExitBroker()
     assert await monitor._exit_position(broker,uid,p,79)
+    positions.reset(uid)
+    p=positions.get(uid,'OPT')
     assert p.status == positions.OPEN and p.exit_order_id == 'exit1'
     assert state.daily_realized_pnl(uid) == 0
     assert not await monitor._exit_position(broker,uid,p,78)
@@ -151,3 +156,8 @@ def test_statutory_stt_change_is_date_effective():
     a=costs.round_trip(100,100,100,exit_ms=int(dt('2026-03-31').timestamp()*1000))
     b=costs.round_trip(100,100,100,exit_ms=int(dt('2026-04-01').timestamp()*1000))
     assert b-a == pytest.approx(5)
+
+
+@pytest.mark.parametrize("quote", [None, {}, {"oi":float("nan")}, {"oi":100,"depth":{"buy":[{"price":110}],"sell":[{"price":100}]}}])
+def test_enabled_liquidity_gate_fails_closed(quote):
+    assert service._passes_liquidity(quote,5,100)[0] is False

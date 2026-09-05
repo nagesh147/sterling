@@ -295,26 +295,28 @@ def _dte_from_expiry(expiry: str, today: Optional[datetime] = None) -> float:
 
 
 def _passes_liquidity(quote, max_spread_pct, min_oi) -> tuple:
-    """(_ok, reason) for an option leg's quote against optional spread/OI gates.
-
-    Fail-OPEN on missing data (no quote / no depth / no OI) — a data gap must not
-    block a real signal; the protective stop still guards the position. Only an
-    explicit breach (spread too wide / OI too thin) rejects the entry."""
-    if quote is None:
+    """An enabled gate requires finite, usable broker evidence."""
+    from math import isfinite
+    if max_spread_pct is None and min_oi is None:
         return True, ""
-    if min_oi is not None:
-        oi = float(quote.get("oi") or quote.get("open_interest") or 0.0)
-        if oi and oi < float(min_oi):
-            return False, f"OI {oi:.0f} < {min_oi}"
-    if max_spread_pct is not None:
-        depth = quote.get("depth") or {}
-        bid = float(((depth.get("buy") or [{}])[0]).get("price") or 0.0)
-        ask = float(((depth.get("sell") or [{}])[0]).get("price") or 0.0)
-        if bid > 0 and ask > 0:
-            mid = 0.5 * (bid + ask)
-            spread_pct = (ask - bid) / mid * 100.0 if mid > 0 else 0.0
-            if spread_pct > float(max_spread_pct):
-                return False, f"spread {spread_pct:.1f}% > {max_spread_pct}%"
+    if not isinstance(quote, dict):
+        return False, "liquidity_quote_missing"
+    try:
+        if min_oi is not None:
+            value = quote.get("oi", quote.get("open_interest"))
+            if value is None or not isfinite(float(value)) or float(value) < float(min_oi):
+                return False, "OI missing or below minimum"
+        if max_spread_pct is not None:
+            depth = quote.get("depth") or {}
+            bid = float((depth.get("buy") or [{}])[0].get("price") or 0)
+            ask = float((depth.get("sell") or [{}])[0].get("price") or 0)
+            if not all(isfinite(v) and v > 0 for v in (bid, ask)) or ask < bid:
+                return False, "invalid or missing two-sided depth"
+            spread = (ask - bid) / ((ask + bid) / 2) * 100
+            if spread > float(max_spread_pct):
+                return False, f"spread {spread:.1f}% > {max_spread_pct}%"
+    except (ValueError, TypeError, IndexError, AttributeError):
+        return False, "malformed liquidity evidence"
     return True, ""
 
 
@@ -733,9 +735,7 @@ def _make_place_cb(client, uid: str):
             if not getattr(sized, "blocked", False):
                 return False
             state.log(uid, "order_blocked",
-                      f"{trade_symbol} entry skipped — {sized.reason}. Lower the stop "
-                      f"distance, raise Risk per trade, or turn on 'Allow minimum lot "
-                      f"over risk' to take the smallest lot anyway.")
+                      f"{trade_symbol} entry skipped — {sized.reason}. Check broker inputs and risk budget.")
             return True
 
         if use_futures:
