@@ -70,6 +70,26 @@ export function ReplayDock() {
   const announcement = useReplayAnnouncer();
   useReplaySignalToasts();
 
+  /**
+   * Keep the keyboard alive across a mode change.
+   *
+   * Changing mode unmounts the focused control (the button you just pressed, or
+   * a portal the dock moved out of), so focus falls back to `<body>` — and the
+   * shortcut handler's ownership check then rejects everything, including the
+   * next Escape. Observed: Escape stepped fullscreen -> overlay -> docked and
+   * then went dead, so the dock could not be closed from the keyboard.
+   *
+   * Only reclaims focus that was actually lost to the body, so a deliberate
+   * click into another pane is left alone.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && rootRef.current?.contains(active)) return;
+    if (active && active !== document.body && !rootRef.current?.contains(active)) return;
+    rootRef.current?.focus({ preventScroll: true });
+  }, [mode, open]);
+
   /* ── Width buckets ─────────────────────────────────────────────────────
      Measured from the dock, never the viewport: it is a pane inside a
      resizable workspace, so the window's width says nothing about its own. */

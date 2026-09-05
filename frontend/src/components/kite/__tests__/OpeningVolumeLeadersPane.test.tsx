@@ -318,7 +318,10 @@ describe('OpeningVolumeLeadersPane', () => {
     expect(screen.getByText('Actionable signal')).toBeInTheDocument();
     expect(screen.getByText('Volume signal')).toBeInTheDocument();
     expect(screen.getAllByText(/71–73/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/20\.0 \/ 20\.0 · pass/i)).toBeInTheDocument();
+    // `formatNumber` drops the fraction for whole numbers on purpose
+    // (`Number.isInteger` -> minimumFractionDigits 0), so a 20-of-20 component
+    // renders "20 / 20", not "20.0 / 20.0".
+    expect(screen.getByText(/20 \/ 20 · pass/i)).toBeInTheDocument();
     expect(screen.getByText(/09:15 IST/)).toBeInTheDocument();
     expect(screen.getAllByText(/09:16 IST/)).toHaveLength(2);
     expect(screen.getByText('140:70')).toBeInTheDocument();

@@ -120,7 +120,11 @@ describe('both tables share one heading scale', () => {
   });
 
   it('labels the shared board day band from sessionDayLabel', () => {
-    expect(sharedBoard).toContain('sessionDayLabel(key, nowMs');
+    // Pin the CALL, not the variable name. This asserted `nowMs`, which was
+    // renamed to `effectiveNowMs` when the board became replay-aware — the
+    // behaviour never changed, only the identifier, and the test went red for
+    // a rename.
+    expect(sharedBoard).toContain('sessionDayLabel(key,');
   });
 
   it('puts the group band on the surface shade, not the row background', () => {

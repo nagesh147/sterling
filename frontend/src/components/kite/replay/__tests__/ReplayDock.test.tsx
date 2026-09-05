@@ -571,3 +571,48 @@ describe('unrealised is kept apart from realised', () => {
     expect(within(realised).getByText('+₹0.00')).toBeTruthy();
   });
 });
+
+describe('the keyboard survives a mode change', () => {
+  // Observed in the browser: Escape stepped fullscreen -> overlay -> docked and
+  // then went dead. Changing mode unmounts the focused control, focus falls to
+  // <body>, and the shortcut handler's ownership check rejects everything after
+  // that — so the dock could not be closed from the keyboard.
+  it('walks the whole Escape ladder, ending closed', async () => {
+    setupDock({ mode: 'fullscreen', prevMode: 'overlay' });
+    await renderDock();
+    screen.getByTestId('replay-dock').focus();
+
+    const esc = async () => {
+      await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
+    };
+
+    await esc();
+    expect(useReplayStore.getState().mode).toBe('overlay');
+    await esc();
+    expect(useReplayStore.getState().mode).toBe('docked');
+    await esc();
+    expect(useReplayStore.getState().open).toBe(false);
+  });
+
+  it('reclaims focus when a mode change drops it to the body', async () => {
+    setupDock();
+    await renderDock();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    await act(async () => { useReplayStore.getState().setMode('overlay'); });
+    expect(screen.getByTestId('replay-dock').contains(document.activeElement)).toBe(true);
+  });
+
+  it('does not steal focus the user put in another pane', async () => {
+    setupDock();
+    await renderDock();
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    outside.focus();
+
+    await act(async () => { useReplayStore.getState().setMode('overlay'); });
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+});
