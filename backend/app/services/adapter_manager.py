@@ -10,14 +10,11 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 _adapter: Optional[BaseExchangeAdapter] = None
-_data_source: str = "delta_india"
+_data_source: str = "zerodha"
 _raw_adapter: Optional[BaseExchangeAdapter] = None   # unwrapped, for WS access
 
 SUPPORTED_DATA_SOURCES = {
-    "delta_india": "Delta Exchange India (candles/prices)",
-    "deribit":     "Deribit (BTC/ETH/SOL options + perps)",
-    "binance":     "Binance USDT-M Futures (candles/prices)",
-    "okx":         "OKX (candles/prices/options)",
+    "zerodha": "Zerodha/Kite Connect (Indian equities/options)",
 }
 
 
@@ -36,22 +33,14 @@ def get_data_source() -> str:
 
 def _build_raw(exchange: str, api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
     exchange = exchange.lower()
-    if exchange == "okx":
-        from app.services.exchanges.adapters.okx import OKXAdapter
-        return OKXAdapter()
-    if exchange == "delta_india":
-        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
-        return DeltaIndiaAdapter(api_key=api_key, api_secret=api_secret, is_paper=True)
-    if exchange == "binance":
-        from app.services.exchanges.adapters.binance import BinanceAdapter
-        return BinanceAdapter(api_key=api_key, api_secret=api_secret, is_paper=True)
-    from app.services.exchanges.adapters.deribit import DeribitAdapter
-    from app.core.config import settings
-    return DeribitAdapter(base_url=settings.deribit_base_url)
+    if exchange == "zerodha":
+        from app.services.exchanges.adapters.zerodha import ZerodhaAdapter
+        return ZerodhaAdapter(api_key=api_key, api_secret=api_secret, access_token="", is_paper=True)
+    raise ValueError(f"Unsupported exchange: {exchange}. Supported: zerodha")
 
 
 async def init(
-    exchange: str = "delta_india",
+    exchange: str = "zerodha",
     api_key: str = "",
     api_secret: str = "",
     start_ws: bool = True,
@@ -65,30 +54,18 @@ async def init(
     _data_source = exchange.lower()
     _raw_adapter = raw
 
-    # Start WebSocket live price feed for delta_india (eliminates REST ticker polling)
-    if start_ws and _data_source == "delta_india" and hasattr(raw, "start_ws"):
-        from app.services.exchanges.instrument_registry import list_instruments
-        symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
-        await raw.start_ws(symbols)
-
-    log.info("Market data adapter initialized: %s (ws=%s)", _data_source, "active" if start_ws else "paused")
+    log.info("Market data adapter initialized: %s", _data_source)
     return _adapter
 
 
 async def start_feed() -> None:
     """Start WebSocket price feed if active raw adapter supports it."""
-    if _data_source == "delta_india" and hasattr(_raw_adapter, "start_ws"):
-        from app.services.exchanges.instrument_registry import list_instruments
-        symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
-        await _raw_adapter.start_ws(symbols)
-        log.info("Market data WS feed started for %s", _data_source)
+    log.info("Start feed called for %s (no-op for zerodha)", _data_source)
 
 
 async def stop_feed() -> None:
     """Stop WebSocket price feed if active raw adapter supports it."""
-    if hasattr(_raw_adapter, "stop_ws"):
-        await _raw_adapter.stop_ws()
-        log.info("Market data WS feed stopped for %s", _data_source)
+    log.info("Stop feed called for %s (no-op for zerodha)", _data_source)
 
 
 async def switch(

@@ -8,22 +8,13 @@ import { SimpleSettingsDrawer, AlgoToggle, AIGatekeeperToggle } from '../compone
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying, useTabOrder, useSetTabOrder } from '../store/useStore';
-import type { TabId } from '../store/useStore';
-import { useScalpMode } from '../hooks/useSignalAlerts';
-import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
-import { setCryptoEnabled } from '../hooks/useAppStream';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 
-import { SterlingEngineTab } from '../components/sterling_engine/SterlingEngineTab';
-import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
-import { GrokTab } from '../components/GrokTab';
-import { SterlingV2Tab } from '../components/SterlingV2Tab';
 import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { KiteTab } from '../components/kite/KiteTab';
 import { ThemeToggle } from '../components/kite/ThemeToggle';
-import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
 import { useKiteSettings } from '../store/useKiteSettings';

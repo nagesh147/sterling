@@ -33,7 +33,6 @@ from app.api.v1.endpoints.candles import router as candles_router
 from app.api.v1.endpoints.analytics import router as analytics_router
 from app.api.v1.endpoints.analytics_baseline import router as analytics_baseline_router
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
-from app.api.v1.endpoints.trading import router as trading_router
 from app.api.v1.endpoints.derivatives import router as derivatives_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
@@ -311,61 +310,7 @@ async def _background_position_monitor(app: FastAPI) -> None:
                             pos.sized_trade.structure.max_gain,
                         )
 
-                        # ── Tiered TP evaluation (scalping only) ────────
-                        if is_scalp and pos.trail_stop_json and pos.status.value == "open":
-                            try:
-                                _ts = TrailState.from_json(pos.trail_stop_json)
-                                _scalp_cfg = getattr(app.state, "sterling_engine_config", None)
-                                _tp_cfg = getattr(_scalp_cfg, "tiered_tp", None) if _scalp_cfg else None
-                                if _tp_cfg and _tp_cfg.enabled and not _ts.tp1_triggered:
-                                    _entry = pos.entry_price_real or pos.entry_spot_price
-                                    _risk = abs(_entry - (pos.initial_sl or _entry * 0.95))
-                                    if _risk > 0:
-                                        if direction_sign == 1:
-                                            _r_mult = (current_spot - _entry) / _risk
-                                        else:
-                                            _r_mult = (_entry - current_spot) / _risk
-                                        if _r_mult >= _tp_cfg.tp1_r_multiple:
-                                            _clip = pos.sized_trade.contracts * _tp_cfg.tp1_size_pct
-                                            _clip = max(1, int(round(_clip)))
-                                            log.info("🎯 TP1 triggered: %s at %.2fR — closing %d/%d contracts",
-                                                     pos.underlying, _r_mult, _clip, pos.sized_trade.contracts)
-                                            # Fire market reduce-only close (live positions only)
-                                            if not pos.is_paper:
-                                                _exec_side = "sell" if direction_sign == 1 else "buy"
-                                                try:
-                                                    from app.services import exchange_account_store as _ecs_tp
-                                                    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DiaTp
-                                                    _ac = _ecs_tp.get_active()
-                                                    if _ac and _ac.api_key and not _ac.api_key.startswith("DUMMY"):
-                                                        _base = (_ac.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
-                                                        _live_ad = _DiaTp(api_key=_ac.api_key, api_secret=_ac.api_secret, is_paper=False, base_url=_base)
-                                                        _delta = inst.delta_perp_symbol or f"{pos.underlying}USD"
-                                                        _pid = await _live_ad.get_product_id(_delta)
-                                                        await _live_ad.market_reduce_close(_pid, _exec_side, float(_clip))
-                                                        log.info("TP1 market reduce-only order placed for %s: %d contracts", pos.underlying, _clip)
-                                                except Exception as _pex:
-                                                    log.warning("TP1 partial close failed for %s: %s", pos.id, _pex)
-                                            # Book the partial close in paper_store & refresh
-                                            _ps.partial_close_position(
-                                                pos.id, float(current_spot), _tp_cfg.tp1_size_pct,
-                                            )
-                                            pos = _ps.get_position(pos.id) or pos
-                                            # Mark TP1 triggered; pull stop to breakeven
-                                            _ts.tp1_triggered = True
-                                            if _tp_cfg.move_to_be_at_tp1:
-                                                _ts.current_stop = round(_entry, 4)
-                                                _ts.breakeven_set = True
-                                                _ps.update_position(
-                                                    pos.id,
-                                                    current_sl=round(_entry, 4),
-                                                    trail_stop_json=_ts.to_json(),
-                                                )
-                                                log.info("🛡️ Stop moved to breakeven (%.2f) for %s", _entry, pos.underlying)
-                                            else:
-                                                _ps.update_position(pos.id, trail_stop_json=_ts.to_json())
-                            except Exception as _tpe:
-                                log.debug("Tiered TP eval error for %s: %s", pos.id, _tpe)
+                        # Tiered TP removed (crypto-only feature)
 
                         # Trail update
                         if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
@@ -1503,21 +1448,7 @@ async def lifespan(app: FastAPI):
     except Exception as _e:
         log.warning("Telegram config restore skipped: %s", _e)
 
-    # Restore persisted scalping config (survives server restarts)
-    from app.engines.sterling_engine.config import ScalpingConfig as _SC, default_config as _default_sc
-    # New key, falling back to the legacy "scalping_config" for pre-rename installs.
-    _saved_sc = get_config("sterling_engine_config") or get_config("scalping_config")
-    if _saved_sc:
-        try:
-            cfg = _SC.model_validate_json(_saved_sc)
-            if not cfg.profiles:
-                cfg.profiles = _default_sc().profiles
-            app.state.sterling_engine_config = cfg
-            log.info("Restored scalping config from DB")
-        except Exception:
-            app.state.sterling_engine_config = _default_sc()
-    else:
-        app.state.sterling_engine_config = _default_sc()
+    log.info("Startup complete")
 
     # Restore persisted Telegram config (survives server restarts)
     from app.services.notifications import telegram as _telegram_svc
@@ -1872,18 +1803,9 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
-    app.include_router(trading_router, prefix="/api/v1")
     app.include_router(derivatives_router, prefix="/api/v1")
     app.include_router(sterling_v2_router, prefix="/api/v1")
 
-    # Grok config
-    from app.api.v1.endpoints.grok import router as grok_router
-    app.include_router(grok_router, prefix="/api/v1")
-
-    # Scalping strategies (Price Action / SMC / MA Crossover)
-    from app.api.v1.endpoints.sterling_engine import router as sterling_engine_router
-    app.include_router(sterling_engine_router, prefix="/api/v1")
-    
     # Zerodha Kite (Indian markets) — multi-tenant manual console
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")

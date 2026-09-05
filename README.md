@@ -1,18 +1,15 @@
-# Sterling — Multi-Market Algo Trading Platform
+# Sterling — Indian Markets Algo Trading Platform
 
-A modular, broker-agnostic trading platform spanning two markets:
+A modular trading platform for Indian equities and derivatives via Zerodha Kite Connect:
 
-- **Crypto** (Delta Exchange India primary; Binance/Deribit/OKX adapters) —
-  futures + options, VCP (Volume Concentration Profile) patterns + multi-
-  timeframe momentum confluence, backtest-validated "edge" signals.
-- **Indian equities & derivatives** (Zerodha Kite Connect, multi-tenant —
-  each user's own encrypted credentials) — an auto-scan/auto-execute engine
-  plus a full manual trading terminal (order window, positions, GTT, funds).
+- **Multi-tenant architecture** — each user's own encrypted credentials
+- **Auto-scan/auto-execute engine** — signal detection + automated execution
+- **Full manual trading terminal** — order window, positions, GTT, funds, charts
+- **Indian indices & options** — NIFTY, BANKNIFTY options strategies
+- **Paper/live modes** — test strategies without risk before going live
 
-Brokers, markets, strategies, and risk rules are plug-and-play (see
-[docs/ai/architecture.md](docs/ai/architecture.md)); every order — auto or manual, crypto or
-Kite — funnels through one `OrderRouter` with paper/shadow/live modes and a
-fail-closed safety pipeline, under a hard zero-regression discipline.
+Every order — auto or manual — funnels through one `OrderRouter` with paper/shadow/live modes 
+and a fail-closed safety pipeline, under a hard zero-regression discipline.
 
 ## Documentation
 
