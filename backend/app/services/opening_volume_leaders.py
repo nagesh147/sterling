@@ -776,9 +776,15 @@ async def scan_kite_leaders(
             )
 
     ranked = rank_leaders(evaluated)
-    leaders = [signal for signal in ranked if signal.is_leader]
-    watch = [signal for signal in ranked if signal.tier is LeaderTier.WATCH]
-    weak = [signal for signal in ranked if signal.tier is LeaderTier.WEAK]
+    # ORION cards are ORB events, not a dump of every opening-volume
+    # classification.  Keep the complete evaluated universe for breadth, but
+    # publish a card only after the first later high/low breach exists.  This
+    # prevents include_weak=True from returning nearly the entire F&O master.
+    event_ranked = [signal for signal in ranked if signal.orb_break_time is not None]
+    pending_orb_count = len(ranked) - len(event_ranked)
+    leaders = [signal for signal in event_ranked if signal.is_leader]
+    watch = [signal for signal in event_ranked if signal.tier is LeaderTier.WATCH]
+    weak = [signal for signal in event_ranked if signal.tier is LeaderTier.WEAK]
     breadth = _breadth(evaluated)
     breadth["coverage_pct"] = (
         len(evaluated) / len(symbols) * 100.0 if symbols else 0.0
@@ -863,6 +869,8 @@ async def scan_kite_leaders(
         "universe": universe,
         "universe_count": len(symbols),
         "evaluated_count": len(evaluated),
+        "event_count": len(event_ranked),
+        "pending_orb_count": pending_orb_count,
         "leader_count": len(leaders),
         "watch_count": len(watch),
         "weak_count": len(weak),

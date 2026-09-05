@@ -243,6 +243,8 @@ export interface OpeningVolumeScanResponse {
   };
   universe_count: number;
   evaluated_count: number;
+  event_count: number;
+  pending_orb_count: number;
   leader_count: number;
   watch_count: number;
   weak_count: number;

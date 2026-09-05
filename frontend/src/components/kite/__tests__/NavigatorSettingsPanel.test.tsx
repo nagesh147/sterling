@@ -303,7 +303,7 @@ describe('NavigatorSettingsPanel', () => {
       it('is hidden on a shared scope, where the engine\'s value is what applies', () => {
         queryData = makeRecord({ scan_scope_mode: 'shared', strike_moneyness: ['ATM'] });
         render(<NavigatorSettingsPanel />);
-        expect(screen.getByText('Strike range & legs')).toBeInTheDocument();
+        expect(screen.getByText('Strike range')).toBeInTheDocument();
         expect(screen.queryByRole('switch', { name: SWITCH })).not.toBeInTheDocument();
       });
 
