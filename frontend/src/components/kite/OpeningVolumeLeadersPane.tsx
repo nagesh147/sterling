@@ -576,8 +576,8 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
           <>
             <section className="ovl-panel ovl-stats" aria-label="Scan summary">
               <Stat name="Universe" value={`${data.evaluated_count}/${data.universe_count}`} detail={data.universe.truncated ? `${data.universe.available_fno_equity_count} available · capped` : sourceLabel} />
-              <Stat name="Leaders" value={data.leader_count} detail="RVOL at or above 3×" />
-              <Stat name="Watch / weak" value={data.watch_count + ' / ' + data.weak_count} detail={(includeWatch || includeWeak) ? 'Selected lower tiers included' : 'Counted, hidden from cards'} />
+              <Stat name="ORB events" value={data.event_count} detail={`${data.pending_orb_count} stocks have not broken the 09:15 range`} />
+              <Stat name="Leader / lower" value={data.leader_count + ' / ' + (data.watch_count + data.weak_count)} detail={(includeWatch || includeWeak) ? 'Selected event tiers included' : 'Lower-tier events counted, hidden'} />
               <Stat name="Breadth" value={`${data.breadth.advances}:${data.breadth.declines}`} detail={`A/D ${data.breadth.advance_decline_ratio == null ? '—' : formatNumber(data.breadth.advance_decline_ratio)} · ${data.breadth.unchanged} flat`} />
               <Stat name="As of" value={formatTime(data.as_of).replace(' IST', '')} detail={`${formatDateTime(data.as_of)} · ${data.failures.length} failed`} />
             </section>

@@ -207,6 +207,8 @@ const response = (over: Record<string, unknown> = {}) => ({
   },
   universe_count: 212,
   evaluated_count: 211,
+  event_count: 1,
+  pending_orb_count: 210,
   leader_count: 1,
   watch_count: 0,
   weak_count: 0,

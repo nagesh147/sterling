@@ -442,6 +442,8 @@ async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypat
     assert result["universe"]["available_fno_equity_count"] == 1
     assert result["universe_count"] == 1
     assert result["evaluated_count"] == 1
+    assert result["event_count"] == 1
+    assert result["pending_orb_count"] == 0
     assert result["leader_count"] == 1
     assert result["leaders"][0]["symbol"] == "RELIANCE"
     assert result["leaders"][0]["tier"] == "strong"
@@ -455,6 +457,52 @@ async def test_kite_runtime_returns_advisory_leaders_without_execution(monkeypat
         == "historical_quote_unavailable"
     )
     assert result["failures"] == []
+
+
+@pytest.mark.asyncio
+async def test_runtime_keeps_prebreak_stocks_in_breadth_but_not_event_cards(monkeypatch):
+    from app.services import nifty_orb_scanner
+    from app.services.exchanges.kite import accounts
+
+    class FakeClient:
+        async def search_instruments(self, _query, exchange, limit=50):
+            if exchange == "NFO":
+                return [{"name": "RELIANCE", "instrument_type": "CE"}]
+            return [{"tradingsymbol": "RELIANCE", "instrument_type": "EQ"}]
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(accounts, "get_active", lambda uid: SimpleNamespace(user_id=uid))
+
+    async def acquire_client(_account):
+        return fake_client
+
+    async def instrument(_client, _symbol):
+        return SimpleNamespace(zerodha_token=123)
+
+    async def history(_client, **_kwargs):
+        # Preserve the 5x 09:15 signal, but remove the 09:16 range breach.
+        rows = _bars()
+        last = rows[-1]
+        rows[-1] = replace(last, high=111.9, low=110.0, close=111.0)
+        return rows
+
+    monkeypatch.setattr(accounts, "acquire_client", acquire_client)
+    monkeypatch.setattr(nifty_orb_scanner, "_kite_instrument", instrument)
+    monkeypatch.setattr(service, "_history", history)
+
+    result = await service.scan_kite_leaders(
+        "tenant-a",
+        as_of=datetime(2026, 9, 3, 9, 17, tzinfo=IST),
+        scan_config=service.LiveLeaderScanConfig(include_watch=True, include_weak=True),
+    )
+
+    assert result["evaluated_count"] == 1
+    assert result["event_count"] == 0
+    assert result["pending_orb_count"] == 1
+    assert result["breadth"]["coverage_pct"] == 100.0
+    assert result["leaders"] == []
+    assert result["watch"] == []
+    assert result["weak"] == []
 
 
 @pytest.mark.asyncio
