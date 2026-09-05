@@ -1,45 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { escapeCsvField, replayCsvName, toCsv } from '../replayCsv';
-import { SIGNAL_CSV_COLUMNS, tradeCsvColumns } from '../replayColumns';
+import { replayCsvName, toCsv } from '../replayCsv';
+import { toCsv as sharedToCsv } from '../../../../utils/csvExport';
+import { SIGNAL_CSV_COLUMNS, signalKey, tradeCsvColumns } from '../replayColumns';
 
-describe('CSV escaping', () => {
-  // Neither of the two exporters this replaced escaped anything, so a symbol or
-  // strategy name containing a comma silently corrupted the file.
-  it('quotes a field containing a comma', () => {
-    expect(escapeCsvField('a,b')).toBe('"a,b"');
+describe('escaping, through the shared exporter', () => {
+  // Escaping itself is covered by utils/csvExport.test.ts. What is pinned here
+  // is that the replay path actually goes THROUGH it — the two exporters this
+  // replaced escaped nothing, so a symbol containing a comma corrupted the
+  // file, and a third bespoke implementation would have repeated that.
+  it('is the shared implementation, not a replay-local copy', () => {
+    expect(toCsv).toBe(sharedToCsv);
   });
 
-  it('doubles internal quotes', () => {
-    expect(escapeCsvField('he said "hi"')).toBe('"he said ""hi"""');
-  });
-
-  it('quotes a field containing a newline', () => {
-    expect(escapeCsvField('line1\nline2')).toBe('"line1\nline2"');
-  });
-
-  it('leaves a plain field alone', () => {
-    expect(escapeCsvField('NIFTY')).toBe('NIFTY');
-  });
-
-  it('renders null and undefined as empty, not as the string "null"', () => {
-    expect(escapeCsvField(null)).toBe('');
-    expect(escapeCsvField(undefined)).toBe('');
-  });
-});
-
-describe('toCsv', () => {
-  it('emits a header row and CRLF line endings', () => {
-    const csv = toCsv([{ a: 1 }], [{ header: 'A', value: (r) => r.a }]);
-    expect(csv).toBe('A\r\n1');
-  });
-
-  it('survives a value containing every special character at once', () => {
-    const csv = toCsv(
-      [{ name: 'a,"b"\nc' }],
-      [{ header: 'Name', value: (r) => r.name }],
-    );
+  it('quotes a value containing every special character at once', () => {
+    const csv = toCsv([{ name: 'a,"b"\nc' }], [{ header: 'Name', value: (r) => r.name }]);
     expect(csv.split('\r\n')[0]).toBe('Name');
     expect(csv).toContain('"a,""b""\nc"');
+  });
+
+  it('renders an absent cell as empty, not as "null" or "0"', () => {
+    const csv = toCsv(
+      [{ slippage: null as number | null }],
+      [{ header: 'Slippage', value: (r) => r.slippage }],
+    );
+    expect(csv).toBe('Slippage\r\n');
   });
 });
 
@@ -80,3 +64,31 @@ describe('file names', () => {
     expect(replayCsvName('trades', '2026-09-04')).toBe('sterling_replay_trades_2026-09-04.csv');
   });
 });
+
+describe('row identity', () => {
+  it('distinguishes two signals that collide on time, strategy and instrument', () => {
+    // The natural key is not unique — a strategy can fire twice on one symbol
+    // inside the same second — and React then drops or duplicates rows. This
+    // was caught in the browser, not by a test, which is why it has one now.
+    const a = makeCollider();
+    expect(signalKey(a, 0)).not.toBe(signalKey(a, 1));
+  });
+
+  it('is stable for a given position', () => {
+    const a = makeCollider();
+    expect(signalKey(a, 3)).toBe(signalKey(a, 3));
+  });
+});
+
+function makeCollider() {
+  return {
+    time_iso: '09:15:00',
+    strategy: 'supertrend',
+    instrument: 'NIFTY',
+    direction: 'BULLISH',
+    strength: 'STRONG',
+    entry: 100,
+    stop: 90,
+    target: 130,
+  } as never;
+}

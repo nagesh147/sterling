@@ -91,7 +91,7 @@ export function ReplayTimeline() {
     let buckets = new Map<number, { left: number; bull: number; bear: number; keys: string[]; labels: string[] }>();
     for (let attempt = 0; attempt < 6; attempt += 1) {
       buckets = new Map();
-      events.forEach((ev) => {
+      events.forEach((ev, evIndex) => {
         const left = scale.pctFor(ev.time_iso);
         const bucket = Math.round((left * width) / 100 / bucketPx);
         let b = buckets.get(bucket);
@@ -101,7 +101,7 @@ export function ReplayTimeline() {
         }
         if (isBullish(ev.direction)) b.bull += 1;
         else b.bear += 1;
-        b.keys.push(signalKey(ev));
+        b.keys.push(signalKey(ev, evIndex));
         if (b.labels.length < 4) {
           b.labels.push(`${fmtTime(ev.time_iso, 5)} ${strategyLabel(ev.strategy)} ${ev.instrument} ${ev.direction}`);
         }

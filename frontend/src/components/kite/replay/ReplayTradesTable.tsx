@@ -270,7 +270,7 @@ export const ReplayTradesTable = memo(function ReplayTradesTable() {
               <td data-align="right" className="rd-num">
                 {fmtInt(totalLots)}L<span className="rd-sub">{fmtInt(totalQty)} qty</span>
               </td>
-              <td colSpan={hasFriction ? 2 : 3} data-align="right">
+              <td colSpan={3} data-align="right">
                 <span className="rd-absent">{ABSENT}</span>
               </td>
               {hasFriction && (

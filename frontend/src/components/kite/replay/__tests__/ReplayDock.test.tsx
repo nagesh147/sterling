@@ -462,3 +462,30 @@ describe('footer chip', () => {
     expect(screen.getByText('10:47:05')).toBeTruthy();
   });
 });
+
+/* ── Table structure ────────────────────────────────────────────────────── */
+
+describe('trades totals row', () => {
+  // Caught in the browser: the blank span was two cells wide when the friction
+  // column was present, so every footer cell after Size sat under the wrong
+  // header. A totals row that does not line up with its columns is worse than
+  // no totals row.
+  it.each([
+    ['without friction', undefined],
+    ['with friction', 12.5],
+  ])('spans exactly the header width %s', async (_label, slippage) => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: slippage as number | undefined })] },
+      }),
+    });
+    await renderDock();
+
+    const table = screen.getByRole('table');
+    const headerCells = table.querySelectorAll('thead th').length;
+    const footCells = Array.from(table.querySelectorAll('tfoot td'))
+      .reduce((sum, td) => sum + (Number(td.getAttribute('colspan')) || 1), 0);
+    expect(footCells).toBe(headerCells);
+  });
+});

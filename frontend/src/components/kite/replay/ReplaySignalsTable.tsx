@@ -19,12 +19,14 @@ const VIRTUALISE_ABOVE = 200;
 
 const SignalRow = memo(function SignalRow({
   ev,
+  rowKey,
   selected,
   isNew,
   onSelect,
   showContract,
 }: {
   ev: ReplaySignal;
+  rowKey: string;
   selected: boolean;
   isNew: boolean;
   onSelect: (key: string) => void;
@@ -32,7 +34,7 @@ const SignalRow = memo(function SignalRow({
 }) {
   const bull = isBullish(ev.direction);
   const rr = rewardRisk(ev.entry, ev.stop, ev.target);
-  const key = signalKey(ev);
+  const key = rowKey;
 
   return (
     <tr
@@ -109,11 +111,16 @@ export const ReplaySignalsTable = memo(function ReplaySignalsTable() {
 
   // Memoised, not reversed in render. The previous table called
   // `.slice().reverse()` inside its render function on every status frame.
-  const rows = useMemo(() => events.slice().reverse(), [events]);
+  // Pair each row with its index in the source array BEFORE reversing, so the
+  // key survives the flip and stays unique.
+  const rows = useMemo(
+    () => events.map((ev, i) => ({ ev, key: signalKey(ev, i) })).reverse(),
+    [events],
+  );
 
   const { unseen, goToNewest } = useStickToTop(bodyRef, rows.length);
   const virtual = useVirtualRows(rows.length, ROW_H, rows.length > VIRTUALISE_ABOVE);
-  const newestKey = rows.length ? signalKey(rows[0]) : null;
+  const newestKey = rows.length ? rows[0].key : null;
 
   // Selecting a row moves the playhead to that signal — the reverse of clicking
   // a timeline dot. The two directions together are what make the timeline
@@ -121,8 +128,8 @@ export const ReplaySignalsTable = memo(function ReplaySignalsTable() {
   const onSelect = (key: string) => {
     setSelected(key);
     if (state === 'idle') return;
-    const ev = events.find((e) => signalKey(e) === key);
-    if (ev) void transport.seekToPct(scale.pctFor(ev.time_iso));
+    const row = rows.find((r) => r.key === key);
+    if (row) void transport.seekToPct(scale.pctFor(row.ev.time_iso));
   };
 
   if (state === 'loading') return <SkeletonRows rows={6} cols={6} />;
@@ -177,19 +184,17 @@ export const ReplaySignalsTable = memo(function ReplaySignalsTable() {
         </thead>
         <tbody>
           {virtual.padTop > 0 && <tr style={{ height: virtual.padTop }} aria-hidden="true"><td colSpan={9} /></tr>}
-          {slice.map((ev) => {
-            const key = signalKey(ev);
-            return (
-              <SignalRow
-                key={key}
-                ev={ev}
-                selected={selected === key}
-                isNew={key === newestKey && state === 'running'}
-                onSelect={onSelect}
-                showContract={!!caps?.contract_on_signal}
-              />
-            );
-          })}
+          {slice.map(({ ev, key }) => (
+            <SignalRow
+              key={key}
+              rowKey={key}
+              ev={ev}
+              selected={selected === key}
+              isNew={key === newestKey && state === 'running'}
+              onSelect={onSelect}
+              showContract={!!caps?.contract_on_signal}
+            />
+          ))}
           {virtual.padBottom > 0 && <tr style={{ height: virtual.padBottom }} aria-hidden="true"><td colSpan={9} /></tr>}
         </tbody>
       </table>

@@ -23,12 +23,13 @@ export function useReplaySignalToasts() {
       seen.current = events.length;   // a seek truncates the ledger
       return;
     }
-    const fresh = events.slice(seen.current);
+    const base = seen.current;
+    const fresh = events.slice(base);
     seen.current = events.length;
 
     if (speed >= HIGH_SPEED_THRESHOLD) return;
 
-    fresh.forEach((ev) => {
+    fresh.forEach((ev, i) => {
       const bull = isBullish(ev.direction);
       pushReplayToast({
         kind: 'signal',
@@ -37,7 +38,7 @@ export function useReplaySignalToasts() {
         detail: `${strategyLabel(ev.strategy)} · ${ev.contract || ev.instrument}`,
         detail2: `${bull ? 'LONG' : 'SHORT'}  entry ${fmtInr(ev.entry)} → target ${fmtInr(ev.target)}`,
         seekTimeIso: ev.time_iso,
-        signalKey: signalKey(ev),
+        signalKey: signalKey(ev, base + i),
       });
     });
   }, [events, speed]);

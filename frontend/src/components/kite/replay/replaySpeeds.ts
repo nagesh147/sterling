@@ -6,14 +6,15 @@
  * 250 and leave every pill unhighlighted, which reads as a broken control.
  */
 
-export const REPLAY_SPEEDS = [1, 5, 10, 50, 100, 5000] as const;
+export const MAX_SPEED = 5000;
+export const REPLAY_SPEEDS = [1, 5, 10, 50, 100, MAX_SPEED] as const;
 export type ReplaySpeed = (typeof REPLAY_SPEEDS)[number];
 
 /** Above this, per-event feedback (toasts, value flashes) becomes a strobe. */
 export const HIGH_SPEED_THRESHOLD = 100;
 
 export function speedLabel(speed: number): string {
-  return speed >= 5000 ? 'MAX' : `${speed}×`;
+  return speed >= MAX_SPEED ? 'MAX' : `${speed}×`;
 }
 
 /**

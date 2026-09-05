@@ -69,6 +69,7 @@ rendering a zero that reads as a measurement.
 | 30 | [`30_MIGRATION_PLAN.md`](30_MIGRATION_PLAN.md) | Phase order, file moves, deletions, rollback. |
 | 31 | [`31_VERIFICATION.md`](31_VERIFICATION.md) | How each phase is proven. Commands, tests, visual checks. |
 | 32 | [`32_ACCEPTANCE_CHECKLIST.md`](32_ACCEPTANCE_CHECKLIST.md) | The single checklist that gates "done". |
+| 40 | [`40_IMPLEMENTATION_NOTES.md`](40_IMPLEMENTATION_NOTES.md) | **What actually landed**, where it deviated, what the browser caught, and what is still open. Read this before trusting the specs as a description of the code. |
 
 ---
 

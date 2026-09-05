@@ -70,7 +70,16 @@ export function tradesHaveFriction(trades: readonly ReplayTrade[]): boolean {
   return trades.some((t) => t.slippage != null);
 }
 
-/** Stable row identity, so React does not remount every row on an append. */
-export function signalKey(s: ReplaySignal): string {
-  return `${s.time_iso}|${s.strategy}|${s.instrument}`;
+/**
+ * Stable, UNIQUE row identity.
+ *
+ * The natural key — time, strategy, instrument — is not unique: two signals
+ * from one strategy on one instrument inside the same second collide, and
+ * React then drops or duplicates rows. The position in the append-only events
+ * array disambiguates them, and stays stable because the array only ever grows
+ * within a session (a seek truncates it, which correctly re-derives the keys
+ * of everything that survives).
+ */
+export function signalKey(s: ReplaySignal, index: number): string {
+  return `${index}|${s.time_iso}|${s.strategy}|${s.instrument}`;
 }

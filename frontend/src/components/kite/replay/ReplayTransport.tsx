@@ -1,7 +1,7 @@
 import React from 'react';
 import { useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
 import { useReplayTransport } from '../../../hooks/useReplayTransport';
-import { REPLAY_SPEEDS, speedLabel } from './replaySpeeds';
+import { MAX_SPEED, REPLAY_SPEEDS, speedLabel } from './replaySpeeds';
 import * as Icons from './ReplayIcons';
 
 /** Click and keyboard agree on step size: plain 1, Shift 5, Alt 30. */
@@ -120,7 +120,7 @@ export function ReplayTransport() {
             type="button"
             className="rd-speed"
             data-active={speed === s}
-            data-max={s >= 5000}
+            data-max={s >= MAX_SPEED}
             aria-pressed={speed === s}
             onClick={() => void transport.setSpeed(s)}
             title={`Replay at ${speedLabel(s)} (+ / − to step)`}
