@@ -1,6 +1,7 @@
 import type {
   BoardOrigin, BoardSection, BoardSignal, BoardStatus,
 } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 import type { BearToBearishSnapshotResponse, BearToBearishSignalRow } from '../../../hooks/useBearToBearish';
 
 const price = (v: number | null | undefined): number | null =>
@@ -81,7 +82,9 @@ export function bearToBearishRowToBoard(row: BearToBearishSignalRow): BoardSigna
     },
     direction: row.direction || 'short',
     status: st,
-    atMs: row.timestamp_ms || Date.now(),
+    atMs: parseTimestampMs(
+      row.timestamp_ms ?? (row as any).at_ms ?? (row as any).created_at ?? (row as any).entered_at ?? (row as any).timestamp ?? (row as any).entered_ms ?? (row as any).session_date
+    ),
     levels: {
       ltp,
       entry,

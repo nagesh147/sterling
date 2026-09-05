@@ -16,6 +16,7 @@
  *    carried-over price" cannot be acted on.
  */
 import type { BoardInstrument, BoardOrigin, BoardSection, BoardSignal, BoardStatus } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 import type { AtmPremiumImbalanceSnapshot, AtmSessionStatus, AtmLegState } from '../../../hooks/useAtmPremiumImbalance';
 
 /** A tradable price, or nothing. Zero is not a level. */
@@ -218,7 +219,9 @@ export function atmPremiumImbalanceToBoard(
     instrument: instrument(session, leg),
     direction: 'long',                       // it only ever buys an option
     status: status(session),
-    atMs: session.session_open_ms ?? null,
+    atMs: parseTimestampMs(
+      session.session_open_ms ?? (session as any).timestamp_ms ?? (session as any).entered_ms ?? session.session_date ?? (session as any).created_at ?? (session as any).timestamp
+    ),
     levels: {
       ltp: price(leg?.ltp),
       entry,

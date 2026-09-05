@@ -119,6 +119,11 @@ class SimulationRunner:
         self._seek_requested_epoch: Optional[float] = None
         self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
 
+    def _get_sim_now_ms(self) -> int:
+        if self._current_sim_epoch > 0:
+            return int(self._current_sim_epoch * 1000)
+        return int(time.time() * 1000)
+
     @property
     def status(self) -> SimStatus:
         return SimStatus(
@@ -241,10 +246,26 @@ class SimulationRunner:
         res_sec = RESOLUTION_SECONDS.get(res, 300)
 
         # Determine instruments (NSE Indian Markets only)
-        instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "TATASTEEL", "HDFCBANK", "ICICIBANK"]
+        default_inst = [
+            "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX",
+            "HDFCBANK", "ICICIBANK", "SBIN", "RELIANCE", "BHARTIARTL",
+            "AXISBANK", "KOTAKBANK", "INFY", "BAJFINANCE", "ADANIENT",
+            "LT", "TCS", "BAJAJFINSV", "ADANIPORTS", "TATASTEEL"
+        ]
+        instruments = cfg.instruments if cfg.instruments else default_inst
 
         self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Zerodha Kite API..."
-        await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
+        warmup_start = start_epoch - 5 * 86400
+        await _hydrate_missing_candles(instruments, res, warmup_start, end_epoch)
+
+        # Pre-seed indicator history with pre-session bars so indicators are ready at 09:15 AM
+        self._bar_history = {}
+        for sym in instruments:
+            prior_candles = ohlcv_get(sym, res, limit=50, since=warmup_start)
+            p_bars = [{**c, "symbol": sym, "resolution": res} for c in prior_candles if c["time"] < start_epoch]
+            if len(p_bars) < 20:
+                p_bars = _generate_warmup_candles(sym, res, start_epoch, count=20, res_sec=res_sec) + p_bars
+            self._bar_history[sym] = p_bars[-50:]
 
         # Fetch candles for each instrument from local store
         all_bars: List[Dict[str, Any]] = []
@@ -350,9 +371,11 @@ class SimulationRunner:
         """Return signals formatted for /api/v1/directional/signals matching the active simulation date."""
         cfg = self._config
         sim_date = cfg.date if cfg else "2026-08-28"
+        now_ms = self._get_sim_now_ms()
 
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             signals.append({
                 "underlying": ev.instrument,
                 "has_options": True,
@@ -382,7 +405,7 @@ class SimulationRunner:
                 "rec_leverage": 10,
                 "futures_symbol": f"{ev.instrument}FUT",
                 "fresh": True,
-                "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else int(time.time() * 1000),
+                "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms,
                 "simulated_date": sim_date,
                 "simulated_time": ev.time_iso,
             })
@@ -390,29 +413,43 @@ class SimulationRunner:
         return {
             "signals": signals,
             "count": len(signals),
-            "timestamp": int(time.time()),
+            "timestamp": int(now_ms / 1000),
             "mode": "simulation",
             "simulated_date": sim_date,
         }
 
     def get_kite_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for Kite Engine signal responses during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         KITE_TOKENS: Dict[str, int] = {
             "NIFTY": 256265,
             "BANKNIFTY": 260101,
             "FINNIFTY": 257001,
             "MIDCPNIFTY": 288001,
+            "SENSEX": 265,
             "RELIANCE": 738561,
             "TATASTEEL": 895745,
             "HDFCBANK": 341249,
             "ICICIBANK": 12705,
+            "SBIN": 779521,
+            "BHARTIARTL": 2714625,
+            "AXISBANK": 1510401,
+            "KOTAKBANK": 492033,
+            "INFY": 408065,
+            "BAJFINANCE": 81153,
+            "ADANIENT": 6401,
+            "LT": 2939649,
+            "TCS": 2953217,
+            "BAJAJFINSV": 4267265,
+            "ADANIPORTS": 3861249,
         }
         cfg_lots = max(1, self._config.lots) if self._config else 1
         cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
+        sim_date = self._config.date if self._config else "2026-08-28"
 
         rows = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             direction_str = "long" if is_long else "short"
@@ -441,7 +478,7 @@ class SimulationRunner:
                     "option_type": opt_type,
                     "option_symbol": f"{ev.instrument}26AUG{int(s_val)}{opt_type}",
                     "strike": s_val,
-                    "expiry": "2026-08-28",
+                    "expiry": sim_date,
                     "premium_spot": round(ev.entry * 0.02, 2),
                     "premium_sl": round(ev.entry * 0.015, 2),
                     "entry_sl": round(ev.entry * 0.01, 2),
@@ -484,9 +521,10 @@ class SimulationRunner:
 
     def get_scalping_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/sterling-engine/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "signal_id": f"sim_{ev.instrument}_{ev.time_iso}",
@@ -508,9 +546,10 @@ class SimulationRunner:
 
     def get_v2_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/sterling-v2/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "id": f"sim_v2_{ev.instrument}_{ev.time_iso}",
@@ -527,9 +566,10 @@ class SimulationRunner:
 
     def get_navigator_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/navigator/signals during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         items = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             items.append({
                 "event_id": f"nav_sim_{ev.instrument}_{ev.time_iso}",
@@ -545,9 +585,10 @@ class SimulationRunner:
 
     def get_adaptive_edge_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for Adaptive Edge UI during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         candidates = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             opt_type = "CE" if is_long else "PE"
@@ -570,7 +611,7 @@ class SimulationRunner:
                 "promotion_gate_reason": None,
             },
             "scan": {
-                "underlyings": len(set(ev.instrument for ev in self._stats.events)) or 1,
+                "underlyings": len(set(ev.instrument for ev in current_events)) or 1,
                 "chains_read": 8,
                 "listed": 40,
                 "tradeable": 25,
@@ -590,8 +631,9 @@ class SimulationRunner:
 
     def get_atm_imbalance_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for ATM Premium Imbalance strategy during simulation."""
-        now_ms = int(time.time() * 1000)
-        first_event = self._stats.events[0] if self._stats.events else None
+        now_ms = self._get_sim_now_ms()
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        first_event = current_events[0] if current_events else None
         sym = first_event.instrument if first_event else "NIFTY"
         price = first_event.entry if first_event else 24175.0
         strike_val = round(price / 50.0) * 50.0
@@ -611,7 +653,7 @@ class SimulationRunner:
                 "enabled": True,
                 "underlying": sym,
                 "expiry_policy": "SAME_DAY",
-                "explicit_expiry": "2026-08-28",
+                "explicit_expiry": self._config.date if self._config else "2026-08-28",
                 "strike_policy": "ATM",
                 "session_start": "09:15:00",
                 "session_end": "15:30:00",
@@ -637,13 +679,13 @@ class SimulationRunner:
                 "phase": "ARMED",
                 "halt_reason": None,
                 "underlying": sym,
-                "expiry": "2026-08-28",
+                "expiry": self._config.date if self._config else "2026-08-28",
                 "strike": strike_val,
                 "quantity": 25,
                 "execution_mode": "paper",
                 "quote_mode": "SYNCHRONIZED",
                 "protection_mode": "RESTING_TARGET_LIMIT",
-                "trades_taken": len(self._stats.events),
+                "trades_taken": len(current_events),
                 "legs": {
                     "CE": {
                         "instrument_id": f"NSE:{sym}26AUG{int(strike_val)}CE",
@@ -685,9 +727,10 @@ class SimulationRunner:
 
     def get_bear_to_bearish_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for Bear to Bearish Strategy during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         rows = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             if ev.direction.upper() in ("BEARISH", "SHORT", "SELL") or ev.strategy == "bear_to_bearish":
                 ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
                 strike_val = round(ev.entry / 50.0) * 50.0
@@ -714,7 +757,7 @@ class SimulationRunner:
                     "reason": "PCR breakdown below 0.80 + Lower-high structure breach",
                     "option_type": "PE",
                     "strike": strike_val,
-                    "expiry": "2026-08-28",
+                    "expiry": self._config.date if self._config else "2026-08-28",
                     "lot_size": 25 if ev.instrument == "NIFTY" else 15,
                     "quote_key": f"NSE:{ev.instrument}",
                 })
@@ -737,9 +780,10 @@ class SimulationRunner:
 
     def get_nifty_orb_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/nifty-orb-options/scan during simulation."""
-        now_ms = int(time.time() * 1000)
+        now_ms = self._get_sim_now_ms()
         signals = []
-        for ev in self._stats.events:
+        current_events = [ev for ev in self._stats.events if ev.timestamp_ms <= now_ms or ev.timestamp_ms == 0]
+        for ev in current_events:
             ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
             signals.append({
                 "symbol": ev.instrument,
@@ -757,6 +801,7 @@ class SimulationRunner:
             "count": len(signals),
             "signals": signals,
         }
+
 
     def _evaluate_bar(self, bar: Dict, bar_dt):
         """Evaluate strategy signals on every replay bar.
@@ -819,13 +864,13 @@ class SimulationRunner:
         signals_to_fire = []
 
         # 1. SuperTrend (Trend crossover / expansion)
-        if sma5 > sma20 and close >= float(prev_bar["high"]):
+        if (sma5 > sma20 and (close >= float(prev_bar["high"]) or (close > opens and close > sma5))):
             signals_to_fire.append({
                 "strategy": "supertrend",
                 "direction": "BULLISH",
                 "strength": "STRONG" if (close - opens) >= 0.5 * atr else "MODERATE",
             })
-        elif sma5 < sma20 and close <= float(prev_bar["low"]):
+        elif (sma5 < sma20 and (close <= float(prev_bar["low"]) or (close < opens and close < sma5))):
             signals_to_fire.append({
                 "strategy": "supertrend",
                 "direction": "BEARISH",
@@ -1040,6 +1085,12 @@ class SimulationRunner:
                 self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
 
 
+def _generate_warmup_candles(symbol: str, res: str, start_epoch: int, count: int = 20, res_sec: int = 300) -> List[Dict[str, Any]]:
+    """Pre-generate warmup candles before session start so indicators are ready at 09:15 AM."""
+    warmup_start = start_epoch - (count * res_sec)
+    return _generate_synthetic_candles(symbol, res, warmup_start, start_epoch - res_sec, res_sec)
+
+
 def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epoch: int, res_sec: int) -> List[Dict[str, Any]]:
     """Generate realistic session candles if DB has no historical data for selected date."""
     import random
@@ -1049,10 +1100,22 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
         "BANKNIFTY": 52300.0,
         "FINNIFTY": 23100.0,
         "MIDCPNIFTY": 13200.0,
+        "SENSEX": 80100.0,
         "RELIANCE": 3000.0,
         "TATASTEEL": 150.0,
         "HDFCBANK": 1650.0,
         "ICICIBANK": 1200.0,
+        "SBIN": 820.0,
+        "BHARTIARTL": 1900.0,
+        "AXISBANK": 1267.0,
+        "KOTAKBANK": 421.15,
+        "INFY": 1850.0,
+        "BAJFINANCE": 1049.0,
+        "ADANIENT": 3100.0,
+        "LT": 3600.0,
+        "TCS": 4400.0,
+        "BAJAJFINSV": 1850.0,
+        "ADANIPORTS": 1706.5,
     }
     spot = base_prices.get(symbol.upper(), 1000.0)
     volatility = spot * 0.0015  # 0.15% per candle standard deviation
@@ -1101,10 +1164,22 @@ async def _hydrate_missing_candles(
         "BANKNIFTY": 260101,
         "FINNIFTY": 257001,
         "MIDCPNIFTY": 288001,
+        "SENSEX": 265,
         "RELIANCE": 738561,
         "TATASTEEL": 895745,
         "HDFCBANK": 341249,
         "ICICIBANK": 12705,
+        "SBIN": 779521,
+        "BHARTIARTL": 2714625,
+        "AXISBANK": 1510401,
+        "KOTAKBANK": 492033,
+        "INFY": 408065,
+        "BAJFINANCE": 81153,
+        "ADANIENT": 6401,
+        "LT": 2939649,
+        "TCS": 2953217,
+        "BAJAJFINSV": 4267265,
+        "ADANIPORTS": 3861249,
     }
 
     for sym in instruments:
@@ -1116,13 +1191,13 @@ async def _hydrate_missing_candles(
         log.info("Missing local candles for Sterling Kite token %s [%s] on range %d-%d. Triggering Zerodha Kite fetch...", sym, resolution, start_epoch, end_epoch)
 
         try:
-            from app.services.exchange_account_store import exchange_account_store
+            from app.services.exchanges.kite import accounts as kite_accounts
             from app.services.exchanges.kite.client import KiteClient
 
             token = KITE_TOKENS.get(sym.upper())
             if token:
-                accounts = exchange_account_store.list_accounts()
-                zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
+                kite_accounts.bootstrap()
+                zerodha_acct = next((a for a in kite_accounts._accounts.values() if a.is_active and a.access_token), None)
                 if zerodha_acct and zerodha_acct.access_token:
                     kc = KiteClient(api_key=getattr(zerodha_acct, "api_key", "") or "", access_token=zerodha_acct.access_token)
                     try:

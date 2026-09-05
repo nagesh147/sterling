@@ -105,3 +105,36 @@ async def test_step_and_seek_controls():
     assert simulation_runner._seek_requested_epoch == 1787889000.0
 
     await simulation_runner.stop()
+
+
+@pytest.mark.asyncio
+async def test_simulation_default_instruments_and_warmup_at_915():
+    import asyncio
+    config = SimConfig(
+        date="2026-09-03",
+        start_time="09:15:00",
+        end_time="09:20:00",
+        speed=10.0,
+        strategy="all",
+        instruments=[],
+        resolution="5m",
+    )
+    await simulation_runner.start(config)
+    await asyncio.sleep(1.5)
+
+    # Verify high-liquidity stock symbols are present in simulation
+    assert "KOTAKBANK" in simulation_runner._bar_history
+    assert "ADANIPORTS" in simulation_runner._bar_history
+    assert "AXISBANK" in simulation_runner._bar_history
+    assert "BAJFINANCE" in simulation_runner._bar_history
+
+    # Verify warmup bars are pre-seeded at 09:15:00
+    assert len(simulation_runner._bar_history["KOTAKBANK"]) >= 20
+
+    # Verify kite signal responses can format rows for these stocks
+    res = simulation_runner.get_kite_signals_response()
+    assert "rows" in res
+    assert isinstance(res["rows"], list)
+
+    await simulation_runner.stop()
+

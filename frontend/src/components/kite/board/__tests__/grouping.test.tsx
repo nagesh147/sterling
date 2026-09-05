@@ -9,7 +9,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard, visibleColumns, COLUMNS } from '../SignalBoard';
-import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, type BoardSignal, type BoardStatus } from '../boardTypes';
+import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
 import { supertrendToBoard } from '../supertrendAdapter';
 import type { EngineSignalRow, OptionLeg } from '../../../../types/kiteEngine';
 
@@ -236,18 +236,13 @@ describe('dates and day order', () => {
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    // The row carries its own date, and that is now the ONLY place it appears:
-    // the day band that used to repeat it above each group is gone. The text
-    // still comes from `sessionDayDate`, so a row and the day grouping cannot
-    // disagree about what a date looks like.
+    const header = screen.getByText('Older');
+    fireEvent.click(header);
     expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
     expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
   });
 
   it('orders day sections latest to oldest', () => {
-    // Asserted on ROW ORDER rather than on section headings. The headings are
-    // gone -- each row states its own date now -- but the ORDER they described is
-    // behaviour and still has to hold, so the assertion moved rather than went.
     render(
       <SignalBoard
         signals={[
@@ -261,6 +256,7 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
+    fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     const at = (sym: string) => body.indexOf(sym);
     expect(at('SYMnew')).toBeGreaterThanOrEqual(0);
@@ -343,5 +339,30 @@ describe('groupByDay hoistToday', () => {
     );
     expect(days[0].key).toBe(LIVE_BUCKET);
     expect(days[0].signals.map((x) => x.id).sort()).toEqual(['new', 'old']);
+  });
+
+  it('does not hoist past days armed setups into live bucket or today', () => {
+    // 28 Aug armed setup evaluated on 4 Sep before market open
+    const days = groupByDay(
+      [s('old_armed', NOW_ - 6 * DAY, 'armed')],
+      { liveFirst: true, nowMs: NOW_ },
+    );
+    expect(days.map((d) => d.key)).not.toContain(LIVE_BUCKET);
+    expect(days[0].key).toBe('older');
+    expect(sessionDayLabel(days[0].key, NOW_)).toBe('Older');
+  });
+
+  it('renders Older heading for past setups and does not render Today when market has not opened', () => {
+    render(
+      <SignalBoard
+        signals={[s('aug28', NOW_ - 6 * DAY, 'armed')]}
+        columns={['instrument', 'time']}
+        nowMs={NOW_}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText('Older')).toBeTruthy();
+    expect(screen.queryByText('Today')).toBeNull();
   });
 });

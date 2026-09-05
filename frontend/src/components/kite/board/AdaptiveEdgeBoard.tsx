@@ -20,7 +20,7 @@ import { k } from '../../../styles/kiteUI';
 export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
   /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
   onOpenChart?: (quoteKey: string) => void;
-  nowMs: number;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
@@ -31,7 +31,7 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
     [snapshot.data],
   );
 
-  const view = useBoardView(signals, { storageKey: 'adaptive_edge' });
+  const view = useBoardView(signals, { endedByDefault: true, storageKey: 'adaptive_edge' });
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
   // Which signals are showing their contracts. Separate from openId, which is
@@ -71,6 +71,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
         collapsedGroups={collapsedGroups}
         onToggleGroup={toggleGroup}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total
             ? 'Every row is filtered out. Clear the search or include ended positions.'

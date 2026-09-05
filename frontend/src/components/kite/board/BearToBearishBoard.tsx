@@ -31,7 +31,7 @@ export function BearToBearishBoard({
   onOpenChart,
 }: {
   onOpenChart?: (quoteKey: string) => void;
-  nowMs: number;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   const s = useKiteSettings();
@@ -120,6 +120,8 @@ export function BearToBearishBoard({
         )}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total
             ? 'Every row is filtered out. Clear the search or include ended positions.'

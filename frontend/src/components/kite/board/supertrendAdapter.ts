@@ -22,6 +22,7 @@ import type { AlignmentChip, EngineSignalRow, OptionLeg } from '../../../types/k
 import { computeGreeksFromLeg } from '../../../utils/computeGreeks';
 import { k } from '../../../styles/kiteUI';
 import type { BoardDayMove, BoardOrigin, BoardSection, BoardSignal, BoardStatus, EngineId } from './boardTypes';
+import { parseTimestampMs } from './boardTypes';
 
 /**
  * A tradable price, or nothing.
@@ -221,7 +222,9 @@ export function supertrendLegToBoard(
   opts: SuperTrendAdapterOptions = {},
 ): BoardSignal {
   const engine = engineOf(row);
-  const atMs = leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms ?? null;
+  const atMs = parseTimestampMs(
+    leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at ?? (row as any).entered_at ?? (row as any).session_date
+  );
   const sections = [evidenceSection(row), exitSection(row, leg), navigatorSection(row)]
     .filter(Boolean) as BoardSection[];
   const quantity = leg.lot_size ?? null;
@@ -336,7 +339,9 @@ function supertrendSignalToBoard(
     },
     direction: row.direction,
     status,
-    atMs: row.timestamp_ms ?? null,
+    atMs: parseTimestampMs(
+      row.timestamp_ms ?? (row as any).timestamp ?? (row as any).created_at ?? (row as any).entered_at ?? (row as any).session_date ?? legs[0]?.atMs
+    ),
     // The live underlying where we have it; the scan's spot otherwise.
     underlyingPrice: opts.spotOf?.(row.underlying) ?? (row.spot > 0 ? row.spot : null),
     levels: { ltp: null, entry: null, stop: null, trail: null, target: null, exit: null },
