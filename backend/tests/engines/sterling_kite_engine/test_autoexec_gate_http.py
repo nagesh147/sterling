@@ -72,15 +72,15 @@ def test_patch_refuses_the_same_way(client):
     assert state.get_config(UID).auto_execute is False
 
 
-def test_force_overrides_the_gate(client):
-    """A gate, not a prohibition — the reasons are returned so the choice is informed."""
+def test_force_cannot_override_unprotected_exposure(client):
+    """A legacy query flag cannot erase exposure/protection failures."""
     _unprotected_position()
 
     r = client.patch(f"{URL}?force=true", headers=HEADERS, json={"auto_execute": True})
 
-    assert r.status_code == 200, r.text
-    assert r.json()["auto_execute"] is True
-    assert state.get_config(UID).auto_execute is True
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["reasons"]
+    assert state.get_config(UID).auto_execute is False
 
 
 def test_turning_auto_execute_off_is_never_gated(client):

@@ -80,12 +80,14 @@ function Record({ record }: { record?: GammaTradeRecord }) {
   );
 }
 
-export function GammaMoveBoard({ nowMs, onOpenDetail }: {
-  nowMs: number;
+export function GammaMoveBoard({ nowMs, onOpenDetail, onOpenChart }: {
+  /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
+  onOpenChart?: (quoteKey: string) => void;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
-  const rowActions = useBoardRowActions();
+  const rowActions = useBoardRowActions({ onOpenChart });
   const [pollMs, setPollMs] = React.useState(0);
   const snapshot = useGammaMoveSnapshot(true, pollMs);
   const scan = useGammaMoveScan();
@@ -229,6 +231,8 @@ export function GammaMoveBoard({ nowMs, onOpenDetail }: {
         )}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel="Nothing at a level right now. Run a scan, or widen the universe in settings."
       />
     </div>

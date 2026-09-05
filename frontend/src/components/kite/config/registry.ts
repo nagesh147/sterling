@@ -25,7 +25,7 @@ import type {
 export type SectionId =
   | 'account' | 'truedata' | 'diagnostics' | 'mode' | 'manualRules' | 'autoRules'
   | 'engine' | 'navigator' | 'adaptiveEdge' | 'orbOptions' | 'atmPremiumImbalance'
-  | 'gammaMove' | 'oiWallFlow'
+  | 'gammaMove' | 'oiWallFlow' | 'bearToBearish'
   | 'markets' | 'notifications'
   | 'experience' | 'dataLake';
 
@@ -429,7 +429,7 @@ const LEGACY_SECTIONS: Record<string, SectionId> = {
 // from being restored on reload -- 'diagnostics' was absent and had both bugs.
 export const SECTION_IDS: SectionId[] = [
   'account', 'truedata', 'diagnostics', 'mode', 'manualRules', 'autoRules', 'engine',
-  'navigator', 'adaptiveEdge', 'orbOptions', 'atmPremiumImbalance', 'gammaMove', 'oiWallFlow', 'markets',
+  'navigator', 'adaptiveEdge', 'orbOptions', 'atmPremiumImbalance', 'gammaMove', 'bearToBearish', 'oiWallFlow', 'markets',
   'notifications', 'experience',
   'dataLake',
 ];

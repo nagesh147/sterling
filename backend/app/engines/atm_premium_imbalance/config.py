@@ -115,6 +115,7 @@ class ATMPremiumImbalanceConfig:
     #: stated, and both default to zero. So enabling alone cannot place an order
     #: at tomorrow's open; someone has to say how big first.
     enabled: bool = True
+    auto_execute: bool = False
 
     # --- universe -----------------------------------------------------------
     underlying: str = "SENSEX"

@@ -17,6 +17,7 @@ export type StopBasis = 'POINTS' | 'PERCENT';
 
 export interface AtmPremiumImbalanceConfig {
   enabled: boolean;
+  auto_execute?: boolean;
   underlying: string;
   expiry_policy: ExpiryPolicy;
   explicit_expiry: string;
@@ -283,15 +284,16 @@ export function useSetAtmPremiumImbalanceConfig() {
   });
 }
 
+import { useReplayActive as useSimActive } from './useReplayStore';
+
 export function useAtmPremiumImbalanceSnapshot(enabled = true, refetchMs = 0) {
+  const isSimActive = useSimActive();
   return useQuery<AtmPremiumImbalanceSnapshot>({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => api.get('/api/v1/config/atm-premium-imbalance/snapshot'),
     enabled,
-    staleTime: 2000,
-    // Polled only while something is armed: an unarmed strategy has no live
-    // state worth a request every few seconds.
-    refetchInterval: refetchMs > 0 ? refetchMs : false,
+    staleTime: isSimActive ? 0 : 2000,
+    refetchInterval: enabled ? (isSimActive ? 300 : (refetchMs > 0 ? refetchMs : 2000)) : false,
     retry: false,
   });
 }

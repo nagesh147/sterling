@@ -4,8 +4,11 @@ import {
   BORDER, ChoiceRow, DefaultBadge, Field, NumberField, Section, Switch, TEXT,
 } from './kite/kiteSettingsPrimitives';
 import { AdvancedSection, ConfigNote, PanelCard, SettingsDraftBar } from './kite/config/ConfigPrimitives';
+import { useUnsavedDraftGuard } from './kite/config/unsavedDraftGuard';
 import { EnginePowerHeader } from './kite/config/EnginePowerHeader';
-import { InstrumentsGroup } from './kite/config/ScanSettings';
+import { ContractsGroup, ExpirySettingsGroup, InstrumentsGroup } from './kite/config/ScanSettings';
+import { OptionContractsPicker } from './kite/config/OptionContractsPicker';
+import type { Moneyness, ScanExpiry } from '../types/kiteEngine';
 
 /**
  * ORB + VWAP options settings.
@@ -19,18 +22,6 @@ import { InstrumentsGroup } from './kite/config/ScanSettings';
 const DATA_SOURCE_OPTIONS = [
   { value: 'kite', label: 'Zerodha Kite', hint: 'Broker candles and quotes. The default, and the same feed that executes.' },
   { value: 'truedata', label: 'TrueData', hint: 'Independent feed with tick, OI and bid/ask depth for contract validation.' },
-] as const;
-
-const MONEYNESS_OPTIONS = [
-  { value: 'ATM', label: 'ATM', hint: 'At the money. Highest liquidity, ~0.5 delta.' },
-  { value: 'ITM', label: 'ITM', hint: 'In the money. Higher delta and cost, less time value.' },
-  { value: 'OTM', label: 'OTM', hint: 'Out of the money. Cheaper, lower delta, decays faster.' },
-] as const;
-
-const EXPIRY_OPTIONS = [
-  { value: 'nearest', label: 'Nearest', hint: 'Whichever eligible expiry is soonest.' },
-  { value: 'weekly', label: 'Weekly', hint: 'Nearest eligible non-monthly contract. Refuses rather than substituting a monthly.' },
-  { value: 'monthly', label: 'Monthly', hint: 'Nearest eligible monthly contract.' },
 ] as const;
 
 /** Settings inside Advanced. Counts fields, the way every other panel labels it. */
@@ -52,8 +43,11 @@ export function NiftyOrbOptionsSettings() {
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
   const cfg = draft ?? server ?? null;
-  const dirty = draft != null && server != null
+  const isDraftDirty = draft != null && server != null
     && (Object.keys(draft) as (keyof OrbConfig)[]).some((key) => JSON.stringify(draft[key]) !== JSON.stringify(server[key]));
+  const dirty = isDraftDirty;
+
+  useUnsavedDraftGuard('orbOptions', dirty);
 
   const patch = React.useCallback((next: Partial<OrbConfig>) => {
     setDraft((prev) => ({ ...(prev ?? server!), ...next }));
@@ -93,9 +87,49 @@ export function NiftyOrbOptionsSettings() {
     const n = changedIn(keys);
     return n ? `${n} changed from default` : atDefault;
   };
-  const universeSummary = cfg.scan_all_stocks
-    ? `All F&O · ${cfg.scan_indices.length} indices`
-    : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
+  const universeSummary = !(cfg.scan_stock_contracts ?? true)
+    ? `${cfg.scan_indices.length} indices · no stocks`
+    : cfg.scan_all_stocks
+      ? `All F&O · ${cfg.scan_indices.length} indices`
+      : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`;
+
+  const strikes: Moneyness[] = (cfg.strike_moneyness && cfg.strike_moneyness.length > 0)
+    ? (cfg.strike_moneyness as Moneyness[])
+    : cfg.option_moneyness === 'ATM'
+      ? ['ATM']
+      : cfg.option_moneyness === 'ITM'
+        ? [('ITM' + Math.min(5, Math.max(1, cfg.option_steps_itm || 1))) as Moneyness]
+        : [('OTM' + Math.min(5, Math.max(1, cfg.option_steps_itm || 1))) as Moneyness];
+
+  const indexExpiries: ScanExpiry[] = (cfg.scan_expiries_indices && cfg.scan_expiries_indices.length > 0)
+    ? (cfg.scan_expiries_indices as ScanExpiry[])
+    : cfg.expiry_selection === 'monthly'
+      ? ['monthly']
+      : ['weekly'];
+
+  const handleContractsChange = (next: {
+    strike_moneyness?: Moneyness[];
+    scan_expiries_indices?: ScanExpiry[];
+  }) => {
+    const patchData: Partial<OrbConfig> = { ...next };
+    if (next.strike_moneyness && next.strike_moneyness.length > 0) {
+      const first = next.strike_moneyness[0];
+      if (first === 'ATM') {
+        patchData.option_moneyness = 'ATM';
+        patchData.option_steps_itm = 1;
+      } else if (first.startsWith('ITM')) {
+        patchData.option_moneyness = 'ITM';
+        patchData.option_steps_itm = parseInt(first.slice(3), 10) || 1;
+      } else if (first.startsWith('OTM')) {
+        patchData.option_moneyness = 'OTM';
+        patchData.option_steps_itm = parseInt(first.slice(3), 10) || 1;
+      }
+    }
+    if (next.scan_expiries_indices && next.scan_expiries_indices.length > 0) {
+      patchData.expiry_selection = next.scan_expiries_indices.includes('weekly') ? 'weekly' : 'monthly';
+    }
+    patch(patchData);
+  };
   const num = (key: keyof OrbConfig) => Number(cfg[key]);
   const def = (key: keyof OrbConfig) => (defaults ? Number(defaults[key]) : undefined);
 
@@ -116,15 +150,6 @@ export function NiftyOrbOptionsSettings() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={setCfg.isPending}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name="ORB + VWAP Options"
         tagline="Opening-range breakout confirmed by VWAP. Buys calls on LONG and puts on SHORT — never sells."
@@ -181,52 +206,44 @@ export function NiftyOrbOptionsSettings() {
 
         <Section
           title="Contracts"
-          description="Which strike and expiry the signal is expressed through."
-          summary={`${cfg.option_moneyness}${cfg.option_moneyness === 'ATM' ? '' : ` ×${cfg.option_steps_itm}`} · ${cfg.expiry_selection} · ${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+          description="Which strikes and expiry cycles this engine resolves."
+          summary={`${strikes.length} strike${strikes.length === 1 ? '' : 's'} · ${indexExpiries.join(' + ')}`}
           defaultOpen
           persistKey="orb-contracts">
-          <Field label="Moneyness" hint="An unavailable moneyness is refused, not silently swapped for the nearest strike." wide
-            badge={defBadge('option_moneyness')}>
-            <ChoiceRow
-              value={cfg.option_moneyness}
-              options={MONEYNESS_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-              onChange={(v) => patch({ option_moneyness: v })}
-            />
-          </Field>
-          {cfg.option_moneyness !== 'ATM' && (
-            <NumberField
-              label={`${cfg.option_moneyness} steps`}
-              hint="How many strikes away from the money."
-              value={num('option_steps_itm')} defaultValue={def('option_steps_itm')}
-              onChange={(v) => patch({ option_steps_itm: v })} min={1} max={5} suffix="strikes"
-            />
-          )}
-          <Field label="Expiry" hint="Weekly and monthly are separated by the venue calendar, not by DTE guesswork." wide
-            badge={defBadge('expiry_selection')}>
-            <ChoiceRow
-              value={cfg.expiry_selection}
-              options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-              onChange={(v) => patch({ expiry_selection: v })}
-            />
-          </Field>
-          <NumberField
-            label="Minimum days to expiry" value={num('expiry_dte_min')} defaultValue={def('expiry_dte_min')}
-            onChange={(v) => patch({ expiry_dte_min: v })} min={0} max={365} suffix="days"
+          <ContractsGroup
+            strikes={strikes}
+            indexExpiries={indexExpiries}
+            badge={defBadge('option_moneyness')}
+            onChange={handleContractsChange}
           />
-          <NumberField
-            label="Maximum days to expiry" value={num('expiry_dte_max')} defaultValue={def('expiry_dte_max')}
-            onChange={(v) => patch({ expiry_dte_max: v })} min={0} max={365} suffix="days"
+          <OptionContractsPicker
+            config={{
+              scan_indices: cfg.scan_indices,
+              scan_stocks: cfg.scan_stocks,
+              scan_all_stocks: cfg.scan_all_stocks,
+              scan_weekly_series_indices: cfg.scan_weekly_series_indices,
+              scan_monthly_series_indices: cfg.scan_monthly_series_indices,
+              scan_monthly_series_stocks: cfg.scan_monthly_series_stocks,
+            }}
+            onSave={(p) => patch(p as Partial<OrbConfig>)}
+            saving={setCfg.isPending}
           />
-          <Field label="Expiry day" hint="Expiry-day options gain and lose value fastest."
-            badge={defBadge('avoid_expiry_day', (v) => (v ? 'skipped' : 'allowed'))}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Switch
-                checked={cfg.avoid_expiry_day} label="Avoid expiry-day entries"
-                onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
-              />
-              <span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.avoid_expiry_day ? 'Skipped' : 'Allowed'}</span>
-            </div>
-          </Field>
+        </Section>
+
+        <Section
+          title="Expiry"
+          description="Rules governing contract days-to-expiry and settlement dates."
+          summary={`${cfg.expiry_dte_min ?? 0}–${cfg.expiry_dte_max ?? 7} DTE${cfg.avoid_expiry_day ? ' · avoid expiry day' : ''}`}
+          defaultOpen
+          persistKey="orb-expiry">
+          <ExpirySettingsGroup
+            dteMin={cfg.expiry_dte_min ?? 0}
+            dteMax={cfg.expiry_dte_max ?? 7}
+            avoidExpiryDay={cfg.avoid_expiry_day ?? false}
+            dteDefaults={{ min: defaults?.expiry_dte_min ?? 0, max: defaults?.expiry_dte_max ?? 7 }}
+            avoidExpiryDayBadge={defBadge('avoid_expiry_day', (v) => (v ? 'skipped' : 'allowed'))}
+            onChange={(next) => patch(next as Partial<OrbConfig>)}
+          />
         </Section>
 
         <Section
@@ -409,6 +426,16 @@ export function NiftyOrbOptionsSettings() {
           </Section>
         </AdvancedSection>
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        hasDraft={isDraftDirty}
+        saving={setCfg.isPending}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
 
       <style>{`
         @media (max-width: 640px) {

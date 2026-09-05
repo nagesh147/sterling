@@ -177,8 +177,144 @@ export function SignalSourceGroup({ value, onChange, name, fieldHint = 'The char
 }
 
 /** Which strikes and expiry cycles this engine resolves. */
+function StrikeGroupCard({
+  group,
+  strikes,
+  onUpdateStrikes,
+}: {
+  group: { label: string; hint: string; values: Moneyness[] };
+  strikes: Moneyness[];
+  onUpdateStrikes: (next: Moneyness[]) => void;
+}) {
+  const activeCount = group.values.filter((v) => strikes.includes(v)).length;
+  const isChecked = activeCount > 0;
+  const maxLevels = group.values.length;
+
+  const toggleGroup = () => {
+    const next = isChecked
+      ? strikes.filter((v) => !group.values.includes(v))
+      : [...new Set([...strikes, ...group.values])];
+    onUpdateStrikes(next.length ? next : ['ATM']);
+  };
+
+  const setLegCount = (count: number) => {
+    const withoutGroup = strikes.filter((v) => !group.values.includes(v));
+    const selectedLegs = group.values.slice(0, count);
+    const next = [...new Set([...withoutGroup, ...selectedLegs])];
+    onUpdateStrikes(next.length ? next : ['ATM']);
+  };
+
+  return (
+    <div
+      style={{
+        padding: '9px 11px',
+        border: `1px solid ${isChecked ? 'color-mix(in srgb, #2563eb 40%, transparent)' : 'var(--k-border, #e5e7eb)'}`,
+        borderRadius: 8,
+        background: isChecked ? 'color-mix(in srgb, #2563eb 5%, var(--k-bg))' : 'var(--k-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        transition: 'all 0.12s ease',
+      }}
+    >
+      <div
+        role="checkbox"
+        aria-checked={isChecked}
+        aria-label={group.label}
+        tabIndex={0}
+        onClick={toggleGroup}
+        onKeyDown={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            toggleGroup();
+          }
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span
+            role="checkbox"
+            aria-checked={isChecked}
+            aria-label={group.label}
+            style={{
+              width: 16,
+              height: 16,
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 4,
+              border: isChecked ? '1px solid #2563eb' : '1px solid #d1d5db',
+              background: isChecked ? '#2563eb' : 'var(--k-bg)',
+              color: '#ffffff',
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            {isChecked ? '✓' : ''}
+          </span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: isChecked ? 'var(--k-text)' : 'var(--k-ink-3)' }}>
+            {group.label}
+          </span>
+        </div>
+
+        <span style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)' }}>
+          {group.hint}
+        </span>
+      </div>
+
+      {maxLevels > 1 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingTop: 1 }}>
+          <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--k-dim)', marginRight: 2 }}>
+            Legs:
+          </span>
+          {Array.from({ length: maxLevels }, (_, i) => i + 1).map((num) => {
+            const isSelected = isChecked && activeCount === num;
+            return (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setLegCount(num)}
+                style={{
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  border: isSelected
+                    ? '1px solid #2563eb'
+                    : '1px solid var(--k-border, #e5e7eb)',
+                  background: isSelected ? '#2563eb' : 'var(--k-bg)',
+                  color: isSelected ? '#ffffff' : 'var(--k-ink-3)',
+                  fontSize: 9.5,
+                  fontWeight: isSelected ? 700 : 500,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.12s ease',
+                }}
+                title={`Include ${num} leg${num === 1 ? '' : 's'} (${group.values.slice(0, num).join(', ')})`}
+              >
+                {num} {num === 1 ? 'leg' : 'legs'}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--k-dim)', paddingTop: 1 }}>
+          1 leg (ATM)
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ContractsGroup({
   strikes, indexExpiries, onChange,
+  badge,
   dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote,
 }: {
   strikes: Moneyness[];
@@ -190,88 +326,99 @@ export function ContractsGroup({
     expiry_dte_max?: number;
     avoid_expiry_day?: boolean;
   }) => void;
-  /* The expiry window, shared by every engine under these names. Optional so a
-     caller that has not adopted them yet renders exactly what it did before —
-     but every option engine now passes them, and this is the one place the
-     wording lives, so "minimum days to expiry" cannot come to mean two things
-     on two pages. */
+  badge?: React.ReactNode;
   dteMin?: number;
   dteMax?: number;
   avoidExpiryDay?: boolean;
   dteDefaults?: { min?: number; max?: number };
-  /** Engine-specific note under the window, e.g. why one of them is off. */
   dteNote?: React.ReactNode;
 }) {
-  const toggleStrikeGroup = (values: Moneyness[]) => {
-    const all = values.every((v) => strikes.includes(v));
-    const next = all ? strikes.filter((v) => !values.includes(v)) : [...new Set([...strikes, ...values])];
-    onChange({ strike_moneyness: next.length ? next : ['ATM'] });
-  };
-  const toggleIndexExpiry = (expiry: ScanExpiry) => {
-    const next = indexExpiries.includes(expiry)
-      ? indexExpiries.filter((x) => x !== expiry)
-      : [...indexExpiries, expiry];
-    // Falling back to BOTH, not to weekly. Unticking your last remaining cycle is
-    // "I did not mean to leave this empty", not "put me on weeklies" — and weekly
-    // and monthly contracts do not behave alike, so silently moving someone from
-    // one to the other is a real change of position dressed as a no-op.
-    onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
-  };
-
   return (
     <>
       <Field
         label="Strike range"
-        hint="Which strikes are resolved for each setup. Also decides which contract an automatic BUY hits."
+        hint="Select moneyness and number of legs per group"
         wide
+        badge={badge}
       >
         <div
-          className="sk-config-check-grid"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-            gap: '8px 10px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: 10,
             width: '100%',
           }}
         >
-          {STRIKE_GROUPS.map((group) => {
-            const checked = group.values.every((v) => strikes.includes(v));
-            const partial = !checked && group.values.some((v) => strikes.includes(v));
-            return (
-              <CheckOption
-                key={group.label}
-                label={group.label}
-                hint={group.hint}
-                checked={checked}
-                indeterminate={partial}
-                onChange={() => toggleStrikeGroup(group.values)}
-              />
-            );
-          })}
-        </div>
-      </Field>
-
-      <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
-        <div
-          className="sk-config-check-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: '6px 12px',
-            maxWidth: 320,
-          }}
-        >
-          {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
-            <CheckOption
-              key={expiry}
-              label={expiry === 'weekly' ? 'Weekly' : 'Monthly'}
-              checked={indexExpiries.includes(expiry)}
-              onChange={() => toggleIndexExpiry(expiry)}
+          {STRIKE_GROUPS.map((group) => (
+            <StrikeGroupCard
+              key={group.label}
+              group={group}
+              strikes={strikes}
+              onUpdateStrikes={(next) => onChange({ strike_moneyness: next })}
             />
           ))}
         </div>
       </Field>
 
+      {indexExpiries && indexExpiries.length > 0 && (
+        <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
+          <div
+            className="sk-config-check-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: '6px 12px',
+              maxWidth: 320,
+            }}
+          >
+            {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
+              <CheckOption
+                key={expiry}
+                label={expiry === 'weekly' ? 'Weekly' : 'Monthly'}
+                checked={indexExpiries.includes(expiry)}
+                onChange={() => {
+                  const next = indexExpiries.includes(expiry)
+                    ? indexExpiries.filter((x) => x !== expiry)
+                    : [...indexExpiries, expiry];
+                  onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
+                }}
+              />
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {dteMin !== undefined && dteMax !== undefined && (
+        <ExpirySettingsGroup
+          dteMin={dteMin}
+          dteMax={dteMax}
+          avoidExpiryDay={avoidExpiryDay}
+          dteDefaults={dteDefaults}
+          dteNote={dteNote}
+          onChange={onChange}
+        />
+      )}
+    </>
+  );
+}
+
+export function ExpirySettingsGroup({
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote, avoidExpiryDayBadge, onChange,
+}: {
+  dteMin?: number;
+  dteMax?: number;
+  avoidExpiryDay?: boolean;
+  dteDefaults?: { min?: number; max?: number };
+  dteNote?: React.ReactNode;
+  avoidExpiryDayBadge?: React.ReactNode;
+  onChange: (next: {
+    expiry_dte_min?: number;
+    expiry_dte_max?: number;
+    avoid_expiry_day?: boolean;
+  }) => void;
+}) {
+  return (
+    <>
       {dteMin !== undefined && dteMax !== undefined && (
         <>
           <NumberField
@@ -291,21 +438,22 @@ export function ContractsGroup({
           <Field
             label="Expiry day"
             hint="Expiry-day options gain and lose value fastest, and their open interest is settlement mechanics rather than positioning."
+            badge={avoidExpiryDayBadge}
           >
-            <Switch
-              checked={!!avoidExpiryDay}
-              label="Avoid expiry-day entries"
-              onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
-            />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: avoidExpiryDay ? 'var(--k-text)' : DIM }}>
+                {avoidExpiryDay ? 'Skipped' : 'Allowed'}
+              </span>
+              <Switch
+                checked={!!avoidExpiryDay}
+                label="Avoid expiry-day entries"
+                onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
+              />
+            </div>
           </Field>
           {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
         </>
       )}
-
-      <ConfigNote>
-        Single-stock contracts are exchange-listed on a monthly cycle only, so there is no cycle to choose.
-        Whether stocks are scanned at all is under Instruments.
-      </ConfigNote>
     </>
   );
 }

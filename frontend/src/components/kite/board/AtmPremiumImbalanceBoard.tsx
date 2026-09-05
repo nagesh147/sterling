@@ -93,12 +93,14 @@ function TradeRecord({ record }: { record?: AtmTradeRecord }) {
   );
 }
 
-export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
-  nowMs: number;
+export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail, onOpenChart }: {
+  /** Opens this row's instrument in the chart pane. Without it the Chart column is empty. */
+  onOpenChart?: (quoteKey: string) => void;
+  nowMs?: number;
   onOpenDetail?: (signal: BoardSignal) => void;
 }) {
   // Buy/Sell and the chart, built from the signal alone — same on every board.
-  const rowActions = useBoardRowActions();
+  const rowActions = useBoardRowActions({ onOpenChart });
   const config = useAtmPremiumImbalanceConfig();
   const enabled = config.data?.config?.enabled ?? false;
   const [armedOnce, setArmedOnce] = React.useState(false);
@@ -276,6 +278,8 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail }: {
         renderDetail={(sig) => <BoardTicket signal={sig} tag="ATM_PREMIUM_IMBALANCE" />}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
+        liveFirst={false}
+        hoistLiveFromToday={false}
         emptyLabel={session
           ? 'Armed — waiting for both legs to quote.'
           : 'Arm the session to resolve the ATM pair and start watching.'}

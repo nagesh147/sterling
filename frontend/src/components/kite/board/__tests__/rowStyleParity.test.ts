@@ -119,9 +119,8 @@ describe('both tables share one heading scale', () => {
     expect(superTrend).toContain('DAY_HEAD_METRICS.textTransform');
   });
 
-  it('has no day band left on the shared board', () => {
-    expect(sharedBoard).not.toContain('sessionDayLabel(key, nowMs)');
-    expect(sharedBoard).not.toMatch(/signal\{rows\.length === 1/);
+  it('labels the shared board day band from sessionDayLabel', () => {
+    expect(sharedBoard).toContain('sessionDayLabel(key, nowMs');
   });
 
   it('puts the group band on the surface shade, not the row background', () => {

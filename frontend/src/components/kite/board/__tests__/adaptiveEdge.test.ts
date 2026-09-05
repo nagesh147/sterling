@@ -173,3 +173,155 @@ describe('Adaptive Edge grouping', () => {
     expect(parent.status).toBe('running');
   });
 });
+
+describe('Adaptive Edge simulation replay signals to board', () => {
+  it('parses simulated snapshot with KOTAKBANK, AXISBANK, SENSEX and groups under Today with sim clock', async () => {
+    const { rowsFromSnapshot } = await import('../../AdaptiveEdgePanel');
+    const { groupByDay } = await import('../boardTypes');
+
+    const simSnapshot = {
+      label: 'SIMULATION_REPLAY',
+      software_complete: true,
+      production_gate_authorized: true,
+      meets_a197: true,
+      registry_locked: true,
+      live_trading: false,
+      settings: {
+        symbol: 'KOTAKBANK',
+        symbols: ['KOTAKBANK', 'AXISBANK', 'SENSEX'],
+      } as any,
+      readiness: [],
+      session: {} as any,
+      legs: [],
+      signals: [
+        {
+          id: 'ae-sim-KOTAKBANK-091400-0',
+          underlying: 'KOTAKBANK',
+          tape_symbol: 'KOTAKBANK',
+          side: 'BUY',
+          option_type: 'CE',
+          spot_entry: 1785.45,
+          spot_exit: null,
+          spot_sl: 1763.25,
+          spot_tsl: 1763.25,
+          entry_time: '2026-08-28T09:14:00+05:30',
+          score: 88.0,
+          scanned: true,
+          flattened: false,
+          quantity: 1,
+          overlays: ['REPLAY', 'STRONG'],
+          thesis: 'BULLISH adaptive_edge at 1785.45',
+          entry_mode: 'SCALP',
+          legs: [
+            {
+              moneyness: 'ATM',
+              option_type: 'CE',
+              option_symbol: 'KOTAKBANK26AUG1780CE',
+              strike: 1780,
+              expiry: '2026-08-28',
+              lot_size: 400,
+              token: 12345,
+              exchange: 'NSE',
+              entry_premium: 32.15,
+              stop_premium: 22.5,
+              trail_premium: 22.5,
+              ltp: 32.15,
+              resolution_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'ae-sim-AXISBANK-091400-1',
+          underlying: 'AXISBANK',
+          tape_symbol: 'AXISBANK',
+          side: 'BUY',
+          option_type: 'CE',
+          spot_entry: 1162.30,
+          spot_exit: null,
+          spot_sl: 1148.80,
+          spot_tsl: 1148.80,
+          entry_time: '2026-08-28T09:14:00+05:30',
+          score: 88.0,
+          scanned: true,
+          flattened: false,
+          quantity: 1,
+          overlays: ['REPLAY', 'STRONG'],
+          thesis: 'BULLISH adaptive_edge at 1162.30',
+          entry_mode: 'SCALP',
+          legs: [
+            {
+              moneyness: 'ATM',
+              option_type: 'CE',
+              option_symbol: 'AXISBANK26AUG1160CE',
+              strike: 1160,
+              expiry: '2026-08-28',
+              lot_size: 625,
+              token: 12346,
+              exchange: 'NSE',
+              entry_premium: 21.0,
+              stop_premium: 14.7,
+              trail_premium: 14.7,
+              ltp: 21.0,
+              resolution_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'ae-sim-SENSEX-091400-2',
+          underlying: 'SENSEX',
+          tape_symbol: 'SENSEX',
+          side: 'SELL',
+          option_type: 'PE',
+          spot_entry: 81342.10,
+          spot_exit: null,
+          spot_sl: 81612.10,
+          spot_tsl: 81612.10,
+          entry_time: '2026-08-28T09:14:00+05:30',
+          score: 88.0,
+          scanned: true,
+          flattened: false,
+          quantity: 1,
+          overlays: ['REPLAY', 'STRONG'],
+          thesis: 'BEARISH adaptive_edge at 81342.10',
+          entry_mode: 'SCALP',
+          legs: [
+            {
+              moneyness: 'ATM',
+              option_type: 'PE',
+              option_symbol: 'SENSEX26AUG81300PE',
+              strike: 81300,
+              expiry: '2026-08-28',
+              lot_size: 10,
+              token: 12347,
+              exchange: 'BSE',
+              entry_premium: 450.0,
+              stop_premium: 315.0,
+              trail_premium: 315.0,
+              ltp: 450.0,
+              resolution_reason: null,
+            },
+          ],
+        },
+      ] as any,
+    };
+
+    const rows = rowsFromSnapshot(simSnapshot as any);
+    expect(rows).toHaveLength(3);
+
+    const boardSignals = adaptiveEdgeToBoard(rows);
+    expect(boardSignals).toHaveLength(3);
+    const symbols = boardSignals.map((b) => b.underlying);
+    expect(symbols).toEqual(['KOTAKBANK', 'AXISBANK', 'SENSEX']);
+
+    // When sim clock is 2026-08-28 09:16:31 IST
+    const simNowMs = Date.parse('2026-08-28T09:16:31+05:30');
+    const buckets = groupByDay(boardSignals, { nowMs: simNowMs });
+    
+    // Bucket key for 2026-08-28 is the 'Today' bucket
+    const todayBucket = buckets.find((b) => b.key === '2026-08-28');
+    expect(todayBucket).toBeDefined();
+    expect(todayBucket!.signals).toHaveLength(3);
+    expect(todayBucket!.signals.map((s) => s.underlying)).toEqual(['KOTAKBANK', 'AXISBANK', 'SENSEX']);
+  });
+});
+

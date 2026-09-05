@@ -26,7 +26,7 @@ import type { EngineSignalRow } from '../../types/kiteEngine';
  * by moving and nobody had to decide for them which ones to drop.
  */
 export function SuperTrendSharedBoard({
-  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode,
+  rows, quotes, originalEntryMs, onSelectSignal, onOpenChart, nowMs, signalMode, isHistoricalSim,
 }: {
   rows: readonly EngineSignalRow[];
   quotes?: Record<string, any>;
@@ -38,6 +38,7 @@ export function SuperTrendSharedBoard({
   nowMs: number;
   /** The lens, so the adapter can suppress a Navigator badge under 'supertrend'. */
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
+  isHistoricalSim?: boolean;
 }) {
   const s = useKiteSettings();
   // The same builder every other board uses, so SuperTrend stops being the only
@@ -169,20 +170,19 @@ export function SuperTrendSharedBoard({
       collapsedGroups={collapsed}
       onToggleGroup={toggleGroup}
       nowMs={nowMs}
+      isHistoricalSim={isHistoricalSim}
       // The three capabilities, from the operator's own Behaviour settings.
       onReorderColumn={s.boardDragColumns ? onReorderColumn : undefined}
       rowScroll={s.boardRowScroll}
-      // This board is fifty ideas across several days, and the operator's first
-      // question is "what is live", not "what fired today". The bespoke table has
-      // always answered that with an Active-now section ahead of the dated log;
-      // without this the shared board buries a running trade from Tuesday under
-      // days of closed history.
-      hoistLiveFromToday
+      // Date groups only: Today / Yesterday / Older. Hoisting live rows into
+      // "Live now" hid those headings — a morning scan then read as one live
+      // pile even when every print was from today.
+      liveFirst={false}
+      hoistLiveFromToday={false}
+      collapseOlderDays={true}
       // Trade and chart are COLUMNS now, shared with every other board, so the
-      // picker can switch either off. `boardRowActions` still governs whether
-      // this table offers them at all — the setting is about this board's
-      // behaviour, the column is about this operator's current view.
-      renderTrade={s.boardRowActions ? rowActions.renderTrade : undefined}
+      // picker can switch either off.
+      renderTrade={rowActions.renderTrade}
       renderChart={rowActions.renderChart}
       emptyLabel="No active or recent setups on the board yet."
     />

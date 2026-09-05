@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, sessionDayLabel, underlyingQuoteKey } from './board/boardTypes';
+import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs, formatSessionDay } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
@@ -13,6 +13,7 @@ import { HEAD_METRICS, DAY_HEAD_METRICS, LEG_BG, LEG_INDENT,
 import { DraggableColHeader, makeHscrollSync } from './board/tableMechanics';
 import { instrumentFlex } from './board/signalRowSpec';
 import { SuperTrendSharedBoard } from './SuperTrendSharedBoard';
+import { useSimNowMs } from '../../hooks/useReplayStore';
 import { useEngineConfig, useEngineSignals, useRunScan, usePatchEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import { useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type { EngineConfigModel, EngineSignalRow, SignalsResponse, SignalChartData } from '../../types/kiteEngine';
@@ -33,6 +34,8 @@ import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
+
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';
 import { PaneHeaderActions } from './PaneHeaderActions';
@@ -240,7 +243,18 @@ function signalColShown(
   col: { key: string; visibleWhen: SignalColVisibility },
   premiumAvailable: boolean,
   hidden: readonly string[],
+  /**
+   * Whether the row is carrying its order buttons.
+   *
+   * Trade and Chart answer to TWO controls: the column picker, and the older
+   * "order buttons in the row" switch whose description promises they MOVE into
+   * the expanded row rather than disappear. Either one can withhold them, and
+   * both the header and the cells go through this function — which is the only
+   * reason the headings can be trusted to sit over their own columns.
+   */
+  rowActionsOn = true,
 ): boolean {
+  if (!rowActionsOn && (col.key === 'trade' || col.key === 'chart')) return false;
   return signalColCapable(col.visibleWhen, premiumAvailable) && !hidden.includes(col.key);
 }
 
@@ -898,6 +912,44 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           const snapTitle = ended
             ? `Past setup (fired at ${entryPx != null ? entryPx.toFixed(2) : '—'}, stop ${slPx != null ? slPx.toFixed(1) : '—'}) — ${liveExited ? 'live premium has fallen through the stop' : "the entry's SuperTrend has since flipped"}, not a live order.`
             : undefined;
+          const legBuy = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            const entryForSl = lastPx || leg.premium_spot || 0;
+            const slPxVal = leg.entry_sl ?? leg.premium_sl;
+            const slPercentage =
+              entryForSl > 0 && slPxVal && slPxVal > 0
+                ? -Math.abs(Number((((entryForSl - slPxVal) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            const tgtPercentage =
+              entryForSl > 0 && leg.premium_target && leg.premium_target > 0
+                ? Math.abs(Number((((leg.premium_target - entryForSl) / entryForSl) * 100).toFixed(1)))
+                : undefined;
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'BUY',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              initialSlPct: slPercentage,
+              initialTgtPct: tgtPercentage,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legSell = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: row.exchange,
+              initialSide: 'SELL',
+              lotSize: leg.lot_size || 1,
+              lastPrice: lastPx || 0,
+              tag: 'SUPERTREND',
+            });
+          };
+          const legChart = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg));
+          };
 
           return (
             <div key={leg.option_symbol}>
@@ -1033,7 +1085,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      };
                      return s.signalLeftColumnOrder.map((key) => {
                        const col = SIGNAL_LEFT_COLUMNS[key];
-                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
+                       if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                        return (
                          <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                            {renderLeftCell(col.key)}
@@ -1049,13 +1101,19 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     deleted it -- and the setting's own description promised a
                     relocation. A control that quietly disappears is bad
                     anywhere; on the path that places a real order it is worse. */}
-                {!isExp && s.boardRowActions && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
-                    <KiteActionButtons
-                      className="st-actions-persistent"
-                      buyDisabled={ended}
-                      disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
-                      onBuy={(e) => {
+                {!isExp && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
+                  {/* NOT gated on `boardRowActions` any more. That gate wrapped this
+                      whole block, so switching the row's order buttons off also took
+                      Chg., Chg.%, LTP and Time with it — and the relocated cluster
+                      below, whose whole purpose is to appear when the setting is off,
+                      sat INSIDE the gate and could therefore never render. */}
+                    
+                    
+                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {(() => {
+                  const legBuy = (e: React.MouseEvent) => {
                         e.stopPropagation();
                         const entryForSl = lastPx || leg.premium_spot || 0;
                         const slPxVal = leg.entry_sl ?? leg.premium_sl;
@@ -1077,8 +1135,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           initialTgtPct: tgtPercentage,
                           tag: 'SUPERTREND',
                         });
-                      }}
-                      onSell={(e) => {
+                      };
+                  const legSell = (e: React.MouseEvent) => {
                         e.stopPropagation();
                         openOrderWindow({
                           symbol: leg.option_symbol,
@@ -1088,20 +1146,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           lastPrice: lastPx || 0,
                           tag: 'SUPERTREND',
                         });
-                      }}
-                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
-                      // The Trade and Chart COLUMNS govern these. LAST, because a
-                      // later JSX prop wins over an earlier one — placed above the
-                      // handlers these spreads would simply be overwritten. Uses the
-                      // component's own contract: a button with no handler is not
-                      // rendered, so hiding one column removes exactly its own
-                      // buttons rather than the whole cluster.
-                      {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
-                      {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
-                    />
-                    
-                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {(() => {
+                      };
+                  const legChart = (e: React.MouseEvent) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); };
                         const renderRightCell = (key: string) => {
                           switch (key) {
                             case 'chg':
@@ -1138,19 +1184,31 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                                   {stamp(row.timestamp_ms, Date.now(), true)}
                                 </span>
                               );
+                            // Buy/Sell and the chart, IN the column grid rather than
+                            // beside it. They used to render in a separate cluster
+                            // before this map, so the headings for Trade and Chart sat
+                            // over the price columns while the buttons sat 126px away —
+                            // and the header reserved 150px for a cluster that measured
+                            // 114px, pushing every right-hand heading off its cells.
+                            case 'trade':
+                              return (
+                                <KiteActionButtons
+                                  className="st-trade-cell"
+                                  buyDisabled={ended}
+                                  disabledHint="This leg has ended — its entry and stop are a frozen record, not a live plan."
+                                  onBuy={legBuy}
+                                  onSell={legSell}
+                                />
+                              );
+                            case 'chart':
+                              return <KiteActionButtons className="st-chart-cell" onChart={legChart} />;
                             default:
                               return null;
                           }
                         };
                         return s.signalRightColumnOrder.map((key) => {
-                          // Trade and Chart are columns in the picker, but they are
-                          // DRAWN by the action buttons beside this map, not as price
-                          // cells. The wrapper below applies `col.width` whatever the
-                          // cell returns, so letting them through here would add 126px
-                          // of empty width to every row.
-                          if (key === 'trade' || key === 'chart') return null;
                           const col = SIGNAL_RIGHT_COLUMNS[key];
-                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols)) return null;
+                          if (!col || !signalColShown(col, showPremiumCols, s.hiddenSignalCols, s.boardRowActions)) return null;
                           return (
                             <div key={col.key} style={{ width: col.width, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                               {renderRightCell(col.key)}
@@ -1159,6 +1217,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                         });
                       })()}
                     </div>
+                  </div>
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
@@ -1219,7 +1278,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                       {...(s.hiddenSignalCols.includes('trade') ? { onBuy: undefined, onSell: undefined } : null)}
                       {...(s.hiddenSignalCols.includes('chart') ? { onChart: undefined } : null)}
                     />
-                  </div>
+                  </>
                 )}
               </div>
               {isExp && (() => {
@@ -1680,7 +1739,7 @@ function InlineDropdown<T extends string>({
   label, scope = 'local',
 }: {
   value: T;
-  options: { value: T; label: string; hint?: string }[];
+  options: { value: T; label: string; hint?: string; disabled?: boolean }[];
   onChange: (next: T) => void;
   tone: string;
   title: string;
@@ -1754,17 +1813,34 @@ function InlineDropdown<T extends string>({
         }}>
           {options.map((option) => {
             const selected = option.value === value;
+            const disabled = Boolean(option.disabled);
             return (
               <button key={option.value} type="button" role="option" aria-selected={selected}
-                onClick={() => { onChange(option.value); setOpen(false); }}
+                aria-disabled={disabled}
+                disabled={disabled}
+                onClick={() => {
+                  if (disabled) return;
+                  onChange(option.value);
+                  setOpen(false);
+                }}
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', textAlign: 'left',
                   border: 'none', borderRadius: 5, background: selected ? tint(tone, 8) : 'transparent',
-                  color: k.text, padding: '7px 8px', fontFamily: 'inherit', cursor: 'pointer',
+                  color: disabled ? k.dim : k.text,
+                  opacity: disabled ? 0.45 : 1,
+                  padding: '7px 8px', fontFamily: 'inherit',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
                 }}>
                 <span style={{ width: 12, flexShrink: 0, color: tone, fontSize: 11, fontWeight: 700 }}>{selected ? '✓' : ''}</span>
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 11.5, fontWeight: selected ? 700 : 600 }}>{option.label}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: selected ? 700 : 600 }}>
+                    {option.label}
+                    {disabled && (
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: tint(k.red, 15), color: k.red }}>
+                        Disabled
+                      </span>
+                    )}
+                  </span>
                   {option.hint && <span style={{ display: 'block', marginTop: 1, fontSize: 9.5, color: k.dim, lineHeight: 1.35 }}>{option.hint}</span>}
                 </span>
               </button>
@@ -1788,6 +1864,11 @@ function InlineDropdown<T extends string>({
  */
 
 export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
+  const simNowMs = useSimNowMs();
+  const currentTodayKey = sessionDayKey(simNowMs ?? Date.now());
+  const realSessionKey = sessionDayKey(Date.now());
+  const isHistoricalSim = simNowMs != null && currentTodayKey !== realSessionKey;
+  const currentSimDayLabel = isHistoricalSim ? formatSessionDay(currentTodayKey) : 'Today';
   const s = useKiteSettings();
   const { data: signals, isLoading: signalsLoading } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
@@ -1884,9 +1965,39 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // press cannot disagree. Left in place it would have kept naming strategies the
   // operator had excluded, which is worse than saying nothing.
   const changeSignalMode = (next: SignalMode) => {
+    if ((next === 'navigator' || next === 'common') && !navigatorEnabled) return;
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
   };
+
+  React.useEffect(() => {
+    if (!navigatorEnabled && signalMode !== 'supertrend') {
+      changeSignalMode('supertrend');
+    }
+  }, [navigatorEnabled, signalMode]);
+
+  const signalModeOptions = React.useMemo(() => [
+    { value: 'combined' as SignalMode, label: 'Everything', hint: 'Every setup either engine found. (Default)' },
+    {
+      value: 'supertrend' as SignalMode,
+      label: 'SuperTrend only',
+      hint: 'Only SuperTrend setups. Navigator is ignored, even where it has an opinion.',
+    },
+    {
+      value: 'navigator' as SignalMode,
+      label: 'Navigator only',
+      hint: navigatorEnabled ? 'Only Navigator setups. Works even while SuperTrend is switched off.' : 'Navigator strategy is turned off in settings.',
+      disabled: !navigatorEnabled,
+    },
+    {
+      value: 'common' as SignalMode,
+      label: 'Where both agree',
+      hint: !navigatorEnabled
+        ? 'Requires Navigator strategy to be enabled in settings.'
+        : 'Only setups SuperTrend found AND Navigator backs. The shortest, highest-conviction list.',
+      disabled: !navigatorEnabled,
+    },
+  ], [navigatorEnabled]);
   const legSort = s.legSort;
   const setLegSort = s.setLegSort;
   const handleLegSort = (key: string) => {
@@ -1945,6 +2056,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     return Array.from(merged.values());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawRows, isScanning]);
+  const [todayOnly, setTodayOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_today_only') === 'true');
+  const changeTodayOnly = (next: boolean) => {
+    setTodayOnly(next);
+    localStorage.setItem('kite_st_today_only', String(next));
+  };
+
   const filteredRows = React.useMemo(() => {
     let result = [...rows];
     if (signalMode === 'navigator') {
@@ -1963,6 +2080,15 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     // 'combined' keeps every row (SuperTrend setups AND Navigator-originated
     // ones) — it differs from the others only in whether/how badges render
     // (see SignalCard).
+    if (todayOnly) {
+      const nowMs = simNowMs ?? Date.now();
+      const todayKey = sessionDayKey(nowMs);
+      result = result.filter((r) => {
+        const rawTs = (r as any).timestamp_ms ?? (r as any).timestamp ?? (r as any).time ?? (r as any).atMs;
+        const day = sessionDayKey(rawTs);
+        return day === todayKey || day === 'unknown';
+      });
+    }
     if (query.trim()) {
       const qLower = query.toLowerCase();
       result = result.filter(r => {
@@ -1973,7 +2099,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       });
     }
     return result;
-  }, [rows, query, signalMode]);
+  }, [rows, query, signalMode, todayOnly, simNowMs]);
   const showSignalPremiumColumns = React.useMemo(
     () => cfg?.scan_source !== 'spot' || filteredRows.some(hasPremiumSnapshot),
     [cfg?.scan_source, filteredRows],
@@ -2046,6 +2172,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       return next;
     });
   };
+  const effectiveNowMs = useEffectiveNowMs();
 
   const groupedRows = React.useMemo(() => {
     const buckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
@@ -2055,9 +2182,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     // now" bucket re-sorted alphabetically straight afterwards — which is why
     // the search bar's sort buttons appeared to do nothing on this board even
     // once they were reading the right value.
-    const chgPctOf = (row: EngineSignalRow): number => {
-      const q = quotes?.[underlyingQuoteKey(row.underlying)];
-      const base = s.chgType === 'close' ? q?.ohlc?.close : q?.ohlc?.open;
+    const chgPctOf = (r: EngineSignalRow): number => {
+      const exch = r.exchange || 'NSE';
+      let sym = r.underlying;
+      if (sym === 'MIDCPNIFTY') sym = 'NIFTY MID SELECT';
+      const q = quotes?.[`${exch}:${sym}`];
+      const base = q?.ohlc?.close || q?.net_change;
       if (q && base) return ((q.last_price - base) / base) * 100;
       return Number.NEGATIVE_INFINITY;  // unknown sorts last, never in the middle
     };
@@ -2094,41 +2224,34 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
     }
 
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    // Only today is named in words. "Yesterday" is useful for exactly one day
-    // and then becomes something the reader has to convert, so it carries its
-    // real date instead — worded by the board's own formatter so the two
-    // surfaces cannot disagree about what a date looks like.
-    //
-    // The three that follow are RANGES spanning many days, not single days, so
-    // there is no date to put in their place. They stay as they are.
-    const yesterdayLabel = sessionDayLabel(
-      sessionDayKey(todayStart - 86_400_000), todayStart,
-    );
+    const nowMs = simNowMs ?? Date.now();
+    const todayKey = sessionDayKey(nowMs);
+    const realTodayKey = sessionDayKey(Date.now());
+    const yesterdayKey = shiftSessionDay(todayKey, -1);
+    const isHistorical = simNowMs != null && todayKey !== realTodayKey;
+    const todayLabel = isHistorical ? formatSessionDay(todayKey) : 'Today';
+    const yesterdayLabel = isHistorical ? formatSessionDay(yesterdayKey) : 'Yesterday';
+
     const groups: Record<string, typeof filteredRows> = {
-      "Today": [], [yesterdayLabel]: [], "Last week": [], "Last 15 days": [], "Older": [],
+      [todayLabel]: [], [yesterdayLabel]: [], Older: [],
     };
     for (const r of history) {
-      const d = new Date(r.timestamp_ms);
-      const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      const diffDays = Math.round((todayStart - startOfDay) / (1000 * 60 * 60 * 24));
-      let label = "";
-      if (diffDays === 0) label = "Today";
-      else if (diffDays === 1) label = yesterdayLabel;
-      else if (diffDays >= 2 && diffDays <= 7) label = "Last week";
-      else if (diffDays >= 8 && diffDays <= 15) label = "Last 15 days";
-      else label = "Older";
-      groups[label].push(r);
+      const rawTs = parseTimestampMs(
+        (r as any).timestamp_ms ?? (r as any).timestamp ?? (r as any).time ?? (r as any).atMs ?? (r as any).created_at ?? (r as any).session_date
+      );
+      const day = sessionDayKey(rawTs);
+      if (day === todayKey || day === 'unknown') groups[todayLabel].push(r);
+      else if (day === yesterdayKey) groups[yesterdayLabel].push(r);
+      else groups.Older.push(r);
     }
-    for (const label of ["Today", yesterdayLabel, "Last week", "Last 15 days", "Older"]) {
-      if (groups[label].length) {
-        buckets.push({ label: `${label} (ended)`, rows: applyUserSort(groups[label]) });
+    for (const label of [todayLabel, yesterdayLabel, 'Older'] as const) {
+      if (groups[label]?.length) {
+        buckets.push({ label, rows: applyUserSort(groups[label]) });
       }
     }
     if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
-  }, [filteredRows, showEnded, quotes, s.sortBy, s.chgType]);
+  }, [filteredRows, showEnded, quotes, s.sortBy, s.chgType, simNowMs]);
   const scanning = signals?.scanning;
   // The Navigator/Common lenses can legitimately show nothing even while
   // SuperTrend has live setups — Navigator may be disabled, still warming
@@ -2153,6 +2276,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const revealRecentSignals = () => {
     setQuery('');
     changeShowEnded(true);
+    changeTodayOnly(false);
     setCollapsedGroups(new Set());
   };
 
@@ -2264,18 +2388,20 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                           needsRescan('exit_mode'),
                         )}
                       />
-                    <ScopeDivider />
+                    {navigatorEnabled && <ScopeDivider />}
                   </>
                 )}
+                {navigatorEnabled && (
                   <InlineDropdown
-                        label="VIEW"
-                        scope="local"
+                    label="VIEW"
+                    scope="local"
                     value={signalMode}
-                    options={SIGNAL_MODE_OPTS}
+                    options={signalModeOptions}
                     tone={k.purple}
                     title="VIEW — A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
                     onChange={changeSignalMode}
                   />
+                )}
     </>
   );
 
@@ -2389,6 +2515,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 onChange={() => changeBestOnly(!bestOnly)}
               />
               <FilterToggle
+                on={todayOnly}
+                label={isHistoricalSim ? 'SIM DATE ONLY' : 'TODAY ONLY'}
+                hint={isHistoricalSim ? `Show only signals generated on simulation date (${currentSimDayLabel}).` : 'Show only signals generated today. Hides historical setups from yesterday and older sessions.'}
+                onChange={() => changeTodayOnly(!todayOnly)}
+              />
+              <FilterToggle
                 on={showEnded}
                 label="ENDED"
                 hint="Include closed positions. They are kept for the record and are not calls to action."
@@ -2424,7 +2556,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  {(() => {
                    return s.signalLeftColumnOrder.map((key) => {
                      const col = SIGNAL_LEFT_COLUMNS[key];
-                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
+                     if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols, s.boardRowActions)) return null;
                      return (
                        <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                          {col.sortKey
@@ -2439,17 +2571,35 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                    });
                  })()}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0, marginLeft: 'auto' }}>
-                 <div style={{ width: 150 }}></div>
+                 {/* The 150px spacer that stood here reserved room for the action
+                     cluster that used to precede the price cells. It measured 114px,
+                     so the reservation was 36px wrong even before Trade and Chart
+                     joined the column list and the row stopped drawing a cluster at
+                     all. Both sides now iterate `signalRightColumnOrder` and nothing
+                     else, which is the only way the headings can stay over their
+                     cells. */}
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                    {(() => {
                      return s.signalRightColumnOrder.map((key) => {
                        const col = SIGNAL_RIGHT_COLUMNS[key];
-                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols)) return null;
+                       if (!col || !signalColShown(col, showSignalPremiumColumns, s.hiddenSignalCols, s.boardRowActions)) return null;
                        return (
                          <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn} enabled={s.boardDragColumns}>
                            {col.sortKey
                              ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
-                             : <span style={{ display: 'block', width: '100%' }} />}
+                             : (
+                               // An unsortable right column still has a NAME. This
+                               // rendered an empty span, so Time, Trade and Chart
+                               // each reserved their width and displayed nothing —
+                               // which is why the operator could not find the
+                               // Buy/Sell column at all, and why Time has been an
+                               // unlabelled column of timestamps since it shipped.
+                               // `dir` is the one that genuinely has no label: it is
+                               // an arrow, and the column menu names it instead.
+                               <Tip text={col.tooltip}>
+                                 <span style={{ display: 'block', width: '100%', textAlign: col.align }}>{col.label}</span>
+                               </Tip>
+                             )}
                          </DraggableColHeader>
                        );
                      });
@@ -2669,7 +2819,8 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             originalEntryMs={originalEntryMs}
             onSelectSignal={onSelectSignal}
             onOpenChart={onOpenChart ? (symbol, tab) => onOpenChart(symbol, tab, cfg?.trail_target) : undefined}
-            nowMs={Date.now()}
+            nowMs={effectiveNowMs}
+            isHistoricalSim={isHistoricalSim}
             signalMode={signalMode}
           />
         ) : (

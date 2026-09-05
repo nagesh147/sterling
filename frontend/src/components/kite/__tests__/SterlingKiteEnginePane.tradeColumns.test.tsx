@@ -58,6 +58,17 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
   useStockRegistry: () => ({ data: [] }),
 }));
+vi.mock('../../../hooks/useOrbConfig', () => ({ useOrbConfig: () => ({ data: { config: { enabled: true } } }), useSetOrbConfig: () => ({ mutate: vi.fn() }) }));
+vi.mock('../../../hooks/useNavigator', () => ({
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: true } } } }),
+  useSetNavigatorConfig: () => ({ mutate: vi.fn() }),
+  useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  useCancelNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useGammaMove', () => ({ useGammaMoveConfig: () => ({ data: { config: { enabled: true } } }), useUpdateGammaMove: () => ({ mutate: vi.fn() }) }));
+vi.mock('../../../hooks/useAdaptiveEdge', () => ({ useAdaptiveEdgeEngineConfig: () => ({ data: { config: { enabled: true } } }), useSetAdaptiveEdgeEngineConfig: () => ({ mutate: vi.fn() }) }));
+vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({ useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }), useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn() }) }));
+vi.mock('../../../hooks/useBearToBearish', () => ({ useBearToBearishConfig: () => ({ data: { enabled: true } }), useUpdateBearToBearishConfig: () => ({ mutate: vi.fn() }) }));
 
 function wrap(node: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -79,8 +90,13 @@ describe('the column menu offers Trade and Chart', () => {
     // drawer — so the pane is what has to be rendered to reach it.
     wrap(<SterlingKiteEnginePane onSelectSignal={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /^Columns/ }));
-    expect(screen.getByText('Trade')).toBeInTheDocument();
-    expect(screen.getByText('Chart')).toBeInTheDocument();
+    // Two of each now: the menu entry AND the column heading, which was an empty
+    // span until the header learned to label a column it cannot sort. Both are
+    // wanted, so this asserts the MENU one specifically.
+    for (const name of ['Trade', 'Chart']) {
+      const inMenu = screen.getAllByText(name).filter((el) => el.closest('[role="menu"], label, button'));
+      expect(inMenu.length, `${name} missing from the column menu`).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -109,10 +125,26 @@ describe('and the listing governs the buttons', () => {
     expect(sells().length).toBeGreaterThan(0);
   });
 
-  it('adds no empty width for them among the price cells', () => {
-    // They are drawn by the action cluster, not as price cells. The cell wrapper
-    // applies `col.width` whatever the cell returns, so letting them through the
-    // price-cell map would put 126px of nothing in every row.
+  it('gives them their own cells, in the column grid', () => {
+    // They used to render in a separate cluster BEFORE the price cells, so the
+    // Trade and Chart headings sat over the price columns while the buttons sat
+    // 126px away — and the header reserved 150px for a cluster measuring 114px,
+    // pushing every right-hand heading off its cells. Being in the grid is the fix.
+    wrap(<SterlingKiteEnginePane onSelectSignal={vi.fn()} />);
+    const cells = Array.from(document.querySelectorAll('.st-prices > div'));
+    const widths = cells.map((d) => (d as HTMLElement).style.width);
+    expect(widths).toContain('92px');   // trade
+    expect(widths).toContain('34px');   // chart
+    // And they are not empty reservations: each holds its own control.
+    expect(document.querySelector('.st-prices .st-trade-cell')).not.toBeNull();
+    expect(document.querySelector('.st-prices .st-chart-cell')).not.toBeNull();
+  });
+
+  it('drops the cells entirely when the row is not carrying its buttons', () => {
+    // `boardRowActions: false` relocates them to the expanded row. A visible
+    // column with nothing in it would reserve 126px of nothing and put every
+    // heading after it out of line — the exact fault this restructure fixed.
+    useKiteSettings.setState({ boardRowActions: false });
     wrap(<SterlingKiteEnginePane onSelectSignal={vi.fn()} />);
     const widths = Array.from(document.querySelectorAll('.st-prices > div'))
       .map((d) => (d as HTMLElement).style.width);

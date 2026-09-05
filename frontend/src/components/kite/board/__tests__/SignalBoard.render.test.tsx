@@ -219,17 +219,31 @@ describe('day order, without the band', () => {
         onToggle={() => {}}
       />,
     );
+    fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     expect(body.indexOf('SYMNEW')).toBeGreaterThanOrEqual(0);
     expect(body.indexOf('SYMNEW'), 'newest first').toBeLessThan(body.indexOf('SYMOLD'));
   });
 
-  it('renders no day heading at all', () => {
+  it('renders Today, Yesterday and Older headings', () => {
+    const DAY = 86_400_000;
     render(
-      <SignalBoard signals={[sig({ atMs: NOW })]} nowMs={NOW} openId={null} onToggle={() => {}} />,
+      <SignalBoard
+        signals={[
+          sig({ id: 'new', atMs: NOW, status: 'ended',
+                instrument: { ...sig().instrument, symbol: 'SYMNEW' } }),
+          sig({ id: 'yest', atMs: NOW - DAY, status: 'ended',
+                instrument: { ...sig().instrument, symbol: 'SYMYEST' } }),
+          sig({ id: 'old', atMs: NOW - 3 * DAY, status: 'ended',
+                instrument: { ...sig().instrument, symbol: 'SYMOLD' } }),
+        ]}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
     );
-    for (const label of ['Today', 'Live now', 'Undated']) {
-      expect(screen.queryByText(label), `${label} band is gone`).toBeNull();
-    }
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.getByText('Yesterday')).toBeTruthy();
+    expect(screen.getByText('Older')).toBeTruthy();
   });
 });

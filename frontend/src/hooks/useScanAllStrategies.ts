@@ -4,6 +4,8 @@ import { useRunScan } from './useSterlingKiteEngine';
 import { useRunNavigatorScan } from './useNavigator';
 import { useGammaMoveScan } from './useGammaMove';
 import { useOiWallFlowScan } from './useOiWallFlow';
+import { useScanActivity } from '../store/useScanActivity';
+import { useBearToBearishScan } from './useBearToBearish';
 
 /**
  * One re-scan for every strategy that has one.
@@ -28,7 +30,7 @@ import { useOiWallFlowScan } from './useOiWallFlow';
  * nothing to call would be a promise the platform cannot keep.
  */
 export type ScannableEngine =
-  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge' | 'oi_wall_flow';
+  | 'supertrend' | 'navigator' | 'orb' | 'gamma_move' | 'adaptive_edge' | 'atm_imbalance' | 'bear_to_bearish' | 'oi_wall_flow';
 
 export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   supertrend: 'SuperTrend',
@@ -37,6 +39,8 @@ export const SCANNABLE_ENGINE_LABEL: Record<ScannableEngine, string> = {
   gamma_move: 'Gamma Move',
   adaptive_edge: 'Adaptive Edge',
   oi_wall_flow: 'OI Wall Flow',
+  atm_imbalance: 'ATM Premium Imbalance',
+  bear_to_bearish: 'Bear to Bearish',
 };
 
 export interface EngineScanResult {
@@ -55,6 +59,15 @@ export function useAdaptiveEdgeScan() {
   });
 }
 
+/** `POST /config/atm-premium-imbalance/arm`. Arm & scan ATM imbalance pair. */
+export function useAtmImbalanceScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/api/v1/config/atm-premium-imbalance/arm', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['atm-premium-imbalance-snapshot'] }),
+  });
+}
+
 export function useScanAllStrategies() {
   const qc = useQueryClient();
   const supertrend = useRunScan();
@@ -62,6 +75,8 @@ export function useScanAllStrategies() {
   const gammaMove = useGammaMoveScan();
   const adaptiveEdge = useAdaptiveEdgeScan();
   const oiWallFlow = useOiWallFlowScan();
+  const atmImbalance = useAtmImbalanceScan();
+  const bearToBearish = useBearToBearishScan();
 
   // ORB's scan is exposed as a polling query that POSTs, not a mutation, so it
   // is triggered by refetching its key rather than by calling a mutate. Reaching
@@ -76,6 +91,8 @@ export function useScanAllStrategies() {
     gamma_move: () => gammaMove.mutateAsync(),
     adaptive_edge: () => adaptiveEdge.mutateAsync(),
     oi_wall_flow: () => oiWallFlow.mutateAsync(),
+    atm_imbalance: () => atmImbalance.mutateAsync(),
+    bear_to_bearish: () => bearToBearish.mutateAsync(),
   };
 
   /**
@@ -88,17 +105,29 @@ export function useScanAllStrategies() {
    */
   const scanAll = async (order: readonly ScannableEngine[]): Promise<EngineScanResult[]> => {
     const results: EngineScanResult[] = [];
-    for (const engine of order) {
-      try {
-        await runners[engine]();
-        results.push({ engine, ok: true });
-      } catch (err) {
-        results.push({
-          engine,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        });
+    const setCurrent = useScanActivity.getState().setCurrent;
+    try {
+      for (const engine of order) {
+        // Say which engine this is before running it. Four of the five publish no
+        // progress of their own, so without this the status line has nothing to
+        // report while they run and falls back to "AUTO" mid-sweep.
+        setCurrent(engine);
+        try {
+          await runners[engine]();
+          results.push({ engine, ok: true });
+        } catch (err) {
+          results.push({
+            engine,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
+    } finally {
+      // In a `finally` so an abandoned sweep cannot leave the status line
+      // claiming an engine is still scanning. A stuck "scanning" is worse than
+      // no label: it hides the next real one.
+      setCurrent(null);
     }
     return results;
   };
@@ -106,7 +135,7 @@ export function useScanAllStrategies() {
   return {
     scanAll,
     isPending: supertrend.isPending || navigator.isPending
-      || gammaMove.isPending || adaptiveEdge.isPending || oiWallFlow.isPending,
+      || gammaMove.isPending || adaptiveEdge.isPending || bearToBearish.isPending || oiWallFlow.isPending,
   };
 }
 

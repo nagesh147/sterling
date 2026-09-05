@@ -161,13 +161,6 @@ export function AdaptiveEdgeSettingsPanel() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={save.isPending}
-        onApply={() => { if (!invalid) save.mutate(draft, { onSuccess: () => setDirty(false) }); }}
-        onDiscard={() => { if (data) { setDraft(withDefaults(data.settings)); setDirty(false); } }}
-        onReset={() => { if (data) { setDraft(withDefaults(data.settings)); setDirty(false); } }}
-      />
       <EnginePowerHeader
         name="Adaptive Edge"
         tagline="Score, modes, protection and structure."
@@ -393,6 +386,14 @@ export function AdaptiveEdgeSettingsPanel() {
           {!snapshot.data && <div style={{ color: MUTED, fontSize: 12 }}>Snapshot not loaded yet.</div>}
         </div>
       </Section>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={save.isPending}
+        onApply={() => { if (!invalid) save.mutate(draft, { onSuccess: () => setDirty(false) }); }}
+        onDiscard={() => { if (data) { setDraft(withDefaults(data.settings)); setDirty(false); } }}
+        onReset={() => { if (data) { setDraft(withDefaults(data.settings)); setDirty(false); } }}
+      />
 
       <style>{`
         @media (max-width: 640px) {

@@ -89,6 +89,21 @@ def short_mean_reversion(df: pd.DataFrame) -> np.ndarray:
     return (fade & (rsi > 60)).fillna(False).to_numpy()
 
 
+def _routed_trend_entries(
+    df: pd.DataFrame,
+    reg: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Enter once when EMA direction and confirmed trend first align."""
+
+    fast = df["close"].ewm(span=9, adjust=False).mean()
+    slow = df["close"].ewm(span=21, adjust=False).mean()
+    long_state = (fast > slow).to_numpy() & (reg == 1)
+    short_state = (fast < slow).to_numpy() & (reg == -1)
+    prior_long = np.r_[False, long_state[:-1]]
+    prior_short = np.r_[False, short_state[:-1]]
+    return long_state & ~prior_long, short_state & ~prior_short
+
+
 def route_signals(df: pd.DataFrame, adx_threshold: float = 25.0,
                   ma_window: int = 50, use_regime: bool = True):
     """Route raw sleeve signals through the regime gate.
@@ -111,8 +126,14 @@ def route_signals(df: pd.DataFrame, adx_threshold: float = 25.0,
         longs = mom_long | mr_long
         shorts = mom_short | mr_short
         return longs, shorts
-    longs = (mom_long & (reg == 1)) | (mr_long & (reg == 0))
-    shorts = (mom_short & (reg == -1)) | (mr_short & (reg == 0))
+    # A crossover can precede ADX/SMA regime confirmation. Gating only the
+    # one-bar crossover event loses that setup permanently when the regime
+    # becomes eligible a few bars later. Emit once when the combined
+    # momentum-state + regime predicate changes from false to true. This is
+    # causal and preserves the intended "enter on confirmed trend" behavior.
+    trend_longs, trend_shorts = _routed_trend_entries(df, reg)
+    longs = trend_longs | (mr_long & (reg == 0))
+    shorts = trend_shorts | (mr_short & (reg == 0))
     return longs, shorts
 
 
@@ -286,8 +307,9 @@ def build_symbol_trades_sleeved(symbol: str, df: pd.DataFrame,
         "mr": {"long": mr_long, "short": mr_short, **_MR_EXIT},
     }
     if use_regime:
-        sleeves["trend"]["long"] = sleeves["trend"]["long"] & (reg == 1)
-        sleeves["trend"]["short"] = sleeves["trend"]["short"] & (reg == -1)
+        trend_long, trend_short = _routed_trend_entries(df, reg)
+        sleeves["trend"]["long"] = trend_long
+        sleeves["trend"]["short"] = trend_short
         sleeves["mr"]["long"] = sleeves["mr"]["long"] & (reg == 0)
         sleeves["mr"]["short"] = sleeves["mr"]["short"] & (reg == 0)
     out: list[dict] = []

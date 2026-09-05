@@ -6,6 +6,11 @@ import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
+import { ReplayDock } from './replay/ReplayDock';
+import { ReplayFooterChip } from './replay/ReplayFooterChip';
+import { useReplayHostHidden } from '../../hooks/useReplayStore';
+import { FOOTER_HEIGHT } from './layoutConstants';
+import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { MacStageLayout } from './mac/MacStageLayout';
@@ -30,7 +35,7 @@ import {
 } from './workspaceLayout';
 import { paneActionsSlotId } from './PaneHeaderActions';
 
-export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
+export type NavItem = 'dashboard' | 'astro' | 'pcr' | 'openingLeaders' | 'orders' | 'holdings' | 'positions' | 'more' | 'data' | 'adaptiveEdge' | 'backtest' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
@@ -121,6 +126,7 @@ function titleCase(value: string): string {
   if (value === 'backtest') return 'Backtest';
   if (value === 'astro') return 'Astrology';
   if (value === 'pcr') return 'PCR';
+  if (value === 'openingLeaders') return 'Opening Leaders';
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -287,20 +293,58 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   const resizeRef = useRef<ResizeSession | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // One boolean, published by the dock. The layout does not know its modes.
+  const isSimFullHeight = useReplayHostHidden();
+
+  /**
+   * "Expand to fill the pane" now maximises the dashboard pane through the
+   * workspace's OWN focus mechanism — the same one every other dock uses.
+   *
+   * Hiding the dashboard's content alone left the pane header, the terminal
+   * dock and both sidebars on screen, so the dock filled a column rather than
+   * the workspace and the surface underneath was still visible.
+   *
+   * A focus the user set by hand is left alone, and only a focus this effect
+   * created is released again.
+   */
+  const replayOwnsFocus = useRef(false);
+  useEffect(() => {
+    if (isSimFullHeight) {
+      setFocus((current) => {
+        if (current) return current;
+        replayOwnsFocus.current = true;
+        return { pane: 'dashboard', mode: 'maximized' };
+      });
+    } else if (replayOwnsFocus.current) {
+      replayOwnsFocus.current = false;
+      setFocus((current) => (current?.pane === 'dashboard' ? null : current));
+    }
+  }, [isSimFullHeight]);
+
   const panes = useMemo<Record<WorkspacePaneId, PaneDefinition>>(() => ({
     watchlist: { id: 'watchlist', title: 'Watchlist', shortTitle: 'Watchlist', accent: '#4f79ce', content: sidebar },
     dashboard: {
       id: 'dashboard', title: titleCase(activeNav), shortTitle: 'Dashboard', accent: 'var(--k-brand)',
       content: (
-        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', scrollbarGutter: 'stable', display: 'flex', flexDirection: 'column' }}>{content}</div>
+        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          {centerTopBar && !isSimFullHeight && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            scrollbarGutter: 'stable',
+            display: isSimFullHeight ? 'none' : 'flex',
+            flexDirection: 'column',
+          }}>
+            {content}
+          </div>
+          <ReplayDock />
         </div>
       ),
     },
     signals: { id: 'signals', title: 'Signals', shortTitle: 'Signals', accent: '#16a066', content: rightSidebar },
     terminal: { id: 'terminal', title: 'Terminal', shortTitle: 'Terminal', accent: '#7d63c5', content: bottomBar },
-  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content]);
+  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content, isSimFullHeight]);
 
   const available = useMemo(() => WORKSPACE_PANES.filter((id) => panes[id].content != null), [panes]);
   const isVisible = useCallback((id: WorkspacePaneId) => available.includes(id) && !layout.minimized.includes(id), [available, layout.minimized]);
@@ -382,6 +426,32 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     };
     window.addEventListener('kite-terminal-mode', onTerminalMode);
     return () => window.removeEventListener('kite-terminal-mode', onTerminalMode);
+  }, []);
+
+  /**
+   * Restore whichever pane occupies a slot, so something opened INTO that slot is
+   * actually visible.
+   *
+   * Opening a chart from a board sets `instrumentView`, which renders in the centre
+   * slot. If the operator has that pane minimized — and it stays minimized across
+   * reloads, so this is a sticky state, not a transient one — the chart mounts into
+   * a collapsed dock and the click looks like it did nothing. Measured on the live
+   * app: `minimized: ["watchlist","terminal","dashboard"]` while the Chart button
+   * fired correctly with the right symbol every time.
+   *
+   * By SLOT rather than by pane id, because the panes can be rearranged and the
+   * caller only knows where its content goes, not which pane is parked there.
+   */
+  useEffect(() => {
+    const onRestoreSlot = (event: Event) => {
+      const slot = (event as CustomEvent<WorkspaceSlotId>).detail;
+      setLayout((current) => {
+        const pane = current.slots[slot];
+        return pane ? restorePane(current, pane) : current;
+      });
+    };
+    window.addEventListener('kite-restore-slot', onRestoreSlot);
+    return () => window.removeEventListener('kite-restore-slot', onRestoreSlot);
   }, []);
 
   const syncTerminalStorage = useCallback((pane: WorkspacePaneId, mode: 'minimized' | 'normal' | 'partial' | 'full') => {
@@ -624,7 +694,10 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     : null;
 
   const minimizedAvailable = layout.minimized.filter((id) => available.includes(id));
-  const scanning = !!activity?.scanning;
+  // Names the strategy before the contract, and names whichever strategy is
+  // actually running — not always SuperTrend, whose endpoint this label came from.
+  const scanStatus = useScanStatus();
+  const scanning = scanStatus.scanning;
   const autoScan = !!activity?.auto_scan;
   const marketClosed = autoScan && activity?.market_open === false;
 
@@ -634,8 +707,27 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
       <div ref={workspaceRef} className="mac-canvas" data-testid="kite-workspace" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         {macOn ? (
           <>
-            {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-            <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+            {centerTopBar && !isSimFullHeight && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
+            <MacStageLayout
+              sidebar={sidebar}
+              content={(
+                <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                  <div style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: 'auto',
+                    scrollbarGutter: 'stable',
+                    display: isSimFullHeight ? 'none' : 'flex',
+                    flexDirection: 'column',
+                  }}>
+                    {content}
+                  </div>
+                  <ReplayDock />
+                </div>
+              )}
+              rightSidebar={rightSidebar}
+              bottomBar={bottomBar}
+            />
           </>
         ) : (
           <>
@@ -668,7 +760,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
-      <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
+      <footer style={{ position: 'relative', height: FOOTER_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
           {/* Broker state and every strategy, next to the watchlist end of the
@@ -684,7 +776,8 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
         </div>
 
-        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, maxWidth: '48%', overflow: 'hidden' }}>
+        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
+          <ReplayFooterChip />
           {macOn ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
           ) : minimizedAvailable.length > 0 ? (
@@ -740,7 +833,13 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
           {liveCount > 0 && <><span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 650, color: k.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green }} />{liveCount} live</span><span style={{ width: 1, height: 14, background: 'var(--k-border)' }} /></>}
           <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: '50%', background: scanning ? k.orange : marketClosed ? 'var(--k-faint-2)' : autoScan ? k.orange : 'var(--k-faint-2)' }} />
-          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : 'var(--k-ink-5)', fontWeight: scanning ? 650 : 400, textTransform: 'capitalize' }}>{scanning ? activity?.scanning_label || 'scanning…' : autoScan ? 'AUTO' : 'MANUAL'}</span>
+          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : 'var(--k-ink-5)', fontWeight: scanning ? 650 : 400 }}>{scanning ? (scanStatus.engineLabel ?? 'Scanning') : autoScan ? 'AUTO' : 'MANUAL'}</span>
+          {/* The item second, and only where the engine publishes one. `capitalize`
+              had to come off the span above: it was title-casing a contract, so
+              "TCS OCT 2300 PE" arrived as "Tcs Oct 2300 Pe". */}
+          {scanning && scanStatus.detail && (
+            <span style={{ opacity: .8 }} title={scanStatus.detail}>· {scanStatus.detail}</span>
+          )}
           {!scanning && (activity?.last_scan_ms ?? 0) > 0 && <span style={{ opacity: .7 }}>· {fmtAgo(activity?.last_scan_ms ?? 0)}</span>}
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
         </div>

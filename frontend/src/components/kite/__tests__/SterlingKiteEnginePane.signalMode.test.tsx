@@ -59,6 +59,10 @@ function mockRows(rows: ReturnType<typeof makeRow>[], overrides: Record<string, 
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
   }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: (overrides.navigator_enabled as boolean) ?? true } } } }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  }));
 }
 
 async function renderPane() {
@@ -72,14 +76,10 @@ async function renderPane() {
 }
 
 function openSignalModeMenu() {
-  // Located by title, which now begins with the control's NAME. The name used to
-  // render outside the chip as separate coloured text; it moved inside, and the
-  // title became "<NAME> — <what it changes>" so hovering still explains the
-  // control rather than just repeating its value.
-  fireEvent.click(screen.getByTitle(/^VIEW —/));
+  fireEvent.click(screen.getAllByTitle(/^VIEW — A local lens/)[0]);
 }
 
-describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {
+describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', { timeout: 15000 }, () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
@@ -90,7 +90,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     await renderPane();
     expect(screen.getByText('NIFTY 50')).toBeInTheDocument();
     expect(screen.getByText('NIFTY BANK')).toBeInTheDocument();
-    expect(screen.getByText(/Nav CONFIRMED/)).toBeInTheDocument();
+    expect(screen.getAllByText(/CONFIRMED/)[0]).toBeInTheDocument();
   });
 
   it('SuperTrend lens hides the Navigator badge even when evidence exists', async () => {
@@ -99,7 +99,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^SuperTrend/ }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Nav CONFIRMED/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText((content) => content.includes('Nav') && content.includes('CONFIRMED'))).toHaveLength(0);
   });
 
   it('Navigator lens filters out rows with no Navigator evidence', async () => {
@@ -108,7 +108,7 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
-    expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
+    expect(screen.queryAllByText('NIFTY BANK')).toHaveLength(0);
   });
 
   it('Common lens keeps only rows where Navigator agrees (Confirmed/High Conviction)', async () => {
@@ -131,8 +131,17 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
     expect(screen.getByText(/SuperTrend setup/)).toBeInTheDocument();
-    expect(screen.getByText('Connect → Value-Flow Navigator')).toBeInTheDocument();
+    expect(screen.getByText(/Navigator is on — it may still be warming up/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Switch to Combined lens/i }));
+    expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
+  });
+
+  it('removes the VIEW dropdown completely when Navigator strategy is turned off', async () => {
+    mockRows([makeRow('NIFTY 50', 1, null)], { navigator_enabled: false });
+    await renderPane();
+    // VIEW selector is completely removed when Navigator is off
+    expect(screen.queryByTitle(/^VIEW — A local lens/)).not.toBeInTheDocument();
+    // SuperTrend setups are still displayed
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
   });
 

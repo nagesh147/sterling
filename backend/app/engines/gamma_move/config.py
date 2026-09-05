@@ -250,6 +250,7 @@ class GammaMoveConfig:
     # real, or the reverse. Likewise manual-vs-auto is the engine's
     # `auto_execute`. Both are READ where needed and never stored here.
     data_source: str = "kite"
+    auto_execute: bool = False
 
     # ------------------------------------------------------------------ rules
     def validate(self) -> "GammaMoveConfig":

@@ -8,7 +8,8 @@ import {
 import { ConfigNote, PanelCard, SettingsDraftBar } from './config/ConfigPrimitives';
 import { useUnsavedDraftGuard } from './config/unsavedDraftGuard';
 import { EnginePowerHeader } from './config/EnginePowerHeader';
-import { ContractsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
+import { ContractsGroup, ExpirySettingsGroup, InstrumentsGroup, SignalSourceGroup } from './config/ScanSettings';
+import { OptionContractsPicker } from './config/OptionContractsPicker';
 import {
   EXIT_MODE_OPTIONS, FIELDS, TRAIL_OPTIONS, exitModeLabel, scanSourceLabel,
 } from './config/registry';
@@ -17,7 +18,7 @@ import { notifyOrder } from '../../store/useKiteNotifications';
 
 /**
  * SuperTrend engine settings — shared order with Navigator:
- * draft bar → power → chart → instruments → contracts → engine-specific.
+ * draft bar → power → chart → instruments → contracts → expiry → engine-specific.
  */
 export function SuperTrendEnginePanel() {
   const { data: serverCfg, isLoading } = useEngineConfig();
@@ -105,15 +106,6 @@ export function SuperTrendEnginePanel() {
 
   return (
     <>
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={saving}
-        onApply={handleApply}
-        onDiscard={handleDiscard}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-      />
-
       <EnginePowerHeader
         name="SuperTrend"
         tagline="Triple SuperTrend on a 1H Heikin-Ashi chart."
@@ -164,6 +156,22 @@ export function SuperTrendEnginePanel() {
           <ContractsGroup
             strikes={cfg.strike_moneyness}
             indexExpiries={indexExpiries}
+            onChange={(next) => patch(next)}
+          />
+          <OptionContractsPicker
+            config={cfg}
+            onSave={(patchData) => patch(patchData)}
+            saving={saving}
+          />
+        </Section>
+
+        <Section
+          title="Expiry"
+          description="Rules governing contract days-to-expiry and settlement dates."
+          summary={`${cfg.expiry_dte_min ?? 0}–${cfg.expiry_dte_max ?? 400} DTE${cfg.avoid_expiry_day ? ' · avoid expiry day' : ''}`}
+          defaultOpen
+          persistKey="st-expiry">
+          <ExpirySettingsGroup
             dteMin={cfg.expiry_dte_min ?? 0}
             dteMax={cfg.expiry_dte_max ?? 400}
             avoidExpiryDay={cfg.avoid_expiry_day ?? false}
@@ -235,6 +243,15 @@ export function SuperTrendEnginePanel() {
           </ConfigNote>
         </Section>
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={saving}
+        onApply={handleApply}
+        onDiscard={handleDiscard}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+      />
 
       <style>{`
         @media (max-width: 640px) {

@@ -330,6 +330,10 @@ async def list_signals(
     before_decision_id: Optional[str] = None, limit: int = 50,
     user: UserContext = Depends(get_current_user),
 ) -> dict:
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_navigator_signals_response()
+
     limit = max(1, min(limit, 200))
     try:
         rows = repository.fetch_signal_events_page(

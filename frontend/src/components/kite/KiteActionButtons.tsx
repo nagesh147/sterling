@@ -30,7 +30,7 @@ interface KiteActionButtonsProps {
 export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, onAdd, onBasket, className, variant = 'short', buyLabel, sellLabel, buyDisabled, sellDisabled, disabledHint }: KiteActionButtonsProps) {
   const btnAction: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: 28, height: 28, borderRadius: 2, cursor: 'pointer',
+    width: 24, height: 24, borderRadius: 3, cursor: 'pointer',
     fontSize: 12, border: 'none'
   };
 
@@ -39,12 +39,12 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
         display: 'flex', alignItems: 'center', justifyContent: 'center', 
         width: 125, height: 32, borderRadius: 3, padding: 0, 
         border: 'none', cursor: 'pointer', 
-        fontSize: 12, letterSpacing: '0.5px', color: 'var(--k-bg)'
+        fontSize: 12, fontWeight: 700, letterSpacing: '0.5px', color: '#ffffff'
       }
     : { 
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minWidth: 35, borderRadius: 3, padding: '6px 10px', cursor: 'pointer',
-        fontSize: 12, border: 'none', color: 'var(--k-bg)'
+        width: 22, height: 22, minWidth: 22, borderRadius: 3, padding: 0, cursor: 'pointer',
+        fontSize: 11, fontWeight: 700, border: 'none', color: '#ffffff'
       };
 
   const iconBtnStyle: React.CSSProperties = {
@@ -73,7 +73,7 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
   });
 
   return (
-    <div className={className} onClick={(e) => e.stopPropagation()}>
+    <div className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => e.stopPropagation()}>
       {onBuy && (
         <button
           style={buyDisabled ? disabledStyle('var(--k-blue)') : { ...buySellStyle, background: 'var(--k-blue)' }}

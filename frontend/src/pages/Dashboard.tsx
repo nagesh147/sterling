@@ -141,7 +141,7 @@ export function Dashboard() {
   const { data: modeData } = useTradingMode();
   const { data: scalpData } = useScalpMode();
   const scalpOn = scalpData?.enabled ?? false;
-  const { data: posData } = usePositions(scalpOn ? undefined : undefined);
+  const { data: posData } = usePositions(undefined, { enabled: scalpOn });
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();

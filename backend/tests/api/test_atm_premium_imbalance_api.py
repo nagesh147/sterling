@@ -16,7 +16,9 @@ def client():
 
 
 def test_get_publishes_identity_defaults_and_vocabularies():
-    got = client().get("/api/v1/config/atm-premium-imbalance")
+    c = client()
+    c.put("/api/v1/config/atm-premium-imbalance", json={"enabled": True, "quantity": 0, "lots": 0})
+    got = c.get("/api/v1/config/atm-premium-imbalance")
     assert got.status_code == 200
     payload = got.json()
 
@@ -120,7 +122,15 @@ def test_snapshot_reports_blockers_rather_than_pretending_to_be_armed():
 
 
 def test_get_publishes_protection_modes_and_live_requirements():
-    payload = client().get("/api/v1/config/atm-premium-imbalance").json()
+    c = client()
+    c.put("/api/v1/config/atm-premium-imbalance", json={
+        "quote_mode": "COMPATIBILITY",
+        "quantity": 0,
+        "lots": 0,
+        "protection_mode": "NONE",
+        "stop_enabled": False,
+    })
+    payload = c.get("/api/v1/config/atm-premium-imbalance").json()
     vocab = payload["vocabularies"]
     assert set(vocab["protection_mode"]) == {"NONE", "RESTING_TARGET_LIMIT", "GTT"}
     assert payload["defaults"]["protection_mode"] == "NONE"   # fidelity by default
@@ -166,8 +176,16 @@ def test_live_blockers_cannot_drift_from_the_engine_gate():
 def test_put_rejects_live_without_broker_side_protection():
     bad = client().put(
         "/api/v1/config/atm-premium-imbalance",
-        json={"execution_mode": "live", "quote_mode": "EXECUTABLE", "quantity": 20,
-              "protection_mode": "NONE"},
+        json={
+            "execution_mode": "live",
+            "quote_mode": "EXECUTABLE",
+            "quantity": 25,
+            "lots": 1,
+            "stop_enabled": True,
+            "stop_basis": "PERCENT",
+            "stop_percent": 20.0,
+            "protection_mode": "NONE",
+        },
     )
     assert bad.status_code == 422
     assert "broker-side protection" in bad.json()["detail"]
@@ -180,6 +198,7 @@ def test_arm_refuses_while_disabled_rather_than_half_arming():
     assert got.status_code == 200
     # A refusal with a reason, never a partially armed session.
     assert got.json()["status"] in ("disabled", "no_quantity", "market_closed")
+    c.put("/api/v1/config/atm-premium-imbalance", json={"enabled": True})
 
 
 def test_every_config_field_is_settable_through_the_api():

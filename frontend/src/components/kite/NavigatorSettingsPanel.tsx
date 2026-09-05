@@ -317,17 +317,6 @@ export function NavigatorSettingsPanel() {
     <>
       <style>{NUM_INPUT_CSS}</style>
 
-      <SettingsDraftBar
-        dirty={dirty}
-        saving={setConfig.isPending}
-        onApply={handleApply}
-        onDiscard={handleReload}
-        onReset={handleReset}
-        resetConfirm={resetConfirm}
-        applyDisabled={customScopeEmpty}
-        applyTitle={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
-      />
-
       <EnginePowerHeader
         name="Value-Flow Navigator"
         tagline="Anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity."
@@ -778,6 +767,17 @@ export function NavigatorSettingsPanel() {
       </AdvancedSection>
 
       </PanelCard>
+
+      <SettingsDraftBar
+        dirty={dirty}
+        saving={setConfig.isPending}
+        onApply={handleApply}
+        onDiscard={handleReload}
+        onReset={handleReset}
+        resetConfirm={resetConfirm}
+        applyDisabled={customScopeEmpty}
+        applyTitle={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
+      />
     </>
   );
 }

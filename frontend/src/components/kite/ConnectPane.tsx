@@ -13,9 +13,9 @@ import type { KiteAccount } from '../../types/kite';
 import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
-import { OptionContractsPicker } from './config/OptionContractsPicker';
 import { TickerStripSettings } from './ticker/TickerStripSettings';
 import { DisplayScaleSettings } from './DisplayScaleSettings';
+import { DefaultSectionSettings } from './DefaultSectionSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
@@ -25,6 +25,7 @@ import { OrbMomentumOptionsSettingsPanel } from './OrbMomentumOptionsSettingsPan
 import { AtmPremiumImbalanceSettingsPanel } from './AtmPremiumImbalanceSettingsPanel';
 import { GammaMoveSettingsPanel } from './GammaMoveSettingsPanel';
 import { OiWallFlowSettingsPanel } from './OiWallFlowSettingsPanel';
+import { BearToBearishSettingsPanel } from './BearToBearishSettingsPanel';
 import { AutomaticRulesPanel, ManualRulesPanel } from './TradeRulesPanels';
 import { SuperTrendEnginePanel } from './SuperTrendEnginePanel';
 import { TradingModePanel } from './TradingModePanel';
@@ -854,6 +855,7 @@ const SECTION_ICONS: Record<ConnectSection, React.ReactNode> = {
   atmPremiumImbalance: <Icons.Chart />,
   gammaMove: <Icons.Pulse />,
   oiWallFlow: <Icons.Chart />,
+  bearToBearish: <Icons.Pulse />,
   markets: <Icons.Basket />,
   notifications: <Icons.Bell />,
   experience: <Icons.Settings />,
@@ -867,8 +869,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Encrypted TrueData credentials for historical and real-time market data.' },
   { id: 'diagnostics', label: 'Feed & API Checklist', eyebrow: 'Kite & TrueData health', group: 'Connection',
     pageDescription: 'Verify broadband connectivity, Zerodha Kite API status, and TrueData market feeds.' },
-  { id: 'mode', label: 'Trading Mode', eyebrow: 'Paper/live, manual/algo', group: 'Trading',
-    pageDescription: 'Paper or live, who places orders, which engines run, and which exchanges to include.' },
+  { id: 'mode', label: 'Trading Config', eyebrow: 'Execution, options & engines', group: 'Trading',
+    pageDescription: 'Paper or live execution, options strike profile, spread protections, who places orders, and which engines run.' },
   { id: 'manualRules', label: 'Manual Trade', eyebrow: 'Orders you place', group: 'Trading',
     pageDescription: 'What happens after you place an order.' },
   { id: 'autoRules', label: 'Algo Trade', eyebrow: 'Orders the algo places', group: 'Trading',
@@ -887,6 +889,8 @@ const SECTION_DEFS: (SectionDef & { pageDescription: string })[] = [
     pageDescription: 'Buys the option that writers are covering: an F&O stock at a support or resistance level, the highest open-interest strike there, entered when open interest falls while volume and premium rise on the same 15-minute bar. Held one to two sessions. Calibrated against real market data, which found the entry trigger alone has no edge — the level filter is where it is — so it stays paper-only until the readiness gate passes.' },
   { id: 'oiWallFlow', label: 'OI Wall Flow', eyebrow: 'First-resistance CE / first-support PE', group: 'Signal engines',
     pageDescription: 'Reads one expiry’s option chain the way a desk does: classify OI+premium flow, locate the put and call walls, and buy the first-resistance CE (or first-support PE) when near-ATM flow agrees — never ATM. Thresholds are judgement from the BSE Ltd 29-Sep-2026 chain, not a calibrated sample. Paper/live and manual/auto stay with Trading Mode.' },
+  { id: 'bearToBearish', label: 'Bear to Bearish', eyebrow: 'PCR short momentum, Lower High structure', group: 'Signal engines',
+    pageDescription: 'Short momentum setup triggered when Put-Call Ratio drops below 0.60 ceiling alongside 5m Lower High candle structure across Indian index options.' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Funds & live data', group: 'Platform',
     pageDescription: 'Exchanges, funds, charges and live ticker tools.' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', group: 'Platform',
@@ -947,6 +951,7 @@ export function ConnectPane() {
   const orderMode = engineCfg?.auto_execute ? 'Algo' : 'Manual';
   const [section, setSection] = useState<ConnectSection>(readInitialSection);
   const page = SECTION_DEFS.find((s) => s.id === section) ?? SECTION_DEFS[0];
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
   const select = (next: ConnectSection) => {
     // Only ONE section is mounted at a time, so navigating away unmounts the panel
@@ -954,8 +959,22 @@ export function ConnectPane() {
     // every control wrote through immediately, but these pages are draft-and-Apply
     // now, so a click on the rail can discard a page of edits the user believes
     // are still pending.
-    if (next !== section && hasUnsavedDraft()
-        && !window.confirm('You have unsaved settings changes. Leave this page and discard them?')) {
+    if (next !== section && hasUnsavedDraft()) {
+      window.dispatchEvent(new CustomEvent('sterling-highlight-draft-bar'));
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl) {
+        if (typeof draftBarEl.scrollIntoView === 'function') {
+          try {
+            draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } catch {
+            // JSDOM environment fallback
+          }
+        }
+        const applyBtn = draftBarEl.querySelector('button');
+        if (applyBtn && typeof applyBtn.focus === 'function') {
+          applyBtn.focus();
+        }
+      }
       return;
     }
     setSection(next);
@@ -967,9 +986,22 @@ export function ConnectPane() {
       const next = resolveSectionId((event as CustomEvent<string>).detail);
       if (next) select(next);
     };
+    const onScrollToDraft = () => {
+      const draftBarEl = document.getElementById('settings-draft-bar');
+      if (draftBarEl && typeof draftBarEl.scrollIntoView === 'function') {
+        try {
+          draftBarEl.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } catch {
+          // JSDOM environment fallback
+        }
+      }
+    };
     window.addEventListener('kite-connect-section', onOpen);
-    return () => window.removeEventListener('kite-connect-section', onOpen);
-  }, []);
+    window.addEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    return () => {
+      window.removeEventListener('kite-scroll-to-draft-bar', onScrollToDraft);
+    };
+  }, [section]);
 
   return (
     <div className="kite-settings-hub" style={{
@@ -1048,11 +1080,11 @@ export function ConnectPane() {
           })}
         </nav>
 
-        <main style={{
+        <main ref={mainRef} style={{
           minWidth: 0, minHeight: 0, overflowY: 'auto',
-          padding: '24px 32px 48px', background: 'var(--k-bg)',
+          padding: '24px 32px 116px', background: 'var(--k-bg)',
         }}>
-          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto' }}>
+          <div className="kite-settings-content-wrapper" style={{ maxWidth: 1000, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
             {section === 'account' && (
               <>
                 {isLoading && <div style={S.hint}>Loading accounts…</div>}
@@ -1099,7 +1131,6 @@ export function ConnectPane() {
             {section === 'engine' && (
               <>
                 <SuperTrendEnginePanel />
-                <OptionContractsPicker />
               </>
             )}
 
@@ -1140,6 +1171,12 @@ export function ConnectPane() {
               </>
             )}
 
+            {section === 'bearToBearish' && (
+              <>
+                <BearToBearishSettingsPanel />
+              </>
+            )}
+
             {section === 'markets' && (
               <>
                 {liveTools ? (
@@ -1167,6 +1204,7 @@ export function ConnectPane() {
 
             {section === 'experience' && (
               <>
+                <DefaultSectionSettings />
                 <DisplayScaleSettings />
                 <MotionStyleSettings />
                 <TickerStripSettings />

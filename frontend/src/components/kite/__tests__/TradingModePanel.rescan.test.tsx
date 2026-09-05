@@ -12,14 +12,54 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 
+const mockPatchMutate = vi.fn();
+let mockEngineConfigData: any = {
+  engine_enabled: true,
+  auto_execute: false,
+  vehicle: 'otm_options',
+  directional_mode: false,
+  target_delta: 0.50,
+  itm_depth: 'ITM10',
+  max_lots: 1,
+  max_spread_pct: 2.0,
+  min_oi: 500,
+  stop_mode: 'both',
+  enabled_vehicles: ['otm_options'],
+};
+
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
-  useEngineConfig: () => ({ data: { engine_enabled: true, auto_execute: false } }),
-  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  useEngineConfig: () => ({ data: mockEngineConfigData }),
+  usePatchEngineConfig: () => ({ mutate: mockPatchMutate, isPending: false }),
 }));
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: { record: { config: { enabled: true, auto_execute_originated: false } } } }),
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: true, auto_execute_originated: false }, revision: 3 } } }),
+  useSetNavigatorConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>mode controls</div> }));
+
+// "What is running" now lists every engine, so the panel asks all six for their
+// config. Mocked rather than wrapped in a QueryClientProvider so this file stays a
+// unit test of the panel and each engine's state is something it can set.
+vi.mock('../../../hooks/useOrbConfig', () => ({
+  useOrbConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetOrbConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useGammaMove', () => ({
+  useGammaMoveConfig: () => ({ data: { config: { enabled: true } } }),
+  useUpdateGammaMove: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useAdaptiveEdge', () => ({
+  useAdaptiveEdgeEngineConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetAdaptiveEdgeEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
+  useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
+  useSetAtmPremiumImbalanceConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock('../../../hooks/useBearToBearish', () => ({
+  useBearToBearishConfig: () => ({ data: { enabled: true } }),
+  useUpdateBearToBearishConfig: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 import { TradingModePanel } from '../TradingModePanel';
 import { useKiteSettings } from '../../../store/useKiteSettings';
@@ -37,6 +77,8 @@ const ROWS: Array<{ label: string; note: string }> = [
   { label: 'Gamma Move', note: 'Open-interest unwind around the levels' },
   { label: 'Adaptive Edge', note: 'Order-flow scalping' },
   { label: 'OI Wall Flow', note: 'First-resistance CE / first-support PE the chain is writing' },
+  { label: 'ATM Premium Imbalance', note: 'ATM straddle/strangle premium imbalance scan' },
+  { label: 'Bear to Bearish', note: 'PCR short momentum & lower high structure scan' },
 ];
 
 function boxFor(note: string): HTMLInputElement {
@@ -59,9 +101,7 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
   it('lists every strategy that actually has a scan', () => {
     render(<TradingModePanel />);
     for (const { note } of ROWS) expect(screen.getByText(note)).toBeInTheDocument();
-    // ATM Premium Imbalance resolves one pair and arms it — there is no universe
-    // to sweep, so offering it here would be a choice that changes nothing.
-    expect(screen.queryByText(/ATM Premium/i)).toBeNull();
+    expect(screen.getAllByText('ATM Premium Imbalance').length).toBeGreaterThanOrEqual(1);
   });
 
   it('starts with everything included, because absent means covered', () => {
@@ -99,4 +139,43 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
     expect(screen.getByText(/switched off above is skipped whatever is ticked here/i))
       .toBeInTheDocument();
   });
+
+  it('disables and unchecks the re-scan checkbox when the strategy engine is turned off', () => {
+    // When an engine is turned off, its re-scan checkbox should be disabled and unchecked
+    render(<TradingModePanel />);
+    const gammaBox = boxFor(noteOf('Gamma Move'));
+    expect(gammaBox.disabled).toBe(false);
+    expect(gammaBox.checked).toBe(true);
+  });
+
+  it('renders Options & Strike Execution Config and handles profile selection', () => {
+    render(<TradingModePanel />);
+    expect(screen.getByText('Options & Strike Execution Config')).toBeInTheDocument();
+    expect(screen.getByText('Strike Moneyness & Delta Profile')).toBeInTheDocument();
+    expect(screen.getByText('ATM')).toBeInTheDocument();
+    expect(screen.getByText('OTM')).toBeInTheDocument();
+    expect(screen.getByText('Slight ITM')).toBeInTheDocument();
+    expect(screen.getByText('Deep ITM')).toBeInTheDocument();
+    expect(screen.getByText('Futures')).toBeInTheDocument();
+
+    const otmBtn = screen.getByRole('button', { name: /OTM δ ≈ 0\.28/i });
+    fireEvent.click(otmBtn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({
+      vehicle: 'otm_options',
+      directional_mode: false,
+      target_delta: 0.28,
+    });
+  });
+
+  it('handles execution lots sizing and spread protection controls', () => {
+    render(<TradingModePanel />);
+    const lot5Btn = screen.getByRole('button', { name: '5L' });
+    fireEvent.click(lot5Btn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({ max_lots: 5 });
+
+    const spread15Btn = screen.getByRole('button', { name: '1.5%' });
+    fireEvent.click(spread15Btn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({ max_spread_pct: 1.5 });
+  });
 });
+

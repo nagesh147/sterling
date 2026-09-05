@@ -1165,6 +1165,10 @@ async def all_signals(request: Request) -> dict:
     calls for stale instruments and caches the result — so the first call
     may take a few seconds but subsequent calls return instantly.
     """
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_directional_signals_response()
+
     mode = getattr(request.app.state, "trading_mode", None)
     macro_filter  = mode.macro_filter  if mode else "adx_4h"
     st_threshold  = mode.st_threshold  if mode else 3
@@ -1770,6 +1774,7 @@ async def _sse_all_generator(
     last_pnl_t       = 0.0
     last_portfolio_t = 0.0
     last_alerts_t    = 0.0
+    last_sim_t       = 0.0
 
     while True:
         if await request.is_disconnected():
@@ -1797,8 +1802,9 @@ async def _sse_all_generator(
             else:
                 rest_needed.append(inst)
 
-        # REST fallback for instruments not in WS cache (other adapters, startup gap)
-        if rest_needed:
+        # REST fallback for instruments not in WS cache (only poll exchange if scalp_mode is on)
+        scalp_active = getattr(request.app.state, "scalp_mode", False)
+        if rest_needed and scalp_active:
             async def _fetch_price(inst) -> tuple[str, float | None]:
                 try:
                     # 0.5 s cap keeps the 1-s SSE prices loop tight even when
@@ -1836,7 +1842,12 @@ async def _sse_all_generator(
         # ── full signal data (every signal_emit_interval s from snap cache) ──
         if now_mono - last_signals_t >= signal_emit_interval:
             last_signals_t = now_mono
-            mode = getattr(request.app.state, "trading_mode", None)
+            from app.services.simulation import simulation_runner, SimState
+            if simulation_runner.status.state != SimState.IDLE:
+                sim_res = simulation_runner.get_directional_signals_response()
+                yield f"event: signals\ndata: {json.dumps(sim_res)}\n\n"
+            else:
+                mode = getattr(request.app.state, "trading_mode", None)
 
             signals_list: list[dict] = []
             for inst in instruments:
@@ -1938,14 +1949,16 @@ async def _sse_all_generator(
             except Exception as _e:
                 log.debug("SSE portfolio build error: %s", _e)
 
-        # ── signal alerts (every 15s from in-memory deque) ───────────────────
-        if now_mono - last_alerts_t >= 15.0:
-            last_alerts_t = now_mono
-            now_ms = int(time.time() * 1000)
+        # ── simulation status (every 1s if simulation active) ────────────────
+        if now_mono - last_sim_t >= 1.0:
+            last_sim_t = now_mono
             try:
-                yield f"event: alerts\ndata: {_build_alerts_event(now_ms)}\n\n"
+                from app.services.simulation import simulation_runner, SimState
+                sim_status = simulation_runner.status
+                if sim_status.state != SimState.IDLE:
+                    yield f"event: simulation\ndata: {sim_status.model_dump_json()}\n\n"
             except Exception as _e:
-                log.debug("SSE alerts build error: %s", _e)
+                log.debug("SSE simulation build error: %s", _e)
 
         await asyncio.sleep(price_interval)
 

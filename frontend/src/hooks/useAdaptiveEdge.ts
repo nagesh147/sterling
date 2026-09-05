@@ -10,11 +10,14 @@ const ROOT = '/api/v1/adaptive-edge';
    `inert_fields` so the UI can say so rather than pretending. */
 const CONFIG_ROOT = '/api/v1/config/adaptive-edge';
 
+import { useReplayActive as useSimActive } from './useReplayStore';
+
 export function useAdaptiveEdgeSnapshot() {
+  const isSimActive = useSimActive();
   return useQuery<AdaptiveEdgeSnapshot>({
     queryKey: ['adaptive-edge-snapshot'],
     queryFn: () => api.get<AdaptiveEdgeSnapshot>(`${ROOT}/snapshot`),
-    refetchInterval: 5000,
+    refetchInterval: isSimActive ? 300 : 5000,
   });
 }
 

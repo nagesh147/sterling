@@ -59,19 +59,22 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+import { useReplayActive as useSimActive } from '../../hooks/useReplayStore';
+
 export function AdaptiveEdgeEngineScan() {
+  const isSimActive = useSimActive();
   const config = useAdaptiveEdgeEngineConfig();
   const snapshot = useQuery<EngineSnapshot>({
     queryKey: ['adaptive-edge-engine-snapshot'],
     queryFn: () => api.get<EngineSnapshot>('/api/v1/config/adaptive-edge/snapshot'),
-    refetchInterval: 10000,
+    refetchInterval: isSimActive ? 300 : 10000,
   });
 
   const qc = useQueryClient();
   const positions = useQuery<{ positions: PositionRow[]; realised_pnl_today: number }>({
     queryKey: ['adaptive-edge-engine-positions'],
     queryFn: () => api.get('/api/v1/config/adaptive-edge/positions'),
-    refetchInterval: 10000,
+    refetchInterval: isSimActive ? 300 : 10000,
   });
   const squareOff = useMutation({
     mutationFn: () => api.post('/api/v1/config/adaptive-edge/square-off', {}),

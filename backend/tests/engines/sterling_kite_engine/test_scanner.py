@@ -23,7 +23,7 @@ def _candles(close_path, start_ms=0):
     out = []
     for i in range(len(c)):
         hi = max(o[i], c[i]) + 1.0
-        lo = min(o[i], c[i]) - 1.0
+        lo = max(0.01, min(o[i], c[i]) - 1.0)
         out.append(Candle(timestamp_ms=start_ms + i * 3_600_000, open=float(o[i]),
                           high=float(hi), low=float(lo), close=float(c[i]), volume=1.0))
     return out
@@ -118,6 +118,13 @@ def test_drop_forming_removes_open_bar():
     assert len(drop_forming(candles, now_ms=2 * 3_600_000 + 1_800_000)) == 2
     # well past close → keep it
     assert len(drop_forming(candles, now_ms=10 * 3_600_000)) == 3
+
+
+def test_drop_forming_preserves_bar_when_allow_forming():
+    candles = _candles([1, 2, 3])  # last ts = 2h
+    # Even if now_ms is right in the middle of forming bar, allow_forming=True preserves it
+    assert len(drop_forming(candles, now_ms=2 * 3_600_000 + 1_800_000, allow_forming=True)) == 3
+
 
 
 def _sig_row(ts_ms: int, *, active: bool, fresh: bool):

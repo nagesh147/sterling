@@ -28,7 +28,14 @@ import { Tip } from '../InfoTooltip';
 
 export interface EngineTabState {
   id: EngineId;
-  /** Server-side on/off. A stopped engine still gets a tab — it explains itself. */
+  /**
+   * Server-side on/off, for the state dot and the tab's own copy.
+   *
+   * No longer decides whether the tab EXISTS: a switched-off engine is filtered
+   * out upstream, because the operator who stopped it does not need a tab
+   * explaining that they stopped it. This still distinguishes "on but quiet"
+   * from "armed and holding" for the engines that are shown.
+   */
   running: boolean;
   /** Live rows: armed, running or weakening. Drives the count badge. */
   live: number;

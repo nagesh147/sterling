@@ -9,8 +9,14 @@ import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
 import { useOiWallFlowSnapshot } from '../../hooks/useOiWallFlow';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 
+
 /**
  * Broker connection and per-strategy state, in the footer.
+ *
+ * The replay chip that used to live here has moved to `ReplayFooterChip`.
+ * Replay is a mode, not an engine, and sitting in this cluster implied it was
+ * a seventh strategy — while duplicating the clock the dock toggle already
+ * rendered forty pixels away.
  *
  * **On what these chips can honestly say.** Only SuperTrend reports scan
  * timing — `scanning`, `scanning_label`, `generated_ms`, `next_scan_ms`. ORB and

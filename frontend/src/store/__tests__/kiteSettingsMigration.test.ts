@@ -126,4 +126,16 @@ describe('kite-settings migration', () => {
     expect(store.getState().boardDragColumns).toBe(true);
     expect(store.getState().boardRowScroll).toBe(true);
   });
+
+  it('v9 migration sets defaultSection to dashboard if missing or invalid', async () => {
+    seed(8, { defaultSection: undefined });
+    const s = await loadStore();
+    expect(s.defaultSection).toBe('dashboard');
+  });
+
+  it('v9 migration preserves valid defaultSection if present', async () => {
+    seed(8, { defaultSection: 'positions' });
+    const s = await loadStore();
+    expect(s.defaultSection).toBe('positions');
+  });
 });

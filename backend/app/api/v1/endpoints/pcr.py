@@ -32,52 +32,6 @@ SLOT_HHMM = [
     )
 ]
 
-# Intraday + Weekly published print (27 Aug 2026). Live niftytrader OI PCR
-# is a different series; overlay only this session so other days pass through.
-SHOT_SESSION_ISO = "2026-08-27"
-SHOT_2026_08_27: dict[str, dict[str, float]] = {
-    "NIFTY": {
-        "09:15": 0.70, "09:30": 0.70, "09:45": 0.66, "10:00": 0.64, "10:15": 0.64,
-        "10:30": 0.63, "10:45": 0.62, "11:00": 0.62, "11:15": 0.62, "11:30": 0.56,
-        "11:45": 0.56, "12:00": 0.56, "12:15": 0.56, "12:30": 0.56, "12:45": 0.58,
-        "13:00": 0.60, "13:15": 0.61, "13:30": 0.62, "13:45": 0.62, "14:00": 0.58,
-        "14:15": 0.57, "14:30": 0.57, "14:45": 0.57, "15:00": 0.60, "15:15": 0.59,
-        "15:30": 0.59,
-    },
-    "BANKNIFTY": {
-        "09:15": 1.16, "09:30": 1.16, "09:45": 1.15, "10:00": 1.16, "10:15": 1.16,
-        "10:30": 1.16, "10:45": 1.16, "11:00": 1.14, "11:15": 1.14, "11:30": 1.14,
-        "11:45": 1.14, "12:00": 1.14, "12:15": 1.14, "12:30": 1.13, "12:45": 1.13,
-        "13:00": 1.13, "13:15": 1.13, "13:30": 1.13, "13:45": 1.13, "14:00": 1.12,
-        "14:15": 1.11, "14:30": 1.11, "14:45": 1.11, "15:00": 1.11, "15:15": 1.11,
-        "15:30": 1.11,
-    },
-    "FINNIFTY": {
-        "09:15": 0.53, "09:30": 0.53, "09:45": 0.53, "10:00": 0.54, "10:15": 0.53,
-        "10:30": 0.54, "10:45": 0.54, "11:00": 0.55, "11:15": 0.55, "11:30": 0.55,
-        "11:45": 0.55, "12:00": 0.55, "12:15": 0.55, "12:30": 0.54, "12:45": 0.53,
-        "13:00": 0.53, "13:15": 0.54, "13:30": 0.55, "13:45": 0.56, "14:00": 0.56,
-        "14:15": 0.56, "14:30": 0.56, "14:45": 0.56, "15:00": 0.56, "15:15": 0.56,
-        "15:30": 0.56,
-    },
-    "SENSEX": {
-        "09:15": 0.67, "09:30": 0.66, "09:45": 0.63, "10:00": 0.61, "10:15": 0.61,
-        "10:30": 0.60, "10:45": 0.60, "11:00": 0.55, "11:15": 0.55, "11:30": 0.52,
-        "11:45": 0.54, "12:00": 0.54, "12:15": 0.55, "12:30": 0.56, "12:45": 0.59,
-        "13:00": 0.61, "13:15": 0.63, "13:30": 0.64, "13:45": 0.65, "14:00": 0.61,
-        "14:15": 0.59, "14:30": 0.60, "14:45": 0.63, "15:00": 0.64, "15:15": 0.64,
-        "15:30": 0.54,
-    },
-    "MIDCPNIFTY": {
-        "09:15": 1.07, "09:30": 1.06, "09:45": 1.06, "10:00": 1.05, "10:15": 1.05,
-        "10:30": 1.06, "10:45": 1.06, "11:00": 1.06, "11:15": 1.07, "11:30": 1.07,
-        "11:45": 1.07, "12:00": 1.08, "12:15": 1.07, "12:30": 1.07, "12:45": 1.07,
-        "13:00": 1.07, "13:15": 1.07, "13:30": 1.06, "13:45": 1.06, "14:00": 1.07,
-        "14:15": 1.07, "14:30": 1.07, "14:45": 1.07, "15:00": 1.08, "15:15": 1.08,
-        "15:30": 1.08,
-    },
-}
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/json",
@@ -85,15 +39,18 @@ HEADERS = {
 }
 
 _CACHE: dict[str, Any] = {"at": 0.0, "payload": None}
-_CACHE_S = 20.0
+_CACHE_S = 8.0
 _NEXT = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>')
 
 
-def _num(v: Any) -> float:
+def _num(v: Any) -> float | None:
     try:
-        return float(v)
+        n = float(v)
     except (TypeError, ValueError):
-        return 0.0
+        return None
+    if n != n:  # NaN
+        return None
+    return n
 
 
 def _hhmm(time_s: str) -> str:
@@ -102,11 +59,30 @@ def _hhmm(time_s: str) -> str:
     return time_s[:5]
 
 
+def _mins(hhmm: str) -> int:
+    try:
+        return int(hhmm[:2]) * 60 + int(hhmm[3:5])
+    except (TypeError, ValueError):
+        return -1
+
+
 def _marks(ticks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by = {_hhmm(t["time"]): t for t in ticks if t.get("time")}
-    out = []
-    for hhmm in SLOT_HHMM:
-        hit = by.get(hhmm)
+    """Last print in each 15-minute bucket.
+
+    NiftyTrader now emits ~1-minute rows (09:10, 09:11, …) instead of only the
+    15-minute clock. Matching the clock exactly dropped every row on those
+    days, the session looked empty, and the desk froze on yesterday's close.
+    """
+    ordered = sorted(ticks, key=lambda t: str(t.get("time") or ""))
+    out: list[dict[str, Any]] = []
+    for i, hhmm in enumerate(SLOT_HHMM):
+        end = _mins(hhmm)
+        start = 9 * 60 + 10 if i == 0 else _mins(SLOT_HHMM[i - 1]) + 1
+        hit = None
+        for t in ordered:
+            m = _mins(_hhmm(str(t.get("time") or "")))
+            if start <= m <= end:
+                hit = t
         if not hit:
             continue
         out.append({
@@ -119,29 +95,38 @@ def _marks(ticks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _overlay(marks: list[dict[str, Any]], shot: dict[str, float] | None) -> list[dict[str, Any]]:
-    if not shot:
-        return marks
-    out = []
-    for m in marks:
-        cell = shot.get(m["hhmm"])
-        if cell is None:
-            out.append(m)
-        else:
-            out.append({**m, "pcr": cell})
-    return out
-
-
 def _latest(ticks: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not ticks:
         return None
-    last = ticks[-1]
+    last = max(ticks, key=lambda t: str(t.get("time") or ""))
     return {
-        "hhmm": _hhmm(last["time"]),
+        "hhmm": _hhmm(str(last["time"])),
         "pcr": last["pcr"],
         "volumePcr": last["volumePcr"],
         "changeOiPcr": last["changeOiPcr"],
         "indexClose": last["indexClose"],
+    }
+
+
+def _spot(page: dict[str, Any], latest: dict[str, Any] | None) -> dict[str, Any]:
+    spot = page.get("initialSpot") or {}
+    ltp = _num(spot.get("last_trade_price"))
+    if ltp is None:
+        ltp = _num(spot.get("ltp"))
+    if ltp is None and latest is not None:
+        ltp = _num(latest.get("indexClose"))
+    chg = _num(spot.get("change_per"))
+    if chg is None:
+        close = _num(spot.get("close"))
+        if ltp is not None and close not in (None, 0):
+            chg = round((ltp - close) / close * 100, 2)
+    ts = spot.get("timestamp") or spot.get("created_at")
+    return {
+        "ltp": ltp,
+        "changePer": chg,
+        "maxPain": _num(spot.get("max_pain")),
+        "vix": _num(spot.get("vix_value")),
+        "timestamp": ts,
     }
 
 
@@ -165,36 +150,32 @@ async def _scrape(client: httpx.AsyncClient, symbol: str, url: str) -> dict[str,
         t = str(row.get("time") or "")
         if not t:
             continue
+        pcr = _num(row.get("pcr"))
+        if pcr is None:
+            continue
         ticks.append({
             "time": t,
-            "pcr": _num(row.get("pcr")),
-            "volumePcr": _num(row.get("volume_pcr")),
-            "changeOiPcr": _num(row.get("change_oi_pcr")),
-            "indexClose": _num(row.get("index_close")),
+            "pcr": pcr,
+            "volumePcr": _num(row.get("volume_pcr")) or 0.0,
+            "changeOiPcr": _num(row.get("change_oi_pcr")) or 0.0,
+            "indexClose": _num(row.get("index_close")) or 0.0,
             "expiry": str(row.get("expiry_date") or "")[:10],
         })
-    if not ticks:
-        return None
-    spot = page.get("initialSpot") or {}
-    expiry = str(page.get("initialExpiry") or ticks[0].get("expiry") or "")[:10]
-    live = page.get("initialPcr")
-    session = str(spot.get("timestamp") or ticks[0].get("time") or "")[:10]
+    latest = _latest(ticks)
     marks = _marks(ticks)
-    if session == SHOT_SESSION_ISO:
-        marks = _overlay(marks, SHOT_2026_08_27.get(symbol))
+    if not ticks and page.get("initialPcr") is None:
+        return None
+    live = _num(page.get("initialPcr"))
+    if live is None and latest is not None:
+        live = latest["pcr"]
+    expiry = str(page.get("initialExpiry") or (ticks[0].get("expiry") if ticks else "") or "")[:10]
     return {
         "id": symbol,
         "expiry": expiry,
-        "livePcr": _num(live) if live is not None else ticks[-1]["pcr"],
-        "spot": {
-            "ltp": spot.get("last_trade_price"),
-            "changePer": spot.get("change_per"),
-            "maxPain": spot.get("max_pain"),
-            "vix": spot.get("vix_value"),
-            "timestamp": spot.get("timestamp"),
-        },
+        "livePcr": live,
+        "spot": _spot(page, latest),
         "marks": marks,
-        "latest": _latest(ticks),
+        "latest": latest,
     }
 
 
@@ -212,7 +193,7 @@ async def pcr_session() -> dict[str, Any]:
         )
     live = 0
     for (sym, _), result in zip(PAGES.items(), results):
-        if isinstance(result, dict) and result.get("marks"):
+        if isinstance(result, dict) and (result.get("marks") or result.get("latest") or result.get("livePcr") is not None):
             series[sym] = result
             live += 1
     payload = {

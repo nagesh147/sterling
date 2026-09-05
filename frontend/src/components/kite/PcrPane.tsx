@@ -1,180 +1,105 @@
-import { useEffect, useMemo, useState } from 'react';
-import { fetchPcrDesk } from '../../lib/pcr/fetchPcr';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchPcrDesk, sessionIsoOf } from "../../lib/pcr/fetchPcr";
 import {
   BAND_COPY,
-  bandTitle,
+  FLOW_MOVE_MIN,
+  SESSION_CLOSE_MIN,
+  SESSION_OPEN_MIN,
   buildGrid,
+  describeFlow,
   expiryKind,
-  formatDelta,
+  flowPath,
   formatExpiry,
   formatPcr,
-  metricValue,
+  hhmmToMinutes,
+  isValidPrint,
+  lastValidSlot,
+  liveAction,
   pcrBand,
   putShare,
-} from '../../lib/pcr/slots';
-import { PCR_INDICES, type PcrDeskPayload, type PcrIndex, type PcrMetric, type PcrSeries, type PcrSlot } from '../../lib/pcr/types';
-import { formatIstIsoDate, getIstParts } from '../../lib/astro/time';
-
-type View = "grid" | "board";
-
-function istStamp(now: Date): string {
-  const p = getIstParts(now);
-  return `${String(p.day).padStart(2, "0")}/${String(p.month).padStart(2, "0")}/${p.year} ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}:${String(p.second).padStart(2, "0")}`;
-}
-
-function nowMinutes(now: Date): number {
-  const p = getIstParts(now);
-  return p.hour * 60 + p.minute;
-}
-
-function fmtLtp(n: number | null): string {
-  if (n == null) return "—";
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
-}
-
-function Spark({ slots }: { slots: PcrSlot[] }) {
-  const pts = slots.map((s) => s.pcr).filter((v): v is number => v != null);
-  if (pts.length < 2) return null;
-  const min = Math.min(...pts);
-  const max = Math.max(...pts);
-  const pad = (max - min) * 0.15 || 0.05;
-  const lo = min - pad;
-  const hi = max + pad;
-  const w = 160;
-  const h = 36;
-  const d = pts
-    .map((v, i) => {
-      const x = (i / (pts.length - 1)) * w;
-      const y = h - ((v - lo) / (hi - lo || 1)) * (h - 4) - 2;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const last = pts[pts.length - 1];
-  const y1 = h - ((1 - lo) / (hi - lo || 1)) * (h - 4) - 2;
-  return (
-    <svg className="kp-spark" viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
-      <line x1="0" y1={y1} x2={w} y2={y1} className="kp-spark-ref" />
-      <path d={d} />
-      <circle cx={w} cy={h - ((last - lo) / (hi - lo || 1)) * (h - 4) - 2} r="2.2" />
-    </svg>
-  );
-}
-
-function Split({ pcr }: { pcr: number | null }) {
-  const put = putShare(pcr);
-  if (put == null) return null;
-  const putPct = Math.round(put * 100);
-  return (
-    <div className="kp-split" title={`Puts ${putPct}% · Calls ${100 - putPct}% of OI`}>
-      <span className="kp-split-put" style={{ width: `${putPct}%` }} />
-      <span className="kp-split-call" style={{ width: `${100 - putPct}%` }} />
-    </div>
-  );
-}
-
-function livePcr(series: PcrSeries | undefined, slots: PcrSlot[], metric: PcrMetric): number | null {
-  if (series?.latest) return metricValue(series.latest, metric);
-  if (metric === "oi" && series?.livePcr != null) return series.livePcr;
-  const live = slots.find((s) => s.live)?.pcr;
-  if (live != null) return live;
-  return [...slots].reverse().find((s) => s.pcr != null)?.pcr ?? null;
-}
-
-
-const CSS = `
-.kite-pcr{display:flex;flex-direction:column;height:100%;min-height:100%;background:var(--k-bg);color:var(--k-text);font-family:inherit;font-size:14px}
-.kite-pcr .ko{display:flex;flex-direction:column;height:100%;min-height:100%}
-.kite-pcr .ko-head{padding:0 32px;border-bottom:1px solid var(--k-surface-hover);margin-top:12px}
-.kite-pcr .ko-title-row{display:flex;align-items:center;gap:16px;margin:0 0 4px;min-height:32px}
-.kite-pcr .ko-title-row h2{margin:0;font-size:24px;font-weight:400;color:var(--k-text);flex:1}
-.kite-pcr .ko-tabs-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:-1px}
-.kite-pcr .ko-tabs{display:flex;gap:32px;overflow-x:auto;min-width:0}
-.kite-pcr .ko-tabs button{padding:0 0 12px;border:0;background:none;color:var(--k-text);font-size:14px;font-weight:400;border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;font-family:inherit}
-.kite-pcr .ko-tabs button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange)}
-.kite-pcr .ko-ins{display:flex;align-items:center;gap:16px;overflow-x:auto;padding-bottom:12px;flex-shrink:0}
-.kite-pcr .ko-ins button{border:0;background:none;padding:0;font-size:13px;color:var(--k-text);white-space:nowrap;cursor:pointer;font-family:inherit}
-.kite-pcr .ko-ins button:hover{color:var(--k-orange)}
-.kite-pcr .ko-ins button[data-on="true"]{color:var(--k-orange);font-weight:500}
-.kite-pcr .ko-body{flex:1;padding:20px 32px 40px;overflow:auto}
-.kite-pcr .ko-sub{color:var(--k-dim);margin:0 0 16px;font-size:13px;line-height:1.5}
-.kite-pcr .text-up{color:var(--k-green)}
-.kite-pcr .text-down{color:var(--k-red)}
-.kite-pcr .text-muted{color:var(--k-dim)}
-.kp-clock{font-size:12px;color:var(--k-dim);font-variant-numeric:tabular-nums;white-space:nowrap}
-.kp-chip-pcr{margin-left:6px;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;padding:1px 5px;border-radius:2px}
-.kp-now{display:grid;grid-template-columns:minmax(140px,180px) 1fr auto;gap:16px 24px;align-items:center;padding:12px 0 16px;border-bottom:1px solid var(--k-surface-hover);margin-bottom:12px}
-.kp-now-kicker{font-size:11px;color:var(--k-dim)}
-.kp-now-val{font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;margin:4px 0;padding:4px 10px;display:inline-block;border-radius:2px}
-.kp-now-band{font-size:13px}
-.kp-now-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}
-.kp-now-meta span{display:block;font-size:11px;color:var(--k-dim)}
-.kp-now-meta b{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
-.kp-now-meta em{font-style:normal;font-size:12px;font-weight:500}
-.kp-now-viz{display:flex;flex-direction:column;gap:8px;min-width:160px}
-.kp-split{display:flex;height:6px;border-radius:2px;overflow:hidden;background:var(--k-surface-hover)}
-.kp-split-put{background:#26a69a}
-.kp-split-call{background:#ef5350}
-.kp-spark{display:block}
-.kp-spark path{fill:none;stroke:var(--k-blue);stroke-width:1.6}
-.kp-spark circle{fill:var(--k-blue)}
-.kp-spark-ref{stroke:var(--k-border);stroke-dasharray:3 3}
-.kp-metric{display:flex;gap:16px;margin:0 0 14px}
-.kp-metric button{border:0;background:none;padding:0 0 8px;font-size:13px;color:var(--k-text);border-bottom:2px solid transparent;cursor:pointer;font-family:inherit}
-.kp-metric button[data-on="true"]{color:var(--k-orange);border-bottom-color:var(--k-orange);font-weight:500}
-.kp-sheet{overflow-x:auto;max-width:560px}
-.kp-board-wrap{max-width:100%}
-.kp-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.kp-table thead th{background:#1565c0;color:#fff;font-weight:600;font-size:13px;padding:8px 12px;text-align:center;border:1px solid #0d47a1}
-.kp-table thead th span{display:block;font-weight:500;font-size:12px;margin-top:2px}
-.kp-table thead .kp-colhead th{background:#1976d2;font-weight:500;font-size:12px}
-.kp-table tbody th{width:88px;padding:5px 10px;font-size:13px;font-weight:400;color:var(--k-text);background:var(--k-surface);border:1px solid var(--k-border);text-align:center}
-.kp-cell{text-align:center;font-size:13px;font-weight:500;padding:5px 10px;border:1px solid #e8d0d0;color:#222}
-.kp-delta{width:64px;text-align:right;font-size:12px;color:var(--k-dim);padding:5px 10px;border:1px solid var(--k-border)}
-.kp-table tbody tr[data-live="true"] th{box-shadow:inset 3px 0 0 var(--k-orange);font-weight:600}
-.kp-band-extreme-positive{background:#1b7a3a;color:#fff}
-.kp-band-highly-positive{background:#43a047;color:#fff}
-.kp-band-positive{background:#c8e6c9;color:#1b5e20}
-.kp-band-negative{background:#f8d0d0;color:#222}
-.kp-band-highly-negative{background:#f0a8a8;color:#222}
-.kp-band-extreme-negative{background:#ff2a2a;color:#111}
-.kp-band-empty{background:var(--k-bg)}
-.kp-now-val.kp-band-empty{background:transparent;padding-left:0}
-.kp-legend{margin:20px 0 8px;max-width:560px;padding:14px 16px;background:var(--k-surface);border:1px solid var(--k-border)}
-.kp-legend h3{margin:0 0 10px;font-size:14px;font-weight:500}
-.kp-legend ul{margin:0;padding:0;list-style:none}
-.kp-legend li{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.55;margin:3px 0}
-.kp-swatch{width:14px;height:14px;border-radius:2px;flex-shrink:0;display:inline-block;border:1px solid rgba(0,0,0,.08)}
-.kp-legend p{margin:12px 0 0;font-size:12px;color:var(--k-dim);line-height:1.5}
-@media (max-width:800px){
-  .kite-pcr .ko-head,.kite-pcr .ko-body{padding-left:16px;padding-right:16px}
-  .kp-now{grid-template-columns:1fr;gap:12px}
-  .kp-sheet{max-width:none}
-}
-`;
+  readBook,
+  readPcr,
+  type PcrAction,
+} from "../../lib/pcr/slots";
+import {
+  PCR_INDICES,
+  type PcrDeskPayload,
+  type PcrIndex,
+  type PcrMetric,
+  type PcrSlot,
+} from "../../lib/pcr/types";
+import { formatIstIsoDate, getIstParts } from "../../lib/astro/time";
+import { useKiteQuote } from "../../hooks/useKite";
+import { underlyingQuoteKey } from "./board/boardTypes";
+import { PCR_CSS } from "./pcrCss";
+import {
+  IndexTile, Path, ideaKind, playHint, moveTxt, stanceLab, fmtLtp, nowMinutes,
+  type DeskRow, type TileField, type SectionId, type ColId, type Prefs,
+  SECTIONS, TABLE_COLS, loadPrefs, savePrefs, expiryLong,
+} from "./pcrWidgets";
 
 export function PcrPane() {
   const [payload, setPayload] = useState<PcrDeskPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState<PcrIndex>("NIFTY");
-  const [view, setView] = useState<View>("grid");
   const [metric, setMetric] = useState<PcrMetric>("oi");
   const [now, setNow] = useState<Date | null>(null);
+  const [liveIso, setLiveIso] = useState("");
+  const [sessionIso, setSessionIso] = useState("");
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const prefsRef = useRef<HTMLDivElement>(null);
+  const writePrefs = (fn: (p: Prefs) => Prefs) => {
+    setPrefs((p) => {
+      const next = fn(p);
+      savePrefs(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
-    const tick = () => setNow(new Date());
+    if (!prefsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (prefsRef.current && !prefsRef.current.contains(e.target as Node)) setPrefsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPrefsOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [prefsOpen]);
+
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      setNow((prev) => {
+        if (!prev) return d;
+        const a = getIstParts(prev);
+        const b = getIstParts(d);
+        if (a.hour === b.hour && a.minute === b.minute) return prev;
+        return d;
+      });
+    };
     tick();
-    const id = window.setInterval(tick, 1000);
+    const id = window.setInterval(tick, 5_000);
     return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      fetchPcrDesk()
+      fetchPcrDesk(null)
         .then((data) => {
           if (cancelled) return;
           setPayload(data);
           setError(null);
+          const iso = sessionIsoOf(data);
+          if (iso) {
+            setLiveIso(iso);
+            setSessionIso(iso);
+          }
         })
         .catch((err: unknown) => {
           if (cancelled) return;
@@ -182,204 +107,416 @@ export function PcrPane() {
         });
     };
     load();
-    const id = window.setInterval(load, 30_000);
+    const id = window.setInterval(load, 8_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const map: Record<string, PcrIndex> = { "1": "NIFTY", "2": "BANKNIFTY", "3": "FINNIFTY", "4": "SENSEX", "5": "MIDCPNIFTY" };
+      const pick = map[e.key];
+      if (pick) {
+        setIndex(pick);
+        writePrefs((p) => {
+          const on = p.indices.includes(pick);
+          return { ...p, indices: on ? p.indices.filter((id) => id !== pick) : [...p.indices, pick] };
+        });
+      }
+      if (e.key === "a" || e.key === "A") writePrefs((p) => ({ ...p, indices: PCR_INDICES.map((u) => u.id) }));
+      if (e.key === "p" || e.key === "P") writePrefs((p) => ({ ...p, path: !p.path }));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const kiteSyms = useMemo(() => PCR_INDICES.map((u) => underlyingQuoteKey(u.id)), []);
+  const { data: liveQuotes } = useKiteQuote(kiteSyms, true, 3_000);
+  const todayIso = now ? formatIstIsoDate(now) : liveIso;
   const series = payload?.series[index];
   const nowMin = now ? nowMinutes(now) : null;
-  const stamp = now ? istStamp(now) : "";
-  const boards = useMemo(() => {
+  const inLiveSession = Boolean(
+    nowMin != null && nowMin >= SESSION_OPEN_MIN && nowMin < SESSION_CLOSE_MIN,
+  );
+  const gridNowMin = inLiveSession ? nowMin : SESSION_CLOSE_MIN;
+  const metricBoards = useMemo(() => {
     if (!payload) return null;
-    const out = {} as Record<PcrIndex, PcrSlot[]>;
-    for (const u of PCR_INDICES) {
-      const row = payload.series[u.id];
-      if (!row) continue;
-      out[u.id] = buildGrid(row.marks, row.latest, nowMin, metric);
-    }
-    return out;
-  }, [payload, nowMin, metric]);
+    const make = (m: PcrMetric) => {
+      const out = {} as Record<PcrIndex, PcrSlot[]>;
+      for (const u of PCR_INDICES) {
+        const row = payload.series[u.id];
+        if (!row) continue;
+        out[u.id] = buildGrid(row.marks, row.latest, gridNowMin, m);
+      }
+      return out;
+    };
+    return { oi: make("oi"), volume: make("volume"), changeOi: make("changeOi") };
+  }, [payload, gridNowMin]);
+  const boards = metricBoards?.[metric] ?? null;
   const grid = boards?.[index] ?? [];
-  const current = livePcr(series, grid, metric);
-  const lastFilled = [...grid].reverse().find((s) => s.pcr != null);
-  const band = (grid.find((s) => s.live) ?? lastFilled)?.band ?? "empty";
-  const sessionIso = series?.spot.timestamp?.slice(0, 10) ?? "";
-  const kindNow = series ? expiryKind(series.expiry, sessionIso || (now ? formatIstIsoDate(now) : "2026-08-27")) : "weekly";
+  const axis = boards?.NIFTY ?? boards?.[PCR_INDICES[0].id] ?? [];
+
+  const deskRows = useMemo(() => {
+    if (!metricBoards) return [];
+    return PCR_INDICES.map((u) => {
+      const oi = metricBoards.oi[u.id] ?? [];
+      const book = readBook(u.short, oi, metricBoards.volume[u.id] ?? [], metricBoards.changeOi[u.id] ?? []);
+      const last = lastValidSlot(oi, "oi");
+      const raw = book.book?.to ?? last?.pcr ?? payload?.series[u.id]?.livePcr ?? payload?.series[u.id]?.latest?.pcr ?? null;
+      const pcr = isValidPrint(raw, "oi") ? raw : null;
+      const filled = oi.filter((s) => isValidPrint(s.pcr, "oi"));
+      const prev = filled.length >= 2 ? filled[filled.length - 2] : null;
+      const delta =
+        pcr != null && prev?.pcr != null
+          ? Math.round((pcr - prev.pcr) * 100) / 100
+          : (last?.delta ?? null);
+      const row = payload?.series[u.id];
+      const q = liveQuotes?.[underlyingQuoteKey(u.id)];
+      const liveLtp = typeof q?.last_price === "number" && q.last_price > 0 ? q.last_price : null;
+      const close = typeof q?.ohlc?.close === "number" && q.ohlc.close > 0 ? q.ohlc.close : null;
+      const liveChg =
+        liveLtp != null && close != null
+          ? Math.round(((liveLtp - close) / close) * 10000) / 100
+          : (typeof q?.change === "number" ? q.change : null);
+      const kind = row ? expiryKind(row.expiry, sessionIso || todayIso) : "weekly";
+      const expiry = row
+        ? `${kind === "today" ? "Today" : kind === "weekly" ? "Wk" : "Mo"} ${formatExpiry(row.expiry)}`
+        : "—";
+      const action = book.book?.action ?? liveAction(pcr);
+      const insight = readPcr(oi, row?.spot.changePer ?? null);
+      const band = last?.band ?? pcrBand(pcr);
+      return {
+        id: u.id,
+        name: u.short,
+        pcr,
+        action,
+        why: book.book?.why ?? "Waiting on the OI print.",
+        path: book.book ? flowPath(book.book) : "—",
+        move: book.book?.move ?? delta,
+        vol: book.volumeStance,
+        doi: book.deltaStance,
+        spot: liveLtp ?? row?.spot.ltp ?? null,
+        spotChg: liveChg ?? row?.spot.changePer ?? null,
+        delta,
+        putPct: putShare(pcr),
+        expiry,
+        expiryLong: row ? expiryLong(row.expiry, kind) : "—",
+        maxPain: row?.spot.maxPain ?? null,
+        hhmm: last?.hhmm ?? "",
+        band,
+        insight,
+      };
+    });
+  }, [metricBoards, payload, sessionIso, todayIso, liveQuotes]);
+  const picked = prefs.indices;
+  const pathOn = prefs.path;
+  const showAll = picked.length === PCR_INDICES.length;
+  const cols = PCR_INDICES.filter((u) => picked.includes(u.id));
+  const sumRows = deskRows.filter((r) => picked.includes(r.id));
+  const heatSlots = showAll || cols.length !== 1 ? axis : (boards?.[cols[0].id] ?? grid);
+  const insight = useMemo(() => readPcr(grid, series?.spot.changePer ?? null), [grid, series?.spot.changePer]);
+  const tape = useMemo(() => {
+    const src = cols.length ? cols : PCR_INDICES;
+    const out: { id: string; name: string; action: PcrAction; why: string; clock: string; hhmm: string }[] = [];
+    for (const u of src) {
+      const row = (metricBoards?.oi[u.id] ?? []);
+      for (const s of row) {
+        if (s.delta == null || Math.abs(s.delta) < FLOW_MOVE_MIN) continue;
+        if (!isValidPrint(s.pcr, "oi")) continue;
+        const line = describeFlow(u.short, s.hhmm, s.pcr, s.delta, "oi");
+        out.push({ id: `${u.id}-${s.hhmm}`, name: line.name, action: line.action, why: line.why, clock: line.clock, hhmm: line.hhmm });
+      }
+    }
+    return out.sort((a, b) => hhmmToMinutes(b.hhmm) - hhmmToMinutes(a.hhmm)).slice(0, 8);
+  }, [metricBoards, cols]);
+  const showSec = (id: SectionId) => prefs.sections[id];
+  const showTile = (id: TileField) => prefs.tile[id] !== false;
+  const showCol = (id: ColId) => prefs.cols[id];
+  const toggleSec = (id: SectionId) => writePrefs((p) => ({ ...p, sections: { ...p.sections, [id]: !p.sections[id] } }));
+  const toggleCol = (id: ColId) => writePrefs((p) => ({ ...p, cols: { ...p.cols, [id]: !p.cols[id] } }));
+  const toggleIndex = (id: PcrIndex) => {
+    setIndex(id);
+    writePrefs((p) => {
+      const on = p.indices.includes(id);
+      return { ...p, indices: on ? p.indices.filter((x) => x !== id) : [...p.indices, id] };
+    });
+  };
+  const notesOn = (prefs.layout === "table" && showSec("read")) || showSec("tape") || showSec("legend");
 
   return (
-    <div className="kite-pcr"><style>{CSS}</style>
-      <div className="ko kp">
-      <div className="ko-head">
-        <div className="ko-title-row">
-          <h2>PCR</h2>
-          <div className="kp-clock">{stamp ? `${stamp} IST` : ""}</div>
-        </div>
-        <div className="ko-tabs-row">
-          <div className="ko-tabs" role="tablist" aria-label="View">
-            <button type="button" role="tab" data-on={view === "grid"} aria-selected={view === "grid"} onClick={() => setView("grid")}>
-              Grid
-            </button>
-            <button type="button" role="tab" data-on={view === "board"} aria-selected={view === "board"} onClick={() => setView("board")}>
-              All indices
-            </button>
+    <div className="kite-pcr">
+      <style>{PCR_CSS}</style>
+      <div className="kp-desk">
+        <header className="kp-head">
+          <div className="kp-head-row">
+            <h1 className="kp-title">PCR Desk</h1>
+            <div className="kp-tabs" role="tablist" aria-label="PCR metric">
+              {([["oi", "OI"], ["volume", "Volume"], ["changeOi", "ΔOI"]] as const).map(([id, label]) => (
+                <button key={id} type="button" role="tab" data-on={metric === id} onClick={() => setMetric(id)}>{label}</button>
+              ))}
+            </div>
+            <div className="kp-tools" ref={prefsRef}>
+              <button type="button" className="kp-gear" data-on={prefsOpen} aria-expanded={prefsOpen} aria-label="Settings" onClick={() => setPrefsOpen((v) => !v)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M4 7h10" />
+                  <circle cx="16.5" cy="7" r="2.2" />
+                  <path d="M20 12H10" />
+                  <circle cx="7.5" cy="12" r="2.2" />
+                  <path d="M4 17h10" />
+                  <circle cx="16.5" cy="17" r="2.2" />
+                </svg>
+              </button>
+              {prefsOpen ? (
+                <div className="kp-prefs" role="dialog" aria-label="Settings">
+                  <div className="kp-prefs-head">
+                    <strong>Settings</strong>
+                    <button type="button" className="kp-prefs-x" aria-label="Close settings" onClick={() => setPrefsOpen(false)}>×</button>
+                  </div>
+                  <div className="kp-prefs-body">
+                    <h3>Layout</h3>
+                    <div className="kp-pref-chips" role="tablist" aria-label="Layout">
+                      <button type="button" data-on={prefs.layout === "tiles"} onClick={() => writePrefs((p) => ({ ...p, layout: "tiles" }))}>Tiles</button>
+                      <button type="button" data-on={prefs.layout === "table"} onClick={() => writePrefs((p) => ({ ...p, layout: "table" }))}>Table</button>
+                    </div>
+                    <h3>Indices</h3>
+                    <div className="kp-pref-chips" role="group" aria-label="Indices">
+                      <button type="button" data-on={showAll} onClick={() => writePrefs((p) => ({ ...p, indices: showAll ? [] : PCR_INDICES.map((u) => u.id) }))}>All</button>
+                      {PCR_INDICES.map((u) => (
+                        <button key={u.id} type="button" data-on={picked.includes(u.id)} onClick={() => toggleIndex(u.id)}>{u.short}</button>
+                      ))}
+                    </div>
+                    <h3>View</h3>
+                    <div className="kp-pref-chips">
+                      <button type="button" data-on={pathOn} onClick={() => writePrefs((p) => ({ ...p, path: !p.path }))}>Path</button>
+                    </div>
+                    <h3>Show</h3>
+                    <div className="kp-pref-grid">
+                      {SECTIONS.filter((s) => prefs.layout === "table" || s.id !== "read").map((s) => (
+                        <label key={s.id}>
+                          <input type="checkbox" checked={prefs.sections[s.id]} onChange={() => toggleSec(s.id)} />
+                          {s.label}
+                        </label>
+                      ))}
+                    </div>
+                    {prefs.layout === "table" ? (
+                      <>
+                        <h3>Columns</h3>
+                        <div className="kp-pref-grid">
+                          {TABLE_COLS.map((c) => (
+                            <label key={c.id}>
+                              <input type="checkbox" checked={prefs.cols[c.id]} onChange={() => toggleCol(c.id)} />
+                              {c.label}
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="ko-ins" role="tablist" aria-label="Underlying">
-            {PCR_INDICES.map((u) => {
-              const val = payload?.series[u.id]?.livePcr ?? payload?.series[u.id]?.latest?.pcr ?? null;
-              const chipBand = pcrBand(val);
-              return (
-                <button key={u.id} type="button" role="tab" data-on={index === u.id} aria-selected={index === u.id} onClick={() => { setIndex(u.id); setView("grid"); }}>
-                  {u.short}
-                  {val != null ? <span className={`kp-chip-pcr kp-band-${chipBand}`}>{formatPcr(val)}</span> : null}
-                </button>
-              );
-            })}
-          </div>
+        </header>
+
+        <div className="kp-body">
+          {error && !payload ? <p className="kp-sub">{error}</p> : null}
+          {pathOn ? (
+            <div className="kp-stack" style={{ marginBottom: 10 }}>
+              {(cols.length ? cols : PCR_INDICES).map((u) => {
+                const row = payload?.series[u.id];
+                const slots = boards?.[u.id] ?? [];
+                if (!row) return null;
+                return (
+                  <div key={u.id}>
+                    <p className="kp-kicker">{u.short}</p>
+                    <Path slots={slots} marks={row.marks} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {sumRows.length ? (
+            <div className="kp-stack">
+              {showSec("book") && prefs.layout === "tiles" ? (
+                <div className={`kp-tiles${cols.length === 1 ? " one" : ""}`}>
+                  {sumRows.map((row) => <IndexTile key={row.id} row={row} show={showTile} />)}
+                </div>
+              ) : null}
+              {showSec("book") && prefs.layout === "table" ? (
+                <div className="kp-sheet">
+                  <table className="kp-book">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        {showCol("play") ? <th>Play</th> : null}
+                        {showCol("pcr") ? <th className="num">OI PCR</th> : null}
+                        {showCol("move") ? <th className="num">Move</th> : null}
+                        {showCol("vol") ? <th className="mid">Vol</th> : null}
+                        {showCol("doi") ? <th className="mid">ΔOI</th> : null}
+                        {showCol("spot") ? <th className="num">Spot</th> : null}
+                        {showCol("pc") ? <th className="mid">P/C</th> : null}
+                        {showCol("expiry") ? <th>Expiry</th> : null}
+                        {showCol("pain") ? <th className="num">Pain</th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sumRows.map((row) => {
+                        const kind = ideaKind(row.action);
+                        return (
+                          <tr key={row.id}>
+                            <th>{row.name}</th>
+                            {showCol("play") ? (
+                              <td className="kp-play-cell">
+                                <span className={`kp-play kp-act ${kind}`}>{row.action}</span>
+                                <span className="kp-tip">{playHint(row.action)}</span>
+                              </td>
+                            ) : null}
+                            {showCol("pcr") ? <td className={`kp-pcr kp-act ${kind} num`}>{row.pcr != null ? formatPcr(row.pcr) : "—"}</td> : null}
+                            {showCol("move") ? (
+                              <td className="kp-move num">
+                                {row.path}
+                                {row.move != null ? (
+                                  <span className={(row.move ?? 0) > 0 ? "text-up" : (row.move ?? 0) < 0 ? "text-down" : ""}>
+                                    {" "}{moveTxt(row.move)}
+                                  </span>
+                                ) : null}
+                              </td>
+                            ) : null}
+                            {showCol("vol") ? <td className={`kp-st ${row.vol} mid`}>{stanceLab(row.vol)}</td> : null}
+                            {showCol("doi") ? <td className={`kp-st ${row.doi} mid`}>{stanceLab(row.doi)}</td> : null}
+                            {showCol("spot") ? (
+                              <td className="num">
+                                <span className="kp-spot">
+                                  <span className="ltp">{fmtLtp(row.spot)}</span>
+                                  {row.spotChg != null ? (
+                                    <span className={`kp-chg ${row.spotChg >= 0 ? "text-up" : "text-down"}`}>
+                                      {row.spotChg >= 0 ? "+" : ""}{row.spotChg.toFixed(2)}%
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </td>
+                            ) : null}
+                            {showCol("pc") ? <td className="mid">{row.putPct == null ? "—" : `${Math.round(row.putPct * 100)}/${100 - Math.round(row.putPct * 100)}`}</td> : null}
+                            {showCol("expiry") ? <td>{row.expiry}</td> : null}
+                            {showCol("pain") ? <td className="num">{fmtLtp(row.maxPain)}</td> : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {showSec("heat") ? (
+                <div className={`kp-sheet kp-sheet-heat${cols.length === 1 ? " one" : ""}`}>
+                  <table>
+                    <colgroup>
+                      <col className="c-time" />
+                      {cols.map((u) => <col key={u.id} />)}
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        {cols.map((u) => (
+                          <th key={u.id} data-on={!showAll && index === u.id}>{u.short}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {heatSlots.map((slot, row) => (
+                        <tr key={slot.hhmm} className="kp-heat-row" data-live={slot.live}>
+                          <th>{slot.hhmm}</th>
+                          {cols.map((u) => {
+                            const s = boards?.[u.id]?.[row];
+                            return (
+                              <td key={u.id}>
+                                <span className={`kp-heat kp-band-${s?.band ?? "empty"}`}>
+                                  {s?.pcr == null ? "" : formatPcr(s.pcr)}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          ) : pathOn ? null : (
+            <p className="kp-sub">{payload ? (picked.length ? "No F&O prints yet this session." : "Pick an index.") : "Loading put-call prints…"}</p>
+          )}
+          {payload && notesOn ? (
+            <div className="kp-notes">
+              {prefs.layout === "table" && showSec("read") ? (
+                <div className="kp-card kp-read">
+                  <p className="kp-kicker">Read · {PCR_INDICES.find((u) => u.id === index)?.short}</p>
+                  <h2>{insight.headline}</h2>
+                  <p className="kp-sub">{insight.reason}</p>
+                  <div className="kp-read-play">
+                    <span className={`kp-play-tag kp-act ${ideaKind(insight.action)}`}>{insight.action}</span>
+                    <p className="kp-sub">{insight.play}</p>
+                  </div>
+                  <div className="kp-conv">
+                    <div>
+                      <div className="lab">Bias</div>
+                      <div className={`val ${insight.bias === "Bullish" ? "text-up" : insight.bias === "Bearish" ? "text-down" : ""}`}>{insight.bias}</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="lab">Conviction {insight.conviction}</div>
+                      <div className="kp-bar"><span style={{ width: `${insight.conviction}%` }} /></div>
+                    </div>
+                    <div>
+                      <div className="lab">Regime</div>
+                      <div className="val">{insight.regime}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {showSec("tape") ? (
+                <aside className="kp-card kp-tape">
+                  <p className="kp-kicker">Flow tape</p>
+                  {tape.length ? (
+                    <ul>
+                      {tape.map((e) => (
+                        <li key={e.id}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <b>{e.name} · <span className={`kp-act ${ideaKind(e.action)}`}>{e.action}</span></b>
+                            <span className="kp-sub">{e.clock}</span>
+                          </div>
+                          <div className="kp-sub" style={{ marginTop: 3 }}>{e.why}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="kp-sub" style={{ marginTop: 10 }}>Quiet book — no 6-tick PCR jumps yet.</p>
+                  )}
+                </aside>
+              ) : null}
+              {showSec("legend") ? (
+                <section className="kp-card kp-legend" aria-label="How to read PCR">
+                  <p className="kp-kicker">How to read PCR</p>
+                  <ul>
+                    {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
+                      <li key={id}>
+                        <i className={`kp-swatch kp-band-${id}`} />
+                        {BAND_COPY[id].hint}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="kp-sub" style={{ marginTop: 8 }}>
+                    OI PCR is put open interest ÷ call open interest on the front weekly expiry (monthly when that is the listed series). Watch the 15-minute change, not a single print.
+                  </p>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+          <p className="kp-foot">Settings → Indices to pick Nifty / Bank / Fin / Sensex / Midcap. 1–5 toggle · A all · P path</p>
         </div>
       </div>
-
-      <div className="ko-body">
-        {error && !payload ? <p className="ko-sub">{error}</p> : null}
-
-        {series ? (
-          <div className="kp-now">
-            <div className="kp-now-main">
-              <div className="kp-now-kicker">Intraday + Weekly PCR</div>
-              <div className={`kp-now-val kp-band-${band}`}>{formatPcr(current) || "—"}</div>
-              <div className="kp-now-band">{bandTitle(band) || "Waiting for print"}</div>
-            </div>
-            <div className="kp-now-meta">
-              <div>
-                <span>Δ 15 min</span>
-                <b className={(lastFilled?.delta ?? 0) > 0 ? "text-up" : (lastFilled?.delta ?? 0) < 0 ? "text-down" : "text-muted"}>
-                  {formatDelta(lastFilled?.delta ?? null)}
-                </b>
-              </div>
-              <div>
-                <span>Expiry</span>
-                <b>
-                  {kindNow === "today" ? "Today" : kindNow === "weekly" ? "Weekly" : "Monthly"} · {formatExpiry(series.expiry)}
-                </b>
-              </div>
-              <div>
-                <span>Spot</span>
-                <b>
-                  {fmtLtp(series.spot.ltp)}
-                  {series.spot.changePer != null ? (
-                    <em className={series.spot.changePer >= 0 ? "text-up" : "text-down"}>
-                      {" "}
-                      {series.spot.changePer >= 0 ? "+" : ""}
-                      {series.spot.changePer.toFixed(2)}%
-                    </em>
-                  ) : null}
-                </b>
-              </div>
-              <div>
-                <span>Max pain</span>
-                <b>{fmtLtp(series.spot.maxPain)}</b>
-              </div>
-            </div>
-            <div className="kp-now-viz">
-              <Split pcr={current} />
-              <Spark slots={grid} />
-            </div>
-          </div>
-        ) : (
-          <p className="ko-sub">Loading put-call prints…</p>
-        )}
-
-        <div className="kp-metric" role="tablist" aria-label="PCR metric">
-          {(
-            [
-              ["oi", "OI PCR"],
-              ["volume", "Volume PCR"],
-              ["changeOi", "ΔOI PCR"],
-            ] as const
-          ).map(([id, label]) => (
-            <button key={id} type="button" role="tab" data-on={metric === id} aria-selected={metric === id} onClick={() => setMetric(id)}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {view === "grid" ? (
-          <div className="kp-sheet">
-            <table className="kp-table">
-              <thead>
-                <tr>
-                  <th>{stamp}</th>
-                  <th colSpan={2}>
-                    Intraday + Weekly PCR
-                    <span>{PCR_INDICES.find((u) => u.id === index)?.label}</span>
-                  </th>
-                </tr>
-                <tr className="kp-colhead">
-                  <th>Time</th>
-                  <th>PCR</th>
-                  <th>Δ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grid.map((slot) => (
-                  <tr key={slot.hhmm} data-live={slot.live} data-empty={slot.pcr == null}>
-                    <th>{slot.label}</th>
-                    <td className={`kp-cell kp-band-${slot.band}`}>{slot.pcr == null ? "" : formatPcr(slot.pcr)}</td>
-                    <td className="kp-delta">{formatDelta(slot.delta)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="kp-sheet kp-board-wrap">
-            <table className="kp-table kp-board">
-              <thead>
-                <tr>
-                  <th>{stamp}</th>
-                  {PCR_INDICES.map((u) => (
-                    <th key={u.id}>{u.short}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {grid.map((slot, row) => (
-                  <tr key={slot.hhmm}>
-                    <th>{slot.label}</th>
-                    {PCR_INDICES.map((u) => {
-                      const s = boards?.[u.id]?.[row];
-                      return (
-                        <td key={u.id} className={`kp-cell kp-band-${s?.band ?? "empty"}`}>
-                          {s?.pcr == null ? "" : formatPcr(s.pcr)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <section className="kp-legend" aria-label="How to read PCR">
-          <h3>How to read Put Call Ratio (PCR)</h3>
-          <ul>
-            {(["positive", "highly-positive", "extreme-positive", "negative", "highly-negative", "extreme-negative"] as const).map((id) => (
-              <li key={id}>
-                <i className={`kp-swatch kp-band-${id}`} />
-                {BAND_COPY[id].hint}
-              </li>
-            ))}
-          </ul>
-          <p>
-            Keep note of changes every 15 minutes. OI PCR is put open interest ÷ call open interest on the front weekly expiry
-            (monthly when that is the listed series).
-          </p>
-        </section>
-      </div>
-    </div>
     </div>
   );
 }

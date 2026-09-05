@@ -58,7 +58,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 }));
 
 vi.mock('../../../hooks/useNavigator', () => ({
-  useNavigatorConfig: () => ({ data: { record: { config: { enabled: navigatorEnabled } } } }),
+  useNavigatorConfig: () => ({ data: { record: { config: { enabled: navigatorEnabled }, revision: 1 } } }),
+  // `useEngineToggles` writes Navigator under optimistic concurrency, so the
+  // shared list reaches for its setter even where nothing toggles anything.
+  useSetNavigatorConfig: () => ({ mutate: vi.fn(), isPending: false }),
   useRunNavigatorScan: () => ({ mutate: navigatorScan, mutateAsync: navigatorScan, isPending: false }),
   useCancelNavigatorScan: () => ({ mutate: cancelNavigator, isPending: false }),
 }));
@@ -66,12 +69,20 @@ vi.mock('../../../hooks/useNavigator', () => ({
 vi.mock('../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
 
 // The shell reads every engine to count its tab. None of them matter here.
-vi.mock('../../../hooks/useAdaptiveEdge', () => ({ useAdaptiveEdgeSnapshot: () => ({ data: null }) }));
+vi.mock('../../../hooks/useAdaptiveEdge', () => ({
+  useAdaptiveEdgeSnapshot: () => ({ data: null }),
+  // The dock hides a switched-off engine, so it asks each one whether it is on.
+  useAdaptiveEdgeEngineConfig: () => ({ data: { config: { enabled: true } } }),
+}));
 vi.mock('../../../hooks/useOrbSignals', () => ({ useOrbSignals: () => ({ signals: [] }) }));
 vi.mock('../../../hooks/useOrbConfig', () => ({ useOrbConfig: () => ({ data: { config: { enabled: true } } }) }));
-vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({ useAtmPremiumImbalanceSnapshot: () => ({ data: null }) }));
+vi.mock('../../../hooks/useAtmPremiumImbalance', () => ({
+  useAtmPremiumImbalanceSnapshot: () => ({ data: null }),
+  useAtmPremiumImbalanceConfig: () => ({ data: { config: { enabled: true } } }),
+}));
 vi.mock('../../../hooks/useGammaMove', () => ({
   useGammaMoveSnapshot: () => ({ data: null }),
+  useGammaMoveConfig: () => ({ data: { config: { enabled: true } } }),
   useGammaMoveScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
 }));
 vi.mock('../../../hooks/useOiWallFlow', () => ({
