@@ -90,6 +90,24 @@ export function ReplayShellBar() {
         </span>
       )}
 
+    </div>
+  );
+}
+
+/**
+ * Window controls, at the end of the command row.
+ *
+ * Split out of the identity cluster when the four chrome bands collapsed to
+ * two — they belong at the far edge of the row, not adjacent to the title.
+ */
+export function ReplayWindowControls() {
+  const mode = useReplayStore((s) => s.mode);
+  const setMode = useReplayStore((s) => s.setMode);
+  const setOpen = useReplayStore((s) => s.setOpen);
+  const toggle = (target: Exclude<ReplayMode, 'docked'>) =>
+    setMode(mode === target ? 'docked' : target);
+
+  return (
       <div className="rd-shell-controls">
         <button
           type="button"
@@ -132,6 +150,5 @@ export function ReplayShellBar() {
           <Icons.Fullscreen size={13} />
         </button>
       </div>
-    </div>
   );
 }

@@ -551,7 +551,7 @@ describe('unrealised is kept apart from realised', () => {
     setupDock({ status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ status: 'WIN' })] } }) });
     await renderDock();
     const strip = screen.getByTestId('replay-metrics');
-    const cell = within(strip).getByText('Unrealised').parentElement!;
+    const cell = within(strip).getByText('Open').parentElement!;
     expect(within(cell).getByText('—')).toBeTruthy();
   });
 
@@ -567,7 +567,7 @@ describe('unrealised is kept apart from realised', () => {
     const strip = screen.getByTestId('replay-metrics');
     expect(within(strip).getByText('+₹340.00')).toBeTruthy();
     // And the realised figure must NOT have absorbed it.
-    const realised = within(strip).getByText('Realized P&L').parentElement!;
+    const realised = within(strip).getByText('P&L').parentElement!;
     expect(within(realised).getByText('+₹0.00')).toBeTruthy();
   });
 });

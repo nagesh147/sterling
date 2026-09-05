@@ -15,7 +15,7 @@ import { ReplayConfigSheet } from './ReplayConfigPanel';
 import { ReplayFilterChips, ReplayFilters } from './ReplayFilters';
 import { ReplayMetricsStrip } from './ReplayMetricsStrip';
 import { ReplaySessionPicker } from './ReplaySessionPicker';
-import { ReplayShellBar } from './ReplayShellBar';
+import { ReplayShellBar, ReplayWindowControls } from './ReplayShellBar';
 import { ReplayShortcuts } from './ReplayShortcuts';
 import { ReplaySignalsTable } from './ReplaySignalsTable';
 import { ReplaySummaryModal } from './ReplaySummaryModal';
@@ -228,16 +228,19 @@ export function ReplayDock() {
         />
       )}
 
-      <ReplayShellBar />
-
-      <div className="rd-rail">
+      {/* TWO bands, not four. Identity, transport and the timeline share one
+          row; the numbers share a row with the view controls. The dock used to
+          stack shell + rail + metrics + view for 136px before any data. */}
+      <div className="rd-bar rd-bar-cmd">
+        <ReplayShellBar />
         <ReplayTransport />
         <ReplayTimeline />
+        <ReplayWindowControls />
       </div>
 
-      <ReplayMetricsStrip />
-
-      <div className="rd-viewbar">
+      <div className="rd-bar rd-bar-meta">
+        <ReplayMetricsStrip />
+        <div className="rd-viewbar">
         <Segmented
           idPrefix="replay"
           label="Replay view"
@@ -251,16 +254,6 @@ export function ReplayDock() {
         />
         <ReplayFilterChips />
         <div className="rd-viewbar-right">
-          <button
-            type="button"
-            className="rd-btn"
-            onClick={exportCurrent}
-            disabled={(tab === 'trades' ? trades.length : events.length) === 0}
-            title="Export the current tab to CSV (E)"
-          >
-            <Icons.Export size={13} />
-            {bucket === 'sm' ? '' : 'Export'}
-          </button>
           <ReplaySessionPicker widthBucket={bucket} />
           <ReplayFilters />
           <button
@@ -272,8 +265,8 @@ export function ReplayDock() {
             data-testid="replay-configure"
           >
             <Icons.Config size={13} />
-            {bucket === 'sm' ? '' : 'Configure'}
           </button>
+        </div>
         </div>
       </div>
 

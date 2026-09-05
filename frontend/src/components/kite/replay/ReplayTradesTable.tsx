@@ -38,16 +38,16 @@ const TradeRow = memo(function TradeRow({
   const win = t.status === 'WIN';
   return (
     <tr className="rd-tr" data-tone={open ? 'open' : win ? 'bull' : 'bear'} tabIndex={0}>
-      <td className="rd-mono" style={{ color: 'var(--k-blue)' }}>{t.trade_id}</td>
+      <td data-col="id" className="rd-mono" style={{ color: 'var(--k-blue)' }}>{t.trade_id}</td>
       <td className="rd-num">{fmtTime(t.entry_time_iso)}</td>
-      <td className="rd-num">
+      <td data-col="out" className="rd-num">
         {open ? (
           <span className="rd-status-chip" data-tone="open">OPEN</span>
         ) : (
           fmtTime(t.exit_time_iso)
         )}
       </td>
-      <td data-align="right" className="rd-num">{fmtDuration(t.duration_mins)}</td>
+      <td data-align="right" data-col="held" className="rd-num">{fmtDuration(t.duration_mins)}</td>
       <td>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: strategyTone(t.strategy) }}>
           <span className="rd-dot-tone" />
@@ -58,7 +58,7 @@ const TradeRow = memo(function TradeRow({
         <strong>{t.symbol}</strong>
         <span className="rd-sub">{t.underlying} · {t.strike} {t.opt_type}</span>
       </td>
-      <td data-align="right" className="rd-num">
+      <td data-align="right" data-col="size" className="rd-num">
         {fmtInt(t.lots)}L<span className="rd-sub">{fmtInt(t.quantity)} qty</span>
       </td>
       <td data-align="right" className="rd-num">
@@ -83,12 +83,12 @@ const TradeRow = memo(function TradeRow({
           </>
         )}
       </td>
-      <td data-align="right" className="rd-num">
+      <td data-align="right" data-col="sltgt" className="rd-num">
         <span className="rd-sl">{fmtInr(t.stop_loss)}</span>
         <span className="rd-sub rd-tp">{fmtInr(t.target_price)}</span>
       </td>
       {hasFriction && (
-        <td data-align="right" className="rd-num">
+        <td data-align="right" data-col="slip" className="rd-num">
           {t.slippage == null || t.slippage === 0 ? (
             <span className="rd-absent">{ABSENT}</span>
           ) : (
@@ -209,17 +209,17 @@ export const ReplayTradesTable = memo(function ReplayTradesTable() {
         <table className="rd-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th data-col="id">ID</th>
               <th>In</th>
-              <th>Out</th>
-              <th data-align="right">Held</th>
+              <th data-col="out">Out</th>
+              <th data-align="right" data-col="held">Held</th>
               <th>Strategy</th>
               <th>Contract</th>
-              <th data-align="right">Size</th>
+              <th data-align="right" data-col="size">Size</th>
               <th data-align="right">Entry</th>
               <th data-align="right">Exit</th>
-              <th data-align="right">SL / Target</th>
-              {hasFriction && <th data-align="right">Slippage</th>}
+              <th data-align="right" data-col="sltgt">SL / Target</th>
+              {hasFriction && <th data-align="right" data-col="slip">Slippage</th>}
               <th data-align="center">Status</th>
               <th data-align="right">P&L</th>
             </tr>
@@ -290,8 +290,8 @@ export const ReplayTradesTable = memo(function ReplayTradesTable() {
         </table>
       </div>
 
-      <div className="rd-pane-note" style={{ background: 'transparent', borderTop: '1px solid var(--k-border)', borderBottom: 0 }}>
-        <span style={{ marginRight: 6 }}>Group by</span>
+      <div className="rd-groupby">
+        <span style={{ marginRight: 4 }}>Group</span>
         {(['none', 'strategy', 'contract'] as TradeGroupBy[]).map((g) => (
           <button
             key={g}

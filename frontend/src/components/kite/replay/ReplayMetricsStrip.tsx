@@ -37,6 +37,7 @@ const Metric = memo(function Metric({
   title,
   flashEnabled,
   hideBelow,
+  bar = true,
 }: {
   label: string;
   value: string;
@@ -44,11 +45,13 @@ const Metric = memo(function Metric({
   tone?: Tone;
   title?: string;
   flashEnabled: boolean;
-  hideBelow?: 'lg' | 'md';
+  hideBelow?: 'lg' | 'md' | 'always';
+  /** `false` keeps the metric computed but off the 30px bar. */
+  bar?: boolean;
 }) {
   const flash = useValueFlash(value, flashEnabled);
   return (
-    <div className="rd-metric" title={title} data-hide-below={hideBelow}>
+    <div className="rd-metric" title={title} data-hide-below={hideBelow} data-bar={bar}>
       <span className="rd-metric-label">{label}</span>
       <span className="rd-metric-value" data-tone={tone} data-flash={flash || undefined}>
         {value}
@@ -98,14 +101,14 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
   return (
     <div className="rd-metrics" role="region" aria-label="Replay performance" data-testid="replay-metrics">
       <Metric
-        label="Realized P&L"
+        label="P&L"
         value={fmtSignedInr(pnl)}
         sub={`${closed.length} closed`}
         tone={pnl >= 0 ? 'profit' : 'loss'}
         flashEnabled={flashEnabled}
       />
       <Metric
-        label="Win rate"
+        label="Win"
         value={winRate == null ? ABSENT : fmtPct(winRate)}
         sub={`${wins}W · ${losses}L`}
         tone={winRate == null ? 'dim' : winRate >= 50 ? 'profit' : 'loss'}
@@ -113,7 +116,7 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
         flashEnabled={flashEnabled}
       />
       <Metric
-        label="Unrealised"
+        label="Open"
         value={openCount === 0 ? ABSENT : fmtSignedInr(unrealised)}
         sub={openCount ? `${openCount} open` : undefined}
         tone={openCount === 0 ? 'absent' : unrealised >= 0 ? 'profit' : 'loss'}
@@ -132,15 +135,15 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
       />
       <Metric label="Signals" value={fmtInt(signals)} flashEnabled={flashEnabled} />
       <Metric
-        label="Avg trade"
+        label="Avg" bar={false}
         value={avg == null ? ABSENT : fmtSignedInr(avg)}
         tone={avg == null ? 'absent' : avg >= 0 ? 'profit' : 'loss'}
         title={avg == null ? 'No trade has closed yet.' : 'Realized P&L divided by closed trades.'}
         flashEnabled={flashEnabled}
-        hideBelow="lg"
+        hideBelow="always"
       />
       <Metric
-        label="Exposure"
+        label="Exposure" bar={false}
         value={openLots ? `${fmtInt(openLots)}L` : ABSENT}
         sub={openQty ? `${fmtInt(openQty)} qty` : undefined}
         tone={openLots ? undefined : 'absent'}
@@ -151,7 +154,7 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
       {/* The honesty case. `null` means the engine did not model friction; it
           is NOT zero, and it must not be rendered as a number. */}
       <Metric
-        label="Slippage"
+        label="Slippage" bar={false}
         value={drag == null ? ABSENT : fmtSignedInr(-drag)}
         tone={drag == null ? 'absent' : 'loss'}
         title={
@@ -163,7 +166,7 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
         hideBelow="lg"
       />
       <Metric
-        label="Elapsed"
+        label="Elapsed" bar={false}
         value={fmtElapsed(elapsed)}
         sub={barsPerSec ? `${barsPerSec.toFixed(0)} bars/s` : undefined}
         tone="dim"

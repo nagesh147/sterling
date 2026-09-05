@@ -71,11 +71,11 @@ const SignalRow = memo(function SignalRow({
       <td>
         <span className="rd-dir" data-tone={bull ? 'bull' : 'bear'}>{bull ? 'LONG' : 'SHORT'}</span>
       </td>
-      <td style={{ color: 'var(--k-dim)' }}>{ev.strength}</td>
+      <td data-col="strength" style={{ color: 'var(--k-dim)' }}>{ev.strength}</td>
       <td data-align="right" className="rd-num">{fmtInr(ev.entry)}</td>
       <td data-align="right" className="rd-num rd-sl">{fmtInr(ev.stop)}</td>
       <td data-align="right" className="rd-num rd-tp">{fmtInr(ev.target)}</td>
-      <td data-align="right" className="rd-num">
+      <td data-align="right" data-col="rr" className="rd-num">
         {rr == null ? <span className="rd-absent">{ABSENT}</span> : `${rr.toFixed(1)}×`}
       </td>
     </tr>
@@ -175,11 +175,11 @@ export const ReplaySignalsTable = memo(function ReplaySignalsTable() {
             <th>Strategy</th>
             <th>{caps?.contract_on_signal ? 'Contract' : 'Underlying'}</th>
             <th>Dir</th>
-            <th>Strength</th>
+            <th data-col="strength">Strength</th>
             <th data-align="right">Entry</th>
             <th data-align="right">SL</th>
             <th data-align="right">Target</th>
-            <th data-align="right">R:R</th>
+            <th data-align="right" data-col="rr">R:R</th>
           </tr>
         </thead>
         <tbody>

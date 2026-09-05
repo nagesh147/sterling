@@ -1462,3 +1462,229 @@ kbd.rd-kbd {
   font-weight: 600;
 }
 .rd-session-note strong { font-weight: 800; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CALM PASS
+
+   The dock stacked FOUR chrome bands — shell, rail, metrics, view — for 136px
+   before a single row of data, then wrapped the data in bordered, rounded
+   panes that each carried their own header bar. Plus a coloured rule down every
+   row, a dot per strategy, and a sub-line under half the cells.
+
+   Two bands now, ~68px, and the content is plain. Everything below overrides
+   the rules above rather than editing them in place, so the diff stays readable
+   and the earlier structure is recoverable.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Two bands ────────────────────────────────────────────────────────── */
+
+.rd-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  background: var(--k-bg);
+}
+.rd-bar-cmd {
+  height: 38px;
+  border-bottom: 1px solid var(--k-border);
+}
+.rd-bar-meta {
+  height: 30px;
+  border-bottom: 1px solid var(--k-border);
+}
+.replay-dock[data-width="sm"] .rd-bar { flex-wrap: wrap; height: auto; padding: 5px 10px; }
+
+/* The identity cluster loses its own band and its own surface. */
+.rd-shell {
+  height: auto;
+  padding: 0;
+  gap: 7px;
+  background: none;
+  border-bottom: 0;
+  flex-shrink: 0;
+}
+.rd-shell-mode,
+.rd-shell-bars,
+.rd-shell-pct { display: none; }          /* the timeline already says all three */
+
+/* One quiet state marker instead of a bordered, tinted, prefixed pill. */
+.rd-state {
+  border: 0;
+  background: none !important;
+  padding: 0;
+  letter-spacing: .05em;
+}
+.rd-state-prefix { display: none; }
+
+.rd-rail,
+.rd-metrics,
+.rd-viewbar {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border-bottom: 0;
+  flex-shrink: 0;
+}
+.rd-metrics { gap: 0; overflow: visible; }
+.rd-viewbar { flex: 1; min-width: 0; }
+
+/* ── Fewer lines ──────────────────────────────────────────────────────── */
+
+/* Metrics separated by space, not by a rule apiece. */
+.rd-metric + .rd-metric { border-left: 0; }
+.rd-metric { padding: 0 9px 0 0; gap: 4px; }
+.rd-metric-sub { display: none; }         /* the detail lives in the tooltip */
+
+.rd-rail-divider,
+.rd-shell-divider { display: none; }
+
+/* Transport: no filled block, just a clear primary glyph. */
+.rd-tbtn-primary {
+  width: 26px;
+  height: 26px;
+  margin: 0 2px;
+  border-radius: 5px;
+  background: none;
+  color: var(--k-green);
+}
+.rd-tbtn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--k-green) 14%, transparent); }
+.rd-tbtn-primary[data-kind="pause"] { background: none; color: var(--k-amber); }
+.rd-tbtn-primary[data-kind="pause"]:hover:not(:disabled) { background: color-mix(in srgb, var(--k-amber) 14%, transparent); }
+.rd-tbtn-primary[data-kind="retry"] { background: none; color: var(--k-red); }
+.rd-tbtn { width: 24px; height: 24px; }
+
+/* Speed: one quiet segmented run, no per-pill border or hatch. */
+.rd-speed {
+  border: 0;
+  background: none;
+  min-width: 26px;
+  padding: 0 5px;
+  height: 20px;
+}
+.rd-speed[data-active="true"] {
+  background: var(--k-surface-hover);
+  color: var(--k-text);
+  border: 0;
+}
+.rd-speed[data-max="true"] { background-image: none; }
+.rd-speed[data-active="true"][data-max="true"] { background-image: none; }
+.rd-speeds { border-radius: 4px; background: var(--k-surface); padding: 2px; }
+
+/* ── No boxes around the data ─────────────────────────────────────────── */
+
+.rd-split { gap: 0; padding: 0; }
+.rd-split > .rd-pane + .rd-pane { border-left: 1px solid var(--k-border); }
+
+.rd-pane {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.rd-pane-head {
+  height: 24px;
+  background: none;
+  border-bottom: 1px solid var(--k-border);
+  color: var(--k-dim);
+  font-size: var(--rd-fs-micro);
+  letter-spacing: .07em;
+}
+.rd-panel > .rd-pane { margin: 0 !important; border-radius: 0 !important; }
+
+/* Segmented control: type weight carries selection, not a filled chip. */
+.rd-seg { border: 0; background: none; height: 22px; }
+.rd-seg-indicator { display: none; }
+.rd-seg-btn { padding: 0 8px; }
+.rd-seg-btn[aria-selected="true"] {
+  color: var(--k-text);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 0 var(--k-brand);
+}
+
+/* Buttons recede until hovered. */
+.rd-btn {
+  border-color: transparent;
+  background: none;
+}
+.rd-btn:hover:not(:disabled) { background: var(--k-surface-hover); border-color: var(--k-border); }
+.rd-btn[data-variant="primary"] { border-color: var(--k-brand); }
+
+/* ── Less colour in the rows ──────────────────────────────────────────── */
+
+/* Direction reads from the DIR cell. A rule down every row as well turned the
+   table into a barcode. */
+.rd-tr[data-tone="bull"] > td:first-child::before,
+.rd-tr[data-tone="bear"] > td:first-child::before,
+.rd-tr[data-tone="open"] > td:first-child::before { display: none; }
+
+/* Strategy colour survives in the filter list, where it disambiguates. In a
+   table the name already does that, and 47 dots do not. */
+.rd-table .rd-dot-tone { display: none; }
+
+/* Status as weight and colour, not a bordered tinted capsule. */
+.rd-table .rd-status-chip {
+  border: 0;
+  background: none !important;
+  padding: 0;
+}
+
+/* Secondary cell text on request, not permanently doubling every row. */
+.rd-table .rd-sub { display: none; }
+
+.rd-table td { border-bottom: 0; }
+.rd-table tbody tr + tr > td { border-top: 1px solid var(--k-hairline); }
+.rd-table th { border-bottom: 1px solid var(--k-border); }
+
+.rd-tfoot td { border-top: 1px solid var(--k-border); }
+
+/* The dock's own edge is enough; it does not also need an inset accent bar. */
+.replay-dock[data-state="running"],
+.replay-dock[data-state="paused"] { box-shadow: none; }
+.replay-dock[data-state="error"] { box-shadow: inset 0 2px 0 0 var(--k-red); }
+
+/* ── Calm pass 2: the meta row was carrying nine metrics AND every control ── */
+
+/* Metrics that are computed but not worth 90px of a 30px row. They stay in the
+   summary and in the group tooltip. */
+.rd-metric[data-bar="false"],
+.rd-metric[data-hide-below="always"] { display: none; }
+
+.rd-metric-label {
+  font-size: var(--rd-fs-micro);
+  letter-spacing: .04em;
+  font-weight: 600;
+}
+.rd-metric { padding-right: 12px; }
+
+/* Controls: icon-only, so the row stops competing with itself for width. */
+.rd-viewbar-right .rd-btn { padding: 0 6px; }
+.rd-viewbar-right { gap: 2px; }
+
+/* Split view is two ~470px columns; the lowest-value columns step out there
+   and return in the single-tab views. */
+.rd-split .rd-table [data-col="strength"],
+.rd-split .rd-table [data-col="rr"],
+.rd-split .rd-table [data-col="held"],
+.rd-split .rd-table [data-col="sltgt"] { display: none; }
+
+/* Group-by, as a quiet footer control rather than a full-width banded row. */
+.rd-groupby {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font-size: var(--rd-fs-micro);
+  color: var(--k-dim);
+  border-top: 1px solid var(--k-hairline);
+}
+
+/* The trades table is 13 columns; a half-width split pane fits about seven.
+   In split view it keeps the ones that answer "what happened": time, what,
+   in, out, and the money. The rest return in the Trades tab. */
+.rd-split .rd-table [data-col="id"],
+.rd-split .rd-table [data-col="out"],
+.rd-split .rd-table [data-col="size"],
+.rd-split .rd-table [data-col="slip"] { display: none; }
