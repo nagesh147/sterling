@@ -217,3 +217,38 @@ async def test_stopping_leaves_end_of_session_positions_open():
     await r.stop()
     assert trade.status == "OPEN"
     assert r._open_by_symbol == {}
+
+
+# ── Dead air at the head of a session ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_replay_starts_on_the_first_bar_not_the_configured_open():
+    """Reported as "replay not working, clicking does nothing".
+
+    The default session opens at 09:00 but NSE's first candle is 09:15, and the
+    loop advanced the clock by `speed * dt` whether or not any data lay ahead.
+    At the default 5x that is 900 simulated seconds of nothing — THREE REAL
+    MINUTES of an empty dock before the first print, which is indistinguishable
+    from a broken replay.
+    """
+    import asyncio
+
+    runner = SimulationRunner()
+    await runner.start(SimConfig(
+        date="2026-09-04", start_time="09:00:00", end_time="15:30:00",
+        speed=5.0, resolution="5m", instruments=["NIFTY"],
+    ))
+
+    # Give the loader a moment to hydrate and enter the loop.
+    for _ in range(80):
+        await asyncio.sleep(0.05)
+        if runner.status.state == SimState.RUNNING and runner.status.bars_played:
+            break
+
+    st = runner.status
+    await runner.stop()
+
+    assert st.bars_total > 0, "no candles were loaded, so this proves nothing"
+    assert st.bars_played > 0, "the clock was still crawling through pre-open dead air"
+    # The clock must have jumped to the data rather than started at 09:00.
+    assert st.current_time_iso >= "09:15:00"

@@ -206,7 +206,9 @@ function initialDraft(): ReplayDraft {
   return {
     date: d,
     endDate: d,
-    startTime: '09:00:00',
+    // Market open. 09:00 is pre-open and has no candles, so it opened every
+    // replay on a dead stretch the user had to sit through.
+    startTime: '09:15:00',
     endTime: '15:30:00',
     speed: 5,
     resolution: '5m',

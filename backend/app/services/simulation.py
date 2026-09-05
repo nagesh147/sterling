@@ -1167,7 +1167,21 @@ class SimulationRunner:
 
         self._start_epoch = start_epoch
         self._end_epoch = end_epoch
-        self._current_sim_epoch = float(start_epoch)
+
+        # Start ON the first bar, not at the configured session start.
+        #
+        # The default session opens at 09:00 but NSE's first candle is 09:15,
+        # and the loop advances the clock by `speed * dt` regardless of whether
+        # any data lies ahead. At the default 5x that is THREE REAL MINUTES of
+        # an empty dock before the first print — indistinguishable from the
+        # replay being broken, which is exactly how it was reported.
+        first_bar_epoch = float(all_bars[0]["time"])
+        self._current_sim_epoch = max(float(start_epoch), min(first_bar_epoch, float(end_epoch)))
+        if first_bar_epoch > start_epoch:
+            log.info(
+                "Skipping %.0fs of pre-session dead air (%s -> first bar).",
+                first_bar_epoch - start_epoch, cfg.start_time,
+            )
 
         try:
             total_sim_seconds = float(max(1, end_epoch - start_epoch))

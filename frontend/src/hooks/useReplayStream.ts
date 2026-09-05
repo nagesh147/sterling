@@ -14,6 +14,8 @@ const API = '/api/v1/simulation';
 const POLL_RUNNING_MS = 500;
 const POLL_PAUSED_MS = 2000;
 const POLL_BACKGROUND_MS = 2000;
+/** How long a connected stream may stay silent before we stop trusting it. */
+const SSE_SILENCE_MS = 6000;
 
 async function fetchStatus(sinceEvents?: number, sinceTrades?: number): Promise<ReplayStatus | null> {
   const qs =
@@ -91,6 +93,7 @@ function applyStatus(next: ReplayStatus, wasDelta: boolean) {
 export function useReplayStream(enabled: boolean): void {
   const esRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppedRef = useRef(false);
   const backoffRef = useRef(500);
 
@@ -107,6 +110,27 @@ export function useReplayStream(enabled: boolean): void {
     const closeStream = () => {
       esRef.current?.close();
       esRef.current = null;
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
+    };
+
+    /**
+     * A stream that opens and then says nothing is indistinguishable from a
+     * quiet market, and `onerror` never fires for it — so a buffering proxy, a
+     * dropped connection or a paused runner would leave the dock frozen at
+     * whatever it last knew, with polling never starting because `openStream()`
+     * reported success. Every event re-arms this; if it expires, abandon the
+     * stream and poll.
+     */
+    const armWatchdog = () => {
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      watchdogRef.current = setTimeout(() => {
+        if (stoppedRef.current) return;
+        closeStream();
+        void poll();
+      }, SSE_SILENCE_MS);
     };
 
     /* ── polling ─────────────────────────────────────────────────────── */
@@ -153,12 +177,15 @@ export function useReplayStream(enabled: boolean): void {
       try {
         const es = new EventSource(`${API}/stream`);
         esRef.current = es;
+        armWatchdog();
 
         es.addEventListener('state', (e) => {
+          armWatchdog();
           const d = JSON.parse((e as MessageEvent).data);
           useReplayStore.getState().applyFrame(d);
         });
         es.addEventListener('frame', (e) => {
+          armWatchdog();
           const d = JSON.parse((e as MessageEvent).data);
           const store = useReplayStore.getState();
           store.applyFrame({
@@ -177,10 +204,12 @@ export function useReplayStream(enabled: boolean): void {
           });
         });
         es.addEventListener('signal', (e) => {
+          armWatchdog();
           const d = JSON.parse((e as MessageEvent).data) as ReplaySignal;
           useReplayStore.getState().appendSignals([d]);
         });
         es.addEventListener('trade', (e) => {
+          armWatchdog();
           const d = JSON.parse((e as MessageEvent).data) as ReplayTrade;
           useReplayStore.getState().upsertTrades([d]);
         });
