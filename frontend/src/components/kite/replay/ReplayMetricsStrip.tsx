@@ -77,12 +77,14 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
   const elapsed = useReplayStore((s) => s.status.elapsed_real_s);
   const barsPlayed = useReplayStore((s) => s.status.bars_played);
   const speed = useReplayStore((s) => s.status.config?.speed ?? s.draft.speed);
+  const openCountSrv = useReplayStore((s) => s.status.open_positions ?? 0);
+  const unrealised = useReplayStore((s) => s.status.unrealised_pnl ?? 0);
 
   const flashEnabled = speed < HIGH_SPEED_THRESHOLD;
 
   const decided = wins + losses;
   const closed = trades.filter((t) => t.status === 'WIN' || t.status === 'LOSS');
-  const openCount = trades.length - closed.length;
+  const openCount = openCountSrv || trades.length - closed.length;
   const winRate = decided > 0 ? (wins / decided) * 100 : null;
   const avg = closed.length ? pnl / closed.length : null;
   const openLots = trades
@@ -108,6 +110,18 @@ export const ReplayMetricsStrip = memo(function ReplayMetricsStrip() {
         sub={`${wins}W · ${losses}L`}
         tone={winRate == null ? 'dim' : winRate >= 50 ? 'profit' : 'loss'}
         title={winRate == null ? 'No trade has closed yet.' : 'Wins as a share of closed trades.'}
+        flashEnabled={flashEnabled}
+      />
+      <Metric
+        label="Unrealised"
+        value={openCount === 0 ? ABSENT : fmtSignedInr(unrealised)}
+        sub={openCount ? `${openCount} open` : undefined}
+        tone={openCount === 0 ? 'absent' : unrealised >= 0 ? 'profit' : 'loss'}
+        title={
+          openCount === 0
+            ? 'No position is open, so there is nothing marked to market.'
+            : 'Mark-to-market on open positions. Not included in realised P&L.'
+        }
         flashEnabled={flashEnabled}
       />
       <Metric

@@ -52,6 +52,17 @@ async def stop_sim():
     return await simulation_runner.stop()
 
 
+@router.post("/clear", response_model=SimStatus)
+async def clear_sim():
+    """Discard a finished session's signals and trades."""
+    if simulation_runner.status.state != SimState.IDLE:
+        raise HTTPException(
+            400,
+            detail={"code": "not_idle", "message": "Stop the replay before clearing it."},
+        )
+    return simulation_runner.clear()
+
+
 @router.post("/pause", response_model=SimStatus)
 async def pause_sim():
     if simulation_runner.status.state != SimState.RUNNING:

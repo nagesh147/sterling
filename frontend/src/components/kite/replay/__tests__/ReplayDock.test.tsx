@@ -489,3 +489,85 @@ describe('trades totals row', () => {
     expect(footCells).toBe(headerCells);
   });
 });
+
+/* ── A finished session must not look like a live one ───────────────────── */
+
+describe('idle with results', () => {
+  // Reported from the running app: the dock showed a full signal feed and
+  // trade list before the user had pressed play. The runner keeps the last
+  // session's ledger for review; the dock has to say so.
+  it('labels a finished session and offers to clear it', async () => {
+    setupDock({
+      status: makeStatus({
+        state: 'idle',
+        session_complete: true,
+        config: { date: '2026-09-04', start_time: '09:00:00', end_time: '15:30:00', speed: 5, resolution: '5m', instruments: [] },
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    const note = screen.getByTestId('replay-historical-note');
+    expect(note.textContent).toContain('finished');
+    expect(note.textContent).toContain('Nothing is replaying now');
+    expect(within(note).getByRole('button', { name: 'Clear results' })).toBeTruthy();
+  });
+
+  it('says nothing when the runner is genuinely empty', async () => {
+    setupDock();
+    await renderDock();
+    expect(screen.queryByTestId('replay-historical-note')).toBeNull();
+  });
+
+  it('says nothing while a replay is actually running', async () => {
+    setupDock({
+      status: makeStatus({
+        state: 'running',
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    expect(screen.queryByTestId('replay-historical-note')).toBeNull();
+  });
+
+  it('clearing empties the ledger and calls the runner', async () => {
+    const { fetchSpy } = setupDock({
+      status: makeStatus({
+        state: 'idle',
+        session_complete: true,
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    fetchSpy.mockClear();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Clear results' }));
+    });
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).includes('/clear'))).toBe(true);
+  });
+});
+
+describe('unrealised is kept apart from realised', () => {
+  it('shows an em dash when nothing is open', async () => {
+    setupDock({ status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ status: 'WIN' })] } }) });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    const cell = within(strip).getByText('Unrealised').parentElement!;
+    expect(within(cell).getByText('—')).toBeTruthy();
+  });
+
+  it('reports the mark-to-market when a position is open', async () => {
+    setupDock({
+      status: makeStatus({
+        open_positions: 1,
+        unrealised_pnl: 340,
+        stats: { ...DEFAULT_STATUS.stats, pnl: 0, trades: [makeTrade({ status: 'OPEN', pnl_usd: 340 })] },
+      }),
+    });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    expect(within(strip).getByText('+₹340.00')).toBeTruthy();
+    // And the realised figure must NOT have absorbed it.
+    const realised = within(strip).getByText('Realized P&L').parentElement!;
+    expect(within(realised).getByText('+₹0.00')).toBeTruthy();
+  });
+});

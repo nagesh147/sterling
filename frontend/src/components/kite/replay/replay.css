@@ -1447,3 +1447,18 @@ kbd.rd-kbd {
 .replay-dock[data-width="sm"] .rd-metric[data-hide-below="md"] {
   display: none;
 }
+
+/* A finished session's results, shown while nothing is replaying. */
+.rd-session-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--k-amber) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--k-amber) 28%, transparent);
+  color: var(--k-amber);
+  font-size: var(--rd-fs-body);
+  font-weight: 600;
+}
+.rd-session-note strong { font-weight: 800; }

@@ -93,6 +93,13 @@ class SimTradeEvent(BaseModel):
     raw_entry: Optional[float] = None
     raw_exit: Optional[float] = None
     slippage: Optional[float] = None
+    # The UNDERLYING levels this position is judged against. Carried on the
+    # trade so a later bar can settle it, rather than the outcome being decided
+    # from future bars at the moment of entry.
+    spot_entry: Optional[float] = None
+    spot_stop: Optional[float] = None
+    spot_target: Optional[float] = None
+    bars_held: int = 0
 
 
 class SimStats(BaseModel):
@@ -138,6 +145,11 @@ class SimCapabilities(BaseModel):
 class SimStatus(BaseModel):
     state: SimState = SimState.IDLE
     config: Optional[SimConfig] = None
+    # A finished session's ledger is worth keeping for review, but the client
+    # has to be able to tell it apart from one that is still running. Without
+    # this the dock showed a completed session's trades before you pressed play.
+    session_id: Optional[str] = None
+    session_complete: bool = False
     current_time_iso: str = ""
     progress_pct: float = 0.0
     bars_played: int = 0
@@ -149,6 +161,8 @@ class SimStatus(BaseModel):
     capabilities: SimCapabilities = SimCapabilities()
     events_total: int = 0
     trades_total: int = 0
+    open_positions: int = 0
+    unrealised_pnl: float = 0.0
 
 
 INDEX_SYMBOLS = {"NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"}
@@ -294,6 +308,11 @@ class SimulationRunner:
         # ledger the client is accumulating.
         self._subscribers: "List[asyncio.Queue[SimEvent]]" = []
         self._last_frame_at: float = 0.0
+        # Positions currently open, per underlying. A replay that decides a
+        # trade's outcome the instant it opens is not a replay.
+        self._open_by_symbol: Dict[str, List[SimTradeEvent]] = {}
+        self._session_id: Optional[str] = None
+        self._session_complete: bool = False
 
     # ── SSE fan-out ─────────────────────────────────────────────────────
 
@@ -370,6 +389,128 @@ class SimulationRunner:
             if q in self._subscribers:
                 self._subscribers.remove(q)
 
+    # ── Open book ───────────────────────────────────────────────────────
+
+    MAX_HOLD_BARS = 30
+
+    def _premium_for_spot(self, trade: SimTradeEvent, spot: float) -> float:
+        """Option premium at `spot`, by the same delta approximation used at entry.
+
+        ~50% of the underlying's move passes into the premium, floored just
+        above zero — an option can expire worthless but cannot go negative.
+        """
+        entry_spot = trade.spot_entry if trade.spot_entry is not None else spot
+        move = (spot - entry_spot) if trade.opt_type == "CE" else (entry_spot - spot)
+        base = trade.raw_entry if trade.raw_entry is not None else trade.entry_price
+        return round(max(0.05, base + move * 0.50), 2)
+
+    def _settle_open_positions(self, bar: Dict[str, Any], bar_dt) -> None:
+        """Advance every open position on this symbol by one bar.
+
+        A position closes when THIS bar's range reaches its stop or target, or
+        when it has been held too long — never from a bar the replay clock has
+        not reached yet.
+        """
+        sym = bar.get("symbol")
+        book = self._open_by_symbol.get(sym)
+        if not book:
+            return
+
+        high = float(bar["high"])
+        low = float(bar["low"])
+        close = float(bar["close"])
+        still_open: List[SimTradeEvent] = []
+
+        for trade in book:
+            trade.bars_held += 1
+            bullish = trade.opt_type == "CE"
+            stop = trade.spot_stop
+            target = trade.spot_target
+
+            exit_spot: Optional[float] = None
+            if stop is not None and target is not None:
+                if bullish:
+                    # Stop first: the pessimistic read when one bar spans both,
+                    # because a bar's high and low carry no ordering.
+                    if low <= stop:
+                        exit_spot = stop
+                    elif high >= target:
+                        exit_spot = target
+                else:
+                    if high >= stop:
+                        exit_spot = stop
+                    elif low <= target:
+                        exit_spot = target
+
+            timed_out = exit_spot is None and trade.bars_held >= self.MAX_HOLD_BARS
+            if timed_out:
+                exit_spot = close
+
+            if exit_spot is None:
+                # Still open — mark it to this bar so unrealised P&L moves.
+                mark = self._premium_for_spot(trade, close)
+                trade.pnl_usd = round((mark - trade.entry_price) * trade.quantity, 2)
+                trade.pnl_pct = round(
+                    ((mark - trade.entry_price) / trade.entry_price) * 100.0, 2
+                ) if trade.entry_price > 0 else 0.0
+                trade.duration_mins = trade.bars_held * self._bar_minutes()
+                still_open.append(trade)
+                continue
+
+            self._close_position(trade, exit_spot, bar_dt)
+
+        if still_open:
+            self._open_by_symbol[sym] = still_open
+        else:
+            self._open_by_symbol.pop(sym, None)
+
+    def _bar_minutes(self) -> int:
+        from app.services.ohlcv_store import RESOLUTION_SECONDS
+        res = self._config.resolution if self._config else "5m"
+        return max(1, RESOLUTION_SECONDS.get(res, 300) // 60)
+
+    def _close_position(self, trade: SimTradeEvent, exit_spot: float, bar_dt) -> None:
+        raw_exit = self._premium_for_spot(trade, exit_spot)
+        _, fill_exit, friction_mode = _apply_friction(
+            trade.raw_entry if trade.raw_entry is not None else trade.entry_price,
+            raw_exit,
+            trade.underlying,
+            self._config,
+        )
+
+        trade.exit_price = fill_exit
+        trade.exit_time_iso = bar_dt.strftime("%H:%M:%S")
+        trade.duration_mins = trade.bars_held * self._bar_minutes()
+        trade.pnl_usd = round((fill_exit - trade.entry_price) * trade.quantity, 2)
+        trade.pnl_pct = round(
+            ((fill_exit - trade.entry_price) / trade.entry_price) * 100.0, 2
+        ) if trade.entry_price > 0 else 0.0
+        # Status follows the money actually made, so the win rate and the P&L
+        # cannot disagree.
+        trade.status = "WIN" if trade.pnl_usd > 0 else "LOSS"
+
+        if friction_mode == "ideal":
+            trade.raw_exit = None
+        else:
+            trade.raw_exit = raw_exit
+            entry_slip = (trade.entry_price - (trade.raw_entry or trade.entry_price)) * trade.quantity
+            exit_slip = (raw_exit - fill_exit) * trade.quantity
+            trade.slippage = round(max(0.0, entry_slip + exit_slip), 2)
+
+        self._recompute_totals()
+        self._publish("trade", trade.model_dump())
+
+    def _close_all_open(self, reason: str = "session end") -> None:
+        """Leave end-of-session positions OPEN rather than inventing an exit.
+
+        Force-closing them at the last close would book a fill the market never
+        offered; the honest report is that the session ended with them open.
+        """
+        count = sum(len(v) for v in self._open_by_symbol.values())
+        if count:
+            log.info("Replay ended with %d position(s) still open (%s).", count, reason)
+        self._open_by_symbol = {}
+
     def _recompute_totals(self) -> None:
         """Re-derive every aggregate from the trade ledger.
 
@@ -383,7 +524,10 @@ class SimulationRunner:
         self._stats.trades_entered = len(trades)
         self._stats.wins = len([tr for tr in trades if tr.status == "WIN"])
         self._stats.losses = len([tr for tr in trades if tr.status == "LOSS"])
-        self._stats.pnl = round(sum(tr.pnl_usd for tr in trades), 2)
+        closed = [tr for tr in trades if tr.status in ("WIN", "LOSS")]
+        # Realised only. Folding an open position's mark-to-market into the
+        # headline number would label an unbooked gain as realised.
+        self._stats.pnl = round(sum(tr.pnl_usd for tr in closed), 2)
         drag = [tr.slippage for tr in trades if tr.slippage is not None]
         self._stats.slippage_total = round(sum(drag), 2) if drag else None
 
@@ -442,6 +586,12 @@ class SimulationRunner:
             capabilities=self.capabilities,
             events_total=len(stats.events),
             trades_total=len(stats.trades),
+            session_id=self._session_id,
+            session_complete=self._session_complete,
+            open_positions=sum(len(v) for v in self._open_by_symbol.values()),
+            unrealised_pnl=round(
+                sum(tr.pnl_usd for tr in stats.trades if tr.status == "OPEN"), 2
+            ),
         )
 
     @property
@@ -462,6 +612,9 @@ class SimulationRunner:
         self._stats = SimStats()
         self._bar_history = {}
         self._last_fired = {}
+        self._open_by_symbol = {}
+        self._session_id = f"{config.date}-{int(time.time())}"
+        self._session_complete = False
         self._bars_played = 0
         self._seek_requested_epoch = None
         self._start_real = time.monotonic()
@@ -479,6 +632,27 @@ class SimulationRunner:
                 pass
         self._state = SimState.IDLE
         self._task = None
+        self._close_all_open("stopped")
+        # The ledger survives for review, but it is now explicitly a FINISHED
+        # session. Without this flag an idle runner handed every client a
+        # completed session's signals and trades, which the dock rendered as
+        # though the replay were live — results before you pressed play.
+        self._session_complete = bool(self._stats.events or self._stats.trades)
+        self._publish_state()
+        return self.status
+
+    def clear(self) -> SimStatus:
+        """Discard a finished session's ledger. Refuses while one is running."""
+        if self._state != SimState.IDLE:
+            return self.status
+        self._stats = SimStats()
+        self._open_by_symbol = {}
+        self._last_signal = None
+        self._session_complete = False
+        self._session_id = None
+        self._current_time_iso = ""
+        self._progress = 0.0
+        self._bars_played = 0
         self._publish_state()
         return self.status
 
@@ -701,6 +875,13 @@ class SimulationRunner:
                     target_ms = int(target * 1000)
                     self._stats.events = [ev for ev in self._stats.events if ev.timestamp_ms <= target_ms]
                     self._stats.trades = [tr for tr in self._stats.trades if tr.timestamp_ms <= target_ms]
+                    # Rebuild the open book from what survived, or a position
+                    # seeked past would keep settling against bars that no
+                    # longer follow it.
+                    self._open_by_symbol = {}
+                    for tr in self._stats.trades:
+                        if tr.status == "OPEN":
+                            self._open_by_symbol.setdefault(tr.underlying, []).append(tr)
                     self._recompute_totals()
                     self._last_signal = self._stats.events[-1] if self._stats.events else None
                     # Reset bar history and dedup state for clean indicator recalculation
@@ -736,6 +917,8 @@ class SimulationRunner:
         finally:
             if not self._stop_requested:
                 self._state = SimState.IDLE
+                self._close_all_open("reached session end")
+                self._session_complete = bool(self._stats.events or self._stats.trades)
                 self._publish_frame(force=True)
                 self._publish_state()
                 log.info(
@@ -1185,6 +1368,10 @@ class SimulationRunner:
         Triggers SuperTrend crossovers, VCP squeeze breakouts, Adaptive Edge
         reversals, and Bear to Bearish breakdowns across instruments.
         """
+        # Advance the open book first: a position opened earlier can close on
+        # THIS bar, and it must do so before a new signal is considered.
+        self._settle_open_positions(bar, bar_dt)
+
         import random
         from datetime import timedelta
 
@@ -1384,119 +1571,53 @@ class SimulationRunner:
             self._publish("signal", event.model_dump())
 
             if strength == "STRONG":
-                self._stats.trades_entered += 1
-
-                # Determine trade outcome from subsequent price action
-                future_bars = [b for b in self._candles[self._bars_played:] if b.get("symbol") == sym]
-                won = False
-                exit_close = close  # default if neither SL nor TP hit
-                bars_held = 0
-                if direction == "BULLISH":
-                    for fb in future_bars[:30]:  # scan up to 30 bars (2.5h)
-                        bars_held += 1
-                        fb_high = float(fb["high"])
-                        fb_low = float(fb["low"])
-                        if fb_low <= stop:  # SL hit first
-                            exit_close = stop
-                            break
-                        if fb_high >= target:  # TP hit first
-                            exit_close = target
-                            won = True
-                            break
-                        exit_close = float(fb["close"])
-                else:
-                    for fb in future_bars[:30]:
-                        bars_held += 1
-                        fb_high = float(fb["high"])
-                        fb_low = float(fb["low"])
-                        if fb_high >= stop:  # SL hit first (short)
-                            exit_close = stop
-                            break
-                        if fb_low <= target:  # TP hit first (short)
-                            exit_close = target
-                            won = True
-                            break
-                        exit_close = float(fb["close"])
-
-                # If neither SL nor TP hit within 30 bars, close at last bar's close
-                if bars_held == 0:
-                    bars_held = 1
-                if not won and exit_close != stop:
-                    # Neither hit — treat as scratch/loss based on actual P&L
-                    won = (exit_close > close) if direction == "BULLISH" else (exit_close < close)
-
-                # Construct detailed SimTradeEvent with correct option PnL.
-                # The leg is the SAME one the signal reported, so the contract a
-                # user reads in the signals feed is the contract that traded.
+                # OPEN the position. Its outcome is decided by later bars, in
+                # `_settle_open_positions`, as the simulated clock reaches them.
+                # This used to scan up to 30 FUTURE bars right here and write
+                # the exit price, exit time and WIN/LOSS in one go — so every
+                # trade appeared already finished, with an exit timestamped
+                # minutes ahead of the replay clock.
                 cfg_lots = max(1, self._config.lots) if self._config else 1
-                opt_type = leg["opt_type"]
-                atm_strike = leg["strike"]
                 lot_size = leg["lot_size"]
                 qty = cfg_lots * lot_size
                 raw_entry_p = leg["premium"]
-                spot_move = exit_close - close if direction == "BULLISH" else close - exit_close
-                # Option premium moves ~40-60% of spot move (delta approximation)
-                premium_move = round(spot_move * 0.50, 2)
-                raw_exit_p = round(max(0.05, raw_entry_p + premium_move), 2)
-
-                # Fills, after bid/ask spread and slippage. P&L is computed from
-                # the FILLS, never from the theoretical prices.
-                entry_p, exit_p, friction_mode = _apply_friction(
-                    raw_entry_p, raw_exit_p, sym, self._config
+                entry_p, _, friction_mode = _apply_friction(
+                    raw_entry_p, raw_entry_p, sym, self._config
                 )
-                slippage_inr = round(
-                    (entry_p - raw_entry_p) * qty + (raw_exit_p - exit_p) * qty, 2
-                )
-                if friction_mode == "ideal":
-                    trade_raw_entry = None
-                    trade_raw_exit = None
-                    trade_slippage = None
-                else:
-                    trade_raw_entry = raw_entry_p
-                    trade_raw_exit = raw_exit_p
-                    trade_slippage = max(0.0, slippage_inr)
-
-                pnl_per_unit = exit_p - entry_p
-                pnl_usd_val = round(pnl_per_unit * qty, 2)
-                pnl_pct_val = round((pnl_per_unit / entry_p) * 100.0, 2) if entry_p > 0 else 0.0
-                dur_mins = bars_held * 5  # each bar is 5m
-                exit_dt = bar_dt + timedelta(minutes=dur_mins)
-
-                # Friction can flip a marginal winner into a loser. The status has
-                # to follow the money that was actually made, not the spot move
-                # that was predicted — otherwise the win rate and the P&L disagree.
-                won = pnl_usd_val > 0
+                entry_slip = round((entry_p - raw_entry_p) * qty, 2)
 
                 trade = SimTradeEvent(
                     trade_id=f"TRD-{1000 + len(self._stats.trades) + 1}",
                     entry_time_iso=bar_dt.strftime("%H:%M:%S"),
-                    exit_time_iso=exit_dt.strftime("%H:%M:%S"),
+                    exit_time_iso="OPEN",
                     timestamp_ms=int(bar_dt.timestamp() * 1000),
                     strategy=strategy,
                     symbol=leg["contract"],
                     underlying=sym,
                     direction="BUY",
-                    opt_type=opt_type,
-                    strike=atm_strike,
+                    opt_type=leg["opt_type"],
+                    strike=leg["strike"],
                     lots=cfg_lots,
                     quantity=qty,
                     entry_price=entry_p,
-                    exit_price=exit_p,
+                    exit_price=None,
                     stop_loss=round(entry_p * 0.75, 2),
                     target_price=round(entry_p * 1.5, 2),
-                    status="WIN" if won else "LOSS",
-                    pnl_usd=pnl_usd_val,
-                    pnl_pct=pnl_pct_val,
-                    duration_mins=dur_mins,
-                    raw_entry=trade_raw_entry,
-                    raw_exit=trade_raw_exit,
-                    slippage=trade_slippage,
+                    status="OPEN",
+                    pnl_usd=0.0,
+                    pnl_pct=0.0,
+                    duration_mins=0,
+                    raw_entry=None if friction_mode == "ideal" else raw_entry_p,
+                    raw_exit=None,
+                    slippage=None if friction_mode == "ideal" else max(0.0, entry_slip),
+                    spot_entry=round(close, 2),
+                    spot_stop=stop,
+                    spot_target=target,
+                    bars_held=0,
                 )
-                if won:
-                    self._stats.wins += 1
-                else:
-                    self._stats.losses += 1
+                self._stats.trades_entered += 1
                 self._stats.trades.append(trade)
+                self._open_by_symbol.setdefault(sym, []).append(trade)
                 self._recompute_totals()
                 self._publish("trade", trade.model_dump())
 

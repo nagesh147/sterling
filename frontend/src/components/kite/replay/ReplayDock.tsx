@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   MIN_DOCK_HEIGHT,
   ReplayMode,
+  useReplayIsHistorical,
   useReplayState,
   useReplayStore,
 } from '../../../hooks/useReplayStore';
@@ -54,6 +55,8 @@ export function ReplayDock() {
   const setError = useReplayStore((s) => s.setError);
   const cfg = useReplayStore((s) => s.status.config);
   const draft = useReplayStore((s) => s.draft);
+  const historical = useReplayIsHistorical();
+  const clearSession = useReplayStore((s) => s.clearSession);
 
   const transport = useReplayTransport();
   const rootRef = useRef<HTMLElement>(null);
@@ -273,6 +276,25 @@ export function ReplayDock() {
           </button>
         </div>
       </div>
+
+      {/* The runner keeps a finished session's ledger so it can be reviewed.
+          Saying so is the difference between "here is your last run" and the
+          dock appearing to show trades before you pressed play. */}
+      {historical && !errorMsg && (
+        <div className="rd-session-note" data-testid="replay-historical-note">
+          <Icons.Alert size={13} />
+          <span>
+            Showing the <strong>finished</strong> session
+            {cfg?.date ? ` from ${cfg.date}` : ''} — {events.length} signals, {trades.length} trades.
+            Nothing is replaying now.
+          </span>
+          <span className="rd-error-strip-actions">
+            <button type="button" className="rd-btn rd-btn-sm" onClick={() => void clearSession()}>
+              Clear results
+            </button>
+          </span>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="rd-error-strip" role="alert">

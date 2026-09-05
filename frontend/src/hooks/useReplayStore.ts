@@ -119,6 +119,18 @@ export interface ReplayStatus {
   capabilities?: ReplayCapabilities;
   events_total?: number;
   trades_total?: number;
+  /** Identifies which run the ledger belongs to. */
+  session_id?: string | null;
+  /**
+   * The ledger is from a run that has ENDED. An idle runner keeps the last
+   * session's signals and trades for review, and without this flag the dock
+   * rendered them as though the replay were live — results before you pressed
+   * play.
+   */
+  session_complete?: boolean;
+  open_positions?: number;
+  /** Mark-to-market on open positions. Never folded into `stats.pnl`. */
+  unrealised_pnl?: number;
 }
 
 export interface ReplayDraft {
@@ -179,6 +191,10 @@ export const DEFAULT_STATUS: ReplayStatus = {
   capabilities: DEFAULT_CAPS,
   events_total: 0,
   trades_total: 0,
+  session_id: null,
+  session_complete: false,
+  open_positions: 0,
+  unrealised_pnl: 0,
 };
 
 function initialDraft(): ReplayDraft {
@@ -315,6 +331,7 @@ export interface ReplayStore {
   appendSignals(signals: ReplaySignal[]): void;
   upsertTrades(trades: ReplayTrade[]): void;
   setError(err: ReplayError | null): void;
+  clearSession(): Promise<void>;
   reset(): void;
 }
 
@@ -465,6 +482,17 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
     }),
 
   setError: (error) => set({ error }),
+
+  clearSession: async () => {
+    set({ status: DEFAULT_STATUS, error: null, selectedSignalKey: null });
+    try {
+      const res = await fetch('/api/v1/simulation/clear', { method: 'POST' });
+      if (res.ok) get().setStatus(await res.json());
+    } catch {
+      /* the local ledger is already cleared; the runner will catch up */
+    }
+  },
+
   reset: () => set({ status: DEFAULT_STATUS, error: null, selectedSignalKey: null }),
 }));
 
@@ -511,6 +539,21 @@ export const useReplayState = (): ReplayState =>
 /** True whenever a session is loaded — running, paused or loading. */
 export const useReplayActive = () =>
   useReplayStore((s) => s.status.state !== 'idle');
+
+/**
+ * Idle, but holding a finished session's results.
+ *
+ * The dock must label these as historical rather than draw them as live — this
+ * is the state that made trades appear before the user pressed play.
+ */
+export const useReplayIsHistorical = () =>
+  useReplayStore(
+    (s) =>
+      s.status.state === 'idle' &&
+      (s.status.session_complete === true ||
+        s.status.stats.events.length > 0 ||
+        s.status.stats.trades.length > 0),
+  );
 
 /** What `KiteLayout` subscribes to. One boolean, no mode vocabulary. */
 export const useReplayHostHidden = () => useReplayStore((s) => s.hostContentHidden);
