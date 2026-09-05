@@ -64,6 +64,12 @@ function mockPane(rows: any[], quotes: Record<string, any> = {}) {
     useStockRegistry: () => ({ data: [] }),
     useExpiryCalendar: () => ({ data: null, isLoading: false, isError: false }),
   }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: true } } } }),
+    useSetNavigatorConfig: () => ({ mutate: vi.fn() }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+    useCancelNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  }));
   vi.doMock('../../../hooks/useKite', async () => {
     const actual: any = await vi.importActual('../../../hooks/useKite');
     return { ...actual, useKiteQuote: () => ({ data: quotes }) };

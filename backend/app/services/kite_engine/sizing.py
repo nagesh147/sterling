@@ -13,6 +13,7 @@ lots against that, never against the full premium outlay.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass
@@ -55,11 +56,14 @@ def size_position(
     would rather take the minimum size than miss the signal; it is a deliberate choice
     rather than the default.
 
-    Degenerate inputs (non-positive lot size, or stop ≥ entry so risk is undefined)
-    still fall back to a single lot. That is not the same case: there is no budget to
-    compare against, so there is nothing to honour. It is reached only when the caller
-    has already resolved a positive entry and stop, which makes it rare.
+    Invalid or unknown inputs and unaffordable minimum lots always block.
+    The explicit minimum-lot risk override never overrides affordability.
     """
+    values = (entry_premium, stop_premium, available_capital, risk_pct, max_lots, lot_size)
+    if any(v is None or not isfinite(float(v)) or float(v) <= 0 for v in values):
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "invalid or unknown sizing input", blocked=True)
+    if int(lot_size) != lot_size or int(max_lots) != max_lots:
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "lot sizes must be integers", blocked=True)
     lot_size = int(lot_size or 0)
     if lot_size <= 0:
         return SizingResult(0, 0, 0.0, 0.0, 0.0, "no lot size — cannot size")
@@ -69,11 +73,8 @@ def size_position(
     risk_per_unit = entry - stop  # per-share premium at risk
     risk_per_lot = risk_per_unit * lot_size
 
-    if risk_per_unit <= 0 or entry <= 0:
-        # Stop above/at entry (or no premium) — risk undefined. Take 1 lot.
-        qty = lot_size
-        return SizingResult(1, qty, max(0.0, risk_per_lot), max(0.0, risk_per_lot),
-                            entry * qty, "stop ≥ entry — risk undefined, defaulting to 1 lot")
+    if risk_per_unit <= 0:
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "stop must be below entry", blocked=True)
 
     budget = max(0.0, float(available_capital or 0.0)) * (float(risk_pct) / 100.0)
     by_risk = int(budget // risk_per_lot) if risk_per_lot > 0 else 0
@@ -82,12 +83,11 @@ def size_position(
     cost_per_lot = entry * lot_size
     by_margin = int(float(available_capital or 0.0) // cost_per_lot) if cost_per_lot > 0 else 0
 
-    # Only a KNOWN budget can be exceeded. ``available_fo_capital`` returns 0.0 when
-    # the margins call fails, and treating that as "over budget" would turn a
-    # transient broker API outage into a silent halt of every automatic entry — a far
-    # bigger behaviour change than the one being fixed here, and one that looks
-    # exactly like the engine being broken. Unknown capital keeps the old 1-lot floor.
-    if by_risk < 1 and not allow_min_lot_over_risk and float(available_capital or 0.0) > 0:
+    if by_margin < 1:
+        return SizingResult(0, 0, risk_per_lot, 0.0, 0.0,
+                            "capital cannot afford one lot", blocked=True)
+
+    if by_risk < 1 and not allow_min_lot_over_risk:
         return SizingResult(
             0, 0, risk_per_lot, 0.0, 0.0,
             f"risk/lot ₹{risk_per_lot:.0f} > budget ₹{budget:.0f} "
@@ -133,6 +133,11 @@ def size_future_position(
     which bites harder here, since a single index-futures lot carries the full
     notional and its stop distance is measured in index points.
     """
+    values = (entry_price, stop_price, available_capital, risk_pct, max_lots, lot_size)
+    if any(v is None or not isfinite(float(v)) or float(v) <= 0 for v in values):
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "invalid or unknown sizing input", blocked=True)
+    if int(lot_size) != lot_size or int(max_lots) != max_lots:
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "lot sizes must be integers", blocked=True)
     lot_size = int(lot_size or 0)
     if lot_size <= 0:
         return SizingResult(0, 0, 0.0, 0.0, 0.0, "no lot size — cannot size")
@@ -142,11 +147,8 @@ def size_future_position(
     risk_per_unit = abs(entry - stop)
     risk_per_lot = risk_per_unit * lot_size
 
-    if risk_per_unit <= 0 or entry <= 0:
-        qty = lot_size
-        return SizingResult(1, qty, max(0.0, risk_per_lot), max(0.0, risk_per_lot),
-                            entry * qty * 0.15,
-                            "stop = entry — risk undefined, defaulting to 1 lot")
+    if risk_per_unit <= 0:
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "stop must differ from entry", blocked=True)
 
     budget = max(0.0, float(available_capital or 0.0)) * (float(risk_pct) / 100.0)
     by_risk = int(budget // risk_per_lot) if risk_per_lot > 0 else 0
@@ -155,12 +157,11 @@ def size_future_position(
     margin_per_lot = entry * lot_size * 0.15
     by_margin = int(float(available_capital or 0.0) // margin_per_lot) if margin_per_lot > 0 else 0
 
-    # Only a KNOWN budget can be exceeded. ``available_fo_capital`` returns 0.0 when
-    # the margins call fails, and treating that as "over budget" would turn a
-    # transient broker API outage into a silent halt of every automatic entry — a far
-    # bigger behaviour change than the one being fixed here, and one that looks
-    # exactly like the engine being broken. Unknown capital keeps the old 1-lot floor.
-    if by_risk < 1 and not allow_min_lot_over_risk and float(available_capital or 0.0) > 0:
+    if by_margin < 1:
+        return SizingResult(0, 0, risk_per_lot, 0.0, 0.0,
+                            "capital cannot afford one lot", blocked=True)
+
+    if by_risk < 1 and not allow_min_lot_over_risk:
         return SizingResult(
             0, 0, risk_per_lot, 0.0, 0.0,
             f"risk/lot ₹{risk_per_lot:.0f} > budget ₹{budget:.0f} "

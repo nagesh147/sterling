@@ -51,8 +51,8 @@ export function TradingModeControls() {
   if (!active) {
     return (
       <div style={S.card}>
-        <div style={S.title}>TRADING MODE</div>
-        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, and who places orders.</div>
+        <div style={S.title}>TRADING CONFIG</div>
+        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, options parameters, and who places orders.</div>
       </div>
     );
   }
@@ -76,7 +76,7 @@ export function TradingModeControls() {
 
   return (
     <div style={S.card}>
-      <div style={S.title}>TRADING MODE · {active.label}</div>
+      <div style={S.title}>TRADING CONFIG · {active.label}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* Paper / Live — where orders go */}

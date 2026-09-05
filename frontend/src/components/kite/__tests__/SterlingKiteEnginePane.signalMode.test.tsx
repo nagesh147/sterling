@@ -59,6 +59,10 @@ function mockRows(rows: ReturnType<typeof makeRow>[], overrides: Record<string, 
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
   }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: (overrides.navigator_enabled as boolean) ?? true } } } }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  }));
 }
 
 async function renderPane() {
@@ -127,8 +131,17 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
     expect(screen.getByText(/SuperTrend setup/)).toBeInTheDocument();
-    expect(screen.getByText('Connect → Value-Flow Navigator')).toBeInTheDocument();
+    expect(screen.getByText(/Navigator is on — it may still be warming up/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Switch to Combined lens/i }));
+    expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
+  });
+
+  it('removes the VIEW dropdown completely when Navigator strategy is turned off', async () => {
+    mockRows([makeRow('NIFTY 50', 1, null)], { navigator_enabled: false });
+    await renderPane();
+    // VIEW selector is completely removed when Navigator is off
+    expect(screen.queryByTitle(/^VIEW — A local lens/)).not.toBeInTheDocument();
+    // SuperTrend setups are still displayed
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
   });
 

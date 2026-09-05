@@ -59,7 +59,8 @@ function formatDateTime(value: string): string {
 
 function formatNumber(value: number | null, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const minDigits = Number.isInteger(value) ? 0 : digits;
+  return value.toLocaleString('en-IN', { minimumFractionDigits: minDigits, maximumFractionDigits: digits });
 }
 
 function formatCompact(value: number | null): string {

@@ -113,6 +113,8 @@ function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClo
       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
         <StatusDot status={p.status} />
         <span style={{ fontWeight: 500, fontSize: 12 }}>{p.symbol}</span>
+        {p.exit_pending && <span style={{ color: k.orange, marginLeft: 6 }}>Exit awaiting fill</span>}
+        {p.pnl_reconciliation_required && <span style={{ color: k.orange, marginLeft: 6 }}>P&amp;L reconciliation required</span>}
         {p.underlying && (
           <span style={{ color: 'var(--k-ink-6)', fontSize: 11, marginLeft: 6 }}>{p.underlying}</span>
         )}

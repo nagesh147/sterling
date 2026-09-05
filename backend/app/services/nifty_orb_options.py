@@ -37,7 +37,14 @@ def get_config()->StrategyConfig:
     try:
         x=json.loads(raw) if isinstance(raw,str) else raw
         base=StrategyConfig()
-        loaded=StrategyConfig(**{k:v for k,v in {**base.__dict__,**x}.items() if k in StrategyConfig.__dataclass_fields__})
+        merged = {**base.__dict__, **x}
+        for key in ("scan_stocks", "scan_indices", "strike_moneyness",
+                    "scan_expiries_indices",
+                    "scan_weekly_series_indices", "scan_monthly_series_indices",
+                    "scan_monthly_series_stocks"):
+            if isinstance(merged.get(key), list):
+                merged[key] = tuple(merged[key])
+        loaded=StrategyConfig(**{k: v for k, v in merged.items() if k in StrategyConfig.__dataclass_fields__})
         return loaded.validate()
     except (ValueError,TypeError,json.JSONDecodeError) as exc:
         log.error("Stored NIFTY ORB config is invalid (%s); running with defaults OFF",exc)
@@ -47,6 +54,12 @@ def set_config(values:dict[str,Any])->StrategyConfig:
     c=get_config().__dict__.copy(); bad=sorted(set(values)-set(c))
     if bad: raise ValueError(f"Unknown NIFTY ORB config fields: {', '.join(bad)}")
     c.update(values)
+    for key in ("scan_stocks", "scan_indices", "strike_moneyness",
+                "scan_expiries_indices",
+                "scan_weekly_series_indices", "scan_monthly_series_indices",
+                "scan_monthly_series_stocks"):
+        if isinstance(c.get(key), list):
+            c[key] = tuple(c[key])
     if c["data_source"] not in {"kite","truedata"}: raise ValueError("data_source must be 'kite' or 'truedata'")
     if c["execution_broker"]!="kite": raise ValueError("execution_broker is fixed to 'kite'")
     if c["interval_minutes"] not in {1,3,5,10,15}: raise ValueError("interval_minutes must be one of 1, 3, 5, 10, 15")

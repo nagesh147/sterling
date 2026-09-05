@@ -366,3 +366,45 @@ describe('groupByDay hoistToday', () => {
     expect(screen.queryByText('Today')).toBeNull();
   });
 });
+
+describe('collapseOlderDays on SignalBoard', () => {
+  const DAY = 86_400_000;
+  const makeSig = (id: string, atMs: number, status: BoardSignal['status']): BoardSignal => ({
+    id, engine: 'adaptive_edge', underlying: 'NIFTY',
+    instrument: { symbol: `SYM${id}`, exchange: 'NFO', kind: 'option', quoteKey: 'NFO:X' },
+    direction: 'long', status, atMs,
+    levels: { ltp: 100, entry: 100, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: 1, quantity: 75, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it('collapses older day groups by default and expands Today when collapseOlderDays=true', () => {
+    const todaySig = makeSig('today-sig', NOW, 'running');
+    const olderSig = makeSig('older-sig', NOW - 4 * DAY, 'ended');
+    const { container } = render(
+      <SignalBoard
+        signals={[todaySig, olderSig]}
+        openId={null}
+        onToggle={() => {}}
+        nowMs={NOW}
+        collapseOlderDays={true}
+      />
+    );
+    // Today's row should be rendered
+    expect(screen.getByText('SYMtoday-sig')).toBeInTheDocument();
+    // Older's row should NOT be rendered (collapsed)
+    expect(screen.queryByText('SYMolder-sig')).not.toBeInTheDocument();
+
+    // Clicking the Older day header expands it
+    const olderHeader = screen.getByText('Older').closest('.sb-day');
+    expect(olderHeader).toBeTruthy();
+    fireEvent.click(olderHeader!);
+
+    // Now olderSig is visible
+    expect(screen.getByText('SYMolder-sig')).toBeInTheDocument();
+
+    // Clicking again collapses it
+    fireEvent.click(olderHeader!);
+    expect(screen.queryByText('SYMolder-sig')).not.toBeInTheDocument();
+  });
+});

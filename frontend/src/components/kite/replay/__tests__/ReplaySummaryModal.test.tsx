@@ -171,3 +171,86 @@ describe('replay again', () => {
     expect(fetchSpy.mock.calls.some(([u]) => String(u).includes('/start'))).toBe(true);
   });
 });
+
+describe('execution model badge', () => {
+  // Ported from main's SimulationSummary test, which asserted a friction badge
+  // on the component this one replaces. It names the model the engine actually
+  // RAN — inferred from whether any trade carried measured friction — rather
+  // than the mode that happened to be requested.
+  it('reads REALISTIC when trades carry measured friction', () => {
+    primeStore({
+      summaryOpen: true,
+      status: makeStatus({
+        config: { date: '2026-09-04', start_time: '09:00:00', end_time: '15:30:00', speed: 5, resolution: '5m', instruments: [], friction_mode: 'realistic' },
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: 12.5 })] },
+      }),
+    });
+    renderModal();
+    expect(screen.getByTestId('replay-friction-badge').textContent).toBe('REALISTIC');
+    expect(screen.getByText(/spread and slippage applied/i)).toBeTruthy();
+  });
+
+  it('reads IDEAL when the run asked for zero friction', () => {
+    primeStore({
+      summaryOpen: true,
+      status: makeStatus({
+        config: { date: '2026-09-04', start_time: '09:00:00', end_time: '15:30:00', speed: 5, resolution: '5m', instruments: [], friction_mode: 'ideal' },
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: undefined })] },
+      }),
+    });
+    renderModal();
+    expect(screen.getByTestId('replay-friction-badge').textContent).toBe('IDEAL');
+  });
+
+  it('says the engine modelled none, rather than implying zero', () => {
+    primeStore({
+      summaryOpen: true,
+      status: makeStatus({
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: undefined })] },
+      }),
+    });
+    renderModal();
+    expect(screen.getByTestId('replay-friction-badge').textContent).toBe('NONE');
+    expect(screen.getByText(/not modelled by this engine/i)).toBeTruthy();
+  });
+});
+
+describe('risk metrics ported from main', () => {
+  it('computes profit factor, and declines to when nothing has lost', () => {
+    primeStore({
+      summaryOpen: true,
+      status: makeStatus({
+        stats: {
+          ...DEFAULT_STATUS.stats, wins: 2, losses: 1,
+          trades: [
+            makeTrade({ trade_id: 'A', status: 'WIN', pnl_usd: 600 }),
+            makeTrade({ trade_id: 'B', status: 'WIN', pnl_usd: 400 }),
+            makeTrade({ trade_id: 'C', status: 'LOSS', pnl_usd: -500 }),
+          ],
+        },
+      }),
+    });
+    renderModal();
+    const box = screen.getByText('Profit factor').parentElement!;
+    expect(within(box).getByText('2.00')).toBeTruthy();
+  });
+
+  it('reports max drawdown as the worst peak-to-trough run', () => {
+    primeStore({
+      summaryOpen: true,
+      status: makeStatus({
+        stats: {
+          ...DEFAULT_STATUS.stats, wins: 1, losses: 2,
+          trades: [
+            makeTrade({ trade_id: 'A', status: 'WIN', pnl_usd: 1000 }),
+            makeTrade({ trade_id: 'B', status: 'LOSS', pnl_usd: -400 }),
+            makeTrade({ trade_id: 'C', status: 'LOSS', pnl_usd: -300 }),
+          ],
+        },
+      }),
+    });
+    renderModal();
+    const box = screen.getByText('Max drawdown').parentElement!;
+    expect(within(box).getByText('₹700.00')).toBeTruthy();
+  });
+});

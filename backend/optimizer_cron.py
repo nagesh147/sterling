@@ -15,6 +15,15 @@ from report_metrics_aggressive import get_candles_paper, replay_strategy
 WHITELIST_PATH = os.path.join(os.path.dirname(__file__), "app", "engines", "scalping", "whitelist.json")
 
 def run_weekly_optimization():
+    try:
+        from app.services.db import init as _db_init, get_config as _get_config
+        _db_init()
+        if _get_config("scalp_mode", "false").lower() != "true":
+            print(f"[{datetime.now()}] Crypto / scalp_mode is disabled in Sterling settings — skipping optimizer.")
+            return
+    except Exception:
+        pass
+
     print(f"[{datetime.now()}] Starting Weekly Walk-Forward Optimizer...")
     symbols = ["BTCUSD", "ETHUSD", "SOLUSD"]
     

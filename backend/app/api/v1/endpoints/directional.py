@@ -1802,8 +1802,9 @@ async def _sse_all_generator(
             else:
                 rest_needed.append(inst)
 
-        # REST fallback for instruments not in WS cache (other adapters, startup gap)
-        if rest_needed:
+        # REST fallback for instruments not in WS cache (only poll exchange if scalp_mode is on)
+        scalp_active = getattr(request.app.state, "scalp_mode", False)
+        if rest_needed and scalp_active:
             async def _fetch_price(inst) -> tuple[str, float | None]:
                 try:
                     # 0.5 s cap keeps the 1-s SSE prices loop tight even when

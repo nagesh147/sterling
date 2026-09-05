@@ -64,6 +64,24 @@ export function ReplaySummaryModal() {
     const winRate = decided > 0 ? (stats.wins / decided) * 100 : null;
     const avg = closed.length ? stats.pnl / closed.length : null;
     const pnls = closed.map((t) => t.pnl_usd);
+
+    // Gross profit over gross loss. `null` rather than Infinity when nothing
+    // lost — "no losses yet" is not a ratio.
+    const grossWin = pnls.filter((v) => v > 0).reduce((a, b) => a + b, 0);
+    const grossLoss = Math.abs(pnls.filter((v) => v < 0).reduce((a, b) => a + b, 0));
+    const profitFactor = grossLoss > 0 ? grossWin / grossLoss : null;
+
+    // Worst peak-to-trough on the realised curve — the same run the equity
+    // sparkline shades, surfaced as a number.
+    let peak = 0;
+    let cum = 0;
+    let maxDd = 0;
+    closed.forEach((t) => {
+      cum += t.pnl_usd || 0;
+      peak = Math.max(peak, cum);
+      maxDd = Math.max(maxDd, peak - cum);
+    });
+
     return {
       closed,
       winRate,
@@ -71,6 +89,8 @@ export function ReplaySummaryModal() {
       best: pnls.length ? Math.max(...pnls) : null,
       worst: pnls.length ? Math.min(...pnls) : null,
       open: trades.length - closed.length,
+      profitFactor,
+      maxDd: closed.length ? maxDd : null,
     };
   }, [trades, stats.wins, stats.losses, stats.pnl]);
 
@@ -90,6 +110,17 @@ export function ReplaySummaryModal() {
   const startTime = status.config?.start_time ?? draft.startTime;
   const endTime = status.config?.end_time ?? draft.endTime;
   const hasFriction = tradesHaveFriction(trades);
+  // Name the execution model the engine actually ran, not the one requested.
+  const frictionMode: 'realistic' | 'ideal' | 'none' = hasFriction
+    ? 'realistic'
+    : status.config?.friction_mode === 'ideal'
+      ? 'ideal'
+      : 'none';
+  const FRICTION_LABEL = {
+    realistic: 'Realistic fills — spread and slippage applied',
+    ideal: 'Ideal fills — zero friction',
+    none: 'Friction not modelled by this engine',
+  } as const;
 
   const verdict = [
     `${fmtSignedInr(stats.pnl)} across ${trades.length} trade${trades.length === 1 ? '' : 's'}`,
@@ -143,6 +174,18 @@ export function ReplaySummaryModal() {
 
         <div className="rd-modal-body">
           <section>
+            <div className="rd-chip-row" style={{ marginBottom: 10 }}>
+              <span
+                className="rd-status-chip"
+                data-tone={frictionMode === 'realistic' ? 'open' : 'neutral'}
+                data-testid="replay-friction-badge"
+              >
+                {frictionMode.toUpperCase()}
+              </span>
+              <span style={{ fontSize: 'var(--rd-fs-body)', color: 'var(--k-dim)' }}>
+                {FRICTION_LABEL[frictionMode]}
+              </span>
+            </div>
             <div className="rd-statgrid">
               <Stat label="Signals" value={String(stats.signals_fired)} />
               <Stat
@@ -168,6 +211,18 @@ export function ReplaySummaryModal() {
                 label="Avg trade"
                 value={derived.avg == null ? ABSENT : fmtSignedInr(derived.avg)}
                 tone={derived.avg == null ? undefined : derived.avg >= 0 ? 'profit' : 'loss'}
+              />
+              <Stat
+                label="Profit factor"
+                value={derived.profitFactor == null ? ABSENT : derived.profitFactor.toFixed(2)}
+                tone={derived.profitFactor == null ? undefined : derived.profitFactor >= 1 ? 'profit' : 'loss'}
+                sub={derived.profitFactor == null ? 'no losing trade yet' : 'gross win ÷ gross loss'}
+              />
+              <Stat
+                label="Max drawdown"
+                value={derived.maxDd == null ? ABSENT : fmtInr(derived.maxDd)}
+                tone={derived.maxDd ? 'loss' : undefined}
+                sub="worst peak to trough"
               />
               <Stat
                 label="Best / worst"

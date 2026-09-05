@@ -179,3 +179,43 @@ class TestDefaultsDoNotOverrideIntent:
         from app.services.gamma_move import get_config
         db.set_config("gamma_move_config", json.dumps({"min_oi_drop_pct": 0}))
         assert get_config().enabled is False
+
+
+class TestReconcile:
+    @pytest.mark.asyncio
+    async def test_reconcile_handles_list_of_account_positions(self, monkeypatch):
+        from app.services import gamma_move_runner
+        from app.schemas.account import AccountPosition
+
+        class MockClient:
+            async def get_positions(self):
+                return [
+                    AccountPosition(
+                        symbol="NIFTY26SEP25000CE",
+                        underlying="NFO:NIFTY",
+                        size=50.0,
+                        side="long",
+                        entry_price=120.0,
+                        mark_price=130.0,
+                        unrealized_pnl=500.0,
+                        realized_pnl=0.0,
+                        margin=6000.0,
+                        position_type="MIS",
+                    )
+                ]
+
+        async def _mock_client(uid):
+            return MockClient()
+
+        monkeypatch.setattr(gamma_move_runner, "_client", _mock_client)
+        monkeypatch.setattr(gamma_move_runner, "is_paper", lambda uid: True)
+
+        res = await gamma_move_runner.reconcile("default")
+        assert res is not None
+
+        orphans = await gamma_move_runner.orphan_positions("default", gamma_move_runner.get_config())
+        assert len(orphans) == 1
+        assert orphans[0]["symbol"] == "NIFTY26SEP25000CE"
+        assert orphans[0]["quantity"] == 50
+        assert orphans[0]["entry_price"] == 120.0
+

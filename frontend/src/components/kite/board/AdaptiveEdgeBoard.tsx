@@ -70,8 +70,9 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
         onSortChange={setSort}
         collapsedGroups={collapsedGroups}
         onToggleGroup={toggleGroup}
-        nowMs={nowMs}
         liveFirst={false}
+        collapseOlderDays={true}
+        nowMs={nowMs}
         hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total

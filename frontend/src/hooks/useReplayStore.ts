@@ -36,6 +36,10 @@ export interface ReplaySignal {
   spot?: number | null;
   strike?: number | null;
   opt_type?: string | null;
+  /** The ladder in option terms, alongside the underlying levels above. */
+  premium_entry?: number | null;
+  premium_sl?: number | null;
+  premium_target?: number | null;
 }
 
 export interface ReplayTrade {
@@ -566,6 +570,17 @@ export function getReplayNowMs(status: ReplayStatus): number | null {
   if (status.state === 'idle' || !status.config?.date || !status.current_time_iso) return null;
   const ms = Date.parse(`${status.config.date}T${status.current_time_iso}+05:30`);
   return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Replay time, or `null` when nothing is loaded.
+ *
+ * Distinct from `useEffectiveNowMs`, which substitutes wall time. Callers that
+ * need to KNOW whether a replay is driving the clock want this one.
+ */
+export function useSimNowMs(): number | null {
+  const status = useReplayStore((s) => s.status);
+  return getReplayNowMs(status);
 }
 
 export function useEffectiveNowMs(): number {

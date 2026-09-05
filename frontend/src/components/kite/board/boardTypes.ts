@@ -353,23 +353,39 @@ export function shiftSessionDay(key: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+export function formatSessionDay(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return key;
+  const dStr = String(d).padStart(2, '0');
+  const mStr = MONTHS_SHORT[m - 1] ?? '';
+  return `${dStr} ${mStr} ${y}`;
+}
+
 /**
  * "Today" / "Yesterday" / "Older" / "Thu 14 Aug" — on the IST trading day.
  *
  * Today and yesterday are named. Everything older than that is one "Older"
  * bucket, because a date per day on a multi-week board is a log, not a scan.
+ * When playing a historical simulation date, the real date is displayed
+ * instead of "Today" to prevent confusing replay data with the live session.
  *
  * `nowMs` is a parameter rather than a `Date.now()` call so the label is
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
-export function sessionDayLabel(key: string, nowMs?: number): string {
+export function sessionDayLabel(key: string, nowMs?: number, isHistoricalSim: boolean = false): string {
   if (key === LIVE_BUCKET) return 'Live now';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
   if (nowMs != null) {
     const today = sessionDayKey(nowMs);
-    if (key === today) return 'Today';
-    if (key === shiftSessionDay(today, -1)) return 'Yesterday';
+    if (key === today) {
+      return isHistoricalSim ? formatSessionDay(key) : 'Today';
+    }
+    if (key === shiftSessionDay(today, -1)) {
+      return isHistoricalSim ? formatSessionDay(key) : 'Yesterday';
+    }
   }
   const [y, m, d] = key.split('-').map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d))

@@ -13,7 +13,7 @@
  * stops advertising a filter that would do nothing.
  */
 import { useCallback, useMemo, useState } from 'react';
-import type { BoardSignal } from './boardTypes';
+import { sessionDayKey, type BoardSignal } from './boardTypes';
 import { DEFAULT_HIDDEN_COLUMNS, type ColumnId } from './SignalBoard';
 
 export interface BoardView {
@@ -21,12 +21,14 @@ export interface BoardView {
   setQuery: (q: string) => void;
   showEnded: boolean;
   setShowEnded: (v: boolean) => void;
+  todayOnly: boolean;
+  setTodayOnly: (v: boolean) => void;
   bestOnly: boolean;
   setBestOnly: (v: boolean) => void;
   /** Rows after every filter, in board order. */
   visible: BoardSignal[];
   /** Whether each control has anything to act on. */
-  offers: { ended: boolean; best: boolean };
+  offers: { ended: boolean; best: boolean; today: boolean };
   /** Counts for the summary line. */
   counts: { total: number; shown: number; ended: number };
   /** Columns the user has switched off. Distinct from columns no row can fill. */
@@ -121,10 +123,16 @@ function bestLegPerUnderlying(signals: BoardSignal[]): BoardSignal[] {
  */
 export function useBoardView(
   signals: readonly BoardSignal[],
-  { endedByDefault = false, storageKey }: { endedByDefault?: boolean; storageKey?: string } = {},
+  { endedByDefault = false, todayByDefault = false, nowMs, storageKey }: {
+    endedByDefault?: boolean;
+    todayByDefault?: boolean;
+    nowMs?: number;
+    storageKey?: string;
+  } = {},
 ): BoardView {
   const [query, setQuery] = useState('');
   const [showEnded, setShowEnded] = useState(endedByDefault);
+  const [todayOnly, setTodayOnly] = useState(todayByDefault);
   const [bestOnly, setBestOnly] = useState(false);
   const [hidden, setHidden] = useState<Set<ColumnId>>(() => loadHidden(storageKey));
 
@@ -163,20 +171,32 @@ export function useBoardView(
       const key = `${s.underlying}:${s.direction}`;
       perUnderlying.set(key, (perUnderlying.get(key) ?? 0) + 1);
     }
+    const todayKey = sessionDayKey(nowMs ?? Date.now());
+    const hasOlderOrOther = all.some((s) => {
+      const k = sessionDayKey(s.atMs);
+      return k !== todayKey && k !== 'unknown';
+    });
     const offers = {
       ended: ended > 0,
       best: [...perUnderlying.values()].some((n) => n > 1),
+      today: hasOlderOrOther,
     };
 
     let visible = all.filter((s) => matches(s, query.trim()));
     if (!showEnded) visible = visible.filter((s) => s.status !== 'ended');
+    if (todayOnly) {
+      visible = visible.filter((s) => {
+        const day = sessionDayKey(s.atMs);
+        return day === todayKey || day === 'unknown';
+      });
+    }
     if (bestOnly) visible = bestLegPerUnderlying(visible);
 
     return {
-      query, setQuery, showEnded, setShowEnded, bestOnly, setBestOnly,
+      query, setQuery, showEnded, setShowEnded, todayOnly, setTodayOnly, bestOnly, setBestOnly,
       visible, offers,
       counts: { total: all.length, shown: visible.length, ended },
       hidden, toggleColumn, showAllColumns, resetColumns,
     };
-  }, [signals, query, showEnded, bestOnly, hidden, toggleColumn, showAllColumns, resetColumns]);
+  }, [signals, query, showEnded, todayOnly, bestOnly, hidden, toggleColumn, showAllColumns, resetColumns, nowMs]);
 }

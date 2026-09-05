@@ -418,6 +418,8 @@ export interface EngineOpenPosition {
   exit_mode?: string;  // the chosen exit counter at entry (one_red etc) — persisted per position
   current_red_count?: number;
   exit_threshold?: number;
+  exit_pending?: boolean;
+  pnl_reconciliation_required?: boolean;
 }
 
 export interface OpenPositionsResponse {

@@ -218,7 +218,17 @@ function StrikeGroupCard({
       }}
     >
       <div
+        role="checkbox"
+        aria-checked={isChecked}
+        aria-label={group.label}
+        tabIndex={0}
         onClick={toggleGroup}
+        onKeyDown={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault();
+            toggleGroup();
+          }
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -304,6 +314,7 @@ function StrikeGroupCard({
 
 export function ContractsGroup({
   strikes, indexExpiries, onChange,
+  badge,
   dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote,
 }: {
   strikes: Moneyness[];
@@ -315,6 +326,7 @@ export function ContractsGroup({
     expiry_dte_max?: number;
     avoid_expiry_day?: boolean;
   }) => void;
+  badge?: React.ReactNode;
   dteMin?: number;
   dteMax?: number;
   avoidExpiryDay?: boolean;
@@ -327,6 +339,7 @@ export function ContractsGroup({
         label="Strike range"
         hint="Select moneyness and number of legs per group"
         wide
+        badge={badge}
       >
         <div
           style={{
@@ -347,28 +360,33 @@ export function ContractsGroup({
         </div>
       </Field>
 
-      <Field label="Index expiries" hint="Contract cycles scanned for indices.">
-        <div style={{ display: 'flex', gap: 16 }}>
-          <CheckOption
-            label="Weekly"
-            checked={indexExpiries.includes('weekly')}
-            onChange={() => onChange({
-              scan_expiries_indices: indexExpiries.includes('weekly')
-                ? (indexExpiries.filter((x) => x !== 'weekly').length ? indexExpiries.filter((x) => x !== 'weekly') : ['weekly'])
-                : [...indexExpiries, 'weekly'],
-            })}
-          />
-          <CheckOption
-            label="Monthly"
-            checked={indexExpiries.includes('monthly')}
-            onChange={() => onChange({
-              scan_expiries_indices: indexExpiries.includes('monthly')
-                ? (indexExpiries.filter((x) => x !== 'monthly').length ? indexExpiries.filter((x) => x !== 'monthly') : ['monthly'])
-                : [...indexExpiries, 'monthly'],
-            })}
-          />
-        </div>
-      </Field>
+      {indexExpiries && indexExpiries.length > 0 && (
+        <Field label="Index expiries" hint="Contract cycles scanned for indices." wide>
+          <div
+            className="sk-config-check-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: '6px 12px',
+              maxWidth: 320,
+            }}
+          >
+            {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
+              <CheckOption
+                key={expiry}
+                label={expiry === 'weekly' ? 'Weekly' : 'Monthly'}
+                checked={indexExpiries.includes(expiry)}
+                onChange={() => {
+                  const next = indexExpiries.includes(expiry)
+                    ? indexExpiries.filter((x) => x !== expiry)
+                    : [...indexExpiries, expiry];
+                  onChange({ scan_expiries_indices: next.length ? next : ['weekly', 'monthly'] });
+                }}
+              />
+            ))}
+          </div>
+        </Field>
+      )}
 
       {dteMin !== undefined && dteMax !== undefined && (
         <ExpirySettingsGroup
@@ -385,13 +403,14 @@ export function ContractsGroup({
 }
 
 export function ExpirySettingsGroup({
-  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote, onChange,
+  dteMin, dteMax, avoidExpiryDay, dteDefaults, dteNote, avoidExpiryDayBadge, onChange,
 }: {
   dteMin?: number;
   dteMax?: number;
   avoidExpiryDay?: boolean;
   dteDefaults?: { min?: number; max?: number };
   dteNote?: React.ReactNode;
+  avoidExpiryDayBadge?: React.ReactNode;
   onChange: (next: {
     expiry_dte_min?: number;
     expiry_dte_max?: number;
@@ -419,12 +438,18 @@ export function ExpirySettingsGroup({
           <Field
             label="Expiry day"
             hint="Expiry-day options gain and lose value fastest, and their open interest is settlement mechanics rather than positioning."
+            badge={avoidExpiryDayBadge}
           >
-            <Switch
-              checked={!!avoidExpiryDay}
-              label="Avoid expiry-day entries"
-              onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
-            />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: avoidExpiryDay ? 'var(--k-text)' : DIM }}>
+                {avoidExpiryDay ? 'Skipped' : 'Allowed'}
+              </span>
+              <Switch
+                checked={!!avoidExpiryDay}
+                label="Avoid expiry-day entries"
+                onChange={() => onChange({ avoid_expiry_day: !avoidExpiryDay })}
+              />
+            </div>
           </Field>
           {dteNote && <ConfigNote>{dteNote}</ConfigNote>}
         </>

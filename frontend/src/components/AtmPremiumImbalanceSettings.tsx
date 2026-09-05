@@ -184,12 +184,55 @@ export function AtmPremiumImbalanceSettings() {
       </ConfigNote>
 
       <Section
+        title="Chart source"
+        description="Which feed ATM Premium Imbalance reads quotes from."
+        summary={cfg.data_source === 'kite' ? 'Zerodha Kite' : 'TrueData'}
+        persistKey="api-chart-source"
+        defaultOpen
+      >
+        <Field label="Market data" hint="Where quotes come from." wide>
+          <ChoiceRow
+            value={cfg.data_source}
+            options={DATA_SOURCE_OPTIONS}
+            onChange={(data_source) => patch({ data_source })}
+          />
+        </Field>
+      </Section>
+
+      <Section
         title="Instruments"
         description="The index this engine watches."
         summary={cfg.underlying}
         persistKey="api-instruments"
         defaultOpen
       >
+        <Field label="Indices" hint="Index whose at-the-money call and put are compared." wide>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX'].map((idx) => {
+              const selected = cfg.underlying === idx;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => patch({ underlying: idx })}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 5,
+                    border: `1px solid ${selected ? 'var(--k-border-brand, #2563eb)' : 'var(--k-border, #e5e7eb)'}`,
+                    background: selected ? 'color-mix(in srgb, #2563eb 10%, var(--k-bg))' : 'var(--k-bg)',
+                    color: selected ? '#2563eb' : TEXT,
+                    fontSize: 11.5,
+                    fontWeight: selected ? 700 : 500,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {idx}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
         <Field label="Underlying" hint="Index whose at-the-money call and put are compared.">
           <input
             value={cfg.underlying}
@@ -205,32 +248,11 @@ export function AtmPremiumImbalanceSettings() {
       <Section
         title="Contracts"
         description="Which strike and expiry the signal is expressed through."
-        summary={`ATM · ${cfg.expiry_policy.toLowerCase().replace(/_/g, ' ')} · `
-          + `${cfg.expiry_dte_min}-${cfg.expiry_dte_max} DTE`}
+        summary={`ATM · 1 leg`}
         persistKey="api-contracts"
         defaultOpen
       >
-        <Field label="Expiry" wide>
-          <ChoiceRow
-            value={cfg.expiry_policy}
-            options={EXPIRY_OPTIONS}
-            onChange={(expiry_policy) => patch({ expiry_policy })}
-          />
-        </Field>
-        {cfg.expiry_policy === 'EXPLICIT' && (
-          <Field label="Explicit expiry" hint="ISO date. Must be a listed expiry.">
-            <input
-              value={cfg.explicit_expiry}
-              onChange={(e) => patch({ explicit_expiry: e.target.value })}
-              placeholder="YYYY-MM-DD"
-              style={{
-                background: 'transparent', color: TEXT, border: 'none', outline: 'none',
-                font: 'inherit', width: 120, textAlign: 'right',
-              }}
-            />
-          </Field>
-        )}
-        <Field label="Strike & legs" wide>
+        <Field label="Strike range & legs" wide>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, width: '100%' }}>
             <div
               style={{
@@ -279,6 +301,35 @@ export function AtmPremiumImbalanceSettings() {
             </div>
           </div>
         </Field>
+      </Section>
+
+      <Section
+        title="Expiry"
+        description="Rules governing contract days-to-expiry and settlement dates."
+        summary={`${cfg.expiry_dte_min}–${cfg.expiry_dte_max} DTE · ${cfg.expiry_policy.toLowerCase().replace(/_/g, ' ')}${cfg.avoid_expiry_day ? ' · avoid expiry day' : ''}`}
+        persistKey="api-expiry"
+        defaultOpen
+      >
+        <Field label="Expiry policy" wide>
+          <ChoiceRow
+            value={cfg.expiry_policy}
+            options={EXPIRY_OPTIONS}
+            onChange={(expiry_policy) => patch({ expiry_policy })}
+          />
+        </Field>
+        {cfg.expiry_policy === 'EXPLICIT' && (
+          <Field label="Explicit expiry" hint="ISO date. Must be a listed expiry.">
+            <input
+              value={cfg.explicit_expiry}
+              onChange={(e) => patch({ explicit_expiry: e.target.value })}
+              placeholder="YYYY-MM-DD"
+              style={{
+                background: 'transparent', color: TEXT, border: 'none', outline: 'none',
+                font: 'inherit', width: 120, textAlign: 'right',
+              }}
+            />
+          </Field>
+        )}
         <NumberField
           label="Minimum days to expiry"
           hint="Contracts closer than this are not eligible. Applied before the expiry policy chooses, so 'nearest' means nearest ELIGIBLE."
@@ -297,13 +348,6 @@ export function AtmPremiumImbalanceSettings() {
             label="Avoid expiry-day entries"
             disabled={cfg.expiry_policy === 'SAME_DAY'}
             onChange={() => patch({ avoid_expiry_day: !cfg.avoid_expiry_day })}
-          />
-        </Field>
-        <Field label="Market data" hint="Where quotes come from." wide>
-          <ChoiceRow
-            value={cfg.data_source}
-            options={DATA_SOURCE_OPTIONS}
-            onChange={(data_source) => patch({ data_source })}
           />
         </Field>
       </Section>
