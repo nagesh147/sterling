@@ -1103,7 +1103,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     relocation. A control that quietly disappears is bad
                     anywhere; on the path that places a real order it is worse. */}
                 {!isExp && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                   {/* NOT gated on `boardRowActions` any more. That gate wrapped this
                       whole block, so switching the row's order buttons off also took
                       Chg., Chg.%, LTP and Time with it — and the relocated cluster
