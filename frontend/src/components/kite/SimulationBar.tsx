@@ -1,7 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSimulation, useSimulationStore, useSimBarOpen, useSimActive, SimSignalEvent, SimTradeEvent } from '../../hooks/useSimulation';
 import { k } from '../../styles/kiteUI';
 import './SimulationBar.css';
+
+const DOCK_HEIGHT_KEY = 'sterling:replay-dock:height';
+
+function DragDots() {
+  return (
+    <span aria-hidden="true" style={{ width: 10, display: 'grid', gridTemplateColumns: 'repeat(2,3px)', gap: 2, color: '#c2c2c2', flexShrink: 0 }}>
+      {Array.from({ length: 6 }).map((_, index) => <span key={index} style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'currentColor' }} />)}
+    </span>
+  );
+}
+
+function ControlIcon({ kind }: { kind: 'minimize' | 'half' | 'maximize' | 'fullscreen' | 'restore' }) {
+  if (kind === 'minimize') return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 18h14"/></svg>;
+  if (kind === 'half') return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M3 4h9v16H3z" fill="currentColor" opacity=".14" stroke="none"/></svg>;
+  if (kind === 'maximize') return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>;
+  if (kind === 'restore') return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="8" width="12" height="11" rx="1.5"/><path d="M8 8V5h11v11h-2"/></svg>;
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>;
+}
 
 // Tick intervals for 30 mins
 const TICKS = ['09:15', '09:45', '10:15', '10:45', '11:15', '11:45', '12:15', '12:45', '13:15', '13:45', '14:15', '14:45', '15:15', '15:30'];
@@ -57,7 +76,12 @@ export function exportSignalsToCSV(events: SimSignalEvent[], date: string) {
 
 export function exportTradesToCSV(trades: SimTradeEvent[], date: string) {
   if (!trades || trades.length === 0) return;
-  const headers = ['Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying', 'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity', 'Entry Price', 'Exit Price', 'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'];
+  const headers = [
+    'Trade ID', 'Entry Time', 'Exit Time', 'Strategy', 'Symbol', 'Underlying',
+    'Direction', 'Option Type', 'Strike', 'Lots', 'Quantity',
+    'Entry Fill', 'Raw Entry', 'Exit Fill', 'Raw Exit', 'Slippage Drag (INR)',
+    'Status', 'PnL (INR)', 'PnL (%)', 'Duration (Mins)'
+  ];
   const rows = trades.map(tr => [
     tr.trade_id,
     tr.entry_time_iso,
@@ -71,7 +95,10 @@ export function exportTradesToCSV(trades: SimTradeEvent[], date: string) {
     tr.lots,
     tr.quantity,
     tr.entry_price,
+    tr.raw_entry ?? tr.entry_price,
     tr.exit_price || '',
+    tr.raw_exit ?? (tr.exit_price || ''),
+    tr.slippage ? tr.slippage.toFixed(2) : '0.00',
     tr.status,
     tr.pnl_usd,
     tr.pnl_pct,
@@ -95,9 +122,17 @@ export function SimulationBar() {
   const [toastSignal, setToastSignal] = useState<SimSignalEvent | null>(null);
 
   const [isExpanded, setIsExpanded] = useState(true);
-  const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades'>('config');
-  const [viewMode, setViewMode] = useState<'docked' | 'half' | 'maximized'>('docked');
-  const [dockHeight, setDockHeight] = useState<number | null>(null);
+  const [activeDockTab, setActiveDockTab] = useState<'config' | 'signals' | 'trades' | 'split'>('config');
+  const [viewMode, setViewMode] = useState<'half' | 'full' | 'maximized' | 'fullscreen'>('half');
+  const [dockHeight, setDockHeight] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(DOCK_HEIGHT_KEY);
+      const parsed = saved ? parseInt(saved, 10) : 320;
+      return Number.isFinite(parsed) && parsed >= 160 ? parsed : 320;
+    } catch {
+      return 320;
+    }
+  });
   const [isResizing, setIsResizing] = useState(false);
 
   const [showStratDropdown, setShowStratDropdown] = useState(false);
@@ -157,7 +192,12 @@ export function SimulationBar() {
         e.preventDefault();
         sim.jumpEnd();
       } else if (e.key === 'Escape') {
-        sim.setBarOpen(false);
+        if (viewMode !== 'half') {
+          e.preventDefault();
+          setViewMode('half');
+        } else {
+          sim.setBarOpen(false);
+        }
       } else if (e.key === '=' || e.key === '+') {
         const speeds = [1, 5, 10, 50, 100, 250, 500, 1000, 5000];
         const idx = speeds.indexOf(sim.speed);
@@ -170,19 +210,22 @@ export function SimulationBar() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [barOpen, sim]);
+  }, [barOpen, sim, viewMode]);
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
     const startY = e.clientY;
-    const startHeight = dockHeight || (viewMode === 'maximized' ? window.innerHeight * 0.8 : viewMode === 'half' ? window.innerHeight * 0.5 : 320);
+    const startHeight = dockHeight || 320;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaY = startY - moveEvent.clientY;
       const newHeight = Math.max(160, Math.min(window.innerHeight - 80, startHeight + deltaY));
       setDockHeight(newHeight);
       setIsExpanded(true);
+      try {
+        localStorage.setItem(DOCK_HEIGHT_KEY, String(newHeight));
+      } catch {}
     };
 
     const handleMouseUp = () => {
@@ -217,69 +260,261 @@ export function SimulationBar() {
     });
   }, [sim.status.stats.events, sim.status.config]);
 
-  return (
-    <>
-      {toastSignal && sim.status.state === 'running' && (
-        <div className="sim-toast-popup" data-direction={toastSignal.direction}>
-          <span className="sim-toast-badge">[{toastSignal.strategy.toUpperCase()}]</span>
-          <span className="sim-toast-title">
-            {toastSignal.direction === 'BULLISH' ? '🟢 LONG' : '🔴 SHORT'} {toastSignal.instrument}
-          </span>
-          <span className="sim-toast-price">@ ₹{toastSignal.entry}</span>
-          <span className="sim-toast-time">({toastSignal.time_iso})</span>
+  const renderSignalsTable = () => (
+    sim.status.stats.events.length === 0 ? (
+      <div className="sim-empty-state">Replay stepping through bars... No signals triggered yet.</div>
+    ) : (
+      <div className="sim-signals-grid">
+        <div className="sim-signals-header">
+          <div>TIME</div>
+          <div>STRATEGY</div>
+          <div>CONTRACT / UNDERLYING</div>
+          <div>DIR</div>
+          <div>ENTRY</div>
+          <div>SL</div>
+          <div>TP</div>
         </div>
-      )}
+        {sim.status.stats.events.slice().reverse().map((ev, i) => (
+          <div key={i} className="sim-signal-row" data-direction={ev.direction}>
+            <div className="sim-signal-time">{ev.time_iso}</div>
+            <div className="sim-signal-strat">[{ev.strategy.toUpperCase()}]</div>
+            <div className="sim-signal-inst">
+              {ev.contract ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 600 }}>{ev.contract}</span>
+                  {ev.spot != null && (
+                    <span style={{ fontSize: 9, opacity: 0.65, padding: '1px 4px', borderRadius: 3, background: 'var(--k-border)' }}>
+                      Spot ₹{ev.spot}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                ev.instrument
+              )}
+            </div>
+            <div className="sim-signal-dir" data-bull={ev.direction === 'BULLISH' || ev.direction === 'LONG'}>{ev.direction}</div>
+            <div className="sim-signal-price">₹{ev.entry}</div>
+            <div className="sim-signal-sl">₹{ev.stop}</div>
+            <div className="sim-signal-tp">₹{ev.target}</div>
+          </div>
+        ))}
+      </div>
+    )
+  );
 
-      <div 
-        className="sim-dock" 
-        data-open={barOpen}
-        style={{
-          height: isExpanded
-            ? (viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : dockHeight ? `${dockHeight}px` : 'auto')
-            : 'auto',
-          maxHeight: viewMode === 'maximized' ? '80vh' : viewMode === 'half' ? '50vh' : 'none',
-          transition: isResizing ? 'none' : 'height 0.25s ease, max-height 0.25s ease',
-        }}
-      >
+  const renderTradesTable = () => (
+    !(sim.status.stats.trades && sim.status.stats.trades.length > 0) ? (
+      <div className="sim-empty-state">No trades executed yet. Strong signals will enter trades automatically.</div>
+    ) : (
+      <table className="sim-trade-table">
+        <thead>
+          <tr>
+            <th className="sim-table-th">ID</th>
+            <th className="sim-table-th">Entry Time</th>
+            <th className="sim-table-th">Exit Time</th>
+            <th className="sim-table-th">Strategy</th>
+            <th className="sim-table-th">Contract</th>
+            <th className="sim-table-th">Lots (Qty)</th>
+            <th className="sim-table-th">Entry ₹</th>
+            <th className="sim-table-th">Exit ₹</th>
+            <th className="sim-table-th">Slippage</th>
+            <th className="sim-table-th">Status</th>
+            <th className="sim-table-th">Realized P&L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sim.status.stats.trades.slice().reverse().map((tr, i) => {
+            const isWin = tr.status === 'WIN';
+            const entryTime = tr.entry_time_iso || (tr.timestamp_ms ? new Date(tr.timestamp_ms).toLocaleTimeString('en-IN', { hour12: false }) : '--');
+            const exitTime = tr.exit_time_iso || (tr.status === 'OPEN' ? 'OPEN' : '--');
+            return (
+              <tr key={i} className="sim-table-tr">
+                <td className="sim-table-td id-cell">{tr.trade_id}</td>
+                <td className="sim-table-td time-cell">{entryTime}</td>
+                <td className="sim-table-td time-cell">{exitTime}</td>
+                <td className="sim-table-td">[{tr.strategy.toUpperCase()}]</td>
+                <td className="sim-table-td">{tr.symbol}</td>
+                <td className="sim-table-td">{tr.lots}L ({tr.quantity}Q)</td>
+                <td className="sim-table-td">
+                  <div>₹{tr.entry_price}</div>
+                  {tr.raw_entry != null && tr.raw_entry !== tr.entry_price && (
+                    <div style={{ fontSize: 9.5, color: 'var(--k-dim)', opacity: 0.8 }} title={`Theoretical Signal: ₹${tr.raw_entry}`}>
+                      raw ₹{tr.raw_entry}
+                    </div>
+                  )}
+                </td>
+                <td className="sim-table-td">
+                  {tr.exit_price ? (
+                    <>
+                      <div>₹{tr.exit_price}</div>
+                      {tr.raw_exit != null && tr.raw_exit !== tr.exit_price && (
+                        <div style={{ fontSize: 9.5, color: 'var(--k-dim)', opacity: 0.8 }} title={`Theoretical Target/SL: ₹${tr.raw_exit}`}>
+                          raw ₹{tr.raw_exit}
+                        </div>
+                      )}
+                    </>
+                  ) : '--'}
+                </td>
+                <td className="sim-table-td">
+                  {tr.slippage && tr.slippage > 0 ? (
+                    <span style={{ fontSize: 10, color: 'var(--k-red-brick)', fontWeight: 650 }} title="Slippage & bid-ask spread friction deducted from P&L">
+                      -₹{tr.slippage.toFixed(2)}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 10, color: 'var(--k-dim)' }}>₹0.00</span>
+                  )}
+                </td>
+                <td className="sim-table-td">
+                  <span className="sim-status-chip" data-win={isWin}>{tr.status}</span>
+                </td>
+                <td className="sim-table-td pnl-cell" data-profit={tr.pnl_usd >= 0}>
+                  {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)} ({tr.pnl_pct >= 0 ? '+' : ''}{tr.pnl_pct}%)
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )
+  );
+
+  const dockBody = (
+    <div
+      className="sim-dock-inner"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+        background: 'var(--k-bg)',
+      }}
+    >
+      {(viewMode === 'half' || viewMode === 'full') && (
         <div 
           className="sim-dock-resizer"
           data-active={isResizing}
           onMouseDown={handleResizeStart}
           title="Drag up/down to resize Market Replay Dock height"
         />
+      )}
 
-        {/* Row 1: Shell Bar */}
-        <div className="sim-shell-bar">
-          <span className="sim-shell-title">⚡ MARKET REPLAY</span>
-          <span className="sim-shell-state" data-state={sim.status.state}>
-            {sim.status.state.toUpperCase()}
-          </span>
-          <span className="sim-shell-clock">
-            {sim.status.current_time_iso || sim.startTime} IST
-          </span>
-          <span className="sim-shell-progress">{sim.status.progress_pct}%</span>
-          
-          <div className="sim-shell-controls">
-            <button className="sim-win-btn" onClick={() => setIsExpanded(!isExpanded)}>
-              {isExpanded ? '▼ DOCK' : '▲ DOCK'}
+      {/* Row 1: Shell Bar (Standard Sterling Dock Header matching PCR / workspace dock) */}
+      <div 
+        className="sim-shell-bar"
+        onDoubleClick={() => {
+          if (viewMode !== 'half') setViewMode('half');
+          else {
+            setIsExpanded(true);
+            setViewMode('maximized');
+          }
+        }}
+        title={viewMode !== 'half' ? 'Double-click to restore dock' : 'Double-click to maximize dock'}
+      >
+        <DragDots />
+        <span style={{ color: 'var(--k-brand)', display: 'inline-flex' }}>⚡</span>
+        <span className="sim-shell-title">Market Replay</span>
+        <span style={{ fontSize: 9, color: 'var(--k-faint)', whiteSpace: 'nowrap' }}>
+          {viewMode === 'full' ? 'Bottom dock' : viewMode === 'maximized' ? 'Maximized' : viewMode === 'fullscreen' ? 'Full screen' : 'Dashboard dock'}
+        </span>
+
+        <span className="sim-shell-state" data-state={sim.status.state}>
+          {sim.status.state.toUpperCase()}
+        </span>
+        <span className="sim-shell-clock">
+          [{sim.status.current_time_iso || sim.startTime} IST · {sim.speed}× SPEED]
+        </span>
+        <span className="sim-shell-progress">{sim.status.progress_pct}%</span>
+        
+        <div className="sim-shell-controls">
+          {viewMode !== 'half' && (
+            <button 
+              type="button"
+              className="kw-pane-control"
+              aria-label="Restore Market Replay"
+              title="Restore to dashboard dock"
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewMode('half');
+              }}
+            >
+              <ControlIcon kind="restore" />
             </button>
-            <button className="sim-win-btn" onClick={() => sim.setBarOpen(false)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 18h14"/></svg>
-            </button>
-            <button className="sim-win-btn" onClick={() => { setIsExpanded(true); setViewMode(viewMode === 'half' ? 'docked' : 'half'); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/><path d="M3 4h9v16H3z" fill="currentColor" opacity=".14" stroke="none"/></svg>
-            </button>
-            <button className="sim-win-btn" onClick={() => { setIsExpanded(true); setViewMode(viewMode === 'maximized' ? 'docked' : 'maximized'); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-            </button>
-            <button className="sim-win-btn" onClick={() => {
-              if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
-              else document.exitFullscreen().catch(()=>{});
-            }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>
-            </button>
-          </div>
+          )}
+
+          <button 
+            type="button"
+            className="kw-pane-control" 
+            style={{ width: 'auto', padding: '0 6px', fontSize: 10, fontWeight: 700, color: isExpanded ? 'var(--k-brand)' : 'var(--k-dim)' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            title={isExpanded ? "Collapse replay tabs" : "Expand replay tabs"}
+            aria-label={isExpanded ? "Collapse replay tabs" : "Expand replay tabs"}
+          >
+            {isExpanded ? '▼ TABLE' : '▲ TABLE'}
+          </button>
+
+          <button 
+            type="button"
+            className="kw-pane-control sim-minimize-btn" 
+            onClick={(e) => {
+              e.stopPropagation();
+              useSimulationStore.getState().setBarOpen(false);
+            }}
+            title="Minimize Market Replay Dock"
+            aria-label="Minimize Replay Dock"
+          >
+            <ControlIcon kind="minimize" />
+          </button>
+
+          <button 
+            type="button"
+            className="kw-pane-control" 
+            aria-label="Half screen Market Replay"
+            aria-pressed={viewMode === 'half'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(true);
+              setViewMode(viewMode === 'half' ? 'full' : 'half');
+            }}
+            title={viewMode === 'half' ? "Full width bottom dock" : "Align to dashboard section (Split)"}
+          >
+            <ControlIcon kind="half" />
+          </button>
+
+          <button 
+            type="button"
+            className="kw-pane-control" 
+            aria-label="Maximize Market Replay"
+            aria-pressed={viewMode === 'maximized'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(true);
+              setViewMode(viewMode === 'maximized' ? 'half' : 'maximized');
+            }}
+            title="Maximize Market Replay"
+          >
+            <ControlIcon kind="maximize" />
+          </button>
+
+          <button 
+            type="button"
+            className="kw-pane-control" 
+            aria-label="Full screen Market Replay"
+            aria-pressed={viewMode === 'fullscreen'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(true);
+              setViewMode(viewMode === 'fullscreen' ? 'half' : 'fullscreen');
+            }}
+            title="Full screen Market Replay"
+          >
+            <ControlIcon kind="fullscreen" />
+          </button>
         </div>
+      </div>
 
         {/* Row 2: Toolbar */}
         <div className="sim-toolbar">
@@ -391,15 +626,26 @@ export function SimulationBar() {
             <button className="sim-tab-btn" data-active={activeDockTab === 'config'} onClick={() => setActiveDockTab('config')}>⚙ Configuration</button>
             <button className="sim-tab-btn" data-active={activeDockTab === 'signals'} onClick={() => setActiveDockTab('signals')}>⚡ Signals ({sim.status.stats.events.length})</button>
             <button className="sim-tab-btn" data-active={activeDockTab === 'trades'} onClick={() => setActiveDockTab('trades')}>💼 Trades ({(sim.status.stats.trades || []).length})</button>
+            <button className="sim-tab-btn" data-active={activeDockTab === 'split'} onClick={() => setActiveDockTab('split')}>🔀 Split View</button>
             
             <div className="sim-tab-actions">
               {activeDockTab === 'signals' && sim.status.stats.events.length > 0 && (
-                <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export</button>
+                <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export Signals</button>
               )}
               {activeDockTab === 'trades' && (sim.status.stats.trades || []).length > 0 && (
-                <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export</button>
+                <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export Trades</button>
               )}
-              <button className="sim-close-btn" onClick={() => setIsExpanded(false)}>✕</button>
+              {activeDockTab === 'split' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {sim.status.stats.events.length > 0 && (
+                    <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Signals</button>
+                  )}
+                  {(sim.status.stats.trades || []).length > 0 && (
+                    <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Trades</button>
+                  )}
+                </div>
+              )}
+              <button className="sim-close-btn" onClick={() => setIsExpanded(false)} title="Collapse dock tabs">✕</button>
             </div>
           </div>
 
@@ -446,84 +692,180 @@ export function SimulationBar() {
                     ))}
                   </div>
                 </div>
+
+                <div>
+                  <div className="sim-config-header">⚡ EXECUTION FRICTION & REALISM</div>
+                  <div className="sim-config-options">
+                    <button
+                      className="sim-speed-pill"
+                      data-active={sim.frictionMode === 'realistic'}
+                      onClick={() => sim.setFrictionMode('realistic')}
+                      disabled={simActive}
+                      title="Simulates real-world spread (0.5% index, 1.5% stock) and execution slippage"
+                    >
+                      ⚡ Realistic (Spread + Slippage)
+                    </button>
+                    <button
+                      className="sim-speed-pill"
+                      data-active={sim.frictionMode === 'ideal'}
+                      onClick={() => sim.setFrictionMode('ideal')}
+                      disabled={simActive}
+                      title="Ideal theoretical execution at exact signal price with zero friction"
+                    >
+                      🎯 Ideal (Zero Friction)
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--k-dim)', marginTop: 6, lineHeight: 1.4 }}>
+                    {sim.frictionMode === 'realistic'
+                      ? 'Realistic mode simulates buying at Ask and selling at Bid with exchange tick friction.'
+                      : 'Ideal mode executes directly at theoretical signal price without market friction.'}
+                  </div>
+                </div>
               </div>
             )}
 
-            {activeDockTab === 'signals' && (
-              sim.status.stats.events.length === 0 ? (
-                <div className="sim-empty-state">Replay stepping through bars... No signals triggered yet.</div>
-              ) : (
-                <div className="sim-signals-grid">
-                  <div className="sim-signals-header">
-                    <div>TIME</div>
-                    <div>STRATEGY</div>
-                    <div>INSTRUMENT</div>
-                    <div>DIR</div>
-                    <div>ENTRY</div>
-                    <div>SL</div>
-                    <div>TP</div>
-                  </div>
-                  {sim.status.stats.events.slice().reverse().map((ev, i) => (
-                    <div key={i} className="sim-signal-row" data-direction={ev.direction}>
-                      <div className="sim-signal-time">{ev.time_iso}</div>
-                      <div className="sim-signal-strat">[{ev.strategy.toUpperCase()}]</div>
-                      <div className="sim-signal-inst">{ev.instrument}</div>
-                      <div className="sim-signal-dir" data-bull={ev.direction === 'BULLISH' || ev.direction === 'LONG'}>{ev.direction}</div>
-                      <div className="sim-signal-price">₹{ev.entry}</div>
-                      <div className="sim-signal-sl">₹{ev.stop}</div>
-                      <div className="sim-signal-tp">₹{ev.target}</div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
+            {activeDockTab === 'signals' && renderSignalsTable()}
 
-            {activeDockTab === 'trades' && (
-              !(sim.status.stats.trades && sim.status.stats.trades.length > 0) ? (
-                <div className="sim-empty-state">No trades executed yet. Strong signals will enter trades automatically.</div>
-              ) : (
-                <table className="sim-trade-table">
-                  <thead>
-                    <tr>
-                      <th className="sim-table-th">ID</th>
-                      <th className="sim-table-th">Time</th>
-                      <th className="sim-table-th">Strategy</th>
-                      <th className="sim-table-th">Contract</th>
-                      <th className="sim-table-th">Lots (Qty)</th>
-                      <th className="sim-table-th">Entry ₹</th>
-                      <th className="sim-table-th">Exit ₹</th>
-                      <th className="sim-table-th">Status</th>
-                      <th className="sim-table-th">Realized P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sim.status.stats.trades.slice().reverse().map((tr, i) => {
-                      const isWin = tr.status === 'WIN';
-                      return (
-                        <tr key={i} className="sim-table-tr">
-                          <td className="sim-table-td id-cell">{tr.trade_id}</td>
-                          <td className="sim-table-td">{tr.entry_time_iso} → {tr.exit_time_iso}</td>
-                          <td className="sim-table-td">[{tr.strategy.toUpperCase()}]</td>
-                          <td className="sim-table-td">{tr.symbol}</td>
-                          <td className="sim-table-td">{tr.lots}L ({tr.quantity}Q)</td>
-                          <td className="sim-table-td">₹{tr.entry_price}</td>
-                          <td className="sim-table-td">{tr.exit_price ? `₹${tr.exit_price}` : '--'}</td>
-                          <td className="sim-table-td">
-                            <span className="sim-status-chip" data-win={isWin}>{tr.status}</span>
-                          </td>
-                          <td className="sim-table-td pnl-cell" data-profit={tr.pnl_usd >= 0}>
-                            {tr.pnl_usd >= 0 ? '+' : ''}₹{tr.pnl_usd.toFixed(2)} ({tr.pnl_pct >= 0 ? '+' : ''}{tr.pnl_pct}%)
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )
+            {activeDockTab === 'trades' && renderTradesTable()}
+
+            {activeDockTab === 'split' && (
+              <div className="sim-split-container">
+                <div className="sim-split-col">
+                  <div className="sim-split-col-head">
+                    <span>⚡ Signals Feed ({sim.status.stats.events.length})</span>
+                    {sim.status.stats.events.length > 0 && (
+                      <button className="sim-export-btn" onClick={() => exportSignalsToCSV(sim.status.stats.events, sim.date)}>📥 Export</button>
+                    )}
+                  </div>
+                  <div className="sim-split-col-body">
+                    {renderSignalsTable()}
+                  </div>
+                </div>
+                <div className="sim-split-col">
+                  <div className="sim-split-col-head">
+                    <span>💼 Executed Trades ({(sim.status.stats.trades || []).length})</span>
+                    {(sim.status.stats.trades || []).length > 0 && (
+                      <button className="sim-export-btn" onClick={() => exportTradesToCSV(sim.status.stats.trades || [], sim.date)}>📥 Export</button>
+                    )}
+                  </div>
+                  <div className="sim-split-col-body">
+                    {renderTradesTable()}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
       </div>
+    );
+
+  if (!barOpen) {
+    return null;
+  }
+
+  if (viewMode === 'fullscreen') {
+    return (
+      <>
+        {createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 12000,
+              padding: 8,
+              background: '#efefef',
+              fontFamily: k.fontFamily,
+            }}
+          >
+            <section
+              className="sim-dock kw-pane"
+              data-open="true"
+              data-mode="fullscreen"
+              style={{
+                height: '100%',
+                minWidth: 0,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                background: 'var(--k-bg)',
+                border: '1px solid #e4e4e4',
+                boxShadow: '0 10px 36px rgba(0,0,0,.09)',
+              }}
+            >
+              {dockBody}
+            </section>
+          </div>,
+          document.body
+        )}
+        {toastSignal && (
+          <div className="sim-toast-popup" data-direction={toastSignal.direction}>
+            <span className="sim-toast-badge">SIGNAL FIRED</span>
+            <span>{toastSignal.time_iso}</span>
+            <strong>[{toastSignal.strategy.toUpperCase()}]</strong>
+            <span>{toastSignal.contract || toastSignal.instrument}</span>
+            <span>₹{toastSignal.entry}</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  const containerStyle: React.CSSProperties = viewMode === 'maximized'
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 36,
+        zIndex: 145,
+        height: 'calc(100vh - 36px)',
+        overflow: 'hidden',
+        background: 'var(--k-bg)',
+        borderTop: '1px solid var(--k-border-strong-4)',
+        boxShadow: '0 10px 36px rgba(0,0,0,.09)',
+      }
+    : viewMode === 'full'
+    ? {
+        position: 'fixed',
+        bottom: 36,
+        left: 0,
+        right: 0,
+        zIndex: 140,
+        height: isExpanded ? `${dockHeight}px` : '32px',
+        overflow: 'hidden',
+        background: 'var(--k-bg)',
+        borderTop: '1px solid var(--k-border-strong-4)',
+        boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.14)',
+      }
+    : {
+        // viewMode === 'half' (Default dashboard-aligned view)
+        width: '100%',
+        flexShrink: 0,
+        height: isExpanded ? `${dockHeight}px` : '32px',
+        borderTop: '1px solid var(--k-border-strong-4)',
+      };
+
+  return (
+    <>
+      <section
+        className="sim-dock kw-pane"
+        data-open="true"
+        data-mode={viewMode}
+        style={containerStyle}
+      >
+        {dockBody}
+      </section>
+
+      {toastSignal && (
+        <div className="sim-toast-popup" data-direction={toastSignal.direction}>
+          <span className="sim-toast-badge">SIGNAL FIRED</span>
+          <span>{toastSignal.time_iso}</span>
+          <strong>[{toastSignal.strategy.toUpperCase()}]</strong>
+          <span>{toastSignal.contract || toastSignal.instrument}</span>
+          <span>₹{toastSignal.entry}</span>
+        </div>
+      )}
     </>
   );
 }
@@ -538,7 +880,9 @@ export function SimulationFooterButton() {
     <button 
       type="button"
       className="kw-dock-chip" 
-      data-active={barOpen || active} 
+      data-active={barOpen} 
+      title={barOpen ? "Minimize Market Replay Dock" : "Open Market Replay Dock"}
+      aria-label={barOpen ? "Minimize Market Replay Dock" : "Open Market Replay Dock"}
       onClick={() => setBarOpen(!barOpen)}
     >
       <span className="kw-dock-chip-icon">

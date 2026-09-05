@@ -12,9 +12,24 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 
+const mockPatchMutate = vi.fn();
+let mockEngineConfigData: any = {
+  engine_enabled: true,
+  auto_execute: false,
+  vehicle: 'otm_options',
+  directional_mode: false,
+  target_delta: 0.50,
+  itm_depth: 'ITM10',
+  max_lots: 1,
+  max_spread_pct: 2.0,
+  min_oi: 500,
+  stop_mode: 'both',
+  enabled_vehicles: ['otm_options'],
+};
+
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
-  useEngineConfig: () => ({ data: { engine_enabled: true, auto_execute: false } }),
-  usePatchEngineConfig: () => ({ mutate: vi.fn(), isPending: false }),
+  useEngineConfig: () => ({ data: mockEngineConfigData }),
+  usePatchEngineConfig: () => ({ mutate: mockPatchMutate, isPending: false }),
 }));
 vi.mock('../../../hooks/useNavigator', () => ({
   useNavigatorConfig: () => ({ data: { record: { config: { enabled: true, auto_execute_originated: false }, revision: 3 } } }),
@@ -131,4 +146,35 @@ describe('Trading Mode — which strategies a re-scan covers', () => {
     expect(gammaBox.disabled).toBe(false);
     expect(gammaBox.checked).toBe(true);
   });
+
+  it('renders Options & Strike Execution Config and handles profile selection', () => {
+    render(<TradingModePanel />);
+    expect(screen.getByText('Options & Strike Execution Config')).toBeInTheDocument();
+    expect(screen.getByText('Strike Moneyness & Delta Profile')).toBeInTheDocument();
+    expect(screen.getByText('ATM')).toBeInTheDocument();
+    expect(screen.getByText('OTM')).toBeInTheDocument();
+    expect(screen.getByText('Slight ITM')).toBeInTheDocument();
+    expect(screen.getByText('Deep ITM')).toBeInTheDocument();
+    expect(screen.getByText('Futures')).toBeInTheDocument();
+
+    const otmBtn = screen.getByRole('button', { name: /OTM δ ≈ 0\.28/i });
+    fireEvent.click(otmBtn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({
+      vehicle: 'otm_options',
+      directional_mode: false,
+      target_delta: 0.28,
+    });
+  });
+
+  it('handles execution lots sizing and spread protection controls', () => {
+    render(<TradingModePanel />);
+    const lot5Btn = screen.getByRole('button', { name: '5L' });
+    fireEvent.click(lot5Btn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({ max_lots: 5 });
+
+    const spread15Btn = screen.getByRole('button', { name: '1.5%' });
+    fireEvent.click(spread15Btn);
+    expect(mockPatchMutate).toHaveBeenCalledWith({ max_spread_pct: 1.5 });
+  });
 });
+

@@ -5,6 +5,7 @@ export type SimState = 'idle' | 'loading' | 'running' | 'paused';
 
 export interface SimSignalEvent {
   time_iso: string;
+  timestamp_ms?: number;
   strategy: string;
   instrument: string;
   direction: string;
@@ -12,6 +13,13 @@ export interface SimSignalEvent {
   entry: number;
   stop: number;
   target: number;
+  contract?: string;
+  opt_type?: string;
+  strike?: number;
+  spot?: number;
+  premium_entry?: number;
+  premium_sl?: number;
+  premium_target?: number;
 }
 
 export interface SimTradeEvent {
@@ -35,6 +43,9 @@ export interface SimTradeEvent {
   pnl_usd: number;
   pnl_pct: number;
   duration_mins: number;
+  slippage?: number;
+  raw_entry?: number | null;
+  raw_exit?: number | null;
 }
 
 export interface SimStats {
@@ -56,6 +67,8 @@ export interface SimStatus {
     speed: number;
     resolution: string;
     instruments: string[];
+    friction_mode?: 'realistic' | 'ideal';
+    slippage_bps?: number;
   } | null;
   current_time_iso: string;
   progress_pct: number;
@@ -67,10 +80,91 @@ export interface SimStatus {
   last_signal: SimSignalEvent | null;
 }
 
+export function getIstDateParts(d: Date = new Date()): { year: number; month: number; day: number; dayOfWeek: number; hours: number; minutes: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(d);
+  
+  const map: Record<string, string> = {};
+  for (const p of parts) map[p.type] = p.value;
+  
+  const year = parseInt(map.year, 10);
+  const month = parseInt(map.month, 10);
+  const day = parseInt(map.day, 10);
+  const hours = parseInt(map.hour, 10);
+  const minutes = parseInt(map.minute, 10);
+  
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const dayOfWeek = weekdayMap[map.weekday] ?? d.getDay();
+  
+  return { year, month, day, dayOfWeek, hours, minutes };
+}
+
+export function formatYmd(year: number, month: number, day: number): string {
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
+/**
+ * Returns the last working day of the Indian market in YYYY-MM-DD format (IST).
+ * Saturday (6) / Sunday (0) -> Friday
+ * Monday before 9:00 AM -> Previous Friday
+ * Weekday before 9:00 AM -> Previous weekday
+ * Weekday on/after 9:00 AM -> Today
+ */
+export function getLastMarketWorkingDay(refDate: Date = new Date()): string {
+  const ist = getIstDateParts(refDate);
+  const d = new Date(Date.UTC(ist.year, ist.month - 1, ist.day));
+  
+  let daysBack = 0;
+  if (ist.dayOfWeek === 6) {
+    daysBack = 1; // Saturday -> Friday
+  } else if (ist.dayOfWeek === 0) {
+    daysBack = 2; // Sunday -> Friday
+  } else if (ist.hours < 9) {
+    daysBack = ist.dayOfWeek === 1 ? 3 : 1; // Before 9:00 AM
+  } else {
+    daysBack = 0; // Weekday on/after 9:00 AM
+  }
+  
+  d.setUTCDate(d.getUTCDate() - daysBack);
+  return formatYmd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+/**
+ * Returns today's market date in YYYY-MM-DD format (IST).
+ */
+export function getTodayMarketDate(refDate: Date = new Date()): string {
+  const ist = getIstDateParts(refDate);
+  return formatYmd(ist.year, ist.month, ist.day);
+}
+
+/**
+ * Returns yesterday's date in YYYY-MM-DD format (IST).
+ */
+export function getYesterdayMarketDate(refDate: Date = new Date()): string {
+  const ist = getIstDateParts(refDate);
+  const d = new Date(Date.UTC(ist.year, ist.month - 1, ist.day));
+  d.setUTCDate(d.getUTCDate() - 1);
+  return formatYmd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+export type SimViewMode = 'half' | 'full' | 'fullheight' | 'maximized' | 'fullscreen';
+
 interface SimulationStore {
   // UI state
   barOpen: boolean;
   setBarOpen: (open: boolean) => void;
+  viewMode: SimViewMode;
+  setViewMode: (m: SimViewMode) => void;
   
   // Simulation state (from backend)
   status: SimStatus;
@@ -78,6 +172,7 @@ interface SimulationStore {
   
   // Local form state (before starting)
   date: string;
+  endDate: string;
   startTime: string;
   endTime: string;
   speed: number;
@@ -87,6 +182,7 @@ interface SimulationStore {
   moneyness: string;
   selectedMoneyness: string[];
   setDate: (d: string) => void;
+  setEndDate: (d: string) => void;
   setStartTime: (t: string) => void;
   setEndTime: (t: string) => void;
   setSpeed: (s: number) => void;
@@ -97,6 +193,8 @@ interface SimulationStore {
   setMoneyness: (m: string) => void;
   setSelectedMoneyness: (m: string[]) => void;
   toggleMoneyness: (m: string) => void;
+  frictionMode: 'realistic' | 'ideal';
+  setFrictionMode: (m: 'realistic' | 'ideal') => void;
   
   // Summary modal
   showSummary: boolean;
@@ -119,10 +217,13 @@ const DEFAULT_STATUS: SimStatus = {
 export const useSimulationStore = create<SimulationStore>((set) => ({
   barOpen: false,
   setBarOpen: (open) => set({ barOpen: open }),
+  viewMode: 'half',
+  setViewMode: (viewMode) => set({ viewMode }),
   status: DEFAULT_STATUS,
   setStatus: (status) => set({ status }),
-  date: '2026-08-28',
-  startTime: '09:15:00',
+  date: getLastMarketWorkingDay(),
+  endDate: getLastMarketWorkingDay(),
+  startTime: '09:00:00',
   endTime: '15:30:00',
   speed: 5,
   selectedStrategy: 'all',
@@ -130,7 +231,10 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
   lots: 1,
   moneyness: 'ATM',
   selectedMoneyness: ['ATM'],
+  frictionMode: 'realistic',
+  setFrictionMode: (frictionMode) => set({ frictionMode }),
   setDate: (date) => set({ date }),
+  setEndDate: (endDate) => set({ endDate }),
   setStartTime: (startTime) => set({ startTime }),
   setEndTime: (endTime) => set({ endTime }),
   setSpeed: (speed) => set({ speed }),
@@ -214,6 +318,8 @@ export function useSimulation() {
       strategies: store.selectedStrategies,
       lots: store.lots,
       moneyness: store.moneyness,
+      friction_mode: store.frictionMode,
+      end_date: store.endDate,
     };
     clearLocalFeedCache();
     try {
@@ -342,3 +448,11 @@ function stopPolling() {
 // Convenience selectors
 export const useSimActive = () => useSimulationStore(s => s.status.state !== 'idle');
 export const useSimBarOpen = () => useSimulationStore(s => s.barOpen);
+export const useSimNowMs = (): number | null => {
+  const status = useSimulationStore(s => s.status);
+  const isSimActive = status.state !== 'idle';
+  if (!isSimActive || !status.config?.date) return null;
+  const iso = `${status.config.date}T${status.current_time_iso || '12:00:00'}+05:30`;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+};

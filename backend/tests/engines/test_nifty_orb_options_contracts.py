@@ -256,3 +256,35 @@ def test_a_short_signal_takes_moneyness_in_the_mirror_direction():
     cfg = StrategyConfig(option_moneyness="ITM", option_steps_itm=1,
                          expiry_dte_min=0, expiry_dte_max=8)
     assert select_option(25000, "SHORT", pes, cfg, today=TODAY).strike == 25100
+
+
+# --------------------------------------------------------------------------
+# multi-strike moneyness and series configuration
+# --------------------------------------------------------------------------
+
+def test_strike_moneyness_validation():
+    with pytest.raises(ValueError, match="strike_moneyness entries must be drawn from"):
+        StrategyConfig(strike_moneyness=("INVALID",)).validate()
+
+    with pytest.raises(ValueError, match="scan_expiries_indices must be drawn from"):
+        StrategyConfig(scan_expiries_indices=("daily",)).validate()
+
+    with pytest.raises(ValueError, match="scan_weekly_series_indices ranks must be between 0 and 3"):
+        StrategyConfig(scan_weekly_series_indices=(5,)).validate()
+
+    with pytest.raises(ValueError, match="scan_weekly_series_indices contains a duplicate rank"):
+        StrategyConfig(scan_weekly_series_indices=(0, 0)).validate()
+
+
+def test_select_option_with_numbered_strike_moneyness():
+    cfg = StrategyConfig(strike_moneyness=("ITM2",), expiry_dte_min=0, expiry_dte_max=8)
+    chain = _ladder(24800, 24900, 25000, 25100, 25200)
+    assert select_option(25000, "LONG", chain, cfg, today=TODAY).strike == 24800
+
+
+def test_select_option_with_multiple_strike_moneyness():
+    cfg = StrategyConfig(strike_moneyness=("ITM1", "ATM", "OTM1"), expiry_dte_min=0, expiry_dte_max=8)
+    # Available ladder only has 25100 (OTM1 for Long)
+    chain = _ladder(25100, 25200)
+    assert select_option(25000, "LONG", chain, cfg, today=TODAY).strike == 25100
+

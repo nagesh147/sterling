@@ -47,6 +47,12 @@ function mockEngineHooks(row: ReturnType<typeof makeRow>) {
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
   }));
+  vi.doMock('../../../hooks/useNavigator', () => ({
+    useNavigatorConfig: () => ({ data: { record: { config: { enabled: true } } } }),
+    useSetNavigatorConfig: () => ({ mutate: vi.fn() }),
+    useRunNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+    useCancelNavigatorScan: () => ({ mutate: vi.fn(), isPending: false }),
+  }));
 }
 
 describe('SterlingKiteEnginePane — Navigator badge (additive, raw score unchanged)', () => {

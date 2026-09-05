@@ -1486,7 +1486,7 @@ async def lifespan(app: FastAPI):
         active_cfg = exchange_account_store.get_active()
         api_key = active_cfg.api_key if active_cfg and active_cfg.name == exchange else ""
         api_secret = active_cfg.api_secret if active_cfg and active_cfg.name == exchange else ""
-        ad = await adapter_manager.init(exchange, api_key, api_secret)
+        ad = await adapter_manager.init(exchange, api_key, api_secret, start_ws=app.state.scalp_mode)
         app.state.adapter = ad
     else:
         # Tests inject adapter — sync adapter_manager so it matches
@@ -1495,23 +1495,28 @@ async def lifespan(app: FastAPI):
 
     from app.services.exchanges import instrument_registry as registry
     ad = adapter_manager.get_adapter()
-    reachable = await ad.ping()
-    active_ex = exchange_account_store.get_active()
-    log.info(
-        "Sterling v0.4 | env=%s | data=%s [%s] | account=%s | instruments=%d | positions=%d",
-        settings.environment,
-        adapter_manager.get_data_source(),
-        "OK" if reachable else "UNREACHABLE",
-        active_ex.display_name if active_ex else "none",
-        len(registry.list_instruments()),
-        len(paper_store.list_positions()),
-    )
-    if not reachable:
-        log.warning("Market data exchange unreachable at startup — will retry on request")
+    if app.state.scalp_mode:
+        reachable = await ad.ping()
+        active_ex = exchange_account_store.get_active()
+        log.info(
+            "Sterling v0.4 | env=%s | data=%s [%s] | account=%s | instruments=%d | positions=%d",
+            settings.environment,
+            adapter_manager.get_data_source(),
+            "OK" if reachable else "UNREACHABLE",
+            active_ex.display_name if active_ex else "none",
+            len(registry.list_instruments()),
+            len(paper_store.list_positions()),
+        )
+        if not reachable:
+            log.warning("Market data exchange unreachable at startup — will retry on request")
+    else:
+        log.info(
+            "Sterling v0.4 | env=%s | scalp_mode=OFF — Delta market data adapter in standby (WS & ping skipped)",
+            settings.environment,
+        )
 
     import asyncio
     bg_task = asyncio.create_task(_background_alert_checker(app, interval=30))
-    log.info("Background alert checker started (every 30s)")
     # Phase: faster signal cadence — default 5 s. Env-tunable via
     # STERLING_SIGNAL_INTERVAL_S so deployments with tighter exchange rate
     # limits can dial it back.
@@ -1523,17 +1528,16 @@ async def lifespan(app: FastAPI):
     signal_refresh_task = asyncio.create_task(
         _background_signal_refresher(app, interval=signal_interval)
     )
-    log.info("Background signal refresher started (every %ss)", signal_interval)
     position_monitor_task = asyncio.create_task(_background_position_monitor(app))
-    log.info("Background position monitor started (interval=mode.poll_interval_s)")
     retry_worker_task = asyncio.create_task(_background_retry_worker(app, base_interval=60))
-    log.info("Background retry worker started (every 60s + exponential backoff)")
     ohlcv_task = asyncio.create_task(_background_ohlcv_updater(interval_hours=1))
-    log.info("OHLCV background updater started (hourly)")
     ohlcv_1m_task = asyncio.create_task(_background_1m_updater(interval_min=5))
-    log.info("OHLCV 1m updater started (every 5 min, core symbols)")
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
-    log.info("OFI Broadcaster started (every 0.5s)")
+
+    if app.state.scalp_mode:
+        log.info("Crypto background tasks started (alert checker 30s, signal refresher %ss, OHLCV, OFI)", signal_interval)
+    else:
+        log.info("scalp_mode OFF — Crypto background tasks (alerts, signals, OHLCV, OFI) NOT active")
 
     # Kite tick stream: restart it if its task dies.
     #
@@ -1589,12 +1593,11 @@ async def lifespan(app: FastAPI):
     # The feed connects to the exchange WebSocket, reconstructs signal bars,
     # and drives VCPExecutor.on_bar() → OrderRouter for each completed bar.
     vcp_feed_task = asyncio.create_task(_background_vcp_live_feed(app))
-    log.info("VCP Live Feed task started")
-
-    # Derivatives scanner — populates /derivatives/scan cache and auto-fires
-    # candidates when `algo_mode` + per-strategy `auto_execute_<type>` are on.
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
-    log.info("Derivatives scanner started (every 30s)")
+    if app.state.scalp_mode:
+        log.info("VCP Live Feed and Derivatives scanner started")
+    else:
+        log.info("scalp_mode OFF — VCP Live Feed and Derivatives scanner idle")
 
     # Kite Sterling Kite Engine — background auto-scan of connected Kite
     # accounts (advisory by default; gated auto-exec when the user enables it).
@@ -1649,7 +1652,10 @@ async def lifespan(app: FastAPI):
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
     tg_alert_task = asyncio.create_task(_background_scalping_alerts(app, interval=45))
     tg_kite_alert_task = asyncio.create_task(_background_kite_alerts(interval=60))
-    log.info("Telegram bot + signal alerts started (crypto + kite)")
+    if app.state.scalp_mode:
+        log.info("Telegram bot + signal alerts started (crypto + kite)")
+    else:
+        log.info("Telegram alerts active (kite only, crypto scalping idle)")
 
     # ── Live event bus + agents (Phase 3) — only when enable_event_bus is set ──
     from app.core.config import settings as _settings

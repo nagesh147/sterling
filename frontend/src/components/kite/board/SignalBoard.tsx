@@ -14,7 +14,7 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
   parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, stamp, trailBreached,
   type BoardDayMove, type BoardOrigin, type BoardSignal, type BoardStatus, type EngineId,
 } from './boardTypes';
@@ -1013,9 +1013,9 @@ function Row({
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = true,
+  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = false,
   onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
-  renderTrade, renderChart,
+  renderTrade, renderChart, collapseOlderDays = false, isHistoricalSim = false,
 }: {
   signals: readonly BoardSignal[];
   /**
@@ -1101,7 +1101,9 @@ export function SignalBoard({
   renderChart?: (signal: BoardSignal) => React.ReactNode;
   /** Passed in so day labels are deterministic and testable. */
   nowMs: number;
+  isHistoricalSim?: boolean;
   emptyLabel?: string;
+  collapseOlderDays?: boolean;
 }) {
   const wanted = requested ?? BOARD_COLUMNS;
   const chosen = hidden ? wanted.filter((c) => !hidden.has(c)) : wanted;
@@ -1129,6 +1131,16 @@ export function SignalBoard({
     reserve: ACTION_RESERVE,
   });
   const days = groupByDay(signals, { liveFirst, nowMs, hoistToday: hoistLiveFromToday });
+
+  const [toggledDays, setToggledDays] = React.useState<ReadonlySet<string>>(new Set());
+  const toggleDay = React.useCallback((dayKey: string) => {
+    setToggledDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(dayKey)) next.delete(dayKey);
+      else next.add(dayKey);
+      return next;
+    });
+  }, []);
 
   if (!signals.length) {
     return <p style={{ padding: '14px 12px', margin: 0, fontSize: 11, color: k.dim, lineHeight: 1.6 }}>{emptyLabel ?? 'Nothing to show.'}</p>;
@@ -1229,123 +1241,152 @@ export function SignalBoard({
         )}
       </div>
 
-      {days.map(({ key, signals: rows }) => (
-        <section key={key}>
-          <div
-            className="sb-day"
-            style={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              padding: DAY_HEAD_METRICS.padding,
-              background: k.surface,
-              borderBottom: `1px solid ${k.border}`,
-              fontSize: DAY_HEAD_METRICS.fontSize,
-              fontWeight: DAY_HEAD_METRICS.fontWeight,
-              letterSpacing: DAY_HEAD_METRICS.letterSpacing,
-              textTransform: DAY_HEAD_METRICS.textTransform,
-              color: k.dim,
-            }}
-          >
-            <span>{sessionDayLabel(key, nowMs ?? Date.now())}</span>
-            <span style={{ fontWeight: 500 }}>{rows.length}</span>
-          </div>
-          {sortSignals(rows, sort).map((signal, i) => {
-            const legs = signal.children ?? [];
-            if (!legs.length) {
-              // An EMPTY ARRAY is not the same as no array.
-              //
-              // ORB, Gamma Move and the ATM bot leave `children` undefined —
-              // their signals are one instrument and always were. SuperTrend
-              // sets it to the contracts it resolved, so an empty array means it
-              // wanted contracts and found none: an expired series, a strike
-              // that is not listed, a filter that excluded everything. Those two
-              // cases look identical after `?? []`, which is why this checks the
-              // field itself.
-              const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
+      {days.map(({ key, signals: rows }) => {
+        const todayKey = nowMs == null ? null : sessionDayKey(nowMs);
+        const dayLabel = sessionDayLabel(key, nowMs ?? Date.now(), isHistoricalSim);
+        const isToday = key === todayKey || dayLabel === 'Today' || key === LIVE_BUCKET;
+        const defaultCollapsed = Boolean(collapseOlderDays && !isToday);
+        const isCollapsed = toggledDays.has(key) ? !defaultCollapsed : defaultCollapsed;
+        return (
+          <section key={key}>
+            <div
+              className="sb-day"
+              onClick={() => toggleDay(key)}
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                padding: DAY_HEAD_METRICS.padding,
+                background: k.surface,
+                borderBottom: `1px solid ${k.border}`,
+                fontSize: DAY_HEAD_METRICS.fontSize,
+                fontWeight: DAY_HEAD_METRICS.fontWeight,
+                letterSpacing: DAY_HEAD_METRICS.letterSpacing,
+                textTransform: DAY_HEAD_METRICS.textTransform,
+                color: k.dim,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s ease',
+                    color: k.dim,
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span>{sessionDayLabel(key, nowMs ?? Date.now(), isHistoricalSim)}</span>
+              </div>
+              <span style={{ fontWeight: 500 }}>{rows.length}</span>
+            </div>
+            {!isCollapsed && sortSignals(rows, sort).map((signal, i) => {
+              const legs = signal.children ?? [];
+              if (!legs.length) {
+                // An EMPTY ARRAY is not the same as no array.
+                //
+                // ORB, Gamma Move and the ATM bot leave `children` undefined —
+                // their signals are one instrument and always were. SuperTrend
+                // sets it to the contracts it resolved, so an empty array means it
+                // wanted contracts and found none: an expired series, a strike
+                // that is not listed, a filter that excluded everything. Those two
+                // cases look identical after `?? []`, which is why this checks the
+                // field itself.
+                const resolvedNothing = Array.isArray(signal.children) && signal.children.length === 0;
+                return (
+                  <React.Fragment key={signal.id}>
+                    <Row
+                      nowMs={nowMs}
+                      signal={signal}
+                      columns={cols}
+                      open={openId === signal.id}
+                      onToggle={() => onToggle(signal.id)}
+                      renderDetail={renderDetail}
+                      onOpenDetail={onOpenDetail}
+                      striped={i % 2 === 1}
+                      rowScroll={rowScroll}
+                      renderRowActions={renderRowActions}
+                      renderTrade={renderTrade}
+                      renderChart={renderChart}
+                    />
+                    {/* The engine knows why it found nothing, so it says so in the
+                        row rather than behind a click. A parent with nothing under
+                        it otherwise reads like a loading state, and an operator
+                        scanning for something to trade should not have to open a
+                        row to learn there is nothing in it. */}
+                    {resolvedNothing && (
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center',
+                          minHeight: ROW_METRICS.legHeight,
+                          padding: `0 16px 0 ${16 + INDENT}px`,
+                          borderLeft: '3px solid transparent',
+                          background: LEG_BG,
+                          fontSize: ROW_METRICS.cellFontSize, color: k.dim,
+                        }}
+                      >
+                        {signal.reason ?? 'No listed contract matched the selected strike and expiry series.'}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              }
+              // A parent's chevron shows its contracts, not its own detail —
+              // the thing behind a signal with eighteen strikes is the strikes.
+              // Its full record is still one click away on the symbol.
+              const expanded = !(collapsedGroups?.has(signal.id) ?? false);
+              // Best-of comparisons are only meaningful between the strikes of
+              // one idea, so they are computed per group, never board-wide.
+              const legMarks = markLegs(legs);
               return (
                 <React.Fragment key={signal.id}>
-                  <Row
-                    nowMs={nowMs}
+                  <GroupHeader
                     signal={signal}
-                    columns={cols}
-                    open={openId === signal.id}
-                    onToggle={() => onToggle(signal.id)}
-                    renderDetail={renderDetail}
+                    legCount={legs.length}
+                    expanded={expanded}
+                    onToggle={() => onToggleGroup?.(signal.id)}
                     onOpenDetail={onOpenDetail}
-                    striped={i % 2 === 1}
-                    rowScroll={rowScroll}
-                    renderRowActions={renderRowActions}
-                    renderTrade={renderTrade}
-                    renderChart={renderChart}
+                    nowMs={nowMs}
                   />
-                  {/* The engine knows why it found nothing, so it says so in the
-                      row rather than behind a click. A parent with nothing under
-                      it otherwise reads like a loading state, and an operator
-                      scanning for something to trade should not have to open a
-                      row to learn there is nothing in it. */}
-                  {resolvedNothing && (
-                    <div
-                      style={{
-                        display: 'flex', alignItems: 'center',
-                        minHeight: ROW_METRICS.legHeight,
-                        padding: `0 16px 0 ${16 + INDENT}px`,
-                        borderLeft: '3px solid transparent',
-                        background: LEG_BG,
-                        fontSize: ROW_METRICS.cellFontSize, color: k.dim,
-                      }}
-                    >
-                      {signal.reason ?? 'No listed contract matched the selected strike and expiry series.'}
-                    </div>
-                  )}
+                  {expanded && sortSignals(legs, sort).map((leg) => (
+                    <Row
+                      nowMs={nowMs}
+                      key={leg.id}
+                      marks={legMarks.get(leg.id)}
+                      signal={leg}
+                      columns={cols}
+                      open={openId === leg.id}
+                      onToggle={() => onToggle(leg.id)}
+                      renderDetail={renderDetail}
+                      onOpenDetail={onOpenDetail}
+                      striped={false}
+                      depth={1}
+                      rowScroll={rowScroll}
+                      renderRowActions={renderRowActions}
+                      renderTrade={renderTrade}
+                      renderChart={renderChart}
+                    />
+                  ))}
                 </React.Fragment>
               );
-            }
-            // A parent's chevron shows its contracts, not its own detail —
-            // the thing behind a signal with eighteen strikes is the strikes.
-            // Its full record is still one click away on the symbol.
-            const expanded = !(collapsedGroups?.has(signal.id) ?? false);
-            // Best-of comparisons are only meaningful between the strikes of
-            // one idea, so they are computed per group, never board-wide.
-            const legMarks = markLegs(legs);
-            return (
-              <React.Fragment key={signal.id}>
-                <GroupHeader
-                  signal={signal}
-                  legCount={legs.length}
-                  expanded={expanded}
-                  onToggle={() => onToggleGroup?.(signal.id)}
-                  onOpenDetail={onOpenDetail}
-                  nowMs={nowMs}
-                />
-                {expanded && sortSignals(legs, sort).map((leg) => (
-                  <Row
-                    nowMs={nowMs}
-                    key={leg.id}
-                    marks={legMarks.get(leg.id)}
-                    signal={leg}
-                    columns={cols}
-                    open={openId === leg.id}
-                    onToggle={() => onToggle(leg.id)}
-                    renderDetail={renderDetail}
-                    onOpenDetail={onOpenDetail}
-                    striped={false}
-                    depth={1}
-                    rowScroll={rowScroll}
-                    renderRowActions={renderRowActions}
-                    renderTrade={renderTrade}
-                    renderChart={renderChart}
-                  />
-                ))}
-              </React.Fragment>
-            );
-          })}
-        </section>
-      ))}
+            })}
+          </section>
+        );
+      })}
     </div>
   );
 }

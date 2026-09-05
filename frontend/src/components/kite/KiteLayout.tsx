@@ -12,6 +12,7 @@ import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { MacStageLayout } from './mac/MacStageLayout';
+import { useSimulationStore, useSimBarOpen } from '../../hooks/useSimulation';
 import {
   WORKSPACE_LAYOUT_KEY,
   WORKSPACE_PANES,
@@ -281,6 +282,9 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     prevActivityScanning.current = nowScanning;
   }, [activity?.scanning, queryClient]);
   const liveCount = useLiveSignalCount((state) => state.count);
+  const simBarOpen = useSimBarOpen();
+  const simViewMode = useSimulationStore((s) => s.viewMode);
+  const isSimFullHeight = simBarOpen && simViewMode === 'fullheight';
   const [layout, setLayout] = useState(() => loadWorkspaceLayout(localStorage));
   const [focus, setFocus] = useState<WorkspaceFocus | null>(null);
   const [draggingPane, setDraggingPane] = useState<WorkspacePaneId | null>(null);
@@ -298,13 +302,14 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
       content: (
         <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', scrollbarGutter: 'stable', display: 'flex', flexDirection: 'column' }}>{content}</div>
+          <div style={{ display: isSimFullHeight ? 'none' : 'flex', flex: 1, minHeight: 0, overflow: 'auto', scrollbarGutter: 'stable', flexDirection: 'column' }}>{content}</div>
+          <SimulationBar />
         </div>
       ),
     },
     signals: { id: 'signals', title: 'Signals', shortTitle: 'Signals', accent: '#16a066', content: rightSidebar },
     terminal: { id: 'terminal', title: 'Terminal', shortTitle: 'Terminal', accent: '#7d63c5', content: bottomBar },
-  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content]);
+  }), [activeNav, sidebar, rightSidebar, bottomBar, centerTopBar, content, isSimFullHeight]);
 
   const available = useMemo(() => WORKSPACE_PANES.filter((id) => panes[id].content != null), [panes]);
   const isVisible = useCallback((id: WorkspacePaneId) => available.includes(id) && !layout.minimized.includes(id), [available, layout.minimized]);
@@ -668,7 +673,17 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         {macOn ? (
           <>
             {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-            <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+            <MacStageLayout
+              sidebar={sidebar}
+              content={(
+                <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: isSimFullHeight ? 'none' : 'flex', flex: 1, minHeight: 0, overflow: 'auto', flexDirection: 'column' }}>{content}</div>
+                  <SimulationBar />
+                </div>
+              )}
+              rightSidebar={rightSidebar}
+              bottomBar={bottomBar}
+            />
           </>
         ) : (
           <>
@@ -701,7 +716,6 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         )}
       </div>
 
-      <SimulationBar />
       <SimulationSummary />
       <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>

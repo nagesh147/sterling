@@ -50,7 +50,12 @@ def _build_raw(exchange: str, api_key: str = "", api_secret: str = "") -> BaseEx
     return DeribitAdapter(base_url=settings.deribit_base_url)
 
 
-async def init(exchange: str = "delta_india", api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
+async def init(
+    exchange: str = "delta_india",
+    api_key: str = "",
+    api_secret: str = "",
+    start_ws: bool = True,
+) -> BaseExchangeAdapter:
     """Build adapter stack and set as active. Called at startup."""
     global _adapter, _data_source, _raw_adapter
     from app.services.cache import CachingAdapter
@@ -60,14 +65,32 @@ async def init(exchange: str = "delta_india", api_key: str = "", api_secret: str
     _data_source = exchange.lower()
     _raw_adapter = raw
 
-    # Start WebSocket live price feed for delta_india (eliminates REST ticker polling)
-    if _data_source == "delta_india" and hasattr(raw, "start_ws"):
+    # Start WebSocket live price feed for delta_india only when start_ws is enabled
+    if start_ws and _data_source == "delta_india" and hasattr(raw, "start_ws"):
         from app.services.exchanges.instrument_registry import list_instruments
         symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
         await raw.start_ws(symbols)
 
-    log.info("Market data adapter initialized: %s", _data_source)
+    log.info("Market data adapter initialized: %s (ws=%s)", _data_source, start_ws)
     return _adapter
+
+
+async def start_ws_feed() -> None:
+    """Start the WebSocket feed on the active adapter if supported."""
+    global _raw_adapter, _data_source
+    if _data_source == "delta_india" and hasattr(_raw_adapter, "start_ws"):
+        from app.services.exchanges.instrument_registry import list_instruments
+        symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
+        await _raw_adapter.start_ws(symbols)
+        log.info("Delta WebSocket feed started")
+
+
+async def stop_ws_feed() -> None:
+    """Stop the WebSocket feed on the active adapter if supported."""
+    global _raw_adapter
+    if hasattr(_raw_adapter, "stop_ws"):
+        await _raw_adapter.stop_ws()
+        log.info("Delta WebSocket feed stopped")
 
 
 async def switch(exchange: str, api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
@@ -87,6 +110,7 @@ async def switch(exchange: str, api_key: str = "", api_secret: str = "") -> Base
 async def close_current() -> None:
     """Close the current adapter (called at shutdown)."""
     global _adapter
+    await stop_ws_feed()
     if _adapter is not None:
         try:
             await _adapter.close()

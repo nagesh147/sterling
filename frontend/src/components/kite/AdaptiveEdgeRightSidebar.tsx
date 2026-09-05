@@ -32,6 +32,7 @@ import { SignalTableSettingsPanel } from './SterlingKiteEnginePane';
 import { SCANNABLE_ENGINE_LABEL, useScanAllStrategies, type ScannableEngine } from '../../hooks/useScanAllStrategies';
 import { useCancelScan } from '../../hooks/useSterlingKiteEngine';
 import { useCancelNavigatorScan } from '../../hooks/useNavigator';
+import { useSimNowMs } from '../../hooks/useSimulation';
 
 /**
  * The engine workspace: pick an engine, see its board.
@@ -95,7 +96,8 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     return () => clearInterval(id);
   }, []);
   // One clock per render, so every day heading in a paint agrees on "today".
-  const nowMs = Date.now();
+  const simNowMs = useSimNowMs();
+  const nowMs = simNowMs ?? Date.now();
 
   const snapshot = useAdaptiveEdgeSnapshot();
   const engineSignals = useEngineSignals();

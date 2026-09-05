@@ -132,8 +132,38 @@ async def get_scalp_mode(request: Request) -> ScalpModeResponse:
 @router.post("/scalp-mode")
 async def set_scalp_mode(body: ScalpModeRequest, request: Request) -> ScalpModeResponse:
     from app.services.db import set_config
+    from app.services import adapter_manager
+    old_val = getattr(request.app.state, "scalp_mode", False)
     request.app.state.scalp_mode = body.enabled
     set_config("scalp_mode", "true" if body.enabled else "false")
+
+    if body.enabled and not old_val:
+        # Turning ON crypto — activate WebSockets, L2 manager, and IV recorder
+        try:
+            from app.services.delta_iv_socket import iv_manager
+            from app.services.delta_iv_recorder import start_recorder
+            from app.services.delta_l2_socket import l2_manager
+            iv_manager.start()
+            start_recorder()
+            l2_manager.start()
+            await adapter_manager.start_ws_feed()
+            log.info("Crypto engines, WebSockets, and sensors started via scalp-mode toggle")
+        except Exception as exc:
+            log.warning("Failed to start crypto sockets: %s", exc)
+    elif not body.enabled and old_val:
+        # Turning OFF crypto — stop all WebSockets, L2 manager, and IV recorder
+        try:
+            from app.services.delta_iv_socket import iv_manager
+            from app.services.delta_iv_recorder import stop_recorder
+            from app.services.delta_l2_socket import l2_manager
+            iv_manager.stop()
+            stop_recorder()
+            l2_manager.stop()
+            await adapter_manager.stop_ws_feed()
+            log.info("Crypto engines, WebSockets, and sensors stopped via scalp-mode toggle")
+        except Exception as exc:
+            log.warning("Failed to stop crypto sockets: %s", exc)
+
     return ScalpModeResponse(enabled=body.enabled)
 
 

@@ -13,8 +13,8 @@ import type { PositionListResponse, PaperPosition } from '../types';
  *
  * The `mode` filter is applied client-side since the SSE stream delivers all positions.
  */
-export function usePositions(mode?: 'paper' | 'live') {
-  const { data: streamData, status } = useAppStream<PositionListResponse>('positions');
+export function usePositions(mode?: 'paper' | 'live', options?: { enabled?: boolean }) {
+  const { data: streamData, status } = useAppStream<PositionListResponse>('positions', options);
 
   const data = useMemo<PositionListResponse | undefined>(() => {
     if (!streamData) return undefined;

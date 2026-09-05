@@ -220,6 +220,10 @@ def put_settings(body: AdaptiveEdgeSettings) -> dict[str, Any]:
 
 @router.get("/snapshot")
 def get_snapshot() -> dict[str, Any]:
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_adaptive_edge_snapshot()
+
     gate = evaluate_execution_gate()
     artifact = _load_json(ARTIFACT) or {}
     manifest = _load_json(MANIFEST) or {}

@@ -9,10 +9,92 @@ import asyncio
 import time
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+import numpy as np
 from pydantic import BaseModel
 from app.core.logging import get_logger
+from app.engines.indicators.supertrend import compute_supertrend
 
 log = get_logger(__name__)
+
+# Standard Kite NSE Instrument Token Map
+KITE_TOKENS: Dict[str, int] = {
+    "NIFTY": 256265,
+    "NIFTY 50": 256265,
+    "BANKNIFTY": 260101,
+    "NIFTY BANK": 260101,
+    "FINNIFTY": 257001,
+    "NIFTY FIN SERVICE": 257001,
+    "MIDCPNIFTY": 288001,
+    "SENSEX": 265,
+    "RELIANCE": 738561,
+    "TATASTEEL": 895745,
+    "HDFCBANK": 341249,
+    "ICICIBANK": 12705,
+    "LT": 2939649,
+    "SBIN": 779521,
+    "TCS": 2953217,
+    "INFY": 408065,
+    "BHARTIARTL": 2714625,
+    "AXISBANK": 1510401,
+    "KOTAKBANK": 492033,
+    "BAJFINANCE": 81153,
+    "ADANIENT": 6401,
+    "ADANIPORTS": 3861249,
+    "BAJAJFINSV": 4267265,
+}
+
+
+def _load_recorded_signals(date_str: str) -> List[Dict[str, Any]]:
+    """Load real recorded signals from kite_engine_signals or system stores for the given date (YYYY-MM-DD)."""
+    from datetime import datetime, timezone, timedelta
+    from app.services import db
+    import json
+
+    if not getattr(db, "_available", False):
+        try:
+            db.init()
+        except Exception:
+            pass
+
+    ist = timezone(timedelta(hours=5, minutes=30))
+    results: List[Dict[str, Any]] = []
+
+    for uid in ["default", "u1", ""]:
+        key = f"kite_engine_signals_{uid}" if uid else "kite_engine_signals"
+        raw = db.get_config(key)
+        if not raw:
+            continue
+        try:
+            val = json.loads(raw)
+            rows = val.get("rows", []) if isinstance(val, dict) else (val if isinstance(val, list) else [])
+            for r in rows:
+                ts = r.get("timestamp_ms")
+                if not ts:
+                    continue
+                dt = datetime.fromtimestamp(ts / 1000, ist)
+                if dt.strftime("%Y-%m-%d") == date_str:
+                    direction_str = str(r.get("direction", "short")).upper()
+                    results.append({
+                        "underlying": r.get("underlying", ""),
+                        "direction": "BEARISH" if direction_str in ("SHORT", "BEARISH", "BEAR") else "BULLISH",
+                        "time_iso": dt.strftime("%H:%M:%S"),
+                        "timestamp_ms": ts,
+                        "spot": float(r.get("spot") or 0.0),
+                        "stop_loss": float(r.get("stop_loss") or 0.0),
+                        "entry_sl": float(r.get("entry_sl") or 0.0),
+                        "target": float(r.get("target") or 0.0) if r.get("target") is not None else None,
+                        "raw_row": r,
+                        "strategy": "supertrend",
+                    })
+        except Exception as err:
+            log.warning("Failed parsing %s: %s", key, err)
+
+    dedup: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    for sig in results:
+        k = (sig["underlying"], sig["timestamp_ms"])
+        if k not in dedup:
+            dedup[k] = sig
+    return sorted(dedup.values(), key=lambda s: s["timestamp_ms"])
 
 
 class SimState(str, Enum):
@@ -24,7 +106,7 @@ class SimState(str, Enum):
 
 class SimConfig(BaseModel):
     date: str                          # "2026-08-28"
-    start_time: str = "09:15:00"       # HH:MM:SS IST
+    start_time: str = "09:00:00"       # HH:MM:SS IST (default 9:00 AM)
     end_time: str = "15:30:00"         # HH:MM:SS IST  
     speed: float = 1.0                 # 1,2,5,10,15,20,50
     resolution: str = "5m"             # candle resolution
@@ -33,6 +115,9 @@ class SimConfig(BaseModel):
     strategies: List[str] = ["all"]    # list of selected strategies
     lots: int = 1                      # number of option/futures lots
     moneyness: str = "ATM"             # "ATM", "ITM1", "ITM2", "OTM1", "OTM2", "ALL"
+    friction_mode: str = "realistic"   # "realistic" (spread + slippage) or "ideal" (zero friction)
+    slippage_bps: float = 100.0        # slippage buffer basis points
+    end_date: Optional[str] = None     # optional end date for multi-day/range replays
 
 
 class SimSignalEvent(BaseModel):
@@ -45,11 +130,18 @@ class SimSignalEvent(BaseModel):
     entry: float
     stop: float
     target: float
+    contract: Optional[str] = None
+    opt_type: Optional[str] = None
+    strike: Optional[float] = None
+    spot: Optional[float] = None
+    premium_entry: Optional[float] = None
+    premium_sl: Optional[float] = None
+    premium_target: Optional[float] = None
 
 
 class SimTradeEvent(BaseModel):
     trade_id: str
-    entry_time_iso: str
+    entry_time_iso: str = ""
     exit_time_iso: str = "OPEN"
     timestamp_ms: int = 0
     strategy: str
@@ -68,6 +160,9 @@ class SimTradeEvent(BaseModel):
     pnl_usd: float = 0.0
     pnl_pct: float = 0.0
     duration_mins: int = 0
+    slippage: float = 0.0
+    raw_entry: Optional[float] = None
+    raw_exit: Optional[float] = None
 
 
 class SimStats(BaseModel):
@@ -118,6 +213,9 @@ class SimulationRunner:
         self._end_epoch: int = 0
         self._seek_requested_epoch: Optional[float] = None
         self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
+        self._active_until_bar: Dict[Tuple[str, str], int] = {}
+        self._recorded_signals: List[Dict[str, Any]] = []
+        self._emitted_recorded_keys: set = set()
 
     @property
     def status(self) -> SimStatus:
@@ -148,6 +246,7 @@ class SimulationRunner:
         self._stats = SimStats()
         self._bar_history = {}
         self._last_fired = {}
+        self._active_until_bar = {}
         self._bars_played = 0
         self._seek_requested_epoch = None
         self._start_real = time.monotonic()
@@ -200,12 +299,189 @@ class SimulationRunner:
             self._stats = SimStats()
             self._last_signal = None
             self._last_fired.clear()
+            self._emitted_recorded_keys.clear()
         return self.status
 
     def jump_end(self) -> SimStatus:
         if self._end_epoch > 0:
             self._seek_requested_epoch = float(self._end_epoch)
         return self.status
+
+    def _emit_recorded_signal(self, rec: Dict[str, Any]) -> None:
+        """Emit a real recorded historical session signal and execute its corresponding trade."""
+        from datetime import datetime, timezone, timedelta
+        ist = timezone(timedelta(hours=5, minutes=30))
+
+        # Check strategy filter
+        cfg_strats = [s.lower() for s in (self._config.strategies if self._config and self._config.strategies else [self._config.strategy if self._config else "all"])]
+        allow_all = "all" in cfg_strats or "*" in cfg_strats or not cfg_strats
+        strat = rec.get("strategy", "supertrend").lower()
+        if not allow_all and strat not in cfg_strats:
+            return
+
+        sym = rec["underlying"]
+        if self._config and self._config.instruments and sym not in self._config.instruments:
+            return
+
+        raw = rec.get("raw_row", {})
+        direction = rec["direction"]
+        spot = float(rec.get("spot") or raw.get("spot") or 1000.0)
+        stop = float(rec.get("stop_loss") or raw.get("stop_loss") or (spot * 1.01 if direction in ("BEARISH", "SHORT") else spot * 0.99))
+        target = rec.get("target") or raw.get("target")
+        if target is None:
+            stop_dist = abs(spot - stop)
+            target = round(spot - 2.0 * stop_dist, 2) if direction in ("BEARISH", "SHORT") else round(spot + 2.0 * stop_dist, 2)
+        else:
+            target = float(target)
+
+        cfg_lots = max(1, self._config.lots) if self._config else 1
+        opt_type = "PE" if direction in ("BEARISH", "SHORT") else "CE"
+        lot_size = 175 if sym == "LT" else (750 if sym == "SBIN" else (25 if "NIFTY" in sym else 15))
+
+        # Select matching leg based on moneyness preference
+        cfg_moneyness = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
+        legs = raw.get("legs") or []
+        selected_leg = None
+        if legs:
+            if cfg_moneyness == "ALL":
+                selected_leg = legs[0]
+            else:
+                for l in legs:
+                    if l.get("moneyness", "").upper() == cfg_moneyness:
+                        selected_leg = l
+                        break
+            if not selected_leg:
+                selected_leg = legs[0]
+
+        if selected_leg:
+            strike = float(selected_leg.get("strike") or spot)
+            lot_size = int(selected_leg.get("lot_size") or lot_size)
+            entry_prem = float(selected_leg.get("premium_spot") or round(spot * 0.02, 2))
+            stop_prem = float(selected_leg.get("entry_sl") or selected_leg.get("premium_sl") or round(entry_prem * 0.8, 2))
+            tgt_prem = float(selected_leg.get("premium_target") or round(entry_prem * 1.5, 2))
+            opt_symbol = selected_leg.get("option_symbol") or f"{sym}26SEP{int(strike)}{opt_type}"
+        else:
+            strike = round(spot / 50.0) * 50.0
+            entry_prem = round(spot * 0.02, 2)
+            stop_prem = round(entry_prem * 0.8, 2)
+            tgt_prem = round(entry_prem * 1.5, 2)
+            opt_symbol = f"{sym}26SEP{int(strike)}{opt_type}"
+
+        event = SimSignalEvent(
+            time_iso=rec["time_iso"],
+            timestamp_ms=rec["timestamp_ms"],
+            strategy="supertrend",
+            instrument=sym,
+            direction=direction,
+            strength="STRONG",
+            entry=entry_prem if opt_symbol else spot,
+            stop=stop_prem if opt_symbol else stop,
+            target=tgt_prem if opt_symbol else target,
+            contract=opt_symbol,
+            opt_type=opt_type,
+            strike=strike,
+            spot=spot,
+            premium_entry=entry_prem,
+            premium_sl=stop_prem,
+            premium_target=tgt_prem,
+        )
+        self._stats.signals_fired += 1
+        self._stats.events.append(event)
+        self._last_signal = event
+
+        self._stats.trades_entered += 1
+
+        # Scan subsequent bars from replay candles to evaluate trade outcome
+        future_bars = [b for b in self._candles[self._bars_played:] if b.get("symbol") == sym]
+        won = False
+        exit_close = spot
+        bars_held = 0
+        if direction in ("BEARISH", "SHORT"):
+            for fb in future_bars[:30]:
+                bars_held += 1
+                fb_high = float(fb["high"])
+                fb_low = float(fb["low"])
+                if fb_high >= stop:
+                    exit_close = stop
+                    break
+                if fb_low <= target:
+                    exit_close = target
+                    won = True
+                    break
+                exit_close = float(fb["close"])
+        else:
+            for fb in future_bars[:30]:
+                bars_held += 1
+                fb_high = float(fb["high"])
+                fb_low = float(fb["low"])
+                if fb_low <= stop:
+                    exit_close = stop
+                    break
+                if fb_high >= target:
+                    exit_close = target
+                    won = True
+                    break
+                exit_close = float(fb["close"])
+
+        if bars_held == 0:
+            bars_held = 1
+        if not won and exit_close != stop:
+            won = (exit_close < spot) if direction in ("BEARISH", "SHORT") else (exit_close > spot)
+
+        spot_move = (spot - exit_close) if direction in ("BEARISH", "SHORT") else (exit_close - spot)
+        premium_move = round(spot_move * 0.50, 2)
+        raw_exit_p = round(max(0.05, entry_prem + premium_move), 2)
+
+        is_index = any(idx in sym.upper() for idx in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"))
+        friction = (getattr(self._config, "friction_mode", "realistic") or "realistic").lower()
+        slip_pct = (0.005 if is_index else 0.015) if friction == "realistic" else 0.0
+        effective_entry = round(entry_prem * (1.0 + slip_pct), 2)
+        effective_exit = round(max(0.05, raw_exit_p * (1.0 - slip_pct)), 2)
+
+        qty = cfg_lots * lot_size
+        pnl_per_unit = effective_exit - effective_entry
+        pnl_usd_val = round(pnl_per_unit * qty, 2)
+        pnl_pct_val = round((pnl_per_unit / effective_entry) * 100.0, 2) if effective_entry > 0 else 0.0
+        slippage_drag = round(((effective_entry - entry_prem) + (raw_exit_p - effective_exit)) * qty, 2)
+        dur_mins = bars_held * 5
+        entry_dt = datetime.fromtimestamp(rec["timestamp_ms"] / 1000, tz=ist)
+        exit_dt = entry_dt + timedelta(minutes=dur_mins)
+        entry_time_str = rec.get("time_iso") or entry_dt.strftime("%H:%M:%S")
+        exit_time_str = exit_dt.strftime("%H:%M:%S")
+
+        won = pnl_usd_val > 0
+        if won:
+            self._stats.wins += 1
+        else:
+            self._stats.losses += 1
+
+        trade = SimTradeEvent(
+            trade_id=f"TRD-{1000 + len(self._stats.trades) + 1}",
+            entry_time_iso=entry_time_str,
+            exit_time_iso=exit_time_str,
+            timestamp_ms=rec["timestamp_ms"],
+            strategy="supertrend",
+            symbol=opt_symbol,
+            underlying=sym,
+            direction="BUY",
+            opt_type=opt_type,
+            strike=strike,
+            lots=cfg_lots,
+            quantity=qty,
+            entry_price=effective_entry,
+            exit_price=effective_exit,
+            stop_loss=stop_prem,
+            target_price=tgt_prem,
+            status="WIN" if won else "LOSS",
+            pnl_usd=pnl_usd_val,
+            pnl_pct=pnl_pct_val,
+            duration_mins=dur_mins,
+            slippage=slippage_drag,
+            raw_entry=entry_prem,
+            raw_exit=raw_exit_p,
+        )
+        self._stats.trades.append(trade)
+        self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
 
     async def _run_loop(self):
         """Main replay loop — fetch candles, then step through them."""
@@ -241,7 +517,29 @@ class SimulationRunner:
         res_sec = RESOLUTION_SECONDS.get(res, 300)
 
         # Determine instruments (NSE Indian Markets only)
-        instruments = cfg.instruments if cfg.instruments else ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "TATASTEEL", "HDFCBANK", "ICICIBANK"]
+        self._recorded_signals = _load_recorded_signals(cfg.date)
+        self._emitted_recorded_keys = set()
+
+        if not cfg.instruments:
+            try:
+                from app.services import db
+                import json
+                raw_c = db.get_config("kite_engine_config_default")
+                if raw_c:
+                    parsed_c = json.loads(raw_c)
+                    stocks = parsed_c.get("scan_stocks", [])
+                    indices = [s.replace(" 50", "").replace(" SERVICE", "").replace(" ", "") for s in parsed_c.get("scan_indices", [])]
+                    instruments = list(dict.fromkeys(indices + stocks))
+                else:
+                    instruments = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "LT", "SBIN", "HDFCBANK", "ICICIBANK", "TCS", "INFY", "TATASTEEL"]
+            except Exception:
+                instruments = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "RELIANCE", "LT", "SBIN", "HDFCBANK", "ICICIBANK", "TCS", "INFY", "TATASTEEL"]
+        else:
+            instruments = list(cfg.instruments)
+
+        for rec in self._recorded_signals:
+            if rec.get("underlying") and rec["underlying"] not in instruments:
+                instruments.append(rec["underlying"])
 
         self._status_message = f"⚡ Fetching historical candles for {cfg.date} from Zerodha Kite API..."
         await _hydrate_missing_candles(instruments, res, start_epoch, end_epoch)
@@ -309,9 +607,13 @@ class SimulationRunner:
                     self._stats.losses = len([tr for tr in self._stats.trades if tr.status == "LOSS"])
                     self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
                     self._last_signal = self._stats.events[-1] if self._stats.events else None
+                    self._emitted_recorded_keys = {
+                        f"{ev.instrument}:{ev.timestamp_ms}" for ev in self._stats.events
+                    }
                     # Reset bar history and dedup state for clean indicator recalculation
                     self._bar_history = {}
                     self._last_fired = {}
+                    self._active_until_bar = {}
 
                 # Dynamic update tick interval (30ms for >=500x, 50ms for >=50x, 100ms otherwise)
                 dt = 0.03 if self._speed >= 500 else (0.05 if self._speed >= 50 else 0.1)
@@ -327,6 +629,14 @@ class SimulationRunner:
                     self._bars_played = bar_idx + 1
                     self._evaluate_bar(bar, datetime.fromtimestamp(bar["time"], tz=ist))
                     bar_idx += 1
+
+                # Check and emit recorded historical signals whose timestamp has arrived
+                curr_sim_ms = int(self._current_sim_epoch * 1000)
+                for rec in self._recorded_signals:
+                    rec_id = f"{rec['underlying']}:{rec['timestamp_ms']}"
+                    if rec_id not in self._emitted_recorded_keys and curr_sim_ms >= rec["timestamp_ms"]:
+                        self._emitted_recorded_keys.add(rec_id)
+                        self._emit_recorded_signal(rec)
 
                 # Advance simulated clock by speed * dt
                 self._current_sim_epoch += self._speed * dt
@@ -398,22 +708,37 @@ class SimulationRunner:
     def get_kite_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for Kite Engine signal responses during simulation."""
         now_ms = int(time.time() * 1000)
-        KITE_TOKENS: Dict[str, int] = {
-            "NIFTY": 256265,
-            "BANKNIFTY": 260101,
-            "FINNIFTY": 257001,
-            "MIDCPNIFTY": 288001,
-            "RELIANCE": 738561,
-            "TATASTEEL": 895745,
-            "HDFCBANK": 341249,
-            "ICICIBANK": 12705,
-        }
         cfg_lots = max(1, self._config.lots) if self._config else 1
         cfg_money = (self._config.moneyness if self._config and self._config.moneyness else "ATM").upper()
 
+        kite_events = [
+            ev for ev in self._stats.events
+            if ev.strategy in ("supertrend", "trend_following", "kite", "supertrend_pullback")
+        ]
+        if not kite_events and (self._config and self._config.strategy in ("supertrend", "all")):
+            kite_events = [
+                ev for ev in self._stats.events
+                if ev.strategy not in ("adaptive_edge", "vcp", "atm_imbalance", "bear_to_bearish", "gamma_move", "nifty_orb")
+            ]
+
+        recorded_map_exact = {(r["underlying"].upper(), r["timestamp_ms"]): r.get("raw_row") for r in getattr(self, "_recorded_signals", []) if r.get("raw_row")}
+        recorded_map_sym = {r["underlying"].upper(): r.get("raw_row") for r in getattr(self, "_recorded_signals", []) if r.get("raw_row")}
+
         rows = []
-        for ev in self._stats.events:
-            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
+        for i, ev in enumerate(kite_events):
+            base_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
+            ev_ms = base_ms + i
+
+            # If this event matches an authentic recorded signal with full live contract legs, use it
+            raw_rec = recorded_map_exact.get((ev.instrument.upper(), ev.timestamp_ms)) or recorded_map_sym.get(ev.instrument.upper())
+            if raw_rec:
+                row_copy = dict(raw_rec)
+                row_copy["is_active"] = True
+                row_copy["is_fresh"] = True
+                row_copy["timestamp_ms"] = ev_ms
+                rows.append(row_copy)
+                continue
+
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             direction_str = "long" if is_long else "short"
             regime_str = "BULL" if is_long else "BEAR"
@@ -546,45 +871,189 @@ class SimulationRunner:
     def get_adaptive_edge_snapshot(self) -> Dict[str, Any]:
         """Return snapshot for Adaptive Edge UI during simulation."""
         now_ms = int(time.time() * 1000)
-        candidates = []
-        for ev in self._stats.events:
-            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
+        cfg = self._config
+        sim_date = cfg.date if cfg else "2026-08-28"
+
+        # Only return events specifically triggered for adaptive_edge
+        ae_events = [ev for ev in self._stats.events if ev.strategy == "adaptive_edge"]
+
+        signals = []
+        for i, ev in enumerate(ae_events):
+            base_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
+            ev_ms = base_ms + i
             is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
             opt_type = "CE" if is_long else "PE"
-            strike_val = round(ev.entry / 50.0) * 50.0
-            candidates.append({
-                "symbol": f"{ev.instrument}26AUG{int(strike_val)}{opt_type}",
+            side = "BUY" if is_long else "SELL"
+
+            # Determine strike step and ATM strike based on underlying instrument and price
+            inst_u = ev.instrument.upper()
+            if "SENSEX" in inst_u or "BANKNIFTY" in inst_u:
+                step = 100.0
+            elif "NIFTY" in inst_u:
+                step = 50.0
+            elif ev.entry > 1000:
+                step = 20.0
+            elif ev.entry > 500:
+                step = 10.0
+            else:
+                step = 5.0
+
+            atm_strike = round(ev.entry / step) * step
+            exch = "BSE" if "SENSEX" in inst_u else "NSE"
+            lot_size = 10 if "SENSEX" in inst_u else (15 if "NIFTY" in inst_u else (250 if "BANK" in inst_u else 500))
+
+            # Generate option ladder legs (ITM1, ATM, OTM1)
+            legs = []
+            ladder_defs = [
+                ("ITM1", atm_strike - step if is_long else atm_strike + step),
+                ("ATM", atm_strike),
+                ("OTM1", atm_strike + step if is_long else atm_strike - step),
+            ]
+
+            for moneyness, strike in ladder_defs:
+                mult = 0.02 if moneyness == "ATM" else (0.03 if moneyness == "ITM1" else 0.012)
+                premium_est = max(5.0, round(ev.entry * mult, 2))
+                sl_est = round(max(2.0, premium_est * 0.7), 2)
+                legs.append({
+                    "moneyness": moneyness,
+                    "option_type": opt_type,
+                    "option_symbol": f"{ev.instrument}26AUG{int(strike)}{opt_type}",
+                    "strike": strike,
+                    "expiry": sim_date,
+                    "lot_size": lot_size,
+                    "token": 10000 + (int(strike) % 10000),
+                    "exchange": exch,
+                    "entry_premium": premium_est,
+                    "stop_premium": sl_est,
+                    "trail_premium": sl_est,
+                    "ltp": premium_est,
+                    "resolution_reason": None,
+                })
+
+            entry_iso = f"{sim_date}T{ev.time_iso}+05:30" if ev.time_iso else None
+            sig_id = f"ae_sim_{ev.instrument}_{ev.time_iso.replace(':', '')}_{i}"
+
+            signals.append({
+                "id": sig_id,
                 "underlying": ev.instrument,
-                "direction": ev.direction.lower(),
-                "entry_price": ev.entry,
-                "stop_loss": ev.stop,
-                "take_profit": ev.target,
-                "score": 0.88,
-                "armed": ev.strength == "STRONG",
+                "tape_symbol": ev.instrument,
+                "side": side,
+                "option_type": opt_type,
+                "spot_entry": ev.entry,
+                "spot_exit": None,
+                "spot_sl": ev.stop,
+                "spot_tsl": ev.stop,
+                "entry_time": entry_iso,
+                "exit_time": None,
+                "score": 88.0 if ev.strength == "STRONG" else 72.0,
+                "poc": round(ev.entry * 0.999, 2),
+                "vwap": round(ev.entry * 1.001, 2),
+                "cvd": 1500.0 if is_long else -1500.0,
+                "scanned": True,
+                "skip_reason": None,
+                "scan_origin": "adaptive_edge" if ev.strategy == "adaptive_edge" else "spot_scan",
+                "flattened": False,
+                "quantity": 1,
+                "overlays": ["REPLAY", ev.strength],
+                "thesis": f"{ev.direction} {ev.strategy} at {ev.entry}",
+                "entry_mode": "SCALP",
+                "current_mode": "SCALP",
+                "peak_mode": "SCALP",
+                "exit_mode": None,
+                "mode_upgraded": False,
+                "mode_downgraded": False,
+                "mode_path": "SCALP",
+                "mode_history": ["SCALP"],
+                "horizon": "IMPULSE",
+                "session_date": sim_date,
                 "timestamp_ms": ev_ms,
+                "legs": legs,
             })
+
+        default_sym = ae_events[0].instrument if ae_events else "NIFTY-I"
+        all_syms = list(dict.fromkeys([ev.instrument for ev in ae_events])) or ["NIFTY-I"]
+
         return {
-            "readiness": {
-                "executable": True,
-                "reason": None,
-                "promotion_gate_reason": None,
+            "label": "SIMULATION_REPLAY",
+            "software_complete": True,
+            "production_gate_authorized": True,
+            "meets_a197": True,
+            "registry_locked": True,
+            "live_trading": False,
+            "settings": {
+                "enabled": True,
+                "symbol": default_sym,
+                "symbols": all_syms,
+                "scan_source": "both",
+                "scan_indices": ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"],
+                "scan_stocks": ["KOTAKBANK", "AXISBANK", "SBIN", "RELIANCE"],
+                "scan_all_stocks": True,
+                "scan_stock_contracts": True,
+                "strike_moneyness": ["ITM1", "ATM", "OTM1"],
+                "scan_expiries": ["weekly", "monthly"],
+                "scan_expiries_indices": ["weekly", "monthly"],
+                "stop_points": 15.0,
+                "trail_points": 25.0,
+                "profit_lock_activation_points": 20.0,
+                "profit_lock_offset_points": 5.0,
+                "persistence_bars": 3,
+                "scalp_favorable_points": 10.0,
+                "extended_favorable_points": 25.0,
+                "intraday_favorable_points": 50.0,
+                "tick_size": 0.05,
+                "ib_minutes": 15,
             },
+            "readiness": [
+                {"name": "sim_engine", "label": "Market Replay", "ready": True, "detail": "Replay active"}
+            ],
+            "session": {
+                "entries": len(signals),
+                "exits": 0,
+                "reentries": 0,
+                "blocked_pyramid": 0,
+                "last_mode": "SCALP",
+                "last_thesis": ae_events[-1].direction if ae_events else None,
+                "last_protection_stage": "TRAIL",
+                "last_overlays": ["REPLAY"],
+                "last_operating_mode": "SCALP",
+                "last_horizon": "IMPULSE",
+                "last_poc": ae_events[-1].entry if ae_events else None,
+                "last_cvd": 1500.0,
+                "last_location": "VALUE_AREA",
+                "last_bar_delta": 300.0,
+                "last_vwap": ae_events[-1].entry if ae_events else None,
+                "last_or_location": "INSIDE_OR",
+                "last_poc_migration": "UP",
+                "peak_pnl": self._stats.pnl,
+                "current_pnl": self._stats.pnl,
+                "profit_giveback": 0.0,
+                "lifecycle_action": "HOLD",
+                "last_position_quantity": 1,
+                "exit_fill_price": None,
+                "audit_stages": ["SIM_REPLAY"],
+            },
+            "legs": [],
+            "signals": signals,
             "scan": {
-                "underlyings": len(set(ev.instrument for ev in self._stats.events)) or 1,
+                "underlyings": len(all_syms),
                 "chains_read": 8,
                 "listed": 40,
                 "tradeable": 25,
-                "candidates": candidates,
-                "signals": candidates,
+                "candidates": signals,
+                "signals": signals,
                 "skipped": {},
                 "dropped": {},
                 "errors": [],
             },
-            "session": {
-                "entries": len(candidates),
-                "win_rate": 0.62,
-                "realised_pnl_today": self._stats.pnl,
-            },
+            "daily": [],
+            "quality": None,
+            "holdout": None,
+            "coverage": None,
+            "walk_forward": None,
+            "mode_counts": {"SCALP": len(signals)},
+            "mode_transitions": [],
+            "formula_table": {},
+            "incomplete_reasons": [],
             "warnings": [],
         }
 
@@ -735,6 +1204,58 @@ class SimulationRunner:
             "auto_execute": False,
         }
 
+    def get_gamma_move_snapshot(self) -> Dict[str, Any]:
+        """Return snapshot for Gamma Move Strategy during simulation."""
+        now_ms = int(time.time() * 1000)
+        cfg = self._config
+        sim_date = cfg.date if cfg else "2026-08-28"
+
+        signals = []
+        for i, ev in enumerate(self._stats.events):
+            ev_ms = ev.timestamp_ms if ev.timestamp_ms > 0 else now_ms
+            is_long = ev.direction.upper() in ("BULLISH", "LONG", "BUY")
+            opt_type = "CE" if is_long else "PE"
+            step = 100.0 if "SENSEX" in ev.instrument.upper() or "BANKNIFTY" in ev.instrument.upper() else (50.0 if "NIFTY" in ev.instrument.upper() else 20.0)
+            strike_val = round(ev.entry / step) * step
+            premium_est = round(max(5.0, ev.entry * 0.02), 2)
+
+            signals.append({
+                "instrument": {
+                    "tradingsymbol": f"{ev.instrument}26AUG{int(strike_val)}{opt_type}",
+                    "exchange": "BFO" if "SENSEX" in ev.instrument.upper() else "NFO",
+                    "kind": "option",
+                    "option_type": opt_type,
+                    "strike": strike_val,
+                    "expiry": sim_date,
+                    "lot_size": 15 if "NIFTY" in ev.instrument.upper() else (10 if "SENSEX" in ev.instrument.upper() else 500),
+                },
+                "underlying": ev.instrument,
+                "state": "armed" if ev.strength == "STRONG" else "watching",
+                "direction": "long" if is_long else "short",
+                "generated_at": f"{sim_date}T{ev.time_iso}+05:30",
+                "generated_at_ms": ev_ms,
+                "spot_at_eval": ev.entry,
+                "spot_level": ev.entry,
+                "level_type": "SUPPORT" if is_long else "RESISTANCE",
+                "distance_pct": 0.15,
+                "score": 88.0 if ev.strength == "STRONG" else 70.0,
+                "ltp": premium_est,
+                "entry_premium": premium_est,
+                "stop_premium": round(premium_est * 0.7, 2),
+                "target_premium": round(premium_est * 1.5, 2),
+                "origin": "level_bounce" if is_long else "level_rejection",
+                "rejection_reason": None,
+            })
+
+        return {
+            "generated_at": f"{sim_date}T09:16:31+05:30",
+            "signals": signals,
+            "positions": [],
+            "blockers": [],
+            "universe": {"underlyings": len(set(ev.instrument for ev in self._stats.events)) or 1},
+            "mode": {"is_paper": True},
+        }
+
     def get_nifty_orb_signals_response(self) -> Dict[str, Any]:
         """Return signals formatted for /api/v1/nifty-orb-options/scan during simulation."""
         now_ms = int(time.time() * 1000)
@@ -765,7 +1286,14 @@ class SimulationRunner:
         reversals, and Bear to Bearish breakdowns across instruments.
         """
         import random
-        from datetime import timedelta
+        from datetime import datetime, timezone, timedelta
+
+        ist = bar_dt.tzinfo if bar_dt.tzinfo is not None else timezone(timedelta(hours=5, minutes=30))
+        if "time" not in bar:
+            if bar_dt.tzinfo is None:
+                bar["time"] = int(bar_dt.replace(tzinfo=ist).timestamp())
+            else:
+                bar["time"] = int(bar_dt.timestamp())
 
         if not hasattr(self, '_bar_history'):
             self._bar_history: Dict[str, List[Dict]] = {}
@@ -775,9 +1303,9 @@ class SimulationRunner:
             self._bar_history[sym] = []
         self._bar_history[sym].append(bar)
 
-        # Keep last 50 bars per instrument
-        if len(self._bar_history[sym]) > 50:
-            self._bar_history[sym] = self._bar_history[sym][-50:]
+        # Keep last 60 bars per instrument
+        if len(self._bar_history[sym]) > 60:
+            self._bar_history[sym] = self._bar_history[sym][-60:]
 
         history = self._bar_history[sym]
 
@@ -817,97 +1345,195 @@ class SimulationRunner:
         rsi = 100 - (100 / (1 + rs))
 
         signals_to_fire = []
+        bar_time_str = bar_dt.strftime("%H:%M:%S")
 
-        # 1. SuperTrend (Trend crossover / expansion)
-        if sma5 > sma20 and close >= float(prev_bar["high"]):
-            signals_to_fire.append({
-                "strategy": "supertrend",
-                "direction": "BULLISH",
-                "strength": "STRONG" if (close - opens) >= 0.5 * atr else "MODERATE",
-            })
-        elif sma5 < sma20 and close <= float(prev_bar["low"]):
-            signals_to_fire.append({
-                "strategy": "supertrend",
-                "direction": "BEARISH",
-                "strength": "STRONG" if (opens - close) >= 0.5 * atr else "MODERATE",
-            })
+        # 1. SuperTrend: Canonical Triple SuperTrend Alignment (regime.py)
+        # Fast (10, 1.0), Mid (14, 2.0), Slow (21, 3.0).
+        # When recorded signals exist for this historical session, ground truth signals are replayed
+        # automatically at their recorded timestamps; synthetic evaluation is skipped.
+        has_recorded_st = any(r.get("strategy", "supertrend") == "supertrend" for r in getattr(self, "_recorded_signals", []))
+        if not has_recorded_st and len(history) >= 25:
+            h_arr = np.array([float(b["high"]) for b in history], dtype=np.float64)
+            l_arr = np.array([float(b["low"]) for b in history], dtype=np.float64)
+            c_arr = np.array([float(b["close"]) for b in history], dtype=np.float64)
+            _, t_fast = compute_supertrend(h_arr, l_arr, c_arr, period=10, multiplier=1.0)
+            _, t_mid = compute_supertrend(h_arr, l_arr, c_arr, period=14, multiplier=2.0)
+            _, t_slow = compute_supertrend(h_arr, l_arr, c_arr, period=21, multiplier=3.0)
 
-        # 2. VCP Squeeze Breakout (Range expansion after contraction)
-        prev_range = float(prev_bar["high"]) - float(prev_bar["low"])
-        if len(history) >= 4 and prev_range < 0.8 * atr and abs(close - opens) > 1.0 * atr:
-            signals_to_fire.append({
-                "strategy": "vcp",
-                "direction": "BULLISH" if close >= opens else "BEARISH",
-                "strength": "STRONG",
-            })
+            # Require indicators to be fully initialized (non-zero) on both current and previous bar
+            if (t_fast[-1] != 0 and t_fast[-2] != 0 and
+                t_mid[-1] != 0 and t_mid[-2] != 0 and
+                t_slow[-1] != 0 and t_slow[-2] != 0):
 
-        # 3. Adaptive Edge (RSI Extreme Reversals)
-        if rsi < 35 and close > opens:
-            signals_to_fire.append({
-                "strategy": "adaptive_edge",
-                "direction": "BULLISH",
-                "strength": "STRONG" if rsi < 25 else "MODERATE",
-            })
-        elif rsi > 65 and close < opens:
-            signals_to_fire.append({
-                "strategy": "adaptive_edge",
-                "direction": "BEARISH",
-                "strength": "STRONG" if rsi > 75 else "MODERATE",
-            })
+                curr_bull = (t_fast[-1] == 1 and t_mid[-1] == 1 and t_slow[-1] == 1)
+                prev_bull = (t_fast[-2] == 1 and t_mid[-2] == 1 and t_slow[-2] == 1)
+                curr_bear = (t_fast[-1] == -1 and t_mid[-1] == -1 and t_slow[-1] == -1)
+                prev_bear = (t_fast[-2] == -1 and t_mid[-2] == -1 and t_slow[-2] == -1)
 
-        # 4. Bear to Bearish Breakdown
-        if sma5 < sma20 and close < float(prev_bar["low"]) and close < opens and rsi < 45:
-            signals_to_fire.append({
-                "strategy": "bear_to_bearish",
-                "direction": "BEARISH",
-                "strength": "STRONG",
-            })
+                if curr_bull and not prev_bull:
+                    signals_to_fire.append({
+                        "strategy": "supertrend",
+                        "direction": "BULLISH",
+                        "strength": "STRONG",
+                    })
+                elif curr_bear and not prev_bear:
+                    signals_to_fire.append({
+                        "strategy": "supertrend",
+                        "direction": "BEARISH",
+                        "strength": "STRONG",
+                    })
 
-        # 5. ATM Premium Imbalance (Institutional Skew Expansion)
-        if len(history) >= 3 and abs(close - opens) > 1.2 * atr:
-            signals_to_fire.append({
-                "strategy": "atm_imbalance",
-                "direction": "BULLISH" if close >= opens else "BEARISH",
-                "strength": "STRONG",
-            })
+        # 2. VCP Squeeze: Canonical Volatility Contraction Pattern
+        # Requires multi-bar contraction (r1 > r2 > r3 < 0.8 * atr) followed by range & volume expansion breakout
+        if len(history) >= 8:
+            r1 = float(history[-4]["high"]) - float(history[-4]["low"])
+            r2 = float(history[-3]["high"]) - float(history[-3]["low"])
+            r3 = float(history[-2]["high"]) - float(history[-2]["low"])
+            recent_vols = [float(b.get("volume", 0)) for b in history[-6:-1]]
+            avg_vol = sum(recent_vols) / max(len(recent_vols), 1) if recent_vols else 0
+            cur_vol = float(bar.get("volume", 0))
+            is_contracting = (r1 > r2 and r2 > r3 and r3 < 0.8 * atr)
+            vol_expansion = (cur_vol > 1.2 * avg_vol) if avg_vol > 0 else True
+            cur_range = high - low
 
-        # 6. Navigator (AVWAP & Volatility Trend)
-        if len(history) >= 5 and sma5 > sma20 and close > sma5 and rsi > 52:
-            signals_to_fire.append({
-                "strategy": "navigator",
-                "direction": "BULLISH",
-                "strength": "STRONG",
-            })
-        elif len(history) >= 5 and sma5 < sma20 and close < sma5 and rsi < 48:
-            signals_to_fire.append({
-                "strategy": "navigator",
-                "direction": "BEARISH",
-                "strength": "STRONG",
-            })
+            if is_contracting and cur_range > 1.0 * atr and vol_expansion:
+                prior_high = max(float(b["high"]) for b in history[-4:-1])
+                prior_low = min(float(b["low"]) for b in history[-4:-1])
+                if close > prior_high and close > opens:
+                    signals_to_fire.append({
+                        "strategy": "vcp",
+                        "direction": "BULLISH",
+                        "strength": "STRONG",
+                    })
+                elif close < prior_low and close < opens:
+                    signals_to_fire.append({
+                        "strategy": "vcp",
+                        "direction": "BEARISH",
+                        "strength": "STRONG",
+                    })
 
-        # 7. Nifty ORB Options (Opening Range Breakout after 09:30 IST)
-        if len(history) >= 4:
-            first_bars = history[:3]
-            or_high = max(float(b["high"]) for b in first_bars)
-            or_low = min(float(b["low"]) for b in first_bars)
-            if close > or_high and close > opens:
+        # 3. Adaptive Edge: Canonical Mean Reversion with Candlestick Reversal Confirmation
+        if len(history) >= 15:
+            body = abs(close - opens)
+            lower_wick = min(opens, close) - low
+            upper_wick = high - max(opens, close)
+            # Exhaustion oversold + pin bar rejection of lows (hammer)
+            if rsi <= 28 and lower_wick >= 2.0 * max(body, 0.05 * atr) and close > low + 0.4 * (high - low):
                 signals_to_fire.append({
-                    "strategy": "nifty_orb",
+                    "strategy": "adaptive_edge",
                     "direction": "BULLISH",
                     "strength": "STRONG",
                 })
-            elif close < or_low and close < opens:
+            # Exhaustion overbought + pin bar rejection of highs (shooting star)
+            elif rsi >= 72 and upper_wick >= 2.0 * max(body, 0.05 * atr) and close < low + 0.6 * (high - low):
                 signals_to_fire.append({
-                    "strategy": "nifty_orb",
+                    "strategy": "adaptive_edge",
                     "direction": "BEARISH",
                     "strength": "STRONG",
                 })
 
+        # 4. Bear to Bearish: Canonical Lower Highs Breakdown (detect_lower_highs)
+        if len(history) >= 10:
+            from app.engines.bear_to_bearish.strategy import detect_lower_highs
+            has_lh, latest_peak, prev_peak = detect_lower_highs(history)
+            prior_support = min(float(b["low"]) for b in history[-6:-1])
+            if has_lh and close < prior_support and close < opens and rsi < 48:
+                signals_to_fire.append({
+                    "strategy": "bear_to_bearish",
+                    "direction": "BEARISH",
+                    "strength": "STRONG",
+                })
+
+        # 5. ATM Premium Imbalance: Canonical Opening Window Session Trade (max 1/day)
+        is_open_window = "09:15:00" <= bar_time_str <= "09:30:00"
+        atm_already_traded = any(
+            ev.strategy == "atm_imbalance" and ev.instrument == sym
+            for ev in self._stats.events
+        )
+        if is_open_window and not atm_already_traded and len(history) >= 2:
+            direction = "BULLISH" if close >= opens else "BEARISH"
+            signals_to_fire.append({
+                "strategy": "atm_imbalance",
+                "direction": direction,
+                "strength": "STRONG",
+            })
+
+        # 6. Navigator: Canonical Session-Anchored VWAP Cross
+        session_bars = [b for b in history if datetime.fromtimestamp(b["time"], tz=ist).date() == bar_dt.date()]
+        if len(session_bars) >= 5:
+            vols = [float(b.get("volume", 0)) for b in session_bars]
+            has_vol = sum(vols) > 0
+            if has_vol:
+                cum_pv = sum(float(b["close"]) * float(b.get("volume", 0)) for b in session_bars)
+                cum_v = sum(vols)
+                session_vwap = cum_pv / cum_v if cum_v > 0 else close
+            else:
+                session_vwap = sum(float(b["close"]) for b in session_bars) / len(session_bars)
+
+            prev_session_bars = session_bars[:-1]
+            if prev_session_bars:
+                if has_vol:
+                    prev_pv = sum(float(b["close"]) * float(b.get("volume", 0)) for b in prev_session_bars)
+                    prev_v = sum(float(b.get("volume", 0)) for b in prev_session_bars)
+                    prev_vwap = prev_pv / prev_v if prev_v > 0 else prev_close
+                else:
+                    prev_vwap = sum(float(b["close"]) for b in prev_session_bars) / len(prev_session_bars)
+
+                if prev_close <= prev_vwap and close > session_vwap and session_vwap >= prev_vwap and rsi > 50:
+                    signals_to_fire.append({
+                        "strategy": "navigator",
+                        "direction": "BULLISH",
+                        "strength": "STRONG",
+                    })
+                elif prev_close >= prev_vwap and close < session_vwap and session_vwap <= prev_vwap and rsi < 50:
+                    signals_to_fire.append({
+                        "strategy": "navigator",
+                        "direction": "BEARISH",
+                        "strength": "STRONG",
+                    })
+
+        # 7. Nifty ORB Options: Canonical Opening Range Breakout (09:30-12:00, max 2/day)
+        orb_trades_today = sum(
+            1 for ev in self._stats.events
+            if ev.strategy == "nifty_orb" and ev.instrument == sym
+        )
+        if orb_trades_today < 2 and "09:30:00" <= bar_time_str <= "12:00:00":
+            or_bars = [b for b in session_bars if datetime.fromtimestamp(b["time"], tz=ist).strftime("%H:%M:%S") < "09:30:00"]
+            if len(or_bars) >= 3:
+                or_high = max(float(b["high"]) for b in or_bars)
+                or_low = min(float(b["low"]) for b in or_bars)
+                cum_pv = sum(float(b["close"]) * max(1.0, float(b.get("volume", 0))) for b in session_bars)
+                cum_v = sum(max(1.0, float(b.get("volume", 0))) for b in session_bars)
+                cur_vwap = cum_pv / cum_v if cum_v > 0 else close
+
+                prev_sb = session_bars[:-1]
+                prev_pv = sum(float(b["close"]) * max(1.0, float(b.get("volume", 0))) for b in prev_sb)
+                prev_v = sum(max(1.0, float(b.get("volume", 0))) for b in prev_sb)
+                prev_vwap = prev_pv / prev_v if prev_v > 0 else cur_vwap
+                vwap_slope = cur_vwap - prev_vwap
+
+                min_breakout = 0.15 * atr
+
+                if close > or_high + min_breakout and prev_close <= or_high and close > cur_vwap and vwap_slope > 0:
+                    signals_to_fire.append({
+                        "strategy": "nifty_orb",
+                        "direction": "BULLISH",
+                        "strength": "STRONG",
+                    })
+                elif close < or_low - min_breakout and prev_close >= or_low and close < cur_vwap and vwap_slope < 0:
+                    signals_to_fire.append({
+                        "strategy": "nifty_orb",
+                        "direction": "BEARISH",
+                        "strength": "STRONG",
+                    })
+
         # Track recent signals per (symbol, strategy) to prevent flood
         if not hasattr(self, '_last_fired'):
             self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
+        if not hasattr(self, '_active_until_bar'):
+            self._active_until_bar: Dict[Tuple[str, str], int] = {}
 
-        current_bar_idx = self._bars_played
+        sym_bar_idx = len(history)
 
         # Emit all generated strategy signals for this bar (or filter by selected strategies)
         cfg_strats = [s.lower() for s in (self._config.strategies if self._config and self._config.strategies else [self._config.strategy if self._config else "all"])]
@@ -922,11 +1548,16 @@ class SimulationRunner:
 
             key = (sym, strategy)
             last_dir, last_idx = self._last_fired.get(key, ("", -1))
-            # De-duplicate: do not re-emit identical direction within 6 bars (30 minutes)
-            if last_dir == direction and (current_bar_idx - last_idx) < 6:
+            # De-duplicate: do not re-emit identical direction within 6 bars of this symbol (30 minutes)
+            if last_dir == direction and (sym_bar_idx - last_idx) < 6:
                 continue
 
-            self._last_fired[key] = (direction, current_bar_idx)
+            # Check if an active position is already open on this symbol for this strategy
+            active_until = self._active_until_bar.get(key, -1)
+            if sym_bar_idx < active_until:
+                continue
+
+            self._last_fired[key] = (direction, sym_bar_idx)
 
             if direction == "BULLISH":
                 stop = round(close - 1.5 * atr, 2)
@@ -992,27 +1623,40 @@ class SimulationRunner:
                     # Neither hit — treat as scratch/loss based on actual P&L
                     won = (exit_close > close) if direction == "BULLISH" else (exit_close < close)
 
+                cfg_lots = max(1, self._config.lots) if self._config else 1
+                opt_type = "CE" if direction == "BULLISH" else "PE"
+                atm_strike = round(close / 50.0) * 50.0
+                dt_month = bar_dt.strftime("%b").upper()
+                dt_year = bar_dt.strftime("%y")
+                opt_sym = f"{sym}{dt_year}{dt_month}{int(atm_strike)}{opt_type}"
+                lot_size = 25 if "NIFTY" in sym else 15
+                qty = cfg_lots * lot_size
+                entry_p = round(close * 0.02, 2)  # approx option premium
+                stop_p = round(entry_p * 0.75, 2)
+                tgt_p = round(entry_p * 1.5, 2)
+                spot_move = exit_close - close if direction == "BULLISH" else close - exit_close
+                # Option premium moves ~40-60% of spot move (delta approximation)
+                premium_move = round(spot_move * 0.50, 2)
+                raw_exit_p = round(max(0.05, entry_p + premium_move), 2)
+
+                is_index = any(idx in sym.upper() for idx in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"))
+                friction = (getattr(self._config, "friction_mode", "realistic") or "realistic").lower() if self._config else "realistic"
+                slip_pct = (0.005 if is_index else 0.015) if friction == "realistic" else 0.0
+                effective_entry = round(entry_p * (1.0 + slip_pct), 2)
+                effective_exit = round(max(0.05, raw_exit_p * (1.0 - slip_pct)), 2)
+
+                pnl_per_unit = effective_exit - effective_entry
+                pnl_usd_val = round(pnl_per_unit * qty, 2)
+                pnl_pct_val = round((pnl_per_unit / effective_entry) * 100.0, 2) if effective_entry > 0 else 0.0
+                slippage_drag = round(((effective_entry - entry_p) + (raw_exit_p - effective_exit)) * qty, 2)
+                dur_mins = bars_held * 5  # each bar is 5m
+                exit_dt = bar_dt + timedelta(minutes=dur_mins)
+
+                won = pnl_usd_val > 0
                 if won:
                     self._stats.wins += 1
                 else:
                     self._stats.losses += 1
-
-                # Construct detailed SimTradeEvent with correct option PnL
-                cfg_lots = max(1, self._config.lots) if self._config else 1
-                opt_type = "CE" if direction == "BULLISH" else "PE"
-                atm_strike = round(close / 50.0) * 50.0
-                lot_size = 25 if "NIFTY" in sym else 15
-                qty = cfg_lots * lot_size
-                entry_p = round(close * 0.02, 2)  # approx option premium
-                spot_move = exit_close - close if direction == "BULLISH" else close - exit_close
-                # Option premium moves ~40-60% of spot move (delta approximation)
-                premium_move = round(spot_move * 0.50, 2)
-                exit_p = round(max(0.05, entry_p + premium_move), 2)
-                pnl_per_unit = exit_p - entry_p
-                pnl_usd_val = round(pnl_per_unit * qty, 2)
-                pnl_pct_val = round((pnl_per_unit / entry_p) * 100.0, 2) if entry_p > 0 else 0.0
-                dur_mins = bars_held * 5  # each bar is 5m
-                exit_dt = bar_dt + timedelta(minutes=dur_mins)
 
                 trade = SimTradeEvent(
                     trade_id=f"TRD-{1000 + len(self._stats.trades) + 1}",
@@ -1020,24 +1664,28 @@ class SimulationRunner:
                     exit_time_iso=exit_dt.strftime("%H:%M:%S"),
                     timestamp_ms=int(bar_dt.timestamp() * 1000),
                     strategy=strategy,
-                    symbol=f"{sym}26AUG{int(atm_strike)}{opt_type}",
+                    symbol=opt_sym,
                     underlying=sym,
                     direction="BUY",
                     opt_type=opt_type,
                     strike=atm_strike,
                     lots=cfg_lots,
                     quantity=qty,
-                    entry_price=entry_p,
-                    exit_price=exit_p,
-                    stop_loss=round(entry_p * 0.75, 2),
-                    target_price=round(entry_p * 1.5, 2),
+                    entry_price=effective_entry,
+                    exit_price=effective_exit,
+                    stop_loss=stop_p,
+                    target_price=tgt_p,
                     status="WIN" if won else "LOSS",
                     pnl_usd=pnl_usd_val,
                     pnl_pct=pnl_pct_val,
                     duration_mins=dur_mins,
+                    slippage=slippage_drag,
+                    raw_entry=entry_p,
+                    raw_exit=raw_exit_p,
                 )
                 self._stats.trades.append(trade)
                 self._stats.pnl = round(sum(tr.pnl_usd for tr in self._stats.trades), 2)
+                self._active_until_bar[key] = sym_bar_idx + bars_held
 
 
 def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epoch: int, res_sec: int) -> List[Dict[str, Any]]:
@@ -1046,13 +1694,28 @@ def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epo
 
     base_prices = {
         "NIFTY": 24500.0,
+        "NIFTY 50": 24500.0,
         "BANKNIFTY": 52300.0,
+        "NIFTY BANK": 52300.0,
         "FINNIFTY": 23100.0,
+        "NIFTY FIN SERVICE": 23100.0,
         "MIDCPNIFTY": 13200.0,
+        "SENSEX": 81000.0,
         "RELIANCE": 3000.0,
         "TATASTEEL": 150.0,
         "HDFCBANK": 1650.0,
         "ICICIBANK": 1200.0,
+        "LT": 3980.0,
+        "SBIN": 1020.0,
+        "TCS": 4200.0,
+        "INFY": 1850.0,
+        "BHARTIARTL": 1550.0,
+        "AXISBANK": 1180.0,
+        "KOTAKBANK": 1800.0,
+        "BAJFINANCE": 7100.0,
+        "ADANIENT": 3050.0,
+        "ADANIPORTS": 1450.0,
+        "BAJAJFINSV": 1850.0,
     }
     spot = base_prices.get(symbol.upper(), 1000.0)
     volatility = spot * 0.0015  # 0.15% per candle standard deviation
@@ -1095,18 +1758,6 @@ async def _hydrate_missing_candles(
     """Fetch missing historical candles for selected replay date range from Zerodha Kite API."""
     from app.services import ohlcv_store
 
-    # Standard Kite NSE Instrument Token Map
-    KITE_TOKENS: Dict[str, int] = {
-        "NIFTY": 256265,
-        "BANKNIFTY": 260101,
-        "FINNIFTY": 257001,
-        "MIDCPNIFTY": 288001,
-        "RELIANCE": 738561,
-        "TATASTEEL": 895745,
-        "HDFCBANK": 341249,
-        "ICICIBANK": 12705,
-    }
-
     for sym in instruments:
         existing = ohlcv_store.get_candles(sym, resolution, limit=5000, since=start_epoch)
         in_range = [c for c in existing if start_epoch <= c["time"] <= end_epoch]
@@ -1116,13 +1767,13 @@ async def _hydrate_missing_candles(
         log.info("Missing local candles for Sterling Kite token %s [%s] on range %d-%d. Triggering Zerodha Kite fetch...", sym, resolution, start_epoch, end_epoch)
 
         try:
-            from app.services.exchange_account_store import exchange_account_store
+            from app.services.exchanges.kite import accounts as kite_accounts
             from app.services.exchanges.kite.client import KiteClient
 
             token = KITE_TOKENS.get(sym.upper())
             if token:
-                accounts = exchange_account_store.list_accounts()
-                zerodha_acct = next((a for a in accounts if a.exchange.value == "zerodha" and a.is_active), None)
+                accounts = kite_accounts.list_accounts("default")
+                zerodha_acct = next((a for a in accounts if a.is_active and getattr(a, "access_token", None)), None)
                 if zerodha_acct and zerodha_acct.access_token:
                     kc = KiteClient(api_key=getattr(zerodha_acct, "api_key", "") or "", access_token=zerodha_acct.access_token)
                     try:

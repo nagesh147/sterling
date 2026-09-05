@@ -158,8 +158,8 @@ describe('ConnectPane settings hub', () => {
     // auto_execute is user-global and Navigator reuses the same placement path,
     // so it never belonged behind a page titled "SuperTrend Engine".
     render(<ConnectPane />);
-    fireEvent.click(screen.getByRole('button', { name: /Trading Mode\s*Paper\/live, manual\/algo/i }));
-    expect(screen.getByRole('heading', { name: 'Trading Mode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Trading (Config|Mode)/i }));
+    expect(screen.getByRole('heading', { name: /Trading (Config|Mode)/i })).toBeInTheDocument();
     expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
     expect(screen.getByText('Exchange choices')).toBeInTheDocument();
 

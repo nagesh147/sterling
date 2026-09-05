@@ -24,6 +24,11 @@ export interface OrbConfig {
   target_r: number;
   option_moneyness: string;
   option_steps_itm: number;
+  strike_moneyness?: string[];
+  scan_expiries_indices?: string[];
+  scan_weekly_series_indices?: number[];
+  scan_monthly_series_indices?: number[];
+  scan_monthly_series_stocks?: number[];
   max_risk_inr: number;
   max_trades_per_day: number;
   avoid_expiry_day: boolean;
