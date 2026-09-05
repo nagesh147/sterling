@@ -58,11 +58,15 @@ def test_contract_publishes_defaults_and_discloses_non_parity_fields():
     assert body["decision_defaults"]["conviction_required"] == 5
     assert body["decision_defaults"]["repeat_volume_ratio"] == 0.5
     assert sum(body["decision_weights"].values()) == 100.0
-    assert body["strategy"]["version"] == "1.3.0"
+    assert body["strategy"]["version"] == "1.4.0"
     assert body["live_scan_defaults"]["max_candidates"] == 250
     assert "Kite NFO" in body["live_universe"]
     assert "transparent bounded score" in body["tier_score"]
     assert "causal replay without live-quote leakage" in body["parity"]["evidence_backed"]
+    assert any(
+        "not restricted to 09:16" in rule
+        for rule in body["strategy"]["local_transparent_rules"]
+    )
     assert (
         any(
             "ORION proprietary numeric strength-score weights" in item
@@ -79,7 +83,7 @@ def test_compare_endpoint_aggregates_multiple_sessions_without_private_fields():
             "direction": "UP",
             "tier": "strong",
             "rvol": 5.0,
-            "signal_time": "09:15",
+            "signal_time": "09:16",
             "orb_break_time": "09:16",
             "combo": True,
         },
@@ -89,7 +93,7 @@ def test_compare_endpoint_aggregates_multiple_sessions_without_private_fields():
             "direction": "DOWN",
             "tier": "explosive",
             "rvol": 11.0,
-            "signal_time": "09:15",
+            "signal_time": "09:18",
             "orb_break_time": "09:18",
             "combo": False,
         },
@@ -112,6 +116,8 @@ def test_supplied_bar_evaluation_returns_the_causal_signal_contract():
     assert signal["tier"] == "strong"
     assert signal["rvol"] == 5.0
     assert signal["signal_time"].startswith("2026-09-03T09:15:00")
+    assert signal["volume_signal_time"].startswith("2026-09-03T09:15:00")
+    assert signal["actionable_signal_time"].startswith("2026-09-03T09:16:00")
     assert signal["orb_break_time"].startswith("2026-09-03T09:16:00")
     assert signal["signal_key"] == "opening-volume:2026-09-03:TEST:UP"
     assert "score" not in signal

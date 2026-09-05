@@ -100,6 +100,8 @@ export interface OpeningLeaderSignal {
   symbol: string;
   session_date: string;
   signal_time: string;
+  volume_signal_time: string;
+  actionable_signal_time: string | null;
   observed_at: string;
   direction: OpeningLeaderDirection;
   tier: OpeningLeaderTier;

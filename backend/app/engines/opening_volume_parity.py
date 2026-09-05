@@ -25,7 +25,13 @@ def compare_opening_sessions(
 
     if rvol_tolerance < 0:
         raise ValueError("rvol_tolerance must be non-negative")
-    fields = ("direction", "tier", "signal_time", "orb_break_time", "combo")
+    fields = (
+        "direction",
+        "tier",
+        "actionable_signal_time",
+        "orb_break_time",
+        "combo",
+    )
 
     def index(rows: Iterable[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
         out: dict[tuple[str, str], dict[str, Any]] = {}
@@ -76,8 +82,22 @@ def compare_opening_sessions(
             continue
         mismatches: list[str] = []
         for field in fields:
-            left_value = _time(left.get(field)) if field.endswith("_time") else left.get(field)
-            right_value = _time(right.get(field)) if field.endswith("_time") else right.get(field)
+            if field == "actionable_signal_time":
+                # Older captured ORION rows call the actionable ORB timestamp
+                # ``signal_time``.  Sterling 1.4 publishes both events.
+                left_raw = left.get(field, left.get("signal_time"))
+                right_raw = right.get(field, right.get("orb_break_time"))
+                left_value = _time(left_raw)
+                right_value = _time(right_raw)
+            else:
+                left_value = (
+                    _time(left.get(field)) if field.endswith("_time") else left.get(field)
+                )
+                right_value = (
+                    _time(right.get(field))
+                    if field.endswith("_time")
+                    else right.get(field)
+                )
             if left_value != right_value:
                 mismatches.append(field)
         try:

@@ -192,7 +192,8 @@ function SignalCard({
 
       <div className="ovl-badges">
         <span className="ovl-badge" data-tier={signal.tier}>{signal.tier}</span>
-        {signal.decision.sterling_combo && <span className="ovl-badge" data-combo="true">Sterling Combo</span>}
+        {signal.combo && <span className="ovl-badge" data-combo="true">COMBO</span>}
+        {signal.decision.execution_eligible && <span className="ovl-badge" data-combo="true">Execution ready</span>}
         <span className="ovl-badge" data-combo={signal.decision.score.trade ? 'true' : undefined}>Score {formatNumber(signal.decision.score.lower_bound, 0)}–{formatNumber(signal.decision.score.upper_bound, 0)}</span>
         <span className="ovl-badge">Conviction {signal.decision.conviction.passed}/7</span>
         <span className="ovl-badge" data-combo={signal.decision.momentum.box_y ? 'true' : undefined}>Box {signal.decision.momentum.box_y ? 'Y' : signal.decision.momentum.box_x ? 'X' : '—'}</span>
@@ -220,8 +221,12 @@ function SignalCard({
 
       <div className="ovl-evidence">
         <div className="ovl-event">
-          <span>Signal</span>
-          <strong>{formatTime(signal.signal_time)} <em>· {formatCompact(signal.opening_volume)} vs {formatCompact(signal.average_opening_volume)} avg · {signal.baseline_session_count} sessions</em></strong>
+          <span>Actionable signal</span>
+          <strong>{formatTime(signal.actionable_signal_time)} <em>· first ORB breach</em></strong>
+        </div>
+        <div className="ovl-event">
+          <span>Volume signal</span>
+          <strong>{formatTime(signal.volume_signal_time)} <em>· {formatCompact(signal.opening_volume)} vs {formatCompact(signal.average_opening_volume)} avg · {signal.baseline_session_count} sessions</em></strong>
         </div>
         <div className="ovl-event">
           <span>ORB</span>
@@ -416,7 +421,7 @@ export function OpeningVolumeLeadersPane({ onOpenChart }: OpeningVolumeLeadersPa
                 disabled={!executionConfig || updateExecutionConfig.isPending}
                 onChange={(event) => updateExecutionConfig.mutate({ enabled: event.target.checked })}
               />
-              Allow shared Kite auto-execute to trade eligible Sterling Combo signals
+              Allow shared Kite auto-execute to trade risk-approved signals
             </label>
             <label className="ovl-control">
               <span>Minimum score</span>

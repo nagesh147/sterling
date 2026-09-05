@@ -259,6 +259,14 @@ class LeaderSignal:
             {
                 "session_date": self.session_date.isoformat(),
                 "signal_time": self.signal_time.isoformat(),
+                # Keep the original causal volume event explicit while also
+                # exposing the first actionable ORB event used by ORION cards.
+                # ``signal_time`` remains the backwards-compatible alias for
+                # the completed 09:15 volume candle.
+                "volume_signal_time": self.signal_time.isoformat(),
+                "actionable_signal_time": self.orb_break_time.isoformat()
+                if self.orb_break_time
+                else None,
                 "observed_at": self.observed_at.isoformat(),
                 "direction": self.direction.value,
                 "tier": self.tier.value,
@@ -867,10 +875,11 @@ def evaluate_leader(
         and liquidity_state is LiquidityState.PASS
         and quality is not CandleQuality.WEAK
     )
-    # Observed source cards associate COMBO with an immediately aligned 09:16
-    # ORB event, but the site's private predicate is not exposed.  This is the
-    # conservative, explicit local approximation; a later ORB break remains
-    # useful context without being retroactively labelled as the same event.
+    # ORION's frozen 2026-09-04 cards establish that aligned breaks at 09:17,
+    # 09:22, 11:13, and 15:02 can all be COMBO.  Therefore COMBO is not an
+    # "09:16 only" predicate.  The observable rule is a volume leader whose
+    # first ORB breach agrees with the opening-candle direction and passes the
+    # published Layer-1 liquidity gate.  Freshness remains entry-risk context.
     orb_immediate = orb_time is not None and orb_time.replace(
         second=0, microsecond=0
     ) == _as_ist(opening.timestamp).replace(second=0, microsecond=0) + timedelta(
@@ -881,7 +890,6 @@ def evaluate_leader(
         and liquidity_state is LiquidityState.PASS
         and direction is not LeaderDirection.NEUTRAL
         and orb_aligned
-        and orb_immediate
     )
     session_low = min(bar.low for bar in current_rows)
     session_high = max(bar.high for bar in current_rows)
@@ -1046,7 +1054,7 @@ def scan_leaders(
 
 STRATEGY_CONTRACT = {
     "id": "opening_volume_leaders",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "execution": "guarded_account_mode",
     "documented_rules": [
         "completed 09:15 one-minute candle",
@@ -1067,7 +1075,8 @@ STRATEGY_CONTRACT = {
     ],
     "local_transparent_rules": [
         "candle quality uses configurable body-fraction and close-location thresholds",
-        "COMBO approximates a leader with Layer-1 pass and an aligned first ORB break at 09:16",
+        "COMBO is a leader with Layer-1 pass and an aligned first ORB break; it is not restricted to 09:16",
+        "volume_signal_time is the 09:15 candle and actionable_signal_time is the first ORB breach",
         "ranking uses tier, combo, quality, RVOL, then symbol",
         "hold and +1% follow-through use the visible ORB boundary as the entry reference",
         (

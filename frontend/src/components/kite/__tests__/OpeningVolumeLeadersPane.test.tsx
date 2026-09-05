@@ -8,7 +8,7 @@ const { mutate, contractResult, scanResult, executionConfigResult, updateExecuti
   contractResult: {
     current: {
       data: {
-        strategy: { version: '1.3.0' },
+        strategy: { version: '1.4.0' },
         tier_score: 'Sterling transparent bounded score',
       },
       error: null,
@@ -48,6 +48,8 @@ const signal = (over: Record<string, unknown> = {}) => ({
   symbol: 'GODREJCP',
   session_date: '2026-09-03',
   signal_time: '2026-09-03T09:15:00+05:30',
+  volume_signal_time: '2026-09-03T09:15:00+05:30',
+  actionable_signal_time: '2026-09-03T09:16:00+05:30',
   observed_at: '2026-09-03T09:24:00+05:30',
   direction: 'DOWN',
   tier: 'explosive',
@@ -193,7 +195,7 @@ const signal = (over: Record<string, unknown> = {}) => ({
 });
 
 const response = (over: Record<string, unknown> = {}) => ({
-  strategy: { version: '1.3.0' },
+  strategy: { version: '1.4.0' },
   as_of: '2026-09-03T09:24:00+05:30',
   universe: {
     source: 'kite_nfo_options_intersect_nse_equities',
@@ -310,11 +312,13 @@ describe('OpeningVolumeLeadersPane', () => {
     expect(screen.getByText('GODREJCP')).toBeInTheDocument();
     expect(screen.getByText('17.73×')).toBeInTheDocument();
     expect(screen.getByText('explosive')).toBeInTheDocument();
-    expect(screen.getByText('Sterling Combo')).toBeInTheDocument();
+    expect(screen.getByText('COMBO')).toBeInTheDocument();
+    expect(screen.getByText('Actionable signal')).toBeInTheDocument();
+    expect(screen.getByText('Volume signal')).toBeInTheDocument();
     expect(screen.getAllByText(/71–73/).length).toBeGreaterThan(0);
     expect(screen.getByText(/20\.0 \/ 20\.0 · pass/i)).toBeInTheDocument();
     expect(screen.getByText(/09:15 IST/)).toBeInTheDocument();
-    expect(screen.getByText(/09:16 IST/)).toBeInTheDocument();
+    expect(screen.getAllByText(/09:16 IST/)).toHaveLength(2);
     expect(screen.getByText('140:70')).toBeInTheDocument();
     expect(screen.getByText('Bullish')).toBeInTheDocument();
     expect(screen.getByText(/5m hold Pass/i)).toBeInTheDocument();

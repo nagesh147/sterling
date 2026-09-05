@@ -194,7 +194,7 @@ def test_documented_rvol_boundaries_are_inclusive(rvol, expected):
             35_985.0,
             23,
             LeaderTier.SPURT,
-            False,
+            True,
         ),
     ],
 )
@@ -208,11 +208,13 @@ def test_reference_leader_cards_preserve_tier_direction_and_event_times(
     tier,
     combo,
 ):
-    """Lock the five observed cards without claiming hidden score parity.
+    """Lock observable tier/direction inputs and causal event timing.
 
     Displayed volume baselines are integer-rounded, so the test verifies the
     stable classification boundaries and event times rather than a proprietary
-    two-decimal display calculation.
+    two-decimal display calculation.  The constructed break is aligned; the
+    source card's historical non-COMBO state cannot be reconstructed without
+    its raw breakout side.
     """
 
     rows = [
@@ -386,7 +388,7 @@ def test_malformed_future_and_premarket_rows_cannot_suppress_a_causal_signal():
     assert signal.orb_break_time is not None
 
 
-def test_later_aligned_orb_break_is_context_not_an_immediate_combo():
+def test_later_aligned_orb_break_is_combo_without_a_0916_restriction():
     rows = _history(with_break=False)
     rows.extend(
         [
@@ -403,7 +405,7 @@ def test_later_aligned_orb_break_is_context_not_an_immediate_combo():
 
     assert signal.orb_aligned is True
     assert signal.orb_immediate is False
-    assert signal.combo is False
+    assert signal.combo is True
 
 
 def test_bearish_opening_candle_tracks_the_first_low_break():
