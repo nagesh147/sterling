@@ -24,7 +24,8 @@ class SimState(str, Enum):
 
 class SimConfig(BaseModel):
     date: str                          # "2026-08-28"
-    start_time: str = "09:15:00"       # HH:MM:SS IST
+    end_date: Optional[str] = None     # Optional multi-day range end
+    start_time: str = "09:00:00"       # HH:MM:SS IST (defaults to 9:00 AM)
     end_time: str = "15:30:00"         # HH:MM:SS IST  
     speed: float = 1.0                 # 1,2,5,10,15,20,50
     resolution: str = "5m"             # candle resolution
@@ -33,6 +34,7 @@ class SimConfig(BaseModel):
     strategies: List[str] = ["all"]    # list of selected strategies
     lots: int = 1                      # number of option/futures lots
     moneyness: str = "ATM"             # "ATM", "ITM1", "ITM2", "OTM1", "OTM2", "ALL"
+    friction_mode: str = "realistic"   # "realistic" (with slippage) or "ideal"
 
 
 class SimSignalEvent(BaseModel):

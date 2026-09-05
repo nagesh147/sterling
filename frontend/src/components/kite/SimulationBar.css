@@ -133,34 +133,41 @@
   background: color-mix(in srgb, var(--k-text) 8%, transparent);
 }
 
-/* ── Toolbar (Row 2) ──────────────────────────── */
+/* ── Toolbar (Row 2: Matching PCR Desk bar) ── */
 .sim-toolbar {
-  min-height: 36px;
+  height: 32px;
+  min-height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: var(--k-bg);
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--k-surface);
   border-bottom: 1px solid var(--k-border);
-  flex-wrap: wrap;
+  overflow-x: auto;
+  font-family: inherit;
+}
+.sim-toolbar::-webkit-scrollbar {
+  display: none;
 }
 .sim-toolbar-left {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .sim-toolbar-center {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .sim-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 3px;
-  margin-left: auto;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* ── Config Button ────────────────────────────── */
@@ -383,16 +390,13 @@
   transition: width 0.3s linear;
 }
 
-/* ── Dock Panel (Expandable) ──────────────────── */
+/* ── Dock Panel ──────────────────────────────── */
 .sim-dock-panel {
-  display: none;
+  display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-.sim-dock-panel[data-expanded="true"] {
-  display: flex;
 }
 
 /* ── Tab Strip ────────────────────────────────── */
@@ -501,30 +505,39 @@
   color: var(--k-dim);
 }
 
-/* ── Signal Grid ──────────────────────────────── */
+/* ── Signal Grid (Matching PCR table) ────────── */
 .sim-signals-grid {
   width: 100%;
 }
 .sim-signals-header {
   display: grid;
-  grid-template-columns: 58px 100px 90px 60px 80px 65px 65px;
-  font-size: 8.5px;
-  font-weight: 700;
+  grid-template-columns: 65px 110px 110px 65px 80px 70px 70px;
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--k-dim);
   border-bottom: 1px solid var(--k-border);
+  background: var(--k-surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .sim-signals-header > div {
-  padding: 7px 8px;
+  padding: 6px 8px;
 }
 .sim-signal-row {
   display: grid;
-  grid-template-columns: 58px 100px 90px 60px 80px 65px 65px;
+  grid-template-columns: 65px 110px 110px 65px 80px 70px 70px;
   align-items: center;
-  height: 34px;
-  border-bottom: 1px solid color-mix(in srgb, var(--k-text) 4%, transparent);
-  font-size: 11px;
+  height: 30px;
+  border-bottom: 1px solid var(--k-border);
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.sim-signal-row:hover {
+  background: var(--k-surface-hover);
 }
 .sim-signal-time,
 .sim-signal-strat,
@@ -533,91 +546,102 @@
 .sim-signal-price,
 .sim-signal-sl,
 .sim-signal-tp {
-  padding: 6px 8px;
+  padding: 4px 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sim-signal-time {
-  font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
   color: var(--k-dim);
+  font-size: 11.5px;
 }
 .sim-signal-strat {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--k-blue);
-  font-size: 10px;
+  font-size: 11px;
 }
 .sim-signal-inst {
   font-weight: 600;
   color: var(--k-text);
+  font-size: 11.5px;
 }
 .sim-signal-dir {
-  font-weight: 700;
-  font-size: 10px;
+  font-weight: 600;
+  font-size: 11px;
 }
 .sim-signal-dir[data-bull="true"] {
   color: var(--k-green);
 }
 .sim-signal-dir[data-bull="false"] {
-  color: var(--k-red);
+  color: var(--k-red-brick);
 }
 .sim-signal-price,
 .sim-signal-sl,
 .sim-signal-tp {
-  font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
   color: var(--k-text);
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
-/* ── Trade Table ──────────────────────────────── */
+/* ── Trade Table (Matching PCR table) ────────── */
 .sim-trade-table {
   width: 100%;
-  font-size: 11px;
+  font-size: 12px;
   text-align: left;
   border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
 }
 .sim-table-th {
-  padding: 7px 6px;
-  font-size: 8.5px;
-  font-weight: 700;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--k-dim);
   border-bottom: 1px solid var(--k-border);
+  background: var(--k-surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  white-space: nowrap;
 }
 .sim-table-th:last-child {
   text-align: right;
 }
 .sim-table-tr {
-  border-bottom: 1px solid color-mix(in srgb, var(--k-text) 6%, transparent);
+  border-bottom: 1px solid var(--k-border);
+  height: 30px;
+  transition: background 0.1s;
 }
 .sim-table-tr:hover {
-  background: color-mix(in srgb, var(--k-text) 3%, transparent);
+  background: var(--k-surface-hover);
 }
 .sim-table-td {
-  padding: 6px 6px;
+  padding: 4px 8px;
   color: var(--k-text);
+  font-size: 12px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .sim-table-td.id-cell {
-  font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
   color: var(--k-blue);
-  font-weight: 600;
-  font-size: 10px;
+  font-weight: 500;
+  font-size: 11px;
 }
 .sim-table-td.pnl-cell {
   text-align: right;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  font-size: 12px;
 }
 .sim-table-td.pnl-cell[data-profit="true"] {
   color: var(--k-green);
 }
 .sim-table-td.pnl-cell[data-profit="false"] {
-  color: var(--k-red);
+  color: var(--k-red-brick);
 }
 
 /* ── Status Chip (WIN/LOSS) ───────────────────── */
@@ -730,3 +754,394 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }
 }
+
+/* ── Full Height Dock Mode ────────────────────── */
+.sim-dock[data-mode="fullheight"] {
+  height: 100% !important;
+  flex: 1 !important;
+  border-top: none !important;
+}
+
+/* ── Performance Metrics Strip (Matching PCR / AdaptiveEdge) ── */
+.sim-metrics-strip,
+.sim-consolidation-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  background: var(--k-surface);
+  border-bottom: 1px solid var(--k-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  font-family: inherit;
+  font-size: 11.5px;
+}
+.sim-metrics-strip::-webkit-scrollbar,
+.sim-consolidation-bar::-webkit-scrollbar {
+  display: none;
+}
+.sim-strip-item,
+.sim-metric-card {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.sim-strip-label,
+.sim-metric-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--k-dim);
+}
+.sim-strip-val,
+.sim-metric-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--k-text);
+}
+.sim-strip-val[data-profit="true"],
+.sim-metric-value[data-profit="true"],
+.sim-metric-value.pnl-value[data-profit="true"] {
+  color: var(--k-green);
+}
+.sim-strip-val[data-profit="false"],
+.sim-metric-value[data-profit="false"],
+.sim-metric-value.pnl-value[data-profit="false"] {
+  color: var(--k-red-brick);
+}
+.sim-strip-sub,
+.sim-metric-sub {
+  font-size: 10px;
+  color: var(--k-dim);
+  font-weight: 400;
+}
+.sim-strip-sep {
+  color: var(--k-border);
+  font-size: 11px;
+}
+
+/* ── Segmented Navigation (Matching PCR .kp-tabs & .kp-seg) ─ */
+.sim-segmented-nav {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--k-border);
+  background: var(--k-surface);
+  border-radius: 3px;
+  overflow: hidden;
+  height: 26px;
+}
+.sim-segmented-nav-btn {
+  border: none;
+  background: none;
+  color: var(--k-dim);
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  height: 100%;
+  transition: background 0.1s, color 0.1s;
+}
+.sim-segmented-nav-btn:hover {
+  color: var(--k-text);
+}
+.sim-segmented-nav-btn[data-active="true"] {
+  background: var(--k-surface-hover);
+  color: var(--k-text);
+  font-weight: 600;
+}
+
+/* ── Toolbar Presets & Speeds (Matching PCR .kp-idx) ── */
+.sim-preset-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.sim-preset-btn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 3px;
+  border: 1px solid var(--k-border);
+  background: var(--k-surface);
+  color: var(--k-text);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sim-preset-btn:hover:not(:disabled) {
+  background: var(--k-surface-hover);
+}
+.sim-preset-btn[data-active="true"] {
+  border-color: var(--k-orange);
+  background: var(--k-orange);
+  color: #ffffff;
+  font-weight: 600;
+}
+.sim-preset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sim-speed-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid var(--k-border);
+}
+.sim-speed-pill {
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 2px;
+  border: 1px solid var(--k-border);
+  background: var(--k-surface);
+  color: var(--k-dim);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.1s;
+}
+.sim-speed-pill:hover {
+  color: var(--k-text);
+  background: var(--k-surface-hover);
+}
+.sim-speed-pill[data-active="true"] {
+  border-color: var(--k-orange);
+  background: var(--k-orange);
+  color: #ffffff;
+  font-weight: 600;
+}
+.sim-speed-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sim-date-range-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--k-dim);
+}
+.sim-input-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--k-dim);
+  text-transform: uppercase;
+  margin-left: 2px;
+}
+.sim-input-sep {
+  font-size: 9.5px;
+  color: var(--k-faint);
+}
+
+.sim-play-btn {
+  color: var(--k-green);
+  font-size: 14px;
+}
+.sim-stop-btn {
+  color: var(--k-red-brick);
+  font-size: 11px;
+}
+
+/* ── Split View Layout ────────────────────────── */
+.sim-tab-split-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+.sim-split-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.sim-split-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--k-border);
+  border-radius: 6px;
+  background: var(--k-bg);
+}
+.sim-split-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--k-border);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--k-text);
+  background: var(--k-surface);
+}
+.sim-split-col-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ── Table Footer Summary ─────────────────────── */
+.sim-table-tf {
+  background: var(--k-surface);
+  border-top: 2px solid var(--k-border);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+/* ── Settings Page Accordions & Cards ─────────── */
+.sim-settings-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 900px;
+  padding: 4px;
+}
+.sim-settings-card {
+  background: var(--k-bg);
+  border: 1px solid var(--k-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  overflow: hidden;
+}
+.sim-settings-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  min-height: 48px;
+  user-select: none;
+  background: var(--k-bg);
+  border-left: 2px solid transparent;
+  box-sizing: border-box;
+}
+.sim-settings-summary::-webkit-details-marker {
+  display: none;
+}
+.sim-settings-card[open] > .sim-settings-summary {
+  border-left-color: var(--k-brand);
+}
+.sim-settings-caret {
+  width: 14px;
+  color: var(--k-dim);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.12s ease;
+  justify-self: center;
+}
+.sim-settings-card[open] > .sim-settings-summary .sim-settings-caret {
+  transform: rotate(90deg);
+  color: var(--k-brand);
+}
+.sim-settings-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sim-settings-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--k-text);
+  line-height: 1.25;
+}
+.sim-settings-desc {
+  font-size: 10.5px;
+  color: var(--k-dim);
+  line-height: 1.35;
+}
+.sim-settings-meta {
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--k-dim);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--k-surface);
+  border: 1px solid var(--k-border);
+  white-space: nowrap;
+}
+.sim-settings-body {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--k-border-2);
+  background: var(--k-surface);
+}
+.sim-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.sim-settings-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--k-dim);
+  min-width: 90px;
+}
+.sim-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sim-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.sim-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sim-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--k-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sim-input-large {
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--k-border);
+  background: var(--k-bg);
+  color: var(--k-text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+.sim-input-large:focus {
+  outline: none;
+  border-color: var(--k-brand);
+}
+
