@@ -46,7 +46,7 @@ function makeRow() {
     underlying: 'NIFTY BANK', token: 1, exchange: 'NFO', regime: 'BULL',
     alignment: { fast: 1, mid: 1, slow: 1 }, direction: 'long', option_type: 'CE',
     spot: 57147.5, stop_loss: 56891.3, entry_sl: 56500, exit_state: '0/3 red',
-    score: 85, timestamp_ms: 1_785_404_700_000, source: 'spot',
+    score: 85, timestamp_ms: Date.now(), source: 'spot',
     is_active: true, is_fresh: false, target: null,
     legs: [{
       moneyness: 'ITM1', option_type: 'CE', option_symbol: SYMBOL, strike: 57000,

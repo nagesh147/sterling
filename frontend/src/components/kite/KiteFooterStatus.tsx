@@ -8,10 +8,14 @@ import { useAdaptiveEdgeSnapshot } from '../../hooks/useAdaptiveEdge';
 import { useGammaMoveSnapshot } from '../../hooks/useGammaMove';
 import { useAtmPremiumImbalanceSnapshot } from '../../hooks/useAtmPremiumImbalance';
 
-import { useSimActive, useSimulationStore } from '../../hooks/useSimulation';
 
 /**
  * Broker connection and per-strategy state, in the footer.
+ *
+ * The replay chip that used to live here has moved to `ReplayFooterChip`.
+ * Replay is a mode, not an engine, and sitting in this cluster implied it was
+ * a seventh strategy — while duplicating the clock the dock toggle already
+ * rendered forty pixels away.
  *
  * **On what these chips can honestly say.** Only SuperTrend reports scan
  * timing — `scanning`, `scanning_label`, `generated_ms`, `next_scan_ms`. ORB and
@@ -29,8 +33,6 @@ import { useSimActive, useSimulationStore } from '../../hooks/useSimulation';
 export function KiteFooterStatus({ onOpenSession }: { onOpenSession: () => void }) {
   const status = useKiteStatus().data;
   const sig = useEngineSignals().data;
-  const simActive = useSimActive();
-  const simStatus = useSimulationStore(s => s.status);
   const engineOn = useEngineConfig().data?.engine_enabled !== false;
   const navOn = useNavigatorConfig().data?.record.config.enabled ?? false;
   const orbOn = useOrbConfig().data?.config?.enabled !== false;
@@ -76,22 +78,6 @@ export function KiteFooterStatus({ onOpenSession }: { onOpenSession: () => void 
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-      {simActive && (
-        <span
-          title={`Simulation replay active (${simStatus.current_time_iso || 'running'})`}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, height: 20, padding: '0 6px',
-            border: `1px solid color-mix(in srgb, ${k.cyan} 40%, transparent)`, borderRadius: 4,
-            background: `color-mix(in srgb, ${k.cyan} 12%, transparent)`, color: k.cyan,
-            fontFamily: 'inherit', fontSize: 8.5, fontWeight: 800, letterSpacing: '.05em',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.cyan, boxShadow: `0 0 6px ${k.cyan}` }} />
-          ▶ SIMULATION {simStatus.current_time_iso ? `(${simStatus.current_time_iso})` : ''}
-        </span>
-      )}
-
       <button
         type="button"
         onClick={onOpenSession}

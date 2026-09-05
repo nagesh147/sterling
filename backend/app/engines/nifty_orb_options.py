@@ -81,6 +81,11 @@ class StrategyConfig:
     truedata_use_oi: bool = True
     truedata_use_bid_ask: bool = True
     truedata_use_quote_freshness: bool = True
+    strike_moneyness: tuple[str, ...] = ("ATM",)
+    scan_expiries_indices: tuple[str, ...] = ("weekly", "monthly")
+    scan_weekly_series_indices: tuple[int, ...] = (0, 1, 2, 3)
+    scan_monthly_series_indices: tuple[int, ...] = (0, 1)
+    scan_monthly_series_stocks: tuple[int, ...] = (0, 1)
 
     def validate(self) -> "StrategyConfig":
         """Reject configuration that would silently bypass a strategy filter.
@@ -132,6 +137,22 @@ class StrategyConfig:
             raise ValueError(f"expiry_selection must be one of {sorted(EXPIRY_SELECTIONS)}")
         if self.option_moneyness.strip().upper() not in MONEYNESS:
             raise ValueError(f"option_moneyness must be one of {sorted(MONEYNESS)}")
+        allowed_strikes = frozenset({"ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5", "ITM", "OTM"})
+        bad_strikes = sorted(set(self.strike_moneyness) - allowed_strikes)
+        if bad_strikes:
+            raise ValueError(f"strike_moneyness entries must be drawn from {sorted(allowed_strikes)}")
+        for name in ("scan_expiries_indices",):
+            bad = sorted(set(getattr(self, name)) - EXPIRY_SERIES)
+            if bad:
+                raise ValueError(f"{name} must be drawn from {sorted(EXPIRY_SERIES)}")
+        for name, limit in (("scan_weekly_series_indices", 4),
+                            ("scan_monthly_series_indices", 2),
+                            ("scan_monthly_series_stocks", 2)):
+            ranks = getattr(self, name)
+            if any(not isinstance(r, int) or r < 0 or r >= limit for r in ranks):
+                raise ValueError(f"{name} ranks must be between 0 and {limit - 1}")
+            if len(set(ranks)) != len(ranks):
+                raise ValueError(f"{name} contains a duplicate rank")
         if self.avoid_expiry_day and self.expiry_dte_min == 0 and self.expiry_dte_max == 0:
             raise ValueError("avoid_expiry_day leaves no eligible expiry when the DTE range is 0-0")
         if self.data_source == "truedata" and self.truedata_use_quote_freshness and not self.truedata_use_ticks:
@@ -620,22 +641,47 @@ def select_option(
     strikes = sorted({c.strike for c in candidates})
     atm = min(strikes, key=lambda x: abs(x - spot))
     steps = min((b - a for a, b in zip(strikes, strikes[1:]) if b > a), default=50.0)
-    moneyness = cfg.option_moneyness.strip().upper()
-    if moneyness == "ATM":
-        target = atm
-    elif moneyness == "ITM":
-        target = atm - cfg.option_steps_itm * steps if direction == "LONG" else atm + cfg.option_steps_itm * steps
+
+    def _target_for(m: str, steps_count: int) -> float:
+        m = m.strip().upper()
+        if m == "ATM":
+            return atm
+        if m.startswith("ITM"):
+            n = int(m[3:]) if len(m) > 3 and m[3:].isdigit() else steps_count
+            return atm - n * steps if direction == "LONG" else atm + n * steps
+        if m.startswith("OTM"):
+            n = int(m[3:]) if len(m) > 3 and m[3:].isdigit() else steps_count
+            return atm + n * steps if direction == "LONG" else atm - n * steps
+        return atm
+
+    use_multi = bool(cfg.strike_moneyness) and (cfg.strike_moneyness != ("ATM",) or cfg.option_moneyness == "ATM")
+    if use_multi:
+        targets = [_target_for(m, cfg.option_steps_itm) for m in cfg.strike_moneyness]
+        target = targets[0]
+        moneyness_desc = ", ".join(cfg.strike_moneyness)
     else:
-        target = atm + cfg.option_steps_itm * steps if direction == "LONG" else atm - cfg.option_steps_itm * steps
-    chosen = min(candidates, key=lambda c: (abs(c.strike - target), c.dte_on(today) or 999, -c.volume, -c.open_interest, c.spread_pct))
+        moneyness = cfg.option_moneyness.strip().upper()
+        target = _target_for(moneyness, cfg.option_steps_itm)
+        targets = [target]
+        moneyness_desc = f"{moneyness}{'' if moneyness == 'ATM' else f' x{cfg.option_steps_itm}'}"
+
+    chosen = min(
+        candidates,
+        key=lambda c: (
+            min(abs(c.strike - t) for t in targets),
+            c.dte_on(today) or 999,
+            -c.volume,
+            -c.open_interest,
+            c.spread_pct,
+        ),
+    )
     # Moneyness is a risk choice, not a hint. Asking for ITM x3 and silently
     # receiving the ATM strike because the ladder does not reach that far changes
     # the position's delta, cost and payoff. One strike step of tolerance absorbs
     # an irregular ladder; anything beyond it is a refusal.
-    if abs(chosen.strike - target) > steps:
+    if min(abs(chosen.strike - t) for t in targets) > steps:
         raise ValueError(
-            f"No liquid {typ} contract at {moneyness}"
-            f"{'' if moneyness == 'ATM' else f' x{cfg.option_steps_itm}'} "
+            f"No liquid {typ} contract at {moneyness_desc} "
             f"(wanted strike near {target:g}, nearest eligible is {chosen.strike:g})"
         )
     return chosen

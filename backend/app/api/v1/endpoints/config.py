@@ -302,6 +302,11 @@ class NiftyOrbConfigRequest(BaseModel):
     truedata_use_oi: bool | None = None
     truedata_use_bid_ask: bool | None = None
     truedata_use_quote_freshness: bool | None = None
+    strike_moneyness: list[str] | None = None
+    scan_expiries_indices: list[str] | None = None
+    scan_weekly_series_indices: list[int] | None = None
+    scan_monthly_series_indices: list[int] | None = None
+    scan_monthly_series_stocks: list[int] | None = None
 
 @router.get("/nifty-orb-options")
 async def get_nifty_orb_options_config() -> dict:
@@ -654,6 +659,10 @@ async def update_gamma_move_config(body: dict = Body(...)) -> dict:
 @router.get("/gamma-move/snapshot")
 async def gamma_move_snapshot(user: UserContext = Depends(get_current_user)) -> dict:
     """Config, what the scan found, and every reason nothing is armed."""
+    from app.services.simulation import simulation_runner, SimState
+    if simulation_runner.status.state != SimState.IDLE:
+        return simulation_runner.get_gamma_move_snapshot()
+
     uid = getattr(user, "user_id", None) or getattr(user, "uid", None)
     if not uid:
         raise HTTPException(status_code=401, detail="authenticated user is required")

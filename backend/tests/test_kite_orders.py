@@ -49,6 +49,7 @@ async def test_place_order_market_payload():
     assert f["quantity"] == "10"
     assert f["order_type"] == "MARKET"
     assert f["product"] == "CNC"
+    assert float(f["market_protection"]) == -1
     assert "price" not in f  # market order carries no price
 
 
@@ -61,6 +62,7 @@ async def test_place_order_limit_payload():
     assert f["transaction_type"] == "SELL"
     assert f["price"] == "1499.5"
     assert f["validity"] == "DAY"
+    assert "market_protection" not in f
 
 
 async def test_place_order_stoploss_trigger():
@@ -70,6 +72,41 @@ async def test_place_order_stoploss_trigger():
     f = seen["form"]
     assert f["order_type"] == "SL-M"
     assert f["trigger_price"] == "1400"
+    assert float(f["market_protection"]) == -1
+
+
+@pytest.mark.parametrize("method", ["place_order_option", "place_order_future"])
+async def test_derivatives_session_rejection_never_becomes_next_day_amo(method):
+    calls = []
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(400, json={"status":"error", "message":"Market closed",
+            "data":{"hints":["switch_to_amo"]}, "error_type":"InputException"})
+    c = _client(handler)
+    with pytest.raises(KiteError):
+        await getattr(c, method)("CONTRACT", "buy", 50)
+    assert calls == ["/orders/regular"]
+
+
+@pytest.mark.parametrize("value", [0, 101, float("nan")])
+async def test_unprotected_market_order_rejected_before_network(value):
+    handler, seen = _capture()
+    c = _client(handler)
+    with pytest.raises(KiteOrderError):
+        await c.place_order("NSE:INFY", "buy", 1, market_protection=value)
+    assert seen == {}
+
+
+async def test_error_message_containing_rate_is_not_a_retry_signal():
+    calls = []
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(400, json={"status":"error", "message":"Corporate action restriction",
+            "data":{}, "error_type":"InputException"})
+    c = _client(handler)
+    with pytest.raises(KiteError):
+        await c.place_order_option("CONTRACT", "buy", 50)
+    assert calls == ["/orders/regular"]
 
 
 async def test_place_order_paper_returns_mock_without_network():

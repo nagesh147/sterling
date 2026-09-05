@@ -1,0 +1,247 @@
+import { useEffect, useRef } from 'react';
+import {
+  ReplaySignal,
+  ReplayStatus,
+  ReplayTrade,
+  useReplayStore,
+} from './useReplayStore';
+
+const API = '/api/v1/simulation';
+
+/* Poll cadences. The surface this replaced used ONE interval — 150 ms — that
+   ran regardless of state, tab visibility or whether the dock was even open,
+   and each response carried the entire signal and trade ledger. */
+const POLL_RUNNING_MS = 500;
+const POLL_PAUSED_MS = 2000;
+const POLL_BACKGROUND_MS = 2000;
+
+async function fetchStatus(sinceEvents?: number, sinceTrades?: number): Promise<ReplayStatus | null> {
+  const qs =
+    sinceEvents != null && sinceTrades != null
+      ? `?since_events=${sinceEvents}&since_trades=${sinceTrades}`
+      : '';
+  try {
+    const res = await fetch(`${API}/status${qs}`);
+    if (!res.ok) return null;
+    return (await res.json()) as ReplayStatus;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fold a delta response into the store.
+ *
+ * `events_total` going DOWN means the ledger was truncated (a seek, or a new
+ * session), so the client's offsets are stale and it must resync from scratch
+ * rather than append onto a ledger that no longer exists.
+ */
+function applyStatus(next: ReplayStatus, wasDelta: boolean) {
+  const store = useReplayStore.getState();
+  if (!wasDelta) {
+    store.setStatus(next);
+    return;
+  }
+  const haveEvents = store.status.stats.events.length;
+  const haveTrades = store.status.stats.trades.length;
+  const totalEvents = next.events_total ?? haveEvents;
+  const totalTrades = next.trades_total ?? haveTrades;
+
+  if (totalEvents < haveEvents || totalTrades < haveTrades) {
+    void fetchStatus().then((full) => full && store.setStatus(full));
+    return;
+  }
+
+  store.applyFrame({
+    state: next.state,
+    config: next.config,
+    current_time_iso: next.current_time_iso,
+    progress_pct: next.progress_pct,
+    bars_played: next.bars_played,
+    bars_total: next.bars_total,
+    elapsed_real_s: next.elapsed_real_s,
+    status_message: next.status_message,
+    capabilities: next.capabilities,
+    events_total: totalEvents,
+    trades_total: totalTrades,
+    stats: {
+      signals_fired: next.stats.signals_fired,
+      trades_entered: next.stats.trades_entered,
+      wins: next.stats.wins,
+      losses: next.stats.losses,
+      pnl: next.stats.pnl,
+      slippage_total: next.stats.slippage_total,
+    },
+  });
+  if (next.stats.events.length) store.appendSignals(next.stats.events);
+  if (next.stats.trades.length) store.upsertTrades(next.stats.trades);
+  if (next.last_signal) {
+    useReplayStore.setState((s) => ({ status: { ...s.status, last_signal: next.last_signal } }));
+  }
+}
+
+/**
+ * Keep the store in step with the runner.
+ *
+ * Prefers server-sent events; falls back to delta polling, then to full
+ * polling. All three stop when the replay is idle and while the tab is hidden —
+ * the previous poller did neither, so a closed dock in a background tab kept
+ * fetching the whole ledger three times a second.
+ */
+export function useReplayStream(enabled: boolean): void {
+  const esRef = useRef<EventSource | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stoppedRef = useRef(false);
+  const backoffRef = useRef(500);
+
+  useEffect(() => {
+    stoppedRef.current = false;
+
+    const clearTimer = () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+
+    const closeStream = () => {
+      esRef.current?.close();
+      esRef.current = null;
+    };
+
+    /* ── polling ─────────────────────────────────────────────────────── */
+
+    const poll = async () => {
+      if (stoppedRef.current) return;
+      const store = useReplayStore.getState();
+      const caps = store.status.capabilities;
+      const canDelta = caps?.delta_status === true;
+
+      const next = canDelta
+        ? await fetchStatus(store.status.stats.events.length, store.status.stats.trades.length)
+        : await fetchStatus();
+
+      if (next) applyStatus(next, canDelta);
+      schedule();
+    };
+
+    const schedule = () => {
+      clearTimer();
+      if (stoppedRef.current || esRef.current) return;
+
+      const store = useReplayStore.getState();
+      const state = store.status.state;
+
+      // Idle with nothing to watch: stop entirely rather than idling a timer.
+      if (state === 'idle' && !store.open) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      const delay =
+        state === 'running'
+          ? (store.open ? POLL_RUNNING_MS : POLL_BACKGROUND_MS)
+          : state === 'paused' || state === 'loading'
+            ? POLL_PAUSED_MS
+            : POLL_BACKGROUND_MS;
+
+      timerRef.current = setTimeout(() => { void poll(); }, delay);
+    };
+
+    /* ── SSE ─────────────────────────────────────────────────────────── */
+
+    const openStream = () => {
+      if (typeof EventSource === 'undefined' || stoppedRef.current) return false;
+      try {
+        const es = new EventSource(`${API}/stream`);
+        esRef.current = es;
+
+        es.addEventListener('state', (e) => {
+          const d = JSON.parse((e as MessageEvent).data);
+          useReplayStore.getState().applyFrame(d);
+        });
+        es.addEventListener('frame', (e) => {
+          const d = JSON.parse((e as MessageEvent).data);
+          const store = useReplayStore.getState();
+          store.applyFrame({
+            current_time_iso: d.t ?? store.status.current_time_iso,
+            progress_pct: d.pct ?? store.status.progress_pct,
+            bars_played: d.bars_played ?? store.status.bars_played,
+            bars_total: d.bars_total ?? store.status.bars_total,
+            elapsed_real_s: d.elapsed_real_s ?? store.status.elapsed_real_s,
+            stats: {
+              pnl: d.pnl ?? store.status.stats.pnl,
+              wins: d.wins ?? store.status.stats.wins,
+              losses: d.losses ?? store.status.stats.losses,
+              signals_fired: d.signals_fired ?? store.status.stats.signals_fired,
+              slippage_total: d.slippage_total ?? store.status.stats.slippage_total,
+            },
+          });
+        });
+        es.addEventListener('signal', (e) => {
+          const d = JSON.parse((e as MessageEvent).data) as ReplaySignal;
+          useReplayStore.getState().appendSignals([d]);
+        });
+        es.addEventListener('trade', (e) => {
+          const d = JSON.parse((e as MessageEvent).data) as ReplayTrade;
+          useReplayStore.getState().upsertTrades([d]);
+        });
+
+        es.onerror = () => {
+          closeStream();
+          if (stoppedRef.current) return;
+          // Back off, then fall back to polling once the stream has clearly
+          // failed rather than reconnecting forever behind a buffering proxy.
+          const wait = Math.min(8000, backoffRef.current);
+          backoffRef.current = wait * 2;
+          timerRef.current = setTimeout(() => {
+            if (stoppedRef.current) return;
+            if (backoffRef.current > 8000 || !openStream()) schedule();
+          }, wait);
+        };
+        return true;
+      } catch {
+        esRef.current = null;
+        return false;
+      }
+    };
+
+    /* ── boot ────────────────────────────────────────────────────────── */
+
+    const boot = async () => {
+      const first = await fetchStatus();
+      if (!first || stoppedRef.current) {
+        schedule();
+        return;
+      }
+      useReplayStore.getState().setStatus(first);
+      if (first.capabilities?.stream && openStream()) return;
+      schedule();
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearTimer();
+      } else if (!esRef.current) {
+        void poll();
+      }
+    };
+
+    if (enabled) {
+      void boot();
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+
+    return () => {
+      stoppedRef.current = true;
+      clearTimer();
+      closeStream();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [enabled]);
+}
+
+/** One-shot resync, for surfaces that need the truth without subscribing. */
+export async function syncReplayStatus(): Promise<ReplayStatus | null> {
+  const status = await fetchStatus();
+  if (status) useReplayStore.getState().setStatus(status);
+  return status;
+}

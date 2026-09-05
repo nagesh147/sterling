@@ -1,0 +1,153 @@
+/**
+ * Number, money and time formatting for the replay dock.
+ *
+ * Centralised because the surface it replaced called `.toFixed(2)` inline in
+ * forty places and disagreed with itself about signs, grouping and what to draw
+ * when a value was missing. The last of those is the one that mattered: a
+ * metric the engine never measured used to render `₹0.00`, which reads as a
+ * measurement of zero. Absent values render an em dash here, always.
+ */
+
+/** What we draw when there is no value. Never `0`, never an empty string. */
+export const ABSENT = '—';
+
+const INR = new Intl.NumberFormat('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const INT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+
+/** U+2212. A hyphen is not a minus sign and does not align in tabular figures. */
+const MINUS = '−';
+
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/** `₹1,248.50`. Absent → em dash. */
+export function fmtInr(v: number | null | undefined): string {
+  if (!isNum(v)) return ABSENT;
+  return v < 0 ? `${MINUS}₹${INR.format(Math.abs(v))}` : `₹${INR.format(v)}`;
+}
+
+/** `+₹1,248.50` / `−₹312.00`. Always signed, so a glance tells direction. */
+export function fmtSignedInr(v: number | null | undefined): string {
+  if (!isNum(v)) return ABSENT;
+  if (v < 0) return `${MINUS}₹${INR.format(Math.abs(v))}`;
+  return `+₹${INR.format(v)}`;
+}
+
+/** `+2.4%` / `−1.0%`. */
+export function fmtSignedPct(v: number | null | undefined, dp = 1): string {
+  if (!isNum(v)) return ABSENT;
+  const body = Math.abs(v).toFixed(dp);
+  return v < 0 ? `${MINUS}${body}%` : `+${body}%`;
+}
+
+/** `62%`. Unsigned — win rates are not directional. */
+export function fmtPct(v: number | null | undefined, dp = 0): string {
+  if (!isNum(v)) return ABSENT;
+  return `${v.toFixed(dp)}%`;
+}
+
+/** `1,250`. */
+export function fmtInt(v: number | null | undefined): string {
+  if (!isNum(v)) return ABSENT;
+  return INT.format(v);
+}
+
+/** `5L`. Lots, not contracts — the two differ by the lot size. */
+export function fmtLots(v: number | null | undefined): string {
+  return isNum(v) ? `${INT.format(v)}L` : ABSENT;
+}
+
+/**
+ * `10:47:05` from either a bare `HH:MM:SS` or a full ISO string.
+ *
+ * The backend sends the bare form; a few call sites historically passed an ISO
+ * string, so both are accepted rather than producing a confident wrong answer.
+ */
+export function fmtTime(iso: string | null | undefined, len = 8): string {
+  if (!iso) return '--:--:--';
+  const body = iso.includes('T') ? iso.split('T')[1] || iso : iso;
+  return body.substring(0, len);
+}
+
+/** `47m`, `1h 12m`, `< 1m`. */
+export function fmtDuration(mins: number | null | undefined): string {
+  if (!isNum(mins)) return ABSENT;
+  if (mins < 1) return '< 1m';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** `41s`, `3m 12s`. Real elapsed wall time, distinct from session duration. */
+export function fmtElapsed(seconds: number | null | undefined): string {
+  if (!isNum(seconds)) return ABSENT;
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s}s`;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * `Fri 4 Sep 2026` from `2026-09-04`; `4 Sep` when `short`.
+ *
+ * Composed by hand rather than through `Intl.DateTimeFormat`, whose en-IN
+ * output differs between ICU builds ("Sep" vs "Sept", a comma before the year).
+ * A label that shifts with the Node version is a label you cannot test.
+ * Unparseable input falls through unchanged rather than becoming "Invalid Date".
+ */
+export function fmtSessionDate(iso: string | null | undefined, short = false): string {
+  if (!iso) return ABSENT;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return iso;
+  // Noon UTC keeps the weekday stable regardless of the runner's timezone.
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  if (Number.isNaN(dt.getTime())) return iso;
+  const day = `${d} ${MONTHS[m - 1]}`;
+  return short ? day : `${WEEKDAYS[dt.getUTCDay()]} ${day} ${y}`;
+}
+
+/** Minutes past midnight, for placing a time on the session timeline. */
+export function timeToMinutes(time: string | null | undefined): number {
+  if (!time) return 0;
+  const body = time.includes('T') ? time.split('T')[1] || '' : time;
+  const [h, m] = body.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 + m;
+}
+
+/** Inverse of `timeToMinutes`, clamped to a real clock. */
+export function minutesToTime(mins: number): string {
+  const clamped = Math.max(0, Math.min(24 * 60 - 1, Math.round(mins)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+}
+
+/** Bullish/long, by any of the names the engines use for it. */
+export function isBullish(direction: string | null | undefined): boolean {
+  const d = (direction || '').toUpperCase();
+  return d === 'BULLISH' || d === 'LONG' || d === 'BUY';
+}
+
+/**
+ * Reward-to-risk. `null` when the stop sits on the entry, because dividing by
+ * zero there would print `Infinity` where the honest answer is "undefined".
+ */
+export function rewardRisk(
+  entry: number | null | undefined,
+  stop: number | null | undefined,
+  target: number | null | undefined,
+): number | null {
+  if (!isNum(entry) || !isNum(stop) || !isNum(target)) return null;
+  const risk = Math.abs(entry - stop);
+  if (risk < 1e-9) return null;
+  return Math.abs(target - entry) / risk;
+}

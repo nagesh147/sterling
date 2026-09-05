@@ -157,6 +157,8 @@ async def test_auto_exec_one_position_guard():
     placed = []
 
     class C:
+        async def get_margins(self,*a):
+            return {"available":{"live_balance":1_000_000}}
         async def place_order_option(self, sym, side, size, **kw):
             placed.append((sym, size))
             return {"order_id": "O-" + sym}
@@ -332,3 +334,10 @@ async def test_update_trails_tightens_short_future_downward(monkeypatch):
     p = positions.open_positions(uid)[0]
     assert p.stop_premium == 25050.0, "short stop should tighten downward"
     assert gtt_moved and gtt_moved[0] == (44, [25050.0])
+
+
+@pytest.fixture(autouse=True)
+def _valid_entry_data_for_execution_plumbing(monkeypatch):
+    """Historical row fixtures isolate execution; session gates tested separately."""
+    from app.services.kite_engine import service as execution
+    monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")

@@ -1,7 +1,5 @@
 import React from 'react';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
-
-
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useOrbConfig, useSetOrbEnabled } from '../../hooks/useOrbConfig';
 import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { toOrbFeedEntries, type OrbFeedEntry } from '../utils/niftyOrbSignalAdapter';
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useOrbSignals(enabled = true) {
   const isSimActive = useSimActive();

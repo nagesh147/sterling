@@ -52,9 +52,9 @@ class TestSizing:
             entry_price=24_000, stop_price=23_900, lot_size=50,
             available_capital=50_000, risk_pct=1.0, max_lots=10,
             allow_min_lot_over_risk=True)
-        assert r_allowed.blocked is False and r_allowed.lots == 1
+        assert r_allowed.blocked is True and r_allowed.lots == 0  # unaffordable margin
 
-    def test_unreadable_capital_falls_back_to_one_lot_rather_than_blocking(self):
+    def test_unreadable_capital_blocks_without_a_budget(self):
         """available_fo_capital returns 0.0 when the margins call fails.
 
         Reading that as "over budget" would make a transient broker outage halt every
@@ -63,10 +63,10 @@ class TestSizing:
         """
         r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
                                  available_capital=0.0, risk_pct=1.0, max_lots=10)
-        assert r.blocked is False and r.lots == 1
+        assert r.blocked is True and r.lots == 0
         rf = sizing.size_future_position(entry_price=24_000, stop_price=23_900, lot_size=50,
                                          available_capital=0.0, risk_pct=1.0, max_lots=10)
-        assert rf.blocked is False and rf.lots == 1
+        assert rf.blocked is True and rf.lots == 0
 
     def test_a_sizeable_trade_is_never_blocked(self):
         r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=50,
@@ -87,11 +87,11 @@ class TestSizing:
         assert r.lots == 3
         assert "margin affords" in r.reason
 
-    def test_stop_above_entry_defaults_one_lot(self):
+    def test_stop_above_entry_blocks(self):
         r = sizing.size_position(entry_premium=100, stop_premium=120, lot_size=50,
                                  available_capital=500_000, risk_pct=1.0, max_lots=10)
-        assert r.lots == 1
-        assert "risk undefined" in r.reason
+        assert r.blocked and r.lots == 0
+        assert "below entry" in r.reason
 
     def test_zero_lot_size_yields_nothing(self):
         r = sizing.size_position(entry_premium=100, stop_premium=80, lot_size=0,
@@ -162,6 +162,7 @@ async def test_tick_exit_sells_and_cancels_gtt(monkeypatch):
     assert out == "NIFTY24JUN24000CE"
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
     assert client.cancelled == [555]
+    await confirm_exit('m1', 79)
     assert pos.get("m1", "NIFTY24JUN24000CE").status == pos.CLOSED
 
 
@@ -182,6 +183,7 @@ async def test_tick_exit_unsubscribes_token(monkeypatch):
         qty=50, stop_premium=80, status=pos.OPEN))
     client = _FakeClient()
     await monitor.on_tick("mu1", 999, 75.0, client=client)
+    await confirm_exit('mu1', 80)
     assert 999 in unsubbed, "token should be unsubscribed after exit"
 
 
@@ -206,6 +208,7 @@ async def test_futures_long_tick_exit_sells(monkeypatch):
     assert out == "NIFTY25JULFUT"
     assert client.futures_exits == [("NIFTY25JULFUT", "sell", 50)]
     assert client.sells == []   # options path NOT used
+    await confirm_exit('mf1', 80)
     assert pos.get("mf1", "NIFTY25JULFUT").status == pos.CLOSED
 
 
@@ -229,6 +232,7 @@ async def test_futures_short_tick_exit_buys(monkeypatch):
     out = await monitor.on_tick("mf2", 999, 48600.0, client=client)
     assert out == "BANKNIFTY25JULFUT"
     assert client.futures_exits == [("BANKNIFTY25JULFUT", "buy", 15)]
+    await confirm_exit('mf2', 80)
     assert pos.get("mf2", "BANKNIFTY25JULFUT").status == pos.CLOSED
 
 
@@ -263,8 +267,8 @@ async def test_order_update_rejection_releases_guard(monkeypatch):
                         lambda uid, key: released.append((uid, key)))
     pos.register(pos.OpenPosition(
         uid="m4", symbol="Z", exchange="NFO", token=3, qty=50,
-        status=pos.PENDING, guard_key="Z"))
-    await monitor.on_order_update("m4", {"tradingsymbol": "Z", "status": "REJECTED"})
+        status=pos.PENDING, guard_key="Z", order_id="ENTRY-Z"))
+    await monitor.on_order_update("m4", {"tradingsymbol": "Z", "status": "REJECTED", "order_id":"ENTRY-Z"})
     assert pos.get("m4", "Z").status == pos.REJECTED
     assert released == [("m4", "Z")]
 
@@ -291,11 +295,11 @@ async def test_protective_exit_fill_closes_position_not_refills(monkeypatch):
     pos.register(pos.OpenPosition(
         uid="mx1", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
         qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
-        status=pos.OPEN, direction="long", guard_key="NIFTY"))
+        status=pos.OPEN, direction="long", guard_key="NIFTY", exit_order_id="GTT-EXIT-1"))
     # GTT-fired exit: a SELL whose order_id is NOT the entry order.
     await monitor.on_order_update("mx1", {
         "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
-        "transaction_type": "SELL", "order_id": "GTT-EXIT-1", "average_price": 79.0})
+        "transaction_type": "SELL", "order_id": "GTT-EXIT-1", "average_price": 79.0, "filled_quantity":50})
     p = pos.get("mx1", "NIFTY24JUN24000CE")
     assert p.status == pos.CLOSED, "protective exit fill must close the position"
     assert released == [("mx1", "NIFTY")], "guard released after exit"
@@ -315,10 +319,10 @@ async def test_futures_short_cover_fill_closes_position(monkeypatch):
     pos.register(pos.OpenPosition(
         uid="mx2", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=888,
         qty=15, entry_premium=48000, stop_premium=48500, order_id="ENTRY-F",
-        status=pos.OPEN, direction="short", vehicle="futures", guard_key="BANKNIFTY"))
+        status=pos.OPEN, exit_order_id="COVER-1", direction="short", vehicle="futures", guard_key="BANKNIFTY"))
     await monitor.on_order_update("mx2", {
         "tradingsymbol": "BANKNIFTY25JULFUT", "status": "COMPLETE",
-        "transaction_type": "BUY", "order_id": "COVER-1", "average_price": 48550.0})
+        "transaction_type": "BUY", "order_id": "COVER-1", "average_price": 48550.0, "filled_quantity":15})
     assert pos.get("mx2", "BANKNIFTY25JULFUT").status == pos.CLOSED
 
 
@@ -359,12 +363,12 @@ async def test_monitor_own_exit_fill_not_double_booked(monkeypatch):
     out = await monitor.on_tick(uid, 777, 80.0, client=client)
     assert out == "NIFTY24JUN24000CE"
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
-    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
+    assert state.daily_realized_pnl(uid) == 0.0  # ACK is not a fill
 
     # Kite now streams the monitor's OWN SELL fill (different order_id than the entry).
     await monitor.on_order_update(uid, {
         "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
-        "transaction_type": "SELL", "order_id": "EXIT-1", "average_price": 80.0})
+        "transaction_type": "SELL", "order_id": "EXIT-1", "average_price": 80.0, "filled_quantity":50})
     # Still booked exactly once — NOT -2000.
     assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
 
@@ -397,6 +401,7 @@ async def test_concurrent_exit_paths_place_single_sell(monkeypatch):
         monitor._exit_position(client, uid, p, 80.0, reason="expiry square-off"),
     )
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)], "exactly one SELL placed"
+    await confirm_exit(uid, 80)
     assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
     assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0), "booked once, not twice"
 
@@ -428,7 +433,7 @@ async def test_exit_fill_postback_arriving_mid_placement_books_once(monkeypatch)
             # Kite streams the fill before our own coroutine gets to pos.close().
             await monitor.on_order_update(uid, {
                 "tradingsymbol": sym, "status": "COMPLETE", "transaction_type": "SELL",
-                "order_id": result["order_id"], "average_price": 80.0})
+                "order_id": result["order_id"], "average_price": 80.0, "filled_quantity":size, "tag":kw["tag"]})
             return result
 
     client = _PostbackDuringPlacement()
@@ -456,12 +461,12 @@ async def test_broker_gtt_fill_during_our_exit_still_reconciles(monkeypatch):
     pos.register(pos.OpenPosition(
         uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
         qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
-        status=pos.OPEN, direction="long", gtt_id=0, guard_key="NIFTY"))
+        status=pos.OPEN, exit_order_id="GTT-FILL", direction="long", gtt_id=0, guard_key="NIFTY"))
     monitor._exiting.add((uid, "NIFTY24JUN24000CE"))
     try:
         await monitor.on_order_update(uid, {
             "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
-            "transaction_type": "SELL", "order_id": "GTT-FILL", "average_price": 80.0})
+            "transaction_type": "SELL", "order_id": "GTT-FILL", "average_price": 80.0, "filled_quantity":50})
     finally:
         monitor._exiting.discard((uid, "NIFTY24JUN24000CE"))
     assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
@@ -524,6 +529,7 @@ async def test_tick_red_count_exit_for_two_red_mode(monkeypatch):
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
     assert client.cancelled == [555]
     closed = pos.get("mr1", "NIFTY24JUN24000CE")
+    await confirm_exit('mr1', 80)
     assert closed.status == pos.CLOSED
     assert "red count exit 2/2 (two_red)" in closed.exit_reason
 
@@ -563,3 +569,5 @@ async def test_tick_red_signal_exit_requires_counter_arrow(monkeypatch):
     # so for test, accept that reds trigger, but reason includes mode
     # (if we want stricter, would need arrow state in pos)
     assert out is not None or pos.get("mr3", "Y").status != pos.OPEN  # depending
+
+from tests.engines.sterling_kite_engine.execution_fixtures import confirm_exit

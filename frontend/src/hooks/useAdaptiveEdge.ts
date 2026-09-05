@@ -10,7 +10,7 @@ const ROOT = '/api/v1/adaptive-edge';
    `inert_fields` so the UI can say so rather than pretending. */
 const CONFIG_ROOT = '/api/v1/config/adaptive-edge';
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useAdaptiveEdgeSnapshot() {
   const isSimActive = useSimActive();

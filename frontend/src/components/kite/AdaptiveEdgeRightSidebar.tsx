@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useReducer, useState } from 'react';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';
@@ -311,9 +311,6 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
         )}
         {engine === 'gamma_move' && (
           <GammaMoveBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
-        )}
-        {engine === 'bear_to_bearish' && (
-          <BearToBearishBoard onOpenChart={openChartFor} nowMs={nowMs} onOpenDetail={onOpenBoardDetail} />
         )}
       </div>
     </div>

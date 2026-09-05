@@ -312,7 +312,7 @@ describe('NavigatorSettingsPanel', () => {
           scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'], strike_moneyness: null,
         });
         render(<NavigatorSettingsPanel />);
-        expect(screen.queryByText('Strike range & legs')).not.toBeInTheDocument();
+        expect(screen.queryByText('Strike range')).not.toBeInTheDocument();
         expect(screen.getByRole('switch', { name: SWITCH })).toBeInTheDocument();
       });
 

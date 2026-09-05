@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-05T11:19:32.655219+00:00",
+  "release_verdict": "NO_GO",
+  "original_review_base": "7ff055e1e30d6d26b33aafb07788e7ad982231aa",
+  "head_at_report": "18a15b25bcbdac566b21873a6865b421a0f31059",
+  "scope": "Sterling Kite Engine; code hashes identify tested files even when concurrent workspace commits move HEAD",
+  "unique_tests_passed": 807,
+  "checks": [
+    {
+      "name": "core",
+      "command": "STERLING_DB_PATH=/tmp/sterling-audit-verified-core.db backend/.venv/bin/python -m pytest backend/tests/engines/sterling_kite_engine -q --tb=short",
+      "cwd": "/home/nageshmadaram/Sterling",
+      "exit_code": 0,
+      "passed": 500,
+      "failed": 0,
+      "warnings": 3,
+      "summary": "500 passed, 3 warnings in 45.00s",
+      "output_sha256": "0f1325fa418ff9dc3efadcdfaf0b65d97e72bef8f12a2ea4ab224acdcd1e00cc"
+    },
+    {
+      "name": "affected_integrations_and_broker_adapter",
+      "command": "STERLING_DB_PATH=/tmp/sterling-audit-verified-integrations.db backend/.venv/bin/python -m pytest backend/tests/test_kite_router.py backend/tests/test_kite_orders.py backend/tests/test_kite_retry_classification.py backend/tests/test_telegram_kite.py backend/tests/services/navigator backend/tests/api/test_navigator.py -q --tb=short",
+      "cwd": "/home/nageshmadaram/Sterling",
+      "exit_code": 0,
+      "passed": 307,
+      "failed": 0,
+      "warnings": 3,
+      "summary": "307 passed, 3 warnings in 23.57s",
+      "output_sha256": "606e026ed95dabb51f9b1b09cea599d9d41ce65ea2a7814abc50c821f2bf8bf3"
+    },
+    {
+      "name": "typescript",
+      "command": "npx tsc --noEmit",
+      "cwd": "/home/nageshmadaram/Sterling/frontend",
+      "exit_code": 0,
+      "summary": "No diagnostics"
+    },
+    {
+      "name": "whitespace",
+      "command": "git diff --check 7ff055e1e30d6d26b33aafb07788e7ad982231aa",
+      "cwd": "/home/nageshmadaram/Sterling",
+      "exit_code": 0
+    }
+  ],
+  "failed_test_ids": [],
+  "tests_limitations": [
+    "Fixtures exercise mechanics; they are not market-performance data.",
+    "Some legacy routing fixtures isolate time/freshness gates; dedicated boundary tests exercise those gates.",
+    "Core and affected integrations only; entire repository suite not run.",
+    "TypeScript compilation only; browser interaction and production broker execution not certified.",
+    "Mock persistence reload verifies serialization, not crash atomicity of a production ledger."
+  ],
+  "real_data": {
+    "path": "docs/audits/2026-09-05-kite-real-data-audit.json",
+    "sha256": "ba4ad7cfcb12cde32cd6a6ee3ba6228e4e35f1db6e26524ff111ffb6cdaadac2",
+    "reproducer": "PYTHONPATH=backend backend/.venv/bin/python backend/study/kite_production_audit.py",
+    "bars": 52063,
+    "sampled_prefix_checks": 404,
+    "prefix_violations": 0,
+    "entry_exit_comparisons": 2275,
+    "raw_vs_ha_exit_indices_changed": 14,
+    "post_cas_bars": 0,
+    "last_utc": "2026-07-16T09:45:00Z",
+    "profitability_established": false
+  },
+  "acquisition_attempts": [
+    {
+      "kind": "registered_kite_lake",
+      "status": "unavailable",
+      "reason": "Registered removable storage was not mounted/accessible"
+    },
+    {
+      "kind": "authenticated_read_only_kite_quote",
+      "status": "unavailable",
+      "error_type": "ConnectTimeout",
+      "http_status": null,
+      "order_submitted": false
+    },
+    {
+      "source_url": "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_20260904_F_0000.csv.zip",
+      "retrieved_at": "2026-09-05T11:10:19.372945+00:00",
+      "purpose": "read-only post-CAS exchange contract data probe",
+      "status": "unavailable",
+      "error_type": "ReadTimeout",
+      "url_status": "Candidate UDiFF archive path; timeout does not establish whether the file exists."
+    }
+  ],
+  "graph": {
+    "used_before_exploration": true,
+    "initially_stale": true,
+    "refreshed_for_review": true,
+    "coverage_caveat": "Graph counts are structural hints; not a complete test coverage or safety certificate."
+  },
+  "actions": {
+    "live_orders_submitted": false,
+    "account_mode_changed": false,
+    "service_restarted": false,
+    "deployed": false,
+    "strategy_parameters_optimized": false,
+    "generated_prices_used_as_market_evidence": false
+  },
+  "release_blockers": [
+    "Transactional entry intent/fill/PnL/capital ledger and ambiguous entry ACK recovery",
+    "Current executable contract/post-CAS data with source manifests and chronological holdout",
+    "Mandatory quote freshness, executable depth, portfolio budgets and capital reservations",
+    "Complete protection/partial-fill/venue-product reconciliation and crash recovery",
+    "Unified session-aware bar endpoints, dated contract universe and separately certified BSE rules",
+    "Full readiness API, account permissions and operational shadow validation"
+  ],
+  "changed_code_and_tests_sha256": {
+    "backend/app/api/v1/endpoints/kite_engine.py": "ee21b2f9a61126c7cb8dcc8e578630c109e040bdf2814e3f95844213eabe8dec",
+    "backend/app/engines/sterling_kite_engine/engine.py": "11171fdb54200f4487bd2cfc68977ac0fdbb1ddd238c7c71b28cd309383f52f9",
+    "backend/app/engines/sterling_kite_engine/exits.py": "a98d07b00a2e8586e447d54343356195c7038c2b9e49ecdb526eb2e549f5ff58",
+    "backend/app/engines/sterling_kite_engine/regime.py": "ad9d194af1978890d9661c2c209eacef1e5a08377c7e4e143cdc105a4a219226",
+    "backend/app/engines/sterling_kite_engine/schemas.py": "ef5ab8fb78870dfed6e82cbaf887b69313d32afa44603b430d31b439d268af96",
+    "backend/app/services/exchanges/kite/client.py": "0f889930df6b838fbe9f4e075cd0df29ed6c88ba85faf8f72caada2b6aecc3e3",
+    "backend/app/services/kite_engine/backtest.py": "8fbc2fc75bbedce390dfb8196a7738100e6ab07d2e392f09b6ecfa5367acf92a",
+    "backend/app/services/kite_engine/detail.py": "8125dc7eb588d5118e566b91a6b26f112664b75966185ef8b4bde6ad2773f23c",
+    "backend/app/services/kite_engine/market_hours.py": "290afd705308a93f56aebc1eab2e284775e791c7062ccda28c995c93efa4b33a",
+    "backend/app/services/kite_engine/monitor.py": "e8765405c32f70ca85ed6e9cd2f737774bf1dae86f21df9e6e4fb1f026f2da60",
+    "backend/app/services/kite_engine/positions.py": "c182308e564dbb071fcaf6df4e15745fd0e2f78644e9c92180d1e5ba463cc557",
+    "backend/app/services/kite_engine/scanner.py": "d373626c8e8367e60c82965b09fa38c54222b1af69b4c04135a5b75595a5a8b6",
+    "backend/app/services/kite_engine/service.py": "9570a6e5d4cf3987a6afb5559bfac78e89d4af3c1fa466cf8ab623a2b2765304",
+    "backend/app/services/kite_engine/sizing.py": "8ff344f7104622adab89cd6be15d136c355dd56cfc141525eba1cfce90e53d87",
+    "backend/study/kite_production_audit.py": "caae9d562b3d743a0c3f3f816847d834b52b7a3e6d86ef5d5b4fcced49eed31c",
+    "backend/tests/engines/sterling_kite_engine/execution_fixtures.py": "be12540bc770372f902e82399f2375e9a94b7dc96c492639172d06bbb9db68da",
+    "backend/tests/engines/sterling_kite_engine/test_autoexec_gate_http.py": "0df0171e0f1289dedc82906f25252ebaee7913bd93aa767486feef19b502c812",
+    "backend/tests/engines/sterling_kite_engine/test_directional.py": "7bb0667d58b5de87e5fd867eb271e83274e80542e24b2af61764b23ff156da9a",
+    "backend/tests/engines/sterling_kite_engine/test_directional_exec.py": "13b8140995d54921ff118d2b75c760e1ccd2aba2c757819c3f0d2ef7d7d156dc",
+    "backend/tests/engines/sterling_kite_engine/test_engine.py": "127524ce5a959a6d40c84ff9d480175d5790b3be3de5b82ba561a4dabe1f774e",
+    "backend/tests/engines/sterling_kite_engine/test_production_audit.py": "ed8cbed0845e4517c1aedf23eb57458257a079b15a0af8652480933601ed789a",
+    "backend/tests/engines/sterling_kite_engine/test_protection.py": "89112dab58da7c6b8ae10216480fa152bf47ba62f7f27a1405768f7dac84848e",
+    "backend/tests/engines/sterling_kite_engine/test_risk_and_monitor.py": "98e84dbc5efd5fd72c42bca814ae9786e67befcf4bffff1869d17272444b2237",
+    "backend/tests/engines/sterling_kite_engine/test_scanner.py": "1d4fa05462e9640cc6a8b18ceff8ce8fd5580ca73c890d53932470e545ef8d23",
+    "backend/tests/engines/sterling_kite_engine/test_state_service.py": "810924fcd49927f3b172513560169306b04f4fd19486f74028359013fa3b42d7",
+    "backend/tests/engines/sterling_kite_engine/test_zz_probe.py": "7617a529cf9dd95dc7edc66078816a1d7ffd7a75494369a392b7018a0052d9ab",
+    "backend/tests/engines/sterling_kite_engine/test_zz_probe_realized.py": "cdfc1cc808a887fbddef5bd107936f59d43250c96379821d391b78aa2f0005ff",
+    "backend/tests/test_kite_orders.py": "483f5e04cda9adcd1467c1c63ed77366ea5e3b50446d3d1e38f8c10b73c7184a",
+    "frontend/src/components/kite/BacktestPane.tsx": "9567195aa4f5807016b76e1e81305ec5f900f098b8d96ecd679bb310711fb8d4",
+    "frontend/src/components/kite/EnginePositionsPane.tsx": "f6a0b6009bd422a4097e804cf455cc0ff05bdc0521962af63e66848e918f0925",
+    "frontend/src/types/kiteEngine.ts": "343a15c87729ef24a7130e2239fd8cc1b26bcbeb9deaa6ae4ac11573a421d25c"
+  }
+}

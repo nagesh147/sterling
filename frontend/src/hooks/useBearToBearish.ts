@@ -49,7 +49,7 @@ export interface BearToBearishSnapshotResponse {
   auto_execute?: boolean;
 }
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useBearToBearishSnapshot(enabled = true, pollMs = 5000) {
   const isSimActive = useSimActive();

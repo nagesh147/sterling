@@ -1,0 +1,573 @@
+import React from 'react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_STATUS, useReplayStore } from '../../../../hooks/useReplayStore';
+import { ReplayDock } from '../ReplayDock';
+import { ReplayFooterChip } from '../ReplayFooterChip';
+import { resetReplayToastBus } from '../replayToastBus';
+import { FULL_CAPS, makeSignal, makeStatus, makeTrade, setupDock, stubFetch, stubResizeObserver } from './testUtils';
+
+/**
+ * A real QueryClient rather than a mocked module: the session picker calls
+ * `useQuery` for `/available-dates`, and a stubbed `useQueryClient` alone
+ * leaves that hook without a provider.
+ */
+function withQuery(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
+
+async function renderDock() {
+  await act(async () => {
+    render(withQuery(<ReplayDock />));
+  });
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  resetReplayToastBus();
+  stubResizeObserver();
+  stubFetch();
+  setupDock();
+});
+
+/* ── Mounting and modes ─────────────────────────────────────────────────── */
+
+describe('mounting', () => {
+  it('renders nothing but its overlays while closed', async () => {
+    setupDock({ open: false });
+    await renderDock();
+    expect(screen.queryByTestId('replay-dock')).toBeNull();
+  });
+
+  it('renders the deck when open', async () => {
+    await renderDock();
+    const dock = screen.getByTestId('replay-dock');
+    expect(dock).toHaveAttribute('data-mode', 'docked');
+    expect(within(dock).getByTestId('replay-transport')).toBeTruthy();
+    expect(within(dock).getByTestId('replay-timeline')).toBeTruthy();
+    expect(within(dock).getByTestId('replay-metrics')).toBeTruthy();
+  });
+
+  it.each(['docked', 'expanded', 'overlay', 'fullscreen'] as const)('renders in %s mode', async (mode) => {
+    setupDock({ mode });
+    await renderDock();
+    expect(screen.getByTestId('replay-dock')).toHaveAttribute('data-mode', mode);
+  });
+
+  it('keeps the metric strip visible in every tab', async () => {
+    // It used to live inside two of four tabs, so P&L vanished on the others.
+    for (const tab of ['split', 'signals', 'trades'] as const) {
+      setupDock({ tab });
+      const { unmount } = render(withQuery(<ReplayDock />));
+      expect(screen.getByTestId('replay-metrics')).toBeTruthy();
+      unmount();
+    }
+  });
+});
+
+/* ── Resizer ────────────────────────────────────────────────────────────── */
+
+describe('resizer', () => {
+  it('is a keyboard-operable separator, not a bare div', async () => {
+    await renderDock();
+    const r = screen.getByTestId('replay-resizer');
+    expect(r).toHaveAttribute('role', 'separator');
+    expect(r).toHaveAttribute('aria-valuenow', '320');
+    expect(r.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('resizes with the arrow keys, and further with shift', async () => {
+    await renderDock();
+    const r = screen.getByTestId('replay-resizer');
+    fireEvent.keyDown(r, { key: 'ArrowUp' });
+    expect(useReplayStore.getState().height).toBe(336);
+    fireEvent.keyDown(r, { key: 'ArrowUp', shiftKey: true });
+    expect(useReplayStore.getState().height).toBe(400);
+    fireEvent.keyDown(r, { key: 'ArrowDown' });
+    expect(useReplayStore.getState().height).toBe(384);
+  });
+
+  it('clamps at the minimum usable height', async () => {
+    setupDock({ height: 224 });
+    await renderDock();
+    const r = screen.getByTestId('replay-resizer');
+    fireEvent.keyDown(r, { key: 'ArrowDown' });
+    fireEvent.keyDown(r, { key: 'ArrowDown' });
+    expect(useReplayStore.getState().height).toBe(220);
+  });
+
+  it('is absent in the modes that cannot be resized', async () => {
+    setupDock({ mode: 'fullscreen' });
+    await renderDock();
+    expect(screen.queryByTestId('replay-resizer')).toBeNull();
+  });
+});
+
+/* ── Transport ──────────────────────────────────────────────────────────── */
+
+describe('transport', () => {
+  it('offers play while idle and pause while running', async () => {
+    await renderDock();
+    expect(screen.getByTestId('replay-primary')).toHaveAttribute('aria-label', 'Start replay (Space)');
+
+    await act(async () => {
+      useReplayStore.getState().setStatus(makeStatus({ state: 'running' }));
+    });
+    expect(screen.getByTestId('replay-primary')).toHaveAttribute('aria-label', 'Pause replay (Space)');
+  });
+
+  it('disables the seek controls while idle', async () => {
+    await renderDock();
+    expect(screen.getByLabelText('Jump to session start (Home)')).toBeDisabled();
+  });
+
+  it('enables them once a session is loaded', async () => {
+    setupDock({ status: makeStatus({ state: 'paused' }) });
+    await renderDock();
+    expect(screen.getByLabelText('Jump to session start (Home)')).not.toBeDisabled();
+  });
+
+  it('renders every speed on the ladder and marks the active one', async () => {
+    await renderDock();
+    ['1×', '5×', '10×', '50×', '100×', 'MAX'].forEach((label) => {
+      expect(screen.getByRole('button', { name: label })).toBeTruthy();
+    });
+    expect(screen.getByText('5×').closest('button')).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+/* ── Timeline ───────────────────────────────────────────────────────────── */
+
+describe('timeline', () => {
+  it('is a slider that reports its position in words', async () => {
+    setupDock({
+      status: makeStatus({ state: 'running', progress_pct: 42, current_time_iso: '11:30:00', bars_played: 120, bars_total: 300 }),
+    });
+    await renderDock();
+    const t = screen.getByTestId('replay-timeline');
+    expect(t).toHaveAttribute('role', 'slider');
+    expect(t).toHaveAttribute('aria-valuenow', '42');
+    expect(t.getAttribute('aria-valuetext')).toContain('11:30:00');
+    expect(t.getAttribute('aria-valuetext')).toContain('120 of 300');
+  });
+
+  it('is inert while idle', async () => {
+    await renderDock();
+    const t = screen.getByTestId('replay-timeline');
+    expect(t).toHaveAttribute('aria-disabled', 'true');
+    expect(t.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('seeks once per drag, not once per pointer move', async () => {
+    // A request per pointermove would be hundreds of round trips per drag.
+    const { fetchSpy } = setupDock({ status: makeStatus({ state: 'running', bars_total: 300 }) });
+    await renderDock();
+    const t = screen.getByTestId('replay-timeline');
+    (t as HTMLElement).setPointerCapture = vi.fn();
+    (t as HTMLElement).releasePointerCapture = vi.fn();
+    t.getBoundingClientRect = () => ({ left: 0, width: 1000, top: 0, height: 24, right: 1000, bottom: 24, x: 0, y: 0, toJSON: () => ({}) });
+
+    fetchSpy.mockClear();
+    await act(async () => {
+      fireEvent.pointerDown(t, { clientX: 100, pointerId: 1 });
+      fireEvent.pointerMove(t, { clientX: 300, pointerId: 1 });
+      fireEvent.pointerMove(t, { clientX: 500, pointerId: 1 });
+      fireEvent.pointerUp(t, { clientX: 500, pointerId: 1 });
+    });
+
+    const seeks = fetchSpy.mock.calls.filter(([url]) => String(url).includes('/seek'));
+    expect(seeks).toHaveLength(1);
+  });
+
+  it('clusters dots so a busy session is not one solid bar', async () => {
+    const events = Array.from({ length: 200 }, (_, i) =>
+      makeSignal({ time_iso: `1${i % 5}:0${i % 6}:00`, instrument: `SYM${i}` }),
+    );
+    setupDock({ status: makeStatus({ state: 'running', stats: { ...DEFAULT_STATUS.stats, events } }) });
+    await renderDock();
+    const dots = screen.getByTestId('replay-timeline').querySelectorAll('.rd-dot');
+    expect(dots.length).toBeGreaterThan(0);
+    expect(dots.length).toBeLessThan(events.length);
+  });
+
+  it('warns rather than draws a wrong picture for a multi-day range', async () => {
+    setupDock({
+      status: makeStatus({
+        state: 'running',
+        config: { date: '2026-09-03', end_date: '2026-09-05', start_time: '09:00:00', end_time: '15:30:00', speed: 5, resolution: '5m', instruments: [] },
+      }),
+    });
+    await renderDock();
+    expect(screen.getByText(/Multi-day range/)).toBeTruthy();
+  });
+});
+
+/* ── Honesty ────────────────────────────────────────────────────────────── */
+
+describe('unmeasured values', () => {
+  it('shows an em dash for slippage when friction was not modelled', async () => {
+    // It used to print ₹0.00, which reads as "measured, and it was free".
+    setupDock({
+      status: makeStatus({
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: undefined })], slippage_total: null },
+      }),
+    });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    const slip = within(strip).getByText('Slippage').parentElement!;
+    expect(within(slip).getByText('—')).toBeTruthy();
+    expect(within(slip).queryByText(/₹0\.00/)).toBeNull();
+  });
+
+  it('shows a real figure once friction was modelled', async () => {
+    setupDock({
+      status: makeStatus({
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: 12.5 })], slippage_total: 12.5 },
+      }),
+    });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    expect(within(strip).getByText('−₹12.50')).toBeTruthy();
+  });
+
+  it('hides the trades slippage column entirely when nothing measured it', async () => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: undefined })] } }),
+    });
+    await renderDock();
+    expect(screen.queryByRole('columnheader', { name: 'Slippage' })).toBeNull();
+    expect(screen.getByText(/Execution friction is not modelled/)).toBeTruthy();
+  });
+
+  it('shows the column and drops the note when it was measured', async () => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: 12.5, raw_entry: 98, raw_exit: 122 })] } }),
+    });
+    await renderDock();
+    expect(screen.getByRole('columnheader', { name: 'Slippage' })).toBeTruthy();
+    expect(screen.queryByText(/Execution friction is not modelled/)).toBeNull();
+  });
+
+  it('labels the contract column by what the engine can actually send', async () => {
+    setupDock({
+      tab: 'signals',
+      status: makeStatus({
+        capabilities: { ...FULL_CAPS, contract_on_signal: false },
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()] },
+      }),
+    });
+    await renderDock();
+    expect(screen.getByRole('columnheader', { name: 'Underlying' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Contract' })).toBeNull();
+  });
+});
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+
+describe('signals table', () => {
+  it('computes reward to risk, and declines to when the stop is the entry', async () => {
+    setupDock({
+      tab: 'signals',
+      status: makeStatus({
+        state: 'running',
+        stats: {
+          ...DEFAULT_STATUS.stats,
+          events: [
+            makeSignal({ entry: 100, stop: 90, target: 130 }),
+            makeSignal({ time_iso: '10:50:00', entry: 100, stop: 100, target: 130 }),
+          ],
+        },
+      }),
+    });
+    await renderDock();
+    expect(screen.getByText('3.0×')).toBeTruthy();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('tells the truth about why it is empty', async () => {
+    setupDock({ tab: 'signals' });
+    await renderDock();
+    // The old copy said "Replay stepping through bars..." even while idle.
+    expect(screen.getByText('No replay loaded')).toBeTruthy();
+
+    await act(async () => {
+      useReplayStore.getState().setStatus(makeStatus({ state: 'running', bars_played: 47 }));
+    });
+    expect(screen.getByText('Watching for signals')).toBeTruthy();
+    expect(screen.getByText(/47 bars replayed/)).toBeTruthy();
+  });
+});
+
+describe('trades table', () => {
+  it('marks an unrealised P&L so it is not read as booked', async () => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ status: 'OPEN', exit_price: null })] } }),
+    });
+    await renderDock();
+    expect(screen.getByText(/~\+₹1,000\.00/)).toBeTruthy();
+  });
+
+  it('says whether the total is net of friction', async () => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade()], pnl: 1000 } }),
+    });
+    await renderDock();
+    expect(screen.getByText('no friction modelled')).toBeTruthy();
+  });
+});
+
+/* ── Configuration ──────────────────────────────────────────────────────── */
+
+describe('configuration', () => {
+  it('is reachable while idle and locked while running', async () => {
+    await renderDock();
+    expect(screen.getByTestId('replay-configure')).not.toBeDisabled();
+
+    await act(async () => {
+      useReplayStore.getState().setStatus(makeStatus({ state: 'running' }));
+    });
+    expect(screen.getByTestId('replay-configure')).toBeDisabled();
+    expect(screen.getByTestId('replay-session-trigger')).toBeDisabled();
+    expect(screen.getByTestId('replay-filters-trigger')).toBeDisabled();
+  });
+
+  it('opens as a dialog and closes on Escape, returning focus', async () => {
+    await renderDock();
+    const trigger = screen.getByTestId('replay-configure');
+    // jsdom does not focus a button on click the way a browser does, and the
+    // trap restores focus to whatever was focused when it opened.
+    trigger.focus();
+    await act(async () => { fireEvent.click(trigger); });
+    const sheet = screen.getByTestId('replay-config-sheet');
+    expect(sheet).toHaveAttribute('aria-modal', 'true');
+
+    await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }); });
+    expect(screen.queryByTestId('replay-config-sheet')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('says plainly when the engine cannot model friction', async () => {
+    setupDock({ status: makeStatus({ capabilities: { ...FULL_CAPS, friction: false } }) });
+    await renderDock();
+    await act(async () => { fireEvent.click(screen.getByTestId('replay-configure')); });
+    expect(screen.getByText('NOT AVAILABLE')).toBeTruthy();
+    expect(screen.getByText(/Spread and slippage\s+modelling is not implemented/)).toBeTruthy();
+    // And offers no control that would pretend otherwise.
+    expect(screen.queryByLabelText('Index spread %')).toBeNull();
+  });
+
+  it('offers the real parameters when it can', async () => {
+    await renderDock();
+    await act(async () => { fireEvent.click(screen.getByTestId('replay-configure')); });
+    expect(screen.getByLabelText('Index spread %')).toBeTruthy();
+    expect(screen.getByLabelText('Slippage % (each leg)')).toBeTruthy();
+  });
+
+  it('blocks Apply on an impossible time range', async () => {
+    await renderDock();
+    await act(async () => { fireEvent.click(screen.getByTestId('replay-configure')); });
+    expect(screen.getByTestId('replay-apply-start')).not.toBeDisabled();
+
+    await act(async () => {
+      useReplayStore.getState().setDraft({ endTime: '08:00:00' });
+    });
+    expect(screen.getByTestId('replay-apply-start')).toBeDisabled();
+  });
+});
+
+/* ── Keyboard ───────────────────────────────────────────────────────────── */
+
+describe('keyboard scope', () => {
+  it('ignores Space typed into an input outside the dock', async () => {
+    // The old handler was bound to `window` whenever the dock was merely open,
+    // so it stole Space, the arrows and Home/End from the whole app.
+    const { fetchSpy } = setupDock({ status: makeStatus({ state: 'running' }) });
+    await renderDock();
+
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    outside.focus();
+    fetchSpy.mockClear();
+
+    await act(async () => { fireEvent.keyDown(outside, { key: ' ' }); });
+    expect(fetchSpy.mock.calls.filter(([u]) => String(u).includes('/pause'))).toHaveLength(0);
+    outside.remove();
+  });
+
+  it('acts when focus is inside the dock', async () => {
+    const { fetchSpy } = setupDock({ status: makeStatus({ state: 'running' }) });
+    await renderDock();
+    screen.getByTestId('replay-dock').focus();
+    fetchSpy.mockClear();
+
+    await act(async () => { fireEvent.keyDown(document, { key: ' ' }); });
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).includes('/pause'))).toBe(true);
+  });
+
+  it('switches tabs with D, S and T', async () => {
+    await renderDock();
+    screen.getByTestId('replay-dock').focus();
+    fireEvent.keyDown(document, { key: 's' });
+    expect(useReplayStore.getState().tab).toBe('signals');
+    fireEvent.keyDown(document, { key: 't' });
+    expect(useReplayStore.getState().tab).toBe('trades');
+    fireEvent.keyDown(document, { key: 'd' });
+    expect(useReplayStore.getState().tab).toBe('split');
+  });
+
+  it('opens the shortcut sheet on ?', async () => {
+    await renderDock();
+    screen.getByTestId('replay-dock').focus();
+    await act(async () => { fireEvent.keyDown(document, { key: '?' }); });
+    expect(screen.getByTestId('replay-shortcuts')).toBeTruthy();
+  });
+
+  it('toggles the dock from anywhere with the one global binding', async () => {
+    await renderDock();
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    outside.focus();
+    await act(async () => { fireEvent.keyDown(document, { key: 'R', ctrlKey: true, shiftKey: true }); });
+    expect(useReplayStore.getState().open).toBe(false);
+    outside.remove();
+  });
+});
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+describe('footer chip', () => {
+  it('toggles the dock and never mutates replay state', async () => {
+    const { fetchSpy } = setupDock();
+    render(withQuery(<ReplayFooterChip />));
+    const chip = screen.getByTestId('replay-footer-chip');
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    fetchSpy.mockClear();
+
+    await act(async () => { fireEvent.click(chip); });
+    expect(useReplayStore.getState().open).toBe(false);
+    expect(fetchSpy.mock.calls.filter(([u]) => /\/(start|stop|pause|resume)/.test(String(u)))).toHaveLength(0);
+  });
+
+  it('shows the replay clock while running', async () => {
+    setupDock({ status: makeStatus({ state: 'running', current_time_iso: '10:47:05' }) });
+    render(withQuery(<ReplayFooterChip />));
+    expect(screen.getByText('10:47:05')).toBeTruthy();
+  });
+});
+
+/* ── Table structure ────────────────────────────────────────────────────── */
+
+describe('trades totals row', () => {
+  // Caught in the browser: the blank span was two cells wide when the friction
+  // column was present, so every footer cell after Size sat under the wrong
+  // header. A totals row that does not line up with its columns is worse than
+  // no totals row.
+  it.each([
+    ['without friction', undefined],
+    ['with friction', 12.5],
+  ])('spans exactly the header width %s', async (_label, slippage) => {
+    setupDock({
+      tab: 'trades',
+      status: makeStatus({
+        stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ slippage: slippage as number | undefined })] },
+      }),
+    });
+    await renderDock();
+
+    const table = screen.getByRole('table');
+    const headerCells = table.querySelectorAll('thead th').length;
+    const footCells = Array.from(table.querySelectorAll('tfoot td'))
+      .reduce((sum, td) => sum + (Number(td.getAttribute('colspan')) || 1), 0);
+    expect(footCells).toBe(headerCells);
+  });
+});
+
+/* ── A finished session must not look like a live one ───────────────────── */
+
+describe('idle with results', () => {
+  // Reported from the running app: the dock showed a full signal feed and
+  // trade list before the user had pressed play. The runner keeps the last
+  // session's ledger for review; the dock has to say so.
+  it('labels a finished session and offers to clear it', async () => {
+    setupDock({
+      status: makeStatus({
+        state: 'idle',
+        session_complete: true,
+        config: { date: '2026-09-04', start_time: '09:00:00', end_time: '15:30:00', speed: 5, resolution: '5m', instruments: [] },
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    const note = screen.getByTestId('replay-historical-note');
+    expect(note.textContent).toContain('finished');
+    expect(note.textContent).toContain('Nothing is replaying now');
+    expect(within(note).getByRole('button', { name: 'Clear results' })).toBeTruthy();
+  });
+
+  it('says nothing when the runner is genuinely empty', async () => {
+    setupDock();
+    await renderDock();
+    expect(screen.queryByTestId('replay-historical-note')).toBeNull();
+  });
+
+  it('says nothing while a replay is actually running', async () => {
+    setupDock({
+      status: makeStatus({
+        state: 'running',
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    expect(screen.queryByTestId('replay-historical-note')).toBeNull();
+  });
+
+  it('clearing empties the ledger and calls the runner', async () => {
+    const { fetchSpy } = setupDock({
+      status: makeStatus({
+        state: 'idle',
+        session_complete: true,
+        stats: { ...DEFAULT_STATUS.stats, events: [makeSignal()], trades: [makeTrade()] },
+      }),
+    });
+    await renderDock();
+    fetchSpy.mockClear();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Clear results' }));
+    });
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).includes('/clear'))).toBe(true);
+  });
+});
+
+describe('unrealised is kept apart from realised', () => {
+  it('shows an em dash when nothing is open', async () => {
+    setupDock({ status: makeStatus({ stats: { ...DEFAULT_STATUS.stats, trades: [makeTrade({ status: 'WIN' })] } }) });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    const cell = within(strip).getByText('Open').parentElement!;
+    expect(within(cell).getByText('—')).toBeTruthy();
+  });
+
+  it('reports the mark-to-market when a position is open', async () => {
+    setupDock({
+      status: makeStatus({
+        open_positions: 1,
+        unrealised_pnl: 340,
+        stats: { ...DEFAULT_STATUS.stats, pnl: 0, trades: [makeTrade({ status: 'OPEN', pnl_usd: 340 })] },
+      }),
+    });
+    await renderDock();
+    const strip = screen.getByTestId('replay-metrics');
+    expect(within(strip).getByText('+₹340.00')).toBeTruthy();
+    // And the realised figure must NOT have absorbed it.
+    const realised = within(strip).getByText('P&L').parentElement!;
+    expect(within(realised).getByText('+₹0.00')).toBeTruthy();
+  });
+});

@@ -1,34 +1,110 @@
-"""NSE/BSE market hours check.
+"""Versioned NSE session policy; auction phases never authorize strategy orders.
 
-Trading hours: 9:15 AM – 3:30 PM IST, Monday–Friday.
-Uses Asia/Kolkata timezone (UTC+5:30).
+Sources verified 2026-09-05: NSE CMTR/71775, CMTR/72260 (holidays),
+CMTR/74466 and FAOP/74467 (CAS), SEBI circular 99122 (pre-open).
+Special sessions and unverified calendar years fail closed for new entries.
 """
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 _IST = ZoneInfo("Asia/Kolkata")
-
-_TRADING_START = time(9, 15)
-_TRADING_END = time(15, 30)
-
-
-def is_market_open(now: datetime | None = None) -> bool:
-    """True if the Indian equity/derivatives market is currently in session."""
-    t = (now or datetime.now(_IST)).astimezone(_IST)
-    if t.weekday() >= 5:  # Saturday = 5, Sunday = 6
-        return False
-    return _TRADING_START <= t.time() <= _TRADING_END
+POLICY_VERSION = "nse-2026-09-07-v1"
+CAS_START = date(2026, 8, 3)
+PREOPEN_START = date(2026, 9, 7)
+_HOLIDAYS = frozenset(date.fromisoformat(d) for d in (
+    "2026-01-15", "2026-01-26", "2026-03-03", "2026-03-26", "2026-03-31",
+    "2026-04-03", "2026-04-14", "2026-05-01", "2026-05-28", "2026-06-26",
+    "2026-09-14", "2026-10-02", "2026-10-20", "2026-11-10", "2026-11-24",
+    "2026-12-25",
+))
 
 
-def minutes_to_close(now: datetime | None = None) -> float | None:
-    """Minutes remaining until the 15:30 IST close, or ``None`` when the market is
-    not open. Used to block new auto-exec entries just before the close (overnight
-    gap risk). Never negative (clamped to 0 at/after the close)."""
-    if not is_market_open(now):
+def _local(now: datetime | None = None) -> datetime:
+    value = now if now is not None else datetime.now(_IST)
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("session timestamps must be timezone-aware")
+    return value.astimezone(_IST)
+
+
+def continuous_close(day: date, exchange: str = "NFO", *, cas_eligible: bool = False) -> time:
+    exchange = exchange.upper()
+    if exchange not in {"NSE", "NFO", "BSE", "BFO"}:
+        raise ValueError(f"unsupported session exchange: {exchange}")
+    if day >= CAS_START:
+        if exchange == "NFO":
+            return time(15, 40)
+        if exchange == "NSE" and cas_eligible:
+            return time(15, 15)
+    # BSE retains its legacy bound until its separate policy is verified.
+    return time(15, 30)
+
+
+def session_phase(now: datetime | None = None, *, exchange: str = "NFO",
+                  cas_eligible: bool = False) -> str:
+    t = _local(now)
+    exchange = exchange.upper()
+    if t.year != 2026 or exchange not in {"NSE", "NFO", "BSE", "BFO"}:
+        return "calendar_unknown"
+    if t.weekday() >= 5 or t.date() in _HOLIDAYS:
+        return "closed"
+    clock = t.time()
+    if time(9, 15) <= clock < continuous_close(t.date(), exchange, cas_eligible=cas_eligible):
+        return "continuous"
+    if exchange in {"NSE", "NFO"} and time(9) <= clock < time(9, 15):
+        if t.date() < PREOPEN_START:
+            return "preopen_legacy"
+        if clock < time(9, 5):
+            return "preopen_market_limit"
+        if clock < time(9, 8):
+            return "preopen_limit"
+        if clock < time(9, 10):
+            return "preopen_random_or_matching"
+        return "preopen_matching" if clock < time(9, 12) else "preopen_buffer"
+    if exchange == "NSE" and cas_eligible and t.date() >= CAS_START:
+        for end, phase in ((time(15, 20), "cas_transition"),
+                           (time(15, 25), "cas_market_limit"),
+                           (time(15, 28), "cas_limit"),
+                           (time(15, 30), "cas_random_or_matching"),
+                           (time(15, 35), "cas_matching")):
+            if time(15, 15) <= clock < end:
+                return phase
+    return "closed"
+
+
+def is_market_open(now: datetime | None = None, *, exchange: str = "NFO",
+                   cas_eligible: bool = False) -> bool:
+    return session_phase(now, exchange=exchange, cas_eligible=cas_eligible) == "continuous"
+
+
+def minutes_to_close(now: datetime | None = None, *, exchange: str = "NFO",
+                     cas_eligible: bool = False) -> float | None:
+    t = _local(now)
+    if not is_market_open(t, exchange=exchange, cas_eligible=cas_eligible):
         return None
-    t = (now or datetime.now(_IST)).astimezone(_IST)
-    close_dt = t.replace(hour=_TRADING_END.hour, minute=_TRADING_END.minute,
-                         second=0, microsecond=0)
-    return max(0.0, (close_dt - t).total_seconds() / 60.0)
+    close = datetime.combine(t.date(), continuous_close(t.date(), exchange,
+                             cas_eligible=cas_eligible), tzinfo=_IST)
+    return (close - t).total_seconds() / 60
+
+
+def entry_block_reason(now: datetime | None = None, *, exchange: str = "NFO",
+                       cash_signal: bool = False, buffer_minutes: int = 0) -> str:
+    """Require continuous traded market and continuous signal source.
+
+    Cash/index feeds can contain auction observations after 15:15. Stop
+    cash-derived origination there; held derivatives retain stop monitoring.
+    """
+    t = _local(now)
+    phase = session_phase(t, exchange=exchange)
+    if phase != "continuous":
+        return f"session_{phase}"
+    if cash_signal and t.date() >= CAS_START and t.time() >= time(15, 15):
+        return "cash_signal_auction"
+    remaining = minutes_to_close(t, exchange=exchange)
+    if cash_signal and t.date() >= CAS_START:
+        cash_close = t.replace(hour=15, minute=15, second=0, microsecond=0)
+        remaining = min(remaining, (cash_close - t).total_seconds() / 60)
+    if remaining <= max(0, buffer_minutes):
+        return "entry_close_buffer"
+    return ""
