@@ -1,14 +1,16 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
+import { useReplaySessionPolicy, useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
 import { useReplayTransport } from '../../../hooks/useReplayTransport';
 import { signalKey } from './replayColumns';
 import { fmtTime, isBullish, minutesToTime, timeToMinutes } from './replayFormat';
 import { strategyLabel } from './replayStrategies';
 
-/* NSE regular hours. Anything outside is hatched, so the flat stretch before
-   09:15 reads as a closed market rather than a dead strategy. */
-const MARKET_OPEN_MIN = 9 * 60 + 15;
-const MARKET_CLOSE_MIN = 15 * 60 + 30;
+/* Fallbacks only. The real bounds come from the backend's versioned session
+   policy — these constants were the bug: a hardcoded 15:30 close has been
+   wrong for F&O since the Closing Auction Session started on 2026-08-03
+   (derivatives run to 15:40, F&O cash stops at 15:15). */
+const FALLBACK_OPEN_MIN = 9 * 60 + 15;
+const FALLBACK_CLOSE_MIN = 15 * 60 + 40;
 
 /** Dots closer than this on screen merge, so a busy session is not a solid bar. */
 const CLUSTER_PX = 4;
@@ -25,7 +27,7 @@ export type SessionScale = {
 
 export function makeScale(startTime: string, endTime: string): SessionScale {
   const startMin = timeToMinutes(startTime || '09:00:00');
-  const endMin = timeToMinutes(endTime || '15:30:00');
+  const endMin = timeToMinutes(endTime || '15:40:00');
   const span = Math.max(1, endMin - startMin);
   return {
     startMin,
@@ -61,6 +63,7 @@ export function ReplayTimeline() {
   const selected = useReplayStore((s) => s.selectedSignalKey);
   const setSelected = useReplayStore((s) => s.setSelectedSignal);
   const transport = useReplayTransport();
+  const policy = useReplaySessionPolicy();
 
   const trackRef = useRef<HTMLDivElement>(null);
   const [scrub, setScrub] = useState<number | null>(null);
@@ -224,20 +227,22 @@ export function ReplayTimeline() {
   }, [scale, width]);
 
   const closedRegions = useMemo(() => {
+    const openMin = policy ? timeToMinutes(policy.continuous_open) : FALLBACK_OPEN_MIN;
+    const closeMin = policy ? timeToMinutes(policy.continuous_close) : FALLBACK_CLOSE_MIN;
     const out: { left: number; width: number }[] = [];
-    if (scale.startMin < MARKET_OPEN_MIN) {
-      const end = Math.min(MARKET_OPEN_MIN, scale.endMin);
+    if (scale.startMin < openMin) {
+      const end = Math.min(openMin, scale.endMin);
       out.push({ left: 0, width: ((end - scale.startMin) / scale.span) * 100 });
     }
-    if (scale.endMin > MARKET_CLOSE_MIN) {
-      const start = Math.max(MARKET_CLOSE_MIN, scale.startMin);
+    if (scale.endMin > closeMin) {
+      const start = Math.max(closeMin, scale.startMin);
       out.push({
         left: ((start - scale.startMin) / scale.span) * 100,
         width: ((scale.endMin - start) / scale.span) * 100,
       });
     }
     return out.filter((r) => r.width > 0.2);
-  }, [scale]);
+  }, [scale, policy]);
 
   const multiDay = !!cfg?.end_date && cfg.end_date !== cfg.date;
 

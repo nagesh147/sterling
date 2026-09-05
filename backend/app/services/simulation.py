@@ -109,7 +109,7 @@ class SimConfig(BaseModel):
     date: str                          # "2026-08-28"
     end_date: Optional[str] = None     # optional end of a multi-day range
     start_time: str = "09:00:00"       # HH:MM:SS IST (default 9:00 AM)
-    end_time: str = "15:30:00"         # HH:MM:SS IST  
+    end_time: str = "15:40:00"         # HH:MM:SS IST — NFO close since 2026-08-03
     speed: float = 1.0                 # 1,2,5,10,15,20,50
     resolution: str = "5m"             # candle resolution
     instruments: List[str] = []        # empty = all watchlist
@@ -217,6 +217,26 @@ class SimEvent(BaseModel):
     data: Dict[str, Any] = {}
 
 
+class SimSessionPolicy(BaseModel):
+    """The exchange session bounds that apply to the replayed date.
+
+    Derived from `kite_engine.market_hours`, which is the versioned source for
+    this (NSE CMTR/74466 + FAOP/74467 for CAS, SEBI 99122 for pre-open). The
+    replay dock reads these instead of hardcoding them — it previously assumed
+    a 15:30 close for everything, which has been wrong for F&O since the
+    Closing Auction Session started on 2026-08-03: derivatives now run to
+    15:40 and F&O cash stops at 15:15.
+    """
+    policy_version: str
+    preopen_start: str          # continuous-trading pre-open opens
+    continuous_open: str        # first continuously-traded bar
+    continuous_close: str       # close for the replay's own instrument class
+    derivatives_close: str      # NFO
+    cash_close: str             # NSE, non-F&O
+    fo_cash_close: str          # NSE, F&O-eligible (CAS takes over after this)
+    cas_end: Optional[str] = None
+
+
 class SimCapabilities(BaseModel):
     """What this build of the runner can actually do.
 
@@ -251,6 +271,7 @@ class SimStatus(BaseModel):
     status_message: str = ""
     last_signal: Optional[SimSignalEvent] = None
     capabilities: SimCapabilities = SimCapabilities()
+    session_policy: Optional[SimSessionPolicy] = None
     events_total: int = 0
     trades_total: int = 0
     open_positions: int = 0
@@ -697,6 +718,7 @@ class SimulationRunner:
             status_message=self._status_message,
             last_signal=self._last_signal,
             capabilities=self.capabilities,
+            session_policy=self.session_policy,
             events_total=len(stats.events),
             trades_total=len(stats.trades),
             session_id=self._session_id,
@@ -710,6 +732,47 @@ class SimulationRunner:
     @property
     def capabilities(self) -> SimCapabilities:
         return SimCapabilities()
+
+    @property
+    def session_policy(self) -> Optional[SimSessionPolicy]:
+        """Session bounds for the date being replayed.
+
+        A replay drives option legs, so `continuous_close` follows the
+        derivatives clock (NFO). The cash bounds are published alongside so the
+        client can label a chart without inventing them.
+        """
+        from datetime import date as _date
+        try:
+            from app.services.kite_engine.market_hours import (
+                CAS_START, POLICY_VERSION, continuous_close,
+            )
+        except Exception:
+            return None
+
+        day_str = self._config.date if self._config else None
+        try:
+            day = _date.fromisoformat(day_str) if day_str else _date.today()
+        except ValueError:
+            day = _date.today()
+
+        try:
+            nfo = continuous_close(day, "NFO")
+            nse = continuous_close(day, "NSE")
+            fo_cash = continuous_close(day, "NSE", cas_eligible=True)
+        except Exception:
+            return None
+
+        fmt = lambda t: t.strftime("%H:%M:%S")
+        return SimSessionPolicy(
+            policy_version=POLICY_VERSION,
+            preopen_start="09:00:00",
+            continuous_open="09:15:00",
+            continuous_close=fmt(nfo),
+            derivatives_close=fmt(nfo),
+            cash_close=fmt(nse),
+            fo_cash_close=fmt(fo_cash),
+            cas_end="15:35:00" if day >= CAS_START else None,
+        )
 
     async def start(self, config: SimConfig) -> SimStatus:
         if self._state in (SimState.RUNNING, SimState.LOADING, SimState.PAUSED):

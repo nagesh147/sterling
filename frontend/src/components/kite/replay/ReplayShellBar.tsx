@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ReplayMode,
+  ReplayFocusMode,
   useReplayStore,
   useReplayState,
 } from '../../../hooks/useReplayStore';
@@ -95,60 +95,72 @@ export function ReplayShellBar() {
 }
 
 /**
- * Window controls, at the end of the command row.
+ * Window controls — the same four the terminal dock has, driving the same
+ * `WorkspaceFocus` mechanism.
  *
- * Split out of the identity cluster when the four chrome bands collapsed to
- * two — they belong at the far edge of the row, not adjacent to the title.
+ * Minimize sends the dock to its footer chip; half, maximize and full screen
+ * focus the pane the dock lives in, exactly as `PaneWindow` does. A Restore
+ * button appears while focused, and each control reports `aria-pressed` for
+ * the focus it owns — so the dock's chrome behaves like every other pane's
+ * rather than resembling it.
  */
 export function ReplayWindowControls() {
-  const mode = useReplayStore((s) => s.mode);
-  const setMode = useReplayStore((s) => s.setMode);
   const setOpen = useReplayStore((s) => s.setOpen);
-  const toggle = (target: Exclude<ReplayMode, 'docked'>) =>
-    setMode(mode === target ? 'docked' : target);
+  const focusMode = useReplayStore((s) => s.hostFocusMode);
+  const focusHost = useReplayStore((s) => s.focusHost);
+  const clearHostFocus = useReplayStore((s) => s.clearHostFocus);
+
+  const control = (
+    kind: 'half' | 'maximize' | 'fullscreen',
+    label: string,
+    mode: ReplayFocusMode,
+    Icon: (p: { size?: number }) => JSX.Element,
+  ) => (
+    <button
+      type="button"
+      className="kw-pane-control"
+      aria-label={`${label} Market replay`}
+      aria-pressed={focusMode === mode}
+      title={`${label} Market replay`}
+      data-testid={`replay-${kind}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        // Same toggle semantics as the workspace: pressing the active one restores.
+        if (focusMode === mode) clearHostFocus();
+        else focusHost(mode);
+      }}
+    >
+      <Icon size={13} />
+    </button>
+  );
 
   return (
-      <div className="rd-shell-controls">
+    <div className="rd-shell-controls">
+      {focusMode && (
         <button
           type="button"
           className="kw-pane-control"
-          onClick={() => setOpen(false)}
-          aria-label="Minimise replay dock"
-          title="Minimise replay dock"
+          aria-label="Restore Market replay"
+          title="Restore workspace"
+          data-testid="replay-restore"
+          onClick={(e) => { e.stopPropagation(); clearHostFocus(); }}
         >
-          <Icons.Minimise size={13} />
+          <Icons.Restore size={13} />
         </button>
-        <span className="rd-shell-divider" aria-hidden="true" />
-        <button
-          type="button"
-          className="kw-pane-control"
-          aria-label="Expand replay to fill pane"
-          aria-pressed={mode === 'expanded'}
-          title="Expand to fill the pane (F)"
-          onClick={() => toggle('expanded')}
-        >
-          <Icons.Expand size={13} />
-        </button>
-        <button
-          type="button"
-          className="kw-pane-control"
-          aria-label="Float replay over workspace"
-          aria-pressed={mode === 'overlay'}
-          title="Float over the workspace (F)"
-          onClick={() => toggle('overlay')}
-        >
-          <Icons.Overlay size={13} />
-        </button>
-        <button
-          type="button"
-          className="kw-pane-control"
-          aria-label="Replay full screen"
-          aria-pressed={mode === 'fullscreen'}
-          title="Full screen"
-          onClick={() => toggle('fullscreen')}
-        >
-          <Icons.Fullscreen size={13} />
-        </button>
-      </div>
+      )}
+      <button
+        type="button"
+        className="kw-pane-control"
+        aria-label="Minimize Market replay"
+        title="Minimize Market replay"
+        data-testid="replay-minimize"
+        onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+      >
+        <Icons.Minimise size={13} />
+      </button>
+      {control('half', 'Half screen', 'half', Icons.Half)}
+      {control('maximize', 'Maximize', 'maximized', Icons.Overlay)}
+      {control('fullscreen', 'Full screen', 'fullscreen', Icons.Fullscreen)}
+    </div>
   );
 }

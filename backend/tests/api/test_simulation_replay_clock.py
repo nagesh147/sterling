@@ -252,3 +252,41 @@ async def test_replay_starts_on_the_first_bar_not_the_configured_open():
     assert st.bars_played > 0, "the clock was still crawling through pre-open dead air"
     # The clock must have jumped to the data rather than started at 09:00.
     assert st.current_time_iso >= "09:15:00"
+
+
+# ── Session policy ───────────────────────────────────────────────────────────
+
+def test_session_policy_follows_the_derivatives_clock_after_cas():
+    """The replay drives option legs, so its close is the NFO close.
+
+    Hardcoding 15:30 truncated every derivatives replay by ten minutes once the
+    Closing Auction Session started on 2026-08-03.
+    """
+    r = SimulationRunner()
+    r._config = SimConfig(date="2026-09-04")
+    p = r.session_policy
+    assert p is not None
+    assert p.continuous_open == "09:15:00"
+    assert p.derivatives_close == "15:40:00"
+    assert p.continuous_close == p.derivatives_close
+    assert p.fo_cash_close == "15:15:00", "F&O cash stops early; CAS takes over"
+    assert p.cash_close == "15:30:00", "non-F&O cash is unchanged"
+    assert p.cas_end == "15:35:00"
+    assert p.policy_version
+
+
+def test_session_policy_before_cas_keeps_the_old_close():
+    """A replay of a pre-2026-08-03 date must not be given today's bounds."""
+    r = SimulationRunner()
+    r._config = SimConfig(date="2026-07-01")
+    p = r.session_policy
+    assert p is not None
+    assert p.derivatives_close == "15:30:00"
+    assert p.cas_end is None
+
+
+def test_session_policy_is_published_on_status():
+    r = SimulationRunner()
+    r._config = SimConfig(date="2026-09-04")
+    assert r.status.session_policy is not None
+    assert r.status.session_policy.derivatives_close == "15:40:00"

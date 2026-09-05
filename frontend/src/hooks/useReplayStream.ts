@@ -17,6 +17,35 @@ const POLL_BACKGROUND_MS = 2000;
 /** How long a connected stream may stay silent before we stop trusting it. */
 const SSE_SILENCE_MS = 6000;
 
+/**
+ * Consecutive failed polls before we say so.
+ *
+ * One miss is a hiccup; several in a row means the engine is not answering —
+ * and a dock that silently swallows every failure looks exactly like a dock
+ * whose buttons do nothing, which is how this was reported.
+ */
+const UNREACHABLE_AFTER = 3;
+let consecutiveFailures = 0;
+
+function noteReachable() {
+  if (consecutiveFailures === 0) return;
+  consecutiveFailures = 0;
+  const err = useReplayStore.getState().error;
+  if (err?.code === 'engine_unreachable') useReplayStore.getState().setError(null);
+}
+
+function noteUnreachable() {
+  consecutiveFailures += 1;
+  if (consecutiveFailures < UNREACHABLE_AFTER) return;
+  const store = useReplayStore.getState();
+  if (store.error) return;
+  store.setError({
+    code: 'engine_unreachable',
+    message: 'Cannot reach the replay engine. It may still be starting up.',
+    at: Date.now(),
+  });
+}
+
 async function fetchStatus(sinceEvents?: number, sinceTrades?: number): Promise<ReplayStatus | null> {
   const qs =
     sinceEvents != null && sinceTrades != null
@@ -24,11 +53,21 @@ async function fetchStatus(sinceEvents?: number, sinceTrades?: number): Promise<
       : '';
   try {
     const res = await fetch(`${API}/status${qs}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      noteUnreachable();
+      return null;
+    }
+    noteReachable();
     return (await res.json()) as ReplayStatus;
   } catch {
+    noteUnreachable();
     return null;
   }
+}
+
+/** Test seam — the failure counter is module-level and outlives a component. */
+export function resetReplayReachability(): void {
+  consecutiveFailures = 0;
 }
 
 /**

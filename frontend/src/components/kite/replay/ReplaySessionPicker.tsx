@@ -1,17 +1,43 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
+import { ReplaySessionPolicy, useReplaySessionPolicy, useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
 import { getDynamicMarketPresets } from '../../../lib/replay/marketSessions';
 import { ReplayPopover } from './primitives/ReplayPopover';
 import { fmtSessionDate, fmtTime } from './replayFormat';
 import { useAvailableDates, verdictForDate } from './useAvailableDates';
 import * as Icons from './ReplayIcons';
 
-const HOUR_RANGES = [
-  { id: 'full', label: 'Full session', start: '09:00:00', end: '15:30:00' },
-  { id: 'regular', label: 'Regular', start: '09:15:00', end: '15:30:00' },
-  { id: 'first', label: 'First hour', start: '09:15:00', end: '10:15:00' },
-  { id: 'last', label: 'Last hour', start: '14:30:00', end: '15:30:00' },
-];
+/**
+ * Quick ranges, built from the backend's versioned session policy.
+ *
+ * These used to be hardcoded at a 15:30 close, which has been wrong for F&O
+ * since the Closing Auction Session began on 2026-08-03 — derivatives run to
+ * 15:40 and F&O cash stops at 15:15. A replay drives option legs, so "Regular"
+ * follows the derivatives clock; "F&O cash" is offered separately because that
+ * is where the CAS takes over.
+ */
+function hourRanges(policy: ReplaySessionPolicy | null) {
+  const open = policy?.continuous_open ?? '09:15:00';
+  const close = policy?.continuous_close ?? '15:40:00';
+  const foCash = policy?.fo_cash_close ?? '15:15:00';
+  const preopen = policy?.preopen_start ?? '09:00:00';
+  const lastHourStart = shiftBack(close, 60);
+  return [
+    { id: 'regular', label: 'Regular', start: open, end: close },
+    { id: 'full', label: 'With pre-open', start: preopen, end: close },
+    { id: 'focash', label: 'F&O cash', start: open, end: foCash },
+    { id: 'first', label: 'First hour', start: open, end: shiftForward(open, 60) },
+    { id: 'last', label: 'Last hour', start: lastHourStart, end: close },
+  ];
+}
+
+function shiftForward(time: string, mins: number): string {
+  const [h, m] = time.split(':').map(Number);
+  const t = h * 60 + m + mins;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00`;
+}
+function shiftBack(time: string, mins: number): string {
+  return shiftForward(time, -mins);
+}
 
 /**
  * Session date, range and market hours.
@@ -24,6 +50,8 @@ export function ReplaySessionPicker({ widthBucket }: { widthBucket: string }) {
   const setDraft = useReplayStore((s) => s.setDraft);
   const state = useReplayState();
   const [open, setOpen] = useState(false);
+  const policy = useReplaySessionPolicy();
+  const HOUR_RANGES = useMemo(() => hourRanges(policy), [policy]);
   const anchor = useRef<HTMLButtonElement>(null);
 
   const { data: available } = useAvailableDates();

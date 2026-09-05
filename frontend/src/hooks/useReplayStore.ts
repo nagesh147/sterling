@@ -21,6 +21,21 @@ export type ReplayState = 'idle' | 'loading' | 'running' | 'paused' | 'error';
 export type ReplayMode = 'docked' | 'expanded' | 'overlay' | 'fullscreen';
 export type ReplayTab = 'split' | 'signals' | 'trades';
 
+/**
+ * The workspace's own focus vocabulary, mirrored here so the dock can speak it.
+ *
+ * The replay dock's window controls now drive `WorkspaceFocus` exactly as the
+ * terminal dock's do — minimize / half / maximize / full screen — instead of a
+ * private set of modes that only looked similar.
+ */
+export type ReplayFocusMode = 'half' | 'maximized' | 'fullscreen';
+
+/** Registered by KiteLayout so the dock can drive the workspace's focus. */
+export interface ReplayHostFocusApi {
+  set(mode: ReplayFocusMode): void;
+  clear(): void;
+}
+
 export interface ReplaySignal {
   time_iso: string;
   timestamp_ms?: number;
@@ -81,6 +96,18 @@ export interface ReplayStats {
   slippage_total?: number | null;
 }
 
+/** Exchange session bounds, published by the backend from its versioned policy. */
+export interface ReplaySessionPolicy {
+  policy_version: string;
+  preopen_start: string;
+  continuous_open: string;
+  continuous_close: string;
+  derivatives_close: string;
+  cash_close: string;
+  fo_cash_close: string;
+  cas_end?: string | null;
+}
+
 export interface ReplayCapabilities {
   friction: boolean;
   contract_on_signal: boolean;
@@ -124,6 +151,7 @@ export interface ReplayStatus {
   events_total?: number;
   trades_total?: number;
   /** Identifies which run the ledger belongs to. */
+  session_policy?: ReplaySessionPolicy | null;
   session_id?: string | null;
   /**
    * The ledger is from a run that has ENDED. An idle runner keeps the last
@@ -195,6 +223,7 @@ export const DEFAULT_STATUS: ReplayStatus = {
   capabilities: DEFAULT_CAPS,
   events_total: 0,
   trades_total: 0,
+  session_policy: null,
   session_id: null,
   session_complete: false,
   open_positions: 0,
@@ -209,7 +238,9 @@ function initialDraft(): ReplayDraft {
     // Market open. 09:00 is pre-open and has no candles, so it opened every
     // replay on a dead stretch the user had to sit through.
     startTime: '09:15:00',
-    endTime: '15:30:00',
+    // NFO continuous close since the Closing Auction Session began on
+    // 2026-08-03. 15:30 truncated every derivatives replay by ten minutes.
+    endTime: '15:40:00',
     speed: 5,
     resolution: '5m',
     strategies: ['all'],
@@ -310,6 +341,9 @@ export interface ReplayStore {
   summaryOpen: boolean;
   /** The single boolean KiteLayout subscribes to. It must not know our modes. */
   hostContentHidden: boolean;
+  /** Which workspace focus the dock's pane currently holds, if any. */
+  hostFocusMode: ReplayFocusMode | null;
+  hostFocusApi: ReplayHostFocusApi | null;
   selectedSignalKey: string | null;
 
   draft: ReplayDraft;
@@ -326,6 +360,10 @@ export interface ReplayStore {
   setShortcutsOpen(open: boolean): void;
   setSummaryOpen(open: boolean): void;
   setSelectedSignal(key: string | null): void;
+  registerHostFocus(api: ReplayHostFocusApi | null): void;
+  syncHostFocus(mode: ReplayFocusMode | null): void;
+  focusHost(mode: ReplayFocusMode): void;
+  clearHostFocus(): void;
 
   setDraft(patch: Partial<ReplayDraft>): void;
   resetDraft(): void;
@@ -353,6 +391,8 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   shortcutsOpen: false,
   summaryOpen: false,
   hostContentHidden: boot.open && boot.mode === 'expanded',
+  hostFocusMode: null,
+  hostFocusApi: null,
   selectedSignalKey: null,
 
   draft: initialDraft(),
@@ -362,7 +402,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   setOpen: (open) => {
     const { mode, height, tab } = get();
     persist({ v: 1, mode: mode === 'fullscreen' ? 'overlay' : mode, height, tab, open });
-    set({ open, hostContentHidden: open && mode === 'expanded' });
+    set({ open, hostContentHidden: open && get().hostFocusMode !== null });
   },
 
   setMode: (mode) => {
@@ -405,6 +445,23 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   setSummaryOpen: (summaryOpen) => set({ summaryOpen }),
   setSelectedSignal: (selectedSignalKey) => set({ selectedSignalKey }),
+
+  registerHostFocus: (hostFocusApi) => set({ hostFocusApi }),
+
+  // Mirrors the workspace's focus so the controls can show which one is on.
+  // While the pane is focused the dock owns it, so the host hides its content.
+  syncHostFocus: (hostFocusMode) =>
+    set((s) => ({ hostFocusMode, hostContentHidden: s.open && hostFocusMode !== null })),
+
+  focusHost: (mode) => {
+    const { hostFocusApi } = get();
+    hostFocusApi?.set(mode);
+  },
+
+  clearHostFocus: () => {
+    const { hostFocusApi } = get();
+    hostFocusApi?.clear();
+  },
 
   setDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
   resetDraft: () => set({ draft: initialDraft() }),
@@ -535,6 +592,9 @@ export const useReplayClock = () => useReplayStore((s) => s.status.current_time_
 export const useReplayPct = () => useReplayStore((s) => s.status.progress_pct);
 export const useReplayError = () => useReplayStore((s) => s.error);
 export const useReplayDraft = () => useReplayStore((s) => s.draft);
+export const useReplaySessionPolicy = () =>
+  useReplayStore((s) => s.status.session_policy ?? null);
+
 export const useReplayCaps = () =>
   useReplayStore((s) => s.status.capabilities ?? DEFAULT_CAPS);
 
@@ -563,6 +623,7 @@ export const useReplayIsHistorical = () =>
 
 /** What `KiteLayout` subscribes to. One boolean, no mode vocabulary. */
 export const useReplayHostHidden = () => useReplayStore((s) => s.hostContentHidden);
+export const useReplayFocusMode = () => useReplayStore((s) => s.hostFocusMode);
 
 /* ── Replay-aware clock ───────────────────────────────────────────────────
    Other panes treat replay time as "now". These signatures are load-bearing
