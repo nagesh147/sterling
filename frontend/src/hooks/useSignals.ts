@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export interface MtfBreakdown {
   macro_4h: number;

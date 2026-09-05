@@ -258,7 +258,7 @@ export function useGammaMoveConfig() {
   });
 }
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useGammaMoveSnapshot(enabled = true, refetchInterval = 0) {
   const isSimActive = useSimActive();

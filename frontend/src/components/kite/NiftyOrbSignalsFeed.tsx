@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 
 
 import { useOrbSignals } from '../../hooks/useOrbSignals';

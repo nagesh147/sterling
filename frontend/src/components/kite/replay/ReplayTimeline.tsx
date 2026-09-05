@@ -1,0 +1,324 @@
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useReplayState, useReplayStore } from '../../../hooks/useReplayStore';
+import { useReplayTransport } from '../../../hooks/useReplayTransport';
+import { signalKey } from './replayColumns';
+import { fmtTime, isBullish, minutesToTime, timeToMinutes } from './replayFormat';
+import { strategyLabel } from './replayStrategies';
+
+/* NSE regular hours. Anything outside is hatched, so the flat stretch before
+   09:15 reads as a closed market rather than a dead strategy. */
+const MARKET_OPEN_MIN = 9 * 60 + 15;
+const MARKET_CLOSE_MIN = 15 * 60 + 30;
+
+/** Dots closer than this on screen merge, so a busy session is not a solid bar. */
+const CLUSTER_PX = 4;
+/** Hard cap on rendered dots; beyond it clustering widens to stay under. */
+const MAX_DOTS = 600;
+
+export type SessionScale = {
+  startMin: number;
+  endMin: number;
+  span: number;
+  pctFor(timeIso: string): number;
+  timeForPct(pct: number): string;
+};
+
+export function makeScale(startTime: string, endTime: string): SessionScale {
+  const startMin = timeToMinutes(startTime || '09:00:00');
+  const endMin = timeToMinutes(endTime || '15:30:00');
+  const span = Math.max(1, endMin - startMin);
+  return {
+    startMin,
+    endMin,
+    span,
+    pctFor: (timeIso) => {
+      const m = timeToMinutes(timeIso);
+      return Math.max(0, Math.min(100, ((m - startMin) / span) * 100));
+    },
+    timeForPct: (pct) => minutesToTime(startMin + (Math.max(0, Math.min(100, pct)) / 100) * span),
+  };
+}
+
+/**
+ * The session timeline: progress readout AND scrubber.
+ *
+ * The bar this replaces was 3px tall and had no pointer handling at all — the
+ * only way to move through a session was `stepBars(±5)`. A replay tool whose
+ * timeline cannot be clicked is a tape player without a shuttle.
+ *
+ * A drag PREVIEWS locally and commits ONE seek on release. Issuing a request
+ * per pointer move would be hundreds of round trips across a session.
+ */
+export function ReplayTimeline() {
+  const state = useReplayState();
+  const events = useReplayStore((s) => s.status.stats.events);
+  const pct = useReplayStore((s) => s.status.progress_pct);
+  const clock = useReplayStore((s) => s.status.current_time_iso);
+  const barsPlayed = useReplayStore((s) => s.status.bars_played);
+  const barsTotal = useReplayStore((s) => s.status.bars_total);
+  const cfg = useReplayStore((s) => s.status.config);
+  const draft = useReplayStore((s) => s.draft);
+  const selected = useReplayStore((s) => s.selectedSignalKey);
+  const setSelected = useReplayStore((s) => s.setSelectedSignal);
+  const transport = useReplayTransport();
+
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [scrub, setScrub] = useState<number | null>(null);
+  const [width, setWidth] = useState(600);
+
+  const startTime = cfg?.start_time ?? draft.startTime;
+  const endTime = cfg?.end_time ?? draft.endTime;
+  const scale = useMemo(() => makeScale(startTime, endTime), [startTime, endTime]);
+
+  const disabled = state === 'idle' || state === 'error';
+  const shown = scrub ?? pct;
+
+  React.useEffect(() => {
+    const el = trackRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width || 600));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /* ── Event dots, clustered ──────────────────────────────────────────── */
+
+  const dots = useMemo(() => {
+    if (!events.length) return [];
+    // Widen the bucket until the rendered count fits the cap. A 5000× replay of
+    // a full day can emit thousands of signals and each dot is a DOM node.
+    let bucketPx = CLUSTER_PX;
+    let buckets = new Map<number, { left: number; bull: number; bear: number; keys: string[]; labels: string[] }>();
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      buckets = new Map();
+      events.forEach((ev) => {
+        const left = scale.pctFor(ev.time_iso);
+        const bucket = Math.round((left * width) / 100 / bucketPx);
+        let b = buckets.get(bucket);
+        if (!b) {
+          b = { left, bull: 0, bear: 0, keys: [], labels: [] };
+          buckets.set(bucket, b);
+        }
+        if (isBullish(ev.direction)) b.bull += 1;
+        else b.bear += 1;
+        b.keys.push(signalKey(ev));
+        if (b.labels.length < 4) {
+          b.labels.push(`${fmtTime(ev.time_iso, 5)} ${strategyLabel(ev.strategy)} ${ev.instrument} ${ev.direction}`);
+        }
+      });
+      if (buckets.size <= MAX_DOTS) break;
+      bucketPx *= 2;
+    }
+
+    return Array.from(buckets.values()).map((b) => {
+      const count = b.bull + b.bear;
+      const tone = b.bull && b.bear ? 'mixed' : b.bull ? 'bull' : 'bear';
+      const more = count > b.labels.length ? `\n+${count - b.labels.length} more` : '';
+      return {
+        key: b.keys[0],
+        keys: b.keys,
+        left: b.left,
+        tone,
+        count,
+        title: count === 1 ? b.labels[0] : `${count} signals\n${b.labels.join('\n')}${more}`,
+      };
+    });
+  }, [events, scale, width]);
+
+  /* ── Scrubbing ──────────────────────────────────────────────────────── */
+
+  const pctFromEvent = useCallback((clientX: number) => {
+    const box = trackRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return 0;
+    return Math.max(0, Math.min(100, ((clientX - box.left) / box.width) * 100));
+  }, []);
+
+  const commit = useCallback(
+    (target: number) => {
+      setScrub(null);
+      void transport.seekToPct(target);
+    },
+    [transport],
+  );
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    const node = e.currentTarget;
+    node.setPointerCapture(e.pointerId);
+    let latest = pctFromEvent(e.clientX);
+    setScrub(latest);
+
+    let frame = 0;
+    const onMove = (ev: PointerEvent) => {
+      latest = pctFromEvent(ev.clientX);
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        setScrub(latest);
+      });
+    };
+    const onUp = () => {
+      if (frame) cancelAnimationFrame(frame);
+      node.removeEventListener('pointermove', onMove);
+      node.removeEventListener('pointerup', onUp);
+      node.removeEventListener('pointercancel', onUp);
+      try {
+        node.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+      commit(latest);
+    };
+    node.addEventListener('pointermove', onMove);
+    node.addEventListener('pointerup', onUp);
+    node.addEventListener('pointercancel', onUp);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    const step = e.altKey ? 30 : e.shiftKey ? 5 : 1;
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        void transport.stepBars(-step);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        void transport.stepBars(step);
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        void transport.stepBars(-30);
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        void transport.stepBars(30);
+        break;
+      case 'Home':
+        e.preventDefault();
+        void transport.jumpStart();
+        break;
+      case 'End':
+        e.preventDefault();
+        void transport.jumpEnd();
+        break;
+      default:
+    }
+  };
+
+  /* ── Ticks and closed regions ───────────────────────────────────────── */
+
+  const ticks = useMemo(() => {
+    const out: { pct: number; label: string }[] = [];
+    const dense = width >= 420;
+    const stepMin = dense ? 60 : 180;
+    const first = Math.ceil(scale.startMin / stepMin) * stepMin;
+    for (let m = first; m <= scale.endMin; m += stepMin) {
+      out.push({ pct: ((m - scale.startMin) / scale.span) * 100, label: minutesToTime(m).slice(0, 5) });
+    }
+    if (!out.length || out[0].pct > 4) {
+      out.unshift({ pct: 0, label: minutesToTime(scale.startMin).slice(0, 5) });
+    }
+    return out;
+  }, [scale, width]);
+
+  const closedRegions = useMemo(() => {
+    const out: { left: number; width: number }[] = [];
+    if (scale.startMin < MARKET_OPEN_MIN) {
+      const end = Math.min(MARKET_OPEN_MIN, scale.endMin);
+      out.push({ left: 0, width: ((end - scale.startMin) / scale.span) * 100 });
+    }
+    if (scale.endMin > MARKET_CLOSE_MIN) {
+      const start = Math.max(MARKET_CLOSE_MIN, scale.startMin);
+      out.push({
+        left: ((start - scale.startMin) / scale.span) * 100,
+        width: ((scale.endMin - start) / scale.span) * 100,
+      });
+    }
+    return out.filter((r) => r.width > 0.2);
+  }, [scale]);
+
+  const multiDay = !!cfg?.end_date && cfg.end_date !== cfg.date;
+
+  return (
+    <div className="rd-timeline-wrap">
+      <div className="rd-ticks" aria-hidden="true">
+        {ticks.map((t) => (
+          <span className="rd-tick" key={t.label} style={{ left: `${t.pct}%` }}>
+            {t.label}
+          </span>
+        ))}
+      </div>
+
+      <div
+        ref={trackRef}
+        className="rd-timeline"
+        data-testid="replay-timeline"
+        data-scrubbing={scrub != null}
+        role="slider"
+        aria-label="Replay position"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(shown)}
+        aria-valuetext={`${fmtTime(clock)} IST, bar ${barsPlayed} of ${barsTotal}`}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+      >
+        {closedRegions.map((r, i) => (
+          <span
+            key={i}
+            className="rd-timeline-closed"
+            style={{ left: `${r.left}%`, width: `${r.width}%` }}
+            aria-hidden="true"
+          />
+        ))}
+
+        <span className="rd-timeline-fill" style={{ width: `${shown}%` }} aria-hidden="true" />
+
+        <span className="rd-events" aria-hidden="true">
+          {dots.map((d) => (
+            <button
+              key={d.key}
+              type="button"
+              tabIndex={-1}
+              className="rd-dot"
+              data-tone={d.tone}
+              data-cluster={d.count > 1}
+              data-count={d.count}
+              data-selected={d.keys.includes(selected ?? '')}
+              style={{ left: `${d.left}%` }}
+              title={d.title}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelected(d.keys[0]);
+                void transport.seekToPct(d.left);
+              }}
+            />
+          ))}
+        </span>
+
+        {!disabled && (
+          <span className="rd-playhead" style={{ transform: `translateX(${(shown / 100) * width}px)` }} aria-hidden="true" />
+        )}
+
+        {scrub != null && (
+          <span className="rd-scrub-tip" style={{ left: `${scrub}%` }} aria-hidden="true">
+            {scale.timeForPct(scrub).slice(0, 5)}
+          </span>
+        )}
+      </div>
+
+      {/* The runner derives session bounds from `date` alone, so a range would
+          be drawn wrong. Say so rather than draw a confident wrong picture. */}
+      {multiDay && (
+        <span className="rd-timeline-note">
+          Multi-day range — the timeline shows session times only.
+        </span>
+      )}
+    </div>
+  );
+}

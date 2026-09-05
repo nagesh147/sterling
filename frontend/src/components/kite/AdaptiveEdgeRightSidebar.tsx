@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useReducer, useState } from 'react';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { rowsFromSnapshot } from './AdaptiveEdgePanel';
 import { NiftyOrbSignalsFeed } from './NiftyOrbSignalsFeed';

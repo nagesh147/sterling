@@ -284,7 +284,7 @@ export function useSetAtmPremiumImbalanceConfig() {
   });
 }
 
-import { useSimActive } from './useSimulation';
+import { useReplayActive as useSimActive } from './useReplayStore';
 
 export function useAtmPremiumImbalanceSnapshot(enabled = true, refetchMs = 0) {
   const isSimActive = useSimActive();

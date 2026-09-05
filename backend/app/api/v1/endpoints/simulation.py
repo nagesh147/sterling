@@ -1,7 +1,11 @@
 """
 Market Replay Simulation endpoints.
 """
-from fastapi import APIRouter, HTTPException, Query
+import asyncio
+import json
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Literal
 from app.services.simulation import simulation_runner, SimConfig, SimState, SimStatus
@@ -100,6 +104,38 @@ async def get_status(
 ):
     # Omitting both offsets returns the full payload, exactly as before.
     return simulation_runner.status_since(since_events, since_trades)
+
+
+@router.get("/stream")
+async def stream_sim(request: Request):
+    """Server-sent replay events.
+
+    Replaces polling `/status` at 150ms for the whole ledger. The payload per
+    tick is now O(1) scalars, and signals and trades arrive once each rather
+    than being re-sent on every poll.
+
+    `/status` remains fully supported: a reverse proxy that buffers SSE will
+    make this endpoint useless, and the client falls back to it.
+    """
+    async def gen():
+        try:
+            async for evt in simulation_runner.subscribe():
+                if await request.is_disconnected():
+                    break
+                yield f"event: {evt.kind}\ndata: {json.dumps(evt.data, default=str)}\n\n"
+        except asyncio.CancelledError:
+            return
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # nginx buffers by default, which turns a stream into one long wait.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/available-dates", response_model=AvailableDatesResponse)

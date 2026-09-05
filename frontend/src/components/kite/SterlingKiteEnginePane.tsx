@@ -33,7 +33,7 @@ import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 import { AdaptiveEdgePositionCalculator } from './AdaptiveEdgePositionCalculator';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 
 import { fmtTick, roundToTick } from '../../utils/fmt';
 import { EXIT_MODE_OPTIONS, SCAN_SOURCE_OPTIONS, needsRescan, openSettingsSection } from './config/registry';

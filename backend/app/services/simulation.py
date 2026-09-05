@@ -108,6 +108,16 @@ class SimStats(BaseModel):
     slippage_total: Optional[float] = None
 
 
+class SimEvent(BaseModel):
+    """One server-sent event.
+
+    `kind` becomes the SSE `event:` name, so the client can register a handler
+    per kind rather than sniffing the payload.
+    """
+    kind: str          # "state" | "frame" | "signal" | "trade"
+    data: Dict[str, Any] = {}
+
+
 class SimCapabilities(BaseModel):
     """What this build of the runner can actually do.
 
@@ -119,7 +129,7 @@ class SimCapabilities(BaseModel):
     friction: bool = True
     contract_on_signal: bool = True
     absolute_seek: bool = True
-    stream: bool = False
+    stream: bool = True
     delta_status: bool = True
     multi_day: bool = False
     resolutions: List[str] = ["1m", "5m", "15m"]
@@ -278,6 +288,87 @@ class SimulationRunner:
         self._end_epoch: int = 0
         self._seek_requested_epoch: Optional[float] = None
         self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
+        # Fan-out to SSE subscribers. Bounded, and `_publish` drops FRAMES
+        # under back-pressure but never a signal, trade or state change: a
+        # dropped frame costs a progress tick, a dropped signal corrupts the
+        # ledger the client is accumulating.
+        self._subscribers: "List[asyncio.Queue[SimEvent]]" = []
+        self._last_frame_at: float = 0.0
+
+    # ── SSE fan-out ─────────────────────────────────────────────────────
+
+    def _publish(self, kind: str, data: Dict[str, Any]) -> None:
+        if not self._subscribers:
+            return
+        event = SimEvent(kind=kind, data=data)
+        for q in list(self._subscribers):
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                # Only a frame may be dropped. For anything else, make room by
+                # discarding the OLDEST frame still queued.
+                if kind == "frame":
+                    continue
+                try:
+                    q.get_nowait()
+                    q.put_nowait(event)
+                except Exception:
+                    pass
+
+    def _publish_state(self) -> None:
+        self._publish("state", {
+            "state": self._state.value if hasattr(self._state, "value") else str(self._state),
+            "status_message": self._status_message,
+            "config": self._config.model_dump() if self._config else None,
+            "bars_total": self._bars_total,
+        })
+
+    def _publish_frame(self, force: bool = False) -> None:
+        """Throttled progress tick.
+
+        10 Hz normally, 2 Hz once the replay is fast enough that a frame per
+        update would be pure noise — at 5000x the clock advances hours per
+        second and nobody can read it anyway.
+        """
+        now = time.monotonic()
+        min_gap = 0.5 if self._speed >= 100 else 0.1
+        if not force and (now - self._last_frame_at) < min_gap:
+            return
+        self._last_frame_at = now
+        self._publish("frame", {
+            "t": self._current_time_iso,
+            "pct": self._progress,
+            "bars_played": self._bars_played,
+            "bars_total": self._bars_total,
+            "elapsed_real_s": round(time.monotonic() - self._start_real, 1) if self._start_real else 0,
+            "pnl": self._stats.pnl,
+            "wins": self._stats.wins,
+            "losses": self._stats.losses,
+            "signals_fired": self._stats.signals_fired,
+            "slippage_total": self._stats.slippage_total,
+        })
+
+    async def subscribe(self):
+        """Yield events until the caller stops iterating."""
+        q: "asyncio.Queue[SimEvent]" = asyncio.Queue(maxsize=512)
+        self._subscribers.append(q)
+        # Open with the current state so a client that connects mid-session is
+        # not left blank until the next transition.
+        try:
+            q.put_nowait(SimEvent(kind="state", data={
+                "state": self._state.value if hasattr(self._state, "value") else str(self._state),
+                "status_message": self._status_message,
+                "config": self._config.model_dump() if self._config else None,
+                "bars_total": self._bars_total,
+            }))
+        except asyncio.QueueFull:
+            pass
+        try:
+            while True:
+                yield await q.get()
+        finally:
+            if q in self._subscribers:
+                self._subscribers.remove(q)
 
     def _recompute_totals(self) -> None:
         """Re-derive every aggregate from the trade ledger.
@@ -388,18 +479,21 @@ class SimulationRunner:
                 pass
         self._state = SimState.IDLE
         self._task = None
+        self._publish_state()
         return self.status
 
     async def pause(self) -> SimStatus:
         if self._state == SimState.RUNNING:
             self._state = SimState.PAUSED
             self._pause_event.clear()
+            self._publish_state()
         return self.status
 
     async def resume(self) -> SimStatus:
         if self._state == SimState.PAUSED:
             self._state = SimState.RUNNING
             self._pause_event.set()
+            self._publish_state()
         return self.status
 
     def set_speed(self, speed: float) -> SimStatus:
@@ -576,6 +670,7 @@ class SimulationRunner:
         self._candles = all_bars
         self._bars_total = len(all_bars)
         self._state = SimState.RUNNING
+        self._publish_state()
         self._status_message = f"Playing {cfg.date} ({len(all_bars)} bars)..."
         log.info("Simulation started: %s, %d bars, speed %.1fx", cfg.date, self._bars_total, self._speed)
 
@@ -619,6 +714,7 @@ class SimulationRunner:
                 bar_dt = datetime.fromtimestamp(self._current_sim_epoch, tz=ist)
                 self._current_time_iso = bar_dt.strftime("%H:%M:%S")
                 self._progress = round(min(100.0, max(0.0, (self._current_sim_epoch - start_epoch) / total_sim_seconds * 100.0)), 1)
+                self._publish_frame()
 
                 # Process bars up to current simulated timestamp
                 while bar_idx < len(all_bars) and self._current_sim_epoch >= all_bars[bar_idx]["time"]:
@@ -640,6 +736,8 @@ class SimulationRunner:
         finally:
             if not self._stop_requested:
                 self._state = SimState.IDLE
+                self._publish_frame(force=True)
+                self._publish_state()
                 log.info(
                     "Simulation complete: %d bars, %d signals, P&L %.2f",
                     self._bars_played, self._stats.signals_fired, self._stats.pnl,
@@ -1229,6 +1327,12 @@ class SimulationRunner:
         # Track recent signals per (symbol, strategy) to prevent flood
         if not hasattr(self, '_last_fired'):
             self._last_fired: Dict[Tuple[str, str], Tuple[str, int]] = {}
+        # Fan-out to SSE subscribers. Bounded, and `_publish` drops FRAMES
+        # under back-pressure but never a signal, trade or state change: a
+        # dropped frame costs a progress tick, a dropped signal corrupts the
+        # ledger the client is accumulating.
+        self._subscribers: "List[asyncio.Queue[SimEvent]]" = []
+        self._last_frame_at: float = 0.0
 
         current_bar_idx = self._bars_played
 
@@ -1277,6 +1381,7 @@ class SimulationRunner:
             self._stats.signals_fired += 1
             self._stats.events.append(event)
             self._last_signal = event
+            self._publish("signal", event.model_dump())
 
             if strength == "STRONG":
                 self._stats.trades_entered += 1
@@ -1393,6 +1498,7 @@ class SimulationRunner:
                     self._stats.losses += 1
                 self._stats.trades.append(trade)
                 self._recompute_totals()
+                self._publish("trade", trade.model_dump())
 
 
 def _generate_warmup_candles(symbol: str, res: str, start_epoch: int, count: int = 20, res_sec: int = 300) -> List[Dict[str, Any]]:

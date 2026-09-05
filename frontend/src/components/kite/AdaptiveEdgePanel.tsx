@@ -5,7 +5,7 @@ import { k, tint } from '../../styles/kiteUI';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { KiteActionButtons } from './KiteActionButtons';
 import { ColumnsMenu } from './board/BoardFilters';
-import { useEffectiveNowMs } from '../../hooks/useSimulation';
+import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { sessionDayKey, shiftSessionDay, parseTimestampMs } from './board/boardTypes';
 import type {
   AdaptiveEdgeHorizon,

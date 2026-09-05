@@ -277,3 +277,92 @@ async def test_multi_day_range_is_refused_out_loud():
         await runner._task
     assert runner.status.state == SimState.IDLE
     assert "Multi-day" in runner.status.status_message
+
+
+# ── SSE fan-out ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_subscriber_receives_the_current_state_immediately():
+    """A client connecting mid-session must not stare at a blank dock."""
+    runner = SimulationRunner()
+    agen = runner.subscribe()
+    first = await agen.__anext__()
+    assert first.kind == "state"
+    assert first.data["state"] == "idle"
+    await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_signals_and_trades_reach_subscribers():
+    runner = SimulationRunner()
+    agen = runner.subscribe()
+    await agen.__anext__()                       # the opening state event
+    runner._publish("signal", {"instrument": "NIFTY"})
+    runner._publish("trade", {"trade_id": "T1"})
+    assert (await agen.__anext__()).kind == "signal"
+    assert (await agen.__anext__()).kind == "trade"
+    await agen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_closing_the_generator_unregisters_the_subscriber():
+    """Otherwise every disconnected client leaks a queue that fills forever."""
+    runner = SimulationRunner()
+    agen = runner.subscribe()
+    await agen.__anext__()
+    assert len(runner._subscribers) == 1
+    await agen.aclose()
+    assert runner._subscribers == []
+
+
+def test_frames_are_throttled_and_harder_at_high_speed():
+    """At 5000x the clock advances hours a second; a frame per tick is noise."""
+    import time as _time
+
+    runner = SimulationRunner()
+    q: list = []
+    runner._subscribers = [_CollectingQueue(q)]
+
+    runner._speed = 1.0
+    runner._publish_frame(force=True)
+    runner._publish_frame()                      # immediately after — throttled
+    assert len(q) == 1
+
+    runner._last_frame_at = _time.monotonic() - 0.2
+    runner._speed = 1.0
+    runner._publish_frame()                      # 0.2s > the 0.1s gap at 1x
+    assert len(q) == 2
+
+    runner._last_frame_at = _time.monotonic() - 0.2
+    runner._speed = 1000.0
+    runner._publish_frame()                      # 0.2s < the 0.5s gap at 1000x
+    assert len(q) == 2
+
+
+def test_backpressure_drops_frames_but_never_signals():
+    """A dropped frame costs a progress tick; a dropped signal corrupts the ledger."""
+    import asyncio as _asyncio
+
+    runner = SimulationRunner()
+    full = _asyncio.Queue(maxsize=1)
+    full.put_nowait("occupied")
+    runner._subscribers = [full]
+
+    runner._publish("frame", {"pct": 50})
+    assert full.qsize() == 1
+    assert full.get_nowait() == "occupied", "a frame must not evict a queued item"
+
+    full.put_nowait("occupied")
+    runner._publish("signal", {"instrument": "NIFTY"})
+    survived = full.get_nowait()
+    assert getattr(survived, "kind", None) == "signal"
+
+
+class _CollectingQueue:
+    """Minimal stand-in for asyncio.Queue that records what was published."""
+
+    def __init__(self, sink: list):
+        self._sink = sink
+
+    def put_nowait(self, item):
+        self._sink.append(item)
