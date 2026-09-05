@@ -349,18 +349,6 @@ export function PcrPane() {
               {showSec("book") && prefs.layout === "table" ? (
                 <div className="kp-sheet">
                   <table className="kp-book">
-                    <colgroup>
-                      <col className="c-idx" />
-                      {showCol("play") ? <col className="c-play" /> : null}
-                      {showCol("pcr") ? <col className="c-pcr" /> : null}
-                      {showCol("move") ? <col className="c-move" /> : null}
-                      {showCol("vol") ? <col className="c-st" /> : null}
-                      {showCol("doi") ? <col className="c-st" /> : null}
-                      {showCol("spot") ? <col className="c-spot" /> : null}
-                      {showCol("pc") ? <col className="c-pc" /> : null}
-                      {showCol("expiry") ? <col className="c-exp" /> : null}
-                      {showCol("pain") ? <col className="c-pain" /> : null}
-                    </colgroup>
                     <thead>
                       <tr>
                         <th>Index</th>
