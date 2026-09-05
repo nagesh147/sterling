@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ReplayFocusMode,
+  ReplayMode,
   useReplayStore,
   useReplayState,
 } from '../../../hooks/useReplayStore';
@@ -114,7 +115,7 @@ export function ReplayWindowControls() {
     kind: 'half' | 'maximize' | 'fullscreen',
     label: string,
     mode: ReplayFocusMode,
-    Icon: (p: { size?: number }) => JSX.Element,
+    Icon: (p: { size?: number }) => React.ReactNode,
   ) => (
     <button
       type="button"

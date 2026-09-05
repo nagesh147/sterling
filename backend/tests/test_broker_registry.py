@@ -6,12 +6,12 @@ import pytest
 from app.schemas.exchange_config import ExchangeConfig
 from app.services.exchanges import registry
 from app.services.exchanges.adapter_factory import create_account_adapter
-from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+from app.services.exchanges.adapters.zerodha import ZerodhaAdapter
 
 
 def test_registry_lists_all_supported_brokers():
     reg = registry.load_registry()
-    assert set(reg["brokers"]).issuperset({"delta_india", "zerodha", "binance", "deribit", "okx"})
+    assert set(reg["brokers"]).issuperset({"zerodha"})
 
 
 def test_every_adapter_path_imports():
@@ -22,20 +22,20 @@ def test_every_adapter_path_imports():
         assert hasattr(mod, cls_name), f"{name}: {cls_name} missing in {module_path}"
 
 
-def test_resolve_adapter_class_returns_delta():
-    assert registry.resolve_adapter_class("delta_india") is DeltaIndiaAdapter
+def test_resolve_adapter_class_returns_zerodha():
+    assert registry.resolve_adapter_class("zerodha") is ZerodhaAdapter
 
 
 def test_broker_meta_exposes_markets():
-    meta = registry.broker_meta("delta_india")
-    assert "crypto" in meta["markets"]
+    meta = registry.broker_meta("zerodha")
+    assert "equities" in meta["markets"]
 
 
 def test_load_account_adapter_parity_with_factory():
-    cfg = ExchangeConfig(id="r", name="delta_india", api_key="k", api_secret="s", is_paper=True)
+    cfg = ExchangeConfig(id="r", name="zerodha", api_key="k", api_secret="s", is_paper=True)
     via_registry = registry.load_account_adapter(cfg)
     via_factory = create_account_adapter(cfg)
-    assert type(via_registry) is type(via_factory) is DeltaIndiaAdapter
+    assert type(via_registry) is type(via_factory) is ZerodhaAdapter
 
 
 def test_unknown_broker_raises():

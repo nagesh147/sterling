@@ -1,43 +1,15 @@
 {
   "brokers": {
-    "delta_india": {
-      "adapter": "app.services.exchanges.adapters.delta_india:DeltaIndiaAdapter",
-      "markets": ["crypto"],
-      "capabilities": ["futures", "options"],
-      "auth": "hmac"
-    },
     "zerodha": {
       "adapter": "app.services.exchanges.adapters.zerodha:ZerodhaAdapter",
       "markets": ["equities", "commodities"],
       "capabilities": ["equity", "futures", "options", "order_placement", "gtt", "mutual_funds", "streaming"],
       "auth": "token"
-    },
-    "binance": {
-      "adapter": "app.services.exchanges.adapters.binance:BinanceAdapter",
-      "markets": ["crypto"],
-      "capabilities": ["futures"],
-      "auth": "hmac"
-    },
-    "deribit": {
-      "adapter": "app.services.exchanges.adapters.deribit:DeribitAdapter",
-      "markets": ["crypto"],
-      "capabilities": ["options", "futures"],
-      "auth": "none"
-    },
-    "okx": {
-      "adapter": "app.services.exchanges.adapters.okx:OKXAdapter",
-      "markets": ["crypto"],
-      "capabilities": ["futures"],
-      "auth": "none"
     }
   },
   "markets": {
-    "crypto": {"description": "Crypto perps & options"},
     "equities": {"description": "Indian equities"},
-    "commodities": {"description": "Commodity futures (incl. natural gas)"},
-    "forex": {"description": "FX pairs"},
-    "metals": {"description": "Gold / silver"},
-    "energy": {"description": "Natural gas / crude"}
+    "commodities": {"description": "Commodity futures (incl. natural gas)"}
   },
   "strategies": {}
 }

@@ -6,27 +6,43 @@ A modular trading platform for Indian equities and derivatives via Zerodha Kite 
 - **Auto-scan/auto-execute engine** — signal detection + automated execution
 - **Full manual trading terminal** — order window, positions, GTT, funds, charts
 - **Indian indices & options** — NIFTY, BANKNIFTY options strategies
+- **Indian indices & options** — NIFTY, BANKNIFTY options strategies (Adaptive Edge, PCR, Opening Volume Leaders, Nifty ORB)
 - **Paper/live modes** — test strategies without risk before going live
 
 Every order — auto or manual — funnels through one `OrderRouter` with paper/shadow/live modes 
+Every order — auto or manual — funnels through Zerodha Kite Connect with paper/shadow/live modes 
 and a fail-closed safety pipeline, under a hard zero-regression discipline.
 
 ## Documentation
+---
 
 | Doc | What |
 |---
+## Quick Start & Run Steps
 
 ## Claude Code Setup (Recommended)
+### Prerequisites
+- Python 3.11+ / 3.12+
+- Node.js 20+ & npm
+- Zerodha Kite Connect API credentials
 
 This project is fully optimized for [Claude Code](https://claude.ai/code) / Claude Desktop App.
+### 1. Backend Setup & Run
 
 After cloning the repository, run **one command**:
+```bash
+cd backend
 
     ./scripts/setup-claude.sh
     # or
     make setup-claude
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
 
 This automatically sets up:
+# Install dependencies
+pip install -r requirements.txt
 
 - `code-review-graph` (knowledge graph for massive token savings)
 - Preferred CLI tools (`rg`, `fd`, `ast-grep`, `jq`, `yq`, `gh`)
@@ -34,27 +50,41 @@ This automatically sets up:
 - Optimized `CLAUDE.md` with graph-first rules + critical invariants
 - Global MCP registration
 - Skill linking into `~/.claude/skills`
+# Start FastAPI backend
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
 
 ### After running the setup
+Backend will be available at `http://localhost:8000` (API documentation at `http://localhost:8000/docs`).
 
 1. Fully restart the **Claude Desktop App**
 2. Open this project (Sterling)
 3. Start a **new session**
+### 2. Frontend Setup & Run
 
 ### What Claude will follow
+```bash
+cd frontend
 
 - Always uses `code-review-graph` tools **before** Grep/Read
 - Protects critical trading invariants (CircuitBreaker, CorrelationTracker, CalibrationService, no lookahead)
 - Uses skills selectively (1–3 max per task) for better token efficiency
 - Prefers modern CLI tools (`rg`, `fd`, `sg`, etc.)
+# Install dependencies
+npm install
 
 ### Manual alternatives
+# Start Vite dev server
+npm run dev
+```
 
     # Only install skills
     bash install-skills.sh
+Frontend application will be accessible at `http://localhost:5173`.
 
     # Verify setup
     bash claude-verify.sh
+### 3. Production Build & Verification
 
 ---
 |---|
@@ -72,9 +102,18 @@ This automatically sets up:
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Local + Docker |
 | [MIGRATION.md](MIGRATION.md) | The phased hardening program (status + rollback) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Standards, workflow, where things go |
+```bash
+# Frontend build
+cd frontend && npm run build
 
 > Quick start: `make setup && make verify && make backend`. Performance/backtest
 > reports live in [`docs/reports/`](docs/reports/).
+# Backend import check
+cd backend && python3 -c "import main"
+
+# Backend test suite
+cd backend && pytest
+```
 
 ---
 
@@ -83,6 +122,7 @@ This automatically sets up:
 ```
 Signal Generation → Track Selection → Orchestrator → OrderRouter → Exchange
 (VCP / trend_following)  (highest score wins)  (paper/shadow/live)
+Market Data (Kite Ticker) → Signal Engines (Adaptive Edge, PCR, ORB) → Kite Engine → OrderRouter → Zerodha Kite Connect
 ```
 
 > **Note:** the trees below cover the crypto/directional core this README was
@@ -92,12 +132,14 @@ Signal Generation → Track Selection → Orchestrator → OrderRouter → Excha
 > [docs/ai/architecture.md](docs/ai/architecture.md) and the current engine list in
 > [STRATEGIES.md](STRATEGIES.md) for the complete picture; this section calls
 > out the highlights.
+### Backend Structure
 
 ### Backend (FastAPI + Python 3.12)
 
 ```
 backend/
 ├── main.py                         App factory, lifespan (app.state singletons), 31 routers
+├── main.py                         App factory, lifespan, Kite routers
 ├── app/
 │   ├── domain/                      Signal/TradeEvent contracts, Protocols (no I/O)
 │   ├── bus/                         EventBus — in-process async pub/sub
@@ -115,6 +157,15 @@ backend/
 │   │   ├── analytics/                 Walk-forward, sensitivity, correlation, CPCV, Monte Carlo (pure fns)
 │   │   ├── risk/                      Drawdown circuit breaker, greeks budget, slippage, microstructure veto
 │   │   └── indicators/, ml/, backtest/, arbitration/, common/
+│   ├── api/v1/endpoints/
+│   │   ├── kite.py                 Account management, session/auth, orders, positions, GTT, funds, instruments
+│   │   ├── kite_engine.py          Auto-scan/auto-execute engine control (PAPER/LIVE, MANUAL/AUTO toggles)
+│   │   ├── kite_telegram.py        Telegram alerts integration
+│   │   └── ...                     Options, candles, PCR, analytics endpoints
+│   ├── engines/
+│   │   ├── sterling_kite_engine/   Zerodha/Indian equities + derivatives engine
+│   │   ├── adaptive_edge/          Adaptive Edge strategy & formula registry
+│   │   └── nifty_orb_*/            NIFTY Opening Range Breakout engines
 │   ├── services/
 │   │   ├── execution/order_router.py  paper/shadow/live dispatch, fail-closed safety pipeline
 │   │   ├── exchanges/                 adapters/ (delta_india, binance, deribit, okx, zerodha shim)
@@ -126,9 +177,18 @@ backend/
 └── config/
     ├── registry.json                  Broker/market registry (source of truth for adapters)
     └── tracks.yaml                    Per-(instrument, profile) → [track_list]
+│   │   ├── exchanges/
+│   │   │   ├── adapters/zerodha.py Zerodha Kite Connect authenticated adapter
+│   │   │   ├── kite/               Kite Connect v3 client, auth, instruments, ticker, multi-tenant accounts
+│   │   │   └── registry.py         Broker registry loader
+│   │   ├── kite_engine/            Kite trading logic: scanner, sizing, strikes, protective stops
+│   │   └── db.py                   SQLite persistence
+│   └── config/
+│       └── registry.json           Broker/market registry (Zerodha + Indian markets)
 ```
 
 ### Frontend (React 19 + TypeScript + Vite)
+### Frontend Structure
 
 ```
 frontend/src/
@@ -136,6 +196,7 @@ frontend/src/
 │   ├── SimpleTerminal.tsx            The production shell — KITE / CRYPTO top-tab switch
 │   │                                   CRYPTO_TABS: sterlingEngine / grok / sterling_v2 / positions / backtest / paper
 │   └── Terminal.tsx, Dashboard.tsx   Pro / legacy tabbed layouts
+│   └── SimpleTerminal.tsx          Production Kite terminal shell
 ├── components/
 │   ├── kite/                         Zerodha panes: ConnectPane, OrderWindow, PositionsPane, OrdersPane,
 │   │   └── mac/                        GttPane, FundsPane, SterlingKiteEnginePane — mac/ = gated Mac-style
@@ -151,6 +212,16 @@ frontend/src/
 │                                       useKiteSettings, useKiteNotifications
 └── styles/                           terminal.css (Bloomberg-dark tokens), kiteUI.tsx (Kite-parity light
                                         tokens), macMotion.ts (motion-layer springs)
+│   └── kite/                       Kite trading workspace:
+│       ├── KiteTab.tsx             Primary Kite application tab & workspace
+│       ├── KiteLayout.tsx          Multi-pane layout with window controls (dock, half, maximize, fullscreen)
+│       ├── PcrPane.tsx             Put-Call Ratio analytics & market depth
+│       ├── OpeningVolumeLeadersPane.tsx Opening volume leaders tracking
+│       ├── replay/                 Market replay dock, controls, and historical simulation
+│       └── ...                     Orders, positions, funds, watchlist, charts
+├── hooks/                          Domain hooks (useKitePositions, useKiteOrders, useKiteLiveTicks, useReplayStore)
+├── store/                          Zustand state stores
+└── styles/                         Kite UI themes and styles
 ```
 
 ---
@@ -162,6 +233,11 @@ frontend/src/
 | `paper`  | NO           | YES             | Simulation, backtesting |
 | `shadow` | YES          | YES             | Live audit — compare fills |
 | `live`   | YES          | NO              | Production |
+| Mode    | Exchange Call | Paper Position | Description |
+|---------|---------------|----------------|-------------|
+| `paper`  | NO            | YES            | Local simulation, zero risk |
+| `shadow` | YES           | YES            | Audit mode — compare fills against live feeds |
+| `live`   | YES           | NO             | Production order routing via Zerodha Kite Connect |
 
 **algo_mode** (master switch) — enables/disables auto-trading for both VCP feeds and directional engine.  
 **algo_router_mode** (paper/shadow/live) — controls execution dispatch for all auto-orders.
@@ -171,6 +247,7 @@ Auto-order fires only when `signal_strength == "STRONG"` (≥75% confluence scor
 ---
 
 ## Signal Generation Pipeline
+## Claude Code & Development Setup
 
 ```
 每条K线进来:
@@ -384,3 +461,7 @@ During `./scripts/setup-claude.sh`:
 During setup:
 - Creates `docs/obsidian/` for human notes, architecture decisions, daily notes, Graphify exports.
 - Backlinks and visual graph complement CRG (code impact), TrueCourse (violations), Graphify (code+docs).
+This project is configured for rapid development with knowledge graph and tool support:
+- `rg`, `fd` for fast codebase search
+- Knowledge graph integration via `code-review-graph`
+- Strict typing with TypeScript and Pydantic models

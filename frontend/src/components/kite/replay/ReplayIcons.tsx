@@ -127,6 +127,13 @@ export const Alert = svg(
 /* ── Window controls ─────────────────────────────────────────────────────── */
 
 export const Minimise = svg(<path d="M5 18h14" />);
+export const Half = svg(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M12 4v16" />
+    <path d="M3 4h9v16H3z" fill="currentColor" opacity=".14" stroke="none" />
+  </>,
+);
 export const Expand = svg(
   <>
     <rect x="4" y="3" width="16" height="18" rx="2" />
