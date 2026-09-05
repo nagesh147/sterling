@@ -53,10 +53,8 @@ import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { AlertsPanel } from '../components/AlertsPanel';
 import { GoLivePanel } from '../components/GoLivePanel';
-import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
-import { useScalpMode } from '../hooks/useSignalAlerts';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -139,9 +137,7 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const { data: sysInfo } = useConfigInfo();
   const { data: modeData } = useTradingMode();
-  const { data: scalpData } = useScalpMode();
-  const scalpOn = scalpData?.enabled ?? false;
-  const { data: posData } = usePositions(undefined, { enabled: scalpOn });
+  const { data: posData } = usePositions(undefined);
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();
@@ -216,8 +212,6 @@ export function Dashboard() {
           {/* Pro mode: instrument selector */}
           {appMode === 'pro' && <InstrumentSelector />}
 
-          {/* Paper / Live toggle — always visible */}
-          <PaperLiveToggle />
 
           {/* Simple mode: status dots + settings gear */}
           {appMode === 'basic' && (

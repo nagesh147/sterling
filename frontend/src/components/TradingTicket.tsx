@@ -4,7 +4,6 @@ import { useSignals } from '../hooks/useSignals';
 import { usePositions, useClosePosition } from '../hooks/usePositions';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useTradingMode } from '../hooks/useTradingMode';
-import { usePlaceOrder, useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
 import { fmtN, fmtUSD, ivrColor } from '../utils/fmt';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -295,11 +294,7 @@ export function TradingTicket({ underlying }: Props) {
   const { data: posData } = usePositions();
   const { data: pnlData } = useLivePnl();
   const { data: modeData } = useTradingMode();
-  const placeOrder = usePlaceOrder();
   const closePosition = useClosePosition();
-  const { data: algoData } = useAlgoMode();
-  const setAlgoMode = useSetAlgoMode();
-  const algoEnabled = algoData?.enabled ?? false;
 
   // ── Signal for this underlying ──────────────────────────────────────────────
   const signal = useMemo(
@@ -419,46 +414,7 @@ export function TradingTicket({ underlying }: Props) {
     snap?.direction !== 'neutral' &&
     spot > 0;
 
-  const handlePlaceFutures = () => {
-    if (!canTrade || !levels) return;
-    placeOrder.mutate(
-      {
-        underlying,
-        direction,
-        instrument_type: 'futures',
-        size: contracts,
-        leverage,
-        order_type: 'market',
-        stop_loss: levels.stopLoss,
-        take_profit: levels.takeProfit,
-        notes: `TradingTicket · ${direction.toUpperCase()} · ${leverage}× · score ${score}`,
-      },
-      {
-        onSuccess: () => setOrderMsg('Order placed!'),
-        onError: (e) => setOrderMsg(`Error: ${e.message}`),
-      }
-    );
-  };
 
-  const handlePlaceOptions = () => {
-    if (!canTrade || !currentExpiry) return;
-    placeOrder.mutate(
-      {
-        underlying,
-        direction,
-        instrument_type: 'options',
-        size: optionLots,
-        leverage: 1,
-        order_type: 'market',
-        option_symbol: optionSymbol,
-        notes: `TradingTicket · ${optionDir.toUpperCase()} · ${currentStrike} · ${currentExpiry.expiryCode}`,
-      },
-      {
-        onSuccess: () => setOrderMsg('Order placed!'),
-        onError: (e) => setOrderMsg(`Error: ${e.message}`),
-      }
-    );
-  };
 
   const handleClose = () => {
     if (!openPos) return;
@@ -543,27 +499,6 @@ export function TradingTicket({ underlying }: Props) {
         )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setAlgoMode.mutate(!algoEnabled)}
-            disabled={setAlgoMode.isPending}
-            title={algoEnabled ? 'Algo ON — orders go live to Delta Exchange' : 'Algo OFF — orders are paper only'}
-            style={{
-              background: algoEnabled ? 'var(--accent)18' : 'var(--bg-surface)',
-              color: algoEnabled ? 'var(--accent)' : 'var(--text-dim)',
-              border: `1px solid ${algoEnabled ? 'var(--accent)50' : 'var(--border)'}`,
-              borderRadius: 6,
-              padding: '4px 12px',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              transition: 'all 0.15s',
-              opacity: setAlgoMode.isPending ? 0.6 : 1,
-            }}
-          >
-            {algoEnabled ? '⚡ ALGO ON' : 'ALGO OFF'}
-          </button>
           <LiveClock />
         </div>
       </div>
@@ -655,9 +590,7 @@ export function TradingTicket({ underlying }: Props) {
             spot={spot}
             atr0={atr0}
             modeData={modeData}
-            onPlace={handlePlaceFutures}
             onClose={handleClose}
-            placing={placeOrder.isPending}
             closing={closePosition.isPending}
             orderMsg={orderMsg}
           />
@@ -683,9 +616,7 @@ export function TradingTicket({ underlying }: Props) {
             openPnl={openPnl}
             spot={spot}
             dirColor={dirColor}
-            onPlace={handlePlaceOptions}
             onClose={handleClose}
-            placing={placeOrder.isPending}
             closing={closePosition.isPending}
             orderMsg={orderMsg}
           />
@@ -704,7 +635,7 @@ function FuturesSection({
   direction, setDirection, leverage, setLeverage,
   contracts, setContracts, levels, setCustomSL, setCustomTP,
   trailMode, setTrailMode, dirColor, canTrade, openPos, openPnl,
-  spot, atr0, modeData, onPlace, onClose, placing, closing, orderMsg,
+  spot, atr0, modeData, onClose, closing, orderMsg,
 }: {
   direction: Direction; setDirection: (d: Direction) => void;
   leverage: number; setLeverage: (l: number) => void;
@@ -713,8 +644,8 @@ function FuturesSection({
   setCustomTP: (v: number | null) => void; trailMode: TrailMode;
   setTrailMode: (m: TrailMode) => void; dirColor: string;
   canTrade: boolean; openPos: any; openPnl: any; spot: number; atr0: number;
-  modeData: any; onPlace: () => void; onClose: () => void;
-  placing: boolean; closing: boolean; orderMsg: string | null;
+  modeData: any; onClose: () => void;
+  closing: boolean; orderMsg: string | null;
 }) {
   const trailAtrMult = modeData?.config?.trail_atr_mult ?? 2.0;
   const trailPct = modeData?.config?.trail_pct ?? 2.5;
@@ -990,34 +921,6 @@ function FuturesSection({
               {orderMsg}
             </div>
           )}
-          <button
-            onClick={onPlace}
-            disabled={!canTrade || placing}
-            style={{
-              width: '100%',
-              padding: '15px 0',
-              borderRadius: 8,
-              cursor: canTrade ? 'pointer' : 'not-allowed',
-              border: 'none',
-              fontFamily: 'inherit',
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase' as const,
-              background: canTrade
-                ? direction === 'long'
-                  ? 'var(--accent)'
-                  : 'var(--danger)'
-                : 'var(--bg-surface)',
-              color: canTrade ? '#000' : 'var(--text-dim)',
-              opacity: (!canTrade || placing) ? 0.65 : 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {placing
-              ? 'Placing Order…'
-              : `${direction === 'long' ? '▲ BUY LONG' : '▼ SELL SHORT'}  ·  ${contracts} contract${contracts > 1 ? 's' : ''}  ·  ${leverage}×`}
-          </button>
           {!canTrade && spot > 0 && (
             <div style={{ marginTop: 6, fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>
               {openPos ? 'Position already open' : 'No signal — direction is neutral'}
@@ -1035,7 +938,7 @@ function OptionsSection({
   underlying, direction, optionDir, setOptionDir, expiries, selectedExpiry,
   setSelectedExpiry, strikes, selectedStrikeIdx, setSelectedStrikeIdx,
   optionSymbol, estPremium, optionLots, setOptionLots, atr0, canTrade,
-  openPos, openPnl, spot, dirColor, onPlace, onClose, placing, closing, orderMsg,
+  openPos, openPnl, spot, dirColor, onClose, closing, orderMsg,
 }: {
   underlying: string; direction: Direction; optionDir: 'call' | 'put';
   setOptionDir: (d: 'call' | 'put') => void; expiries: OptionExpiry[];
@@ -1044,8 +947,8 @@ function OptionsSection({
   optionSymbol: string; estPremium: number; optionLots: number;
   setOptionLots: (l: number) => void; atr0: number; canTrade: boolean;
   openPos: any; openPnl: any; spot: number; dirColor: string;
-  onPlace: () => void; onClose: () => void;
-  placing: boolean; closing: boolean; orderMsg: string | null;
+  onClose: () => void;
+  closing: boolean; orderMsg: string | null;
 }) {
   const currentExp = expiries[selectedExpiry];
   const currentStrike = strikes[selectedStrikeIdx] ?? 0;
@@ -1219,32 +1122,6 @@ function OptionsSection({
               {orderMsg}
             </div>
           )}
-          <button
-            onClick={onPlace}
-            disabled={!canTrade || placing}
-            style={{
-              width: '100%',
-              padding: '15px 0',
-              borderRadius: 8,
-              cursor: canTrade ? 'pointer' : 'not-allowed',
-              border: 'none',
-              fontFamily: 'inherit',
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase' as const,
-              background: canTrade
-                ? optionDir === 'call' ? 'var(--accent)' : 'var(--danger)'
-                : 'var(--bg-surface)',
-              color: canTrade ? '#000' : 'var(--text-dim)',
-              opacity: (!canTrade || placing) ? 0.65 : 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {placing
-              ? 'Placing Order…'
-              : `BUY ${optionDir.toUpperCase()}  ·  ${fmtUSD(currentStrike, 0)} strike  ·  ${currentExp?.label ?? '—'}`}
-          </button>
         </>
       )}
     </>

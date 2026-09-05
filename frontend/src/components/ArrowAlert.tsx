@@ -9,16 +9,6 @@ import { fpPrice } from '../utils/fmt';
 import { MODE_COLOR } from '../utils/colors';
 import { alpha } from '../styles/terminalUI';
 
-function usePlaceNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: object) => api.post('/api/v1/trading/place-order', body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['positions'] });
-      qc.invalidateQueries({ queryKey: ['live-pnl'] });
-    },
-  });
-}
 
 interface TradeNotif {
   underlying: string;
@@ -40,9 +30,7 @@ interface TradeNotif {
 const AUTO_DISMISS_MS = 30_000;
 
 function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => void }) {
-  const [feedback, setFeedback]   = useState('');
   const [progress, setProgress]   = useState(100);
-  const { mutate: place, isPending } = usePlaceNow();
   // Stable ref for onDismiss so the interval never captures a stale closure
   const onDismissRef = useRef(onDismiss);
   useEffect(() => { onDismissRef.current = onDismiss; });
@@ -66,22 +54,6 @@ function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => v
     return () => clearInterval(tick);
   }, []); // no dependency — ref stays current
 
-  const handleTrade = () => {
-    place({
-      underlying: notif.underlying,
-      direction: notif.direction,
-      instrument_type: 'futures',
-      size: 1,
-      leverage: notif.leverage,
-      order_type: 'market',
-      stop_loss: notif.stopLoss,
-      take_profit: notif.takeProfit,
-      notes: `Arrow signal — ${notif.regime}`,
-    }, {
-      onSuccess: () => { setFeedback('✅ Placed'); setTimeout(onDismiss, 2000); },
-      onError:   (e: unknown) => { setFeedback(`❌ ${(e as Error).message}`); setTimeout(() => setFeedback(''), 6000); },
-    });
-  };
 
   return (
     <div style={{
@@ -165,29 +137,6 @@ function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => v
           )}
         </div>
 
-        {feedback ? (
-          <span style={{
-            fontSize: 11, fontWeight: 700,
-            color: feedback.startsWith('✅') ? 'var(--accent)' : 'var(--danger)',
-          }}>
-            {feedback}
-          </span>
-        ) : (
-          <button
-            onClick={handleTrade}
-            disabled={isPending}
-            style={{
-              flexShrink: 0,
-              padding: '7px 14px',
-              background: bgDark, color, border: `1px solid ${color}`,
-              borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
-              opacity: isPending ? 0.6 : 1,
-            }}
-          >
-            {isPending ? '…' : `${side} NOW`}
-          </button>
-        )}
       </div>
 
       <style>{`

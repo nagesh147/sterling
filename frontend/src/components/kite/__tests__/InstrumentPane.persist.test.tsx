@@ -154,7 +154,7 @@ describe('InstrumentPane global chart-state persistence', () => {
     expect(chartProps.params.rsiPeriod).toBe(99);
   });
 
-  it('flushes the pending save on unmount (Mac-mode MacSectionFade remount path)', async () => {
+  it('flushes the pending save on unmount', async () => {
     const { unmount } = await renderLoaded(A);
     apiPost.mockClear();
 

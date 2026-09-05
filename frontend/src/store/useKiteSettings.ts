@@ -15,7 +15,6 @@ type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirect
 export interface KiteSettingsState {
   defaultSection: NavItem;
   setDefaultSection: (section: NavItem) => void;
-  macKite: boolean;
   loaderStyle: LoaderStyle;
   brandIcon: KiteBrandIcon;
   brandIconSize: KiteBrandIconSize;
@@ -41,7 +40,6 @@ export interface KiteSettingsState {
    * already per-table here (`signalLeftColumnOrder`); visibility now matches.
    */
   hiddenSignalCols: string[];
-  setMacKite: (on: boolean) => void;
   setLoaderStyle: (s: LoaderStyle) => void;
   setBrandIcon: (icon: KiteBrandIcon) => void;
   setBrandIconSize: (size: KiteBrandIconSize) => void;
@@ -135,7 +133,6 @@ export const useKiteSettings = create<KiteSettingsState>()(
     (set) => ({
       defaultSection: 'dashboard',
       setDefaultSection: (section) => set({ defaultSection: section }),
-      macKite: false,
       loaderStyle: 'ubuntu',
       brandIcon: 'phoenix',
       brandIconSize: 'medium',
@@ -162,7 +159,6 @@ export const useKiteSettings = create<KiteSettingsState>()(
       signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
       signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp', 'time', 'trade', 'chart'],
       hiddenSignalCols: [],
-      setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s === 'classic' ? 'material' : s === 'off' ? 'minimal' : s }),
       setBrandIcon: (icon) => set((state) => ({
         brandIcon: icon,

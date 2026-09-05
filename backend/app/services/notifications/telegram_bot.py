@@ -109,7 +109,9 @@ def _load_cfg():
 
 
 async def _scan():
-    from app.api.v1.endpoints.sterling_engine import _scan_all
+    # `sterling_engine` was the crypto scan engine and is gone. Kite scans
+    # run from the KITE tab and its own auto-scan loop.
+    raise RuntimeError('Crypto scanning was removed from this build.')
     from app.services import adapter_manager as _adm
     cfg = _load_cfg()
     try:

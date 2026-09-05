@@ -15,8 +15,6 @@
  */
 import React, { useState } from 'react';
 import { card, cardHead, cardBody, alpha, c } from '../../styles/terminalUI';
-import { useAlgoMode } from '../../hooks/useSignalAlerts';
-import { useRouterMode } from '../../hooks/useRouterMode';
 import {
   useDerivativesFuturesCandidates,
   useDerivativesExecute,
@@ -45,8 +43,6 @@ interface Props {
 export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy, underlying }) => {
   const { data, isLoading, refetch } = useDerivativesFuturesCandidates(strategy, underlying);
   const cfg = useDerivativesConfig();
-  const algoOn = useAlgoMode().data?.enabled ?? false;
-  const { mode: routerMode } = useRouterMode();
   const execute = useDerivativesExecute();
   const pnl = useDerivativesPositionPnl('futures');
   const [toast, setToast] = useState<string>('');
@@ -106,7 +102,6 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
   });
 
   const isAutoExec = (row: DerivativesCandidateRow): boolean => {
-    if (!algoOn) return false;
     const prof = cfg.data?.profiles?.[row.strategy];
     return !!prof?.auto_execute_futures;
   };
@@ -256,13 +251,13 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
                           if (row.source === 'position') {
                             const pos = (row as any)._rawPos;
                             isAuto = /\[AUTO\]/.test(pos?.notes || '');
-                            pausedAuto = isAuto && !algoOn && (pos?.status === 'open' || pos?.status === 'partially_closed');
+                            pausedAuto = false;
                             if (pos && pos.is_paper !== undefined) {
-                               posModeStr = pos.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE';
+                               posModeStr = pos.is_paper ? 'PAPER' : 'LIVE';
                             }
                           } else {
                             isAuto = rp.mode.includes('AUTO');
-                            pausedAuto = isAuto && !algoOn && !rp.realized;
+                            pausedAuto = false;
                             posModeStr = rp.mode.replace('·AUTO', '');
                           }
 
@@ -279,18 +274,20 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
                               {rp.realized ? '✓ CLOSED' : `✓ ${isAuto ? 'AUTO·' : ''}${posModeStr}${pausedAuto ? ' ⏸' : ''}`}
                             </span>
                           );
-                        } else if (auto && algoOn) {
-                          const modeStr = routerMode.toUpperCase();
-                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
+                        } else if (auto) {
+                          // The crypto-era global algo switch and its router
+                          // mode (paper/shadow/live) are gone; the per-strategy
+                          // auto_execute_* flag is the whole gate now.
+                          const color = c.blue;
                           return (
-                            <span title={`Algo is ON — auto-executes in ${modeStr} mode`} style={{
+                            <span title="Auto-execute is on for this strategy" style={{
                               display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
                               fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
                               background: alpha(color, 0.08), color: color,
                               border: `1px solid ${alpha(color, 0.27)}`,
                               whiteSpace: 'nowrap'
                             }}>
-                              ⚡ AUTO·{modeStr}
+                              ⚡ AUTO
                             </span>
                           );
                         }

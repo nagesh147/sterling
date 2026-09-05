@@ -3,7 +3,6 @@ import {
   createChart, createSeriesMarkers, CandlestickSeries, LineSeries, ColorType, PriceScaleMode,
 } from 'lightweight-charts';
 import { k } from '../../styles/kiteUI';
-import { MacChartSwitch } from './mac/MacChartSwitch';
 import { useEngineSetup } from '../../hooks/useSterlingKiteEngine';
 import type { SetupChart as SetupChartData } from '../../types/kiteEngine';
 
@@ -90,9 +89,7 @@ export function SetupChart({ token, underlying, onClose }: Props) {
       <div style={{ flex: 1, position: 'relative' }}>
         {isLoading && <div style={{ padding: 32, color: k.dim, fontSize: 12 }}>Loading setup…</div>}
         {isError && <div style={{ padding: 32, color: k.red, fontSize: 12 }}>Could not load setup chart.</div>}
-        <MacChartSwitch switchKey={underlying}>
-          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-        </MacChartSwitch>
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       </div>
     </div>
   );

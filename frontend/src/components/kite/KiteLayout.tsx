@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { k, Icons } from '../../styles/kiteUI';
-import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
@@ -12,8 +11,6 @@ import { useReplayHostHidden } from '../../hooks/useReplayStore';
 import { FOOTER_HEIGHT } from './layoutConstants';
 import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
-import { MacKiteToggle } from './mac/MacKiteToggle';
-import { MacStageLayout } from './mac/MacStageLayout';
 import {
   WORKSPACE_LAYOUT_KEY,
   WORKSPACE_PANES,
@@ -265,7 +262,6 @@ function PresetDiagram({ preset }: { preset: WorkspacePresetId }) {
 }
 
 export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content, onBasketClick, basketCount = 0 }: KiteLayoutProps) {
-  const { on: macOn } = useMacKite();
   const { data: activity } = useEngineActivity();
   const queryClient = useQueryClient();
   // The footer's activity poll (10s) and the signals dock's own poll run on
@@ -380,7 +376,6 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
 
   useEffect(() => {
     const reclamp = () => {
-      if (macOn) return;
       const rect = workspaceRef.current?.getBoundingClientRect();
       if (!rect) return;
       setLayout((current) => {
@@ -395,15 +390,8 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
     reclamp();
     window.addEventListener('resize', reclamp);
     return () => window.removeEventListener('resize', reclamp);
-  }, [available, macOn]);
+  }, [available]);
 
-  useEffect(() => {
-    if (!macOn) return;
-    setFocus(null);
-    setDraggingPane(null);
-    setDropSlot(null);
-    setMenuOpen(false);
-  }, [macOn]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('kite-pane-toggle')));
@@ -704,49 +692,21 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', background: 'var(--k-bg)', fontFamily: k.fontFamily }}>
       <style>{WORKSPACE_CSS}</style>
-      <div ref={workspaceRef} className="mac-canvas" data-testid="kite-workspace" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-        {macOn ? (
-          <>
-            {centerTopBar && !isSimFullHeight && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
-            <MacStageLayout
-              sidebar={sidebar}
-              content={(
-                <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                  <div style={{
-                    flex: 1,
-                    minHeight: 0,
-                    overflow: 'auto',
-                    scrollbarGutter: 'stable',
-                    display: isSimFullHeight ? 'none' : 'flex',
-                    flexDirection: 'column',
-                  }}>
-                    {content}
-                  </div>
-                  <ReplayDock />
-                </div>
-              )}
-              rightSidebar={rightSidebar}
-              bottomBar={bottomBar}
-            />
-          </>
-        ) : (
-          <>
-            {!focus && standardWorkspace}
-            {focusedWorkspace}
-          </>
-        )}
+      <div ref={workspaceRef} data-testid="kite-workspace" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+        {!focus && standardWorkspace}
+        {focusedWorkspace}
 
-        {!macOn && !layout.locked && !focus && leftVisible && centerColumnOccupied && (
+        {!layout.locked && !focus && leftVisible && centerColumnOccupied && (
           <div className="kw-resizer" data-active={resizing === 'left'} aria-label="Resize left dock" role="separator" tabIndex={0} aria-orientation="vertical" aria-valuenow={layout.sizes.left} onKeyDown={(event) => resizeWithKeyboard('left', event)} onPointerDown={(event) => startResize('left', event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} style={{ top: 0, bottom: 0, left: layout.sizes.left - 4, width: 8, cursor: 'col-resize' }} />
         )}
-        {!macOn && !layout.locked && !focus && rightVisible && (centerColumnOccupied || leftVisible) && (
+        {!layout.locked && !focus && rightVisible && (centerColumnOccupied || leftVisible) && (
           <div className="kw-resizer" data-active={resizing === 'right'} aria-label="Resize right dock" role="separator" tabIndex={0} aria-orientation="vertical" aria-valuenow={layout.sizes.right} onKeyDown={(event) => resizeWithKeyboard('right', event)} onPointerDown={(event) => startResize('right', event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} style={{ top: 0, bottom: 0, right: layout.sizes.right - 4, width: 8, cursor: 'col-resize' }} />
         )}
-        {!macOn && !layout.locked && !focus && centerVisible && bottomVisible && (
+        {!layout.locked && !focus && centerVisible && bottomVisible && (
           <div className="kw-resizer" data-active={resizing === 'bottom'} aria-label="Resize bottom dock" role="separator" tabIndex={0} aria-orientation="horizontal" aria-valuenow={layout.sizes.bottom} onKeyDown={(event) => resizeWithKeyboard('bottom', event)} onPointerDown={(event) => startResize('bottom', event)} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} style={{ left: leftVisible ? layout.sizes.left : 0, right: rightVisible ? layout.sizes.right : 0, bottom: layout.sizes.bottom - 4, height: 8, cursor: 'row-resize' }} />
         )}
 
-        {!macOn && draggingPane && (
+        {draggingPane && (
           <div aria-label="Pane drop targets" style={{ position: 'absolute', inset: 8, zIndex: 200, display: 'grid', gridTemplateColumns: '24% 1fr 24%', gridTemplateRows: '1fr 24%', gap: 8, pointerEvents: 'none' }}>
             {WORKSPACE_SLOTS.map((slot) => {
               const area: React.CSSProperties = slot === 'left' ? { gridColumn: 1, gridRow: '1 / 3' } : slot === 'right' ? { gridColumn: 3, gridRow: '1 / 3' } : slot === 'center' ? { gridColumn: 2, gridRow: 1 } : { gridColumn: 2, gridRow: 2 };
@@ -762,7 +722,6 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
 
       <footer style={{ position: 'relative', height: FOOTER_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid var(--k-border-strong-4)', background: 'color-mix(in srgb, var(--k-bg) 98%, transparent)', zIndex: 150 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <MacKiteToggle />
           {/* Broker state and every strategy, next to the watchlist end of the
               footer. Clicking KITE opens the session panel either way — the
               connected case is worth being able to check on purpose, not only
@@ -776,11 +735,9 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
         </div>
 
-        <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
+        <div aria-label="Minimized panes" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: '60%', overflow: 'hidden' }}>
           <ReplayFooterChip />
-          {macOn ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--k-faint)', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
-          ) : minimizedAvailable.length > 0 ? (
+          {minimizedAvailable.length > 0 ? (
             <>
               {minimizedAvailable.length > 1 && (
                 <button type="button" className="kw-dock-chip" onClick={restoreAll} title="Restore all panes" aria-label="Restore all panes" style={{ color: 'var(--k-ink-3)', fontWeight: 700 }}>
@@ -801,7 +758,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         </div>
 
         <div aria-label="Workspace and engine status" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--k-ink-5)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-          {!macOn && (
+          {(
             <div ref={menuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: 2 }}>
               <button type="button" className="kw-dock-chip" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} title="Open workspace layouts">
                 <PaneGlyph pane="dashboard" size={13} />
@@ -844,7 +801,7 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           {!scanning && marketClosed ? <span style={{ opacity: .7 }}>· Market closed</span> : !scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 ? <span style={{ opacity: .7 }}>· Next Due {fmtNext(activity?.next_scan_ms ?? 0)}</span> : null}
         </div>
       </footer>
-      {!macOn && fullscreenWorkspace}
+      {fullscreenWorkspace}
     </div>
   );
 }

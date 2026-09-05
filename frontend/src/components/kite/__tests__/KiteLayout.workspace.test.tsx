@@ -15,7 +15,6 @@ function renderLayout(componentProps: typeof props) {
   return render(<QueryClientProvider client={qc}><KiteLayout {...componentProps} /></QueryClientProvider>);
 }
 
-const macState = vi.hoisted(() => ({ on: false }));
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineActivity: () => ({ data: undefined }),
   useEngineServerLogs: () => ({ data: undefined }),
@@ -23,13 +22,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 vi.mock('../../../store/useLiveSignalCount', () => ({
   useLiveSignalCount: (selector: (state: { count: number }) => unknown) => selector({ count: 27 }),
 }));
-vi.mock('../../../hooks/useMacKite', () => ({ useMacKite: () => macState }));
-vi.mock('../mac/MacKiteToggle', () => ({ MacKiteToggle: () => <button type="button">MAC</button> }));
 // The footer now carries broker and per-strategy state, which reaches for every
 // engine's hook. None of that is under test here, and this file is about the
 // workspace, so the strip is stubbed rather than each of its six hooks mocked.
 vi.mock('../KiteFooterStatus', () => ({ KiteFooterStatus: () => <div data-testid="footer-status" /> }));
-vi.mock('../mac/MacStageLayout', () => ({ MacStageLayout: () => <div data-testid="mac-stage">Mac stage</div> }));
 
 const props = {
   activeNav: 'dashboard' as const,
@@ -42,7 +38,6 @@ const props = {
 };
 
 beforeEach(() => {
-  macState.on = false;
   localStorage.clear();
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     callback(0);
@@ -205,17 +200,6 @@ describe('KiteLayout advanced workspace', () => {
     expect(screen.getAllByLabelText(/pane$/)).toHaveLength(4);
   });
 
-  it('keeps the existing Mac stage as an independent workspace mode', () => {
-    const qc = new QueryClient();
-    const view = render(<QueryClientProvider client={qc}><KiteLayout {...props} /></QueryClientProvider>);
-    macState.on = true;
-    view.rerender(<QueryClientProvider client={qc}><KiteLayout {...props} /></QueryClientProvider>);
-
-    expect(screen.getByTestId('mac-stage')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Layout' })).not.toBeInTheDocument();
-    expect(screen.getByText('Mac stage active')).toBeInTheDocument();
-  });
 });
 
 describe('EngineTerminal workspace synchronization', () => {

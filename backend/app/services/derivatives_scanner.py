@@ -66,7 +66,15 @@ async def auto_execute_derivative(
     The freeze_token is single-fire: a second call with the same token
     will return False even if the first call succeeded.
     """
-    from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
+    # The Delta order path went with the crypto product surface, and this
+    # function is only reached when scalp_mode is on — the crypto kill
+    # switch, which no longer has a control. Refuse rather than raise
+    # ImportError from a module that is gone.
+    log.warning(
+        "DERIV auto-exec %s/%s/%s: no broker order path in this build; skipping.",
+        row_strategy, row_underlying, leg,
+    )
+    return False
     from app.engines.derivatives.freeze_token import get_store
 
     store = get_store()

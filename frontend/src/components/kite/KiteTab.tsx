@@ -31,8 +31,6 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { BasketPane } from './BasketPane';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { MacMotionProvider } from './mac/MacMotionProvider';
-import { MacSectionFade } from './mac/MacSectionFade';
 import {
   EngineStartupBoundary,
   KiteStartupCoordinator,
@@ -202,18 +200,8 @@ export function KiteTab() {
     else if (nav === 'help') content = <HelpPane />;
   }
 
-  const contentKey = setupView ? `setup:${setupView.token}`
-    // Keyed by signal id so switching between two rows remounts the pane
-    // rather than leaving the previous signal's calculator state behind.
-    : boardDetail ? `board:${boardDetail.id}`
-    : detailView ? `detail:${detailView.token}`
-    : instrumentView ? `inst:${instrumentView.symbol}`
-    : nav === 'more' ? `more:${moreTab}`
-    : `nav:${nav}`;
-
   return (
     <KiteInteractionMotion>
-      <MacMotionProvider>
         <KiteStartupCoordinator statusLoading={kiteStatusLoading} hasStatus={!!kiteStatus} />
         <KiteLayout
           activeNav={nav}
@@ -238,7 +226,7 @@ export function KiteTab() {
               <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />
             </TickerStartupBoundary>
           )}
-          content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
+          content={content}
           onBasketClick={() => setBasketOpen(true)}
           basketCount={basketCount}
         />
@@ -248,7 +236,6 @@ export function KiteTab() {
         <KiteAuthOverlay />
         {isOpen && options && <OrderWindow options={options} onClose={closeOrderWindow} />}
         {basketOpen && <BasketPane onClose={() => setBasketOpen(false)} />}
-      </MacMotionProvider>
     </KiteInteractionMotion>
   );
 }

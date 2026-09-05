@@ -216,40 +216,6 @@ const ORDER_STATUS_COLORS: Record<string, string> = {
   retry: t.blue,
 };
 
-function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => void }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const retry = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await api.post(`/api/v1/trading/retry-order/${posId}`);
-      onDone?.();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Retry failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div>
-      <button
-        style={{
-          background: '#1a2233', color: t.blue, border: '1px solid #4499cc66',
-          padding: '4px 12px', borderRadius: 3, cursor: 'pointer',
-          fontFamily: 'inherit', fontSize: 11, opacity: loading ? 0.6 : 1,
-        }}
-        onClick={retry}
-        disabled={loading}
-      >
-        {loading ? '⟳ RETRYING…' : '⟳ RETRY ORDER'}
-      </button>
-      {error && <span style={{ color: t.red, fontSize: 10, marginLeft: 8 }}>{error}</span>}
-    </div>
-  );
-}
 
 export function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number | null }) {
   const [closePrice, setClosePrice] = useState('');
@@ -395,7 +361,6 @@ export function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: n
           <div style={{ color: t.red, marginBottom: 8 }}>
             {pos.notes?.replace('[ALGO-FAILED] ', '').replace('[ALGO-RETRY] [ALGO-FAILED] ', '')}
           </div>
-          <RetryOrderButton posId={pos.id} />
         </div>
       )}
       {(pos.status === 'open' || pos.status === 'partially_closed') && (

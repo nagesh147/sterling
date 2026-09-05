@@ -5,7 +5,6 @@ import {
   useKiteInstrumentSearch, useKiteQuote, useKiteOrderCharges,
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
-import { useMacKite } from '../../hooks/useMacKite';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { useKitePendingProtectionStore } from '../../store/useKitePendingProtectionStore';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
@@ -53,15 +52,8 @@ const Pencil = () => (
 );
 
 export function OrderWindow({ options, onClose }: Props) {
-  const { on, motion, AnimatePresence, sp, setTicketOpen } = useMacKite();
   const { initialSide, initialQty, product: productHint, tag, onPlaced } = options;
 
-  // Dim + 2% scale-down of the background Kite canvas while the ticket is open.
-  // No-op when Mac Kite is off (setTicketOpen guards on the flag internally).
-  useEffect(() => {
-    setTicketOpen(true);
-    return () => setTicketOpen(false);
-  }, [setTicketOpen]);
 
   const [instr, setInstr] = useState({
     symbol: options.symbol, exchange: options.exchange,
@@ -513,31 +505,6 @@ export function OrderWindow({ options, onClose }: Props) {
     <InstrumentSearchOverlay symbol={instr.symbol} accent={accent} onPick={selectInstrument} onClose={() => setSearchOpen(false)} />
   );
 
-  // ── Off-path: byte-identical to the original static popover. ─────────────────
-  if (!on) {
-    return (
-      <>
-        {styleTag}
-
-        <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, display: 'flex', alignItems: 'flex-start', fontFamily: k.fontFamily }}>
-          <div style={{ position: 'relative', width: cardW, transition: 'width .12s' }}>
-            {nudge && nudgeOpen && <NudgePopup message={nudge.message} onClose={() => setNudgeOpen(false)} />}
-
-            <div style={cardStyle}>
-              {cardInner}
-            </div>
-          </div>
-
-          {depthOpen && <MarketDepth q={depthQ} onClose={() => setDepthOpen(false)} />}
-        </div>
-
-        {/* Centered search overlay — its own component, so typing never re-renders the ticket */}
-        {searchOverlay}
-      </>
-    );
-  }
-
-  // ── Mac path: App Store "card expansion" morph from the anchor (top-left). ────
   return (
     <>
       {styleTag}
@@ -546,19 +513,9 @@ export function OrderWindow({ options, onClose }: Props) {
         <div style={{ position: 'relative', width: cardW, transition: 'width .12s' }}>
           {nudge && nudgeOpen && <NudgePopup message={nudge.message} onClose={() => setNudgeOpen(false)} />}
 
-          <AnimatePresence>
-            <motion.div
-              key="ow-card"
-              className="mac-gpu"
-              style={{ ...cardStyle, transformOrigin: 'top left' }}
-              initial={{ opacity: 0, scale: 0.9, y: 6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 6 }}
-              transition={sp('standard')}
-            >
-              {cardInner}
-            </motion.div>
-          </AnimatePresence>
+          <div style={cardStyle}>
+            {cardInner}
+          </div>
         </div>
 
         {depthOpen && <MarketDepth q={depthQ} onClose={() => setDepthOpen(false)} />}

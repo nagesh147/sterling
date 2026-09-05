@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSignalAlerts, usePlaceOrder } from '../hooks/useSignalAlerts';
+import { useSignalAlerts } from '../hooks/useSignalAlerts';
 import type { SignalAlert } from '../hooks/useSignalAlerts';
 import { fmtN } from '../utils/fmt';
 import { c as ui, tint } from '../styles/terminalUI';
@@ -40,161 +40,12 @@ function PriceGrid({ alert }: { alert: SignalAlert }) {
   );
 }
 
-function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => void }) {
-  const [instrType, setInstrType] = useState<'futures' | 'options'>('futures');
-  const [leverage, setLeverage] = useState(alert.rec_leverage);
-  const [size, setSize] = useState(1);
-  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
-  const { mutate: placeOrder, isPending } = usePlaceOrder();
-
-  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? ui.dim;
-  const side = DIR_LABEL[alert.direction as keyof typeof DIR_LABEL] ?? alert.direction.toUpperCase();
-
-  const handlePlace = () => {
-    placeOrder({
-      underlying: alert.underlying,
-      direction: alert.direction,
-      instrument_type: instrType,
-      size,
-      leverage,
-      order_type: 'market',
-      stop_loss: alert.stop_loss,
-      take_profit: alert.take_profit,
-      option_symbol: instrType === 'options' ? (alert.opt_symbol ?? undefined) : undefined,
-      notes: `Alert: ${alert.state_label}`,
-    }, {
-      onSuccess: (data: any) => {
-        setStatus({ ok: true, msg: `${data.mode === 'live' ? '✅ LIVE' : '📋 Paper'} order placed — ${data.order_id || data.paper_position_id}` });
-        setTimeout(onClose, 2000);
-      },
-      onError: (e: Error) => setStatus({ ok: false, msg: `Error: ${e.message}` }),
-    });
-  };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onClose}>
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 8, padding: 24, width: 380, maxWidth: '95vw' }}
-        onClick={e => e.stopPropagation()}>
-
-        {/* header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div>
-            <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>{alert.underlying}</span>
-            <span style={{ marginLeft: 10, fontSize: 14, fontWeight: 800, color: dirColor }}>{side}</span>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        </div>
-
-        <PriceGrid alert={alert} />
-
-        {/* instrument type toggle */}
-        <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
-          {(['futures', 'options'] as const).map(t => (
-            <button key={t} onClick={() => setInstrType(t)} style={{
-              flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer',
-              background: instrType === t ? (t === 'futures' ? '#1a2a1a' : '#1a1a2a') : 'var(--bg)',
-              color: instrType === t ? (t === 'futures' ? ui.green : ui.blue) : 'var(--text-dim)',
-              fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 1,
-            }}>{t.toUpperCase()}</button>
-          ))}
-        </div>
-
-        {instrType === 'futures' ? (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 4 }}>SYMBOL: {alert.futures_symbol}</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 3 }}>LEVERAGE</div>
-                <select value={leverage} onChange={e => setLeverage(Number(e.target.value))} style={{
-                  width: '100%', background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                  borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12,
-                }}>
-                  {[1,2,3,5,10,20,25,50].map(l => <option key={l} value={l}>{l}×</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 3 }}>CONTRACTS</div>
-                <input type="number" min={1} max={100} value={size} onChange={e => setSize(Number(e.target.value))} style={{
-                  width: '100%', background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                  borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12,
-                }} />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ marginBottom: 12 }}>
-            {alert.opt_symbol ? (
-              <>
-                <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 4 }}>
-                  OPTION: <span style={{ color: ui.blue, fontWeight: 700 }}>{alert.opt_symbol}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  <span>Strike: <b style={{ color: 'var(--text-primary)' }}>{fmtPrice(alert.opt_strike)}</b></span>
-                  <span>Type: <b style={{ color: alert.opt_type === 'CE' ? ui.green : ui.red }}>{alert.opt_type}</b></span>
-                  <span>Expiry: <b style={{ color: 'var(--text-primary)' }}>{alert.opt_expiry}</b></span>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 3 }}>LOTS</div>
-                    <input type="number" min={1} max={50} value={size} onChange={e => setSize(Number(e.target.value))} style={{
-                      width: '100%', background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                      borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12,
-                    }} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>Option chain not available for this instrument.</div>
-            )}
-          </div>
-        )}
-
-        {/* risk info */}
-        <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--text-faint)', marginBottom: 16 }}>
-          <span>Risk: <b style={{ color: ui.red }}>{alert.risk_pct}%</b></span>
-          <span>ADX: <b style={{ color: 'var(--text-muted)' }}>{alert.adx}</b></span>
-          <span>RSI: <b style={{ color: 'var(--text-muted)' }}>{alert.rsi}</b></span>
-          <span>Score: <b style={{ color: ui.amber }}>{alert.score}</b></span>
-        </div>
-
-        {status && (
-          <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 4,
-            background: status.ok ? '#1a2a1a' : '#2a1a1a',
-            color: status.ok ? ui.green : ui.red,
-            border: `1px solid ${status.ok ? '#44cc8833' : '#cc444433'}`,
-            fontSize: 11 }}>
-            {status.msg}
-          </div>
-        )}
-
-        <button
-          disabled={isPending}
-          onClick={handlePlace}
-          style={{
-            width: '100%', padding: '12px 0',
-            background: alert.direction === 'long' ? '#0f2a0f' : '#2a0f0f',
-            color: alert.direction === 'long' ? ui.green : ui.red,
-            border: `1px solid ${alert.direction === 'long' ? ui.green : ui.red}`,
-            borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: 14, fontWeight: 900, letterSpacing: 1,
-          }}
-        >
-          {isPending ? 'Placing Order…' : `▶ ${side} ${instrType.toUpperCase()} — ${alert.underlying}`}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function AlertCard({ alert }: { alert: SignalAlert }) {
-  const [showOrder, setShowOrder] = useState(false);
   const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? ui.dim;
   const stateColor = STATE_COLOR[alert.state] ?? ui.amber;
 
   return (
     <>
-      {showOrder && <OrderModal alert={alert} onClose={() => setShowOrder(false)} />}
       <div style={{
         background: 'var(--bg-card)', border: `1px solid ${stateColor}44`,
         borderLeft: `4px solid ${stateColor}`, borderRadius: 6, padding: '12px 14px',
@@ -219,19 +70,6 @@ function AlertCard({ alert }: { alert: SignalAlert }) {
           <span style={{ color: 'var(--text-faint)', fontSize: 9 }}>{fmtAge(alert.timestamp_ms)}</span>
         </div>
 
-        {/* action */}
-        <button
-          onClick={() => setShowOrder(true)}
-          style={{
-            padding: '10px 18px', borderRadius: 5, cursor: 'pointer',
-            background: alert.direction === 'long' ? '#0f2a0f' : '#2a0f0f',
-            color: alert.direction === 'long' ? ui.green : ui.red,
-            border: `1px solid ${alert.direction === 'long' ? ui.green : ui.red}`,
-            fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
-          }}
-        >
-          TRADE
-        </button>
       </div>
     </>
   );

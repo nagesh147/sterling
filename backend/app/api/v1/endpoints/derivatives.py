@@ -566,7 +566,21 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
     strat_tag = f"{body.strategy} " if body.strategy else ""
 
     if candidate.structure and len(candidate.structure.legs) > 1:
-        from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
+        # The Delta order path (`endpoints.trading.place_live_order`) was removed
+        # with the crypto product surface. Nothing has replaced it here yet —
+        # Kite orders go through POST /kite/orders — so say so plainly instead
+        # of raising ImportError from an import of a module that is gone.
+        raise HTTPException(
+            501,
+            detail={
+                "code": "execution_unavailable",
+                "message": (
+                    "Derivatives execution is not wired to a broker in this "
+                    "build. The crypto order path was removed; place Kite "
+                    "orders through the KITE tab."
+                ),
+            },
+        )
 
         leg_results: list[dict] = []
         for leg in candidate.structure.legs:
@@ -621,7 +635,21 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         )
 
     # ── Single-leg path (futures or single options) ─────────────────────
-    from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
+    # The Delta order path (`endpoints.trading.place_live_order`) was removed
+    # with the crypto product surface. Nothing has replaced it here yet —
+    # Kite orders go through POST /kite/orders — so say so plainly instead
+    # of raising ImportError from an import of a module that is gone.
+    raise HTTPException(
+        501,
+        detail={
+            "code": "execution_unavailable",
+            "message": (
+                "Derivatives execution is not wired to a broker in this "
+                "build. The crypto order path was removed; place Kite "
+                "orders through the KITE tab."
+            ),
+        },
+    )
     order = LiveOrderRequest(
         underlying=candidate.underlying,
         direction=candidate.direction,
