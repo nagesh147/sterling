@@ -778,3 +778,10 @@ def test_new_trail_deep_itm_no_update_when_wider():
     # ST trail slipped back (24700 < spot) → would loosen → no update (ratchet)
     row = _make_signal_row(underlying="NIFTY 50", stop_loss=24700.0)
     assert service._new_trail_for_open(p, [row]) is None
+
+
+@pytest.fixture(autouse=True)
+def _valid_entry_data_for_execution_plumbing(monkeypatch):
+    """Historical row fixtures isolate execution; session gates tested separately."""
+    from app.services.kite_engine import service as execution
+    monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")

@@ -348,6 +348,8 @@ async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenP
             stop_premium=p.stop_premium, status=p.status,
             direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
             opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
+            exit_pending=bool(p.exit_order_id) and p.status in (kite_positions.OPEN, kite_positions.PENDING),
+            pnl_reconciliation_required=p.pnl_reconciliation_required,
             exit_mode=em,
             current_red_count=getattr(p, 'current_red_count', 0),
             exit_threshold=thresh,
@@ -361,26 +363,14 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
     Cancels any live broker GTT stop before closing, so it can't fire after removal.
     Use when an order was filled outside the engine or to clean up stale entries."""
     uid = user.user_id
-    from app.services.kite_engine import protective_stop as pstop
-    from app.services.exchanges.kite import ticker_manager
     p = kite_positions.get(uid, symbol)
-    if p:
-        try:
-            client = await _client(user)
-            if p.gtt_id and not await pstop.cancel_stop(client, p.gtt_id):
-                # We are about to forget this position, so a trigger left armed becomes
-                # a resting SELL with nothing behind it — a naked short if it fires.
-                # `cancel_stop` returns False instead of raising, so the except below
-                # would never see this.
-                state.log(uid, "order_failed",
-                          f"⚠ {symbol} removed from the registry but its broker GTT "
-                          f"#{p.gtt_id} could NOT be cancelled — a resting SELL may still "
-                          f"be armed at Zerodha with nothing tracking it. Cancel it there.")
-            if p.token:
-                await ticker_manager.unsubscribe(uid, [p.token])
-        except Exception as _exc:# noqa: BLE001
-            log.debug("suppressed: %s", _exc)
-    kite_positions.close(uid, symbol, reason="manual_close")
+    if p is not None and p.status in (kite_positions.OPEN, kite_positions.PENDING):
+        client = await _client(user)
+        # Removing a row cannot remove a broker position or cancel its protection.
+        # Reconcile from broker evidence; a missing/malformed reply is not flatness.
+        await service._reconcile_closed_positions(client, uid)
+        if p.status in (kite_positions.OPEN, kite_positions.PENDING):
+            raise HTTPException(status_code=409, detail="Broker position is not confirmed flat; use an exit order.")
     records = []
     for p in kite_positions.open_positions(uid):
         em = getattr(p, 'exit_mode', 'one_red')
@@ -393,6 +383,8 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
             stop_premium=p.stop_premium, status=p.status,
             direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
             opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
+            exit_pending=bool(p.exit_order_id) and p.status in (kite_positions.OPEN, kite_positions.PENDING),
+            pnl_reconciliation_required=p.pnl_reconciliation_required,
             exit_mode=em,
             current_red_count=getattr(p, 'current_red_count', 0),
             exit_threshold=thresh,

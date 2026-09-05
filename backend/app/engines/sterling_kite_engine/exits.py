@@ -64,22 +64,23 @@ def trail_exit_index(r, direction: str, entry_i: int, last_idx: int,
     at ``j`` is computed from ``j``'s own high/low, so the bar that breaks the stop
     would also be the bar that moved it.
 
-    Compares against ``basis_high``/``basis_low`` rather than the raw candle: the ST
-    lines are computed on the configured basis (Heikin-Ashi by default), and a raw low
-    is not on the same series as ``l_fast``.
+    HA prices are synthetic indicator inputs. Only raw traded high/low can
+    establish that an order at the previous close's stop could have triggered.
     """
     if not getattr(cfg, "price_stop_exit", True):
         return None
-    if r.basis_low.size <= last_idx or r.basis_high.size <= last_idx:
-        return None  # basis not carried — cannot compare honestly, so do not guess
+    if r.raw_low.size <= last_idx or r.raw_high.size <= last_idx:
+        return None  # raw prices not carried — cannot compare honestly, so do not guess
+    level = trail_level(r, direction, entry_i, entry_i, cfg)
     for j in range(entry_i + 1, last_idx + 1):
-        level = trail_level(r, direction, entry_i, j - 1, cfg)
+        candidate = trail_level(r, direction, entry_i, j - 1, cfg)
+        level = max(level, candidate) if direction == "long" else min(level, candidate)
         if level <= 0:
             continue
         if direction == "long":
-            if float(r.basis_low[j]) <= level:
+            if float(r.raw_low[j]) <= level:
                 return j
-        elif float(r.basis_high[j]) >= level:
+        elif float(r.raw_high[j]) >= level:
             return j
     return None
 

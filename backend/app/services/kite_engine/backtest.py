@@ -26,6 +26,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import List, Optional
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -42,22 +44,26 @@ class OptionCosts:
     turnover unless noted. Defaults track the common 2026 retail schedule; the UI
     can override. STT applies to the SELL side only (on premium)."""
     brokerage_per_order: float = 20.0      # ₹ flat per order (typical discount broker)
-    stt_sell_pct: float = 0.000625         # 0.0625% of sell premium turnover
+    stt_sell_pct: Optional[float] = None   # None = effective-date statutory schedule
     exchange_txn_pct: float = 0.00035      # ~0.035% of premium turnover (NSE options)
     gst_pct: float = 0.18                  # on (brokerage + exchange txn)
     sebi_pct: float = 0.000001             # ₹10 per crore
     stamp_pct: float = 0.00003             # 0.003% on buy side
     slippage_pct: float = 0.01             # 1% of premium per side (wide OTM spreads)
 
-    def round_trip(self, entry_premium: float, exit_premium: float, qty: int) -> float:
+    def round_trip(self, entry_premium: float, exit_premium: float, qty: int, *, exit_ms: int | None = None) -> float:
         """Total charges (₹) for a buy-then-sell of ``qty`` units."""
         buy_turnover = entry_premium * qty
         sell_turnover = exit_premium * qty
         brokerage = self.brokerage_per_order * 2
-        stt = sell_turnover * self.stt_sell_pct
+        day = (datetime.fromtimestamp(exit_ms / 1000, ZoneInfo("Asia/Kolkata")).date()
+               if exit_ms is not None else date.today())
+        rate = (0.0015 if day >= date(2026, 4, 1) else 0.001 if day >= date(2024, 10, 1)
+                else 0.000625 if day >= date(2023, 4, 1) else 0.0005)
+        stt = sell_turnover * (rate if self.stt_sell_pct is None else self.stt_sell_pct)
         exch = (buy_turnover + sell_turnover) * self.exchange_txn_pct
-        gst = (brokerage + exch) * self.gst_pct
         sebi = (buy_turnover + sell_turnover) * self.sebi_pct
+        gst = (brokerage + exch + sebi) * self.gst_pct
         stamp = buy_turnover * self.stamp_pct
         slip = (buy_turnover + sell_turnover) * self.slippage_pct
         return brokerage + stt + exch + gst + sebi + stamp + slip
@@ -144,7 +150,7 @@ def _stats_from_trades(trades: List[BacktestTrade], starting_capital: float) -> 
     stats.avg_loss = round(np.mean(losses), 2) if losses else 0.0
     stats.max_drawdown = round(max_dd * 100, 2)
     if len(rets) > 1 and np.std(rets) > 0:
-        stats.sharpe = round(float(np.mean(rets) / np.std(rets) * np.sqrt(252)), 3)
+        stats.sharpe = round(float(np.mean(rets) / np.std(rets)), 3)
     stats.final_capital = round(cap, 2)
     stats.return_pct = round((cap - starting_capital) / starting_capital * 100, 2)
     return stats, [round(e, 2) for e in equity]
@@ -193,9 +199,16 @@ def replay_premium_series(
     l = np.asarray(premium_low, float)
     c = np.asarray(premium_close, float)
     n = len(c)
+    if (not all(len(x) == n for x in (o, h, l, timestamps_ms))
+            or not all(np.isfinite(x).all() for x in (o, h, l, c))
+            or any(np.any(x <= 0) for x in (o, h, l, c))
+            or np.any(l > np.minimum(o, c)) or np.any(h < np.maximum(o, c))
+            or np.any(np.diff(timestamps_ms) <= 0)
+            or qty <= 0 or starting_capital <= 0):
+        raise ValueError("invalid raw OHLC, timestamps, quantity or capital")
     trades: List[BacktestTrade] = []
     if n <= cfg.warmup + 2:
-        run = BacktestRun(mode="", caveat="")
+        run = BacktestRun(mode="", caveat="Raw next-open entries; gap-aware stops; OHLC execution/slippage estimates, not observed fills.")
         run.stats, run.equity_curve = _stats_from_trades(trades, starting_capital)
         return run
 
@@ -207,14 +220,33 @@ def replay_premium_series(
         if not longs[i]:
             i += 1
             continue
-        # enter at this bar's close (premium)
-        entry_i = i
-        entry_px = float(c[entry_i])
-        # exit = red-count over the premium's 3 STs (the live exit_mode rule)
-        exit_i, reason = _exit_bar(r, entry_i, 1, longs, shorts, exit_mode, n, cfg, trail_target)
-        exit_px = float(c[exit_i])
+        # The signal becomes known at close; entry is next observed raw open.
+        signal_i = i
+        entry_i = i + 1
+        if entry_i >= n:
+            break
+        entry_px = float(o[entry_i])
+        exit_signal_i, reason = _exit_bar(r, signal_i, 1, longs, shorts, exit_mode, n, cfg, trail_target)
+        if reason.startswith("trail breach"):
+            exit_i = exit_signal_i
+            # Gap-aware stop: resting stop fills no better than the opening gap.
+            effective = replace(cfg, exit_mode=exit_mode, trail_target=trail_target)
+            level = max(exits.trail_level(r, "long", signal_i, j, effective)
+                        for j in range(signal_i, exit_i))
+            exit_px = min(float(o[exit_i]), level)
+        elif reason == "series end":
+            exit_i, exit_px = n - 1, float(c[-1])
+            reason = "series-end mark (not a verified executable exit)"
+        else:
+            exit_i = exit_signal_i + 1
+            if exit_i >= n:
+                break  # no subsequent observation to fill a close-derived exit
+            exit_px = float(o[exit_i])
+        if entry_px * qty > starting_capital + sum(t.net_pnl for t in trades):
+            i += 1
+            continue
         gross = (exit_px - entry_px) * qty
-        ch = costs.round_trip(entry_px, exit_px, qty)
+        ch = costs.round_trip(entry_px, exit_px, qty, exit_ms=int(timestamps_ms[exit_i]))
         trades.append(BacktestTrade(
             entry_ms=int(timestamps_ms[entry_i]), exit_ms=int(timestamps_ms[exit_i]),
             direction=direction_label, entry_premium=round(entry_px, 2),
@@ -223,7 +255,7 @@ def replay_premium_series(
             bars_held=exit_i - entry_i, exit_reason=reason))
         i = exit_i + 1   # no overlapping positions
 
-    run = BacktestRun(mode="", caveat="")
+    run = BacktestRun(mode="", caveat="Raw next-open entries; gap-aware stops; OHLC execution/slippage estimates, not observed fills.")
     run.trades = trades
     run.stats, run.equity_curve = _stats_from_trades(trades, starting_capital)
     return run
@@ -303,7 +335,7 @@ def run_synthetic(
         entry_px = bs_price(spot=spot0, strike=strike, dte_days=entry_dte, iv=iv, option_type=opt_type)
         exit_px = bs_price(spot=float(c[exit_i]), strike=strike, dte_days=exit_dte, iv=iv, option_type=opt_type)
         gross = (exit_px - entry_px) * qty
-        ch = costs.round_trip(entry_px, exit_px, qty)
+        ch = costs.round_trip(entry_px, exit_px, qty, exit_ms=int(timestamps_ms[exit_i]))
         trades.append(BacktestTrade(
             entry_ms=int(timestamps_ms[i]), exit_ms=int(timestamps_ms[exit_i]),
             direction="long-call" if is_long else "long-put",

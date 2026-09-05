@@ -17,6 +17,7 @@ from app.engines.common.exit_counter import (
 )
 from app.engines.common.trailing import ratchet_trail
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.exits import resolve_exit, trail_level
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
@@ -26,6 +27,7 @@ class _OpenPos:
     entry: float
     stop: float  # ratcheted trail stop
     initial_stop: float
+    entry_ms: int = 0
 
 
 @dataclass
@@ -69,7 +71,7 @@ class SterlingKiteEngine:
         direction = "long" if longs[i] else "short"
         trail = float(r.line(self.cfg.trail_target)[i])
         entry = float(c[i])
-        self._positions[underlying] = _OpenPos(direction, entry, trail, trail)
+        self._positions[underlying] = _OpenPos(direction, entry, trail, trail, int(candles[i].timestamp_ms))
         score = self._score(r, i)
         return [Signal(
             underlying=underlying,
@@ -96,28 +98,26 @@ class SterlingKiteEngine:
         red_count = r.red_line_count(pos.direction, i)
         green_count = 3 - red_count
 
-        # ── Adaptive trailing stop ──────────────────────────────────────────
-        # Use the tightest still-green line as the trail. As lines flip red one by
-        # one, the trail auto-tightens to the next innermost green line. This gives
-        # progressively tighter protection as the trade deteriorates.
-        trail_value = r.best_trail_line_value(pos.direction, i)
-        if trail_value > 0:
-            pos.stop = ratchet_trail(pos.stop, trail_value, pos.direction)
-
-        # ── Exit decision (based on configured exit_mode) ───────────────────
-        # Use shared counter logic for unification.
-        has_arrow = False
-        if exit_needs_counter_signal(self.cfg.exit_mode):
-            longs, shorts = entry_transitions(r)
-            has_arrow = bool(shorts[i]) if pos.direction == "long" else bool(longs[i])
-        should_exit = should_exit_on_reds(red_count, self.cfg.exit_mode, has_arrow)
-
-        if should_exit:
+        entry_i = next((j for j, bar in enumerate(candles)
+                        if int(bar.timestamp_ms) == pos.entry_ms), None)
+        if entry_i is None:
+            # Entry aged out of lookback: use the already-persisted stop; never loosen.
+            breached = self.cfg.price_stop_exit and (
+                float(l[i]) <= pos.stop if pos.direction == "long" else float(h[i]) >= pos.stop)
+            if breached:
+                self._positions.pop(underlying, None)
+                return ManageResult(underlying, pos.stop, exit=True, reason="raw price stop",
+                                    red_count=red_count, green_lines=green_count)
+            entry_i = i
+        longs, shorts = entry_transitions(r)
+        exit_i, reason = resolve_exit(r, pos.direction, entry_i, i, self.cfg, longs, shorts)
+        if exit_i is not None:
             self._positions.pop(underlying, None)
-            reason = get_exit_reason(red_count, self.cfg.exit_mode)
             return ManageResult(underlying, pos.stop, exit=True, reason=reason,
                                 red_count=red_count, green_lines=green_count)
-
+        level = trail_level(r, pos.direction, entry_i, i, self.cfg)
+        if level > 0:
+            pos.stop = ratchet_trail(pos.stop, level, pos.direction)
         return ManageResult(underlying, pos.stop, exit=False,
                             red_count=red_count, green_lines=green_count)
 

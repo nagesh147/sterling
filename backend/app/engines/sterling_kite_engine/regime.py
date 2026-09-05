@@ -29,10 +29,9 @@ class RegimeSeries:
     l_mid: NDArray[np.float64]
     l_slow: NDArray[np.float64]
     warmup: int
-    # The high/low series the SuperTrend lines were actually computed on. Under
-    # ``candle_basis="heikin_ashi"`` (the live default) the lines live in HA space, so a
-    # raw candle low is NOT comparable to l_fast — anything asking "did price trade
-    # through the trail?" must use these, or it compares two different price series.
+    # Basis prices drive indicators; only raw prices prove executable stop touches.
+    raw_high: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    raw_low: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
     basis_high: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
     basis_low: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
     basis_close: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
@@ -92,10 +91,8 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
     c = np.asarray(closes, dtype=float)
 
     # Zerodha applies indicators to the candle series currently displayed. The
-    # production scanner defaults to regular OHLC so the three visible green
-    # lines and confirmation arrow correspond to the exact same input bars. HA is
-    # retained as an explicit research/backtest mode instead of being silently
-    # forced for every live scan.
+    # production scanner defaults to Heikin-Ashi. Raw OHLC remains distinct for
+    # executable stop touches; synthetic HA extrema never prove a market fill.
     if cfg.candle_basis == "heikin_ashi":
         _, basis_h, basis_l, basis_c = compute_heikin_ashi(o, h, l, c)
     else:
@@ -118,6 +115,8 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
         t_fast=t_fast, t_mid=t_mid, t_slow=t_slow,
         l_fast=l_fast, l_mid=l_mid, l_slow=l_slow,
         warmup=cfg.warmup,
+        raw_high=np.asarray(highs, dtype=float),
+        raw_low=np.asarray(lows, dtype=float),
         basis_high=np.asarray(basis_h, dtype=float),
         basis_low=np.asarray(basis_l, dtype=float),
         basis_close=np.asarray(basis_c, dtype=float),

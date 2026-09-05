@@ -38,6 +38,7 @@ SCAN_INTERVAL_S = 300  # background auto-scan cadence (5 min; 1H bars move slowl
 
 _auto_running = False
 _first_scan_done = False
+_entry_locks: dict[str, asyncio.Lock] = {}
 
 
 def is_auto_running() -> bool:
@@ -145,8 +146,8 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
                     f" — the whole tracked position ({held.qty} qty) was closed, not the "
                     f"{quantity} requested")
             return {"status": "ok", "order_id": held.order_id or "",
-                    "message": f"Position closed at market (manual exit){note}",
-                    "protected": False, "protection": "position closed"}
+                    "message": "Exit submitted; awaiting broker fill confirmation",
+                    "protected": False, "protection": "exit pending broker confirmation"}
 
     cfg = state.get_config(uid)
     plan = None
@@ -495,6 +496,18 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
         delta=delta, strike=float(pick.strike), expiry=str(pick.expiry))
 
 
+def entry_data_block_reason(row, *, exchange: str, buffer_minutes: int) -> str:
+    reason = market_hours.entry_block_reason(
+        exchange=exchange, cash_signal=row.source != "derivatives", buffer_minutes=buffer_minutes)
+    if reason:
+        return reason
+    signal_at = datetime.fromtimestamp(row.timestamp_ms / 1000, _IST)
+    now = datetime.now(_IST)
+    if signal_at.date() != now.date() or not (0 <= (now - signal_at).total_seconds() - 3600 <= 600):
+        return "stale_or_unclosed_signal"
+    return ""
+
+
 def _make_place_cb(client, uid: str):
     """Gated auto-exec: risk-sized option BUY (nearest-spot leg) under the same
     live-safety + idempotency checks as manual Kite orders, with a broker-side
@@ -508,6 +521,10 @@ def _make_place_cb(client, uid: str):
         if not args or not args["option_symbol"] or args["size"] <= 0:
             return
         cfg = state.get_config(uid)
+        if any(p.exit_order_id or p.pnl_reconciliation_required for p in positions._load(uid).values()
+               if p.status in (positions.OPEN, positions.PENDING) or p.pnl_reconciliation_required):
+            state.log(uid, "order_blocked", "unreconciled_exit_or_pnl")
+            return
 
         # ── Sterling Value-Flow Navigator gate (additive; a pass-through
         # unless the user explicitly enabled Navigator in `gate` mode).
@@ -559,15 +576,12 @@ def _make_place_cb(client, uid: str):
                       f"underlying (both-mode cross guard)")
             return
 
-        # ── session-time gate: no new entries just before the close (opt-in) ────
+        # Rechecked immediately before submission: scans cross session boundaries.
         blk = int(getattr(cfg, "block_entry_minutes_before_close", 0) or 0)
-        if blk > 0:
-            mtc = market_hours.minutes_to_close()
-            if mtc is not None and mtc < blk:
-                state.log(uid, "info",
-                          f"{row.underlying}: entry skipped — {mtc:.0f}m to close < {blk}m "
-                          f"(overnight-gap guard)")
-                return
+        session_reason = entry_data_block_reason(row, exchange=row.exchange, buffer_minutes=blk)
+        if session_reason:
+            state.log(uid, "order_blocked", f"{row.underlying}: {session_reason}")
+            return
 
         # ── INR daily-loss breaker (opt-in): halt new entries after a bad day ───
         if getattr(cfg, "max_daily_loss_pct", None) is not None:
@@ -779,7 +793,7 @@ def _make_place_cb(client, uid: str):
                 ok, why = _passes_liquidity((q or {}).get(qkey), cfg.max_spread_pct, cfg.min_oi)
             except Exception as _exc:  # noqa: BLE001
                 log.debug("suppressed: %s", _exc)
-                ok, why = True, ""   # fail-open on a quote error
+                ok, why = False, "liquidity_quote_unavailable"
             if not ok:
                 state.log(uid, "info", f"{row.underlying} {trade_symbol} entry skipped — {why}")
                 return
@@ -837,6 +851,27 @@ def _make_place_cb(client, uid: str):
             return  # this signal already executed
 
         # ── place order ───────────────────────────────────────────────────────
+        if use_futures:
+            try:
+                from math import isfinite
+                margin_rows = await client.order_margins([{
+                    "exchange": trade_exchange, "tradingsymbol": trade_symbol,
+                    "transaction_type": "BUY" if pos_direction == "long" else "SELL",
+                    "variety": "regular", "product": "NRML", "order_type": "MARKET",
+                    "quantity": qty, "price": 0, "trigger_price": 0,
+                }])
+                required_margin = float(margin_rows[0]["total"])
+                available = await available_fo_capital(client)
+                margin_ok = isfinite(required_margin) and required_margin > 0 and required_margin <= available
+            except Exception:
+                margin_ok = False
+            if not margin_ok:
+                state.log(uid, "order_blocked", f"{trade_symbol}: broker_margin_unavailable_or_insufficient")
+                return
+        session_reason = entry_data_block_reason(row, exchange=trade_exchange, buffer_minutes=blk)
+        if session_reason:
+            state.log(uid, "order_blocked", f"{trade_symbol}: {session_reason}")
+            return
         try:
             if use_futures:
                 side = "buy" if signal_dir == "long" else "sell"
@@ -895,7 +930,10 @@ def _make_place_cb(client, uid: str):
             state.log(uid, "order_failed",
                       f"⚠ {trade_symbol} is OPEN and UNPROTECTED — {armed.describe()}. "
                       f"Set a stop in Zerodha now.")
-    return _cb
+    async def _serialized(row, item):
+        async with _entry_locks.setdefault(uid, asyncio.Lock()):
+            await _cb(row, item)
+    return _serialized
 
 
 def _is_expiring(expiry: str, today, within_days: int = 1) -> bool:
@@ -933,12 +971,16 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
     """
     now_ms = int(datetime.now(_IST).timestamp() * 1000)
     for p in positions.open_positions(uid):
-        if p.status != positions.PENDING or not p.order_id:
+        exit_id = p.exit_order_id
+        order_id = exit_id if exit_id and exit_id not in {"submitting", "unknown"} else p.order_id
+        if exit_id in {"submitting", "unknown"}:
+            continue  # requires matching the uncertain request in broker order book
+        if not exit_id and (p.status != positions.PENDING or not order_id):
             continue
-        if now_ms - int(p.opened_ms or 0) < _PENDING_GRACE_MS:
+        if not exit_id and now_ms - int(p.opened_ms or 0) < _PENDING_GRACE_MS:
             continue
         try:
-            hist = await client.get_order_history(p.order_id)
+            hist = await client.get_order_history(order_id)
         except Exception as exc:  # noqa: BLE001
             log.debug("kite pending reconcile failed for %s/%s: %s", uid, p.symbol, exc)
             continue
@@ -947,7 +989,7 @@ async def _reconcile_pending_positions(client, uid: str) -> None:
             continue
         # The order book omits the symbol on some venues; on_order_update matches on it.
         last = {**last, "tradingsymbol": last.get("tradingsymbol") or p.symbol,
-                "order_id": last.get("order_id") or p.order_id}
+                "order_id": last.get("order_id") or order_id}
         state.log(uid, "info",
                   f"{p.symbol}: fill postback never arrived — reconciling from the order "
                   f"book ({str(last.get('status')).lower()})")
@@ -1032,8 +1074,8 @@ async def _reconcile_closed_positions(client, uid: str) -> None:
                 uid, p.symbol,
                 reason=(f"reconciled closed at broker @ ₹{exit_px:.2f}" if exit_px
                         else "reconciled closed at broker (exit price unknown)"))
-            if exit_px > 0:
-                monitor._record_realized(uid, p, exit_px)
+            p.pnl_reconciliation_required = True
+            positions._persist(uid)
             if p.guard_key:
                 state.clear_auto_open(uid, p.guard_key)
             if p.token:
@@ -1207,6 +1249,13 @@ def autoexec_preflight(uid: str) -> List[str]:
     now = int(time.time() * 1000)
     live = [p for p in positions.open_positions(uid)
             if p.status in (positions.PENDING, positions.OPEN)]
+
+    unresolved_pnl = [p.symbol for p in positions._load(uid).values() if p.pnl_reconciliation_required]
+    if unresolved_pnl:
+        reasons.append("Fill-level PnL reconciliation required: " + ", ".join(unresolved_pnl))
+    uncertain_exits = [p.symbol for p in live if p.exit_order_id]
+    if uncertain_exits:
+        reasons.append("Exit confirmation pending: " + ", ".join(uncertain_exits))
 
     unprotected = [p.symbol for p in live
                    if p.status == positions.OPEN and float(p.stop_premium or 0.0) <= 0]

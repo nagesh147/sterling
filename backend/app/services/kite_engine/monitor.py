@@ -124,17 +124,45 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         exit_side = "SELL" if p.direction == "long" else "BUY"  # side that CLOSES us
         is_entry = bool(oid) and oid == str(p.order_id)
 
-        # ── protective/GTT exit already filled at the broker → reconcile ──────
-        # Only when the position is still live (pending/open). If it is already CLOSED
-        # the monitor's OWN _exit_position placed and recorded this SELL — its COMPLETE
-        # postback must NOT re-enter here and book realized PnL a second time (which
-        # would trip the INR daily-loss breaker at ~half the configured limit).
-        if (status == _FILLED_STATUS and txn == exit_side and not is_entry
+        # Only matched strategy exits may consume quantity. Unattributed external
+        # sells require broker-position reconciliation; a symbol match is insufficient.
+        matched_exit = bool(oid) and (
+            oid == p.exit_order_id or (
+                p.exit_order_id in {"submitting", "unknown"}
+                and order.get("tag") == f"trailexit:{symbol}"))
+        if matched_exit and status in _DEAD_STATUSES and not order.get("filled_quantity"):
+            p.exit_order_id = ""
+            pos._persist(uid)
+            state.log(uid, "order_failed", f"{symbol}: exit {status}; position remains open")
+            return
+        if (matched_exit and txn == exit_side and not is_entry
                 and p.status in (pos.PENDING, pos.OPEN)):
-            avg = float(order.get("average_price") or 0.0)
-            pos.close(uid, symbol,
-                      reason=(f"broker stop/exit fill @ ₹{avg:.2f}" if avg else "broker stop/exit fill"))
-            _record_realized(uid, p, avg)
+            from math import isfinite
+            filled = int(order.get("filled_quantity") or 0)
+            avg = float(order.get("average_price") or 0)
+            prior = p.exit_fills.get(oid, 0)
+            delta = filled - prior
+            if status in _DEAD_STATUSES and delta <= 0:
+                p.exit_order_id = ""
+                pos._persist(uid)
+            if delta <= 0 or delta > p.qty or not isfinite(avg) or avg <= 0:
+                return
+            # Quantity evidence survives duplicate/out-of-order events and restarts.
+            # Partial-fill PnL is left unbooked until a transactional fill ledger exists.
+            p.exit_fills[oid] = filled
+            if delta < p.qty:
+                old_qty = p.qty
+                p.qty -= delta
+                p.pnl_reconciliation_required = True
+                if status in _DEAD_STATUSES or status == _FILLED_STATUS:
+                    p.exit_order_id = ""
+                pos._persist(uid)
+                await _resize_broker_stop(client, uid, p, old_qty)
+                state.log(uid, "info", f"{symbol}: partial exit, {p.qty} qty remains; PnL reconciliation required")
+                return
+            pos.close(uid, symbol, reason=f"broker exit fill @ ₹{avg:.2f}")
+            if prior == 0 and len(p.exit_fills) == 1:
+                _record_realized(uid, p, avg)
             # The exit may have come from somewhere other than the GTT — a hand-placed
             # SELL, another app, the Kite web order book. Anything still resting is now
             # an ORPHAN: a SELL with no position behind it, i.e. a naked short if it
@@ -168,7 +196,7 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         # A COMPLETE that is not the entry and carries no order_id lands here too. It must
         # not RESURRECT a position we already closed: mark_filled would flip it back to
         # OPEN at the exit price, and the next tick would sell it a second time.
-        if (status == _FILLED_STATUS and (is_entry or not oid)
+        if (status == _FILLED_STATUS and is_entry
                 and p.status in (pos.PENDING, pos.OPEN)):
             avg = float(order.get("average_price") or 0.0)
             old_qty = int(p.qty or 0)
@@ -177,7 +205,7 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             state.log(uid, "info",
                       f"Fill confirmed: {symbol} @ ₹{avg:.2f}{qty_note} (#{oid})")
             await _resize_broker_stop(client, uid, p, old_qty)
-        elif status in _DEAD_STATUSES and (is_entry or not oid):
+        elif status in _DEAD_STATUSES and is_entry:
             if filled > 0:
                 # PARTIALLY filled then cancelled: we DO hold something. Treating this
                 # as a rejection would leave a real position with no registry entry, no
@@ -316,7 +344,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # so a genuine retry can proceed; on success the position ends CLOSED and the status
     # check keeps any later exit out.
     key = (uid, p.symbol)
-    if key in _exiting or p.status not in (pos.OPEN, pos.PENDING):
+    if key in _exiting or p.exit_order_id or p.status not in (pos.OPEN, pos.PENDING):
         return False
     _exiting.add(key)
     is_futures = p.vehicle == "futures"
@@ -430,61 +458,36 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
                   f"prepared — not placing a second SELL")
         return False
 
+    # Persist the in-flight claim before the network await. A timeout is ambiguous:
+    # retain this claim and reconcile instead of retrying a possibly accepted SELL.
+    p.exit_order_id = "submitting"
+    pos._persist(uid)
     try:
-        if is_futures:
-            await client.place_order_future(
-                p.symbol, exit_side, p.qty, exchange=p.exchange,
-                tag=f"trailexit:{p.symbol}")
-        else:
-            await client.place_order_option(
-                p.symbol, "sell", p.qty, exchange=p.exchange,
-                tag=f"trailexit:{p.symbol}")
+        place = client.place_order_future if is_futures else client.place_order_option
+        result = await place(p.symbol, exit_side, p.qty, exchange=p.exchange,
+                             tag=f"trailexit:{p.symbol}")
     except Exception as exc:  # noqa: BLE001
+        p.exit_order_id = "unknown"
+        pos._persist(uid)
         _exiting.discard(key)
         if old_gtt and outcome == pstop.CANCELLED:
-            # We took the broker's stop off and then failed to sell. The position has no
-            # protection at all right now, and leaving the id set would make every later
-            # tick "defer to the broker" for a trigger we cancelled ourselves.
             pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
-            _stop_probe.pop((uid, p.symbol, old_gtt), None)
-            state.log(uid, "order_failed",
-                      f"⚠ {p.symbol}: broker stop #{old_gtt} was cancelled but the exit "
-                      f"{exit_side.upper()} FAILED — this position has NO stop right now")
-        state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
+        state.log(uid, "order_failed",
+                  f"{p.symbol}: exit outcome UNKNOWN; reconcile broker order book before retry: {exc}")
         return False
-    # Our own SELL just changed the portfolio, so the cached read is stale.
+    oid = str((result or {}).get("order_id") or "")
+    # A fill postback may have completed while place() was awaiting.
+    if p.status in (pos.OPEN, pos.PENDING):
+        p.exit_order_id = oid or "unknown"
+        pos._persist(uid)
+    _exiting.discard(key)
     forget_holdings(uid)
-    breach_dir = "≥" if p.direction == "short" else "≤"
-    close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
-    pos.close(uid, p.symbol, reason=close_reason)
-    _exiting.discard(key)  # closed now; status guard keeps later exits out
-    _record_realized(uid, p, ltp)
-    if old_gtt:
-        # We just sold. Any trigger still resting at Zerodha is now an ORPHAN — a SELL
-        # with nothing behind it, which opens a naked short if it fires. One retry, then
-        # tell the operator; this is the case the code cannot fix by itself.
-        if outcome != pstop.CANCELLED and await pstop.cancel_stop_result(
-                client, old_gtt) != pstop.CANCELLED:
-            state.log(uid, "order_failed",
-                      f"⚠ {p.symbol} is closed but its GTT #{old_gtt} could not be "
-                      f"cancelled — a resting SELL may still be armed at Zerodha with no "
-                      f"position behind it. Cancel it there now.")
-        # Never keep a stale trigger id: re-entering this contract later would try to
-        # cancel it and read the failure as "a rival stop may be live".
+    if old_gtt and outcome == pstop.CANCELLED:
         pos.update_stop(uid, p.symbol, p.stop_premium, gtt_id=0)
         _stop_probe.pop((uid, p.symbol, old_gtt), None)
-    if p.guard_key:
-        state.clear_auto_open(uid, p.guard_key)
-    state.log(uid, "order_placed",
-              f"{exit_side.upper()} {p.qty} {p.symbol} @ market — {close_reason}")
-    # Unsubscribe the token now that we no longer hold this position.
-    if p.token:
-        try:
-            from app.services.exchanges.kite import ticker_manager
-            await ticker_manager.unsubscribe(uid, [p.token])
-        except Exception as _exc:# noqa: BLE001
-            log.debug("suppressed: %s", _exc)
-    return True
+    state.log(uid, "order_placed" if oid else "order_failed",
+              f"{p.symbol}: exit {'submitted #' + oid if oid else 'outcome UNKNOWN'}; awaiting confirmed fills")
+    return bool(oid)
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:

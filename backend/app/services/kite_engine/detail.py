@@ -14,6 +14,7 @@ from app.engines.sterling_kite_engine.schemas import (
 )
 from app.services.kite_engine.greeks import black_scholes_greeks, implied_vol
 from app.services.kite_engine.scanner import scanner
+from app.services.kite_engine.market_hours import continuous_close
 
 log = get_logger(__name__)
 _IST = timezone(timedelta(hours=5, minutes=30))
@@ -23,7 +24,7 @@ _IST = timezone(timedelta(hours=5, minutes=30))
 _EXPIRY_CLOSE_IST = (15, 30)
 
 
-def intraday_dte_days(expiry: str, now: Optional[datetime] = None) -> float:
+def intraday_dte_days(expiry: str, now: Optional[datetime] = None, *, exchange: str = "NFO") -> float:
     """Fractional days left until the 15:30 IST expiry close.
 
     Whole-day arithmetic returns 0 for the entire expiry session, which drives
@@ -43,7 +44,7 @@ def intraday_dte_days(expiry: str, now: Optional[datetime] = None) -> float:
         day = datetime.strptime(str(expiry)[:10], "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return 0.0
-    close = datetime(day.year, day.month, day.day, *_EXPIRY_CLOSE_IST, tzinfo=_IST)
+    close = datetime.combine(day, continuous_close(day, exchange), tzinfo=_IST)
     return max(0.0, (close - now).total_seconds() / 86_400.0)
 
 
@@ -157,7 +158,7 @@ async def build_detail(
         ask = sell[0].price if sell else 0.0
         ltp = float(q.get("last_price") or 0.0)
         iv = float(q.get("implied_volatility") or 0.0) / 100.0
-        dte_exact = intraday_dte_days(leg.expiry, now=now_ist)
+        dte_exact = intraday_dte_days(leg.expiry, now=now_ist, exchange=row.exchange)
         dte = int(dte_exact)  # whole days, for display only
         # Live IV is absent after hours — back it out of the last traded premium so
         # greeks stay meaningful (the user often looks when the market is closed).

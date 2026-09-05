@@ -2503,3 +2503,10 @@ class TestAFillLandingMidExitIsNotBookedTwice:
         assert client.sells == [], "second SELL placed after the position had closed"
         assert len(booked) == 1, f"realized PnL booked {len(booked)} times, expected once"
         assert pos.get("mid1", p.symbol).status == pos.CLOSED
+
+
+@pytest.fixture(autouse=True)
+def _valid_entry_data_for_execution_plumbing(monkeypatch):
+    """Historical row fixtures isolate execution; session gates tested separately."""
+    from app.services.kite_engine import service as execution
+    monkeypatch.setattr(execution, "entry_data_block_reason", lambda *a, **kw: "")
