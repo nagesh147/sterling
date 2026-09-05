@@ -50,7 +50,12 @@ def _build_raw(exchange: str, api_key: str = "", api_secret: str = "") -> BaseEx
     return DeribitAdapter(base_url=settings.deribit_base_url)
 
 
-async def init(exchange: str = "delta_india", api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
+async def init(
+    exchange: str = "delta_india",
+    api_key: str = "",
+    api_secret: str = "",
+    start_ws: bool = True,
+) -> BaseExchangeAdapter:
     """Build adapter stack and set as active. Called at startup."""
     global _adapter, _data_source, _raw_adapter
     from app.services.cache import CachingAdapter
@@ -61,16 +66,37 @@ async def init(exchange: str = "delta_india", api_key: str = "", api_secret: str
     _raw_adapter = raw
 
     # Start WebSocket live price feed for delta_india (eliminates REST ticker polling)
-    if _data_source == "delta_india" and hasattr(raw, "start_ws"):
+    if start_ws and _data_source == "delta_india" and hasattr(raw, "start_ws"):
         from app.services.exchanges.instrument_registry import list_instruments
         symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
         await raw.start_ws(symbols)
 
-    log.info("Market data adapter initialized: %s", _data_source)
+    log.info("Market data adapter initialized: %s (ws=%s)", _data_source, "active" if start_ws else "paused")
     return _adapter
 
 
-async def switch(exchange: str, api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
+async def start_feed() -> None:
+    """Start WebSocket price feed if active raw adapter supports it."""
+    if _data_source == "delta_india" and hasattr(_raw_adapter, "start_ws"):
+        from app.services.exchanges.instrument_registry import list_instruments
+        symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
+        await _raw_adapter.start_ws(symbols)
+        log.info("Market data WS feed started for %s", _data_source)
+
+
+async def stop_feed() -> None:
+    """Stop WebSocket price feed if active raw adapter supports it."""
+    if hasattr(_raw_adapter, "stop_ws"):
+        await _raw_adapter.stop_ws()
+        log.info("Market data WS feed stopped for %s", _data_source)
+
+
+async def switch(
+    exchange: str,
+    api_key: str = "",
+    api_secret: str = "",
+    start_ws: bool = True,
+) -> BaseExchangeAdapter:
     """Hot-swap the market data adapter at runtime. Closes the old one first."""
     global _adapter
     old = _adapter
@@ -79,7 +105,7 @@ async def switch(exchange: str, api_key: str = "", api_secret: str = "") -> Base
             await old.close()
         except Exception as exc:
             log.warning("Error closing old adapter during switch: %s", exc)
-    new = await init(exchange, api_key, api_secret)
+    new = await init(exchange, api_key, api_secret, start_ws=start_ws)
     log.info("Market data switched to: %s", exchange)
     return new
 

@@ -1321,6 +1321,90 @@ async def _background_kite_alerts(interval: int = 60) -> None:
         await asyncio.sleep(interval)
 
 
+async def start_crypto_services(app: FastAPI) -> None:
+    """Start all Delta Exchange crypto sockets, feeds, and background scanners."""
+    tasks = getattr(app.state, "crypto_tasks", None)
+    if tasks is None:
+        tasks = {}
+        app.state.crypto_tasks = tasks
+
+    # 1. Start WS price feed
+    await adapter_manager.start_feed()
+
+    # 2. Start Delta IV socket, recorder, and L2 socket
+    try:
+        from app.services.delta_iv_socket import iv_manager
+        from app.services.delta_iv_recorder import start_recorder
+        from app.services.delta_l2_socket import l2_manager
+        iv_manager.start()
+        start_recorder()
+        l2_manager.start()
+        log.info("Delta real-time IV stream, recorder, and L2 socket started")
+    except Exception as exc:
+        log.warning("Delta IV/L2 socket start error: %s", exc)
+
+    # 3. Arbitrator fake log worker
+    from app.api.v1.endpoints.stream import _arbitrator_log_worker
+
+    # 4. Background workers
+    try:
+        signal_interval = int(os.environ.get("STERLING_SIGNAL_INTERVAL_S", "5"))
+    except (TypeError, ValueError):
+        signal_interval = 5
+    signal_interval = max(1, min(60, signal_interval))
+
+    workers = {
+        "alert_checker": lambda: _background_alert_checker(app, interval=30),
+        "signal_refresher": lambda: _background_signal_refresher(app, interval=signal_interval),
+        "position_monitor": lambda: _background_position_monitor(app),
+        "retry_worker": lambda: _background_retry_worker(app, base_interval=60),
+        "ohlcv_updater": lambda: _background_ohlcv_updater(interval_hours=1),
+        "ohlcv_1m_updater": lambda: _background_1m_updater(interval_min=5),
+        "ofi_broadcaster": lambda: _broadcast_ofi(app),
+        "arbitrator_log": lambda: _arbitrator_log_worker(),
+        "vcp_feed": lambda: _background_vcp_live_feed(app),
+        "derivatives_scanner": lambda: _background_derivatives_scanner(app, interval=30),
+        "scalping_alerts": lambda: _background_scalping_alerts(app, interval=45),
+    }
+    for name, factory in workers.items():
+        existing = tasks.get(name)
+        if not existing or existing.done():
+            tasks[name] = asyncio.create_task(factory())
+
+    log.info("Crypto engines started: Delta WS feed, scanners, and background workers active (%d tasks)", len(tasks))
+
+
+async def stop_crypto_services(app: FastAPI) -> None:
+    """Stop all Delta Exchange crypto sockets, feeds, and background scanners."""
+    # 1. Stop WS price feed
+    await adapter_manager.stop_feed()
+
+    # 2. Stop Delta IV socket, recorder, and L2 socket
+    try:
+        from app.services.delta_iv_socket import iv_manager
+        from app.services.delta_iv_recorder import stop_recorder
+        from app.services.delta_l2_socket import l2_manager
+        iv_manager.stop()
+        stop_recorder()
+        l2_manager.stop()
+        log.info("Delta real-time IV stream, recorder, and L2 socket stopped")
+    except Exception as exc:
+        log.warning("Delta IV/L2 socket stop error: %s", exc)
+
+    # 3. Cancel background tasks
+    tasks = getattr(app.state, "crypto_tasks", {})
+    for name, task in list(tasks.items()):
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception, BaseException):
+                pass
+    tasks.clear()
+
+    log.info("Crypto engines stopped: Delta WS disconnected, all crypto tasks terminated")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -1486,7 +1570,9 @@ async def lifespan(app: FastAPI):
         active_cfg = exchange_account_store.get_active()
         api_key = active_cfg.api_key if active_cfg and active_cfg.name == exchange else ""
         api_secret = active_cfg.api_secret if active_cfg and active_cfg.name == exchange else ""
-        ad = await adapter_manager.init(exchange, api_key, api_secret)
+        ad = await adapter_manager.init(
+            exchange, api_key, api_secret, start_ws=bool(app.state.scalp_mode)
+        )
         app.state.adapter = ad
     else:
         # Tests inject adapter — sync adapter_manager so it matches
@@ -1495,45 +1581,34 @@ async def lifespan(app: FastAPI):
 
     from app.services.exchanges import instrument_registry as registry
     ad = adapter_manager.get_adapter()
-    reachable = await ad.ping()
+    if app.state.scalp_mode:
+        reachable = await ad.ping()
+        reach_str = "OK" if reachable else "UNREACHABLE"
+    else:
+        reachable = None
+        reach_str = "PAUSED (scalp_mode OFF)"
     active_ex = exchange_account_store.get_active()
     log.info(
         "Sterling v0.4 | env=%s | data=%s [%s] | account=%s | instruments=%d | positions=%d",
         settings.environment,
         adapter_manager.get_data_source(),
-        "OK" if reachable else "UNREACHABLE",
+        reach_str,
         active_ex.display_name if active_ex else "none",
         len(registry.list_instruments()),
         len(paper_store.list_positions()),
     )
-    if not reachable:
+    if reachable is False:
         log.warning("Market data exchange unreachable at startup — will retry on request")
 
     import asyncio
-    bg_task = asyncio.create_task(_background_alert_checker(app, interval=30))
-    log.info("Background alert checker started (every 30s)")
-    # Phase: faster signal cadence — default 5 s. Env-tunable via
-    # STERLING_SIGNAL_INTERVAL_S so deployments with tighter exchange rate
-    # limits can dial it back.
-    try:
-        signal_interval = int(os.environ.get("STERLING_SIGNAL_INTERVAL_S", "5"))
-    except (TypeError, ValueError):
-        signal_interval = 5
-    signal_interval = max(1, min(60, signal_interval))
-    signal_refresh_task = asyncio.create_task(
-        _background_signal_refresher(app, interval=signal_interval)
-    )
-    log.info("Background signal refresher started (every %ss)", signal_interval)
-    position_monitor_task = asyncio.create_task(_background_position_monitor(app))
-    log.info("Background position monitor started (interval=mode.poll_interval_s)")
-    retry_worker_task = asyncio.create_task(_background_retry_worker(app, base_interval=60))
-    log.info("Background retry worker started (every 60s + exponential backoff)")
-    ohlcv_task = asyncio.create_task(_background_ohlcv_updater(interval_hours=1))
-    log.info("OHLCV background updater started (hourly)")
-    ohlcv_1m_task = asyncio.create_task(_background_1m_updater(interval_min=5))
-    log.info("OHLCV 1m updater started (every 5 min, core symbols)")
-    ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
-    log.info("OFI Broadcaster started (every 0.5s)")
+    app.state.crypto_tasks = {}
+    app.state.start_crypto_services = start_crypto_services
+    app.state.stop_crypto_services = stop_crypto_services
+
+    if app.state.scalp_mode:
+        await start_crypto_services(app)
+    else:
+        log.info("scalp_mode OFF (Crypto disabled) — Delta WS feed, scanners, and crypto workers NOT started")
 
     # Kite tick stream: restart it if its task dies.
     #
@@ -1574,28 +1649,6 @@ async def lifespan(app: FastAPI):
     log.info("ATM PI auto-arm loop started (every 30s)")
     log.info("Adaptive Edge auto scan loop started (every 60s)")
 
-    # Arbitrator fake log worker for UI parity — only runs when crypto is on
-    if app.state.scalp_mode:
-        from app.api.v1.endpoints.stream import _arbitrator_log_worker
-        arbitrator_log_task = asyncio.create_task(_arbitrator_log_worker())
-        log.info("Arbitrator log worker started")
-    else:
-        arbitrator_log_task = None
-        log.info("scalp_mode OFF — Arbitrator log worker NOT started")
-
-
-    # ── VCP Live Feed ─────────────────────────────────────────────────────────
-    # Start the Hybrid VCP-Momentum live execution feed when algo_mode is on.
-    # The feed connects to the exchange WebSocket, reconstructs signal bars,
-    # and drives VCPExecutor.on_bar() → OrderRouter for each completed bar.
-    vcp_feed_task = asyncio.create_task(_background_vcp_live_feed(app))
-    log.info("VCP Live Feed task started")
-
-    # Derivatives scanner — populates /derivatives/scan cache and auto-fires
-    # candidates when `algo_mode` + per-strategy `auto_execute_<type>` are on.
-    deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
-    log.info("Derivatives scanner started (every 30s)")
-
     # Kite Sterling Kite Engine — background auto-scan of connected Kite
     # accounts (advisory by default; gated auto-exec when the user enables it).
     # First reconcile each account's auto-open guard against the broker's real
@@ -1628,28 +1681,11 @@ async def lifespan(app: FastAPI):
     navigator_task = asyncio.create_task(_navigator_auto_scan())
     log.info("Value-Flow Navigator auto-scan loop started (every 5 min)")
 
-    # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
-    # Only starts when scalp_mode (crypto kill switch) is enabled.
-    if app.state.scalp_mode:
-        try:
-            from app.services.delta_iv_socket import iv_manager
-            from app.services.delta_iv_recorder import start_recorder
-            from app.services.delta_l2_socket import l2_manager
-            iv_manager.start()
-            start_recorder()
-            l2_manager.start()
-            log.info("Delta real-time IV stream, recorder, and L2 socket started")
-        except Exception:
-            log.warning("Delta IV stream start failed (ws may be unreachable) — retry on next restart")
-    else:
-        log.info("scalp_mode OFF — Delta IV stream, recorder, and L2 socket NOT started")
-
-    # ── Telegram bot + signal-detection alerts ────────────────────────────────
+    # ── Telegram bot + Kite signal alerts ────────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
-    tg_alert_task = asyncio.create_task(_background_scalping_alerts(app, interval=45))
     tg_kite_alert_task = asyncio.create_task(_background_kite_alerts(interval=60))
-    log.info("Telegram bot + signal alerts started (crypto + kite)")
+    log.info("Telegram bot + Kite signal alerts started")
 
     # ── Live event bus + agents (Phase 3) — only when enable_event_bus is set ──
     from app.core.config import settings as _settings
@@ -1685,31 +1721,15 @@ async def lifespan(app: FastAPI):
     except Exception as _exc:
         log.debug("suppressed: %s", _exc)
 
-    for _t in (tg_bot_task, tg_alert_task, tg_kite_alert_task):
+    await stop_crypto_services(app)
+
+    for _t in (tg_bot_task, tg_kite_alert_task):
         _t.cancel()
         try:
             await _t
         except (Exception, BaseException):
             pass
 
-    if arbitrator_log_task is not None:
-        arbitrator_log_task.cancel()
-        try:
-            await arbitrator_log_task
-        except (Exception, BaseException):
-            pass
-
-    ofi_broadcast_task.cancel()
-    try:
-        await ofi_broadcast_task
-    except (Exception, BaseException):
-        pass
-
-    deriv_scan_task.cancel()
-    try:
-        await deriv_scan_task
-    except (Exception, BaseException):
-        pass
     kite_engine_task.cancel()
     try:
         await kite_engine_task
@@ -1725,11 +1745,6 @@ async def lifespan(app: FastAPI):
         await navigator_task
     except (Exception, BaseException):
         pass
-    vcp_feed_task.cancel()
-    try:
-        await vcp_feed_task
-    except (Exception, BaseException):
-        pass
     atm_auto_arm_task.cancel()
     try:
         await atm_auto_arm_task
@@ -1740,52 +1755,16 @@ async def lifespan(app: FastAPI):
         await gamma_move_task
     except (Exception, BaseException):
         pass
-
+    adaptive_edge_task.cancel()
+    try:
+        await adaptive_edge_task
+    except (Exception, BaseException):
+        pass
     ticker_watchdog_task.cancel()
     try:
         await ticker_watchdog_task
     except asyncio.CancelledError:
         pass
-
-    ohlcv_task.cancel()
-    try:
-        await ohlcv_task
-    except (Exception, BaseException):
-        pass
-    ohlcv_1m_task.cancel()
-    try:
-        await ohlcv_1m_task
-    except (Exception, BaseException):
-        pass
-    bg_task.cancel()
-    try:
-        await bg_task
-    except (Exception, BaseException):
-        pass
-    signal_refresh_task.cancel()
-    try:
-        await signal_refresh_task
-    except (Exception, BaseException):
-        pass
-    position_monitor_task.cancel()
-    try:
-        await position_monitor_task
-    except (Exception, BaseException):
-        pass
-    retry_worker_task.cancel()
-    try:
-        await retry_worker_task
-    except (Exception, BaseException):
-        pass
-    try:
-        from app.services.delta_iv_recorder import stop_recorder
-        from app.services.delta_iv_socket import iv_manager
-        from app.services.delta_l2_socket import l2_manager
-        stop_recorder()
-        iv_manager.stop()
-        l2_manager.stop()
-    except Exception as exc:
-        log.warning("Error stopping IV stream/recorder/L2: %s", exc)
 
     await adapter_manager.close_current()
     log.info("Sterling shutdown complete")

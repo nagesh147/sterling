@@ -403,18 +403,29 @@ async def orphan_positions(uid: str, cfg: GammaMoveConfig) -> list[dict]:
     except Exception as exc:                                       # noqa: BLE001
         log.debug("gamma_move position fetch failed for %s: %s", uid, exc)
         return []
-    rows = (book or {}).get("net") or []
+    raw_rows = book.get("net") or [] if isinstance(book, dict) else (book or [])
     known = {sym for sym, p in positions_store.load(uid).items() if p.is_open}
     out = []
-    for r in rows:
-        sym = str(r.get("tradingsymbol") or "")
-        qty = int(r.get("quantity") or 0)
-        if qty <= 0 or str(r.get("exchange")) not in ("NFO", "BFO") or sym in known:
+    for r in raw_rows:
+        if isinstance(r, dict):
+            sym = str(r.get("tradingsymbol") or r.get("symbol") or "")
+            qty = int(r.get("quantity") or r.get("size") or 0)
+            exchange = str(r.get("exchange") or "")
+            entry_price = float(r.get("average_price") or r.get("entry_price") or 0.0)
+        else:
+            sym = str(getattr(r, "symbol", "") or "")
+            qty = int(getattr(r, "size", 0) or 0)
+            underlying = str(getattr(r, "underlying", "") or "")
+            exchange = underlying.split(":")[0] if ":" in underlying else ""
+            entry_price = float(getattr(r, "entry_price", 0.0) or 0.0)
+        if not exchange and (sym.endswith("CE") or sym.endswith("PE")):
+            exchange = "NFO"
+        if qty <= 0 or exchange not in ("NFO", "BFO") or sym in known:
             continue
         if not (sym.endswith("CE") or sym.endswith("PE")):
             continue
         out.append({"symbol": sym, "quantity": qty,
-                    "entry_price": q2(float(r.get("average_price") or 0))})
+                    "entry_price": q2(entry_price)})
     return out
 
 
@@ -439,8 +450,17 @@ async def reconcile(uid: str) -> dict:
     try:
         client = await _client(uid)
         book = await client.get_positions()
-        live = {str(r.get("tradingsymbol")): int(r.get("quantity") or 0)
-                for r in ((book or {}).get("net") or [])}
+        raw_rows = book.get("net") or [] if isinstance(book, dict) else (book or [])
+        live = {}
+        for r in raw_rows:
+            if isinstance(r, dict):
+                sym = str(r.get("tradingsymbol") or r.get("symbol") or "")
+                qty = int(r.get("quantity") or r.get("size") or 0)
+            else:
+                sym = str(getattr(r, "symbol", "") or "")
+                qty = int(getattr(r, "size", 0) or 0)
+            if sym:
+                live[sym] = qty
         for sym in list(session.strategy.state.positions):
             if live.get(sym, 0) <= 0 and not is_paper(uid):
                 vanished.append(sym)

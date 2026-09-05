@@ -1740,7 +1740,7 @@ function InlineDropdown<T extends string>({
   label, scope = 'local',
 }: {
   value: T;
-  options: { value: T; label: string; hint?: string }[];
+  options: { value: T; label: string; hint?: string; disabled?: boolean }[];
   onChange: (next: T) => void;
   tone: string;
   title: string;
@@ -1816,11 +1816,14 @@ function InlineDropdown<T extends string>({
             const selected = option.value === value;
             return (
               <button key={option.value} type="button" role="option" aria-selected={selected}
-                onClick={() => { onChange(option.value); setOpen(false); }}
+                disabled={option.disabled}
+                onClick={() => { if (option.disabled) return; onChange(option.value); setOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', textAlign: 'left',
                   border: 'none', borderRadius: 5, background: selected ? tint(tone, 8) : 'transparent',
-                  color: k.text, padding: '7px 8px', fontFamily: 'inherit', cursor: 'pointer',
+                  color: option.disabled ? k.dim : k.text, padding: '7px 8px', fontFamily: 'inherit',
+                  cursor: option.disabled ? 'not-allowed' : 'pointer',
+                  opacity: option.disabled ? 0.5 : 1,
                 }}>
                 <span style={{ width: 12, flexShrink: 0, color: tone, fontSize: 11, fontWeight: 700 }}>{selected ? '✓' : ''}</span>
                 <span style={{ minWidth: 0 }}>
@@ -1944,9 +1947,39 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // press cannot disagree. Left in place it would have kept naming strategies the
   // operator had excluded, which is worse than saying nothing.
   const changeSignalMode = (next: SignalMode) => {
+    if ((next === 'navigator' || next === 'common') && !navigatorEnabled) return;
     setSignalMode(next);
     localStorage.setItem('kite_st_signal_mode', next);
   };
+
+  React.useEffect(() => {
+    if (!navigatorEnabled && signalMode !== 'supertrend') {
+      changeSignalMode('supertrend');
+    }
+  }, [navigatorEnabled, signalMode]);
+
+  const signalModeOptions = React.useMemo(() => [
+    { value: 'combined' as SignalMode, label: 'Everything', hint: 'Every setup either engine found. (Default)' },
+    {
+      value: 'supertrend' as SignalMode,
+      label: 'SuperTrend only',
+      hint: 'Only SuperTrend setups. Navigator is ignored, even where it has an opinion.',
+    },
+    {
+      value: 'navigator' as SignalMode,
+      label: 'Navigator only',
+      hint: navigatorEnabled ? 'Only Navigator setups. Works even while SuperTrend is switched off.' : 'Navigator strategy is turned off in settings.',
+      disabled: !navigatorEnabled,
+    },
+    {
+      value: 'common' as SignalMode,
+      label: 'Where both agree',
+      hint: !navigatorEnabled
+        ? 'Requires Navigator strategy to be enabled in settings.'
+        : 'Only setups SuperTrend found AND Navigator backs. The shortest, highest-conviction list.',
+      disabled: !navigatorEnabled,
+    },
+  ], [navigatorEnabled]);
   const legSort = s.legSort;
   const setLegSort = s.setLegSort;
   const handleLegSort = (key: string) => {
@@ -2315,18 +2348,20 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                           needsRescan('exit_mode'),
                         )}
                       />
-                    <ScopeDivider />
+                    {navigatorEnabled && <ScopeDivider />}
                   </>
                 )}
+                {navigatorEnabled && (
                   <InlineDropdown
-                        label="VIEW"
-                        scope="local"
+                    label="VIEW"
+                    scope="local"
                     value={signalMode}
-                    options={SIGNAL_MODE_OPTS}
+                    options={signalModeOptions}
                     tone={k.purple}
                     title="VIEW — A local lens. It never changes what is scanned or how a trade exits — the two engines scan independently and this picks whose rows you are reading."
                     onChange={changeSignalMode}
                   />
+                )}
     </>
   );
 
