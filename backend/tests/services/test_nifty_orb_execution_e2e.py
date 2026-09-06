@@ -327,11 +327,13 @@ async def test_an_unprotected_position_that_cannot_be_closed_trips_the_kill_swit
 # ---------------------------------------------------------------- policy gates
 
 @pytest.mark.asyncio
-async def test_auto_execute_off_is_advisory_only(harness):
+async def test_auto_execute_off_is_manual_signals_only(harness):
     harness["patch"](harness["state"], "get_config", lambda uid: FakeUniversal(auto_execute=False))
     client = FakeClient()
     out = await _run(harness, client)
-    assert out == {"status": "advisory", "executed": []}
+    assert out["status"] == "manual"
+    assert out["mode"] == "signals_only"
+    assert out["executed"] == []
     assert client.placed == []
 
 
