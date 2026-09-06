@@ -5,7 +5,7 @@
   "supersedes_status_in": "docs/audits/2026-09-06-kite-validation.json",
   "head_at_report": "01f1621a260971800890025a1d9fb8301859b197",
   "working_tree_state": "uncommitted; the files under code_sha256 are the tested revision",
-  "scope": "P0 gates 1-4 as far as this host allows: the signed execution ledger and its costs, cross-process execution ownership, GTT child attribution, and an unreadable position registry that can no longer look empty. P0 gate 5 is blocked on hardware.",
+  "scope": "P0 gates 1-4 as far as this host allows, plus a decisive read on gate 5 with the lake drive attached: the signed execution ledger and its costs, cross-process execution ownership, GTT child attribution, an unreadable position registry that can no longer look empty, and a derivative-coverage audit of the lake.",
   "unique_backend_tests_passed": 3784,
   "backend_tests_skipped": 6,
   "test_count_note": "The prior manifest recorded 4755 passed / 14 skipped at HEAD d721b7454. The lower count here is the crypto product extraction merged as 01f1621a2 (PR #165) deleting those tests, not tests lost by this change. 67 tests were added across both commits.",
@@ -62,6 +62,14 @@
       "cwd": "/home/nageshmadaram/Sterling/backend",
       "exit_code": 0,
       "summary": "3787 passed, 3 skipped in 50.50s"
+    },
+    {
+      "name": "derivative_coverage_audit",
+      "command": "PYTHONPATH=. .venv/bin/python study/kite_derivative_coverage_audit.py --out ../docs/audits/2026-09-06-kite-derivative-coverage.json",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "NO_EXECUTABLE_CONTRACT_HISTORY \u2014 231,143,717 bars, 0 of them derivative",
+      "proves": "The lake holds no option or futures price history, so no executable-contract validation is possible from it."
     }
   ],
   "failed_test_ids": [],
@@ -71,7 +79,7 @@
     "deployed": false,
     "strategy_parameters_optimized": false,
     "synthetic_market_data_used_as_evidence": false,
-    "real_data_reaudited": false
+    "real_data_reaudited": true
   },
   "release_gates": [
     {
@@ -152,8 +160,13 @@
     {
       "id": "P0-5",
       "title": "Real executable-contract dataset and chronological validation",
-      "status": "BLOCKED",
-      "evidence": "The registered lake drive is not attached to this host (no matching mount or block device), so no option/futures replay was possible and no real-data audit was rerun."
+      "status": "NOT_MET",
+      "evidence": "The drive is attached and its data is intact \u2014 the CAS audit reproduced byte-identically, 0 differing fields and 9/9 hashes matching. It holds 231,143,717 minute bars across 12,246 symbols, and NOT ONE of them is an option or a future. The engine trades NFO/BFO options and futures, so cash and index history cannot answer this gate however much of it there is.",
+      "blocked_by": [
+        "Option history cannot be back-filled through the supported API. Kite's historical endpoint is addressed by instrument_token, and the instrument master lists LIVE contracts only \u2014 the lake's 2026-08-14 snapshot starts at expiry 2026-08-18, so every contract that had already expired is absent and its token is no longer discoverable. kitelake/universe.py records this same conclusion in OUT_OF_SCOPE['fno-opt']. Options must be accumulated forward or bought from a vendor.",
+        "Futures history IS obtainable: `kitelake plan NFO:NIFTY26SEPFUT,...` resolves and costs 12 requests for three contracts, and download.py already takes `continuous`. It is excluded by OUT_OF_SCOPE['fno-fut'] rather than by any technical barrier. That would cover the `futures` vehicle only; the engine's configured vehicle is `otm_options`.",
+        "Any such download writes to the evidence drive and needs a live Kite session, so it was not started without the owner asking for it."
+      ]
     },
     {
       "id": "P1-1",
@@ -197,15 +210,41 @@
     "backend/app/services/kite_engine/positions.py": "267d773b07e86c3277e173c9de9a19abd49a2176c099eac946e1480af0ac639a",
     "backend/app/services/kite_engine/service.py": "fad52a67b31c84bb0e7623e9254417524c9f26fc0d0bdb6ae28603c3fedc4a56",
     "backend/app/services/kite_engine/state.py": "f858d5c1502deb91c1f9ab77c0a1291832da043b7d69a1c029891a60197c4bd1",
+    "backend/study/kite_derivative_coverage_audit.py": "980867d7ea352ac3ecb0008c2e949dcd9e70ff880da7117ec2b377d54e02d0c4",
     "backend/tests/engines/sterling_kite_engine/test_execution_lease.py": "f16e1c7582253f84b8c8aa3b35c306f4351fe1b2fca2c75c3b8ed6822baff70d",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger.py": "ad0705838f609a59de7506069c5edbe6003586ffffbfc87de3d760ffaa63dfd1",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger_integration.py": "89130f3f8f9f3c9cc088406494550881824d3092d5086525910a9f018bb8a63e",
     "backend/tests/engines/sterling_kite_engine/test_gtt_child_attribution.py": "b0b4dc187dbcd3c8cb0b568e53393c719297770fb333fc5ff27b11d3cfe802d4"
   },
-  "backend_python_tree_sha256": "6e0a36feb44596a46f1081c816e7e898da937b9086c30c6c302a178461457fb1",
+  "backend_python_tree_sha256": "5584199336439a9a5a05e6ea9875f81ea3042321fcc8fbe58df02969b48ba52f",
   "artifact_sha256": {
-    "docs/audits/2026-09-06-kite-implementation-handoff.md": "9f0406daa3f2290c25cdc1c6f86d13b2c8fc5ddc8aeb6ae0ed52b029f1644886",
-    "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356",
-    "docs/audits/2026-09-06-kite-cas-realdata.json": "ffb8499d62acc2cc145ae298fb958821d501474c6c528447058d50fab8238757"
+    "docs/audits/2026-09-06-kite-cas-realdata.json": "ffb8499d62acc2cc145ae298fb958821d501474c6c528447058d50fab8238757",
+    "docs/audits/2026-09-06-kite-derivative-coverage.json": "4874b717221595774ae94c387945e8e038cc3bccdac0431491fbb61f66cf276d",
+    "docs/audits/2026-09-06-kite-implementation-handoff.md": "d5266099f4f556d01b7cb97c5a72053cb45dd7d66617c07efa1519061aaba6cb",
+    "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356"
+  },
+  "real_data": {
+    "lake_attached": true,
+    "mount": "/dev/sda1 (uuid 3f36ac07-fdbe-48c1-9514-ecf65c6619b0) at /run/media/nageshmadaram/3f36ac07-fdbe-48c1-9514-ecf65c6619b0, options ro,nosuid,nodev,relatime",
+    "mount_note": "udisks refuses the `norecovery` option the earlier audit used, so the mount is read-only without it. Provenance was checked instead of assumed: the CAS audit reproduced byte-identically.",
+    "cas_audit_rerun": {
+      "command": "PYTHONPATH=backend backend/.venv/bin/python study/kite_cas_realdata_audit.py",
+      "selected_total_bars": 136980,
+      "selected_post_cas_bars": 9855,
+      "observed_session_validation_passed": true,
+      "differing_fields_vs_committed_report": 0,
+      "sha256_fields_compared": 9,
+      "sha256_fields_mismatched": 0
+    },
+    "derivative_coverage": {
+      "report": "docs/audits/2026-09-06-kite-derivative-coverage.json",
+      "total_symbols_with_bars": 12246,
+      "total_bar_rows": 231143717,
+      "derivative_bar_rows": 0,
+      "bars_present_for": "NSE and BSE cash, plus indices on NSE/BSE/MCX/NSEIX/GLOBAL. Nothing else.",
+      "instrument_master_catalogues": "35,845 NFO options, 640 NFO futures, 4,532 BFO options, 12 BFO futures \u2014 a catalogue with no prices behind it.",
+      "verdict": "NO_EXECUTABLE_CONTRACT_HISTORY"
+    },
+    "profitability_established": false
   }
 }
