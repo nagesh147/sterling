@@ -94,7 +94,7 @@ def bs_rho(
 ) -> float:
     """Rho per 1% rate move (divided by 100 from the standard formula).
 
-    Mostly negligible for short-dated crypto options (DTE < 30, r ≈ 0)
+    Suitable for short-dated NSE index options when rates are supplied.
     but real for the dte_max=90 positional profile and required for the
     `bsm_greeks_full` Greeks-budget vector to be complete.
     """

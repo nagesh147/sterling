@@ -3,7 +3,7 @@ broker-neutral `BaseSignalEvidence` contract Navigator's fusion engine
 consumes.
 
 Kite-only build: `KiteTripleSupertrendAdapter` is the only adapter here, and
-none is planned for the crypto/directional path in this build.
+no alternate market source is planned in this build.
 """
 from __future__ import annotations
 

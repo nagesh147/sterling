@@ -52,8 +52,6 @@ backend/test_statarb.py
 # Multi-symbol OHLCV universe (regenerate via study.ohlcv_pipeline; immutable historical klines)
 backend/data/ohlcv/
 
-# Perp funding-rate history (regenerate via study.funding_pipeline; immutable historical funding)
-backend/data/funding/
 
 # Paper-trading state + ledger (regenerates from real data)
 backend/data/paper/

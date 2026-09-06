@@ -1,7 +1,7 @@
 """Domain models for the Sterling Value-Flow Navigator.
 
 This build is Kite-only: `BaseSignalEvidence.engine_id` is a single-value
-`Literal` on purpose so a second engine source (e.g. the crypto/directional
+`Literal` on purpose so a second engine source
 path) cannot be wired in without deliberately widening this contract. See
 `app.services.navigator.adapters.KiteTripleSupertrendAdapter` for the only
 adapter that produces one.
@@ -230,7 +230,7 @@ class NavigatorDecision(BaseModel):
 
 # ─────────────────────────────────────────────────────────────────────────
 # Section 6 — configuration contract (Kite-only build: `engine_sources` is
-# fixed to a single value; there is no directional/crypto config surface).
+# fixed to a single value; there is no alternate market config surface).
 # ─────────────────────────────────────────────────────────────────────────
 
 
@@ -446,7 +446,7 @@ class FusionConfig(BaseModel):
 
 class NavigatorConfigModel(BaseModel):
     """§6 root settings. Kite-only build: `engine_sources` is a fixed
-    single-value list — there is no directional/crypto config surface, and
+    single-value list — there is no alternate market config surface, and
     none is planned. (`engine_sources` says whose signals Navigator ALSO
     comments on; it is not a claim that Navigator can only run downstream of
     that engine — see `scan_scope_mode`.) This is the client-editable payload

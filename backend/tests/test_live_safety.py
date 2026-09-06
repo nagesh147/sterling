@@ -118,13 +118,13 @@ class TestIdempotency:
         reset_all_for_tests()
 
     def test_make_key_is_deterministic(self) -> None:
-        a = make_idempotency_key("BTC", "long", 1.0)
-        b = make_idempotency_key("BTC", "long", 1.0)
+        a = make_idempotency_key("NIFTY", "long", 1.0)
+        b = make_idempotency_key("NIFTY", "long", 1.0)
         assert a == b
 
     def test_make_key_changes_with_inputs(self) -> None:
-        a = make_idempotency_key("BTC", "long", 1.0)
-        b = make_idempotency_key("BTC", "short", 1.0)
+        a = make_idempotency_key("NIFTY", "long", 1.0)
+        b = make_idempotency_key("NIFTY", "short", 1.0)
         assert a != b
 
     def test_check_returns_none_on_miss(self) -> None:
@@ -147,32 +147,32 @@ class TestRetryQueue:
         reset_all_for_tests()
 
     def test_enqueue_adds_item(self) -> None:
-        item = enqueue_retry({"underlying": "BTC", "size": 1.0}, error="timeout")
+        item = enqueue_retry({"underlying": "NIFTY", "size": 1.0}, error="timeout")
         assert item.id
         assert item.attempt == 0
         assert item.poison is False
         assert list_retries() == [item]
 
     def test_mark_attempt_increments(self) -> None:
-        item = enqueue_retry({"u": "BTC"}, error="fail")
+        item = enqueue_retry({"u": "NIFTY"}, error="fail")
         m1 = mark_attempt(item.id, error="still fail")
         assert m1.attempt == 1
         assert m1.poison is False
 
     def test_max_attempts_marks_poison(self) -> None:
-        item = enqueue_retry({"u": "BTC"}, error="fail", max_attempts=2)
+        item = enqueue_retry({"u": "NIFTY"}, error="fail", max_attempts=2)
         mark_attempt(item.id, error="still fail")
         m2 = mark_attempt(item.id, error="still fail")
         assert m2.attempt == 2
         assert m2.poison is True
 
     def test_remove(self) -> None:
-        item = enqueue_retry({"u": "BTC"}, error="fail")
+        item = enqueue_retry({"u": "NIFTY"}, error="fail")
         assert remove_retry(item.id) is True
         assert remove_retry(item.id) is False
 
     def test_list_excludes_poison_when_filtered(self) -> None:
-        item = enqueue_retry({"u": "BTC"}, error="fail", max_attempts=1)
+        item = enqueue_retry({"u": "NIFTY"}, error="fail", max_attempts=1)
         mark_attempt(item.id, error="still fail")
         assert list_retries(include_poison=True) == [item]
         assert list_retries(include_poison=False) == []
@@ -226,7 +226,7 @@ class TestAssertSafeToTrade:
 
     def test_daily_loss_skipped_when_check_disabled(self) -> None:
         # Kite (INR) order paths pass check_daily_loss=False — the USD breaker is
-        # crypto-only, so a position deep past the halt threshold must NOT block.
+        # legacy-only, so a position deep past the halt threshold must NOT block.
         configure_daily_loss(DailyLossConfig(soft_warn_usd=-100.0, hard_halt_usd=-200.0))
         pos = [_FakePos(exit_timestamp_ms=_now(), realized_pnl_usd=-300.0)]
         d = assert_safe_to_trade(positions=pos, check_daily_loss=False)

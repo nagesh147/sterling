@@ -1,7 +1,7 @@
 // Sterling Value-Flow Navigator types — mirrors
 // backend/app/engines/navigator/schemas.py exactly. Kite-only build:
 // `engine_sources` is fixed to a single value; there is no
-// directional/crypto config surface here or on the server.
+// alternate market config surface here or on the server.
 
 import type { EngineSignalRow, Moneyness } from './kiteEngine';
 

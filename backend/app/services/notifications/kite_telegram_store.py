@@ -1,13 +1,13 @@
 """
 Per-user Kite-specific Telegram alert targets — store + transport.
 
-Kite gets its OWN Telegram (separate bot(s)/chat from the crypto global one). A
+Kite supports dedicated Telegram bot and chat configurations. A
 user can register multiple alert *targets*, each a ``{bot_token, chat_id}`` pair.
 
 Persistence is JSON in the app DB config store (``db.set_config``/``get_config``)
 under a per-user key (``kite_tg_targets:{user_id}``). Bot tokens are encrypted at
 rest with the SAME util the Kite account credentials use
-(:mod:`app.core.security`) — never invent new crypto, never store a raw token.
+(:mod:`app.core.security`) — never invent encryption, never store a raw token.
 
 Responses expose only ``bot_token_hint`` (last 6 chars) + ``bot_token_set`` — the
 raw token never leaves this layer except to :func:`send_via`.

@@ -56,7 +56,6 @@ def _stock_meta(symbol: str, row: dict, *, exchange: str = "NSE") -> InstrumentM
         has_options=True,
         exchange="zerodha",
         exchange_currency="INR",
-        perp_symbol="",
         index_name=str(row.get("tradingsymbol") or symbol),
         zerodha_token=int(row.get("instrument_token") or 0),
         zerodha_index_symbol=f"{exchange}:{row.get('tradingsymbol') or symbol}",

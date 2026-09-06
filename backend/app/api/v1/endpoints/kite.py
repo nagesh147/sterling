@@ -4,7 +4,7 @@ Zerodha Kite Connect endpoints — multi-tenant, manual trading + market data.
 Every route is scoped to the calling user (``get_current_user``). Credentials and
 the daily login are fully managed here (add/update/delete + login-URL handshake).
 Order-placing routes pass through ``live_safety`` (kill-switch / daily-loss /
-idempotency) exactly like the crypto trading path.
+idempotency) through the shared execution safety layer.
 
 NOTE: this is a standalone manual console for Indian markets — no Sterling/Grok/
 scalping strategy is wired to Kite. It exposes the full Kite REST surface plus a
@@ -701,7 +701,7 @@ def _resolve_chain_instrument(underlying: str):
             index_name=spot_symbol,                       # display/spot name
             zerodha_index_symbol=f"{spot_prefix}{spot_symbol}",
             exchange="zerodha", exchange_currency="INR",
-            quote_currency="INR", perp_symbol=option_name,
+            quote_currency="INR",
             tick_size=0.05, strike_step=50.0,
             has_options=True, min_dte=0,
         )
@@ -927,7 +927,7 @@ async def order_trades(order_id: str, user: UserContext = Depends(get_current_us
 def _safety_gate(user: UserContext, idem_parts) -> str:
     """Kill-switch / daily-loss / idempotency gate. Returns the idempotency key."""
     idem_key = live_safety.make_idempotency_key(*idem_parts)
-    # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
+    # Kite uses INR risk controls; kill-switch and idempotency always apply.
     decision = live_safety.assert_safe_to_trade(
         positions=[],
         idempotency_key=idem_key,

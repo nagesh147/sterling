@@ -153,7 +153,7 @@ def test_backtest_engine_with_bs(tmp_path):
     candles_4h = candles_1h[::4]
 
     result = run_backtest(
-        underlying="BTC",
+        underlying="NIFTY",
         candles_4h=candles_4h,
         candles_1h=candles_1h,
         lookback_days=14,
@@ -172,7 +172,7 @@ def test_backtest_engine_with_bs(tmp_path):
 
     # Without atm_iv: bs fields should be absent
     result_no_bs = run_backtest(
-        underlying="BTC",
+        underlying="NIFTY",
         candles_4h=candles_4h,
         candles_1h=candles_1h,
         lookback_days=14,

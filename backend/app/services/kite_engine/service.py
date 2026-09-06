@@ -88,7 +88,7 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
         return {"status": "blocked", "reason": "invalid_side_or_quantity"}
     norm = "buy" if side.upper() == "BUY" else "sell"
     idem = live_safety.make_idempotency_key(uid, option_symbol, side.upper(), quantity)
-    # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
+    # Kite uses INR risk controls; kill-switch and idempotency always apply.
     decision = live_safety.assert_safe_to_trade(
         positions=[], idempotency_key=idem, check_daily_loss=False)
     if not decision.allowed and decision.code != "duplicate_order":
@@ -925,7 +925,7 @@ def _make_place_cb(client, uid: str):
                 state.log(uid, "info",
                           f"{row.underlying}: correlation ×{cmult:.1f} vs open {open_assets} ({lots} lot)")
 
-        # ── live safety (Kite is INR; USD daily-loss breaker is crypto-only) ───
+        # ── live safety (Kite INR controls) ───────────────────────────────────
         trade_side = "BUY" if (not use_futures or signal_dir == "long") else "SELL"
         # ── no stop, no trade ─────────────────────────────────────────────────
         # An unresolved premium (strike has not traded yet today, quote rate-limited,

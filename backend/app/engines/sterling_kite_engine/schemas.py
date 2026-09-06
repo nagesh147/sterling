@@ -482,7 +482,7 @@ class EngineConfigModel(BaseModel):
     # ── INR daily-loss breaker (auto-exec; opt-in, default off) ───────────────
     # Halt NEW auto-exec entries once realized losses for the IST day reach this % of
     # available F&O capital. Fills the gap left by the USD daily-loss breaker being
-    # crypto-only. None = off. Only ever blocks entries; never force-closes.
+    # None = off. Only ever blocks entries; never force-closes.
     max_daily_loss_pct: Optional[float] = None
     # ── Risk infrastructure wiring ────────────────────────────────────────────
     # Wires the drawdown circuit breaker + correlation penalty into sizing.

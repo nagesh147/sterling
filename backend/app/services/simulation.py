@@ -1373,7 +1373,6 @@ class SimulationRunner:
                 "atr_percentile": 65.0,
                 "rsi": 58.0,
                 "squeezed": False,
-                "rec_leverage": 10,
                 "futures_symbol": f"{ev.instrument}FUT",
                 "fresh": True,
                 "timestamp_ms": ev.timestamp_ms if ev.timestamp_ms > 0 else int(time.time() * 1000),

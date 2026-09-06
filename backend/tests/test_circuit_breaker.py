@@ -113,7 +113,7 @@ async def test_positions_enter_returns_503_when_halted():
 
         resp = client.post(
             "/api/v1/positions/enter",
-            json={"underlying": "BTC", "notes": "", "structure_rank": 0},
+            json={"underlying": "NIFTY", "notes": "", "structure_rank": 0},
         )
     # Halted CB → 503; unknown instrument → 404 (both acceptable)
     assert resp.status_code in (503, 404)

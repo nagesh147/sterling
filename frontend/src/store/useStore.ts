@@ -44,14 +44,14 @@ function loadTheme(): Theme {
 
 function loadUnderlying(): string {
   try {
-    let val = localStorage.getItem(STORAGE_KEY) || 'BTC';
+    let val = localStorage.getItem(STORAGE_KEY) || 'NIFTY';
     if (val.includes('-')) {
       val = val.split('-')[0];
       try { localStorage.setItem(STORAGE_KEY, val); } catch { /* ignore */ }
     }
     return val;
   } catch {
-    return 'BTC';
+    return 'NIFTY';
   }
 }
 

@@ -329,7 +329,7 @@ def test_safety_is_read_through_allowed_not_ok(monkeypatch):
 
 
 def test_safety_skips_the_usd_daily_loss_breaker_and_passes_uid(monkeypatch):
-    """That breaker is USD-denominated against a crypto book and reads zero for
+    """That breaker uses a legacy accounting unit and reads zero for
     an INR position, so including it would be a gate that always passes. uid is
     what routes the check at the right account."""
     import app.services.live_safety as live_safety

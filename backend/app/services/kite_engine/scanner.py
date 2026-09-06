@@ -673,7 +673,7 @@ def _inst(item: UniverseItem) -> InstrumentMeta:
     return InstrumentMeta(
         underlying=item.tradingsymbol,
         tick_size=0.05, strike_step=1.0, exchange_currency="INR",
-        perp_symbol="", index_name=item.name,
+        index_name=item.name,
         has_options=True, exchange="zerodha",
         zerodha_token=item.token,
     )
@@ -740,7 +740,7 @@ class KiteEngineScanner:
             return hit[1]
         inst = InstrumentMeta(
             underlying=name, tick_size=0.05, strike_step=1.0, exchange_currency="INR",
-            perp_symbol="", index_name=name, has_options=True, exchange="zerodha",
+            index_name=name, has_options=True, exchange="zerodha",
             zerodha_token=token,
         )
         candles = await client.get_candles(inst, "1H", _LOOKBACK_BARS)

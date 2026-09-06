@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     paper_trading: bool = True
     real_public_data: bool = True
     default_underlying: str = "NIFTY"
-    deribit_base_url: str = "https://www.deribit.com/api/v2"
     log_level: str = "INFO"
     log_json: bool = False  # opt-in structured JSON logging (Phase 2 observability)
     database_url: str = ""       # SQLAlchemy URL; empty → dedicated sqlite file (Postgres-ready)

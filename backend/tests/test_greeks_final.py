@@ -81,7 +81,7 @@ class TestPortfolioGreeks:
         from app.schemas.execution import SizedTrade, TradeStructure, CandidateContract
         from app.schemas.directional import Direction
         leg = CandidateContract(
-            instrument_name="BTC-12JAN25-42000-C", underlying="NIFTY",
+            instrument_name="NIFTY-12JAN25-42000-C", underlying="NIFTY",
             strike=42000.0, expiry_date="12JAN25", dte=12, option_type="call",
             bid=400.0, ask=420.0, mark_price=410.0, mid_price=410.0,
             mark_iv=55.0, delta=0.45, open_interest=100.0, volume_24h=20.0,
@@ -110,7 +110,7 @@ class TestMonitorAllPnLRecord:
         from app.schemas.execution import SizedTrade, TradeStructure, CandidateContract
         from app.schemas.directional import Direction
         leg = CandidateContract(
-            instrument_name="ETH-12JAN25-2000-P", underlying="BANKNIFTY",
+            instrument_name="BANKNIFTY-12JAN25-2000-P", underlying="BANKNIFTY",
             strike=2000.0, expiry_date="12JAN25", dte=10, option_type="put",
             bid=100.0, ask=120.0, mark_price=110.0, mid_price=110.0,
             mark_iv=60.0, delta=-0.40, open_interest=50.0, volume_24h=10.0,

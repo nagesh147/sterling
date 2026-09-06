@@ -160,7 +160,6 @@ class Quantity(BaseModel):
 class Currency(str, Enum):
     INR = "INR"
     USD = "USD"
-    USDT = "USDT"
     EUR = "EUR"
 
 

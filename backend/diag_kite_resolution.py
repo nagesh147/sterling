@@ -99,7 +99,7 @@ async def main():
         # 2a) underlying 1H candles via token
         from app.schemas.instruments import InstrumentMeta
         inst = InstrumentMeta(underlying=u.tradingsymbol, tick_size=0.05, strike_step=1.0,
-                              exchange_currency="INR", perp_symbol="", index_name=u.name,
+                              exchange_currency="INR", index_name=u.name,
                               has_options=True, exchange="zerodha", zerodha_token=u.token)
         try:
             cand = drop_forming(await client.get_candles(inst, "1H", 320))
@@ -150,7 +150,7 @@ async def main():
         for m, pk in contracts:
             try:
                 inst2 = InstrumentMeta(underlying=pk.option_symbol, tick_size=0.05, strike_step=1.0,
-                                       exchange_currency="INR", perp_symbol="", index_name=pk.option_symbol,
+                                       exchange_currency="INR", index_name=pk.option_symbol,
                                        has_options=True, exchange="zerodha", zerodha_token=pk.token)
                 oc = drop_forming(await client.get_candles(inst2, "1H", 320))
             except Exception as e:

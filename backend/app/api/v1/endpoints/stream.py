@@ -1,74 +1,12 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
-from pydantic import BaseModel
-from typing import Dict, List, Any
+"""Shared WebSocket fan-out for Zerodha/Kite account and tick channels."""
 import json
-import asyncio
 import logging
+from typing import Dict, List
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 log = logging.getLogger(__name__)
-
 router = APIRouter()
-
-class AnalyticsResponse(BaseModel):
-    ofi: int
-    unrealized_pnl: float
-    drift_bps: float
-    timestamp_ms: int
-
-
-@router.get("/analytics/{symbol}", response_model=AnalyticsResponse)
-async def get_analytics(symbol: str, request: Request):
-    """REST endpoint for V4AnalyticsDashboard — returns current OFI, PnL, drift."""
-    now_ms = int(__import__('time').time() * 1000)
-
-    # Order-flow imbalance came from the Delta L2 socket, which went with the
-    # crypto surface. Kite's feed carries no L2 book, so this is reported as 0
-    # rather than pretending a number exists.
-    ofi = 0
-
-    # PnL from paper_store via _build_pnl_event logic
-    unrealized_pnl = 0.0
-    try:
-        from app.api.v1.endpoints.directional import _paper_store, _stream_last_prices
-        active = [p for p in _paper_store.list_positions()
-                  if p.status.value in ("open", "partially_closed")]
-        from app.api.v1.endpoints.positions import _estimate_pnl
-        for pos in active:
-            if pos.underlying != symbol.upper():
-                continue
-            spot = _stream_last_prices.get(pos.underlying)
-            if spot is not None:
-                spot_move = spot - pos.entry_spot_price
-                direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-                pnl = _estimate_pnl(pos.sized_trade, spot_move, direction_sign,
-                                      pos.sized_trade.max_risk_usd, pos.sized_trade.structure.max_gain)
-                unrealized_pnl += pnl or 0.0
-    except Exception as _exc:
-        log.debug("suppressed: %s", _exc)
-
-    # Drift: compare entry_spot vs current spot for active positions
-    drift_bps = 0.0
-    try:
-        from app.api.v1.endpoints.directional import _paper_store, _stream_last_prices
-        active = [p for p in _paper_store.list_positions()
-                  if p.status.value in ("open", "partially_closed") and p.underlying == symbol.upper()]
-        if active:
-            total_drift = 0.0
-            for pos in active:
-                spot = _stream_last_prices.get(pos.underlying)
-                if spot and pos.entry_spot_price:
-                    drift_pct = ((spot - pos.entry_spot_price) / pos.entry_spot_price) * 10_000
-                    total_drift += drift_pct
-            drift_bps = round(total_drift / len(active), 2) if active else 0.0
-    except Exception as _exc:
-        log.debug("suppressed: %s", _exc)
-
-    return AnalyticsResponse(
-        ofi=ofi,
-        unrealized_pnl=round(unrealized_pnl, 2),
-        drift_bps=drift_bps,
-        timestamp_ms=now_ms,
-    )
 
 class StreamManager:
     def __init__(self):
@@ -128,22 +66,3 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
     except WebSocketDisconnect:
         stream_manager.disconnect(websocket)
-async def _arbitrator_log_worker():
-    import random
-    while True:
-        await asyncio.sleep(random.randint(6, 12))
-        if "arbitrator_logs" in stream_manager.active_connections:
-            syms = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
-            tfs = ["5m", "15m", "1h"]
-            strats = ["bb_rsi_reversion", "vwap_cross", "momentum_squeeze"]
-            dsr = round(random.uniform(0.75, 0.95), 2)
-            wfa = random.choice([60, 70, 80, 90])
-            passed = dsr >= 0.85 and wfa >= 80
-            status = "[PASS]" if passed else "[REJECT]"
-            level = "INFO" if passed else "DEBUG"
-            msg = f"{status} {random.choice(syms)} {random.choice(tfs)} {random.choice(strats)} (DSR: {dsr}, WFA: {wfa}%)"
-            await stream_manager.broadcast_to_channel("arbitrator_logs", {
-                "type": "log",
-                "message": msg,
-                "level": level
-            })

@@ -31,8 +31,7 @@ from app.services.execution.order_router import (
 
 @dataclass
 class _FakeInstrument:
-    underlying: str = "BTC"
-    delta_perp_symbol: str = "BTCUSD"
+    underlying: str = "NIFTY"
 
 
 @dataclass
@@ -71,7 +70,6 @@ def _make_adapter(
     mock = AsyncMock()
     mock.get_index_price.return_value = index_price
     mock.get_product_id.return_value = 27
-    mock.set_leverage.return_value = None
     if place_order_raises:
         mock.place_order.side_effect = place_order_raises
         mock.place_order_option.side_effect = place_order_raises
@@ -87,8 +85,8 @@ def _make_adapter(
 
 def _basic_req(**overrides: Any) -> OrderRouterRequest:
     base = dict(
-        underlying="BTC", direction="long",
-        instrument_type="futures", size=1, leverage=5,
+        underlying="NIFTY", direction="long",
+        instrument_type="futures", size=1,
         order_type="market",
     )
     base.update(overrides)
@@ -159,7 +157,7 @@ class TestLiveMode:
         router = OrderRouter(RouterMode.LIVE, adapter, deps, _resolve)
 
         resp = await router.submit(_basic_req(
-            instrument_type="options", option_symbol="C-BTC-50000-051226",
+            instrument_type="options", option_symbol="C-NIFTY-50000-051226",
             direction="short",         # short via PE — but order side is still buy
         ))
 

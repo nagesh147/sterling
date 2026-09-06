@@ -27,27 +27,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Crypto Terminal',
+          title: 'Markets',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="kite"
-        options={{
-          title: 'Kite Terminal',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trending-up" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="signals"
-        options={{
-          title: 'VCP Signals',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="radio" size={size} color={color} />
           ),
         }}
       />

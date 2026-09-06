@@ -1,186 +1,264 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  RefreshControl, ActivityIndicator, Alert, ScrollView 
+  ScrollView, RefreshControl, ActivityIndicator 
 } from 'react-native';
 import Header from '../../src/components/Header';
-import MetricCard from '../../src/components/MetricCard';
 import OrderModal from '../../src/components/OrderModal';
 import { api } from '../../src/services/api';
-import { useStore } from '../../src/store/useStore';
 import { theme } from '../../src/styles/theme';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function CryptoTerminal() {
-  const { selectedUnderlying, setSelectedUnderlying } = useStore();
+type SubTab = 'WATCHLIST' | 'POSITIONS' | 'HOLDINGS' | 'ORDERS';
+
+// Default Watchlist if backend is not loaded
+const DEFAULT_WATCHLIST = [
+  { symbol: 'NSE:INFY', name: 'Infosys Ltd', price: 1845.50, change: 1.25 },
+  { symbol: 'NSE:TCS', name: 'Tata Consultancy Services', price: 3820.10, change: -0.45 },
+  { symbol: 'NSE:RELIANCE', name: 'Reliance Industries', price: 2450.00, change: 0.85 },
+  { symbol: 'NFO:NIFTY26JUL22000CE', name: 'Nifty Jul 22000 Call', price: 185.30, change: 12.4 },
+  { symbol: 'NFO:NIFTY26JUL22000PE', name: 'Nifty Jul 22000 Put', price: 92.40, change: -8.15 },
+];
+
+export default function IndianMarketsTerminal() {
+  const [activeTab, setActiveTab] = useState<SubTab>('WATCHLIST');
+  const [watchlist, setWatchlist] = useState(DEFAULT_WATCHLIST);
   const [positions, setPositions] = useState<any[]>([]);
-  const [pnlData, setPnlData] = useState({ open: 0, realized: 0 });
+  const [holdings, setHoldings] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Order modal states
   const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState('');
 
-  const fetchCryptoData = async () => {
+  const fetchKiteData = async () => {
     try {
-      // 1. Fetch positions
-      const posRes = await api.get<{ positions: any[] }>('/api/v1/positions?status=open');
-      setPositions(posRes.positions || []);
-
-      // 2. Fetch Live PNL metrics
-      const pnlRes = await api.get<any>('/api/v1/positions/live-pnl');
-      setPnlData({
-        open: pnlRes?.open_pnl_usd || 0,
-        realized: pnlRes?.total_realized_pnl_usd || pnlRes?.realized_pnl_usd || 0,
-      });
+      if (activeTab === 'POSITIONS') {
+        const res = await api.get<{ net: any[]; day: any[] }>('/api/v1/kite/positions');
+        setPositions(res.net || []);
+      } else if (activeTab === 'HOLDINGS') {
+        const res = await api.get<any[]>('/api/v1/kite/holdings');
+        setHoldings(res || []);
+      } else if (activeTab === 'ORDERS') {
+        const res = await api.get<any[]>('/api/v1/kite/orders');
+        setOrders(res || []);
+      }
     } catch (e) {
-      console.warn('Error fetching crypto terminal data:', e);
+      console.warn('Error fetching Kite data:', e);
     }
   };
 
   useEffect(() => {
     setLoading(true);
-    fetchCryptoData().finally(() => setLoading(false));
-  }, []);
+    fetchKiteData().finally(() => setLoading(false));
+  }, [activeTab]);
 
-  // Poll rates every 3 seconds
+  // Periodic polling for real-time rates
   useEffect(() => {
-    const interval = setInterval(fetchCryptoData, 3000);
+    const interval = setInterval(fetchKiteData, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchCryptoData();
+    await fetchKiteData();
     setRefreshing(false);
   };
 
-  const handleClosePosition = async (posId: string, symbol: string) => {
-    Alert.alert(
-      'Confirm Close',
-      `Are you sure you want to market close your ${symbol} position?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Close Position', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.post(`/api/v1/positions/${posId}/close`, {});
-              Alert.alert('Closed', 'Position has been queued for market close.');
-              fetchCryptoData();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to close position.');
-            }
-          }
-        }
-      ]
+  const handleOpenOrder = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    setOrderModalVisible(true);
+  };
+
+  const renderSubTabs = () => {
+    const tabs: SubTab[] = ['WATCHLIST', 'POSITIONS', 'HOLDINGS', 'ORDERS'];
+    return (
+      <View style={styles.subTabContainer}>
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.subTabButton, activeTab === tab ? styles.subTabActive : null]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={[styles.subTabText, activeTab === tab ? styles.subTabTextActive : null]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     );
   };
 
-  const renderPositionItem = ({ item }: { item: any }) => {
-    const isLong = item.direction === 'LONG' || item.side === 'BUY';
-    const profit = item.unrealized_pnl_usd || item.pnl || 0;
-    
+  const renderWatchlist = () => {
     return (
-      <View style={styles.positionCard}>
-        <View style={styles.posHeader}>
-          <View>
-            <Text style={styles.posSymbol}>{item.symbol || item.underlying}</Text>
-            <View style={styles.directionRow}>
-              <View style={[styles.directionBadge, { backgroundColor: isLong ? theme.colors.green : theme.colors.red }]}>
-                <Text style={styles.directionText}>{isLong ? 'LONG' : 'SHORT'}</Text>
-              </View>
-              <Text style={styles.sizeText}>Size: {item.size || item.quantity}</Text>
-            </View>
-          </View>
-
+      <FlatList
+        data={watchlist}
+        keyExtractor={(item) => item.symbol}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item }) => (
           <TouchableOpacity 
-            style={styles.closeBtn} 
-            onPress={() => handleClosePosition(item.id || item.position_id, item.symbol || item.underlying)}
+            style={styles.cardRow} 
+            onPress={() => handleOpenOrder(item.symbol)}
           >
-            <Text style={styles.closeBtnText}>CLOSE</Text>
+            <View>
+              <Text style={styles.symbolText}>{item.symbol}</Text>
+              <Text style={styles.nameText}>{item.name}</Text>
+            </View>
+            <View style={styles.rightAligned}>
+              <Text style={styles.priceVal}>₹{item.price.toFixed(2)}</Text>
+              <Text style={[styles.changeText, { color: item.change >= 0 ? theme.colors.green : theme.colors.red }]}>
+                {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+              </Text>
+            </View>
           </TouchableOpacity>
-        </View>
+        )}
+      />
+    );
+  };
 
-        <View style={styles.posStatsRow}>
-          <View>
-            <Text style={styles.statLabel}>ENTRY PRICE</Text>
-            <Text style={styles.statVal}>${parseFloat(item.entry_price || item.average_price || 0).toLocaleString()}</Text>
-          </View>
-          <View style={styles.alignCenter}>
-            <Text style={styles.statLabel}>MARK PRICE</Text>
-            <Text style={styles.statVal}>${parseFloat(item.mark_price || item.last_price || 0).toLocaleString()}</Text>
-          </View>
-          <View style={styles.alignRight}>
-            <Text style={styles.statLabel}>UNREALIZED P&L</Text>
-            <Text style={[styles.statVal, { color: profit >= 0 ? theme.colors.green : theme.colors.red, fontWeight: '800' }]}>
-              ${profit.toFixed(2)}
-            </Text>
-          </View>
-        </View>
-      </View>
+  const renderPositions = () => {
+    if (loading) return <ActivityIndicator style={styles.loader} size="large" color={theme.colors.orange} />;
+    
+    if (positions.length === 0) {
+      return (
+        <ScrollView 
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          <Ionicons name="briefcase-outline" size={48} color={theme.colors.textMuted} />
+          <Text style={styles.emptyText}>No Active Positions</Text>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <FlatList
+        data={positions}
+        keyExtractor={(item, index) => item.tradingsymbol + index}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item }) => {
+          const pnl = item.pnl || 0;
+          return (
+            <View style={styles.cardRow}>
+              <View>
+                <Text style={styles.symbolText}>{item.exchange}:{item.tradingsymbol}</Text>
+                <Text style={styles.nameText}>Qty: {item.quantity} | Avg: ₹{item.average_price}</Text>
+              </View>
+              <View style={styles.rightAligned}>
+                <Text style={styles.priceVal}>LTP: ₹{item.last_price}</Text>
+                <Text style={[styles.pnlText, { color: pnl >= 0 ? theme.colors.green : theme.colors.red }]}>
+                  ₹{pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          );
+        }}
+      />
+    );
+  };
+
+  const renderHoldings = () => {
+    if (loading) return <ActivityIndicator style={styles.loader} size="large" color={theme.colors.orange} />;
+
+    if (holdings.length === 0) {
+      return (
+        <ScrollView 
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          <Ionicons name="wallet-outline" size={48} color={theme.colors.textMuted} />
+          <Text style={styles.emptyText}>No Holdings Found</Text>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <FlatList
+        data={holdings}
+        keyExtractor={(item) => item.isin}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item }) => {
+          const currentVal = item.quantity * item.last_price;
+          const investedVal = item.quantity * item.average_price;
+          const pnl = currentVal - investedVal;
+          return (
+            <View style={styles.cardRow}>
+              <View>
+                <Text style={styles.symbolText}>{item.tradingsymbol}</Text>
+                <Text style={styles.nameText}>Qty: {item.quantity} | Avg: ₹{item.average_price}</Text>
+              </View>
+              <View style={styles.rightAligned}>
+                <Text style={styles.priceVal}>₹{currentVal.toFixed(2)}</Text>
+                <Text style={[styles.pnlText, { color: pnl >= 0 ? theme.colors.green : theme.colors.red }]}>
+                  {pnl >= 0 ? '+' : ''}{((pnl / investedVal) * 100).toFixed(2)}%
+                </Text>
+              </View>
+            </View>
+          );
+        }}
+      />
+    );
+  };
+
+  const renderOrders = () => {
+    if (loading) return <ActivityIndicator style={styles.loader} size="large" color={theme.colors.orange} />;
+
+    if (orders.length === 0) {
+      return (
+        <ScrollView 
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          <Ionicons name="receipt-outline" size={48} color={theme.colors.textMuted} />
+          <Text style={styles.emptyText}>No Placed Orders</Text>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <FlatList
+        data={orders}
+        keyExtractor={(item) => item.order_id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item }) => {
+          const statusColor = item.status === 'COMPLETE' ? theme.colors.green : item.status === 'REJECTED' ? theme.colors.red : theme.colors.amber;
+          return (
+            <View style={styles.cardRow}>
+              <View>
+                <Text style={styles.symbolText}>{item.tradingsymbol}</Text>
+                <Text style={styles.nameText}>{item.transaction_type} • {item.quantity} Qty • {item.product}</Text>
+              </View>
+              <View style={styles.rightAligned}>
+                <Text style={styles.priceVal}>₹{item.price || item.trigger_price || 0}</Text>
+                <View style={[styles.statusBadge, { borderColor: statusColor }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColor }]}>{item.status}</Text>
+                </View>
+              </View>
+            </View>
+          );
+        }}
+      />
     );
   };
 
   return (
     <View style={styles.container}>
       <Header />
+      {renderSubTabs()}
 
-      {/* Top Metric Cards */}
-      <View style={styles.metricsRow}>
-        <MetricCard 
-          label="Open P&L" 
-          value={`$${pnlData.open.toFixed(2)}`} 
-          type={pnlData.open >= 0 ? 'green' : 'red'} 
-        />
-        <MetricCard 
-          label="Realized P&L" 
-          value={`$${pnlData.realized.toFixed(2)}`} 
-          type={pnlData.realized >= 0 ? 'green' : 'red'} 
-        />
-        <MetricCard 
-          label="Asset" 
-          value={selectedUnderlying} 
-          subValue="10x Leverage"
-        />
+      <View style={styles.contentContainer}>
+        {activeTab === 'WATCHLIST' && renderWatchlist()}
+        {activeTab === 'POSITIONS' && renderPositions()}
+        {activeTab === 'HOLDINGS' && renderHoldings()}
+        {activeTab === 'ORDERS' && renderOrders()}
       </View>
-
-      {/* Open Positions Title */}
-      <Text style={styles.sectionHeader}>OPEN POSITIONS ({positions.length})</Text>
-
-      {/* Positions List */}
-      {loading && positions.length === 0 ? (
-        <ActivityIndicator style={styles.loader} size="large" color={theme.colors.blue} />
-      ) : (
-        <FlatList
-          data={positions}
-          keyExtractor={(item) => item.id || item.position_id || item.symbol}
-          renderItem={renderPositionItem}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListEmptyComponent={
-            <ScrollView contentContainerStyle={styles.emptyContainer}>
-              <Ionicons name="swap-horizontal-outline" size={48} color={theme.colors.textMuted} />
-              <Text style={styles.emptyText}>No Open Positions</Text>
-            </ScrollView>
-          }
-        />
-      )}
-
-      {/* Floating Action Button (FAB) for Placing Orders */}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => setOrderModalVisible(true)}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
 
       <OrderModal
         visible={orderModalVisible}
         onClose={() => setOrderModalVisible(false)}
-        symbol={selectedUnderlying}
-        marketType="crypto"
+        symbol={selectedSymbol}
       />
     </View>
   );
@@ -191,134 +269,103 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  metricsRow: {
+  subTabContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.bgHeader,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
-  sectionHeader: {
+  subTabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  subTabActive: {
+    borderBottomColor: theme.colors.orange,
+  },
+  subTabText: {
     color: theme.colors.textMuted,
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginTop: theme.spacing.lg,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  listContainer: {
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: 80, // Safe padding for FAB
+  subTabTextActive: {
+    color: theme.colors.textBright,
   },
-  positionCard: {
+  contentContainer: {
+    flex: 1,
+    padding: theme.spacing.sm,
+  },
+  cardRow: {
     backgroundColor: theme.colors.bgCard,
     borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-  },
-  posHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingBottom: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
   },
-  posSymbol: {
+  symbolText: {
     color: theme.colors.textBright,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     fontFamily: theme.fonts.mono,
   },
-  directionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
+  nameText: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    marginTop: 2,
   },
-  directionBadge: {
+  rightAligned: {
+    alignItems: 'flex-end',
+  },
+  priceVal: {
+    color: theme.colors.textBright,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: theme.fonts.mono,
+  },
+  changeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: theme.fonts.mono,
+    marginTop: 2,
+  },
+  pnlText: {
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: theme.fonts.mono,
+    marginTop: 2,
+  },
+  statusBadge: {
+    borderWidth: 1,
+    borderRadius: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 3,
-    marginRight: 8,
+    marginTop: 4,
   },
-  directionText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  sizeText: {
-    color: theme.colors.textDim,
-    fontSize: 11,
-    fontFamily: theme.fonts.mono,
-  },
-  closeBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderColor: theme.colors.red,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  closeBtnText: {
-    color: theme.colors.red,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  posStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  statVal: {
-    color: theme.colors.textBright,
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: theme.fonts.mono,
-  },
-  alignCenter: {
-    alignItems: 'center',
-  },
-  alignRight: {
-    alignItems: 'flex-end',
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
   },
   loader: {
     marginTop: 40,
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 100,
   },
   emptyText: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    marginTop: 8,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    marginTop: 12,
   },
 });
+

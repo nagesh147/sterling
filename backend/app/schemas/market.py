@@ -11,20 +11,6 @@ class Candle(BaseModel):
     volume: float
 
 
-class MarketSnapshotResponse(BaseModel):
-    underlying: str
-    spot_price: float
-    index_price: float
-    perp_price: float
-    candles_4h_count: int
-    candles_1h_count: int
-    candles_15m_count: int
-    dvol: Optional[float] = None
-    ivr: Optional[float] = None
-    data_source: str
-    timestamp_ms: int
-
-
 class OptionSummary(BaseModel):
     instrument_name: str
     underlying: str
@@ -43,7 +29,7 @@ class OptionSummary(BaseModel):
     last_updated_ms: int
     # ── Phase 1 derivatives build: full Greeks vector ──────────────────
     # Optional with sensible defaults so adapters that only ship delta/iv
-    # (the legacy Delta India response) still validate. Downstream code
+    # still validate. Downstream code
     # uses `enrich_with_greeks(option, spot)` to BSM-fill any field left
     # at the default — see app/engines/risk/option_pricing.py. The
     # extended fields are surfaced in every /options/chain response and

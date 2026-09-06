@@ -107,7 +107,7 @@ def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     """Kill switch and duplicate-order guard, before anything is sent.
 
     `check_daily_loss=False` matches every other Kite path here: that breaker is
-    denominated in USD against a crypto book and reads zero for an INR position,
+    denominated in a different accounting unit and reads zero for an INR position,
     so including it would be a gate that always passes — worse than no gate,
     because it looks like one. This engine's own INR daily-loss limit is enforced
     in `GammaMoveStrategy.admit`.

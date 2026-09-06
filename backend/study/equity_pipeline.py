@@ -1,9 +1,7 @@
-"""Equity-index data pipeline — the UNCORRELATED-market unlock for the regime book.
+"""Indian equity-index data pipeline for the regime book.
 
-Crypto-coin breadth failed (the coins are ~0.8 correlated, so more of them adds
-trade count but not independent information). The honest path to a
-deflation-provable (DSR ≥ 0.5) edge is a market whose returns are independent of
-crypto. Indian equity indices (NIFTY, BANKNIFTY) are exactly that.
+Indian equity indices (NIFTY, BANKNIFTY) provide the market universe used by
+the research workflow.
 
 Fetches daily OHLCV from Yahoo Finance's public chart endpoint (no API key,
 stdlib urllib + json — no new dependency), normalises to the same 6-column
@@ -31,7 +29,7 @@ YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/"
 EQUITY_DIR = "data/equity"
 _COLS = ["time", "open", "high", "low", "close", "volume"]
 
-# name -> Yahoo symbol. Indices are uncorrelated to crypto (the whole point).
+# name -> Yahoo symbol for Indian indices.
 SYMBOLS = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK"}
 
 

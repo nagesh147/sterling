@@ -22,7 +22,7 @@ from app.services.exchanges.kite.client import _parse_kite_ts
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "kite_cache")
 
-# The Kite index universe (no crypto). spot_token drives historical fetches.
+# The Kite index universe. spot_token drives historical fetches.
 INDICES = [
     {"name": "NIFTY 50",          "token": 256265, "option_name": "NIFTY",     "strike_step": 50.0},
     {"name": "NIFTY BANK",        "token": 260105, "option_name": "BANKNIFTY", "strike_step": 100.0},

@@ -33,8 +33,8 @@ def _today_start_ms_ist():
 def daily_realized_pnl_inr(positions):
     """Today's realised P&L across the supplied positions.
 
-    The field cascade ends at ``realized_pnl_usd`` because paper/crypto positions
-    expose *only* that field. Omitting it made every such position contribute
+    The field cascade accepts ``realized_pnl_usd`` for records created before
+    the INR schema migration. Omitting it made every such position contribute
     0.00, so the daily-loss breaker read "clear" no matter how much the book had
     lost -- a realised -600 against a -500 halt threshold was allowed through. A
     risk read that cannot see a loss must not be treated as no loss.

@@ -52,11 +52,9 @@ class OrderRouterRequest:
     direction: str               # "long" | "short"
     instrument_type: str         # "futures" | "options"
     size: float = 1.0
-    leverage: float = 1.0
-    order_type: str = "market"   # "market" | "limit" | "maker"
+    order_type: str = "market"   # "market" | "limit"
     limit_price: Optional[float] = None
     time_in_force: str = "gtc"
-    post_only: bool = False
     reduce_only: bool = False
     # Bracket
     stop_loss: Optional[float] = None
@@ -125,12 +123,11 @@ class RouterDeps:
 
 class _AsyncAdapterShim:
     """Minimal protocol the OrderRouter needs from an exchange adapter.
-    Lets us pass a `MagicMock(spec=...)` in tests without dragging the full
-    DeltaIndiaAdapter import chain."""
+    Lets tests pass a `MagicMock(spec=...)` without importing a concrete
+    broker client."""
     async def get_index_price(self, instrument: Any) -> float: ...
     async def place_order(self, **kwargs) -> Dict[str, Any]: ...
     async def place_order_option(self, **kwargs) -> Dict[str, Any]: ...
-    async def set_leverage(self, product_id: int, leverage: float) -> None: ...
     async def get_product_id(self, symbol: str) -> int: ...
     async def cancel_replace_stop(
         self, product_id: int, side: str, size: float,
@@ -215,12 +212,8 @@ class OrderRouter:
             return self._reject(req, "microstructure_veto", micro, now_ms)
 
         # 5. Correlation penalty applies as a *size* multiplier (not a veto).
-        # We preserve fractional contracts here for high-notional options/perps
-        # where rounding to int would distort the size by 30-40% (e.g. 0.7
-        # contracts on a $50k notional option rounded up to 1 is a 43% size
-        # error). The integer-floor is enforced ONLY when the underlying
-        # exchange product doesn't accept fractional sizes — that check now
-        # lives in the dispatcher (_submit_live) where we know the product.
+    # Preserve the strategy's requested size here. Indian lot-size and freeze
+    # quantity enforcement belongs to the broker-aware dispatcher.
         # Hard floor: penalty-scaled size below 0.01 contracts → reject.
         penalty = self.deps.correlation_penalty(sym, self.deps.list_open_positions())
         scaled_size = req.size * penalty
@@ -316,19 +309,6 @@ class OrderRouter:
                 symbol = req.option_symbol
             else:
                 product_id = await self.adapter.get_product_id(symbol)
-                # Set isolated margin before leverage so the position can't
-                # cascade-liquidate the rest of the book if it goes bad.
-                # Non-fatal — some products only support cross-margin and the
-                # exchange will reject this call there; we proceed and let the
-                # leverage call run on whatever margin mode the product allows.
-                try:
-                    await self.adapter.set_margin_mode(product_id, "isolated")
-                except Exception:
-                    pass
-                try:
-                    await self.adapter.set_leverage(product_id, req.leverage)
-                except Exception:
-                    pass        # leverage failures are non-fatal — see runbook
                 order = await self.adapter.place_order(
                     symbol=symbol,
                     side=side,
@@ -336,7 +316,6 @@ class OrderRouter:
                     order_type=self._api_order_type(req.order_type),
                     limit_price=req.limit_price,
                     time_in_force=req.time_in_force,
-                    post_only=(req.order_type == "maker"),
                     reduce_only=req.reduce_only,
                     stop_loss=req.stop_loss,
                     take_profit=req.take_profit,
@@ -349,7 +328,6 @@ class OrderRouter:
                     "direction": req.direction,
                     "instrument_type": req.instrument_type,
                     "size": req.size,
-                    "leverage": req.leverage,
                     "client_order_id": idem_key,
                 },
                 error=str(exc),
@@ -468,17 +446,13 @@ class OrderRouter:
 
     @staticmethod
     def _api_order_type(order_type: str) -> str:
-        return "limit_order" if order_type in ("limit", "maker") else "market_order"
+        return "limit_order" if order_type == "limit" else "market_order"
 
     @staticmethod
     def _symbol_for(req: OrderRouterRequest, inst: Any) -> str:
         if req.instrument_type == "options" and req.option_symbol:
             return req.option_symbol
-        # `delta_perp_symbol` is a Delta Exchange perp ticker. The instrument
-        # registry no longer sets it on ANY instrument, so this used to fall
-        # through and invent "NIFTYUSD" for an NSE underlying. Never fabricate a
-        # crypto ticker: use whatever the instrument actually carries.
-        return getattr(inst, "perp_symbol", "") or req.underlying.upper()
+        return req.underlying.upper()
 
     async def _fetch_entry_price(self, inst: Any) -> float:
         if self.adapter is None:

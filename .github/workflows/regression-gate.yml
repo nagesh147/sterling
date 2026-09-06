@@ -34,5 +34,5 @@ jobs:
           ENVIRONMENT: test
           PAPER_TRADING: "true"
           REAL_PUBLIC_DATA: "false"
-          DEFAULT_UNDERLYING: BTC
+          DEFAULT_UNDERLYING: NIFTY
           LOG_LEVEL: WARNING

@@ -117,7 +117,7 @@ def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     try:
         from app.services.live_safety import assert_safe_to_trade
         # check_daily_loss=False matches every other Kite path here: that breaker
-        # is denominated in USD against a crypto book and reads zero for an INR
+        # is denominated in a different accounting unit and reads zero for an INR
         # position, so including it would be a gate that always passes — worse
         # than no gate, because it looks like one. uid= is what routes this at
         # the right account; omitting it is how an engine escapes the check.
@@ -218,7 +218,7 @@ def daily_loss_breached(uid: str, cfg: AdaptiveEdgeConfig) -> tuple[bool, str]:
     """Whether today's realised loss has reached the configured cap.
 
     Denominated in rupees against this engine's own closed positions, not the
-    shared USD crypto breaker — that one reads zero for an INR book, so relying
+    shared legacy breaker — it reads zero for an INR book, so relying
     on it would be a gate that always passes.
     """
     if cfg.max_daily_loss <= 0:

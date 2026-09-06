@@ -16,10 +16,10 @@ from app.domain.models import TradeEvent
 
 
 def test_event_types_carry_their_name_and_timestamp():
-    ev = FillReceived(symbol="BTCUSD", side="buy", size=1.0, price=50000.0)
+    ev = FillReceived(symbol="NIFTYUSD", side="buy", size=1.0, price=50000.0)
     assert ev.event_type == "FillReceived"
     assert ev.timestamp_ms > 0
-    assert ev.symbol == "BTCUSD"
+    assert ev.symbol == "NIFTYUSD"
     assert isinstance(ev, TradeEvent)
 
 
@@ -33,9 +33,9 @@ async def test_subscribe_and_publish_async_and_sync_handlers():
         seen.append(("async", e.symbol))
 
     bus.subscribe(FillReceived, _async_handler)
-    await bus.publish(FillReceived(symbol="ETHUSD", side="sell", size=2.0, price=3000.0))
-    assert ("sync", "ETHUSD") in seen
-    assert ("async", "ETHUSD") in seen
+    await bus.publish(FillReceived(symbol="BANKNIFTYUSD", side="sell", size=2.0, price=3000.0))
+    assert ("sync", "BANKNIFTYUSD") in seen
+    assert ("async", "BANKNIFTYUSD") in seen
 
 
 @pytest.mark.asyncio
@@ -52,7 +52,7 @@ async def test_subscribe_to_base_TradeEvent_receives_all():
     bus = EventBus()
     all_events = []
     bus.subscribe(TradeEvent, lambda e: all_events.append(e.event_type))
-    await bus.publish(SignalRaised(payload={"underlying": "BTC"}))
+    await bus.publish(SignalRaised(payload={"underlying": "NIFTY"}))
     await bus.publish(Heartbeat())
     assert all_events == ["SignalRaised", "Heartbeat"]
 
@@ -75,6 +75,6 @@ async def test_failing_handler_is_isolated():
 
 @pytest.mark.asyncio
 async def test_position_closed_carries_pnl():
-    ev = PositionClosed(symbol="BTCUSD", realized_pnl_usd=125.5)
+    ev = PositionClosed(symbol="NIFTYUSD", realized_pnl_usd=125.5)
     assert ev.event_type == "PositionClosed"
     assert ev.realized_pnl_usd == 125.5

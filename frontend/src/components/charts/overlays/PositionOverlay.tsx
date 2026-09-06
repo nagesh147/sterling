@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { LineSeries } from 'lightweight-charts';
 import type { IChartApi } from 'lightweight-charts';
-import type { TrailStopState } from '../../../hooks/useTrailStop';
+
+interface TrailStopState {
+  stop: number;
+}
 
 interface PositionOverlayProps {
   chart: IChartApi | null;
@@ -28,19 +31,19 @@ export function PositionOverlay({ chart, entry, trailStop, target }: PositionOve
     if (entry > 0) {
       linesRef.current.push(series.createPriceLine({
         price: entry, color: '#44cc88', lineWidth: 1,
-        lineStyle: 2, axisLabelVisible: true, title: `Entry $${entry.toFixed(0)}`,
+        lineStyle: 2, axisLabelVisible: true, title: `Entry ₹${entry.toFixed(0)}`,
       }));
     }
     if (trailStop?.stop) {
       linesRef.current.push(series.createPriceLine({
         price: trailStop.stop, color: '#cc4444', lineWidth: 1,
-        lineStyle: 2, axisLabelVisible: true, title: `Stop $${trailStop.stop.toFixed(0)} (trailing)`,
+        lineStyle: 2, axisLabelVisible: true, title: `Stop ₹${trailStop.stop.toFixed(0)} (trailing)`,
       }));
     }
     if (target > 0) {
       linesRef.current.push(series.createPriceLine({
         price: target, color: '#f0c040', lineWidth: 1,
-        lineStyle: 2, axisLabelVisible: true, title: `Target $${target.toFixed(0)}`,
+        lineStyle: 2, axisLabelVisible: true, title: `Target ₹${target.toFixed(0)}`,
       }));
     }
 

@@ -9,7 +9,6 @@ import {
 export const KITE_SIGNAL_TABLE_LAYOUT_KEY = 'kite_st_view_layout';
 export const KITE_TERMINAL_THEME_KEY = 'kite_terminal_theme';
 export const KITE_SETTINGS_STORAGE_KEY = 'kite-settings';
-export const STERLING_SHOW_CRYPTO_TAB_KEY = 'sterling_show_crypto_tab';
 export const KITE_DEFAULT_PREFERENCES_MIGRATION_KEY = 'kite_default_preferences_migration';
 export const KITE_DEFAULT_PREFERENCES_VERSION = 'list-layout-light-terminal-v1';
 export const KITE_CHART_WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
@@ -55,11 +54,6 @@ function applyStoredBrandIcon(storage: PreferenceStorage): void {
   applyKiteBrandIcon(readStoredBrandIcon(storage), readStoredBrandIconSize(storage));
 }
 
-function seedStableDefaults(storage: PreferenceStorage): void {
-  if (storage.getItem(STERLING_SHOW_CRYPTO_TAB_KEY) === null) {
-    storage.setItem(STERLING_SHOW_CRYPTO_TAB_KEY, 'false');
-  }
-}
 
 function shouldUseTradingViewDownRed(value: unknown): boolean {
   return typeof value !== 'string' || LEGACY_CHART_DOWN_REDS.has(value.trim().toLowerCase());
@@ -130,7 +124,6 @@ export function installKiteDefaultPreferences(storage: PreferenceStorage | null 
     const layout = storage.getItem(KITE_SIGNAL_TABLE_LAYOUT_KEY);
     const theme = storage.getItem(KITE_TERMINAL_THEME_KEY);
 
-    seedStableDefaults(storage);
     migrateTradingViewChartPalette(storage);
     if (typeof document !== 'undefined') {
       document.documentElement.style.setProperty('--tradingview-down-red', TRADINGVIEW_DOWN_RED);

@@ -249,7 +249,7 @@ export function LiveChart({
           <PositionOverlay
             chart={chart}
             entry={position.entry}
-            trailStop={position.stop != null ? { stop: position.stop, mode: null, highest_seen: null, partial_25_done: false, partial_50_done: false, stop_moved_last_check: false } : null}
+            trailStop={position.stop != null ? { stop: position.stop } : null}
             target={position.target}
           />
         )}

@@ -11,10 +11,9 @@ interface OrderModalProps {
   visible: boolean;
   onClose: () => void;
   symbol: string;
-  marketType: 'crypto' | 'kite';
 }
 
-export default function OrderModal({ visible, onClose, symbol, marketType }: OrderModalProps) {
+export default function OrderModal({ visible, onClose, symbol }: OrderModalProps) {
   const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
   const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
   const [quantity, setQuantity] = useState('10');
@@ -39,33 +38,18 @@ export default function OrderModal({ visible, onClose, symbol, marketType }: Ord
     setLoading(true);
 
     try {
-      if (marketType === 'kite') {
-        const payload = {
-          tradingsymbol: symbol.split(':').pop() || symbol,
-          exchange: symbol.includes(':') ? symbol.split(':')[0] : 'NSE',
-          transaction_type: side,
-          order_type: orderType,
-          quantity: qty,
-          price: orderType === 'LIMIT' ? limitPrice : 0,
-          product: product,
-          variety: 'regular'
-        };
-        await api.post('/api/v1/kite/orders', payload);
-        Alert.alert('Success', `Kite ${side} Order placed successfully.`);
-      } else {
-        const payload = {
-          underlying: symbol,
-          direction: side === 'BUY' ? 'LONG' : 'SHORT',
-          instrument_type: 'futures',
-          size: qty,
-          leverage: 10,
-          order_type: orderType === 'LIMIT' ? 'limit_order' : 'market_order',
-          limit_price: orderType === 'LIMIT' ? limitPrice : undefined,
-          notes: 'Placed via Sterling Mobile'
-        };
-        await api.post('/api/v1/trading/place-order', payload);
-        Alert.alert('Success', `Crypto ${side} Order placed successfully.`);
-      }
+      const payload = {
+        tradingsymbol: symbol.split(':').pop() || symbol,
+        exchange: symbol.includes(':') ? symbol.split(':')[0] : 'NSE',
+        transaction_type: side,
+        order_type: orderType,
+        quantity: qty,
+        price: orderType === 'LIMIT' ? limitPrice : 0,
+        product,
+        variety: 'regular'
+      };
+      await api.post('/api/v1/kite/orders', payload);
+      Alert.alert('Success', `Kite ${side} order placed successfully.`);
       onClose();
     } catch (e: any) {
       Alert.alert('Order Failed', e.message || 'Unknown error occurred.');
@@ -94,7 +78,7 @@ export default function OrderModal({ visible, onClose, symbol, marketType }: Ord
               <View style={styles.header}>
                 <View>
                   <Text style={styles.title}>Place Order</Text>
-                  <Text style={styles.subtitle}>{symbol} • {marketType.toUpperCase()}</Text>
+                  <Text style={styles.subtitle}>{symbol} • KITE</Text>
                 </View>
                 <TouchableOpacity onPress={onClose}>
                   <Ionicons name="close" size={24} color={theme.colors.textDim} />
@@ -142,8 +126,7 @@ export default function OrderModal({ visible, onClose, symbol, marketType }: Ord
                 </View>
               </View>
 
-              {/* Product Selector (Only for Kite) */}
-              {marketType === 'kite' && (
+              {/* Product Selector */}
                 <View style={styles.labelValueRow}>
                   <Text style={styles.sectionLabel}>PRODUCT TYPE</Text>
                   <View style={styles.segmentContainer}>
@@ -161,7 +144,6 @@ export default function OrderModal({ visible, onClose, symbol, marketType }: Ord
                     </TouchableOpacity>
                   </View>
                 </View>
-              )}
 
               {/* Quantity Selector */}
               <View style={styles.inputContainer}>

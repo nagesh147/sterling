@@ -37,9 +37,9 @@ def _reset_safety():
 async def test_pnl_agent_reference_flow():
     bus = EventBus()
     pnl = PNLAgent(bus=bus)
-    await bus.publish(FillReceived(symbol="BTCUSD", side="buy", size=1.0, price=50000.0))
-    await bus.publish(FillReceived(symbol="BTCUSD", side="sell", size=1.0, price=51000.0))
-    await bus.publish(PositionClosed(symbol="BTCUSD", realized_pnl_usd=1000.0))
+    await bus.publish(FillReceived(symbol="NIFTYUSD", side="buy", size=1.0, price=50000.0))
+    await bus.publish(FillReceived(symbol="NIFTYUSD", side="sell", size=1.0, price=51000.0))
+    await bus.publish(PositionClosed(symbol="NIFTYUSD", realized_pnl_usd=1000.0))
     snap = pnl.snapshot()
     assert snap["fills"] == 2
     assert snap["realized_pnl_usd"] == 1000.0
@@ -47,8 +47,7 @@ async def test_pnl_agent_reference_flow():
 
 # ── ExecutionAgent wraps the real OrderRouter (paper) + emits events ──────
 class _Inst:
-    underlying = "BTC"
-    delta_perp_symbol = "BTCUSD"
+    underlying = "NIFTY"
 
 
 @pytest.mark.asyncio
@@ -65,7 +64,7 @@ async def test_execution_agent_routes_and_emits_events():
     )
     agent = ExecutionAgent(router=router, bus=bus)
     resp = await agent.execute(OrderRouterRequest(
-        underlying="BTC", direction="long", instrument_type="futures", size=1,
+        underlying="NIFTY", direction="long", instrument_type="futures", size=1,
     ))
     assert resp.accepted is True
     assert "OrderSubmitted" in events and "OrderAccepted" in events
@@ -86,11 +85,11 @@ async def test_risk_agent_first_breach_wins_and_publishes():
 # ── ReconciliationAgent finds size discrepancies ──────────────────────────
 def test_reconciliation_agent_detects_drift():
     agent = ReconciliationAgent()
-    diff = agent.reconcile(internal={"BTCUSD": 1.0, "ETHUSD": 2.0},
-                           broker={"BTCUSD": 1.0, "ETHUSD": 3.0})
-    assert "ETHUSD" in diff
-    assert "BTCUSD" not in diff
-    assert diff["ETHUSD"] == {"internal": 2.0, "broker": 3.0}
+    diff = agent.reconcile(internal={"NIFTYUSD": 1.0, "BANKNIFTYUSD": 2.0},
+                           broker={"NIFTYUSD": 1.0, "BANKNIFTYUSD": 3.0})
+    assert "BANKNIFTYUSD" in diff
+    assert "NIFTYUSD" not in diff
+    assert diff["BANKNIFTYUSD"] == {"internal": 2.0, "broker": 3.0}
 
 
 # ── BrokerAgent passes through to the adapter ─────────────────────────────
@@ -99,7 +98,7 @@ async def test_broker_agent_passes_through():
     adapter = AsyncMock()
     adapter.place_order.return_value = {"id": "ORD1"}
     agent = BrokerAgent(adapter=adapter)
-    out = await agent.place_order(symbol="BTCUSD", side="buy", size=1)
+    out = await agent.place_order(symbol="NIFTYUSD", side="buy", size=1)
     assert out == {"id": "ORD1"}
     adapter.place_order.assert_awaited_once()
 
@@ -120,8 +119,8 @@ async def test_strategy_agent_emits_signals():
     raised = []
     from app.domain.events import SignalRaised
     bus.subscribe(SignalRaised, lambda e: raised.append(e.payload.get("underlying")))
-    sig = Signal(underlying="BTC", direction="long")
+    sig = Signal(underlying="NIFTY", direction="long")
     agent = StrategyAgent(generator=lambda: [sig], bus=bus)
     out = await agent.run()
     assert out == [sig]
-    assert raised == ["BTC"]
+    assert raised == ["NIFTY"]
