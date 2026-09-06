@@ -381,6 +381,24 @@ export interface ReplayStore {
 
 const boot = loadPrefs();
 
+/**
+ * The ONE definition of "the dock has taken the host pane over".
+ *
+ * This used to be recomputed inline at four call sites with three different
+ * formulas: `setMode` dropped the focus clause and `syncHostFocus` dropped the
+ * `expanded` clause. `KiteLayout` binds this boolean to its own workspace focus
+ * in BOTH directions — the boolean makes it set focus, and setting focus feeds
+ * `syncHostFocus` — so two disagreeing formulas gave that loop no fixed point.
+ * It oscillated `null` <-> `{pane:'dashboard',mode:'maximized'}` forever and
+ * took the whole app down with "Maximum update depth exceeded", blaming
+ * whichever child happened to hold a layout effect.
+ *
+ * Every writer now goes through here, so both directions agree by construction.
+ */
+function hostHidden(s: { open: boolean; mode: ReplayMode; hostFocusMode: ReplayFocusMode | null }): boolean {
+  return s.open && (s.mode === 'expanded' || s.hostFocusMode !== null);
+}
+
 export const useReplayStore = create<ReplayStore>((set, get) => ({
   open: boot.open,
   mode: boot.mode,
@@ -390,7 +408,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   configOpen: false,
   shortcutsOpen: false,
   summaryOpen: false,
-  hostContentHidden: boot.open && boot.mode === 'expanded',
+  hostContentHidden: hostHidden({ open: boot.open, mode: boot.mode, hostFocusMode: null }),
   hostFocusMode: null,
   hostFocusApi: null,
   selectedSignalKey: null,
@@ -402,14 +420,14 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   setOpen: (open) => {
     const { mode, height, tab } = get();
     persist({ v: 1, mode: mode === 'fullscreen' ? 'overlay' : mode, height, tab, open });
-    set({ open, hostContentHidden: open && (mode === 'expanded' || get().hostFocusMode !== null) });
+    set((s) => ({ open, hostContentHidden: hostHidden({ ...s, open }) }));
   },
 
   setMode: (mode) => {
     const { mode: cur, height, tab, open } = get();
     const prevMode = cur === 'fullscreen' ? get().prevMode : cur;
     persist({ v: 1, mode: mode === 'fullscreen' ? prevMode : mode, height, tab, open });
-    set({ mode, prevMode, hostContentHidden: open && mode === 'expanded' });
+    set((s) => ({ mode, prevMode, hostContentHidden: hostHidden({ ...s, mode }) }));
   },
 
   cycleMode: () => {
@@ -451,7 +469,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   // Mirrors the workspace's focus so the controls can show which one is on.
   // While the pane is focused the dock owns it, so the host hides its content.
   syncHostFocus: (hostFocusMode) =>
-    set((s) => ({ hostFocusMode, hostContentHidden: s.open && hostFocusMode !== null })),
+    set((s) => ({ hostFocusMode, hostContentHidden: hostHidden({ ...s, hostFocusMode }) })),
 
   focusHost: (mode) => {
     const { hostFocusApi } = get();

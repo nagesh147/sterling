@@ -58,6 +58,47 @@ describe('modes', () => {
     expect(useReplayStore.getState().hostContentHidden).toBe(false);
   });
 
+  /**
+   * `KiteLayout` binds `hostContentHidden` to its own workspace focus in BOTH
+   * directions: the boolean makes it call `setFocus`, and `setFocus` feeds
+   * `syncHostFocus` straight back. That loop only settles if every writer of
+   * the boolean agrees on what it means.
+   *
+   * They did not. `setMode` computed `open && mode === 'expanded'` while
+   * `syncHostFocus` computed `open && hostFocusMode !== null`, so an expanded
+   * dock reporting "no focus" flipped the boolean false, which cleared the
+   * focus, which flipped it back — forever. React gave up with "Maximum update
+   * depth exceeded" and the ENTIRE app rendered as a crash screen; the trace
+   * blamed whichever child happened to own a layout effect, never the store.
+   *
+   * These assert the fixed point directly, in both orders.
+   */
+  it('keeps host content hidden when an expanded dock reports no host focus', () => {
+    const s = useReplayStore.getState();
+    s.setOpen(true);
+    s.setMode('expanded');
+    expect(useReplayStore.getState().hostContentHidden).toBe(true);
+    // The host mounts and syncs its (empty) focus. This must NOT undo `expanded`.
+    useReplayStore.getState().syncHostFocus(null);
+    expect(useReplayStore.getState().hostContentHidden).toBe(true);
+    // ...and settling on a focus must not change it either.
+    useReplayStore.getState().syncHostFocus('maximized');
+    expect(useReplayStore.getState().hostContentHidden).toBe(true);
+  });
+
+  it('keeps host content hidden when a focused dock leaves expanded mode', () => {
+    const s = useReplayStore.getState();
+    s.setOpen(true);
+    s.syncHostFocus('maximized');
+    expect(useReplayStore.getState().hostContentHidden).toBe(true);
+    // The dock still owns a maximised host pane, so docking it does not hand
+    // the pane back — only clearing the focus does.
+    useReplayStore.getState().setMode('docked');
+    expect(useReplayStore.getState().hostContentHidden).toBe(true);
+    useReplayStore.getState().syncHostFocus(null);
+    expect(useReplayStore.getState().hostContentHidden).toBe(false);
+  });
+
   it('hides host content only while the dock is open', () => {
     useReplayStore.getState().setOpen(false);
     useReplayStore.getState().setMode('expanded');
