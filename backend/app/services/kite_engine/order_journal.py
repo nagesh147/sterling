@@ -247,6 +247,30 @@ def unresolved(uid: str, account_id: Optional[str] = None) -> List[Intent]:
     return [_row(r) for r in rows]
 
 
+def acknowledge(intent_key: str, order_id: str) -> Intent:
+    """Bind the HTTP ACK without regressing a postback that arrived first."""
+    _text(order_id, "order_id")
+    with _transaction() as conn:
+        current = _get(conn, intent_key)
+        _check_order_id(conn, current, order_id)
+        if current.state == "RESERVED":
+            raise ValueError("unclaimed_acknowledgement")
+        state = "SUBMITTED" if current.state in {"SUBMITTING", "UNKNOWN"} else current.state
+        conn.execute("UPDATE kite_order_intents SET state=?,order_id=?,updated_ms=? WHERE intent_key=?",
+                     (state, order_id, int(time.time() * 1000), intent_key))
+        return _get(conn, intent_key)
+
+
+def submission_uncertain(intent_key: str, error: str) -> Intent:
+    """Timeout cannot erase stronger broker evidence delivered concurrently."""
+    with _transaction() as conn:
+        current = _get(conn, intent_key)
+        if current.state == "SUBMITTING":
+            conn.execute("UPDATE kite_order_intents SET state='UNKNOWN',error=?,updated_ms=? WHERE intent_key=?",
+                         (error, int(time.time() * 1000), intent_key))
+        return _get(conn, intent_key)
+
+
 def find(*, uid: str, account_id: str, order_id: str = "", tag: str = "",
          exchange: str = "", symbol: str = "", side: str = "") -> Optional[Intent]:
     """Resolve within account+user; tag fallback recovers a lost acknowledgement.

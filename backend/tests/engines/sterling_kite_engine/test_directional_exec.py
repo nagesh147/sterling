@@ -189,6 +189,13 @@ def test_live_entry_is_reserved_before_send_and_duplicate_signal_cannot_resend()
             _account_id=identity._account_id
             _account_generation=identity._account_generation
             calls=0
+            async def search_instruments(self, symbol, **kw):
+                return [dict(tradingsymbol=symbol, exchange=kw['exchange'], lot_size=75,
+                             tick_size=0.05, instrument_type='PE', expiry=_future_expiry(10))]
+            async def get_quote(self, keys):
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                return {key: dict(last_price=120, timestamp=now, last_trade_time=now) for key in keys}
             async def place_order_option(self,*a,**kw):
                 self.calls+=1; self.sent_tag=kw['tag']
                 raise TimeoutError('response lost')

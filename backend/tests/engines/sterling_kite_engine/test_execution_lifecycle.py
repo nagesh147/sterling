@@ -98,6 +98,11 @@ async def test_unknown_gtt_outcome_is_not_retried(setup):
     await life.consume_order(client, "u", order)
     assert positions.get("u", "OPT").protection_pending
     assert place.await_count == 1
+    p = positions.get("u", "OPT")
+    client.cancel_gtt = AsyncMock()
+    client.place_order_option = AsyncMock()
+    assert not await monitor._exit_position(client, "u", p, 99, reason="manual")
+    client.place_order_option.assert_not_awaited()
 
 
 @pytest.mark.asyncio

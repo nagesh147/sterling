@@ -103,7 +103,7 @@ def _make_broadcaster(user_id: str):
     return _broadcast
 
 
-def _make_order_broadcaster(user_id: str):
+def _make_order_broadcaster(user_id: str, *, client=None):
     async def _broadcast(order: dict) -> None:
         # Confirm fills / rejections against our position registry FIRST (E).
         # The client is passed because a REJECTED entry has to cancel the protective
@@ -111,7 +111,7 @@ def _make_order_broadcaster(user_id: str):
         # log that an orphaned SELL is resting at Zerodha.
         try:
             from app.services.kite_engine import monitor
-            await monitor.on_order_update(user_id, order, client=await _warm_client(user_id))
+            await monitor.on_order_update(user_id, order, client=client or await _warm_client(user_id))
         except Exception as exc:  # never let the monitor kill the WS loop
             log.debug("kite monitor on_order_update failed for %s: %s", user_id, exc)
         try:
@@ -125,12 +125,12 @@ def _make_order_broadcaster(user_id: str):
     return _broadcast
 
 
-async def broadcast_order_update(user_id: str, order: dict) -> None:
+async def broadcast_order_update(user_id: str, order: dict, *, client=None) -> None:
     """Push a single order update to the user's ``kite_orders`` channel.
 
     Used by both the live WS postback (text frames) and the HTTP postback webhook.
     """
-    await _make_order_broadcaster(user_id)(order)
+    await _make_order_broadcaster(user_id, client=client)(order)
 
 
 async def ensure(user_id: str) -> Optional[KiteTicker]:
@@ -167,7 +167,7 @@ async def ensure(user_id: str) -> Optional[KiteTicker]:
     ticker = KiteTicker(
         api_key=acct.api_key, access_token=acct.access_token,
         on_ticks=_make_broadcaster(user_id),
-        on_order_update=_make_order_broadcaster(user_id),
+        on_order_update=_make_order_broadcaster(user_id, client=await _accounts.acquire_client(acct)),
     )
     _tickers[user_id] = ticker
     await ticker.start()

@@ -194,15 +194,28 @@ def test_modify_and_delete_alerts(client, monkeypatch):
 
 # ─── Postback webhook ────────────────────────────────────────────────────────
 def test_postback_routes_to_account_by_kite_user_id(client):
+    import hashlib
     acc = _add_account(client, paper=True)
     ka.save_session("default", acc["id"], access_token="ATOK", kite_user_id="ZID1")
 
     r = client.post("/api/v1/kite/postback", json={
         "user_id": "ZID1", "order_id": "O1", "status": "COMPLETE",
+        "order_timestamp": "2026-09-07 10:00:00",
+        "checksum": hashlib.sha256(b"O12026-09-07 10:00:00topsecret").hexdigest(),
     })
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
     assert r.json()["routed"] is True
+
+
+@pytest.mark.parametrize("checksum", [None, "", "invalid", 42])
+def test_unsigned_or_invalid_postback_cannot_mutate_positions(client, checksum):
+    acc = _add_account(client, paper=True)
+    ka.save_session("default", acc["id"], access_token="ATOK", kite_user_id="ZID1")
+    r = client.post("/api/v1/kite/postback", json={
+        "user_id": "ZID1", "order_id": "O1", "status": "COMPLETE",
+        "order_timestamp": "2026-09-07 10:00:00", "checksum": checksum})
+    assert r.status_code == 200 and r.json()["routed"] is False
 
 
 def test_postback_unknown_user_is_accepted_but_not_routed(client):

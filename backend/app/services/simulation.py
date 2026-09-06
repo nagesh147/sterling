@@ -1201,8 +1201,6 @@ class SimulationRunner:
         for sym in instruments:
             prior_candles = ohlcv_get(sym, res, limit=50, since=warmup_start)
             p_bars = [{**c, "symbol": sym, "resolution": res} for c in prior_candles if c["time"] < start_epoch]
-            if len(p_bars) < 20:
-                p_bars = _generate_warmup_candles(sym, res, start_epoch, count=20, res_sec=res_sec) + p_bars
             self._bar_history[sym] = p_bars[-50:]
 
         # Fetch candles for each instrument from local store
@@ -1217,15 +1215,8 @@ class SimulationRunner:
         all_bars.sort(key=lambda b: b["time"])
 
         if not all_bars:
-            self._status_message = f"Generating session candles for {cfg.date}..."
-            log.info("No remote or local candles found for simulation date %s; generating session candles...", cfg.date)
-            for sym in instruments:
-                all_bars.extend(_generate_synthetic_candles(sym, res, start_epoch, end_epoch, res_sec))
-            all_bars.sort(key=lambda b: b["time"])
-
-        if not all_bars:
             log.warning("No candles available for simulation date %s", cfg.date)
-            self._status_message = f"No candles available for {cfg.date}"
+            self._status_message = f"No real candles available for {cfg.date}; acquire historical data before replay"
             self._state = SimState.IDLE
             return
 
@@ -2365,79 +2356,6 @@ class SimulationRunner:
                 self._active_until_bar[key] = sym_bar_idx + self.MAX_HOLD_BARS
                 self._recompute_totals()
                 self._publish("trade", trade.model_dump())
-
-
-def _generate_warmup_candles(symbol: str, res: str, start_epoch: int, count: int = 20, res_sec: int = 300) -> List[Dict[str, Any]]:
-    """Pre-generate warmup candles before session start so indicators are ready at 09:15 AM."""
-    warmup_start = start_epoch - (count * res_sec)
-    return _generate_synthetic_candles(symbol, res, warmup_start, start_epoch - res_sec, res_sec)
-
-
-def _generate_synthetic_candles(symbol: str, res: str, start_epoch: int, end_epoch: int, res_sec: int) -> List[Dict[str, Any]]:
-    """Generate realistic session candles if DB has no historical data for selected date."""
-    import random
-
-    base_prices = {
-        "NIFTY": 24500.0,
-        "NIFTY 50": 24500.0,
-        "BANKNIFTY": 52300.0,
-        "NIFTY BANK": 52300.0,
-        "FINNIFTY": 23100.0,
-        "NIFTY FIN SERVICE": 23100.0,
-        "MIDCPNIFTY": 13200.0,
-        "SENSEX": 81000.0,
-        "RELIANCE": 3000.0,
-        "TATASTEEL": 150.0,
-        "HDFCBANK": 1650.0,
-        "ICICIBANK": 1200.0,
-        "LT": 3980.0,
-        "SBIN": 1020.0,
-        "TCS": 4200.0,
-        "INFY": 1850.0,
-        "BHARTIARTL": 1550.0,
-        "AXISBANK": 1180.0,
-        "KOTAKBANK": 1800.0,
-        "BAJFINANCE": 7100.0,
-        "ADANIENT": 3050.0,
-        "ADANIPORTS": 1450.0,
-        "BAJAJFINSV": 1850.0,
-    }
-    spot = base_prices.get(symbol.upper(), 1000.0)
-    volatility = spot * 0.0015  # 0.15% per candle standard deviation
-
-    bars = []
-    curr_time = start_epoch
-    curr_price = spot
-
-    random.seed(start_epoch + hash(symbol))  # deterministic per day/symbol
-
-    while curr_time <= end_epoch:
-        drift = random.gauss(0, volatility)
-        open_p = round(curr_price, 2)
-        close_p = round(curr_price + drift, 2)
-        high_p = round(max(open_p, close_p) + abs(random.gauss(0, volatility * 0.5)), 2)
-        low_p = round(min(open_p, close_p) - abs(random.gauss(0, volatility * 0.5)), 2)
-        volume = float(random.randint(1000, 50000))
-
-        bars.append({
-            "symbol": symbol,
-            "resolution": res,
-            "time": curr_time,
-            "open": open_p,
-            "high": high_p,
-            "low": low_p,
-            "close": close_p,
-            "volume": volume,
-        })
-        curr_price = close_p
-        curr_time += res_sec
-    return bars
-
-
-def _generate_warmup_candles(symbol: str, res: str, start_epoch: int, count: int = 20, res_sec: int = 300) -> List[Dict[str, Any]]:
-    """Pre-generate warmup candles before session start so indicators are ready at 09:15 AM."""
-    warmup_start = start_epoch - (count * res_sec)
-    return _generate_synthetic_candles(symbol, res, warmup_start, start_epoch - res_sec, res_sec)
 
 
 async def _hydrate_missing_candles(
