@@ -17,11 +17,7 @@ ORB_VEHICLES = frozenset({"otm_options", "deep_itm_options"})
 
 
 def ticket_fingerprint(plan: dict[str, Any], signal: dict[str, Any]) -> str:
-    """Stable id for the Manual board ticket and the Auto order.
-
-    Manual Buy and Auto execute_scan must resolve to the same fingerprint for the
-    same scan row — one signal, one ticket, two ways to place it.
-    """
+    """Stable id for the Manual board ticket and the Auto order."""
     contract = plan.get("contract") or {}
     return "|".join(
         [
@@ -55,18 +51,12 @@ def orb_open_positions(uid: str) -> list:
     for p in positions.open_positions(uid):
         vehicle = str(getattr(p, "vehicle", "") or "")
         if vehicle in ORB_VEHICLES or vehicle == "":
-            # Empty vehicle kept for legacy rows; callers may still filter further.
             out.append(p)
     return out
 
 
 def recover_trade_state(uid: str) -> dict[str, Any]:
-    """Rebuild ORB day-count state after a process restart.
-
-    Positions already rehydrate from ``kite_engine_positions_{uid}``. This syncs
-    the ORB trade-state date/count so Auto cannot double-fire past max_trades_per_day
-    when the in-memory runner restarts mid-session.
-    """
+    """Rebuild ORB day-count visibility after a process restart."""
     from app.services.nifty_orb_execution import _save_state, _state
 
     state = _state(uid)
@@ -74,11 +64,9 @@ def recover_trade_state(uid: str) -> dict[str, Any]:
         p
         for p in orb_open_positions(uid)
         if str(getattr(p, "vehicle", "") or "") in ORB_VEHICLES
-        or str(getattr(p, "order_id", "") or "").startswith("ORB")
-        or "ORB" in str(getattr(p, "guard_key", "") or "")
+        or "ORB" in str(getattr(p, "order_id", "") or "").upper()
+        or "ORB" in str(getattr(p, "guard_key", "") or "").upper()
     ]
-    # Day count is fills today, not currently open — never raise the cap from open qty.
-    # Only ensure date bucket exists and open underlyings are visible to the next scan.
     underlyings = sorted(
         {str(getattr(p, "underlying", "") or "").upper() for p in open_orb if getattr(p, "underlying", "")}
     )
@@ -128,22 +116,44 @@ async def recover_after_restart(uid: str) -> dict[str, Any]:
 
 
 async def disarm_position(client, uid: str, *, symbol: str, reason: str = "disarmed") -> dict[str, Any]:
-    """Tear down protection for a held ORB contract, then mark the registry closed.
-
-    Cancels the broker GTT when present, best-effort unsubscribes the tick token,
-    and closes the positions registry row. Does not place a market exit — callers
-    that need flat inventory must sell first (see square_off_expired).
-    """
+    """Cancel broker GTT (if any), drop tick watch, close registry row."""
     from app.services.kite_engine import positions, protective_stop, state
-    from app.services.kite_engine.protection import disarm_position as _disarm
 
-    return await _disarm(client, uid, symbol=symbol, reason=reason)
+    p = positions.get(uid, symbol)
+    if p is None:
+        return {"status": "missing", "symbol": symbol}
+    gtt_id = int(getattr(p, "gtt_id", 0) or 0)
+    cancel_outcome = "none"
+    if gtt_id:
+        try:
+            cancel_outcome = await protective_stop.cancel_stop_result(client, gtt_id)
+        except Exception as exc:  # noqa: BLE001
+            cancel_outcome = f"error:{exc}"
+            log.warning("ORB disarm GTT cancel failed %s #%s: %s", symbol, gtt_id, exc)
+    token = int(getattr(p, "token", 0) or 0)
+    if token:
+        try:
+            from app.services.exchanges.kite import ticker_manager
+
+            unsub = getattr(ticker_manager, "unsubscribe", None)
+            if callable(unsub):
+                await unsub(uid, [token])
+        except Exception as exc:  # noqa: BLE001
+            log.debug("ORB disarm unsubscribe %s: %s", symbol, exc)
+    positions.close(uid, symbol, reason=reason)
+    state.log(uid, "info", f"ORB protection disarmed for {symbol}: {reason} (gtt={cancel_outcome})")
+    return {
+        "status": "disarmed",
+        "symbol": symbol,
+        "gtt_id": gtt_id,
+        "cancel": cancel_outcome,
+        "reason": reason,
+    }
 
 
 async def square_off_expired(client, uid: str, *, today: datetime | None = None) -> dict[str, Any]:
     """Market-sell ORB option positions whose expiry is today or earlier (IST)."""
-    from app.services.kite_engine import positions, state
-    from app.services.kite_engine.protection import disarm_position as _disarm
+    from app.services.kite_engine import state
     from app.services.nifty_orb_execution import _sell_and_verify
 
     now = today or datetime.now(IST)
@@ -161,9 +171,10 @@ async def square_off_expired(client, uid: str, *, today: datetime | None = None)
             continue
         qty = int(p.qty or 0)
         ok, note = await _sell_and_verify(client, p.symbol, p.exchange, qty)
-        disarm = await _disarm(client, uid, symbol=p.symbol, reason=f"expiry_square_off:{expiry_s}")
+        disarm = await disarm_position(
+            client, uid, symbol=p.symbol, reason=f"expiry_square_off:{expiry_s}"
+        )
         if ok:
-            positions.close(uid, p.symbol, reason=f"expiry_square_off:{expiry_s}")
             state.log(uid, "info", f"ORB expiry square-off {p.symbol}: {note}")
         else:
             state.log(uid, "order_failed", f"ORB expiry square-off FAILED {p.symbol}: {note}")
