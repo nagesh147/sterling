@@ -904,6 +904,30 @@ async def watchlist_sync(user: UserContext = Depends(get_current_user)):
 
 
 # ─── Risk controls ────────────────────────────────────────────────────────────
+class KillSwitchRequest(BaseModel):
+    enabled: bool
+    reason: str = ""
+
+
+@router.get("/trading/kill-switch")
+async def get_kill_switch(_user: UserContext = Depends(get_current_user)):
+    """The halt every order path checks first, whatever the daily loss says.
+
+    `live_safety.assert_safe_to_trade` has always consulted this and no route
+    exposed it, so the only way to engage it was a Python shell. It is the one
+    control an operator needs when something is going wrong and they cannot say
+    exactly what, which is precisely when a shell is the wrong interface.
+    """
+    return live_safety.kill_switch_state()
+
+
+@router.post("/trading/kill-switch")
+async def set_kill_switch(body: KillSwitchRequest, _user: UserContext = Depends(get_current_user)):
+    # Process-wide, not per account: a halt that left another account trading
+    # would not be a halt.
+    return live_safety.set_kill_switch(body.enabled, body.reason)
+
+
 class DailyLossRequest(BaseModel):
     """Both thresholds are a realised INR loss, so both are negative.
 

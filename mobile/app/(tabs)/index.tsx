@@ -11,18 +11,18 @@ import { Ionicons } from '@expo/vector-icons';
 
 type SubTab = 'WATCHLIST' | 'POSITIONS' | 'HOLDINGS' | 'ORDERS';
 
-// Default Watchlist if backend is not loaded
-const DEFAULT_WATCHLIST = [
-  { symbol: 'NSE:INFY', name: 'Infosys Ltd', price: 1845.50, change: 1.25 },
-  { symbol: 'NSE:TCS', name: 'Tata Consultancy Services', price: 3820.10, change: -0.45 },
-  { symbol: 'NSE:RELIANCE', name: 'Reliance Industries', price: 2450.00, change: 0.85 },
-  { symbol: 'NFO:NIFTY26JUL22000CE', name: 'Nifty Jul 22000 Call', price: 185.30, change: 12.4 },
-  { symbol: 'NFO:NIFTY26JUL22000PE', name: 'Nifty Jul 22000 Put', price: 92.40, change: -8.15 },
-];
+/* There is no placeholder watchlist any more.
+   There used to be five hard-coded rows -- fixed prices, and two NIFTY July
+   2026 contracts -- and the WATCHLIST tab had no fetch branch at all, so those
+   rows were never replaced. Tapping one opened the LIVE order modal, which
+   means a mobile operator could be shown an invented price and send an order
+   for a contract that no longer lists. An empty list is the honest state while
+   there is nothing real to show. */
+type WatchRow = { symbol: string; name: string; price: number | null; change: number | null };
 
 export default function IndianMarketsTerminal() {
   const [activeTab, setActiveTab] = useState<SubTab>('WATCHLIST');
-  const [watchlist, setWatchlist] = useState(DEFAULT_WATCHLIST);
+  const [watchlist, setWatchlist] = useState<WatchRow[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [holdings, setHoldings] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -35,7 +35,26 @@ export default function IndianMarketsTerminal() {
 
   const fetchKiteData = async () => {
     try {
-      if (activeTab === 'POSITIONS') {
+      if (activeTab === 'WATCHLIST') {
+        // Kite Connect has no saved-marketwatch endpoint; the backend synthesises
+        // one from holdings, positions and GTTs.
+        const res = await api.get<{ items: { symbol: string; name?: string }[] }>(
+          '/api/v1/kite/watchlist/sync');
+        const items = res.items || [];
+        if (!items.length) { setWatchlist([]); return; }
+        const query = items.map((i) => `i=${encodeURIComponent(i.symbol)}`).join('&');
+        const quotes = await api.get<Record<string, any>>(`/api/v1/kite/quote?${query}`);
+        setWatchlist(items.map((i) => {
+          const q = quotes?.[i.symbol];
+          const ltp = typeof q?.last_price === 'number' ? q.last_price : null;
+          const prev = q?.ohlc?.close;
+          // A row with no quote keeps null rather than 0: zero is a price, and
+          // this is the absence of one.
+          const change = (ltp != null && typeof prev === 'number' && prev > 0)
+            ? ((ltp - prev) / prev) * 100 : null;
+          return { symbol: i.symbol, name: i.name || i.symbol, price: ltp, change };
+        }));
+      } else if (activeTab === 'POSITIONS') {
         const res = await api.get<{ net: any[]; day: any[] }>('/api/v1/kite/positions');
         setPositions(res.net || []);
       } else if (activeTab === 'HOLDINGS') {
@@ -97,23 +116,36 @@ export default function IndianMarketsTerminal() {
         data={watchlist}
         keyExtractor={(item) => item.symbol}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.cardRow} 
-            onPress={() => handleOpenOrder(item.symbol)}
-          >
-            <View>
-              <Text style={styles.symbolText}>{item.symbol}</Text>
-              <Text style={styles.nameText}>{item.name}</Text>
-            </View>
-            <View style={styles.rightAligned}>
-              <Text style={styles.priceVal}>₹{item.price.toFixed(2)}</Text>
-              <Text style={[styles.changeText, { color: item.change >= 0 ? theme.colors.green : theme.colors.red }]}>
-                {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
-              </Text>
-            </View>
-          </TouchableOpacity>
+        ListEmptyComponent={(
+          <Text style={styles.emptyText}>
+            {loading ? 'Loading…' : 'Nothing to watch. Holdings, open positions and GTTs appear here.'}
+          </Text>
         )}
+        renderItem={({ item }) => {
+          // No quote, no order. The row is what tells you the price, so a row
+          // that cannot tell you must not be the thing that starts a trade.
+          const priced = item.price != null;
+          return (
+            <TouchableOpacity
+              style={styles.cardRow}
+              disabled={!priced}
+              onPress={() => handleOpenOrder(item.symbol)}
+            >
+              <View>
+                <Text style={styles.symbolText}>{item.symbol}</Text>
+                <Text style={styles.nameText}>{item.name}</Text>
+              </View>
+              <View style={styles.rightAligned}>
+                <Text style={styles.priceVal}>{priced ? `₹${item.price!.toFixed(2)}` : 'No quote'}</Text>
+                {item.change != null && (
+                  <Text style={[styles.changeText, { color: item.change >= 0 ? theme.colors.green : theme.colors.red }]}>
+                    {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)}%
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
       />
     );
   };

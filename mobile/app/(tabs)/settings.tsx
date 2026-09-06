@@ -17,35 +17,45 @@ export default function SettingsDashboard() {
   // States
   const [killSwitch, setKillSwitch] = useState({ enabled: false, reason: '' });
   const [routerMode, setRouterMode] = useState<RouterMode>('paper');
-  const [dailyLoss, setDailyLoss] = useState({ enabled: true, soft_warn_usd: 100, hard_halt_usd: 200 });
+  // INR, and stored negative. The USD fields these used to carry went with the
+  // crypto surface, along with every route this screen called.
+  const [dailyLoss, setDailyLoss] = useState({ enabled: true, soft_warn_inr: 1000, hard_halt_inr: 1500 });
   const [telegram, setTelegram] = useState({ bot_token: '', chat_id: '', enabled: false, reachable: false, hint: '' });
   const [systemInfo, setSystemInfo] = useState<any>(null);
 
   const fetchSettings = async () => {
     try {
-      const [ks, dl, rm, tg, info] = await Promise.all([
-        api.get<any>('/api/v1/trading/kill-switch'),
-        api.get<any>('/api/v1/risk/daily-loss'),
-        api.get<any>('/api/v1/trading/algo-router-mode'),
-        api.get<any>('/api/v1/config/telegram'),
-        api.get<any>('/api/v1/config/info'),
+      // allSettled, not all. One dead route used to reject the whole batch, so a
+      // single 404 left the screen blank -- including the kill switch, which is
+      // the control you most need when something else is already broken.
+      const [ks, dl, tg] = await Promise.allSettled([
+        api.get<any>('/api/v1/kite/trading/kill-switch'),
+        api.get<any>('/api/v1/kite/risk/daily-loss'),
+        api.get<any>('/api/v1/kite/telegram'),
       ]);
 
-      setKillSwitch({ enabled: ks.enabled, reason: ks.reason || '' });
-      setRouterMode((rm.mode || 'paper') as RouterMode);
-      setDailyLoss({
-        enabled: dl.enabled !== false,
-        soft_warn_usd: dl.soft_warn_usd || 100,
-        hard_halt_usd: dl.hard_halt_usd || 200
-      });
-      setTelegram({
-        bot_token: '',
-        chat_id: tg.chat_id || '',
-        enabled: tg.enabled || false,
-        reachable: tg.reachable || false,
-        hint: tg.bot_token_hint || ''
-      });
-      setSystemInfo(info);
+      if (ks.status === 'fulfilled') {
+        setKillSwitch({ enabled: ks.value.enabled, reason: ks.value.reason || '' });
+      }
+      if (dl.status === 'fulfilled') {
+        // Shown as a positive rupee figure; the backend stores a loss.
+        setDailyLoss({
+          enabled: dl.value.enabled !== false,
+          soft_warn_inr: Math.abs(dl.value.soft_warn_inr ?? 1000),
+          hard_halt_inr: Math.abs(dl.value.hard_halt_inr ?? 1500),
+        });
+      }
+      if (tg.status === 'fulfilled') {
+        const first = Array.isArray(tg.value) ? tg.value[0] : tg.value;
+        setTelegram({
+          bot_token: '',
+          chat_id: first?.chat_id || '',
+          enabled: first?.enabled || false,
+          reachable: first?.reachable || false,
+          hint: first?.bot_token_hint || ''
+        });
+      }
+      setSystemInfo(null);
     } catch (e) {
       console.warn('Error loading settings:', e);
     }
@@ -60,7 +70,7 @@ export default function SettingsDashboard() {
     setBusy(true);
     try {
       const next = !killSwitch.enabled;
-      await api.post('/api/v1/trading/kill-switch', {
+      await api.post('/api/v1/kite/trading/kill-switch', {
         enabled: next,
         reason: next ? 'manual mobile operator halt' : ''
       });
@@ -74,6 +84,13 @@ export default function SettingsDashboard() {
   };
 
   const handleChangeMode = async (mode: RouterMode) => {
+    // No backend. /api/v1/trading/algo-router-mode went with the crypto surface
+    // and Kite has no equivalent: paper vs live is a property of the ACCOUNT
+    // (kite_accounts.is_paper), not a router setting. Left visible and inert
+    // rather than posting into a 404 and reporting "Mode Switched".
+    Alert.alert('Not available', 'Paper or live is set per Kite account, from the desktop app.');
+    return;
+    // eslint-disable-next-line no-unreachable
     setBusy(true);
     try {
       await api.post('/api/v1/trading/algo-router-mode', { mode });
@@ -90,10 +107,11 @@ export default function SettingsDashboard() {
   const handleSaveDailyLoss = async () => {
     setBusy(true);
     try {
-      await api.post('/api/v1/risk/daily-loss', {
+      await api.put('/api/v1/kite/risk/daily-loss', {
         enabled: dailyLoss.enabled,
-        soft_warn_usd: Number(dailyLoss.soft_warn_usd),
-        hard_halt_usd: Number(dailyLoss.hard_halt_usd)
+        // Typed as a positive rupee amount, stored as the loss it describes.
+        soft_warn_inr: -Math.abs(Number(dailyLoss.soft_warn_inr)),
+        hard_halt_inr: -Math.abs(Number(dailyLoss.hard_halt_inr)),
       });
       Alert.alert('Success', 'Daily loss limits updated successfully.');
       await fetchSettings();
@@ -107,6 +125,9 @@ export default function SettingsDashboard() {
   const handleSaveTelegram = async () => {
     setBusy(true);
     try {
+      Alert.alert('Not available', 'Telegram targets are managed from the desktop app, under Connect.');
+      return;
+      // eslint-disable-next-line no-unreachable
       await api.put('/api/v1/config/telegram', {
         bot_token: telegram.bot_token,
         chat_id: telegram.chat_id,
@@ -124,6 +145,9 @@ export default function SettingsDashboard() {
   const handleTestTelegram = async () => {
     setBusy(true);
     try {
+      Alert.alert('Not available', 'Send a test from the desktop app, under Connect.');
+      return;
+      // eslint-disable-next-line no-unreachable
       const res = await api.post<any>('/api/v1/config/telegram/test', {});
       if (res.reachable) {
         Alert.alert('Success', 'Test message sent successfully!');
@@ -217,22 +241,22 @@ export default function SettingsDashboard() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>SOFT WARN LIMIT (USD)</Text>
+              <Text style={styles.inputLabel}>SOFT WARN LIMIT (₹)</Text>
               <TextInput
                 style={styles.input}
-                value={String(dailyLoss.soft_warn_usd)}
-                onChangeText={(val) => setDailyLoss({ ...dailyLoss, soft_warn_usd: Number(val) || 0 })}
+                value={String(dailyLoss.soft_warn_inr)}
+                onChangeText={(val) => setDailyLoss({ ...dailyLoss, soft_warn_inr: Number(val) || 0 })}
                 keyboardType="numeric"
                 placeholderTextColor={theme.colors.textMuted}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>HARD HALT LIMIT (USD)</Text>
+              <Text style={styles.inputLabel}>HARD HALT LIMIT (₹)</Text>
               <TextInput
                 style={styles.input}
-                value={String(dailyLoss.hard_halt_usd)}
-                onChangeText={(val) => setDailyLoss({ ...dailyLoss, hard_halt_usd: Number(val) || 0 })}
+                value={String(dailyLoss.hard_halt_inr)}
+                onChangeText={(val) => setDailyLoss({ ...dailyLoss, hard_halt_inr: Number(val) || 0 })}
                 keyboardType="numeric"
                 placeholderTextColor={theme.colors.textMuted}
               />
