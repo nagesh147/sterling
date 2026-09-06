@@ -27,10 +27,12 @@ from app.engines.derivatives.schemas import MarketContext, StrategyDerivativesPr
 COLD_START_LEVERAGE_CAP = 2.0
 KELLY_FRACTION = 0.25                  # fractional Kelly — conservative
 DEFAULT_RISK_PER_R = 0.02              # 2% per R as the "1 unit" denominator
-EXCHANGE_PRODUCT_CAP = {
-    "BTC": 100.0, "ETH": 100.0, "SOL": 50.0, "XRP": 25.0,
-    "BNB": 50.0, "ADA": 25.0,
-}
+# Per-product maximum leverage. This was a crypto-perp table (BTC/ETH 100x,
+# SOL/BNB 50x, XRP/ADA 25x) and every NSE underlying fell through to the 25.0
+# default below — a crypto tier, not an NSE one. NSE F&O leverage is set by
+# broker margin, which the sizing path already checks, so the cap here is a
+# ceiling rather than a venue lookup.
+EXCHANGE_PRODUCT_CAP: dict[str, float] = {}
 
 
 @dataclass

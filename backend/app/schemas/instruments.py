@@ -19,14 +19,10 @@ class InstrumentMeta(BaseModel):
     index_name: str
     dvol_symbol: Optional[str] = None
     description: str = ""
-    # OKX-specific
-    okx_perp_symbol: Optional[str] = None
-    okx_index_id: Optional[str] = None
-    okx_underlying: Optional[str] = None
-
-    # Delta Exchange India-specific
-    delta_perp_symbol: Optional[str] = None        # e.g. "BTCUSD" or "BTCUSDT"
-    delta_option_underlying: Optional[str] = None  # e.g. "BTC" for option chain
+    # OKX / Delta Exchange perp + option-chain identifiers used to live here.
+    # The instrument registry sets them on nothing, and code that read them fell
+    # back to inventing a "{SYM}USD" ticker for NSE underlyings, so they are gone
+    # rather than left as permanently-None traps.
     # Zerodha Kite-specific
     zerodha_token: Optional[int] = None            # instrument token for historical data
     zerodha_index_symbol: Optional[str] = None     # e.g. "NSE:NIFTY 50" for LTP/quote

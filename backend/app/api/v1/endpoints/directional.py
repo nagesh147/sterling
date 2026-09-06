@@ -419,7 +419,7 @@ async def _fire_signal_alert(
             'risk_pct': round(risk_pct, 2), 'score': round(score, 1),
             'atr': round(atr_val, 2), 'adx': round(adx_val, 1),
             'rsi': round(getattr(signal, 'rsi', 50.0), 1),
-            'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
+            'futures_symbol': sym,
             'rec_leverage': rec_lev,
             'opt_strike': opt_strike, 'opt_type': opt_type,
             'opt_expiry': opt_expiry, 'opt_symbol': opt_symbol,
@@ -431,7 +431,7 @@ async def _fire_signal_alert(
         sl_str    = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
         tp_str    = f"${target_price:,.2f}" if target_price else 'N/A'
         rr_label  = f"{alert_mode.rr_target:.1f}:1" if alert_mode else "2:1"
-        fut_sym   = inst.delta_perp_symbol or f"{sym}USD"
+        fut_sym   = sym
         rsi_val   = round(getattr(signal, 'rsi', 50))
 
         # ── FUTURES message ───────────────────────────────────────────────────
@@ -644,26 +644,13 @@ async def _watchlist_item(
 def _adapter_can_serve(inst, source: str) -> bool:
     """
     Check whether the active data source can serve market data for an instrument.
-    Uses instrument-specific symbol fields rather than inst.exchange label,
-    since most crypto instruments are multi-exchange.
+
+    Zerodha is the only adapter `adapter_manager._build_raw` can construct, so
+    every other branch this used to carry (delta_india / okx / binance /
+    deribit, including a special case for XRP being delisted on Deribit) could
+    only ever describe a source that cannot exist.
     """
-    if source == "zerodha":
-        return inst.exchange == "zerodha"
-    if source == "delta_india":
-        # Delta India can serve any instrument that has a delta_perp_symbol
-        return inst.delta_perp_symbol is not None
-    if source == "okx":
-        return inst.okx_perp_symbol is not None
-    if source == "binance":
-        # Binance can serve all non-zerodha crypto instruments
-        return inst.exchange != "zerodha"
-    if source == "deribit":
-        # XRP-PERPETUAL returns 400 on Deribit (delisted / never listed)
-        if inst.underlying == "XRP":
-            return False
-        return inst.exchange != "zerodha"
-    # Unknown source: attempt and let the adapter fail gracefully
-    return inst.exchange != "zerodha"
+    return source == "zerodha" and inst.exchange == "zerodha"
 
 
 @router.get("/watchlist")
@@ -1138,7 +1125,7 @@ signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
             'squeezed': getattr(signal, 'squeezed', False),
             # Actionable trade parameters
             'rec_leverage': 5 if regime.adx < 20 else (10 if regime.adx < 30 else 20),
-            'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
+            'futures_symbol': sym,
             **_option_params(sym, spot_f, setup.direction.value, mode),
             'fresh': True,
             'timestamp_ms': now_ms,
@@ -1228,7 +1215,7 @@ async def all_signals(request: Request) -> dict:
                 'rsi': snap.rsi,
                 'squeezed': snap.squeezed,
                 'rec_leverage': rec_lev,
-                'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
+                'futures_symbol': sym,
                 **opt,
                 'fresh': True,
                 'timestamp_ms': snap.computed_at_ms,
@@ -1796,7 +1783,7 @@ async def _sse_all_generator(
         rest_needed: list = []
 
         for inst in serveable:
-            delta_sym = inst.delta_perp_symbol or f"{inst.underlying}USD"
+            delta_sym = inst.underlying
             if delta_sym in ws_cache:
                 prices[inst.underlying] = ws_cache[delta_sym]
             else:
@@ -1892,7 +1879,7 @@ async def _sse_all_generator(
                     'rsi': snap.rsi,
                     'squeezed': snap.squeezed,
                     'rec_leverage': rec_lev,
-                    'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
+                    'futures_symbol': sym,
                     **opt,
                     'fresh': True,
                     'timestamp_ms': snap.computed_at_ms,

@@ -29,7 +29,7 @@ class WalkForwardConfig:
     test_bars:  int = 60
     step_bars:  int = 30
     score_thresholds_to_test: list = field(default_factory=lambda: [0, 3, 5, 8, 10, 12, 15])
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     # Tier S #4 — deflated-Sharpe gate is now ALWAYS-ON by default. Threshold
     # selection requires deflated_sharpe ≥ deflated_p_gate (default 0.95) on
     # the train window. Windows that don't clear the gate are flagged

@@ -111,13 +111,11 @@ async def _market_context(
                             detail="no spot available (adapter cold + no stored candles)")
 
     # Funding rate via the new adapter method
-    funding_8h = 0.0001
-    try:
-        pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
-        fr = await adapter.get_funding_rate(pid)
-        funding_8h = float(fr.get("funding_rate_8h_pct") or 0.0001)
-    except Exception as _exc:
-        log.debug("suppressed: %s", _exc)
+    # Funding is a perpetual-swap mechanism and NSE has none; ZerodhaAdapter
+    # implements neither `get_product_id` nor `get_funding_rate`, so this block
+    # asked a Delta API for a fabricated "{SYM}USD" product and swallowed the
+    # exception on every call.
+    funding_8h = 0.0
 
     # CB / regime / calibration consumers
     dd_cb = getattr(app.state, "dd_circuit_breaker", None)
@@ -962,16 +960,22 @@ async def greeks_budget_state(request: Request) -> dict:
 
 @router.get("/funding/{underlying}")
 async def funding(underlying: str, request: Request) -> dict:
-    from app.services import adapter_manager as _adm
-    adapter = _adm.get_adapter() or getattr(request.app.state, "adapter", None)
+    # No adapter is consulted any more (see below), so only the underlying has
+    # to resolve — an unknown one is still a 503.
     inst = registry.get_instrument(underlying.upper())
-    if adapter is None or inst is None:
-        raise HTTPException(status_code=503, detail="adapter or instrument unavailable")
-    try:
-        pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
-        return await adapter.get_funding_rate(pid)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"funding fetch failed: {exc}") from exc
+    if inst is None:
+        raise HTTPException(status_code=503, detail="instrument unavailable")
+    # `GET /derivatives/funding/{underlying}` is a perpetual-swap concept.
+    # NSE instruments have no funding leg — cost of carry is already in the
+    # futures basis and the option premium — and ZerodhaAdapter implements
+    # neither `get_product_id` nor `get_funding_rate`. This used to ask a Delta
+    # API for a fabricated "{SYM}USD" product and surface a 502.
+    return {
+        "underlying": underlying.upper(),
+        "funding_rate_8h_pct": 0.0,
+        "source": "not_applicable",
+        "reason": "NSE instruments have no perpetual funding leg",
+    }
 
 
 @router.get("/book/{symbol}")

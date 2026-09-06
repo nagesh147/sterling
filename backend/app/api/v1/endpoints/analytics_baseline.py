@@ -34,7 +34,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics_baseline"])
 
 
 class BaselineRequest(BaseModel):
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     profile: str = "intraday_1h"
     lookback_days: int = Field(default=60, ge=14, le=365)
     funding_8h_pct: Optional[float] = None
@@ -44,7 +44,7 @@ class BaselineRequest(BaseModel):
 
 
 class CPCVRequest(BaseModel):
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     profile: str = "intraday_1h"
     lookback_days: int = Field(default=60, ge=14, le=365)
     n_groups: int = Field(default=6, ge=3, le=12)
@@ -54,7 +54,7 @@ class CPCVRequest(BaseModel):
 
 
 class LabelRequest(BaseModel):
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     profile: str = "intraday_1h"
     lookback_days: int = Field(default=60, ge=14, le=365)
     pt_mult: float = 2.0

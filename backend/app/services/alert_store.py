@@ -124,7 +124,7 @@ def _seed_default_alerts() -> None:
         instruments = []
 
     # Fallback: seed for BTC and ETH even if registry unavailable
-    underlyings = [i.underlying for i in instruments] if instruments else ["BTC", "ETH"]
+    underlyings = [i.underlying for i in instruments] if instruments else ["NIFTY", "BANKNIFTY"]
 
     for sym in underlyings:
         for condition, notes in [

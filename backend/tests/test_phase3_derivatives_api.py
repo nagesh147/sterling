@@ -78,14 +78,13 @@ def app(monkeypatch):
     cal.win_rate.return_value = None
     app.state.calibration_service = cal
 
-    # Force the instrument registry to know about BTC for the funding/book tests
+    # Force the instrument registry to know one underlying for the funding/book
+    # tests. Was BTC with Delta perp/option identifiers; those fields are gone
+    # and the registry is NSE-only now.
     from app.services.exchanges import instrument_registry as _reg
-    btc = MagicMock(
-        underlying="BTC", delta_perp_symbol="BTCUSD",
-        delta_option_underlying="BTC", has_options=True, min_dte=0,
-    )
+    nifty = MagicMock(underlying="NIFTY", has_options=True, min_dte=0)
     monkeypatch.setattr(_reg, "get_instrument",
-                        lambda s: btc if (s or "").upper() == "BTC" else None)
+                        lambda s: nifty if (s or "").upper() == "NIFTY" else None)
 
     return app
 
@@ -129,12 +128,18 @@ class TestConfigEndpoints:
 
 
 class TestFundingEndpoint:
-    def test_returns_adapter_value(self, client, app):
-        r = client.get("/api/v1/derivatives/funding/BTC")
+    def test_reports_no_funding_leg_for_nse(self, client, app):
+        """Funding is a perpetual-swap mechanism and NSE has none.
+
+        This used to assert a live Delta funding rate for BTC. The endpoint now
+        answers honestly instead of asking a Delta API for a fabricated
+        "{SYM}USD" product and returning its 502.
+        """
+        r = client.get("/api/v1/derivatives/funding/NIFTY")
         assert r.status_code == 200
         body = r.json()
-        assert body["funding_rate_8h_pct"] == 0.0001
-        assert body["source"] == "live"
+        assert body["funding_rate_8h_pct"] == 0.0
+        assert body["source"] == "not_applicable"
 
     def test_unknown_underlying_503(self, client):
         r = client.get("/api/v1/derivatives/funding/UNOBTANIUM")
@@ -177,7 +182,7 @@ class TestPreviewEndpoint:
                 # Scalping-tier profiles default enabled=False (operator opts
                 # in), so this exercises the PROFILE_OFF gate. (directional and
                 # edge/* feeds default enabled=True for display.)
-                "strategy": "conservative/price_action", "underlying": "BTC",
+                "strategy": "conservative/price_action", "underlying": "NIFTY",
                 "direction": "long", "entry": 50_000,
                 "stop_loss": 49_000, "take_profit": 53_000,
                 "atr": 1_000, "signal_score": 75,
@@ -195,7 +200,7 @@ class TestPreviewEndpoint:
         r = client.get(
             "/api/v1/derivatives/preview",
             params={
-                "strategy": "directional", "underlying": "BTC",
+                "strategy": "directional", "underlying": "NIFTY",
                 "direction": "long", "entry": 50_000,
                 "stop_loss": 49_000, "take_profit": 53_000,
                 "atr": 1_000, "signal_score": 75,
@@ -238,7 +243,7 @@ class TestExecuteEndpoint:
         dec = DerivativesDecision(
             status=DecisionStatus.OK,
             chosen=DerivativesCandidate(
-                rank=0, instrument_type="futures", underlying="BTC",
+                rank=0, instrument_type="futures", underlying="NIFTY",
                 entry_price=50_000, direction="long",
                 contracts=1.0, leverage=5.0, notional_usd=50_000,
                 stop_loss=49_000, take_profit=51_000, expected_r=2.0,

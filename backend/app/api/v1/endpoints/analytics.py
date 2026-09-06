@@ -18,14 +18,14 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 class WalkForwardRequest(BaseModel):
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     train_bars: int = 180
     test_bars: int = 60
     step_bars: int = 30
 
 
 class SensitivityRequest(BaseModel):
-    underlying: str = "BTC"
+    underlying: str = "NIFTY"
     params: Optional[list] = None  # subset of SWEEP_PARAMS keys, or None=all
 
 
