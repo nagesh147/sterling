@@ -121,7 +121,9 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
     from app.services.exchanges.kite import accounts
     from app.services.nifty_orb_options import get_config
     universal=engine_state.get_config(uid)
-    if not getattr(universal,"auto_execute",False):return {"status":"advisory","executed":[]}
+    if not getattr(universal,"auto_execute",False):
+        from app.services.nifty_orb_lifecycle import manual_mode_response
+        return manual_mode_response()
     account=accounts.get_active(uid)
     if not account:return {"status":"blocked","reason":"No active Kite account","executed":[]}
     cfg=get_config(); trade_state=_state(uid)
