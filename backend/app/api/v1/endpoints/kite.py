@@ -1193,14 +1193,18 @@ async def order_postback(payload: dict = Body(...)):
     if not acct:
         return {"ok": True, "routed": False, "reason": "unknown user"}
     checksum = payload.get("checksum")
-    if checksum:
-        expected = hashlib.sha256(
-            f"{payload.get('order_id','')}{payload.get('order_timestamp','')}{acct.api_secret}".encode()
-        ).hexdigest()
-        if checksum != expected:
-            return {"ok": True, "routed": False, "reason": "checksum mismatch"}
+    if (not isinstance(checksum, str) or not payload.get("order_id")
+            or not payload.get("order_timestamp") or not acct.api_secret):
+        return {"ok": True, "routed": False, "reason": "signed postback required"}
+    import hmac
+    expected = hashlib.sha256(
+        f"{payload['order_id']}{payload['order_timestamp']}{acct.api_secret}".encode()
+    ).hexdigest()
+    if not hmac.compare_digest(checksum, expected):
+        return {"ok": True, "routed": False, "reason": "checksum mismatch"}
     try:
-        await ticker_manager.broadcast_order_update(acct.user_id, payload)
+        await ticker_manager.broadcast_order_update(
+            acct.user_id, payload, client=await kite_accounts.acquire_client(acct))
     except Exception as exc:  # noqa: BLE001
         log.debug("postback broadcast failed: %s", exc)
     return {"ok": True, "routed": True}

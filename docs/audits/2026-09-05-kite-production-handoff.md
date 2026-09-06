@@ -1,5 +1,7 @@
 # Sterling Kite Engine: production audit and AI implementation handoff
 
+> Historical September 5 audit. The authoritative continuation is [September 6 implementation and release handoff](2026-09-06-kite-implementation-handoff.md), with current tests in [September 6 validation](2026-09-06-kite-validation.json). It supersedes the missing-lake, entry-recovery, manual-journal, quote-evidence and test-count statements below. Original measurements remain historical evidence.
+
 Date: 2026-09-05. Scope: Sterling Kite Engine, including spot, derivatives and confluence signals, option/futures execution, protection, replay and operator UI. Navigator remains an optional integration, not a replacement strategy.
 
 ## 1. Decision and evidence boundary

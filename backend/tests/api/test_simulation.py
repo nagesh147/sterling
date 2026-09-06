@@ -108,8 +108,12 @@ async def test_step_and_seek_controls():
 
 
 @pytest.mark.asyncio
-async def test_simulation_default_instruments_and_warmup_at_915():
+async def test_simulation_default_instruments_never_fabricate_missing_warmup(monkeypatch):
     import asyncio
+    from unittest.mock import AsyncMock
+    from app.services import simulation, ohlcv_store
+    monkeypatch.setattr(simulation, "_hydrate_missing_candles", AsyncMock())
+    monkeypatch.setattr(ohlcv_store, "get_candles", lambda *a, **kw: [])
     config = SimConfig(
         date="2026-09-03",
         start_time="09:15:00",
@@ -128,8 +132,11 @@ async def test_simulation_default_instruments_and_warmup_at_915():
     assert "AXISBANK" in simulation_runner._bar_history
     assert "BAJFINANCE" in simulation_runner._bar_history
 
-    # Verify warmup bars are pre-seeded at 09:15:00
-    assert len(simulation_runner._bar_history["KOTAKBANK"]) >= 20
+    # Missing real history cannot be replaced with generated warmup/session bars.
+    assert simulation_runner._bar_history["KOTAKBANK"] == []
+    assert simulation_runner.status.state == SimState.IDLE
+    assert simulation_runner.status.bars_total == 0
+    assert "No real candles" in simulation_runner._status_message
 
     # Verify kite signal responses can format rows for these stocks
     res = simulation_runner.get_kite_signals_response()
@@ -444,7 +451,7 @@ async def test_september_4_replay_emits_only_lt_and_sbin(september_4_recorded_ev
 
 
 @pytest.mark.asyncio
-async def test_simulation_ideal_friction_mode():
+async def test_simulation_ideal_friction_mode(september_4_recorded_evidence):
     """Verify that ideal friction mode executes at raw signal entry/exit with 0 slippage."""
     config = SimConfig(
         date="2026-09-04",

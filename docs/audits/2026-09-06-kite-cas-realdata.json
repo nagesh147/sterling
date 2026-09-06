@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-09-05T21:21:12.392132+00:00",
+  "generated_at_utc": "2026-09-06T04:17:19.293867+00:00",
   "scope": "Observed cash/index minute timestamps and OHLC integrity around CAS implementation",
   "policy_version": "nse-2026-09-07-v1",
   "cas_effective_date": "2026-08-03",

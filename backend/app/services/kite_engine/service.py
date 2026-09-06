@@ -216,14 +216,19 @@ async def _place_live_manual_buy(client, uid, symbol, quantity, exchange, order_
             raise ValueError("invalid_live_lot_quantity")
         if order_type not in {"MARKET", "LIMIT"}:
             raise ValueError("unsupported_engine_order_type")
-        key = f"{exchange}:{symbol}"
-        quote = await client.get_ltp([key])
-        premium = float((quote or {}).get(key, {}).get("last_price") or 0)
+        from app.services.kite_engine.execution_evidence import entry_evidence
+        evidence = await entry_evidence(client, symbol, exchange, quantity)
+        if evidence.lot_size != plan.lot_size:
+            raise ValueError("board_contract_metadata_changed")
+        premium = evidence.last_price
         if not isfinite(premium) or not 0 < plan.stop_premium < premium:
             raise ValueError("live_quote_or_stop_invalid")
-        ceiling = float(limit_price) if order_type == "LIMIT" else premium * 1.003
+        ceiling = float(limit_price) if order_type == "LIMIT" else evidence.buy_limit
         if not isfinite(ceiling) or ceiling <= plan.stop_premium:
             raise ValueError("invalid_entry_price")
+        from decimal import Decimal
+        if Decimal(str(ceiling)) % Decimal(str(evidence.tick_size)):
+            raise ValueError("limit_price_not_on_exchange_tick")
         available = await available_fo_capital(client)
         required = ceiling * quantity
         if not isfinite(available) or available <= 0 or required > available:
@@ -264,12 +269,12 @@ async def _place_live_manual_buy(client, uid, symbol, quantity, exchange, order_
         oid = str((result or {}).get("order_id") or "")
         if not oid:
             raise RuntimeError("missing_order_id")
-        intent = order_journal.transition(intent.intent_key, "SUBMITTED", order_id=oid)
+        intent = order_journal.acknowledge(intent.intent_key, oid)
         register_pending(intent, oid)
         return {"status": "ok", "order_id": oid, "protected": False,
                 "protection": "awaiting confirmed fill", "message": "Entry submitted; fill pending"}
     except Exception as exc:
-        order_journal.transition(intent.intent_key, "UNKNOWN", error=type(exc).__name__)
+        order_journal.submission_uncertain(intent.intent_key, type(exc).__name__)
         return {"status": "error", "message": "Entry outcome uncertain; broker reconciliation required"}
 
 
@@ -953,14 +958,30 @@ def _make_place_cb(client, uid: str):
             return  # this signal already executed
 
         # ── place order ───────────────────────────────────────────────────────
+        live_evidence = None
+        if getattr(client, "_is_paper", True) is False:
+            try:
+                from app.services.kite_engine.execution_evidence import entry_evidence
+                live_evidence = await entry_evidence(client, trade_symbol, trade_exchange, qty)
+                if live_evidence.lot_size != trade_lot:
+                    raise ValueError("contract_lot_changed")
+                entry_px = live_evidence.last_price
+                stop_valid = (stop_px > entry_px if pos_direction == "short" else 0 < stop_px < entry_px)
+                if not stop_valid:
+                    raise ValueError("live_stop_invalid")
+            except Exception as exc:
+                state.log(uid, "order_blocked", f"{trade_symbol}: live execution evidence unavailable: {exc}")
+                return
         if use_futures:
             try:
                 from math import isfinite
                 margin_rows = await client.order_margins([{
                     "exchange": trade_exchange, "tradingsymbol": trade_symbol,
                     "transaction_type": "BUY" if pos_direction == "long" else "SELL",
-                    "variety": "regular", "product": "NRML", "order_type": "MARKET",
-                    "quantity": qty, "price": 0, "trigger_price": 0,
+                    "variety": "regular", "product": "NRML",
+                    "order_type": "LIMIT" if live_evidence else "MARKET",
+                    "quantity": qty, "price": (live_evidence.sell_limit if pos_direction == "short"
+                        else live_evidence.buy_limit) if live_evidence else 0, "trigger_price": 0,
                 }])
                 required_margin = float(margin_rows[0]["total"])
                 available = await available_fo_capital(client)
@@ -977,6 +998,11 @@ def _make_place_cb(client, uid: str):
             limit_buffer = 1.003  # highest price used by the stock-option order below
             if not isfinite(available) or available <= 0 or entry_px * qty * limit_buffer > available:
                 state.log(uid, "order_blocked", f"{trade_symbol}: broker_capital_unavailable_or_insufficient")
+                return
+        if live_evidence:
+            risk_price = live_evidence.sell_limit if pos_direction == "short" else live_evidence.buy_limit
+            if abs(risk_price - stop_px) * qty > available * cfg.risk_pct / 100:
+                state.log(uid, "order_blocked", f"{trade_symbol}: live fill envelope exceeds risk budget")
                 return
         session_reason = entry_data_block_reason(row, exchange=trade_exchange, buffer_minutes=blk)
         if session_reason:
@@ -1022,6 +1048,9 @@ def _make_place_cb(client, uid: str):
                 side = "buy" if signal_dir == "long" else "sell"
                 result = await client.place_order_future(
                     trade_symbol, side, qty, exchange=trade_exchange,
+                    **({"order_type": "limit_order", "limit_price":
+                        live_evidence.sell_limit if pos_direction == "short" else live_evidence.buy_limit}
+                       if live_evidence else {}),
                     tag=(intent.tag if intent else idem))
             else:
                 # `stop_px` — not args["stop_loss"] — is the authoritative premium stop:
@@ -1035,6 +1064,8 @@ def _make_place_cb(client, uid: str):
                 else:
                     limit_px = None
                     order_type = "market_order"
+                if live_evidence:
+                    limit_px, order_type = live_evidence.buy_limit, "limit_order"
                 result = await client.place_order_option(
                     trade_symbol, "buy", qty, order_type=order_type, limit_price=limit_px,
                     exchange=trade_exchange,
@@ -1042,16 +1073,16 @@ def _make_place_cb(client, uid: str):
                     tag=(intent.tag if intent else idem))
         except Exception as exc:  # noqa: BLE001
             if intent is not None:
-                order_journal.transition(intent.intent_key, "UNKNOWN", error=type(exc).__name__)
+                order_journal.submission_uncertain(intent.intent_key, type(exc).__name__)
             state.log(uid, "order_failed", f"{row.underlying} {trade_symbol}: {exc}")
             return
         oid = (result or {}).get("order_id", "")
         if not oid:
             if intent is not None:
-                order_journal.transition(intent.intent_key, "UNKNOWN", error="missing_order_id")
+                order_journal.submission_uncertain(intent.intent_key, "missing_order_id")
             return
         if intent is not None:
-            order_journal.transition(intent.intent_key, "SUBMITTED", order_id=str(oid))
+            order_journal.acknowledge(intent.intent_key, str(oid))
         live_safety.record_idempotency(idem, oid)
         state.mark_auto_open(uid, guard_key)  # one-position guard (per slot)
 
@@ -1222,7 +1253,15 @@ async def _reconcile_closed_positions(client, uid: str) -> None:
         return  # a malformed reply is not evidence that anything closed
 
     for p in open_now:
-        row = _broker_net_row(raw, p.symbol)
+        if getattr(client, "_is_paper", True) is False:
+            if not p.account_id or p.account_id != str(getattr(client, "_account_id", "")):
+                continue
+            matches = [r for r in raw["net"] if isinstance(r, dict)
+                       and r.get("tradingsymbol") == p.symbol and r.get("exchange") == p.exchange
+                       and r.get("product") == p.product]
+            row = matches[0] if len(matches) == 1 else None
+        else:
+            row = _broker_net_row(raw, p.symbol)
         if row is None:
             continue  # never opened today at the broker — not evidence of a close
         try:
@@ -1425,7 +1464,8 @@ def autoexec_preflight(uid: str) -> List[str]:
     """
     reasons: List[str] = []
     try:
-        pending_intents = order_journal.unresolved(uid)
+        pending_intents = list({i.intent_key: i for i in
+            order_journal.unresolved(uid) + order_journal.pending_projection(uid)}.values())
     except Exception:
         pending_intents = []
         reasons.append("Durable order journal unavailable; reconciliation cannot be verified")
@@ -1442,9 +1482,13 @@ def autoexec_preflight(uid: str) -> List[str]:
     uncertain_exits = [p.symbol for p in live if p.exit_order_id]
     if uncertain_exits:
         reasons.append("Exit confirmation pending: " + ", ".join(uncertain_exits))
-    unknown_protection = [p.symbol for p in live if p.protection_pending]
+    unknown_protection = [p.symbol for p in positions._load(uid).values() if p.protection_pending]
     if unknown_protection:
         reasons.append("Broker protection reconciliation required: " + ", ".join(unknown_protection))
+    missing_broker_protection = [p.symbol for p in live if p.account_id and p.status == positions.OPEN
+                                and p.stop_mode in {"broker", "both"} and not p.gtt_id]
+    if missing_broker_protection:
+        reasons.append("Confirmed broker protection missing: " + ", ".join(missing_broker_protection))
 
     unprotected = [p.symbol for p in live
                    if p.status == positions.OPEN and float(p.stop_premium or 0.0) <= 0]

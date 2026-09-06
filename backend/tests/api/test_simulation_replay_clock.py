@@ -222,7 +222,7 @@ async def test_stopping_leaves_end_of_session_positions_open():
 # ── Dead air at the head of a session ────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_replay_starts_on_the_first_bar_not_the_configured_open():
+async def test_replay_starts_on_the_first_bar_not_the_configured_open(monkeypatch):
     """Reported as "replay not working, clicking does nothing".
 
     The default session opens at 09:00 but NSE's first candle is 09:15, and the
@@ -232,11 +232,28 @@ async def test_replay_starts_on_the_first_bar_not_the_configured_open():
     from a broken replay.
     """
     import asyncio
+    from pathlib import Path
+    from unittest.mock import AsyncMock
+    from app.services import simulation, ohlcv_store
+    import numpy as np
+
+    path = Path(__file__).resolve().parents[2] / "study/kite_cache/256265_1H.npz"
+    if not path.is_file():
+        pytest.skip("Actual NIFTY hourly cache unavailable; no generated replacement")
+    with np.load(path, allow_pickle=False) as raw:
+        bars = [{"time": int(t / 1000), **{name: float(raw[key][i]) for name, key in
+                 (("open", "o"), ("high", "h"), ("low", "l"), ("close", "c"), ("volume", "v"))}}
+                for i, t in enumerate(raw["ts"])
+                if datetime.fromtimestamp(t / 1000, IST).date().isoformat() == "2026-07-16"]
+    assert bars
+    monkeypatch.setattr(simulation, "_hydrate_missing_candles", AsyncMock())
+    monkeypatch.setattr(simulation, "_load_recorded_signals", lambda _: [])
+    monkeypatch.setattr(ohlcv_store, "get_candles", lambda *a, **kw: bars)
 
     runner = SimulationRunner()
     await runner.start(SimConfig(
-        date="2026-09-04", start_time="09:00:00", end_time="15:30:00",
-        speed=5.0, resolution="5m", instruments=["NIFTY"],
+        date="2026-07-16", start_time="09:00:00", end_time="15:30:00",
+        speed=5.0, resolution="1h", instruments=["NIFTY"],
     ))
 
     # Give the loader a moment to hydrate and enter the loop.

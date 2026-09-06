@@ -7,7 +7,7 @@ import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { KiteFooterStatus } from './KiteFooterStatus';
 import { ReplayDock } from './replay/ReplayDock';
 import { ReplayFooterChip } from './replay/ReplayFooterChip';
-import { useReplayHostHidden } from '../../hooks/useReplayStore';
+import { useReplayHostHidden, useReplayOpen, useReplayStore } from '../../hooks/useReplayStore';
 import { FOOTER_HEIGHT } from './layoutConstants';
 import { useScanStatus } from '../../hooks/useScanStatus';
 import { openSettingsSection } from './config/registry';
@@ -291,6 +291,42 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
 
   // One boolean, published by the dock. The layout does not know its modes.
   const isSimFullHeight = useReplayHostHidden();
+  const replayOpen = useReplayOpen();
+  const registerHostFocus = useReplayStore((s) => s.registerHostFocus);
+  const syncHostFocus = useReplayStore((s) => s.syncHostFocus);
+
+  // Wire dock window controls (half / max / fullscreen / restore) into the workspace focus
+  useEffect(() => {
+    registerHostFocus({
+      set: (mode) => setFocus({ pane: 'dashboard', mode }),
+      clear: () => setFocus((current) => (current?.pane === 'dashboard' ? null : current)),
+    });
+    return () => registerHostFocus(null);
+  }, [registerHostFocus]);
+
+  useEffect(() => {
+    syncHostFocus(focus?.pane === 'dashboard' ? focus.mode : null);
+  }, [focus, syncHostFocus]);
+
+  // When the replay dock is opened, ensure the host dashboard pane is visible:
+  // 1. If dashboard was minimized, restore it immediately so the dock mounts.
+  // 2. If another pane was focused/maximized, clear focus so dashboard is on screen.
+  useEffect(() => {
+    if (replayOpen) {
+      setLayout((current) => {
+        if (current.minimized.includes('dashboard')) {
+          return restorePane(current, 'dashboard');
+        }
+        return current;
+      });
+      setFocus((current) => {
+        if (current && current.pane !== 'dashboard') {
+          return null;
+        }
+        return current;
+      });
+    }
+  }, [replayOpen]);
 
   /**
    * "Expand to fill the pane" now maximises the dashboard pane through the

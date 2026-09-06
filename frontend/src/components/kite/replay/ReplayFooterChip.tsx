@@ -47,7 +47,11 @@ export function ReplayFooterChip() {
       title={hint}
       data-testid="replay-footer-chip"
       onClick={() => {
-        setOpen(!open);
+        const next = !open;
+        setOpen(next);
+        if (next) {
+          window.dispatchEvent(new CustomEvent('kite-restore-slot', { detail: 'center' }));
+        }
         if (state === 'error' && !open) setConfigOpen(false);
       }}
     >

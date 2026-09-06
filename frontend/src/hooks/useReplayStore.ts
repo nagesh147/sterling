@@ -402,7 +402,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   setOpen: (open) => {
     const { mode, height, tab } = get();
     persist({ v: 1, mode: mode === 'fullscreen' ? 'overlay' : mode, height, tab, open });
-    set({ open, hostContentHidden: open && get().hostFocusMode !== null });
+    set({ open, hostContentHidden: open && (mode === 'expanded' || get().hostFocusMode !== null) });
   },
 
   setMode: (mode) => {

@@ -28,6 +28,74 @@ def test_reservation_is_atomic_and_idempotent():
     assert len(journal.unresolved('u')) == 1
 
 
+def test_only_one_worker_can_claim_network_submission():
+    r = journal.reserve(**args())
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        claims = list(pool.map(lambda _: journal.claim_submission(r.intent_key), range(32)))
+    assert sum(claims) == 1
+    with pytest.raises(ValueError, match="use_claim_submission"):
+        journal.transition(r.intent_key, "SUBMITTING")
+
+
+def test_configuration_change_cannot_reexecute_signal():
+    first = journal.reserve(**args())
+    second = journal.reserve(**{**args(), "generation_id": "new-config"})
+    assert first.intent_key == second.intent_key
+    with pytest.raises(ValueError, match="immutable_intent_conflict"):
+        journal.reserve(**{**args(), "quantity": 130})
+
+
+def test_pending_capital_reservations_serialize_across_workers():
+    def reserve_one(n):
+        try:
+            journal.reserve(**{**args(), "signal_id": str(n)},
+                            capital_required=60, available_capital=100)
+            return True
+        except ValueError as exc:
+            assert str(exc) == "insufficient_unreserved_capital"
+            return False
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert sum(pool.map(reserve_one, range(16))) == 1
+
+
+def test_lost_ack_uses_tag_fallback_with_account_scope():
+    r = journal.reserve(**args())
+    journal.claim_submission(r.intent_key)
+    journal.submission_uncertain(r.intent_key, "timeout")
+    assert journal.find(uid="u", account_id="a", order_id="new-id", tag=r.tag) == journal.unresolved("u")[0]
+    assert journal.find(uid="u", account_id="other", order_id="new-id", tag=r.tag) is None
+
+
+def test_out_of_order_cumulative_fills_never_regress_or_double_count():
+    r = journal.reserve(**args())
+    journal.claim_submission(r.intent_key)
+    first = journal.observe_order(r.intent_key, status="OPEN", order_id="o", filled_quantity=40, average_price=100)
+    old = journal.observe_order(r.intent_key, status="OPEN", order_id="o", filled_quantity=20, average_price=99)
+    assert first.delta_quantity == 40 and old.delta_quantity == 0
+    assert old.intent.filled_quantity == 40 and not old.reconciliation_required
+    conflict = journal.observe_order(r.intent_key, status="OPEN", order_id="o", filled_quantity=40, average_price=101)
+    assert conflict.reconciliation_required and conflict.intent.filled_value == 4000
+
+
+def test_projection_ack_cannot_clear_newer_fill():
+    r = journal.reserve(**args())
+    journal.claim_submission(r.intent_key)
+    first = journal.observe_order(r.intent_key, status="OPEN", order_id="o", filled_quantity=20, average_price=100)
+    second = journal.observe_order(r.intent_key, status="COMPLETE", order_id="o", filled_quantity=65, average_price=101)
+    assert not journal.mark_projected(r.intent_key, first.intent.projection_version)
+    assert journal.pending_projection("u", "a")
+    assert journal.mark_projected(r.intent_key, second.intent.projection_version)
+    assert not journal.pending_projection("u", "a")
+
+
+def test_ack_and_timeout_do_not_regress_early_fill_postback():
+    r = journal.reserve(**args())
+    journal.claim_submission(r.intent_key)
+    journal.observe_order(r.intent_key, status="COMPLETE", order_id="o", filled_quantity=65, average_price=101)
+    assert journal.acknowledge(r.intent_key, "o").state == "FILLED"
+    assert journal.submission_uncertain(r.intent_key, "timeout").state == "FILLED"
+
+
 def test_state_machine_rejects_terminal_resurrection():
     r=journal.reserve(**{**args(),'signal_id':'s2'})
     assert journal.claim_submission(r.intent_key)

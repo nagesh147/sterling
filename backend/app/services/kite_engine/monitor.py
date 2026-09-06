@@ -123,6 +123,9 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         p = pos.get(uid, symbol)
         if p is None:
             return  # not one of ours
+        if (client is not None and getattr(client, "_is_paper", True) is False
+                and (not p.account_id or p.account_id != str(getattr(client, "_account_id", "")))):
+            return  # an order ID/symbol alone cannot establish account ownership
         status = str(order.get("status", "")).upper()
         txn = str(order.get("transaction_type", "")).upper()
         oid = str(order.get("order_id", "")).strip()
@@ -382,6 +385,10 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     is_live = getattr(client, "_is_paper", True) is False
     product = str(getattr(p, "product", "NRML") or "NRML")
     if is_live:
+        if p.protection_pending:
+            _exiting.discard(key)
+            state.log(uid, "order_failed", f"{p.symbol}: unknown broker protection outcome; rival exit blocked")
+            return False
         from app.services.exchanges.kite import accounts as kite_accounts
         account_id = str(getattr(client, "_account_id", "") or "")
         if (not account_id or account_id != str(getattr(p, "account_id", "") or "")
