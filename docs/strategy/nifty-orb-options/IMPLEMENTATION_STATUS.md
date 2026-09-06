@@ -366,18 +366,18 @@ on `validate()`.
 | Unfilled order | A live unfilled order is cancelled and reconciled. |
 | Partial fill | Protection is armed for the quantity *held*, the remainder is cancelled, and `requested_quantity` is reported alongside it. |
 | Protection failure | An unprotectable position is closed; if it cannot be closed the kill switch trips. |
-| Contract authority | A broker strike/expiry/type disagreeing with the plan is refused before any order. |
-| Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget and >0.30% underlying drift each refuse. |
+| Contract authority | A broker strike/expiry/type/lot disagreeing with the plan is refused before any order. |
+| Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget, >0.30% underlying drift, and a live ask that would resize the ticket each refuse. |
 | Daily limit | The count persists, and a second scan returns `daily_limit`. |
-| Manual mode | `auto_execute` off returns `status: manual` and places nothing. |
+| Manual mode | `auto_execute` off returns `status: manual` and places nothing. `/execute` returns the same ticket and never calls `place_manual_order`. |
 
 Also covered since: refusals no longer consume the daily budget, and a failed
 trade-count write trips the kill switch instead of silently raising the cap.
 
 Still uncovered, and still blocking unattended live:
 
-- **historical option replay on real data** — schema exists; no corpus;
-- **walk-forward / OOS** — no evidence of edge yet.
+- **historical option replay on real data** — schema + fail-closed runner exist; no real corpus;
+- **walk-forward / OOS** — runner exists (`orb_historical_walk_forward.py`); no evidence of edge yet.
 
 Restart recovery, protection disarm, and expiry square-off are implemented
 (`nifty_orb_lifecycle`) and called from the runner: recover once per user per
@@ -425,10 +425,10 @@ live order path end-to-end              [DONE]
 restart recovery + protection teardown  [DONE]
         |
         v
-historical option replay on real data   [OPEN]
+historical option replay on real data   [OPEN — runner fail-closed; no corpus]
         |
         v
-walk-forward                            [OPEN]
+walk-forward                            [OPEN — runner exists; no real OOS]
         |
         v
 out-of-sample stable                    [OPEN]

@@ -196,12 +196,15 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"blocked","symbol":symbol,"reason":"underlying entry/current price unavailable"});continue
         if abs(current-spot)/spot>0.003:
             executed.append({"status":"blocked","symbol":symbol,"reason":"underlying moved >0.30% since signal"});continue
-        lot=int(contract.get("lot_size") or instrument.get("lot_size") or 1)
-        broker_lot=int(instrument.get("lot_size") or lot)
-        if lot!=broker_lot:lot=broker_lot
+        lot=int(contract.get("lot_size") or 0)
+        broker_lot=int(instrument.get("lot_size") or 0)
+        if lot<=0 or broker_lot<=0 or lot!=broker_lot:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract lot size mismatch"});continue
         quantity=_conservative_quantity(requested,lot,quote["ask"],float(cfg.max_risk_inr))
         if quantity<=0:
             executed.append({"status":"blocked","symbol":symbol,"reason":"one option lot exceeds conservative premium risk budget"});continue
+        if quantity!=requested:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"live premium would change the ticket quantity"});continue
         decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True,uid=uid)
         if not decision.allowed:
             executed.append({"status":"blocked","symbol":symbol,"reason":decision.reason,"code":decision.code});continue

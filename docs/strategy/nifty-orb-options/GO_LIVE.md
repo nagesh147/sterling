@@ -20,3 +20,13 @@ Not unattended until walk-forward on real option history is green. This is the s
 ## Same-ticket rule
 
 Manual Buy and Auto must use the same plan fields from the scan row. If they ever diverge, treat it as a bug — fix before Live+Auto.
+
+## Historical walk-forward (required before unattended Auto)
+
+A real option corpus is still required. The runner refuses to invent trades:
+
+```text
+python backend/scripts/orb_historical_walk_forward.py corpus.json
+```
+
+Exit 2 if the file is missing or has bars without labeled signals. A green unit-test fixture is not evidence of edge.

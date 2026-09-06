@@ -185,7 +185,8 @@ export function AdaptiveEdgePositionCalculator({
   };
 
   const handleCopyTradePlan = () => {
-    const text = `ADAPTIVE EDGE TRADE PLAN\nSymbol: ${tradingsymbol || symbol} (${exchange})\nLots: ${numLots} (${totalQty} Qty)\nEntry: ₹${fmtTick(entryPrice)}\nStop Loss: ₹${fmtTick(slPrice)} (-${fmtTick(slDistance)} pts)\nTSL: ₹${fmtTick(tslPrice)}\nTarget: ₹${fmtTick(targetPrice)} (+${fmtTick(targetDistance)} pts)\nRisk/Reward: 1 : ${riskRewardRatio} R`;
+    const tslLine = hideTsl ? '' : `\nTSL: ₹${fmtTick(tslPrice)}`;
+    const text = `TRADE PLAN\nSymbol: ${tradingsymbol || symbol} (${exchange})\nLots: ${numLots} (${totalQty} Qty)\nEntry: ₹${fmtTick(entryPrice)}\nStop Loss: ₹${fmtTick(slPrice)} (-${fmtTick(slDistance)} pts)${tslLine}\nTarget: ₹${fmtTick(targetPrice)} (+${fmtTick(targetDistance)} pts)\nRisk/Reward: 1 : ${riskRewardRatio} R`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       setCopied(true);

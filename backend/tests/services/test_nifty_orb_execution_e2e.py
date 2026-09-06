@@ -341,6 +341,30 @@ async def test_auto_execute_off_is_manual_signals_only(harness):
 
 
 @pytest.mark.asyncio
+async def test_a_broker_lot_size_disagreeing_with_the_plan_is_refused(harness):
+    harness["patch"](execution, "_find_contract", _async((
+        "NFO",
+        {"instrument_type": "CE", "strike": 25000.0, "expiry": EXPIRY, "lot_size": 50, "instrument_token": 1},
+    )))
+    client = FakeClient()
+    out = await _run(harness, client)
+    assert out["executed"][0]["reason"] == "broker contract lot size mismatch"
+    assert client.placed == []
+
+
+@pytest.mark.asyncio
+async def test_a_live_ask_that_would_resize_the_ticket_is_refused(harness):
+    """Same ticket: Auto must not silently buy fewer lots than the board showed."""
+    harness["patch"](execution, "_fresh_quote", _async(
+        {"ask": 40.0, "bid": 39.9, "volume": 5000.0, "oi": 50000.0},
+    ))
+    client = FakeClient()
+    out = await _run(harness, client, rows=[_signal_row(quantity=150)])
+    assert out["executed"][0]["reason"] == "live premium would change the ticket quantity"
+    assert client.placed == []
+
+
+@pytest.mark.asyncio
 async def test_the_daily_trade_limit_persists_across_scans(harness):
     client = FakeClient()
     await _run(harness, client, max_trades=1)

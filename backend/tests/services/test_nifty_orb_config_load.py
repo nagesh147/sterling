@@ -89,6 +89,60 @@ def test_execute_scan_is_the_only_automatic_execution_path():
     assert callable(nifty_orb_execution.execute_scan)
 
 
+@pytest.mark.asyncio
+async def test_execute_manual_does_not_place_an_order(monkeypatch, db):
+    """The /execute endpoint used to call place_manual_order on the snapshot
+    without protection. Manual Buy is the board ticket."""
+    placed = []
+
+    async def boom(*a, **k):
+        placed.append(1)
+        raise AssertionError("execute_manual must not place")
+
+    monkeypatch.setattr(service, "get_config", lambda: StrategyConfig(enabled=False))
+    monkeypatch.setattr("app.services.kite_engine.service.place_manual_order", boom, raising=False)
+    out = await service.execute_manual("u1")
+    assert out["status"] == "manual"
+    assert out["executed"] == []
+    assert placed == []
+
+
+@pytest.mark.asyncio
+async def test_execute_manual_returns_the_same_ticket_without_placing(monkeypatch, db):
+    placed = []
+
+    async def boom(*a, **k):
+        placed.append(1)
+        raise AssertionError("execute_manual must not place")
+
+    plan = {
+        "quantity": 75,
+        "stop_premium": 14.0,
+        "target_premium": 26.0,
+        "underlying_entry": 25000.0,
+        "contract": {
+            "symbol": "NIFTY26AUG25000CE",
+            "option_type": "CE",
+            "strike": 25000,
+            "expiry": "2026-08-27",
+            "lot_size": 75,
+        },
+    }
+    signal = {"direction": "LONG", "timestamp": "2026-08-25T10:30:00+05:30"}
+
+    async def snap(uid):
+        return {"plan": plan, "signal": signal}
+
+    monkeypatch.setattr(service, "get_config", lambda: StrategyConfig(enabled=True))
+    monkeypatch.setattr(service, "snapshot", snap)
+    monkeypatch.setattr("app.services.kite_engine.service.place_manual_order", boom, raising=False)
+    out = await service.execute_manual("u1")
+    assert out["status"] == "manual"
+    assert out["ticket"]["symbol"] == "NIFTY26AUG25000CE"
+    assert out["ticket_fingerprint"]
+    assert placed == []
+
+
 def test_the_kite_expiry_rule_is_the_engine_rule():
     """Guards against a third local reimplementation of weekly-vs-monthly."""
     import inspect
