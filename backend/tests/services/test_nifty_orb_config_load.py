@@ -54,13 +54,11 @@ def test_an_out_of_range_stored_dte_range_also_falls_back(db):
 def test_no_stored_config_means_the_shipped_defaults(db):
     """Nothing stored means the defaults, whatever they are.
 
-    This used to assert `enabled=False` against a loader that hardcoded it, so
-    the dataclass default was unreachable: the two disagreed and the loader won.
-    The safety case — a stored config that will not validate — is asserted
-    separately below, and that one still falls back OFF.
+    Fresh install is engine OFF. The safety case — a stored config that will
+    not validate — is asserted separately, and that one still falls back OFF.
     """
     assert service.get_config() == StrategyConfig()
-    assert service.get_config().enabled is True
+    assert service.get_config().enabled is False
 
 
 def test_an_invalid_stored_config_still_falls_back_off(db):

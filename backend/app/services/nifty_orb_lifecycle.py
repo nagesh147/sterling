@@ -1,7 +1,8 @@
 """ORB process lifecycle: restart recovery, protection disarm, expiry square-off.
 
 Manual and Auto share one signal/ticket. This module does not generate signals.
-It keeps live state honest across restarts and exits.
+It keeps live state honest across restarts and exits, and names the ticket both
+paths must use.
 """
 from __future__ import annotations
 
@@ -15,23 +16,65 @@ log = get_logger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
 ORB_VEHICLES = frozenset({"otm_options", "deep_itm_options"})
 
+# Fields that must be identical on the Manual board ticket and the Auto order.
+# A divergence here is a product bug, not a cosmetic difference.
+SAME_TICKET_FIELDS = (
+    "symbol",
+    "option_type",
+    "strike",
+    "expiry",
+    "quantity",
+    "underlying_entry",
+    "stop_premium",
+    "target_premium",
+    "lot_size",
+)
+
+
+def ticket_fields(plan: dict[str, Any]) -> dict[str, Any]:
+    """Canonical ticket the Manual board and Auto both consume."""
+    contract = plan.get("contract") or {}
+    expiry = str(contract.get("expiry") or "")[:10]
+    return {
+        "symbol": str(contract.get("symbol") or ""),
+        "option_type": str(contract.get("option_type") or ""),
+        "strike": float(contract.get("strike") or 0) or None,
+        "expiry": expiry or None,
+        "quantity": int(plan.get("quantity") or 0),
+        "underlying_entry": float(plan.get("underlying_entry") or 0) or None,
+        "stop_premium": float(plan.get("stop_premium") or 0) or None,
+        "target_premium": float(plan.get("target_premium") or 0) or None,
+        "lot_size": int(contract.get("lot_size") or 0),
+    }
+
 
 def ticket_fingerprint(plan: dict[str, Any], signal: dict[str, Any]) -> str:
     """Stable id for the Manual board ticket and the Auto order."""
-    contract = plan.get("contract") or {}
+    fields = ticket_fields(plan)
     return "|".join(
         [
             str(signal.get("direction") or ""),
             str(signal.get("timestamp") or ""),
-            str(contract.get("symbol") or ""),
-            str(contract.get("option_type") or ""),
-            str(contract.get("strike") or ""),
-            str(contract.get("expiry") or "")[:10],
-            str(plan.get("quantity") or ""),
-            str(plan.get("stop_premium") or ""),
-            str(plan.get("target_premium") or ""),
+            str(fields["symbol"] or ""),
+            str(fields["option_type"] or ""),
+            str(fields["strike"] or ""),
+            str(fields["expiry"] or ""),
+            str(fields["quantity"] or ""),
+            str(fields["stop_premium"] or ""),
+            str(fields["target_premium"] or ""),
         ]
     )
+
+
+def attach_ticket(row: dict[str, Any]) -> dict[str, Any]:
+    """Stamp fingerprint + same-ticket fields onto a scan row. Mutates and returns."""
+    plan = row.get("trade") or {}
+    signal = row.get("signal") or {}
+    if not plan or not signal:
+        return row
+    row["ticket"] = ticket_fields(plan)
+    row["ticket_fingerprint"] = ticket_fingerprint(plan, signal)
+    return row
 
 
 def manual_mode_response() -> dict[str, Any]:
@@ -42,6 +85,51 @@ def manual_mode_response() -> dict[str, Any]:
         "message": "Auto off — board shows the trade ticket; place Buy yourself. Same signal Auto would trade.",
         "executed": [],
     }
+
+
+def preview_auto_refusal(
+    row: dict[str, Any],
+    cfg,
+    *,
+    now: datetime,
+    filled_today: int = 0,
+    max_trades: int = 2,
+) -> str | None:
+    """Reasons Auto would refuse this scan row, without a broker call.
+
+    Reason strings match ``execute_scan`` so Manual shows the same refusal Auto
+    would emit. Broker-only gates (drift, live quote, contract search) stay on
+    the order path — they cannot be previewed honestly from the scan snapshot.
+    """
+    from app.services.nifty_orb_execution import _entry_window_open, _parse_timestamp
+
+    if row.get("status") != "signal":
+        return None
+    plan = row.get("trade") or {}
+    contract = plan.get("contract") or {}
+    signal = row.get("signal") or {}
+    direction = str(signal.get("direction") or "")
+    expected = "CE" if direction == "LONG" else "PE" if direction == "SHORT" else ""
+    if expected != str(contract.get("option_type") or ""):
+        return "option direction mismatch"
+    ts = _parse_timestamp(signal.get("timestamp"))
+    age = None if ts is None else max(0.0, (now.astimezone(IST) - ts.astimezone(IST)).total_seconds())
+    if age is None or age > cfg.interval_minutes * 60:
+        return f"signal stale/invalid age={age}"
+    if int(filled_today) >= int(max_trades):
+        return "daily trade limit reached"
+    if not _entry_window_open(now, cfg):
+        return "outside entry window"
+    try:
+        expiry = datetime.strptime(str(contract.get("expiry") or "")[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return "invalid contract expiry"
+    dte = (expiry - now.astimezone(IST).date()).days
+    if dte < cfg.expiry_dte_min or dte > cfg.expiry_dte_max or (cfg.avoid_expiry_day and dte == 0):
+        return "contract outside configured expiry policy"
+    if int(plan.get("quantity") or 0) <= 0:
+        return "one option lot exceeds conservative premium risk budget"
+    return None
 
 
 def orb_open_positions(uid: str) -> list:

@@ -191,6 +191,9 @@ async def test_a_complete_fill_is_executed_protected_and_counted(harness):
     assert entry["conservative_max_loss_inr"] == 1350.0     # 18.00 ask * 75
     assert harness["store"]["u1"]["count"] == 1
     assert harness["rec"].kill == []
+    assert entry["ticket_fingerprint"]
+    assert entry["ticket"]["symbol"] == SYMBOL
+    assert entry["ticket"]["quantity"] == 75
 
 
 @pytest.mark.asyncio

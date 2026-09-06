@@ -47,6 +47,26 @@ describe('ORB signal adapter', () => {
     expect(toOrbFeedEntries({ signals: [row()] })[0].quoteAgeS).toBe(3.2);
   });
 
+  it('stamps the same-ticket fingerprint Auto will place', () => {
+    const [entry] = toOrbFeedEntries({
+      signals: [row({ ticket_fingerprint: 'LONG|ts|NIFTY26AUG24000CE|CE|24000|2026-08-27|150|14|26' })],
+    });
+    expect(entry.ticketFingerprint).toContain('NIFTY26AUG24000CE');
+    expect(entry.quantity).toBe(150);
+    expect(entry.stopPremium).toBe(14);
+    expect(entry.targetPremium).toBe(26);
+    expect(entry.optionType).toBe('CE');
+  });
+
+  it('shows the Auto refusal on the Manual row', () => {
+    const [entry] = toOrbFeedEntries({
+      signals: [row({ auto_block: 'daily trade limit reached' })],
+    });
+    expect(entry.autoBlock).toBe('daily trade limit reached');
+    expect(entry.reason).toBe('daily trade limit reached');
+    expect(entry.state).toBe('SIGNAL');
+  });
+
   it('marks a signal with no resolvable option as unresolved', () => {
     const [entry] = toOrbFeedEntries({ signals: [row({ status: 'signal_unresolved', trade: null })] });
     expect(entry.state).toBe('SIGNAL_UNRESOLVED');

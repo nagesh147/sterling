@@ -11,26 +11,25 @@ def test_engine_contract_is_kite_and_strategy_has_no_local_execution_mode():
     assert cfg.data_source == "kite"
     assert cfg.execution_broker == "kite"
     assert not hasattr(cfg, "paper_only")
-    # Power switch, not a safety device — paper/live is `account.is_paper` and
-    # this engine has never carried a copy of it (the assertion above).
-    assert cfg.enabled is True
+    assert not hasattr(cfg, "auto_execute")
+    # Power switch, off on a fresh install — paper/live is `account.is_paper`
+    # and Manual/Auto is the shared engine switch, never a strategy-local copy.
+    assert cfg.enabled is False
     assert cfg.opening_range_minutes == 15
     assert cfg.interval_minutes == 5
     assert cfg.max_risk_inr == 3000.0
     assert cfg.max_spread_pct == 1.5
 
 
-def test_runtime_default_is_enabled():
-    """Enabled by default, like the other option engines.
+def test_runtime_default_is_disabled():
+    """Fresh install is off. The runner will not scan until an operator enables it.
 
-    For THIS engine that is a stronger statement than for the others: the runner
-    gates on `enabled` and the market clock and then executes, with no
-    `auto_execute` check — so `account.is_paper` is the thing standing between it
-    and real orders.
+    Manual/Auto is the shared engine switch, not a field on this config.
     """
     cfg = get_config()
-    assert cfg.enabled is True
+    assert cfg.enabled is False
     assert not hasattr(cfg, "paper_only")
+    assert not hasattr(cfg, "auto_execute")
     assert cfg.execution_broker == "kite"
 
 
@@ -44,9 +43,9 @@ def test_config_rejects_invalid_data_source():
         set_config({"data_source": "unknown"})
 
 
-def test_config_rejects_legacy_strategy_local_paper_flag():
-    with pytest.raises(ValueError, match="paper_only"):
-        set_config({"paper_only": True})
+def test_config_rejects_legacy_strategy_local_auto_flag():
+    with pytest.raises(ValueError, match="auto_execute"):
+        set_config({"auto_execute": True})
 
 
 def test_config_rejects_quote_freshness_without_ticks():

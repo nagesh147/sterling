@@ -15,9 +15,7 @@ def get_config()->StrategyConfig:
 
     Two different fallbacks, deliberately not the same one:
 
-    * **Nothing stored** -> the real defaults. Hardcoding a disabled config here
-      made the shipped default unreachable -- the dataclass said one thing and
-      this said another, and this one won.
+    * **Nothing stored** -> the real defaults (engine OFF on a fresh install).
     * **Stored but unreadable or invalid** -> defaults with the engine OFF. A row
       persisted before validation existed, or edited straight in the database,
       must never become a trading config: the invalid value would otherwise

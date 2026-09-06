@@ -17,11 +17,13 @@ def test_ticket_fingerprint_is_stable_for_manual_and_auto():
         "quantity": 75,
         "stop_premium": 14.0,
         "target_premium": 26.0,
+        "underlying_entry": 25000.0,
         "contract": {
             "symbol": "NIFTY26AUG25000CE",
             "option_type": "CE",
             "strike": 25000,
             "expiry": "2026-08-27",
+            "lot_size": 75,
         },
     }
     signal = {"direction": "LONG", "timestamp": "2026-08-25T10:30:00+05:30"}
@@ -30,6 +32,13 @@ def test_ticket_fingerprint_is_stable_for_manual_and_auto():
     assert a == b
     assert "NIFTY26AUG25000CE" in a
     assert "LONG" in a
+    fields = life.ticket_fields(plan)
+    assert set(fields) == set(life.SAME_TICKET_FIELDS)
+    row = {"status": "signal", "trade": plan, "signal": signal}
+    stamped = life.attach_ticket(dict(row))
+    assert stamped["ticket_fingerprint"] == a
+    assert stamped["ticket"]["quantity"] == 75
+    assert stamped["ticket"]["symbol"] == "NIFTY26AUG25000CE"
 
 
 def test_manual_mode_response_is_signals_only():
@@ -38,6 +47,47 @@ def test_manual_mode_response_is_signals_only():
     assert out["mode"] == "signals_only"
     assert out["executed"] == []
     assert "Same signal" in out["message"]
+
+
+def test_preview_auto_refusal_matches_execute_scan_reasons():
+    """Manual board shows the same refusal Auto would emit (no broker needed)."""
+    from datetime import timedelta
+    from app.engines.nifty_orb_options import StrategyConfig
+
+    now = datetime(2026, 8, 25, 10, 30, tzinfo=IST)
+    cfg = StrategyConfig(enabled=True, interval_minutes=5, max_trades_per_day=2)
+    row = {
+        "status": "signal",
+        "trade": {
+            "quantity": 75,
+            "stop_premium": 14.0,
+            "target_premium": 26.0,
+            "contract": {
+                "symbol": "NIFTY26AUG25000CE",
+                "option_type": "CE",
+                "strike": 25000,
+                "expiry": "2026-08-27",
+                "lot_size": 75,
+            },
+        },
+        "signal": {"direction": "LONG", "timestamp": now.isoformat()},
+    }
+    assert life.preview_auto_refusal(row, cfg, now=now, filled_today=0, max_trades=2) is None
+
+    pe = dict(row)
+    pe["trade"] = {**row["trade"], "contract": {**row["trade"]["contract"], "option_type": "PE"}}
+    assert life.preview_auto_refusal(pe, cfg, now=now) == "option direction mismatch"
+
+    stale = dict(row)
+    stale["signal"] = {"direction": "LONG", "timestamp": (now - timedelta(hours=2)).isoformat()}
+    reason = life.preview_auto_refusal(stale, cfg, now=now)
+    assert reason and "stale" in reason
+
+    assert life.preview_auto_refusal(row, cfg, now=now, filled_today=2, max_trades=2) == "daily trade limit reached"
+
+    far = dict(row)
+    far["trade"] = {**row["trade"], "contract": {**row["trade"]["contract"], "expiry": "2026-12-31"}}
+    assert life.preview_auto_refusal(far, cfg, now=now) == "contract outside configured expiry policy"
 
 
 def test_recover_trade_state_lists_open_orb_underlyings(monkeypatch):

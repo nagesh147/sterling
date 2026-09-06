@@ -1,6 +1,6 @@
 # NIFTY ORB Options — Implementation Status and Execution Plan
 
-Last updated: 2026-08-20
+Last updated: 2026-09-07
 
 ## Status
 
@@ -374,13 +374,15 @@ on `validate()`.
 Also covered since: refusals no longer consume the daily budget, and a failed
 trade-count write trips the kill switch instead of silently raising the cap.
 
-Still uncovered, and still blocking:
+Still uncovered, and still blocking unattended live:
 
-- **restart recovery** — re-reading trade state and open positions after a
-  process restart;
-- **protection disarming** — the teardown side of `arm_position`;
-- **broker-side expiry square-off** — modelled in replay, not yet proven on the
-  live path.
+- **historical option replay on real data** — schema exists; no corpus;
+- **walk-forward / OOS** — no evidence of edge yet.
+
+Restart recovery, protection disarm, and expiry square-off are implemented
+(`nifty_orb_lifecycle`) and called from the runner: recover once per user per
+start, then expiry SO, then scan, then `execute_scan`. Auto-off returns
+`status: manual` and places nothing. Fresh install `enabled=false`.
 
 ### Step 2 — Historical option dataset (open)
 
@@ -420,7 +422,7 @@ costed replay model honest              [DONE]
 live order path end-to-end              [DONE]
         |
         v
-restart recovery + protection teardown  [OPEN]
+restart recovery + protection teardown  [DONE]
         |
         v
 historical option replay on real data   [OPEN]

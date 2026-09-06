@@ -120,10 +120,9 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
     from app.services import live_safety
     from app.services.exchanges.kite import accounts
     from app.services.nifty_orb_options import get_config
+    from app.services.nifty_orb_lifecycle import manual_mode_response, ticket_fields, ticket_fingerprint
     universal=engine_state.get_config(uid)
-    if not getattr(universal,"auto_execute",False):
-        from app.services.nifty_orb_lifecycle import manual_mode_response
-        return manual_mode_response()
+    if not getattr(universal,"auto_execute",False):return manual_mode_response()
     account=accounts.get_active(uid)
     if not account:return {"status":"blocked","reason":"No active Kite account","executed":[]}
     cfg=get_config(); trade_state=_state(uid)
@@ -137,6 +136,7 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
         if row.get("status")!="signal":continue
         plan=row.get("trade") or {}; contract=plan.get("contract") or {}; symbol=str(contract.get("symbol") or ""); underlying=str(row.get("underlying") or "").upper(); requested=int(plan.get("quantity") or 0); signal=row.get("signal") or {}; direction=str(signal.get("direction") or "")
         expected="CE" if direction=="LONG" else "PE" if direction=="SHORT" else ""
+        fingerprint=ticket_fingerprint(plan,signal); ticket=ticket_fields(plan)
         if not symbol or requested<=0 or not underlying or underlying in seen:continue
         if expected!=str(contract.get("option_type") or ""):
             executed.append({"status":"blocked","symbol":symbol,"reason":"option direction mismatch"});continue
@@ -243,5 +243,5 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"executed_count_not_persisted","underlying":underlying,"symbol":symbol,"quantity":actual,"order_id":oid,"protected":True,"reason":str(exc)})
             seen.add(underlying);continue
         seen.add(underlying)
-        executed.append({"status":"executed","underlying":underlying,"symbol":symbol,"quantity":actual,"requested_quantity":quantity,"fill_price":fill_price,"broker_status":status,"order_id":oid,"protected":True,"conservative_max_loss_inr":round(quote["ask"]*actual,2),"plan":plan})
+        executed.append({"status":"executed","underlying":underlying,"symbol":symbol,"quantity":actual,"requested_quantity":quantity,"fill_price":fill_price,"broker_status":status,"order_id":oid,"protected":True,"conservative_max_loss_inr":round(quote["ask"]*actual,2),"plan":plan,"ticket_fingerprint":fingerprint,"ticket":ticket})
     return {"status":"executed" if executed else "no_trade","executed":executed,"count":trade_state["count"]}

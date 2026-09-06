@@ -21,6 +21,10 @@ vi.mock('../../../hooks/useOrbConfig', () => ({
   useOrbConfig: () => ({ data: { config: { enabled: state.enabled } }, isLoading: state.configLoading }),
   useSetOrbEnabled: () => ({ mutate: state.setEnabled, isPending: state.pending, error: state.setError }),
 }));
+const engineState = vi.hoisted(() => ({ auto: false }));
+vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
+  useEngineConfig: () => ({ data: { auto_execute: engineState.auto } }),
+}));
 const openSection = vi.hoisted(() => vi.fn());
 vi.mock('../config/registry', () => ({ openSettingsSection: openSection }));
 // The expansion pulls a live book and mounts the shared calculator; neither is
@@ -44,6 +48,8 @@ const entry = (over: Partial<OrbFeedEntry> = {}): OrbFeedEntry => ({
   underlyingEntry: 24050, underlyingStop: 24040,
   timestamp: '2026-08-21T10:30:00+05:30', deltaIsEstimated: true, deltaSource: 'implied', impliedVol: 0.224,
   vwapBasis: 'volume', volumeConfirmed: true,
+  ticketFingerprint: 'LONG|2026-08-21T10:30:00+05:30|NIFTY26AUG24000CE|CE|24000|2026-08-27|150|14|26',
+  autoBlock: null,
   ...over,
 });
 
@@ -52,7 +58,7 @@ function show(over: Partial<typeof state> = {}) {
   return render(<NiftyOrbSignalsFeed />);
 }
 
-beforeEach(() => { state.setEnabled.mockClear(); openSection.mockClear(); });
+beforeEach(() => { state.setEnabled.mockClear(); openSection.mockClear(); engineState.auto = false; });
 
 describe('ORB feed — engine off', () => {
   it('says the engine is off rather than showing an empty list', () => {
@@ -152,6 +158,28 @@ describe('ORB feed — tradable setups', () => {
   it('calls out a scan that failed for everything', () => {
     show({ rows: [entry({ state: 'ERROR', reason: "'str' object has no attribute 'zerodha_token'" })] });
     expect(screen.getByText(/Scan failed for all 1 underlyings/)).toBeInTheDocument();
+  });
+});
+
+describe('ORB feed — Manual / Auto is one ticket', () => {
+  it('labels MANUAL and says the user Buys the ticket Auto would place', () => {
+    engineState.auto = false;
+    show({ rows: [entry()] });
+    expect(screen.getByText('MANUAL')).toBeInTheDocument();
+    expect(screen.getByText(/Same ticket Auto would place/)).toBeInTheDocument();
+  });
+
+  it('labels AUTO as placing the same ticket, not a second strategy', () => {
+    engineState.auto = true;
+    show({ rows: [entry()] });
+    expect(screen.getByText('AUTO')).toBeInTheDocument();
+    expect(screen.getByText(/same ticket shown below/i)).toBeInTheDocument();
+  });
+
+  it('surfaces an Auto refusal on a Manual row', () => {
+    show({ rows: [entry({ autoBlock: 'daily trade limit reached', reason: 'daily trade limit reached' })] });
+    fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
+    expect(screen.getByText('daily trade limit reached')).toBeInTheDocument();
   });
 });
 

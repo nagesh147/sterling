@@ -35,17 +35,15 @@ class Bar:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    #: Whether this engine scans at all. Defaults ON, matching the other option
-    #: engines.
-    #:
-    #: A power switch, not a safety device. Opening a position additionally
-    #: requires the engine's MANUAL/AUTO switch: `nifty_orb_execution.execute_scan`
-    #: returns `{"status": "advisory"}` without placing anything unless
-    #: `auto_execute` is on, so `enabled` alone means "scan and advise". And
-    #: whether an order reaches the exchange is `account.is_paper`, which this
+    #: Whether this engine scans at all. Fresh installs stay OFF — turning it
+    #: on is an operator action, not a default. A power switch, not a safety
+    #: device: opening a position additionally requires the account's MANUAL/AUTO
+    #: switch. ``nifty_orb_execution.execute_scan`` returns
+    #: ``{"status": "manual"}`` without placing anything unless the shared
+    #: ``auto_execute`` is on, so ``enabled`` alone means "scan and show tickets".
+    #: Whether an order reaches the exchange is ``account.is_paper``, which this
     #: strategy has never carried a copy of.
-    enabled: bool = True
-    auto_execute: bool = False
+    enabled: bool = False
     underlying: str = "NIFTY"
     scan_indices: tuple[str, ...] = ("NIFTY",)
     scan_stocks: tuple[str, ...] = ()
