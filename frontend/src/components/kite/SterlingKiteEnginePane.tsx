@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs, formatSessionDay } from './board/boardTypes';
+import { stamp, isDayExpandedByDefault, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs, formatSessionDay } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
@@ -1908,53 +1908,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
 
-  /**
-   * How far down the group bands have to pin.
-   *
-   * The toolbar and the heading strip share one sticky wrapper at the top of
-   * the table, so a group band that pins at `top: 0` would slide underneath
-   * them. The offset is that wrapper's height -- which is not a constant: the
-   * toolbar wraps when the pane is narrow, and the strip is absent in the cards
-   * layout. Measured rather than guessed, and re-measured when it changes, so
-   * the band lands right at every width instead of at the one I happened to
-   * check.
-   *
-   * Published as a CSS variable so each band can read it without this value
-   * re-rendering the table on every resize.
-   */
-  const stickyHeadRef = React.useRef<HTMLDivElement>(null);
-  // The variable is set on the pane root explicitly rather than on
-  // `stickyHead.parentElement`. Today those are the same node -- the
-  // `{!settingsOpen && ...}` around the sticky wrapper creates no DOM element --
-  // but that is a coincidence of the current markup, and one added wrapper would
-  // silently move the variable onto a node that does not contain the bands. The
-  // bands would then fall back to `top: 0` and slide under the header, which is
-  // exactly the bug this is meant to prevent.
-  const paneRootRef = React.useRef<HTMLDivElement>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   // From the shared store, not local state. The settings drawer that changes it
   // is common to every engine and opens from the pane's title bar, so the value
   // has to live somewhere both can reach.
   const viewLayout = s.signalViewLayout;
   const setViewLayout = s.setSignalViewLayout;
-
-  React.useEffect(() => {
-    const el = stickyHeadRef.current;
-    if (!el) return;
-    const apply = () => {
-      paneRootRef.current?.style.setProperty('--st-sticky-head', `${Math.round(el.offsetHeight)}px`);
-    };
-    apply();
-    // ResizeObserver is not in every test environment's jsdom.
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    return () => ro.disconnect();
-    // Only the two things that change whether the wrapper exists or what it
-    // contains. NOT every render: this table re-renders on every quote tick, and
-    // an unkeyed effect would build and tear down a ResizeObserver each time.
-    // Height changes from the toolbar wrapping are the observer's own job.
-  }, [settingsOpen, viewLayout]);
 
   const [signalMode, setSignalMode] = React.useState<SignalMode>(
     () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
@@ -2149,10 +2108,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
 
-  // Recent ended setups are part of the signal board, so show their rows on load.
-  // Users can still collapse any date bucket manually for the current session.
-  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
-    () => new Set(),
+  // What the user has toggled this session, NOT what is collapsed. The default
+  // is a rule (see isDayExpandedByDefault), and storing the collapsed set
+  // instead meant the default could only ever be "everything open" — which is
+  // what this was, so a week of ended setups all arrived expanded.
+  const [userToggledGroups, setUserToggledGroups] = React.useState<Map<string, boolean>>(
+    () => new Map(),
   );
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const [bestOnly, setBestOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_best_only') === 'true');
@@ -2164,11 +2125,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     setBestOnly(next);
     localStorage.setItem('kite_st_best_only', String(next));
   };
-  const toggleGroup = (label: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+  const toggleGroup = (label: string, expandedNow: boolean) => {
+    setUserToggledGroups(prev => {
+      const next = new Map(prev);
+      next.set(label, !expandedNow);
       return next;
     });
   };
@@ -2220,10 +2180,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       if (aIdx !== bIdx) return bIdx - aIdx; // indices first
       return a.underlying.localeCompare(b.underlying);
     });
-    if (active.length) {
-      buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
-    }
-
     const nowMs = simNowMs ?? Date.now();
     const todayKey = sessionDayKey(nowMs);
     const realTodayKey = sessionDayKey(Date.now());
@@ -2232,8 +2188,40 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     const todayLabel = isHistorical ? formatSessionDay(todayKey) : 'Today';
     const yesterdayLabel = isHistorical ? formatSessionDay(yesterdayKey) : 'Yesterday';
 
+    /* Still-running signals keep their place at the TOP — a live trade must not
+       hide under an old date — but they are titled by the session they actually
+       entered on. The single "Active now" bucket claimed the present tense for
+       everything in it, so on a closed Saturday it read "Active now" over
+       entries from 31 Aug and 3 Sept. Grouping by day keeps the hoist and drops
+       the false claim.
+
+       Rows from today or yesterday merge into those buckets (already the top
+       two, so nothing moves); older ones get a dated bucket of their own,
+       marked active, above the general history. */
+    const activeByDay = new Map<string, typeof filteredRows>();
+    const activeToday: typeof filteredRows = [];
+    const activeYesterday: typeof filteredRows = [];
+    for (const r of sortedActive) {
+      const day = sessionDayKey(parseTimestampMs(r.timestamp_ms));
+      if (day === todayKey || day === 'unknown') activeToday.push(r);
+      else if (day === yesterdayKey) activeYesterday.push(r);
+      else {
+        const bucket = activeByDay.get(day) ?? [];
+        bucket.push(r);
+        activeByDay.set(day, bucket);
+      }
+    }
+    // Newest dated group first, so the most recent live entry sits highest.
+    for (const day of [...activeByDay.keys()].sort().reverse()) {
+      buckets.push({
+        label: `${formatSessionDay(day)} · active`,
+        rows: applyUserSort(activeByDay.get(day)!),
+        active: true,
+      });
+    }
+
     const groups: Record<string, typeof filteredRows> = {
-      [todayLabel]: [], [yesterdayLabel]: [], Older: [],
+      [todayLabel]: [...activeToday], [yesterdayLabel]: [...activeYesterday], Older: [],
     };
     for (const r of history) {
       const rawTs = parseTimestampMs(
@@ -2244,11 +2232,21 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       else if (day === yesterdayKey) groups[yesterdayLabel].push(r);
       else groups.Older.push(r);
     }
+    const dayBuckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
     for (const label of [todayLabel, yesterdayLabel, 'Older'] as const) {
       if (groups[label]?.length) {
-        buckets.push({ label, rows: applyUserSort(groups[label]) });
+        // `active` drives both the section styling and the `showEnded` filter
+        // below, so a day bucket holding a running signal has to carry it.
+        const hasActive = label === todayLabel ? activeToday.length > 0
+          : label === yesterdayLabel ? activeYesterday.length > 0
+          : false;
+        dayBuckets.push({ label, rows: applyUserSort(groups[label]), active: hasActive });
       }
     }
+    // Today and Yesterday lead; the dated active groups sit between them and
+    // the rest of the history.
+    buckets.unshift(...dayBuckets.filter(b => b.label === todayLabel || b.label === yesterdayLabel));
+    buckets.push(...dayBuckets.filter(b => b.label === 'Older'));
     if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
   }, [filteredRows, showEnded, quotes, s.sortBy, s.chgType, simNowMs]);
@@ -2277,7 +2275,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     setQuery('');
     changeShowEnded(true);
     changeTodayOnly(false);
-    setCollapsedGroups(new Set());
+    // Drop the session's manual toggles so the default rule applies again —
+    // which opens the newest band. Clearing a collapsed SET used to expand
+    // every band at once, and this button exists to undo filters, not to
+    // override the grouping.
+    setUserToggledGroups(new Map());
   };
 
   const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
@@ -2417,7 +2419,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   // See AdaptiveEdgeRightSidebar, which renders regardless of engine.
 
   return (
-    <div ref={paneRootRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/*
         The engine's own controls, on the shared toolbar grammar.
 
@@ -2445,7 +2447,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           fill it disappeared exactly when nothing was there. Only the search box
           itself is pointless with no rows, so only it is gated. */}
       {!settingsOpen && (
-        <div ref={stickyHeadRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
               {rows.length > 0 && <KiteSearchBar
@@ -2825,28 +2827,42 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           />
         ) : (
           groupedRows.map(group => {
-            const isCollapsed = collapsedGroups.has(group.label);
+            const expanded = userToggledGroups.has(group.label)
+              ? userToggledGroups.get(group.label)!
+              : isDayExpandedByDefault(group.label, groupedRows.map(g => g.label));
+            const isCollapsed = !expanded;
             return (
               <div key={group.label}>
-                <div 
-                  onClick={() => toggleGroup(group.label)}
+                <div
+                  onClick={() => toggleGroup(group.label, expanded)}
                   className="st-group-header"
-                  style={{ 
+                  style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: DAY_HEAD_METRICS.padding, background: k.surface,
                     borderBottom: `1px solid ${k.border}`,
                     // Stays visible while its strikes scroll past, as the shared
-                    // board's day band does. Falls back to 0 if the variable has
-                    // not been measured yet, which only costs one frame.
-                    position: 'sticky', top: 'var(--st-sticky-head, 0px)', zIndex: 1,
-                    cursor: 'pointer', userSelect: 'none'
-                  }}
-                >
-                  <div style={{
+                    // board's day band does — and pins at the top of the SCROLL
+                    // CONTAINER, which is what `top: 0` means here. This used to
+                    // pin at a measured toolbar height instead, on the theory
+                    // that a band at 0 would slide under the toolbar. That
+                    // wrapper is a SIBLING above the scroller, never inside it,
+                    // so the scrollport already starts below the toolbar and the
+                    // offset was pure double count: every band sat 59px down
+                    // into its own rows, its first card showing through above
+                    // it, which read as the band labelling the group below.
+                    position: 'sticky', top: 0, zIndex: 1,
+                    // The band's micro-type lives HERE, not on the label alone,
+                    // so the row count inherits it. With it on the label only,
+                    // "2 signals" rendered at the inherited 12px next to an
+                    // 8.5px uppercase date.
                     fontSize: DAY_HEAD_METRICS.fontSize,
                     fontWeight: DAY_HEAD_METRICS.fontWeight,
                     letterSpacing: DAY_HEAD_METRICS.letterSpacing,
                     textTransform: DAY_HEAD_METRICS.textTransform,
+                    cursor: 'pointer', userSelect: 'none'
+                  }}
+                >
+                  <div style={{
                     // Quiet baseline like the shared band, but an active group
                     // keeps its green: that is real state, not decoration, and
                     // the dot beside it would otherwise be the only sign of it.
@@ -2859,7 +2875,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {/* Inherits the band's micro-type; lighter than the label,
                         as in the shared board's count. */}
-                    <span style={{ fontWeight: 500, color: k.dim }}>{group.rows.length} signals</span>
+                    <span style={{ fontWeight: 500, color: k.dim }}>
+                      {group.rows.length} {group.rows.length === 1 ? 'signal' : 'signals'}
+                    </span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>

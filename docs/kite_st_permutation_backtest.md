@@ -1,6 +1,6 @@
 # Kite Sterling Kite Engine — Full Permutation Backtest (real data)
 
-**Date:** 2026-06-20 · **Branch:** KiteEngine · **Scope:** Kite (Indian index options) only — **no crypto.**
+**Date:** 2026-06-20 · **Branch:** KiteEngine · **Scope:** Kite Indian index options.
 
 Every combination of the live Kite strategy's knobs, replayed over **7.5 years of
 real 1H index candles** pulled from the Zerodha historical API (read-only). This

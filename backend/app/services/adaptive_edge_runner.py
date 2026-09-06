@@ -116,13 +116,16 @@ def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     """
     try:
         from app.services.live_safety import assert_safe_to_trade
-        # check_daily_loss=False matches every other Kite path here: that breaker
-        # is denominated in USD against a crypto book and reads zero for an INR
-        # position, so including it would be a gate that always passes — worse
-        # than no gate, because it looks like one. uid= is what routes this at
-        # the right account; omitting it is how an engine escapes the check.
+        # check_daily_loss was False here, on the grounds that the breaker was
+        # denominated in a different accounting unit and read zero for an INR
+        # position — a gate that always passes, which is worse than no gate.
+        # That is no longer how it reads: daily_loss_state(uid=...) goes through
+        # _account_daily_pnl_inr to state.daily_realized_pnl_strict(uid), which
+        # is INR-native and propagates a failed read instead of returning 0.
+        # uid= is what routes this at the right account; omitting it is how an
+        # engine escapes the check.
         decision = assert_safe_to_trade([], idempotency_key,
-                                        check_daily_loss=False, uid=uid)
+                                        check_daily_loss=True, uid=uid)
         # `.allowed` by name, with no permissive default. The field is called
         # allowed, so getattr(decision, "ok", True) takes the default every
         # time and passes everything the gate was added to stop.
@@ -218,7 +221,7 @@ def daily_loss_breached(uid: str, cfg: AdaptiveEdgeConfig) -> tuple[bool, str]:
     """Whether today's realised loss has reached the configured cap.
 
     Denominated in rupees against this engine's own closed positions, not the
-    shared USD crypto breaker — that one reads zero for an INR book, so relying
+    shared legacy breaker — it reads zero for an INR book, so relying
     on it would be a gate that always passes.
     """
     if cfg.max_daily_loss <= 0:

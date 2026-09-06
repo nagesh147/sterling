@@ -12,7 +12,7 @@ Caching strategy
 ----------------
 Greeks are stable inside a small spot bucket and constant DTE. We cache
 keyed on `(instrument_name, spot_bucket, dte)` where the bucket is the
-spot rounded to 0.1% of the spot (so a $50,000 BTC spot uses a $50 bucket
+spot rounded to 0.1% of the spot (so a 25,000 NIFTY spot uses a 25-point bucket
 — more than enough resolution for portfolio-level Greeks, far cheaper
 than recomputing per call). Entries TTL after 60s and are evicted lazily.
 """
@@ -39,8 +39,8 @@ _CACHE_MAX = 4096                # eviction floor; far below memory pressure
 def _spot_bucket(spot: float) -> float:
     """Bucket spot to a stable ~1% grid derived from its order of
     magnitude so neighbouring poll-time spots reliably hit the same
-    cache entry. At BTC $50k → grid step is $100, so spots in
-    [$50,000, $50,099] all share the bucket key $50,000.
+    cache entry. At NIFTY 25,000 the grid step is 100, so spots in
+    [25,000, 25,099] all share the same bucket key.
 
     Note: an earlier formulation used `spot * 0.001` as the step which
     silently broke cache hits — the step itself drifted as spot moved,
@@ -98,7 +98,7 @@ def _needs_enrichment(opt: OptionSummary) -> bool:
 
 
 def _normalise_iv(iv: float) -> float:
-    """DEI returns IV as a percent (e.g. 65 for 65%) for some products
+    """Providers may return IV as a percent (e.g. 65 for 65%) for some products
     and as a decimal (0.65) for others. Normalise to decimal so
     bsm_greeks_full can use sigma directly."""
     if iv <= 0:
@@ -111,7 +111,7 @@ def enrich_with_greeks(
 ) -> OptionSummary:
     """Return a copy of `option` with the full Greeks vector populated.
 
-    When the adapter already shipped gamma/vega/theta/rho (DEI sometimes
+    When the adapter already supplied gamma/vega/theta/rho
     does, in the `greeks` block of the ticker), they pass through
     untouched and `greeks_enriched` is False. When they're missing, we
     BSM-fill using the option's mark_iv as sigma and stamp
@@ -121,16 +121,10 @@ def enrich_with_greeks(
     Inputs:
       option — the raw OptionSummary from the adapter
       spot   — current underlying spot price (drives BSM)
-      r      — risk-free rate (decimal). 0 is fine for short-dated crypto;
-               the DerivativesSelector's positional profile sets r > 0 when
-               wider DTE warrants it.
+      r      — risk-free rate (decimal).
 
     Returns a new OptionSummary; the original is not mutated.
     """
-    # The Delta live-IV socket used to pre-empt BSM here. It went with the
-    # crypto surface, and never carried Kite ticks, so every option now takes
-    # the Black-Scholes path below — which is what it already did in practice
-    # once that socket stopped being started.
     if not _needs_enrichment(option):
         return option
 

@@ -123,9 +123,11 @@ describe('sorting on the rendered board', () => {
         nowMs={NOW}
         sort={{ column: 'ltp', direction: 'desc' }}
         onSortChange={vi.fn()}
-        liveFirst={false}
       />,
     );
+    // Only the newest band opens by default; yesterday's row has to be revealed
+    // before the two can be ordered against each other.
+    fireEvent.click(screen.getByText('Yesterday'));
     const text = document.body.textContent ?? '';
     // The day bands are gone -- each row carries its own date now -- so this
     // reads the property off the ROWS. That is the property that mattered all

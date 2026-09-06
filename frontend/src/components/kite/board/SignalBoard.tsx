@@ -14,8 +14,9 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, shiftSessionDay, stamp, trailBreached,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay,
+  isDayExpandedByDefault, isLiveDayKey, markLegs, parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel,
+  shiftSessionDay, stamp, trailBreached,
 } from './boardTypes';
 import type { BoardDayMove, BoardOrigin, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -1041,8 +1042,8 @@ function Row({
 
 export function SignalBoard({
   signals, columns: requested, openId, onToggle, renderDetail, onOpenDetail, nowMs, emptyLabel,
-  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup, liveFirst = false,
-  onReorderColumn, rowScroll = false, renderRowActions, hoistLiveFromToday = false,
+  sort = DEFAULT_SORT, onSortChange, hidden, collapsedGroups, onToggleGroup,
+  onReorderColumn, rowScroll = false, renderRowActions,
   renderTrade, renderChart, collapseOlderDays = false, isHistoricalSim = false,
 }: {
   signals: readonly BoardSignal[];
@@ -1081,16 +1082,6 @@ export function SignalBoard({
    */
   collapsedGroups?: ReadonlySet<string>;
   onToggleGroup?: (id: string) => void;
-  /** Float open positions above the dated history. On by default. */
-  liveFirst?: boolean;
-  /**
-   * Put TODAY's live rows in that section too, so it holds everything actionable
-   * rather than only what the date buckets would bury.
-   *
-   * Off by default, because on a board whose whole content is one session the
-   * section would just duplicate "Today".
-   */
-  hoistLiveFromToday?: boolean;
   /**
    * Let a heading be dragged sideways to move its column.
    *
@@ -1163,30 +1154,16 @@ export function SignalBoard({
 
   const effectiveNowMs = nowMs ?? Date.now();
 
-  const days = groupByDay(signals, { liveFirst, nowMs: effectiveNowMs, hoistToday: hoistLiveFromToday });
+  const days = groupByDay(signals, { nowMs: effectiveNowMs });
 
   const isDayExpanded = (key: string): boolean => {
     if (userToggledDays.has(key)) {
       return userToggledDays.get(key)!;
     }
-    const todayKey = sessionDayKey(effectiveNowMs);
-    const label = sessionDayLabel(key, effectiveNowMs, isHistoricalSim);
-    // Today and Yesterday are always expanded by default.
-    if (key === todayKey || label === 'Today' || label === 'Yesterday') {
-      return true;
-    }
-    // Yesterday and Older are collapsed by default.
-    const hasTodayGroup = days.some(
-      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs, isHistoricalSim) === 'Today',
-    );
-    if (!hasTodayGroup && days.length > 0 && days[0].key === key) {
-      const firstGroup = days[0];
-      const hasActionable = firstGroup.signals.some((s) => ACTIONABLE.includes(s.status));
-      if (hasActionable) {
-        return true;
-      }
-    }
-    return false;
+    // One shared rule for every engine's board — see isDayExpandedByDefault.
+    // This used to open Today and Yesterday together, plus the first group when
+    // it held an actionable row, which left most of a week's history expanded.
+    return isDayExpandedByDefault(key, days.map((d) => d.key));
   };
 
   const toggleDay = (key: string) => {
@@ -1289,6 +1266,10 @@ export function SignalBoard({
         const monthlySignals = sorted.filter((s) => !isWeeklySignal(s));
         const hasBoth = weeklySignals.length > 0 && monthlySignals.length > 0;
         const expandedDay = isDayExpanded(key);
+        // Its own dated band means every row in it is running; today and
+        // yesterday hold a mix, so they are active when any row still is.
+        const dayIsActive = isLiveDayKey(key)
+          || rows.some((s) => s.status === 'running' || s.status === 'weakening');
         const isRecentGroup =
           key === sessionDayKey(effectiveNowMs) ||
           sessionDayLabel(key, effectiveNowMs, isHistoricalSim) === 'Today';
@@ -1449,7 +1430,10 @@ export function SignalBoard({
                 fontWeight: DAY_HEAD_METRICS.fontWeight,
                 letterSpacing: DAY_HEAD_METRICS.letterSpacing,
                 textTransform: DAY_HEAD_METRICS.textTransform,
-                color: k.dim,
+                // A band holding a running position keeps its green, as
+                // SuperTrend's does: that is real state, not decoration, and the
+                // dot beside it would otherwise be the only sign of it.
+                color: dayIsActive ? k.green : k.dim,
                 cursor: 'pointer',
                 userSelect: 'none',
               }}
@@ -1473,9 +1457,14 @@ export function SignalBoard({
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
+                {dayIsActive && (
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: k.green, flexShrink: 0 }} />
+                )}
                 <span>{sessionDayLabel(key, effectiveNowMs, isHistoricalSim)}</span>
               </div>
-              <span style={{ fontWeight: 500 }}>{rows.length}</span>
+              <span style={{ fontWeight: 500, color: k.dim }}>
+                {rows.length} {rows.length === 1 ? 'signal' : 'signals'}
+              </span>
             </div>
 
             {expandedDay && (

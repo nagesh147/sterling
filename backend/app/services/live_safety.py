@@ -1,8 +1,10 @@
 """Fail-closed live execution safety primitives."""
 from __future__ import annotations
-import hashlib,time,uuid
+import hashlib,json,logging,time,uuid
 from dataclasses import dataclass,field
 from typing import Any,Dict,List,Optional
+
+log=logging.getLogger(__name__)
 
 _KILL_SWITCH={"enabled":False,"reason":"","set_ts_ms":0}; _IDEMPOTENCY_CACHE={}; _IDEMPOTENCY_TTL_MS=60000; _RETRY_QUEUE={}
 
@@ -21,10 +23,55 @@ class DailyLossConfig:
         if self.soft_warn_usd is not None:self.soft_warn_inr=float(self.soft_warn_usd)
         if self.hard_halt_usd is not None:self.hard_halt_inr=float(self.hard_halt_usd)
         if self.hard_halt_inr>=0 or self.soft_warn_inr>=0 or self.soft_warn_inr<self.hard_halt_inr:raise ValueError("daily-loss thresholds must be negative with soft_warn >= hard_halt")
+    def as_dict(self)->Dict[str,Any]:
+        return {"enabled":bool(self.enabled),"soft_warn_inr":float(self.soft_warn_inr),"hard_halt_inr":float(self.hard_halt_inr)}
 _DAILY_LOSS_CFG=DailyLossConfig()
+_DAILY_LOSS_KEY="daily_loss_cfg_"
 
-def configure_daily_loss(cfg):
-    global _DAILY_LOSS_CFG; _DAILY_LOSS_CFG=cfg
+def configure_daily_loss(cfg,uid:str|None=None):
+    """Set the daily-loss thresholds, for one account or for the fallback.
+
+    Without ``uid`` this replaces the process-wide default -- the value every
+    account falls back to and the only thing that existed before thresholds were
+    per-account. With ``uid`` it is persisted against that account and applies to
+    it alone.
+    """
+    if uid:
+        from app.services import db
+        db.set_config(f"{_DAILY_LOSS_KEY}{uid}",json.dumps(cfg.as_dict()));return cfg
+    global _DAILY_LOSS_CFG;_DAILY_LOSS_CFG=cfg;return cfg
+
+def has_daily_loss_override(uid:str)->bool:
+    """Whether this account has thresholds of its own, or is on the default."""
+    if not uid:return False
+    from app.services import db
+    return bool(db.get_config(f"{_DAILY_LOSS_KEY}{uid}"))
+
+def clear_daily_loss(uid:str)->None:
+    """Drop one account's override so it falls back to the shipped default."""
+    from app.services import db
+    db.set_config(f"{_DAILY_LOSS_KEY}{uid}","")
+
+def daily_loss_config(uid:str|None=None)->DailyLossConfig:
+    """The thresholds in force for one account.
+
+    A stored row that will not validate must never become a trading config, so a
+    bad one falls back to the default rather than being repaired into something
+    nobody chose. The fallback is the tighter of the two in the shipped case, and
+    tighter is the safe direction to fail: it halts earlier than intended rather
+    than later. ``db.get_config`` already swallows a read failure into its
+    default, so an unreachable store lands here too.
+    """
+    if not uid:return _DAILY_LOSS_CFG
+    from app.services import db
+    raw=db.get_config(f"{_DAILY_LOSS_KEY}{uid}")
+    if not raw:return _DAILY_LOSS_CFG
+    try:
+        d=json.loads(raw)
+        return DailyLossConfig(enabled=bool(d["enabled"]),soft_warn_inr=float(d["soft_warn_inr"]),hard_halt_inr=float(d["hard_halt_inr"]))
+    except Exception as exc:                                       # noqa: BLE001
+        log.warning("daily-loss config for %s is unusable, falling back to the default: %s",uid,exc)
+        return _DAILY_LOSS_CFG
 
 def _today_start_ms_ist():
     from datetime import datetime,timezone,timedelta
@@ -33,8 +80,8 @@ def _today_start_ms_ist():
 def daily_realized_pnl_inr(positions):
     """Today's realised P&L across the supplied positions.
 
-    The field cascade ends at ``realized_pnl_usd`` because paper/crypto positions
-    expose *only* that field. Omitting it made every such position contribute
+    The field cascade accepts ``realized_pnl_usd`` for records created before
+    the INR schema migration. Omitting it made every such position contribute
     0.00, so the daily-loss breaker read "clear" no matter how much the book had
     lost -- a realised -600 against a -500 halt threshold was allowed through. A
     risk read that cannot see a loss must not be treated as no loss.
@@ -70,11 +117,16 @@ def _account_daily_pnl_inr(uid:str|None)->float|None:
 
 def daily_loss_state(positions=None, *, uid:str|None=None):
     pnl=_account_daily_pnl_inr(uid) if uid else daily_realized_pnl_inr(positions or [])
+    # The account's own thresholds when it has any, the process default otherwise.
+    # Read per call rather than cached: this runs a few times a minute at most, and
+    # a threshold someone has just tightened has to bind on the next order, not
+    # after a restart.
+    cfg=daily_loss_config(uid)
     level="clear"
-    if _DAILY_LOSS_CFG.enabled:
-        if pnl<=_DAILY_LOSS_CFG.hard_halt_inr:level="halt"
-        elif pnl<=_DAILY_LOSS_CFG.soft_warn_inr:level="warning"
-    return {"pnl_inr":pnl,"pnl_usd":pnl,"level":level,"enabled":_DAILY_LOSS_CFG.enabled,"soft_warn_inr":_DAILY_LOSS_CFG.soft_warn_inr,"hard_halt_inr":_DAILY_LOSS_CFG.hard_halt_inr,"soft_warn_usd":_DAILY_LOSS_CFG.soft_warn_inr,"hard_halt_usd":_DAILY_LOSS_CFG.hard_halt_inr}
+    if cfg.enabled:
+        if pnl<=cfg.hard_halt_inr:level="halt"
+        elif pnl<=cfg.soft_warn_inr:level="warning"
+    return {"pnl_inr":pnl,"pnl_usd":pnl,"level":level,"enabled":cfg.enabled,"soft_warn_inr":cfg.soft_warn_inr,"hard_halt_inr":cfg.hard_halt_inr,"soft_warn_usd":cfg.soft_warn_inr,"hard_halt_usd":cfg.hard_halt_inr}
 
 def make_idempotency_key(*parts):return hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()[:32]
 def check_idempotency(key):

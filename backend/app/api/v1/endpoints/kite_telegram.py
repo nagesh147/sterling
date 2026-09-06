@@ -1,7 +1,7 @@
 """
 Kite-specific Telegram alert targets — per-user CRUD + test.
 
-Kite gets its OWN Telegram (separate bot(s)/chat from the crypto global one). Each
+Kite supports dedicated Telegram bot and chat configurations. Each
 user can register multiple alert *targets* (``{bot_token, chat_id}``); enabled
 targets receive the Kite engine's outbound signal alerts (see
 ``services/notifications/telegram_kite.py::push_kite_alerts``).
@@ -11,7 +11,7 @@ Every route is scoped to the calling user (``get_current_user``), mirroring
 encryption) and NEVER returned raw — responses expose only a 6-char hint.
 
 This part is OUTBOUND alerts + test + management only; the interactive ``/kite``
-control bot stays on the shared crypto bot.
+control bot remains isolated from execution alert bots.
 """
 from __future__ import annotations
 

@@ -231,8 +231,6 @@ export function GammaMoveBoard({ nowMs, onOpenDetail, onOpenChart }: {
         )}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
-        liveFirst={false}
-        hoistLiveFromToday={false}
         emptyLabel="Nothing at a level right now. Run a scan, or widen the universe in settings."
       />
     </div>

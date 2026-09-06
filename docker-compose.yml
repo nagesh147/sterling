@@ -13,8 +13,7 @@ services:
       - ENVIRONMENT=production
       - PAPER_TRADING=true
       - REAL_PUBLIC_DATA=true
-      - DEFAULT_UNDERLYING=BTC
-      - EXCHANGE_ADAPTER=deribit
+      - DEFAULT_UNDERLYING=NIFTY
       - LOG_LEVEL=INFO
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173","http://frontend"]
       - STERLING_DB_PATH=/app/data/sterling_paper.db

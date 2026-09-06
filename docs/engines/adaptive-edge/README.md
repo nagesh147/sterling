@@ -4,7 +4,7 @@ Sterling Kite strategy engine.
 
 ## Scope
 
-Adaptive Edge is an independent Kite engine. It is not a crypto engine and it does not replace SuperTrend or Flow Navigator.
+Adaptive Edge is an independent Kite engine and does not replace SuperTrend or Flow Navigator.
 
 ```text
 Sterling Kite

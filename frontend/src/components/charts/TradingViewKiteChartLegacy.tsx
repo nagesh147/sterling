@@ -10,7 +10,7 @@ import {
   type Candle,
 } from '../../utils/indicators';
 import { useCandles } from '../../hooks/useCandles';
-import { useCreateAlert } from '../../hooks/useAlerts';
+import { useCreateKiteAlert } from '../../hooks/useKite';
 import {
   IconCrosshair, IconHLine, IconTrendline, IconRay, IconFib, IconFibExt, IconFibFan,
   IconRect, IconPitchfork, IconText, IconPencil, IconFullscreen, IconClose, IconMore, IconGear,
@@ -291,11 +291,10 @@ export function TradingViewKiteChart({
   const [replaySpeed, setReplaySpeed] = useState<number>(1);
   const [alertDialog, setAlertDialog] = useState<{ price: number } | null>(null);
   const [alertCondition, setAlertCondition] = useState<'price_above' | 'price_below'>('price_above');
-  const [alertNotes, setAlertNotes] = useState('');
   const [alertDraft, setAlertDraft] = useState<{ price: number; y: number } | null>(null);
   const [templateImportText, setTemplateImportText] = useState('');
   const [templateError, setTemplateError] = useState('');
-  const createAlert = useCreateAlert();
+  const createAlert = useCreateKiteAlert();
 
   const comparisonSlots = useMemo(() => workspace.comparisons.slice(0, MAX_COMPARISONS), [workspace.comparisons]);
   const { data: comparisonRawCandles0 = [] } = useCandles(comparisonSlots[0]?.symbol || '', tf, COMPARISON_CANDLE_LIMIT);
@@ -2267,16 +2266,18 @@ export function TradingViewKiteChart({
 
   const submitAlert = () => {
     if (!alertDialog) return;
+    const [exchange, tradingsymbol] = symbol.includes(':') ? symbol.split(':', 2) : ['NSE', symbol];
     createAlert.mutate({
-      underlying: symbol,
-      condition: alertCondition,
-      threshold: Number(alertDialog.price.toFixed(4)),
-      notes: alertNotes || `Created from ${tf} chart`,
+      name: `${tradingsymbol} ${alertCondition === 'price_above' ? 'above' : 'below'} ${alertDialog.price.toFixed(2)}`,
+      lhs_exchange: exchange,
+      lhs_tradingsymbol: tradingsymbol,
+      lhs_attribute: 'LastTradedPrice',
+      operator: alertCondition === 'price_above' ? '>=' : '<=',
+      rhs_constant: Number(alertDialog.price.toFixed(4)),
     }, {
       onSuccess: () => {
         setAlertDialog(null);
         setAlertDraft(null);
-        setAlertNotes('');
       },
     });
   };
@@ -3326,7 +3327,6 @@ export function TradingViewKiteChart({
               <div style={{ fontSize: 11, color: tv.dim }}>{symbol}</div>
               <select value={alertCondition} onChange={(event) => setAlertCondition(event.target.value as typeof alertCondition)} style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }}><option value="price_above">Price crosses above</option><option value="price_below">Price crosses below</option></select>
               <input type="number" step="0.05" value={Number(alertDialog.price.toFixed(4))} onChange={(event) => setAlertDialog({ price: Number(event.target.value) })} style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }} />
-              <input value={alertNotes} onChange={(event) => setAlertNotes(event.target.value)} placeholder="Optional note" style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }} />
               {createAlert.isError && <div style={{ fontSize: 10, color: tv.red }}>{createAlert.error.message}</div>}
             </div>
             <div style={{ padding: 12, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}><button onClick={() => { setAlertDialog(null); setAlertDraft(null); }} style={{ flex: 1, padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }}>Cancel</button><button onClick={submitAlert} disabled={createAlert.isPending || !(alertDialog.price > 0)} style={{ flex: 1, padding: 8, background: tv.orange, color: '#fff', border: 0, borderRadius: 3, opacity: createAlert.isPending ? 0.6 : 1 }}>{createAlert.isPending ? 'Creating...' : 'Create alert'}</button></div>

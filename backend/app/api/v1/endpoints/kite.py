@@ -4,7 +4,7 @@ Zerodha Kite Connect endpoints — multi-tenant, manual trading + market data.
 Every route is scoped to the calling user (``get_current_user``). Credentials and
 the daily login are fully managed here (add/update/delete + login-URL handshake).
 Order-placing routes pass through ``live_safety`` (kill-switch / daily-loss /
-idempotency) exactly like the crypto trading path.
+idempotency) through the shared execution safety layer.
 
 NOTE: this is a standalone manual console for Indian markets — no Sterling/Grok/
 scalping strategy is wired to Kite. It exposes the full Kite REST surface plus a
@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.csp import csp_nonce
 from fastapi.responses import HTMLResponse
@@ -701,7 +702,7 @@ def _resolve_chain_instrument(underlying: str):
             index_name=spot_symbol,                       # display/spot name
             zerodha_index_symbol=f"{spot_prefix}{spot_symbol}",
             exchange="zerodha", exchange_currency="INR",
-            quote_currency="INR", perp_symbol=option_name,
+            quote_currency="INR",
             tick_size=0.05, strike_step=50.0,
             has_options=True, min_dte=0,
         )
@@ -902,6 +903,78 @@ async def watchlist_sync(user: UserContext = Depends(get_current_user)):
     }
 
 
+# ─── Risk controls ────────────────────────────────────────────────────────────
+class KillSwitchRequest(BaseModel):
+    enabled: bool
+    reason: str = ""
+
+
+@router.get("/trading/kill-switch")
+async def get_kill_switch(_user: UserContext = Depends(get_current_user)):
+    """The halt every order path checks first, whatever the daily loss says.
+
+    `live_safety.assert_safe_to_trade` has always consulted this and no route
+    exposed it, so the only way to engage it was a Python shell. It is the one
+    control an operator needs when something is going wrong and they cannot say
+    exactly what, which is precisely when a shell is the wrong interface.
+    """
+    return live_safety.kill_switch_state()
+
+
+@router.post("/trading/kill-switch")
+async def set_kill_switch(body: KillSwitchRequest, _user: UserContext = Depends(get_current_user)):
+    # Process-wide, not per account: a halt that left another account trading
+    # would not be a halt.
+    return live_safety.set_kill_switch(body.enabled, body.reason)
+
+
+class DailyLossRequest(BaseModel):
+    """Both thresholds are a realised INR loss, so both are negative.
+
+    `soft_warn_inr` only colours the readout; `hard_halt_inr` is what stops new
+    entries. Validation lives in `DailyLossConfig.__post_init__` so the API and
+    the engines cannot disagree about what a usable pair looks like.
+    """
+    enabled: bool = True
+    soft_warn_inr: float
+    hard_halt_inr: float
+
+
+def _daily_loss_payload(uid: str) -> dict:
+    cfg = live_safety.daily_loss_config(uid)
+    stored = live_safety.has_daily_loss_override(uid)
+    # The account's own realised P&L against the thresholds actually in force,
+    # so the UI never has to recompute the comparison and get it subtly wrong.
+    state = live_safety.daily_loss_state(uid=uid)
+    return {**cfg.as_dict(), "uid": uid, "is_account_override": stored,
+            "pnl_inr": state["pnl_inr"], "level": state["level"],
+            "default": live_safety.daily_loss_config().as_dict()}
+
+
+@router.get("/risk/daily-loss")
+async def get_daily_loss(user: UserContext = Depends(get_current_user)):
+    """This account's daily-loss thresholds, and where it currently stands."""
+    return _daily_loss_payload(user.user_id)
+
+
+@router.put("/risk/daily-loss")
+async def set_daily_loss(body: DailyLossRequest, user: UserContext = Depends(get_current_user)):
+    try:
+        cfg = live_safety.DailyLossConfig(
+            enabled=body.enabled, soft_warn_inr=body.soft_warn_inr, hard_halt_inr=body.hard_halt_inr)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    live_safety.configure_daily_loss(cfg, uid=user.user_id)
+    return _daily_loss_payload(user.user_id)
+
+
+@router.delete("/risk/daily-loss")
+async def clear_daily_loss(user: UserContext = Depends(get_current_user)):
+    """Drop this account's override so it falls back to the shipped default."""
+    live_safety.clear_daily_loss(user.user_id)
+    return _daily_loss_payload(user.user_id)
+
+
 # ─── Orders ───────────────────────────────────────────────────────────────────
 @router.get("/orders")
 async def orders(user: UserContext = Depends(get_current_user)):
@@ -927,7 +1000,7 @@ async def order_trades(order_id: str, user: UserContext = Depends(get_current_us
 def _safety_gate(user: UserContext, idem_parts) -> str:
     """Kill-switch / daily-loss / idempotency gate. Returns the idempotency key."""
     idem_key = live_safety.make_idempotency_key(*idem_parts)
-    # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
+    # Kite uses INR risk controls; kill-switch and idempotency always apply.
     decision = live_safety.assert_safe_to_trade(
         positions=[],
         idempotency_key=idem_key,

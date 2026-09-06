@@ -26,7 +26,7 @@ _BARS_PER_DAY = 6.0   # ~6 trading hours of 1H bars in an Indian session
 def _inst(token: int, name: str) -> InstrumentMeta:
     return InstrumentMeta(
         underlying=name, tick_size=0.05, strike_step=1.0, exchange_currency="INR",
-        perp_symbol="", index_name=name, has_options=True, exchange="zerodha",
+        index_name=name, has_options=True, exchange="zerodha",
         zerodha_token=int(token))
 
 

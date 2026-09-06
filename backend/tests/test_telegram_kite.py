@@ -1,4 +1,4 @@
-"""Telegram Kite desk: text builders, crypto/kite callback separation, and the
+"""Telegram Kite desk: text builders, callback separation, and the
 two-tap confirm → shared-order-service path. Network TX (_send/_edit) no-ops
 without a token, so handlers run safely offline."""
 from unittest.mock import AsyncMock, patch
@@ -17,21 +17,24 @@ def test_status_text_reports_mode_and_toggles():
     assert "Auto-trade" in txt and "Alerts" in txt
 
 
-async def test_kite_callbacks_route_to_kite_module_not_crypto():
-    """`k*` callbacks + the Kite top-menu button go to the Kite desk; crypto
-    callbacks do not."""
+async def test_callbacks_route_to_kite_module():
+    """All callbacks are delegated to the Kite command surface.
+
+    Drives `_handle_update`, the actual update-loop entry point. The private
+    `_handle_callback` hop this used to call was inlined when the crypto command
+    surface was removed — only the Kite namespace is left to route to, so the
+    dispatch no longer needs a branch of its own.
+    """
+    def _cb(data: str) -> dict:
+        return {"callback_query": {"id": "cb", "data": data,
+                                   "message": {"message_id": 1, "chat": {"id": "1"}}}}
+
     with patch("app.services.notifications.telegram_kite.handle_kite_callback",
                new=AsyncMock()) as kite_cb:
-        await tb._handle_callback("1", 1, "cb", "ksig")
-        await tb._handle_callback("1", 1, "cb", "menu_kite")
-        assert kite_cb.await_count == 2
-        # a crypto callback must NOT hit the kite handler
-        with patch.object(tb, "_scan", new=AsyncMock(return_value=None)), \
-             patch.object(tb, "_answer_cb", new=AsyncMock()), \
-             patch.object(tb, "_edit", new=AsyncMock()), \
-             patch.object(tb, "build_signals_text", return_value="x"):
-            await tb._handle_callback("1", 1, "cb", "menu_crypto")
-        assert kite_cb.await_count == 2  # unchanged
+        await tb._handle_update(_cb("ksig"))
+        await tb._handle_update(_cb("menu_kite"))
+        await tb._handle_update(_cb("menu_unknown"))
+        assert kite_cb.await_count == 3
 
 
 async def test_order_requires_two_tap_confirm_then_places():

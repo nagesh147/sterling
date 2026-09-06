@@ -198,13 +198,13 @@ describe('why a trade ended', () => {
     mockPane([makeRow({ source: 'navigator', is_active: false, is_fresh: true })]);
     await renderPane();
     expect(screen.getByText(/ITM1/)).toBeInTheDocument();
-    expect(screen.getByText('Active now')).toBeInTheDocument();
+    expect(screen.getByText(/· active$/)).toBeInTheDocument();
   });
 
   it('still treats a row with neither flag as history', async () => {
     mockPane([makeRow({ is_active: false, is_fresh: false })]);
     await renderPane();
-    expect(screen.queryByText('Active now')).not.toBeInTheDocument();
+    expect(screen.queryByText(/· active$/)).not.toBeInTheDocument();
   });
 
   it('never renders an absolute rupee change as a percentage', async () => {
@@ -227,7 +227,7 @@ describe('audit leads closed out', () => {
     vi.resetModules();
   });
 
-  it('does not park a confluence row in Active now once its legs have traded through', async () => {
+  it('does not park a confluence row in the active bucket once its legs have traded through', async () => {
     // Lead 14. The bucket and the footer live-count keyed off source ==
     // 'derivatives', so a CONFLUENCE row — which carries a premium plan just the same —
     // kept the frozen scan flag while the card body reconciled each leg against the
@@ -237,16 +237,16 @@ describe('audit leads closed out', () => {
       { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
     );
     await renderPane();
-    expect(screen.queryByText('Active now')).not.toBeInTheDocument();
+    expect(screen.queryByText(/· active$/)).not.toBeInTheDocument();
   });
 
-  it('keeps a confluence row in Active now while its legs are above the trail', async () => {
+  it('keeps a confluence row in the active bucket while its legs are above the trail', async () => {
     mockPane(
       [makeRow({ source: 'confluence', leg: { premium_spot: 964.95, premium_sl: 845.85, entry_sl: 801.97 } })],
       { 'NFO:BANKNIFTY26AUG57000CE': { last_price: 965 } },
     );
     await renderPane();
-    expect(screen.getByText('Active now')).toBeInTheDocument();
+    expect(screen.getByText(/· active$/)).toBeInTheDocument();
   });
 
   it('gives two rows on the same contract their own marker slots', async () => {

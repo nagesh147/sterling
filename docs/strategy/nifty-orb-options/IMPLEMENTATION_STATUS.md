@@ -313,7 +313,7 @@ feed. Not guessed at here.
 ### Finding 14 in detail
 
 `daily_realized_pnl_inr` read `realized_pnl_inr`, falling back to
-`realized_pnl` -- but paper and crypto positions expose **only**
+`realized_pnl` -- but older persisted positions expose **only**
 `realized_pnl_usd`. Every such position therefore contributed 0.00 and the
 breaker reported `clear` regardless of the loss:
 

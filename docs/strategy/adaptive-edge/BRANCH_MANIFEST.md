@@ -6,7 +6,7 @@
 
 ## Scope
 
-This branch is restricted to Adaptive Edge formula definition, deterministic implementation, provenance, testing, and research replay. It must not modify SuperTrend, Value Flow Navigator, crypto engines, or unrelated Sterling strategies.
+This branch is restricted to Adaptive Edge formula definition, deterministic implementation, provenance, testing, and research replay. It must not modify SuperTrend, Value Flow Navigator, or unrelated Sterling strategies.
 
 ## Current implementation
 
@@ -41,7 +41,7 @@ F-001..F-008 are anchored platform/strategy invariants. F-101..F-114 are impleme
 - no live execution enablement
 - no production authorization from unit tests alone
 - no replacement of SuperTrend/Navigator logic
-- no crypto implementation
+- no unrelated market implementation
 - no borrowing of unrelated derivative strategy equations
 
 ## Next completion gate

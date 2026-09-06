@@ -278,8 +278,6 @@ export function AtmPremiumImbalanceBoard({ nowMs, onOpenDetail, onOpenChart }: {
         renderDetail={(sig) => <BoardTicket signal={sig} tag="ATM_PREMIUM_IMBALANCE" />}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
-        liveFirst={false}
-        hoistLiveFromToday={false}
         emptyLabel={session
           ? 'Armed — waiting for both legs to quote.'
           : 'Arm the session to resolve the ATM pair and start watching.'}

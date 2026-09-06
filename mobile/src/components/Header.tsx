@@ -11,19 +11,30 @@ export default function Header() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(true);
 
-  // Poll current algo states from backend
+  /* Both routes this polled -- /trading/algo-mode and /trading/algo-router-mode
+     -- went with the crypto surface, so every poll 404'd, the dot was pinned red
+     and the badge showed the store's default PAPER TRADING no matter what the
+     account was actually set to. A mode badge that cannot be wrong about live
+     money is worth more than one that is always there.
+
+     Kite's own status carries the real answer: `connected`, and `is_paper` off
+     the ACCOUNT rather than a router setting. The master halt is the kill
+     switch, which is what `assert_safe_to_trade` consults on every order. */
   const fetchStatus = async () => {
     try {
-      // Get Master Algo state
-      const algoResp = await api.get<{ enabled: boolean }>('/api/v1/trading/algo-mode');
-      setAlgoEnabled(algoResp.enabled);
-
-      // Get Router mode
-      const routerResp = await api.get<{ mode: 'paper' | 'shadow' | 'live' }>('/api/v1/trading/algo-router-mode');
-      setRouterMode(routerResp.mode);
-      setConnected(true);
+      const status = await api.get<{ connected: boolean; is_paper: boolean }>('/api/v1/kite/status');
+      setRouterMode(status.is_paper ? 'paper' : 'live');
+      setConnected(status.connected);
     } catch (e) {
       setConnected(false);
+    }
+    try {
+      const kill = await api.get<{ enabled: boolean }>('/api/v1/kite/trading/kill-switch');
+      // "Algo on" is "not halted": the kill switch is the only thing on this
+      // build that stops every order path at once.
+      setAlgoEnabled(!kill.enabled);
+    } catch (e) {
+      /* leave the last known state rather than claiming the algo is off */
     }
   };
 
@@ -37,7 +48,10 @@ export default function Header() {
     setLoading(true);
     try {
       const nextState = !algoEnabled;
-      await api.post(`/api/v1/trading/algo-mode?enabled=${nextState}`);
+      await api.post('/api/v1/kite/trading/kill-switch', {
+        enabled: !nextState,
+        reason: nextState ? '' : 'manual mobile operator halt',
+      });
       setAlgoEnabled(nextState);
     } catch (e) {
       console.warn('Failed to toggle Master Algo:', e);

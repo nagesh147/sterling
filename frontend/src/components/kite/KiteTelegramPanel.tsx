@@ -18,7 +18,7 @@ import {
 
 // Kite light theme — white cards, var(--k-border) borders, orange var(--k-brand) accents.
 // Matches ConnectPane's inline-style conventions; this panel is the Kite-specific
-// multi-bot Telegram manager (distinct from the global crypto TelegramConfigPanel).
+// Multi-bot Telegram manager for Kite execution and alerts.
 const ORANGE = 'var(--k-brand)';
 
 const S: Record<string, React.CSSProperties> = {
@@ -375,7 +375,7 @@ export function KiteTelegramPanel() {
       <section style={{ padding: 18, background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
         <div style={S.title}>KITE TELEGRAM ALERTS</div>
         <div style={S.sub}>
-          Send Kite signal alerts to your own Telegram bot(s) — separate from the crypto dashboard’s Telegram.
+          Send Kite signal alerts to your own dedicated Telegram bot(s).
           Add one or more bots, enable the ones you want, and Test to confirm delivery.
         </div>
 

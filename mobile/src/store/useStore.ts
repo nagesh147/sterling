@@ -24,7 +24,7 @@ interface StoreState {
 }
 
 export const useStore = create<StoreState>((set) => ({
-  selectedUnderlying: 'BTC',
+  selectedUnderlying: 'NIFTY',
   setSelectedUnderlying: (u) => set({ selectedUnderlying: u }),
   tradingMode: 'swing',
   setTradingMode: (mode) => set({ tradingMode: mode }),

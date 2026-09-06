@@ -16,6 +16,7 @@ import { MotionStyleSettings } from './MotionStyleSettings';
 import { TickerStripSettings } from './ticker/TickerStripSettings';
 import { DisplayScaleSettings } from './DisplayScaleSettings';
 import { DefaultSectionSettings } from './DefaultSectionSettings';
+import { DailyLossLimitPanel } from './DailyLossLimitPanel';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
@@ -1112,6 +1113,7 @@ export function ConnectPane() {
             {section === 'mode' && (
               <>
                 <TradingModePanel />
+                <DailyLossLimitPanel />
                 <KiteExchangeSettingsCard />
               </>
             )}

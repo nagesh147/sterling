@@ -4,7 +4,7 @@ from typing import Optional, Tuple, List
 
 class InstrumentMeta(BaseModel):
     underlying: str
-    quote_currency: str = "USD"
+    quote_currency: str = "INR"
     contract_multiplier: float = 1.0
     tick_size: float
     strike_step: float
@@ -15,26 +15,18 @@ class InstrumentMeta(BaseModel):
     has_options: bool = True
     exchange: str = "zerodha"
     exchange_currency: str
-    perp_symbol: str
     index_name: str
-    dvol_symbol: Optional[str] = None
     description: str = ""
-    # OKX / Delta Exchange perp + option-chain identifiers used to live here.
-    # The instrument registry sets them on nothing, and code that read them fell
-    # back to inventing a "{SYM}USD" ticker for NSE underlyings, so they are gone
-    # rather than left as permanently-None traps.
     # Zerodha Kite-specific
     zerodha_token: Optional[int] = None            # instrument token for historical data
     zerodha_index_symbol: Optional[str] = None     # e.g. "NSE:NIFTY 50" for LTP/quote
-    zerodha_vix_token: Optional[int] = None        # India VIX token (264969) for DVOL proxy
+    zerodha_vix_token: Optional[int] = None        # India VIX instrument token (264969)
 
     @computed_field
     @property
     def compatible_sources(self) -> List[str]:
         """Data sources that can provide market data for this instrument."""
-        # Zerodha is the only adapter this build can construct. The crypto
-        # branches below used to append deribit/binance unconditionally, so a
-        # non-zerodha instrument advertised sources that cannot be built.
+        # Zerodha is the only market-data adapter this build can construct.
         return ["zerodha"] if self.exchange == "zerodha" else []
 
 
@@ -47,4 +39,3 @@ class InstrumentDetailResponse(BaseModel):
     instrument: InstrumentMeta
     supported: bool
     options_available: bool
-    perp_symbol: str

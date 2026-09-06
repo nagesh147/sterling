@@ -71,4 +71,4 @@ The current branch therefore replaces that interpretation with parameterized ope
 
 ## Scope
 
-This branch remains restricted to Adaptive Edge for Sterling Kite. No crypto engine, SuperTrend engine, or Value Flow Navigator implementation is part of this source-of-truth recovery.
+This branch remains restricted to Adaptive Edge for Sterling Kite. No SuperTrend engine or Value Flow Navigator implementation is part of this source-of-truth recovery.

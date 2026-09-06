@@ -24,7 +24,7 @@ from study.surface_snapshot import SurfaceSnapshot
 log = logging.getLogger(__name__)
 
 # Default (sane) values when the snapshot can't provide a measurement
-_DEFAULT_IV = 0.60       # 60% — typical crypto ATM IV
+_DEFAULT_IV = 0.18       # conservative Indian index ATM IV fallback
 _DEFAULT_VRP = 1.0       # fair
 _DEFAULT_SKEW = 0.02     # 2 IV points — mild put skew
 

@@ -1,6 +1,6 @@
 // Kite-specific Telegram alert targets — frontend types.
 // Mirrors the backend contract in app/api/v1/endpoints/kite_telegram.py.
-// Distinct from the GLOBAL crypto Telegram config (see TelegramConfigPanel.tsx):
+// Dedicated Kite Telegram configuration:
 // the Kite app manages its OWN multiple bots/chats, scoped per user.
 
 /** A managed Telegram alert target as returned by the API (token never echoed). */

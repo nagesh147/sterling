@@ -41,7 +41,7 @@ Adaptive Edge is a distinct strategy. It must not inherit formulas from:
 
 - SuperTrend
 - Value Flow Navigator
-- Sterling crypto scalper
+- unrelated strategy engines
 - old derivatives routing-gate studies
 - unrelated directional engines
 

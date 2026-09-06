@@ -106,16 +106,19 @@ def auto_execute(uid: str) -> bool:
 def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     """Kill switch and duplicate-order guard, before anything is sent.
 
-    `check_daily_loss=False` matches every other Kite path here: that breaker is
-    denominated in USD against a crypto book and reads zero for an INR position,
-    so including it would be a gate that always passes — worse than no gate,
-    because it looks like one. This engine's own INR daily-loss limit is enforced
-    in `GammaMoveStrategy.admit`.
+    `check_daily_loss` was False here, on the grounds that the breaker was
+    denominated in a different accounting unit and read zero for an INR position
+    — a gate that always passes, which is worse than no gate. That is no longer
+    how it reads: `daily_loss_state(uid=...)` goes through
+    `_account_daily_pnl_inr` to `state.daily_realized_pnl_strict(uid)`, which is
+    INR-native and propagates a failed read instead of returning 0. It is now
+    armed, and sits alongside this engine's own limit in
+    `GammaMoveStrategy.admit`: that one is per-engine, this one is the account's.
     """
     try:
         from app.services.live_safety import assert_safe_to_trade
         decision = assert_safe_to_trade([], idempotency_key,
-                                        check_daily_loss=False, uid=uid)
+                                        check_daily_loss=True, uid=uid)
         # `.allowed` by name, with no permissive default. An earlier version read
         # `getattr(decision, "ok", True)`; the field is called `allowed`, so the
         # default was taken every single time and the gate passed everything it

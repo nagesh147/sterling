@@ -177,8 +177,6 @@ export function SuperTrendSharedBoard({
       // Date groups only: Today / Yesterday / Older. Hoisting live rows into
       // "Live now" hid those headings — a morning scan then read as one live
       // pile even when every print was from today.
-      liveFirst={false}
-      hoistLiveFromToday={false}
       collapseOlderDays={true}
       // Trade and chart are COLUMNS now, shared with every other board, so the
       // picker can switch either off.

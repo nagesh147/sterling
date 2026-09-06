@@ -9,91 +9,18 @@ from app.core.logging import setup_logging, get_logger
 from app.core.observability import (
     configure_json_logging, new_correlation_id, set_correlation_id, reset_correlation_id,
 )
-from app.services import paper_store
-from app.services import exchange_account_store
-from app.services import adapter_manager
-from app.services import webhook_store as _webhook_store_svc
-from app.services import pnl_history as _pnl_history_svc
 from app.api.v1.endpoints.health import router as health_router
-from app.api.v1.endpoints.instruments import router as instruments_router
-from app.api.v1.endpoints.directional import router as directional_router
-from app.api.v1.endpoints.positions import router as positions_router
-from app.api.v1.endpoints.config import router as config_router
 from app.api.v1.endpoints.backtest import router as backtest_router
-from app.api.v1.endpoints.exchanges import router as exchanges_router
-from app.api.v1.endpoints.account import router as account_router
-from app.api.v1.endpoints.alerts import router as alerts_router
-from app.api.v1.endpoints.webhooks import router as webhooks_router
-from app.api.v1.endpoints.options import router as options_router
-from app.api.v1.endpoints.stats import router as stats_router
-from app.api.v1.endpoints.session import router as session_router
-from app.api.v1.endpoints.trading_mode import router as trading_mode_router
 from app.api.v1.endpoints.candles import router as candles_router
-from app.api.v1.endpoints.analytics import router as analytics_router
-from app.api.v1.endpoints.analytics_baseline import router as analytics_baseline_router
-from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
-from app.api.v1.endpoints.derivatives import router as derivatives_router
-from app.api.v1.endpoints.ohlcv import router as ohlcv_router
-from app.api.v1.endpoints.wfo import router as wfo_router
-from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backtest_router
+from app.api.v1.endpoints.config import router as config_router
 import secrets
 from app.core.csp import reset_csp_nonce, set_csp_nonce
-from app.api.v1.endpoints.sterling_v2 import router as sterling_v2_router
-from app.api.v1.endpoints.paper import router as paper_router
-from app.services import alert_store as _alert_store_svc
 
 log = get_logger(__name__)
 
 
-def _build_greeks_budget_gate(app: FastAPI):
-    """Build the async `greeks_budget_gate` callable wired into every
-    OrderRouter construction. Reads `app.state.greeks_budget_checker` at
-    call time so a later update to the checker (e.g. NAV change) takes
-    effect on the next order without rebuilding the router. Resolves the
-    live adapter from `app.state.adapter` and uses it for option-chain
-    fetches when an options order arrives. Returns a no-op callable when
-    no checker is bound (early-boot or tests).
-    """
-    from app.engines.risk import portfolio_greeks_aggregator as _agg
-    from app.services.exchanges import instrument_registry as _reg
-
-    async def _gate(req, open_positions):
-        checker = getattr(app.state, "greeks_budget_checker", None)
-        if checker is None or checker.pv <= 0:
-            return None
-        adapter = getattr(app.state, "adapter", None)
-        if adapter is None:
-            return None
-
-        async def _get_spot(sym: str) -> float:
-            inst = _reg.get_instrument(sym)
-            if inst is None:
-                return 0.0
-            try:
-                return float(await adapter.get_index_price(inst))
-            except Exception:
-                return 0.0
-
-        return await _agg.check_against_budget(
-            req=req, open_positions=open_positions,
-            adapter=adapter, checker=checker, get_spot=_get_spot,
-        )
-
-    return _gate
-
-
-# ─── Derivatives scanner + auto-execute ─────────────────────────────────
-#
-# Scanner body lives in app/services/derivatives_scanner.py so the unit
-# tests can drive `auto_execute_derivative` + `run_scanner_tick`
-# without booting the full ASGI lifespan. Main.py keeps only the loop
-# that drives the tick every `interval` seconds.
-
-
 async def _background_kite_alerts(interval: int = 60) -> None:
-    """Push NEW active Kite engine signals to Telegram — a SEPARATE stream from the
-    crypto scalping alerts. Gated on market hours; the push itself no-ops unless a
-    bot token/chat is configured and alerts are enabled."""
+    """Push new Kite engine signals to Telegram during Indian market hours."""
     import asyncio
     from app.services.notifications import telegram_kite as _kbot
     from app.services.kite_engine.market_hours import is_market_open
@@ -111,8 +38,14 @@ async def _background_kite_alerts(interval: int = 60) -> None:
 async def lifespan(app: FastAPI):
     setup_logging()
     configure_json_logging()  # no-op unless settings.log_json (Phase 2 observability)
-    paper_store.bootstrap()
-    exchange_account_store.bootstrap()
+    # The SQLite store must be open BEFORE anything reads it. This used to
+    # happen as a side effect of importing `exchange_account_store`, which went
+    # with the crypto surface — after which `kite_accounts.bootstrap()` found
+    # `db._available` False, loaded nothing, and `/kite/status` reported
+    # "No active Kite account" even though the row was still in the database.
+    from app.services import db as _db
+    _db.init()
+
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
     # Adopt KITE_API_KEY / KITE_API_SECRET (and optionally KITE_ACCESS_TOKEN) from
@@ -123,71 +56,13 @@ async def lifespan(app: FastAPI):
         _kite_auth.seed_from_env()
     except Exception as exc:  # noqa: BLE001
         log.warning("Kite env seeding skipped: %s", exc)
-    _webhook_store_svc.bootstrap()
-    _alert_store_svc.bootstrap()
-    _pnl_history_svc.bootstrap()
-    from app.services import eval_history as _eval_history_svc
-    _eval_history_svc.bootstrap()
-    from app.services import arrow_store as _arrow_store_svc
-    _arrow_store_svc.bootstrap()
-
     # Init OHLCV table and kick off first fetch in background (non-blocking)
     from app.services.ohlcv_store import init_ohlcv_table
     init_ohlcv_table()
     
-    # Restore signal tracker state — prevents re-firing Telegram on server restart
-    from app.api.v1.endpoints.directional import _load_signal_tracker_state, _migrate_signal_ids_to_v2
-    _load_signal_tracker_state()
-    _migrate_signal_ids_to_v2()
-
-    from app.core.trading_mode import MODES, DEFAULT_MODE
-    from app.services.db import get_trading_mode, get_config
-    mode_name = get_trading_mode() or DEFAULT_MODE
-    if mode_name not in MODES:
-        mode_name = DEFAULT_MODE
-    app.state.trading_mode = MODES[mode_name]
-    app.state.algo_mode = get_config("algo_mode", "false").lower() == "true"
-    # Scoring strategy — controls how TF+VCP+MR are combined into a direction/score.
-    # Persisted via db.set_config("scoring_strategy", ...). Default "by_edge_max_linear_agree".
-    from app.engines.directional.track_scoring import set_strategy as _set_scoring_strategy
-    _saved_strategy = get_config("scoring_strategy") or "by_edge_max_linear_agree"
-    _set_scoring_strategy(_saved_strategy)
-    # Phase F: paper / shadow / live router mode for the auto-trader.
-    # Persisted via db.set_config("algo_router_mode", ...). Default "live"
-    # preserves prior behaviour for users who already have algo configured.
-    _router_mode = (get_config("algo_router_mode") or "live").lower()
-    if _router_mode not in ("paper", "shadow", "live"):
-        _router_mode = "live"
-    app.state.algo_router_mode = _router_mode
-
-    # Phase: derivatives_profiles and DailyLossConfig persistence loading
+    # Restore the single Kite Telegram transport configuration.
     try:
         from app.services.db import get_config
-        import json
-        
-        dl_str = get_config("daily_loss_config")
-        if dl_str:
-            from app.services.live_safety import configure_daily_loss
-            parsed = json.loads(dl_str)
-            from app.services.live_safety import DailyLossConfig
-            configure_daily_loss(DailyLossConfig(enabled=parsed.get("enabled", True), soft_warn_usd=parsed.get("soft_warn_usd", -500.0), hard_halt_usd=parsed.get("hard_halt_usd", -1500.0)))
-            
-        dp_str = get_config("derivatives_profiles")
-        if dp_str:
-            from app.engines.derivatives.schemas import StrategyDerivativesProfile
-            parsed = json.loads(dp_str)
-            restored = {}
-            for k, v in parsed.items():
-                restored[k] = StrategyDerivativesProfile(**v)
-            app.state.derivatives_profile_overrides = restored
-            log.info(f"Restored derivatives_profiles from DB for {list(restored.keys())}")
-    except Exception as e:
-        log.warning(f"Failed to restore configs from DB: {e}")
-
-    # Restore persisted Telegram credentials. They're saved to config by
-    # PUT /config/telegram but the module only read env vars at import — so after
-    # a restart Telegram silently went quiet (send() returns False with no token).
-    try:
         import app.services.notifications.telegram as _tg_mod
         _tg_token = get_config("telegram_bot_token")
         _tg_chat  = get_config("telegram_chat_id")
@@ -204,83 +79,6 @@ async def lifespan(app: FastAPI):
         log.warning("Telegram config restore skipped: %s", _e)
 
     log.info("Startup complete")
-
-    # Restore persisted Telegram config (survives server restarts)
-    from app.services.notifications import telegram as _telegram_svc
-    saved_tg_token = get_config("telegram_bot_token")
-    saved_tg_chat  = get_config("telegram_chat_id")
-    if saved_tg_token:
-        _telegram_svc.TELEGRAM_TOKEN   = saved_tg_token
-    if saved_tg_chat:
-        _telegram_svc.TELEGRAM_CHAT_ID = saved_tg_chat
-    # Restore verified status from DB — no network call needed at startup.
-    # telegram_verified is written to DB whenever a test message succeeds.
-    if saved_tg_token and saved_tg_chat:
-        if get_config("telegram_verified") == "1":
-            _telegram_svc.TELEGRAM_REACHABLE = True
-            log.info("Telegram: restored verified status from DB")
-
-    from app.services.execution.circuit_breaker import CircuitBreaker
-    app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
-
-    # v3 singletons
-            # v3 singletons
-    from app.engines.risk.circuit_breaker import DrawdownCircuitBreaker, CircuitBreakerConfig
-    from app.engines.analytics.correlation import CorrelationTracker
-    from app.services.calibration import CalibrationService
-    from app.services import db as _db
-
-    dd_cfg = CircuitBreakerConfig(
-        warn_dd=float(os.environ.get('STERLING_DD_WARN', '0.05')),
-        halt_dd=float(os.environ.get('STERLING_DD_HALT', '0.10')),
-        reset_dd=float(os.environ.get('STERLING_DD_RESET', '0.15')),
-    )
-    app.state.dd_circuit_breaker = DrawdownCircuitBreaker(dd_cfg, portfolio_value=100_000.0)
-    app.state.correlation_tracker = CorrelationTracker(assets=['BTC', 'ETH', 'SOL'])
-    app.state.calibration_service = CalibrationService(db_path=_db._DB_PATH)
-
-    # Portfolio Greeks budget hard gate (Phase 0 of the derivatives build).
-    # Read by `OrderRouter._submit_live` via the `greeks_budget_gate` dep
-    # wired in `_router_deps_with_greeks_gate()` below. Bound to the same
-    # NAV figure as `dd_circuit_breaker` so a single env knob moves both;
-    # both should be kept in sync with actual account NAV in production.
-    from app.engines.risk.greeks_budget import GreeksBudgetChecker, GreeksBudget
-    app.state.greeks_budget_checker = GreeksBudgetChecker(
-        GreeksBudget(), portfolio_value=100_000.0,
-    )
-
-    # Build market data adapter (use pre-injected adapter in tests, else build fresh)
-    if not getattr(app.state, "adapter", None):
-        exchange = settings.exchange_adapter.lower()
-        # If active exchange config has keys, use them for data adapters that need auth
-        active_cfg = exchange_account_store.get_active()
-        api_key = active_cfg.api_key if active_cfg and active_cfg.name == exchange else ""
-        api_secret = active_cfg.api_secret if active_cfg and active_cfg.name == exchange else ""
-        ad = await adapter_manager.init(exchange, api_key, api_secret)
-        app.state.adapter = ad
-    else:
-        # Tests inject adapter — sync adapter_manager so it matches
-        adapter_manager._adapter = app.state.adapter
-        adapter_manager._data_source = settings.exchange_adapter.lower()
-
-    from app.services.exchanges import instrument_registry as registry
-    ad = adapter_manager.get_adapter()
-    # The ping used to be skipped whenever the crypto kill switch was off, which
-    # left an Indian-only build reporting its data source as "PAUSED" forever.
-    reachable = await ad.ping()
-    reach_str = "OK" if reachable else "UNREACHABLE"
-    active_ex = exchange_account_store.get_active()
-    log.info(
-        "Sterling v0.4 | env=%s | data=%s [%s] | account=%s | instruments=%d | positions=%d",
-        settings.environment,
-        adapter_manager.get_data_source(),
-        reach_str,
-        active_ex.display_name if active_ex else "none",
-        len(registry.list_instruments()),
-        len(paper_store.list_positions()),
-    )
-    if reachable is False:
-        log.warning("Market data exchange unreachable at startup — will retry on request")
 
     import asyncio
 
@@ -451,7 +249,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    await adapter_manager.close_current()
     log.info("Sterling shutdown complete")
 
 
@@ -519,33 +316,15 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health_router)
-    # More-specific stream prefix before generic /api/v1 routers (registration order).
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
-
-    app.include_router(instruments_router, prefix="/api/v1")
-    app.include_router(paper_router, prefix="/api/v1")
-    app.include_router(directional_router, prefix="/api/v1")
-    app.include_router(positions_router, prefix="/api/v1")
+    # Generic OHLC candles for any underlying. Removed with the crypto sweep,
+    # but 13 MOUNTED Kite components read it through `useCandles` —
+    # KiteTicker, InstrumentPane, KiteDashboard, AstroPane and every chart —
+    # so every chart in the Kite tab was 404ing.
+    app.include_router(candles_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(backtest_router, prefix="/api/v1")
-    app.include_router(vectorized_backtest_router, prefix="/api/v1")
-    app.include_router(exchanges_router, prefix="/api/v1")
-    app.include_router(account_router, prefix="/api/v1")
-    app.include_router(alerts_router, prefix="/api/v1")
-    app.include_router(webhooks_router, prefix="/api/v1")
-    app.include_router(options_router, prefix="/api/v1")
-    app.include_router(stats_router, prefix="/api/v1")
-    app.include_router(session_router, prefix="/api/v1")
-    app.include_router(trading_mode_router, prefix="/api/v1")
-    app.include_router(candles_router, prefix="/api/v1")
-    app.include_router(ohlcv_router, prefix="/api/v1")
-    app.include_router(wfo_router, prefix="/api/v1")
-    app.include_router(analytics_router, prefix="/api/v1")
-    app.include_router(analytics_baseline_router, prefix="/api/v1")
-    app.include_router(risk_dashboard_router, prefix="/api/v1")
-    app.include_router(derivatives_router, prefix="/api/v1")
-    app.include_router(sterling_v2_router, prefix="/api/v1")
 
     # Zerodha Kite (Indian markets) — multi-tenant manual console
     from app.api.v1.endpoints.kite import router as kite_router
@@ -559,7 +338,7 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")
 
-    # Kite-specific Telegram alert targets (per-user, separate from crypto bot)
+    # Kite-specific Telegram alert targets (per-user)
     from app.api.v1.endpoints.kite_telegram import router as kite_telegram_router
     app.include_router(kite_telegram_router, prefix="/api/v1")
 

@@ -13,7 +13,7 @@ It was uploaded into the Sterling workspace during the strategy recovery process
 - Kite only.
 - Options scalping / intraday strategy.
 - Separate engine from SuperTrend and Value Flow Navigator.
-- No crypto logic.
+- No unrelated market logic.
 - No reuse of SuperTrend/Navigator signal semantics as Adaptive Edge mathematics.
 
 ## Canonical mathematical chain

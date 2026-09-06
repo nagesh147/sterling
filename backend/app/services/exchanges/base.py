@@ -16,10 +16,6 @@ class BaseExchangeAdapter(ABC):
         ...
 
     @abstractmethod
-    async def get_perp_price(self, instrument: InstrumentMeta) -> float:
-        ...
-
-    @abstractmethod
     async def get_candles(
         self,
         instrument: InstrumentMeta,
@@ -33,18 +29,6 @@ class BaseExchangeAdapter(ABC):
     async def get_option_chain(
         self, instrument: InstrumentMeta
     ) -> List[OptionSummary]:
-        ...
-
-    @abstractmethod
-    async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
-        """Returns current DVOL index value, or None if unavailable."""
-        ...
-
-    @abstractmethod
-    async def get_dvol_history(
-        self, instrument: InstrumentMeta, days: int = 30
-    ) -> List[float]:
-        """Returns list of daily DVOL closes for IVR computation."""
         ...
 
     @abstractmethod

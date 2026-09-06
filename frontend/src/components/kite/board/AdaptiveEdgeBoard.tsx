@@ -70,10 +70,8 @@ export function AdaptiveEdgeBoard({ nowMs, onOpenDetail, onOpenChart }: {
         onSortChange={setSort}
         collapsedGroups={collapsedGroups}
         onToggleGroup={toggleGroup}
-        liveFirst={false}
         collapseOlderDays={true}
         nowMs={nowMs}
-        hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total
             ? 'Every row is filtered out. Clear the search or include ended positions.'

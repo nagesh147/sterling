@@ -7,7 +7,7 @@ class AssetBalance(BaseModel):
     available: float
     locked: float
     total: float
-    usd_value: Optional[float] = None
+    inr_value: Optional[float] = None
 
 
 class AccountPosition(BaseModel):
@@ -20,8 +20,7 @@ class AccountPosition(BaseModel):
     unrealized_pnl: float
     realized_pnl: float
     margin: float
-    leverage: Optional[float] = None
-    position_type: str   # "options" | "perpetual" | "futures"
+    position_type: str   # "equity" | "options" | "futures"
     created_at_ms: Optional[int] = None
 
 
@@ -44,32 +43,23 @@ class AccountFill(BaseModel):
     side: str
     size: float
     price: float
-    fee: float             # net_commission — AUTHORITATIVE (positive=paid, negative=rebate)
+    fee: float
     fee_asset: str
     pnl: float = 0.0
     created_at_ms: int
-    # ── Detailed fee fields (populated when raw fill data is available) ──────
-    fill_type: str = "normal"          # "normal"/"liquidation"/"adl"/"settlement"/"otc"
-    role: str = "taker"                # "taker" / "maker"
-    notional_usd: float = 0.0          # size × contract_value × price
-    gross_commission: float = 0.0      # fee before VIP/DETO/TFC discounts
-    liquidation_fee: float = 0.0       # separate penalty (liquidation fills only)
-    effective_rate: float = 0.0        # actual rate applied after all discounts
-    deto_discount: float = 0.0         # DETO tokens used, in settling asset
-    tfc_used: float = 0.0              # Trading Fee Credit offset
-    vip_discount: float = 0.0          # VIP tier reduction amount
-    gst_amount: float = 0.0            # 18% GST on fee (not in API; computed here)
-    total_cost: float = 0.0            # fee + liquidation_fee − tfc_used
-    total_with_gst: float = 0.0        # fee + gst_amount
-    settling_asset: str = "USD"        # currency of all fee fields
+    turnover_inr: float = 0.0
+    brokerage: float = 0.0
+    gst_amount: float = 0.0
+    total_cost: float = 0.0
+    settling_currency: str = "INR"
 
 
 class PortfolioSnapshot(BaseModel):
     exchange: str
     display_name: str
-    total_balance_usd: float
-    unrealized_pnl_usd: float
-    realized_pnl_usd: float
+    total_balance_inr: float
+    unrealized_pnl_inr: float
+    realized_pnl_inr: float
     margin_used: float
     margin_available: float
     positions_count: int

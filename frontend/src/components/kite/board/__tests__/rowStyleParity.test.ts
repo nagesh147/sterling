@@ -349,36 +349,53 @@ describe('parent rows alternate shade, as the shared board’s do', () => {
 /**
  * The group band stays put while its rows scroll.
  *
- * The shared board pins its day band under the heading strip, so you can always
- * see which day you are looking at. SuperTrend's band scrolled away.
+ * The shared board pins its day band at `top: 0` and has always been right to.
+ * SuperTrend pinned at `var(--st-sticky-head)` instead — the measured height of
+ * the toolbar wrapper — on the theory that a band at 0 would slide underneath
+ * it. The wrapper is a SIBLING above the scroll container, never inside it, so
+ * the scrollport already begins below the toolbar and the offset was counted
+ * twice: measured at 59px, every band sat 59px down into its own rows with its
+ * first card showing through above it. Which read, correctly, as the band
+ * labelling the group below it.
  *
- * I first wrote this off as unsafe to do blind, on the grounds that the offset
- * is the sticky wrapper's height and the wrapper is not a fixed size. That was
- * a reason to measure it, not a reason to skip it — and it turned out the
- * heading strip was already inside that wrapper, so only the band was missing.
+ * Measuring the wrapper was never the fix, so the variable, the ref and the
+ * ResizeObserver that maintained it are all gone.
  */
-describe('SuperTrend group bands pin under the sticky head', () => {
-  it('pins to a measured offset rather than a guessed constant', () => {
-    expect(superTrend).toContain("top: 'var(--st-sticky-head, 0px)'");
-    expect(superTrend).toContain('--st-sticky-head');
-    // Measured from the real element, so a wrapped toolbar cannot desync it.
-    expect(superTrend).toContain('el.offsetHeight');
-    // Written to the pane root, not to `stickyHead.parentElement`. Those are the
-    // same node today only because the surrounding conditional renders no
-    // element; one added wrapper would put the variable on a node that does not
-    // contain the bands, and they would silently fall back to top: 0.
-    expect(superTrend).toContain('paneRootRef.current?.style.setProperty');
-    expect(superTrend).not.toContain('el.parentElement?.style.setProperty');
+describe('SuperTrend group bands pin to the top of the scroller', () => {
+  it('pins at 0, like the shared board', () => {
+    expect(superTrend).toContain("position: 'sticky', top: 0, zIndex: 1,");
+    expect(sharedBoard).toContain('top: 0,');
   });
 
-  it('does not rebuild the observer on every render', () => {
-    // This table re-renders on every quote tick; an unkeyed effect would build
-    // and tear down a ResizeObserver each time.
-    expect(superTrend).toContain('}, [settingsOpen, viewLayout]);');
+  it('keeps no trace of the double-counted offset', () => {
+    expect(superTrend).not.toContain('--st-sticky-head');
+    expect(superTrend).not.toContain('stickyHeadRef');
+    expect(superTrend).not.toContain('paneRootRef');
+  });
+});
+
+/**
+ * The band's micro-type has to sit on the band.
+ *
+ * The shared board puts fontSize/weight/letterSpacing/textTransform on the day
+ * band element, so everything inside it — label and row count alike — inherits
+ * one type scale. SuperTrend had them on the label div only, which left
+ * "2 signals" at the inherited 12px beside an 8.5px uppercase date: the count
+ * was the largest text in a band meant to be the quietest row in the table.
+ */
+describe('SuperTrend group band type is set on the band', () => {
+  it('carries the day-head metrics on the header element itself', () => {
+    const header = superTrend.slice(superTrend.indexOf('className="st-group-header"'));
+    const decl = header.slice(0, header.indexOf('>'));
+    for (const prop of ['fontSize', 'fontWeight', 'letterSpacing', 'textTransform']) {
+      expect(decl).toContain(`${prop}: DAY_HEAD_METRICS.${prop}`);
+    }
   });
 
-  it('survives an environment with no ResizeObserver', () => {
-    expect(superTrend).toContain("typeof ResizeObserver === 'undefined'");
+  it('leaves the count free to be lighter, not larger', () => {
+    // Weight is the one thing the count still overrides; size and case come
+    // from the band, so they cannot drift apart again.
+    expect(superTrend).toContain("fontWeight: 500, color: k.dim");
   });
 });
 

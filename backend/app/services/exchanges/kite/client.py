@@ -410,7 +410,7 @@ class KiteClient(TradingExchangeAdapter):
     async def place_order(
         self, symbol: str, side: str, size: float,
         order_type: str = "market_order", limit_price: Optional[float] = None,
-        time_in_force: str = "gtc", post_only: bool = False, reduce_only: bool = False,
+        time_in_force: str = "day", post_only: bool = False, reduce_only: bool = False,
         stop_loss: Optional[float] = None, take_profit: Optional[float] = None,
         trail_amount: Optional[float] = None, **kwargs,
     ) -> dict:
@@ -418,6 +418,10 @@ class KiteClient(TradingExchangeAdapter):
         Kite has no per-order bracket, so stop_loss/take_profit are honored only
         when an explicit ``kite_order_type`` (SL/SL-M) + trigger is supplied —
         otherwise wire protection via GTT. ``post_only`` is unsupported by Kite."""
+        # Dropping this parameter let `post_only=True` fall into **kwargs and be
+        # SILENTLY IGNORED: a caller asking for maker-only got an ordinary order
+        # that can cross the spread and pay taker fees. Kite has no post-only, so
+        # refusing is the only honest answer.
         if post_only:
             raise KiteOrderError("post_only (maker-only) is not supported by Kite.", error_type="OrderException")
         exchange, tradingsymbol = self._split_symbol(symbol, kwargs.get("exchange"))
@@ -792,9 +796,6 @@ class KiteClient(TradingExchangeAdapter):
     async def get_spot_price(self, instrument: InstrumentMeta) -> float:
         return await self.get_index_price(instrument)
 
-    async def get_perp_price(self, instrument: InstrumentMeta) -> float:
-        return await self.get_index_price(instrument)
-
     async def get_candles(self, instrument: InstrumentMeta, resolution: str, limit: int = 200) -> List[Candle]:
         token = instrument.zerodha_token
         if not token:
@@ -947,26 +948,6 @@ class KiteClient(TradingExchangeAdapter):
                 continue
         return options
 
-    async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
-        try:
-            data = await self.get_ltp(["NSE:INDIA VIX"])
-            vix = (data.get("NSE:INDIA VIX") or {}).get("last_price")
-            return float(vix) if vix else None
-        except Exception:
-            return None
-
-    async def get_dvol_history(self, instrument: InstrumentMeta, days: int = 30) -> List[float]:
-        vix_token = instrument.zerodha_vix_token or K.INDIA_VIX_TOKEN
-        now = datetime.now(_IST)
-        from_dt = now - timedelta(days=days + 5)
-        try:
-            data = await self.get_historical(
-                vix_token, "day", from_dt.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"),
-            )
-            return [float(row[4]) for row in data.get("candles", []) if len(row) >= 5]
-        except Exception:
-            return []
-
     # ─── AuthenticatedExchangeAdapter ─────────────────────────────────────────
     async def test_connection(self) -> bool:
         if not self._access_token:
@@ -990,7 +971,7 @@ class KiteClient(TradingExchangeAdapter):
                     available=float(info.get("available", {}).get("live_balance") or 0.0),
                     locked=float(info.get("utilised", {}).get("debits") or 0.0),
                     total=float(info.get("net") or 0.0),
-                    usd_value=None,
+                    inr_value=float(info.get("net") or 0.0),
                 ))
             except (TypeError, ValueError):
                 continue
@@ -1015,7 +996,7 @@ class KiteClient(TradingExchangeAdapter):
                     mark_price=float(p.get("last_price") or 0.0),
                     unrealized_pnl=float(p.get("pnl") or 0.0),
                     realized_pnl=float(p.get("realised") or 0.0),
-                    margin=float(p.get("value") or 0.0), leverage=None,
+                    margin=float(p.get("value") or 0.0),
                     position_type=str(p.get("product") or "MIS"), created_at_ms=None,
                 ))
             except (TypeError, ValueError):
@@ -1077,8 +1058,8 @@ class KiteClient(TradingExchangeAdapter):
         margin_used = sum(abs(p.margin) for p in positions)
         return PortfolioSnapshot(
             exchange="zerodha", display_name="Zerodha Kite",
-            total_balance_usd=round(total_bal, 2),
-            unrealized_pnl_usd=round(unreal_pnl, 2), realized_pnl_usd=round(real_pnl, 2),
+            total_balance_inr=round(total_bal, 2),
+            unrealized_pnl_inr=round(unreal_pnl, 2), realized_pnl_inr=round(real_pnl, 2),
             margin_used=round(margin_used, 2),
             margin_available=max(0.0, round(total_bal - margin_used, 2)),
             positions_count=len(positions), open_orders_count=len(orders),
@@ -1092,6 +1073,6 @@ class KiteClient(TradingExchangeAdapter):
 
 def _paper_balances() -> List[AssetBalance]:
     return [
-        AssetBalance(asset="INR (equity)", available=500000.0, locked=50000.0, total=550000.0, usd_value=None),
-        AssetBalance(asset="INR (commodity)", available=100000.0, locked=0.0, total=100000.0, usd_value=None),
+        AssetBalance(asset="INR (equity)", available=500000.0, locked=50000.0, total=550000.0, inr_value=550000.0),
+        AssetBalance(asset="INR (commodity)", available=100000.0, locked=0.0, total=100000.0, inr_value=100000.0),
     ]

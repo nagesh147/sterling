@@ -328,10 +328,13 @@ def test_safety_is_read_through_allowed_not_ok(monkeypatch):
     assert allowed is False
 
 
-def test_safety_skips_the_usd_daily_loss_breaker_and_passes_uid(monkeypatch):
-    """That breaker is USD-denominated against a crypto book and reads zero for
-    an INR position, so including it would be a gate that always passes. uid is
-    what routes the check at the right account."""
+def test_safety_arms_the_daily_loss_breaker_and_passes_uid(monkeypatch):
+    """The breaker used to read zero for an INR position, so arming it would
+    have been a gate that always passes. It is INR-native now —
+    daily_loss_state(uid=...) reads state.daily_realized_pnl_strict(uid) and
+    propagates a failed read rather than returning 0 — so it is armed. uid is
+    what routes the check at the right account; without it the engine escapes
+    the check entirely."""
     import app.services.live_safety as live_safety
     seen: dict = {}
 
@@ -345,7 +348,7 @@ def test_safety_skips_the_usd_daily_loss_breaker_and_passes_uid(monkeypatch):
 
     monkeypatch.setattr(live_safety, "assert_safe_to_trade", capture)
     runner._safety("u-42", "key-1")
-    assert seen.get("check_daily_loss") is False
+    assert seen.get("check_daily_loss") is True
     assert seen.get("uid") == "u-42"
 
 

@@ -1,9 +1,9 @@
 """
 Telegram control surface for the Kite (Zerodha) Sterling Kite Engine.
 
-Kept SEPARATE from the crypto/scalping bot (telegram_bot.py): its own command
+Kept separate from the low-level transport (telegram_bot.py): its own command
 (`/kite`), its own `k*` callback namespace, and its own alert push — the two
-streams never mix. Reuses the crypto bot's low-level Telegram transport
+streams never mix. Reuses the shared low-level Telegram transport
 (`_send/_edit/_answer_cb/_btn`) so there is still one bot / one token.
 
 Capabilities (acts as the local user ``default`` + its active Kite account):
@@ -326,7 +326,7 @@ async def _run_scan() -> str:
         return f"⚠️ Scan failed: {exc}"
 
 
-# ── alert push (separate channel from the crypto bot) ─────────────────────────
+# ── alert push ────────────────────────────────────────────────────────────────
 def _alert_html(r) -> str:
     arrow = "🟢▲ LONG" if r.direction == "long" else "🔴▼ SHORT"
     leg = r.legs[0] if r.legs else None

@@ -196,7 +196,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
 
     renderPane();
 
-    expect(screen.getByText('Active now')).toBeInTheDocument();
+    expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('25000')).toBeInTheDocument();
     expect(screen.queryByText(/no liquid contract/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/No option contract matched/i)).not.toBeInTheDocument();

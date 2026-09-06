@@ -6,7 +6,7 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { KiteActionButtons } from './KiteActionButtons';
 import { ColumnsMenu } from './board/BoardFilters';
 import { useEffectiveNowMs } from '../../hooks/useReplayStore';
-import { sessionDayKey, shiftSessionDay, parseTimestampMs } from './board/boardTypes';
+import { isDayExpandedByDefault, sessionDayKey, shiftSessionDay, parseTimestampMs } from './board/boardTypes';
 import type {
   AdaptiveEdgeHorizon,
   AdaptiveEdgeLeg,
@@ -819,20 +819,11 @@ export function AdaptiveEdgePanel({
     if (userToggledDays.has(label)) {
       return userToggledDays.get(label)!;
     }
-    if (label === 'Today' || label === 'Yesterday') {
-      return true;
-    }
-    // Older expands by default if it contains active open setups
-    const olderBucket = dayBuckets.find((b) => b.label === 'Older');
-    if (olderBucket && olderBucket.rows.some((r) => r.open)) {
-      return true;
-    }
-    // Auto-expand first group if Today and Yesterday are empty
-    const hasRecent = dayBuckets.some((b) => b.label === 'Today' || b.label === 'Yesterday');
-    if (!hasRecent && dayBuckets.length > 0 && dayBuckets[0].label === label) {
-      return true;
-    }
-    return false;
+    // One shared rule for every engine's board — see isDayExpandedByDefault.
+    // This panel used to open Today, Yesterday, Older whenever any row in it was
+    // still open, and the first bucket when the first two were absent, so a week
+    // of history arrived almost entirely expanded.
+    return isDayExpandedByDefault(label, dayBuckets.map((b) => b.label));
   };
 
   const renderRow = (row: AdaptiveEdgeRow, rIdx: number) => {

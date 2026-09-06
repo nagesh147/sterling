@@ -79,7 +79,7 @@ class JsonLogFormatter(logging.Formatter):
             payload["correlation_id"] = cid
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
-        # Merge any user-supplied extras (e.g. log.info("x", extra={"symbol": "BTC"}))
+        # Merge any user-supplied extras (e.g. log.info("x", extra={"symbol": "NIFTY"}))
         for key, val in record.__dict__.items():
             if key not in _RESERVED and not key.startswith("_"):
                 payload[key] = val

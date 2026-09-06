@@ -21,7 +21,7 @@ It is independent from:
 
 - SuperTrend
 - Flow Navigator
-- crypto engines
+- unrelated engines
 
 It may use Sterling's shared Kite infrastructure for market data, execution, positions, safety, and accounting.
 

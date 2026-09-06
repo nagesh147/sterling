@@ -9,7 +9,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard, visibleColumns, COLUMNS } from '../SignalBoard';
-import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
+import { LIVE_BUCKET, OLDER_BUCKET, flattenSignals, groupByDay, hasGroups, isDayExpandedByDefault, isLiveDayKey, liveDayKey, sessionDayKey, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
 import { supertrendToBoard } from '../supertrendAdapter';
 import type { EngineSignalRow, OptionLeg } from '../../../../types/kiteEngine';
 
@@ -236,8 +236,8 @@ describe('dates and day order', () => {
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    const header = screen.getByText('Older');
-    fireEvent.click(header);
+    // 'Older' is the only band here, so it is the newest and opens by default.
+    expect(screen.getByText('Older')).toBeTruthy();
     expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
     expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
   });
@@ -256,6 +256,9 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
+    // Only the newest band ('Today') opens by default, so the two below it have
+    // to be opened before their rows can be ordered against it.
+    fireEvent.click(screen.getByText('Yesterday'));
     fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     const at = (sym: string) => body.indexOf(sym);
@@ -295,7 +298,7 @@ describe('dates and day order', () => {
  * "what is live", not "what fired today". Hence the option, and hence it being
  * an option rather than the rule.
  */
-describe('groupByDay hoistToday', () => {
+describe('groupByDay day bands', () => {
   const IST_ = (5 * 60 + 30) * 60_000;
   const NOW_ = Date.UTC(2026, 7, 21, 10, 30) - IST_;
   const DAY = 86_400_000;
@@ -309,45 +312,64 @@ describe('groupByDay hoistToday', () => {
     score: null, reason: null, sections: [],
   });
 
-  it('leaves today’s live row in its date section by default', () => {
-    const days = groupByDay([s('a', NOW_, 'running')], { liveFirst: true, nowMs: NOW_ });
-    expect(days.map((d) => d.key)).not.toContain(LIVE_BUCKET);
+  it('leaves today’s live row in its date section', () => {
+    // Today is the first band anyway, so lifting a live row out of it buys no
+    // visibility and costs it its date.
+    const days = groupByDay([s('a', NOW_, 'running')], { nowMs: NOW_ });
+    expect(days.map((d) => d.key)).toEqual([sessionDayKey(NOW_)]);
   });
 
-  it('lifts it out when asked', () => {
-    const days = groupByDay([s('a', NOW_, 'running')], { liveFirst: true, nowMs: NOW_, hoistToday: true });
-    expect(days[0].key).toBe(LIVE_BUCKET);
+  it('gives an older live row a band titled by the day it entered on', () => {
+    // The case SuperTrend's own table was built to handle, now the shared rule:
+    // a trade that entered last Tuesday and is still running must not sit inside
+    // "Older" below days of closed history.
+    const days = groupByDay([s('old', NOW_ - 4 * DAY, 'running')], { nowMs: NOW_ });
+    expect(days[0].key).toBe(liveDayKey(sessionDayKey(NOW_ - 4 * DAY)));
+    expect(sessionDayLabel(days[0].key, NOW_)).toBe('17 Aug 2026 · active');
   });
 
-  it('still buries nothing that is not actionable', () => {
-    // An ended row is a record. Hoisting it would put history above the live
-    // section, which is the opposite of the point.
+  it('keeps each live day apart rather than merging them into one section', () => {
+    // One "Live now" bucket claimed the present tense for every entry in it,
+    // whatever session it came from.
     const days = groupByDay(
-      [s('a', NOW_, 'ended'), s('b', NOW_, 'running')],
-      { liveFirst: true, nowMs: NOW_, hoistToday: true },
+      [s('tue', NOW_ - 4 * DAY, 'running'), s('thu', NOW_ - 2 * DAY, 'running')],
+      { nowMs: NOW_ },
     );
-    const live = days.find((d) => d.key === LIVE_BUCKET);
-    expect(live!.signals.map((x) => x.id)).toEqual(['b']);
+    expect(days.map((d) => d.key)).toEqual([
+      liveDayKey(sessionDayKey(NOW_ - 2 * DAY)),
+      liveDayKey(sessionDayKey(NOW_ - 4 * DAY)),
+    ]);
   });
 
-  it('collects live rows from every day into one section', () => {
-    // The case the bespoke table exists to handle: a trade that entered last
-    // Tuesday and is still running must not sit below days of closed history.
+  it('sits the live bands between yesterday and the history', () => {
     const days = groupByDay(
-      [s('old', NOW_ - 4 * DAY, 'running'), s('new', NOW_, 'running')],
-      { liveFirst: true, nowMs: NOW_, hoistToday: true },
+      [
+        s('today', NOW_, 'ended'),
+        s('yesterday', NOW_ - DAY, 'ended'),
+        s('live', NOW_ - 4 * DAY, 'running'),
+        s('old', NOW_ - 5 * DAY, 'ended'),
+      ],
+      { nowMs: NOW_ },
     );
-    expect(days[0].key).toBe(LIVE_BUCKET);
-    expect(days[0].signals.map((x) => x.id).sort()).toEqual(['new', 'old']);
+    expect(days.map((d) => sessionDayLabel(d.key, NOW_)))
+      .toEqual(['Today', 'Yesterday', '17 Aug 2026 · active', 'Older']);
   });
 
-  it('does not hoist past days armed setups into live bucket or today', () => {
-    // 28 Aug armed setup evaluated on 4 Sep before market open
+  it('leaves an ended older row in the one Older band', () => {
+    // A date per day across a month of closed history is a log, not a scan.
     const days = groupByDay(
-      [s('old_armed', NOW_ - 6 * DAY, 'armed')],
-      { liveFirst: true, nowMs: NOW_ },
+      [s('a', NOW_ - 4 * DAY, 'ended'), s('b', NOW_ - 6 * DAY, 'ended')],
+      { nowMs: NOW_ },
     );
-    expect(days.map((d) => d.key)).not.toContain(LIVE_BUCKET);
+    expect(days.map((d) => d.key)).toEqual([OLDER_BUCKET]);
+  });
+
+  it('does not give a past day’s armed setup a live band', () => {
+    // 28 Aug armed setup evaluated on 4 Sep before market open. Armed is an
+    // intraday trigger condition for its own session; from an older day it never
+    // entered and is not a running position.
+    const days = groupByDay([s('old_armed', NOW_ - 6 * DAY, 'armed')], { nowMs: NOW_ });
+    expect(days.some((d) => isLiveDayKey(d.key))).toBe(false);
     expect(days[0].key).toBe('older');
     expect(sessionDayLabel(days[0].key, NOW_)).toBe('Older');
   });
@@ -406,5 +428,62 @@ describe('collapseOlderDays on SignalBoard', () => {
     // Clicking again collapses it
     fireEvent.click(olderHeader!);
     expect(screen.queryByText('SYMolder-sig')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * One default, shared by every engine's board.
+ *
+ * The three boards each had their own version of "which day starts open" and
+ * all three disagreed — the shared board opened Today and Yesterday together,
+ * Adaptive Edge added Older whenever it held an open row, and SuperTrend's
+ * classic table opened everything. The same history read as three different
+ * amounts of scrolling depending on the tab.
+ */
+describe('only the newest day band opens by default', () => {
+  const makeDaySig = (id: string, atMs: number, status: BoardSignal['status']): BoardSignal => ({
+    id, engine: 'adaptive_edge', underlying: 'NIFTY',
+    instrument: { symbol: `SYM${id}`, exchange: 'NFO', kind: 'option', quoteKey: 'NFO:X' },
+    direction: 'long', status, atMs,
+    levels: { ltp: 100, entry: 100, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: 1, quantity: 75, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it('opens the first key and nothing else', () => {
+    const keys = [LIVE_BUCKET, '2026-09-04', '2026-09-03', OLDER_BUCKET];
+    expect(isDayExpandedByDefault(LIVE_BUCKET, keys)).toBe(true);
+    for (const key of keys.slice(1)) {
+      expect(isDayExpandedByDefault(key, keys)).toBe(false);
+    }
+  });
+
+  it('opens whichever band happens to lead, not a named one', () => {
+    // No live bucket and no today: the oldest history is all there is, and its
+    // first band still opens. "Newest" is a position in the list, not a label.
+    expect(isDayExpandedByDefault(OLDER_BUCKET, [OLDER_BUCKET])).toBe(true);
+  });
+
+  it('opens nothing when there are no bands', () => {
+    expect(isDayExpandedByDefault('2026-09-04', [])).toBe(false);
+  });
+
+  it('leaves Yesterday closed on a board that has Today', () => {
+    render(
+      <SignalBoard
+        signals={[
+          makeDaySig('today-row', NOW, 'running'),
+          makeDaySig('yesterday-row', NOW - 86_400_000, 'ended'),
+        ]}
+        columns={['instrument', 'time']}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText('SYMtoday-row')).toBeInTheDocument();
+    expect(screen.queryByText('SYMyesterday-row')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Yesterday'));
+    expect(screen.getByText('SYMyesterday-row')).toBeInTheDocument();
   });
 });

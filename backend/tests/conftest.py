@@ -39,10 +39,6 @@ def _default_risk():
     )
 
 
-def _reset_exchange_store(eas) -> None:
-    """Reset both exchange-account memory and its SQLite write-through table."""
-    from app.services import db
-
     try:
         if db._available:
             with db._conn() as connection:
@@ -57,42 +53,31 @@ def _reset_exchange_store(eas) -> None:
 @pytest.fixture(autouse=True)
 def reset_global_stores():
     """Reset every module-level and persisted mutable test store."""
-    from app.services import paper_store, eval_history, arrow_store
-    from app.services import alert_store, pnl_history, webhook_store
-    from app.services import exchange_account_store as eas
+    # `paper_store`, `alert_store`, `exchange_account_store` and the directional
+    # engine's caches went with the crypto surface. Importing them here made an
+    # AUTOUSE fixture raise, which errored every one of the 3748 collected tests
+    # — the suite could not run at all.
+    from app.services import eval_history, arrow_store
+    from app.services import pnl_history, webhook_store
     from app.services.exchanges.kite import accounts as kite_accounts
     import app.api.v1.endpoints.config as config_ep
-    from app.engines.directional.regime_engine import _REGIME_CACHE
-    from app.engines.directional.signal_engine import _SIGNAL_CACHE
 
-    paper_store._positions.clear()
-    paper_store._loaded = True
     eval_history.clear()
     arrow_store.clear()
     arrow_store._bootstrapped = True
-    alert_store.clear()
-    alert_store._loaded = True
     pnl_history.clear()
     pnl_history._loaded = True
     webhook_store.clear()
     webhook_store._loaded = True
-    _reset_exchange_store(eas)
     kite_accounts.clear()
     config_ep._risk = _default_risk()
-    _REGIME_CACHE.clear()
-    _SIGNAL_CACHE.clear()
 
     yield
 
-    paper_store._positions.clear()
     eval_history.clear()
     arrow_store.clear()
     arrow_store._bootstrapped = False
-    alert_store.clear()
     pnl_history.clear()
     webhook_store.clear()
-    _reset_exchange_store(eas)
     kite_accounts.clear()
     config_ep._risk = _default_risk()
-    _REGIME_CACHE.clear()
-    _SIGNAL_CACHE.clear()

@@ -44,7 +44,7 @@ Every material claim is labeled. Do not silently promote a proposal or an implem
 
 `[CANONICAL]` Adaptive Edge is Sterling’s institutional, causal, artifact-by-artifact options scalping / intraday strategy. Authoritative strategy documents live in `adaptive-edge/`. Implementation lives under `backend/app/engines/adaptive_edge/`.
 
-It is a distinct strategy. It must not inherit SuperTrend, Value Flow Navigator, Sterling crypto-scalper, or other engine semantics.
+It is a distinct strategy. It must not inherit SuperTrend, Value Flow Navigator, or other engine semantics.
 
 The current research/engineering slice is **F-101** (`Feature normalization / feature score`): the first strategy-specific formula in the locked F-101..F-114 set.
 
@@ -544,7 +544,7 @@ Independent check of whether the LI-depth blocker can be resolved **technically*
 | TrueData historical WebSocket | Docs mention a history WS idle timeout; they do **not** document a longer tick archive than REST `/getticks`. `wss://replay.truedata.in` is **not** in the official PDFs (A201). | `[DOCUMENTED]` no extra depth |
 | Local `truedata_ticks.sqlite` | 41,313 `NIFTY-I` rows, 2026-08-06–2026-08-14 only. Acquisition cache. | `[VERIFIED]` |
 | Other local SQLite (`sterling_paper.db`, `backend/sterling_paper.db`) | No tables with `bidqty`/`askqty` except TrueData credentials / unrelated engines. | `[VERIFIED]` |
-| `backend/data/ohlcv*` | Crypto OHLCV only. No Indian quote book. | `[VERIFIED]` |
+| `backend/data/ohlcv*` | Legacy non-Indian OHLCV. No Indian quote book. | `[VERIFIED]` |
 | Kitelake (`SterlingLake/ticks`) | Drive mounted. `ticks/` has **zero** parquet files. Kite historical API has **no** sub-minute archive (`kitelake/README.md`, `kitelake/ticks.py`). | `[VERIFIED]` cannot backfill LI |
 | DeltaVelocity | Unchanged A201: unavailable from documented TrueData interfaces. No local aggressor archive found. | `[PARKED]` |
 

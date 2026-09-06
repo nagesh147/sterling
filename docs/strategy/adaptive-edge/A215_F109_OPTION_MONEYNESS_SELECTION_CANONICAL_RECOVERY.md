@@ -105,7 +105,7 @@ Where multiple contracts remain eligible, selection must be deterministic and us
 
 `backend/app/engines/adaptive_edge/option_ladder.py` already documents itself as a research/display adapter and explicitly states that it does not implement F-109. Its standard ladder is therefore retained as a display/candidate mechanism only, not promoted to the production F-109 formula. fileciteturn88file0L2-L6
 
-The separate derivatives strike picker is Greeks/liquidity aware, but it contains crypto-oriented timeframe/IV assumptions and therefore cannot be silently promoted as the Adaptive Edge F-109 production formula. fileciteturn86file0L2-L6
+The separate derivatives strike picker is Greeks/liquidity aware, but its timeframe and IV assumptions do not match Indian index options and therefore cannot be silently promoted as the Adaptive Edge F-109 production formula. fileciteturn86file0L2-L6
 
 ## 8. Parameter governance
 
