@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   MIN_DOCK_HEIGHT,
   ReplayMode,
+  useReplayHostHidden,
   useReplayIsHistorical,
   useReplayState,
   useReplayStore,
@@ -44,6 +45,9 @@ export function ReplayDock() {
   const open = useReplayStore((s) => s.open);
   const mode = useReplayStore((s) => s.mode);
   const height = useReplayStore((s) => s.height);
+  // True once the dock has taken the host pane over — either its own `expanded`
+  // mode, or a workspace focus (half / maximised / fullscreen) it drives.
+  const ownsHostPane = useReplayHostHidden();
   const tab = useReplayStore((s) => s.tab);
   const setTab = useReplayStore((s) => s.setTab);
   const setHeight = useReplayStore((s) => s.setHeight);
@@ -229,7 +233,10 @@ export function ReplayDock() {
       data-width={bucket}
       className="replay-dock kw-pane"
       aria-label="Market replay"
-      style={geometry[mode]}
+      /* While the dock owns the host pane there is nothing else in it, so a
+         stored pixel height would leave dead space below — which is exactly
+         what "half screen" looked like. Fill the pane instead. */
+      style={ownsHostPane && mode === 'docked' ? geometry.expanded : geometry[mode]}
     >
       {resizable && (
         <div
