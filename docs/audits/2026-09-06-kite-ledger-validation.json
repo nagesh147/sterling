@@ -72,12 +72,20 @@
       "proves": "The lake holds no option or futures price history, so no executable-contract validation is possible from it."
     },
     {
-      "name": "futures_edge_holdout",
-      "command": "PYTHONPATH=. .venv/bin/python study/kite_futures_edge.py --out ../docs/audits/2026-09-07-kite-futures-edge.json",
+      "name": "futures_edge_daily",
+      "command": "PYTHONPATH=. .venv/bin/python study/kite_futures_edge.py --interval day --out ../docs/audits/2026-09-07-kite-futures-edge-daily.json",
       "cwd": "/home/nageshmadaram/Sterling/backend",
       "exit_code": 0,
-      "summary": "FAIL \u2014 holdout gross -7,154 before costs; net -165,089; 27/347 symbols profitable",
-      "proves": "The engine's own entry/exit logic has no edge on real executable futures, out of sample, across 347 instruments and 3,242 trades, at any slippage in the grid."
+      "summary": "FAIL 0/2 cells \u2014 long gross -7,134, short gross -41,121, both before costs",
+      "proves": "Neither side of the futures vehicle has an edge on the deep daily series."
+    },
+    {
+      "name": "futures_edge_intraday",
+      "command": "PYTHONPATH=. .venv/bin/python study/kite_futures_edge.py --interval minute --out ../docs/audits/2026-09-07-kite-futures-edge-intraday.json",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "FAIL 0/6 cells \u2014 every timeframe and side negative gross; short@5min 0/427 symbols profitable",
+      "proves": "The signal has no edge at 5, 15 or 60 minutes, long or short, on real executable futures."
     }
   ],
   "failed_test_ids": [],
@@ -169,11 +177,11 @@
       "id": "P0-5",
       "title": "Real executable-contract dataset and chronological validation",
       "status": "MEASURED_AND_FAILING",
-      "evidence": "Futures history was acquired and the engine's own logic was measured on it. 598,441 real continuous-daily bars for 427 NFO/BFO futures, 2018-01-01..2026-09-04, downloaded 2026-09-07. Replayed through replay_premium_series \u2014 the same compute_regime, entry_transitions and exits the live scanner runs \u2014 with a futures cost schedule. Untouched holdout from 2025-01-01: 347 symbols, 3,242 trades, GROSS PnL -7,154 before a single rupee of cost, net -165,089, median per-symbol -491, 27 of 347 symbols profitable. Full window 2018-2026: 275 symbols, 9,840 trades, gross -32,834, net -508,416, 20 of 275 profitable. The result is flat across slippage 0.0001/0.0002/0.0005 because the failure is not a cost failure \u2014 gross is already negative. Predeclared criterion, recorded in the study before the first run: FAIL.",
+      "evidence": "Both untested dimensions were closed on 2026-09-07: the SHORT side and the INTRADAY timeframes. Eight cells in total, and every one fails with NEGATIVE GROSS PnL before a single rupee of cost.\nDaily continuous (2018-2026, 341 symbols): long 3,200 trades gross -7,134; short 2,621 trades gross -41,121 \u2014 the short side is 5.8x WORSE, not the missing half.\nIntraday per-contract minute (428 symbols, ~3 months): long@5min 26,606 trades gross -42,390; short@5min 26,533 gross -43,353; long@15min 9,354 gross -16,298; short@15min 9,644 gross -22,198; long@60min 2,127 gross -2,964; short@60min 2,569 gross -18,000. Holdouts negative throughout; short@5min had ZERO profitable symbols out of 427.\nAbout 77,000 trades across 8 cells, 2 sides, 4 timeframes and ~430 instruments. No cell passed.",
       "blocked_by": [
-        "Options: measurement is impossible, not merely absent. Measured against the live API on 2026-09-07 \u2014 an expired futures contract returns \"invalid token\" (HTTP 400) even with its token in hand, and an expired option returns zero candles. Option history can only be accumulated forward or bought.",
-        "Futures intraday: continuous is DAILY ONLY (\"invalid interval for continuous data\" for every other interval), and a live contract's own minute history starts at its inception, about three months. So the intraday strategy cannot be measured on a long executable series.",
-        "What WAS measurable is measured, and it loses money. Long-only and daily, so it does not prove the intraday or short side fails \u2014 but nothing here supports promotion, and the burden is on evidence of edge, not on its absence."
+        "Options remain unmeasurable, by probe not inference: an expired future returns \"invalid token\" (HTTP 400) with its token in hand, and an expired option returns zero candles.",
+        "The intraday series is one contract's life, about three months, so its holdout is weeks. Those cells are a hint rather than a measurement \u2014 but they point the same way as the deep daily ones.",
+        "Long and short were measured separately; running both together, and the margin that would consume, is not modelled. Nothing suggests the combination rescues two negative halves."
       ]
     },
     {
@@ -211,7 +219,7 @@
   },
   "code_sha256": {
     "backend/app/services/db.py": "44d8bd812df2ecf815de2c325f82ddb9f8ba0f00ec7f518a6f4c2dd375e63ecb",
-    "backend/app/services/kite_engine/backtest.py": "fd46da6bfd21ba8ec3cbc595ab2e460dbb980001e3be056e2b78163da0ea5063",
+    "backend/app/services/kite_engine/backtest.py": "131ee1c11917868624886f168af1abd1494d9016aadc8a3019ad6245ec71949d",
     "backend/app/services/kite_engine/execution_lease.py": "d594a40c969a275377e21b0f932f9cc511cfdd90c013cc65e2bfec589bc3693c",
     "backend/app/services/kite_engine/execution_lifecycle.py": "8a802febaba451afc399be10fb0cacc9bc4f978912393f31373044e057dc9d09",
     "backend/app/services/kite_engine/fill_ledger.py": "6ad9a8ecf914076890a1bf521eb0990c4695c0ae12548012d9a0c36117b060b8",
@@ -220,7 +228,8 @@
     "backend/app/services/kite_engine/service.py": "fad52a67b31c84bb0e7623e9254417524c9f26fc0d0bdb6ae28603c3fedc4a56",
     "backend/app/services/kite_engine/state.py": "f858d5c1502deb91c1f9ab77c0a1291832da043b7d69a1c029891a60197c4bd1",
     "backend/study/kite_derivative_coverage_audit.py": "980867d7ea352ac3ecb0008c2e949dcd9e70ff880da7117ec2b377d54e02d0c4",
-    "backend/study/kite_futures_edge.py": "797dc57d965c793580b1fb22ca610dea8e087c651b266e5b7096a2c91500d620",
+    "backend/study/kite_futures_edge.py": "c015c8c65ceb64368d5b320175c6513dff8ad4eae8cc51658995efc2738d9dfb",
+    "backend/tests/engines/sterling_kite_engine/test_backtest.py": "9eb0a58872d5c295aade696c6159b483c4fb8d5f2d510bf3b683e4df6a96bbde",
     "backend/tests/engines/sterling_kite_engine/test_execution_lease.py": "f16e1c7582253f84b8c8aa3b35c306f4351fe1b2fca2c75c3b8ed6822baff70d",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger.py": "ad0705838f609a59de7506069c5edbe6003586ffffbfc87de3d760ffaa63dfd1",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger_integration.py": "89130f3f8f9f3c9cc088406494550881824d3092d5086525910a9f018bb8a63e",
@@ -229,13 +238,14 @@
     "kitelake/download.py": "2356cb2ff93b78cced939d82bd2a2cb0e84b1707875fb7fe684216ac03678b6b",
     "kitelake/universe.py": "263abfec885c162ef6d135a4c5a47ad94fde0c34e1d61eb36ff92b309dcdcc17"
   },
-  "backend_python_tree_sha256": "37b713b64fee2e6233b9144908c2062ce138c473e9169035f943a21f8a1bc1b5",
+  "backend_python_tree_sha256": "8935f396dba0db13e97397cc7805914bd8a6f0a297d5d4dbee97b7301d583639",
   "artifact_sha256": {
     "docs/audits/2026-09-06-kite-cas-realdata.json": "ffb8499d62acc2cc145ae298fb958821d501474c6c528447058d50fab8238757",
-    "docs/audits/2026-09-06-kite-derivative-coverage.json": "a7945a5cde1c71e4feecd8134cbdb9904e88c59c4893fa69f29b52fb8c596a51",
-    "docs/audits/2026-09-06-kite-implementation-handoff.md": "122e17d2664f7113f5885ca11ee14ac03cbfd8e33b656dd08a6304a35b2b949c",
+    "docs/audits/2026-09-06-kite-derivative-coverage.json": "e01adb42a1b543a67cfda75b5d0f13a49c926ccfd6b52f4fedfbc8650a5c357b",
+    "docs/audits/2026-09-06-kite-implementation-handoff.md": "c6a48153a20f082244fb37f9c5ba3c083856647a17d2de7c48ba6d5b020e5c4c",
     "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356",
-    "docs/audits/2026-09-07-kite-futures-edge.json": "cefe65176182e0bcd9de60c3a0bd45500fdc2c959ee5e2e1201a54b517148e69"
+    "docs/audits/2026-09-07-kite-futures-edge-daily.json": "5b68d7719af58ce92ee19d3c45e13fa037c25c21d5cdc79c16a16061e28e031e",
+    "docs/audits/2026-09-07-kite-futures-edge-intraday.json": "164f770188a7e18e280bdf61fe7ce4f0e85a3e44b116649e258df73ba9bf0d16"
   },
   "real_data": {
     "lake_attached": true,
@@ -262,11 +272,21 @@
     "profitability_established": false,
     "futures_dataset": {
       "acquired": "2026-09-07",
-      "bars": 598441,
-      "symbols": 427,
-      "span": "2018-01-01..2026-09-04",
-      "interval": "day (continuous)",
-      "report": "docs/audits/2026-09-07-kite-futures-edge.json"
+      "continuous_daily": {
+        "bars": 598441,
+        "symbols": 427,
+        "span": "2018-01-01..2026-09-04"
+      },
+      "per_contract_minute": {
+        "bars": 10776193,
+        "symbols": 453,
+        "span": "2026-06-01..2026-09-04"
+      },
+      "total_derivative_bars_in_lake": 6333057,
+      "reports": [
+        "docs/audits/2026-09-07-kite-futures-edge-daily.json",
+        "docs/audits/2026-09-07-kite-futures-edge-intraday.json"
+      ]
     }
   }
 }

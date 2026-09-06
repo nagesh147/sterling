@@ -1,0 +1,194 @@
+{
+  "lake": "/run/media/nageshmadaram/3f36ac07-fdbe-48c1-9514-ecf65c6619b0/SterlingLake",
+  "interval": "day",
+  "vehicle": "NFO/BFO futures, continuous back-adjusted",
+  "criterion": {
+    "predeclared": true,
+    "holdout": "from 2025-01-01",
+    "slippage_grid": [
+      0.0001,
+      0.0002,
+      0.0005
+    ],
+    "requires": "holdout aggregate net > 0 AND median per-symbol net > 0, at every slippage in the grid"
+  },
+  "multiple_testing": {
+    "cells_tested": 2,
+    "cells_passed": 0,
+    "passing_cells": [],
+    "note": "Cells are not independent evidence. One passing cell out of 2 is what luck produces; it is a reason to test that cell properly, not a reason to trade it."
+  },
+  "engine_logic": "app.services.kite_engine.backtest.replay_premium_series (compute_regime + entry_transitions + exits, next-open entry, gap-aware stops, direction-aware trail fills)",
+  "position": {
+    "qty": 1,
+    "starting_capital": 1000000.0
+  },
+  "symbols_considered": 427,
+  "symbols_with_enough_bars": 362,
+  "cells": {
+    "long@day": {
+      "passed": false,
+      "symbols_used": 362,
+      "results_by_slippage": {
+        "0.0001": {
+          "full": {
+            "symbols": 275,
+            "trades": 9840,
+            "aggregate_net_pnl": -508415.9,
+            "aggregate_gross_pnl": -32833.65,
+            "aggregate_costs": 475582.28,
+            "median_symbol_net_pnl": -1974.33,
+            "profitable_symbols": 20,
+            "worst_symbol_net_pnl": -13074.66,
+            "best_symbol_net_pnl": 14957.82
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 3200,
+            "aggregate_net_pnl": -163081.41,
+            "aggregate_gross_pnl": -7133.99,
+            "aggregate_costs": 155947.47,
+            "median_symbol_net_pnl": -496.16,
+            "profitable_symbols": 27,
+            "worst_symbol_net_pnl": -6404.41,
+            "best_symbol_net_pnl": 11153.38
+          }
+        },
+        "0.0002": {
+          "full": {
+            "symbols": 275,
+            "trades": 9840,
+            "aggregate_net_pnl": -513765.38,
+            "aggregate_gross_pnl": -32833.65,
+            "aggregate_costs": 480931.69,
+            "median_symbol_net_pnl": -1977.07,
+            "profitable_symbols": 18,
+            "worst_symbol_net_pnl": -13347.65,
+            "best_symbol_net_pnl": 14735.87
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 3200,
+            "aggregate_net_pnl": -165200.59,
+            "aggregate_gross_pnl": -7133.99,
+            "aggregate_costs": 158067.06,
+            "median_symbol_net_pnl": -496.53,
+            "profitable_symbols": 27,
+            "worst_symbol_net_pnl": -6471.42,
+            "best_symbol_net_pnl": 11079.88
+          }
+        },
+        "0.0005": {
+          "full": {
+            "symbols": 275,
+            "trades": 9840,
+            "aggregate_net_pnl": -529811.44,
+            "aggregate_gross_pnl": -32833.65,
+            "aggregate_costs": 496977.94,
+            "median_symbol_net_pnl": -1998.42,
+            "profitable_symbols": 17,
+            "worst_symbol_net_pnl": -14166.71,
+            "best_symbol_net_pnl": 14069.86
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 3200,
+            "aggregate_net_pnl": -171558.63,
+            "aggregate_gross_pnl": -7133.99,
+            "aggregate_costs": 164424.8,
+            "median_symbol_net_pnl": -502.45,
+            "profitable_symbols": 26,
+            "worst_symbol_net_pnl": -6672.4,
+            "best_symbol_net_pnl": 10859.44
+          }
+        }
+      }
+    },
+    "short@day": {
+      "passed": false,
+      "symbols_used": 362,
+      "results_by_slippage": {
+        "0.0001": {
+          "full": {
+            "symbols": 275,
+            "trades": 8224,
+            "aggregate_net_pnl": -528296.73,
+            "aggregate_gross_pnl": -131502.11,
+            "aggregate_costs": 396793.69,
+            "median_symbol_net_pnl": -1859.51,
+            "profitable_symbols": 6,
+            "worst_symbol_net_pnl": -24662.84,
+            "best_symbol_net_pnl": 1839.21
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 2621,
+            "aggregate_net_pnl": -168498.0,
+            "aggregate_gross_pnl": -41121.26,
+            "aggregate_costs": 127376.64,
+            "median_symbol_net_pnl": -442.17,
+            "profitable_symbols": 19,
+            "worst_symbol_net_pnl": -12277.23,
+            "best_symbol_net_pnl": 4692.55
+          }
+        },
+        "0.0002": {
+          "full": {
+            "symbols": 275,
+            "trades": 8224,
+            "aggregate_net_pnl": -532403.66,
+            "aggregate_gross_pnl": -131502.11,
+            "aggregate_costs": 400901.45,
+            "median_symbol_net_pnl": -1863.3,
+            "profitable_symbols": 6,
+            "worst_symbol_net_pnl": -24901.02,
+            "best_symbol_net_pnl": 1791.07
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 2621,
+            "aggregate_net_pnl": -170079.17,
+            "aggregate_gross_pnl": -41121.26,
+            "aggregate_costs": 128957.92,
+            "median_symbol_net_pnl": -443.0,
+            "profitable_symbols": 19,
+            "worst_symbol_net_pnl": -12410.16,
+            "best_symbol_net_pnl": 4638.44
+          }
+        },
+        "0.0005": {
+          "full": {
+            "symbols": 275,
+            "trades": 8224,
+            "aggregate_net_pnl": -544727.78,
+            "aggregate_gross_pnl": -131502.11,
+            "aggregate_costs": 413225.55,
+            "median_symbol_net_pnl": -1878.14,
+            "profitable_symbols": 5,
+            "worst_symbol_net_pnl": -25615.66,
+            "best_symbol_net_pnl": 1646.64
+          },
+          "holdout": {
+            "symbols": 341,
+            "trades": 2621,
+            "aggregate_net_pnl": -174822.58,
+            "aggregate_gross_pnl": -41121.26,
+            "aggregate_costs": 133701.99,
+            "median_symbol_net_pnl": -445.92,
+            "profitable_symbols": 18,
+            "worst_symbol_net_pnl": -12808.92,
+            "best_symbol_net_pnl": 4476.14
+          }
+        }
+      }
+    }
+  },
+  "verdict": "FAIL",
+  "caveats": [
+    "One fixed quantity per trade, no position sizing and no portfolio risk.",
+    "Slippage is an assumption swept across a grid, not an observed fill cost.",
+    "Continuous daily series are back-adjusted by the broker; roll costs are not separately modelled.",
+    "The per-contract minute series covers about three months, so its holdout is weeks. A result there is a hint, not a measurement.",
+    "Long and short are measured separately. Nothing here models running both, or the margin either would consume."
+  ]
+}

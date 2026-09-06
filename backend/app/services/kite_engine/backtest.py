@@ -232,11 +232,23 @@ def replay_premium_series(
     costs: OptionCosts,
     starting_capital: float,
     direction_label: str = "long",
+    side: str = "long",
 ) -> BacktestRun:
     """Replay the ST on a PREMIUM series (the 'real' mode, and the inner loop the
     'synthetic' mode reuses on its modeled premium series). BUY on a fresh up-
     transition of the premium's own SuperTrend; exit on the red-count ``exit_mode``.
+
+    ``side`` selects which transition opens a trade. ``"long"`` is the options
+    behaviour and the default, so every existing caller is unchanged. ``"short"``
+    is only meaningful for a vehicle that can actually be sold short — futures —
+    and it is not a sign flip on the result: the entry signal is the DOWN
+    transition, the resting stop sits ABOVE price so a gap fills no BETTER than
+    the open, and the exit machinery is asked about a short. Getting any one of
+    those three wrong produces a plausible-looking equity curve that no order
+    could have made.
     """
+    if side not in ("long", "short"):
+        raise ValueError("side must be 'long' or 'short'")
     o = np.asarray(premium_open, float)
     h = np.asarray(premium_high, float)
     l = np.asarray(premium_low, float)
@@ -257,10 +269,12 @@ def replay_premium_series(
 
     r = compute_regime(o, h, l, c, cfg)
     longs, shorts = entry_transitions(r)     # premium up-transition = BUY
+    is_long = side == "long"
+    entries, want = (longs, 1) if is_long else (shorts, -1)
 
     i = 0
     while i < n:
-        if not longs[i]:
+        if not entries[i]:
             i += 1
             continue
         # The signal becomes known at close; entry is next observed raw open.
@@ -269,13 +283,15 @@ def replay_premium_series(
         if entry_i >= n:
             break
         entry_px = float(o[entry_i])
-        exit_signal_i, reason = _exit_bar(r, signal_i, 1, longs, shorts, exit_mode, n, cfg, trail_target)
+        exit_signal_i, reason = _exit_bar(r, signal_i, want, longs, shorts, exit_mode, n, cfg, trail_target)
         if reason.startswith("trail breach"):
             exit_i = exit_signal_i
             # Gap-aware stop: resting stop fills no better than the opening gap.
+            # For a short the stop is ABOVE price, so "no better" is the MAXIMUM.
             effective = replace(cfg, exit_mode=exit_mode, trail_target=trail_target)
-            level = exits.ratcheted_trail_level(r, "long", signal_i, exit_i - 1, effective)
-            exit_px = min(float(o[exit_i]), level)
+            level = exits.ratcheted_trail_level(r, side, signal_i, exit_i - 1, effective)
+            exit_px = (min(float(o[exit_i]), level) if is_long
+                       else max(float(o[exit_i]), level))
         elif reason == "series end":
             exit_i, exit_px = n - 1, float(c[-1])
             reason = "series-end mark (not a verified executable exit)"
@@ -287,11 +303,12 @@ def replay_premium_series(
         if entry_px * qty > starting_capital + sum(t.net_pnl for t in trades):
             i += 1
             continue
-        gross = (exit_px - entry_px) * qty
+        gross = (exit_px - entry_px) * qty if is_long else (entry_px - exit_px) * qty
         ch = costs.round_trip(entry_px, exit_px, qty, exit_ms=int(timestamps_ms[exit_i]))
         trades.append(BacktestTrade(
             entry_ms=int(timestamps_ms[entry_i]), exit_ms=int(timestamps_ms[exit_i]),
-            direction=direction_label, entry_premium=round(entry_px, 2),
+            direction=direction_label if is_long else "short",
+            entry_premium=round(entry_px, 2),
             exit_premium=round(exit_px, 2), qty=qty,
             gross_pnl=round(gross, 2), costs=round(ch, 2), net_pnl=round(gross - ch, 2),
             bars_held=exit_i - entry_i, exit_reason=reason))

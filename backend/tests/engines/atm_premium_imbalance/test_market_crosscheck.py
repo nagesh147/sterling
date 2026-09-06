@@ -222,9 +222,15 @@ def test_contract_metadata_matches_the_real_instrument_master(lake):
 
 
 def test_lake_has_no_option_bars_so_premiums_stay_unverified(lake):
-    """Records the boundary of this cross-check, so nobody overstates it."""
+    """Records the boundary of this cross-check, so nobody overstates it.
+
+    Narrowed from "no NFO/BFO segment at all" to "no OPTION segment" once futures
+    bars were downloaded for release gate P0-5. Futures arriving does not make an
+    option premium checkable, and the wider assertion would have failed for a
+    reason that has nothing to do with what this test guards.
+    """
     segments = {p.name for p in (lake / "bars" / "interval=minute").glob("exchange=*/segment=*")}
-    assert not any("BFO" in s or "NFO" in s for s in segments), (
+    assert not any(s.endswith("-OPT") for s in segments), (
         "option bars appeared in the lake — the premium cross-check is now possible "
         "and A275 must be updated"
     )
