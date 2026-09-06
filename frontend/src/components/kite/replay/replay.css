@@ -1043,17 +1043,18 @@
 /* ── Config sheet ─────────────────────────────────────────────────────── */
 
 .rd-sheet-scrim {
-  position: absolute;
+  /* Portalled to <body>: fixed to the viewport, above the terminal root. */
+  position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: var(--rd-z-modal);
   background: color-mix(in srgb, var(--k-text) 32%, transparent);
   animation: rd-fade var(--rd-dur-fast) var(--rd-ease-out);
 }
 .rd-sheet {
-  position: absolute;
+  position: fixed;
   top: 0; right: 0; bottom: 0;
-  z-index: 6;
-  width: min(420px, 100%);
+  z-index: calc(var(--rd-z-modal) + 1);
+  width: min(420px, 100vw);
   display: flex;
   flex-direction: column;
   background: var(--k-bg);
@@ -1088,6 +1089,14 @@
 .rd-sheet-foot-right { margin-left: auto; display: inline-flex; gap: 8px; }
 
 .rd-card {
+  /* The sheet body is a flex COLUMN, so a card's default `flex-shrink: 1` let
+     it be compressed below its content instead of overflowing. Every card was
+     rendered shorter than its natural height — Strategies 288px of 353px — so
+     labels clipped and ran into each other, and `overflow: auto` on the body
+     never engaged because nothing overflowed. Worse the shorter the dock: at a
+     ~280px dock the cards collapse to slivers.
+     Cards keep their height; the body scrolls. */
+  flex-shrink: 0;
   border: 1px solid var(--k-border);
   border-radius: 8px;
   background: var(--k-bg);
