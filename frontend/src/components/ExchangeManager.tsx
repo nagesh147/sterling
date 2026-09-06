@@ -37,13 +37,12 @@ const S: Record<string, React.CSSProperties> = {
 
 const EXTRA_HINTS: Record<string, string> = {
   zerodha: '{"access_token":"session_token_from_kite_login"}',
-  delta_india: '{}',
-  deribit: '{}',
-  okx: '{"subaccount":"optional"}',
-  binance: '{}',
 };
 
-const DATA_SOURCE_ADAPTERS = new Set(['deribit', 'binance', 'okx', 'delta_india']);
+// `adapter_manager.SUPPORTED_DATA_SOURCES` is {"zerodha"} — the crypto adapters
+// were removed, and `_build_raw` raises for anything else. Offering them here
+// let the form create an account the backend then refused to build.
+const DATA_SOURCE_ADAPTERS = new Set(['zerodha']);
 
 function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; currentDataSource?: string }) {
   const [showEdit, setShowEdit] = useState(false);
@@ -194,7 +193,7 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
 }
 
 function AddExchangeForm({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState('delta_india');
+  const [name, setName] = useState('zerodha');
   const [displayName, setDisplayName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');

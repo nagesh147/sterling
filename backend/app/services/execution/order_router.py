@@ -474,7 +474,11 @@ class OrderRouter:
     def _symbol_for(req: OrderRouterRequest, inst: Any) -> str:
         if req.instrument_type == "options" and req.option_symbol:
             return req.option_symbol
-        return getattr(inst, "delta_perp_symbol", None) or f"{req.underlying.upper()}USD"
+        # `delta_perp_symbol` is a Delta Exchange perp ticker. The instrument
+        # registry no longer sets it on ANY instrument, so this used to fall
+        # through and invent "NIFTYUSD" for an NSE underlying. Never fabricate a
+        # crypto ticker: use whatever the instrument actually carries.
+        return getattr(inst, "perp_symbol", "") or req.underlying.upper()
 
     async def _fetch_entry_price(self, inst: Any) -> float:
         if self.adapter is None:

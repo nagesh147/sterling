@@ -189,8 +189,19 @@ class TestStatsDynamic:
     def test_stats_counts_all_registry_instruments(self, client):
         from app.services.exchanges import instrument_registry as registry
         all_syms = [i.underlying for i in registry.list_instruments()]
-        # Populate eval history for each
-        from app.services import eval_history
+        # Populate eval history for each.
+        #
+        # `eval_history` is process-global AND persisted to `signal_history`,
+        # which `bootstrap()` reloads at app startup — so this asserts exact
+        # counts against whatever earlier tests recorded unless both copies are
+        # emptied first, after the client has booted.
+        from app.services import db, eval_history
+        try:
+            with db.connection() as conn:
+                conn.execute("DELETE FROM signal_history")
+        except Exception:
+            pass
+        eval_history.clear()
         now = int(time.time() * 1000)
         for sym in all_syms[:2]:
             eval_history.record(sym, {

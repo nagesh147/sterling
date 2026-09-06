@@ -9,10 +9,7 @@ import { useConfigInfo } from '../hooks/useConfigInfo';
 import { useQueryClient } from '@tanstack/react-query';
 
 const SHORT: Record<string, string> = {
-  deribit:     'Deribit',
-  binance:     'Binance',
-  okx:         'OKX',
-  delta_india: 'DELTA EXCHANGE',
+  zerodha: 'Zerodha Kite',
 };
 
 export function DataSourceSelector({ chipStyle }: { chipStyle?: React.CSSProperties } = {}) {

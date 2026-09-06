@@ -1,17 +1,16 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
+# Must stay in step with `adapter_manager.SUPPORTED_DATA_SOURCES`: `_build_raw`
+# raises for anything else, so advertising an adapter here that it cannot build
+# only produces an account the server then refuses to use.
 SUPPORTED_EXCHANGES = {
-    "deribit":     "Deribit (options + perps)",
-    "binance":     "Binance USDT-M Futures",
-    "okx":         "OKX",
-    "delta_india": "Delta Exchange India",
-    "zerodha":     "Zerodha Kite (India)",
+    "zerodha": "Zerodha Kite (India)",
 }
 
 
 class ExchangeConfigCreate(BaseModel):
-    name: str = Field(..., description="Adapter key: delta_india | deribit | okx")
+    name: str = Field(..., description="Adapter key: zerodha")
     display_name: str = ""
     api_key: str = ""
     api_secret: str = ""

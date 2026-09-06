@@ -36,15 +36,10 @@ class InstrumentMeta(BaseModel):
     @property
     def compatible_sources(self) -> List[str]:
         """Data sources that can provide market data for this instrument."""
-        if self.exchange == "zerodha":
-            return ["zerodha"]
-        sources: List[str] = []
-        if self.delta_perp_symbol:
-            sources.append("delta_india")  # Delta Exchange first — primary source
-        if self.okx_perp_symbol:
-            sources.append("okx")
-        sources += ["deribit", "binance"]  # legacy/fallback sources
-        return sources
+        # Zerodha is the only adapter this build can construct. The crypto
+        # branches below used to append deribit/binance unconditionally, so a
+        # non-zerodha instrument advertised sources that cannot be built.
+        return ["zerodha"] if self.exchange == "zerodha" else []
 
 
 class InstrumentListResponse(BaseModel):

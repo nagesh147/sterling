@@ -454,13 +454,11 @@ async def live_pnl(request: Request):
     fundings: dict = {}
 
     async def _fetch_funding(sym: str, inst):
-        try:
-            pid = await adapter.get_product_id(
-                getattr(inst, "delta_perp_symbol", None) or f"{sym}USD")
-            fr = await adapter.get_funding_rate(pid)
-            fundings[sym] = float(fr.get("funding_rate_8h_pct") or 0.0)
-        except Exception:
-            fundings[sym] = 0.0
+        # Funding is a perpetual-swap concept. NSE futures have none, and
+        # ZerodhaAdapter implements neither `get_product_id` nor
+        # `get_funding_rate` — so this asked a Delta API for a "NIFTYUSD"
+        # product and swallowed the resulting exception on every single call.
+        fundings[sym] = 0.0
 
     await _asyncio.gather(*[
         _fetch_funding(sym, inst)

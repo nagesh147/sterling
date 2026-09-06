@@ -3,9 +3,7 @@ import { useAccountInfo } from '../hooks/useAccount';
 import { c as t, tint } from '../styles/terminalUI';
 
 const EXCHANGE_COLORS: Record<string, string> = {
-  delta_india: t.amber,
-  deribit: t.blue,
-  okx: t.green,
+  zerodha: t.blue,
 };
 
 export function ExchangeBadge() {

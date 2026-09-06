@@ -21,12 +21,10 @@ async def get_analytics(symbol: str, request: Request):
     """REST endpoint for V4AnalyticsDashboard — returns current OFI, PnL, drift."""
     now_ms = int(__import__('time').time() * 1000)
 
-    # OFI from l2_manager
-    try:
-        from app.services.delta_l2_socket import l2_manager
-        ofi = l2_manager.get_ofi(symbol.upper()) or 0
-    except Exception:
-        ofi = 0
+    # Order-flow imbalance came from the Delta L2 socket, which went with the
+    # crypto surface. Kite's feed carries no L2 book, so this is reported as 0
+    # rather than pretending a number exists.
+    ofi = 0
 
     # PnL from paper_store via _build_pnl_event logic
     unrealized_pnl = 0.0

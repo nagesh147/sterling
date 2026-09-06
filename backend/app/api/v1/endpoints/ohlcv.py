@@ -1,51 +1,45 @@
 """
-OHLCV stored candle API — serves data from SQLite, updated by delta_candle_fetcher.
-Provides status and manual trigger endpoints for the frontend.
+OHLCV stored candle API — serves candles from SQLite.
+
+The store used to be filled by `delta_candle_fetcher`, whose universe was
+["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]. That fetcher went with the crypto
+product surface, and with it the `POST /ohlcv/fetch` trigger it backed: there is
+no equivalent "go fetch everything" for Kite, whose candles are hydrated on
+demand by the replay runner instead. What remains is the read side.
 """
 import time
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
 from app.services import ohlcv_store
-from app.services.delta_candle_fetcher import (
-    RESOLUTIONS, SYMBOLS, is_fetching, last_summary, run_full_fetch,
-)
 
 router = APIRouter(prefix="/ohlcv", tags=["ohlcv"])
+
+#: Resolutions the store is written at. Previously imported from the crypto
+#: fetcher; the replay runner writes 5m/15m/1m, and the rest are legacy reads.
+RESOLUTIONS = ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"]
 
 
 @router.get("/status")
 async def get_ohlcv_status():
-    """Coverage summary + fetch state."""
+    """Coverage summary, straight from the store."""
+    # `get_status()` is a GROUP BY over the whole table, so it stays off the
+    # event loop.
+    coverage = await run_in_threadpool(ohlcv_store.get_status)
     return {
-        "is_fetching": is_fetching(),
-        "last_summary": last_summary(),
-        "coverage": await run_in_threadpool(ohlcv_store.get_status),
-        "supported_symbols": SYMBOLS,
+        "coverage": coverage,
+        "supported_symbols": sorted({row["symbol"] for row in coverage}),
         "supported_resolutions": RESOLUTIONS,
         "timestamp_ms": int(time.time() * 1000),
     }
 
 
-@router.post("/fetch")
-async def trigger_fetch(
-    background_tasks: BackgroundTasks,
-    symbol: Optional[str] = Query(default=None, description="Specific symbol, or all if omitted"),
-):
-    """Manually trigger a candle data fetch (runs in background)."""
-    if is_fetching():
-        return {"status": "already_running"}
-    syms = [symbol.upper()] if symbol else None
-    background_tasks.add_task(run_full_fetch, syms)
-    return {"status": "started", "symbols": syms or SYMBOLS}
-
-
 @router.get("")
 async def get_candles(
-    symbol: str = Query(default="BTCUSD"),
-    resolution: str = Query(default="1h"),
+    symbol: str = Query(default="NIFTY"),
+    resolution: str = Query(default="5m"),
     limit: int = Query(default=500, ge=10, le=5000),
     since: Optional[int] = Query(default=None, description="Unix timestamp (seconds) — return only candles after this"),
 ):
@@ -62,15 +56,11 @@ async def get_candles(
 
     candles = ohlcv_store.get_candles(sym, resolution, limit=limit, since=since)
 
-    earliest = ohlcv_store.get_earliest_time(sym, resolution)
-    latest   = ohlcv_store.get_latest_time(sym, resolution)
-
     return {
         "symbol": sym,
         "resolution": resolution,
         "count": len(candles),
-        "earliest": earliest,
-        "latest": latest,
-        "is_fetching": is_fetching(),
+        "earliest": ohlcv_store.get_earliest_time(sym, resolution),
+        "latest": ohlcv_store.get_latest_time(sym, resolution),
         "candles": candles,
     }

@@ -76,6 +76,30 @@ class TestWatchlist:
 # ─── Eval History ─────────────────────────────────────────────────────────────
 
 class TestEvalHistory:
+    @pytest.fixture(autouse=True)
+    def _empty_history(self, client):
+        """`eval_history._history` is a process-global deque per underlying that
+        every `run-once` anywhere appends to, and it is ALSO persisted to the
+        `signal_history` table and reloaded by `eval_history.bootstrap()` during
+        app startup. These cases assert exact counts from empty, so they must own
+        both copies — and must clear AFTER the `client` fixture has booted the
+        app, or bootstrap simply reloads the rows again.
+
+        Without this they passed or failed purely on how many replay tests
+        happened to run first in the session.
+        """
+        from app.services import db, eval_history
+        def _wipe():
+            try:
+                with db.connection() as conn:
+                    conn.execute("DELETE FROM signal_history")
+            except Exception:
+                pass
+            eval_history.clear()
+        _wipe()
+        yield
+        _wipe()
+
     def test_empty_history(self, client):
         resp = client.get("/api/v1/directional/history/NIFTY")
         assert resp.status_code == 200

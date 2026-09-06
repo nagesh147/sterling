@@ -24,7 +24,6 @@ from typing import Optional
 
 from app.engines.risk.greeks_budget import bsm_greeks_full
 from app.schemas.market import OptionSummary
-from app.services.delta_iv_socket import iv_manager
 
 
 # ── cache ─────────────────────────────────────────────────────────────
@@ -128,29 +127,10 @@ def enrich_with_greeks(
 
     Returns a new OptionSummary; the original is not mutated.
     """
-    # ── Live IV Stream Priority ───────────────────────────────────────
-    tick = iv_manager.get(option.instrument_name)
-    if tick and tick.mark_iv > 0:
-        has_greeks = (tick.gamma != 0.0 or tick.vega != 0.0 or tick.theta != 0.0)
-        enriched_delta = tick.delta if tick.delta != 0.0 else option.delta
-        
-        if has_greeks:
-            return option.model_copy(update={
-                "mark_iv": tick.mark_iv,
-                "delta": enriched_delta,
-                "gamma": tick.gamma,
-                "vega": tick.vega,
-                "theta": tick.theta,
-                "rho": tick.rho,
-                "greeks_enriched": True,
-            })
-        else:
-            # Update the option with live IV and Delta, let it fall through to BSM
-            option = option.model_copy(update={
-                "mark_iv": tick.mark_iv,
-                "delta": enriched_delta,
-            })
-
+    # The Delta live-IV socket used to pre-empt BSM here. It went with the
+    # crypto surface, and never carried Kite ticks, so every option now takes
+    # the Black-Scholes path below — which is what it already did in practice
+    # once that socket stopped being started.
     if not _needs_enrichment(option):
         return option
 
