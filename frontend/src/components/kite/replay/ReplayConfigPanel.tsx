@@ -1,5 +1,4 @@
 import React, { useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useReplayStore } from '../../../hooks/useReplayStore';
 import { useReplayTransport } from '../../../hooks/useReplayTransport';
 import { useFocusTrap } from './primitives/useFocusTrap';
@@ -50,14 +49,12 @@ export function ReplayConfigSheet() {
   const echoMismatch =
     frictionSupported && echo?.friction_mode != null && echo.friction_mode !== draft.frictionMode;
 
-  /* Portalled to <body> and anchored to the VIEWPORT, not the dock.
-     It used to be absolutely positioned inside the dock, which sets
-     `overflow: hidden` — so on a docked replay (~300px tall) the sheet was
-     ~236px tall with about 150px of usable body, and could not grow. The dock's
-     height is not a sensible constraint on a configuration form.
-     See reference_modal_stacking_term_root: body portal + z-index above the
-     terminal root, or this renders behind the page. */
-  return createPortal(
+  /* Lives INSIDE the dock and lays its cards out horizontally.
+     A vertical drawer fought the dock's height: on a ~300px docked replay the
+     cards had nowhere to go. Across the dock's width there is plenty of room,
+     so the cards become columns and the panel scrolls sideways if they run out
+     of it. */
+  return (
     <>
       <div className="rd-sheet-scrim" onMouseDown={() => setOpen(false)} />
       <div
@@ -372,7 +369,6 @@ export function ReplayConfigSheet() {
           </div>
         </footer>
       </div>
-    </>,
-    document.body,
+    </>
   );
 }

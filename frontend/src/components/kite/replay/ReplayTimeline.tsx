@@ -244,7 +244,6 @@ export function ReplayTimeline() {
     return out.filter((r) => r.width > 0.2);
   }, [scale, policy]);
 
-  const multiDay = !!cfg?.end_date && cfg.end_date !== cfg.date;
 
   return (
     <div className="rd-timeline-wrap">
@@ -317,13 +316,13 @@ export function ReplayTimeline() {
         )}
       </div>
 
-      {/* The runner derives session bounds from `date` alone, so a range would
-          be drawn wrong. Say so rather than draw a confident wrong picture. */}
-      {multiDay && (
-        <span className="rd-timeline-note">
-          Multi-day range — the timeline shows session times only.
-        </span>
-      )}
+      {/* A multi-day warning used to sit here. As a third row inside
+          `.rd-timeline-wrap` — a flex column in a bar laid out around the
+          timeline — it rendered ~50px BELOW the shell bar, overlapping the
+          metrics strip, and was squeezed to the wrap's 120px min-width so the
+          text broke up. The same warning already appears twice and legibly:
+          the config panel says a multi-day range will be refused, and the
+          shell message reports it at runtime. */}
     </div>
   );
 }

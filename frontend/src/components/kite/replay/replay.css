@@ -169,7 +169,12 @@
 .rd-shell-msg {
   font-size: var(--rd-fs-micro);
   color: var(--k-dim);
-  max-width: 260px;
+  /* Was a hard `max-width: 260px`, so a message like "Multi-day ranges are not
+     supported yet (2026-08-31 to 2026-09-04)" ellipsised even on a 1920px dock
+     with the room to show it. Take the space that is actually free, and only
+     clip when there genuinely is none. */
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -505,11 +510,6 @@
   white-space: nowrap;
   pointer-events: none;
   z-index: 3;
-}
-
-.rd-timeline-note {
-  font-size: var(--rd-fs-micro);
-  color: var(--k-amber);
 }
 
 /* ── Metric strip ─────────────────────────────────────────────────────── */
@@ -1043,27 +1043,25 @@
 /* ── Config sheet ─────────────────────────────────────────────────────── */
 
 .rd-sheet-scrim {
-  /* Portalled to <body>: fixed to the viewport, above the terminal root. */
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: var(--rd-z-modal);
+  z-index: 5;
   background: color-mix(in srgb, var(--k-text) 32%, transparent);
   animation: rd-fade var(--rd-dur-fast) var(--rd-ease-out);
 }
+/* Fills the dock rather than hanging off its right edge. The cards run
+   HORIZONTALLY inside it — see `.rd-sheet-body`. */
 .rd-sheet {
-  position: fixed;
-  top: 0; right: 0; bottom: 0;
-  z-index: calc(var(--rd-z-modal) + 1);
-  width: min(420px, 100vw);
+  position: absolute;
+  inset: 0;
+  z-index: 6;
   display: flex;
   flex-direction: column;
   background: var(--k-bg);
-  border-left: 1px solid var(--k-border-strong);
-  box-shadow: -12px 0 32px color-mix(in srgb, var(--k-text) 18%, transparent);
-  animation: rd-sheet-in var(--rd-dur-base) var(--rd-ease-out);
+  border-top: 1px solid var(--k-border-strong);
+  box-shadow: 0 -12px 32px color-mix(in srgb, var(--k-text) 14%, transparent);
+  animation: rd-sheet-rise var(--rd-dur-base) var(--rd-ease-out);
 }
-.replay-dock[data-width="sm"] .rd-sheet,
-.replay-dock[data-width="md"] .rd-sheet { width: 100%; }
 .rd-sheet-head {
   display: flex;
   align-items: center;
@@ -1076,7 +1074,42 @@
   font-size: var(--rd-fs-data);
   font-weight: 700;
 }
-.rd-sheet-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+/* Cards side by side: the dock is short and wide, so width is the axis with
+   room to spare. Each card scrolls on its own if it is taller than the dock;
+   the row scrolls sideways when the cards outrun the width. Below `md` the
+   dock is too narrow for columns, so it falls back to a stack. */
+.rd-sheet-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  padding: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.rd-sheet-body > .rd-card {
+  flex: 0 0 clamp(230px, 24%, 300px);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Only the narrowest bucket stacks. `md` (700px+) still fits two or three
+   columns and scrolls sideways for the rest, which beats a column that the
+   dock's height cannot show. */
+.replay-dock[data-width="sm"] .rd-sheet-body {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.replay-dock[data-width="sm"] .rd-sheet-body > .rd-card {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow-y: visible;
+}
 .rd-sheet-foot {
   display: flex;
   align-items: center;
@@ -1408,7 +1441,7 @@ kbd.rd-kbd {
 @keyframes rd-dock-in   { from { opacity: .6; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes rd-panel-in  { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes rd-pop-in    { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
-@keyframes rd-sheet-in  { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes rd-sheet-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes rd-fade      { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rd-modal-in  { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes rd-toast-in  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

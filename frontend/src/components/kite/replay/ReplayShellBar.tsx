@@ -41,9 +41,21 @@ export function ReplayShellBar() {
   const barsTotal = useReplayStore((s) => s.status.bars_total);
   const message = useReplayStore((s) => s.status.status_message);
   const errorMsg = useReplayStore((s) => s.error?.message);
+  const cfgDate = useReplayStore((s) => s.status.config?.date);
+  const cfgEndDate = useReplayStore((s) => s.status.config?.end_date);
 
   const active = state !== 'idle';
-  const note = errorMsg || message;
+
+  /* The runner derives session bounds from `date` alone, so a range would be
+     drawn wrong on the timeline. This warning used to live under the timeline
+     itself, where — as a third row of a flex column inside a bar laid out
+     around that timeline — it rendered ~50px BELOW the shell bar, overlapping
+     the metrics strip, squeezed to the wrap's 120px min-width. Here it shares
+     the message slot, which already handles long text. */
+  const multiDay = !!cfgEndDate && cfgEndDate !== cfgDate;
+  const note =
+    errorMsg || message ||
+    (multiDay ? 'Multi-day range — the timeline shows session times only.' : '');
 
   const toggle = (target: Exclude<ReplayMode, 'docked'>) =>
     setMode(mode === target ? 'docked' : target);
