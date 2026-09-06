@@ -343,6 +343,20 @@ export function sessionDayDate(key: string, nowMs: number): string {
 /** The bucket live positions float into, ahead of every dated one. */
 export const LIVE_BUCKET = 'live';
 
+/**
+ * A still-running signal's own session day, kept as its own band.
+ *
+ * One "Live now" bucket claimed the present tense for everything in it, so on a
+ * closed Saturday it read "Live now" over entries from 31 Aug and 3 Sept alike.
+ * SuperTrend's own table had already stopped doing that; these keys are how the
+ * shared board says the same thing, so every engine's board groups a live
+ * position by the session it actually entered on.
+ */
+export const LIVE_DAY_PREFIX = 'live:';
+export const liveDayKey = (day: string): string => `${LIVE_DAY_PREFIX}${day}`;
+export const isLiveDayKey = (key: string): boolean => key.startsWith(LIVE_DAY_PREFIX);
+export const liveDayOf = (key: string): string => key.slice(LIVE_DAY_PREFIX.length);
+
 /** Everything older than yesterday, in one section. */
 export const OLDER_BUCKET = 'older';
 
@@ -377,6 +391,7 @@ export function formatSessionDay(key: string): string {
  * testable and so a re-render at midnight cannot disagree with the grouping.
  */
 export function sessionDayLabel(key: string, nowMs?: number, isHistoricalSim: boolean = false): string {
+  if (isLiveDayKey(key)) return `${formatSessionDay(liveDayOf(key))} · active`;
   if (key === LIVE_BUCKET) return 'Live now';
   if (key === OLDER_BUCKET) return 'Older';
   if (key === 'unknown') return 'Undated';
@@ -396,43 +411,35 @@ export function sessionDayLabel(key: string, nowMs?: number, isHistoricalSim: bo
 }
 
 /**
- * Groups signals into Today, Yesterday and Older, newest first inside each.
+ * Groups signals into Today, Yesterday, a dated band per still-running day, and
+ * Older — newest first inside each.
+ *
+ * This is SuperTrend's grouping, now the only one. Every board used to call
+ * this with `liveFirst={false}` and `hoistLiveFromToday={false}` — all six of
+ * them, every time — so the live bucket those flags controlled was never
+ * actually built, and a position entered last Tuesday and still running sat
+ * inside "Older" under days of closed history. SuperTrend's own table had
+ * fixed that for itself; the other five engines had not, which is the whole
+ * inconsistency.
+ *
+ * The rule, in one place:
+ *
+ * - Today and Yesterday keep every row from those sessions, running or ended.
+ *   They are already the top two bands, so lifting a live row out of them buys
+ *   no visibility and costs it its date.
+ * - A running or weakening row from any older session gets a band of its own,
+ *   titled by the day it entered on. Not one merged "Live now": that claimed
+ *   the present tense for a 31 Aug entry and a 3 Sept entry alike.
+ * - Everything else older than yesterday stays in one "Older" band. A date per
+ *   day across a month of closed history is a log, not a scan.
  *
  * Undated rows sort last rather than being dropped — an engine that failed to
- * stamp a signal still has something to say.
- *
- * With `liveFirst` and a `nowMs`, an open position floats into one bucket ahead
- * of every dated one **only when its day is not today**. That is the case the
- * bucket exists for: a position entered last Tuesday and still running would
- * otherwise sit under "Tue 12 Aug" below three days of closed history, and the
- * top of the board would read as though nothing were on.
- *
- * Today's live rows stay under "Today", which is the first section anyway, so
- * hoisting them gains no visibility and costs them a date heading. Day grouping
- * is then the board's primary organisation — what an operator scanning a log
- * asks for — without letting a stale open position hide in it.
- *
- * With no `nowMs` every live row is hoisted, preserving the older behaviour for
- * callers that cannot supply a clock.
+ * stamp a signal still has something to say. Without `nowMs` there is no
+ * "today" to compare against, so every row falls back to its own day band.
  */
 export function groupByDay(
   signals: readonly BoardSignal[],
-  { liveFirst = false, nowMs, hoistToday = false }: {
-    liveFirst?: boolean;
-    nowMs?: number;
-    /**
-     * Hoist a live row even when it is from today.
-     *
-     * Off, the live bucket collects only what day grouping would bury — see
-     * below. On, it collects every actionable row, which separates "things I
-     * could act on" from "history" outright rather than by date. That is how
-     * SuperTrend's own table has always read: an "Active now" section, then the
-     * dated log of entries whose trend has since ended. A board of fifty ideas
-     * across three days wants that; a board of one session's single trade does
-     * not, which is why it is a choice and not the rule.
-     */
-    hoistToday?: boolean;
-  } = {},
+  { nowMs }: { nowMs?: number } = {},
 ): Array<{ key: string; signals: BoardSignal[] }> {
   const buckets = new Map<string, BoardSignal[]>();
   const push = (key: string, s: BoardSignal) => {
@@ -444,31 +451,27 @@ export function groupByDay(
   const yesterdayKey = todayKey ? shiftSessionDay(todayKey, -1) : null;
   for (const s of signals) {
     const day = sessionDayKey(s.atMs);
-    const buried = todayKey == null || day !== todayKey;
-    // An armed setup is an intraday trigger condition for its own session day.
-    // An armed setup from an older day never entered and is not a running position.
-    // Only positions that are actually running or weakening can be hoisted across days.
-    const isOldRunning = buried && (s.status === 'running' || s.status === 'weakening');
-    const isTodayActionable = !buried && ACTIONABLE.includes(s.status);
-    if ((hoistToday && (isTodayActionable || isOldRunning)) || (liveFirst && isOldRunning)) {
-      push(LIVE_BUCKET, s);
-      continue;
-    }
     if (todayKey && day !== 'unknown') {
       if (day === todayKey) push(todayKey, s);
       else if (day === yesterdayKey) push(yesterdayKey, s);
+      // An armed setup is an intraday trigger condition for its own session day,
+      // so an armed setup from an older day never entered and is not a running
+      // position. Only running and weakening earn a band of their own.
+      else if (s.status === 'running' || s.status === 'weakening') push(liveDayKey(day), s);
       else push(OLDER_BUCKET, s);
       continue;
     }
     push(day, s);
   }
   const rank = (key: string) => {
-    if (key === LIVE_BUCKET) return 0;
     if (todayKey && key === todayKey) return 1;
     if (yesterdayKey && key === yesterdayKey) return 2;
-    if (key === OLDER_BUCKET) return 3;
-    if (key === 'unknown') return 5;
-    return 4;
+    // Between the two named sessions and the history, as in SuperTrend's table:
+    // a live position is not today's news, but it is not a closed record either.
+    if (isLiveDayKey(key)) return 3;
+    if (key === OLDER_BUCKET) return 4;
+    if (key === 'unknown') return 6;
+    return 5;
   };
   return [...buckets.entries()]
     .sort((a, b) => rank(a[0]) - rank(b[0]) || b[0].localeCompare(a[0]))

@@ -120,8 +120,6 @@ export function BearToBearishBoard({
         )}
         onOpenDetail={onOpenDetail}
         nowMs={nowMs}
-        liveFirst={false}
-        hoistLiveFromToday={false}
         emptyLabel={
           view.counts.total
             ? 'Every row is filtered out. Clear the search or include ended positions.'

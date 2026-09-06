@@ -123,7 +123,6 @@ describe('sorting on the rendered board', () => {
         nowMs={NOW}
         sort={{ column: 'ltp', direction: 'desc' }}
         onSortChange={vi.fn()}
-        liveFirst={false}
       />,
     );
     // Only the newest band opens by default; yesterday's row has to be revealed
