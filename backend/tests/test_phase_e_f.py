@@ -20,7 +20,6 @@ from app.services import (
 )
 from app.services.snapshot_cache import SnapshotEntry
 from app.core.trading_mode import MODES
-from main import _auto_place_algo_order, _algo_last_ordered, _background_retry_worker
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -53,11 +52,11 @@ def _make_snap(direction: str = "long", strong: bool = True) -> SnapshotEntry:
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    _algo_last_ordered.clear()
+    # `_algo_last_ordered` was the crypto auto-order cooldown map and went with
+    # `_auto_place_algo_order`; nothing here drives that path any more.
     live_safety.reset_all_for_tests()
     snapshot_cache._cache.clear()
     yield
-    _algo_last_ordered.clear()
     live_safety.reset_all_for_tests()
 
 
