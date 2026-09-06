@@ -9,7 +9,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SignalBoard, visibleColumns, COLUMNS } from '../SignalBoard';
-import { LIVE_BUCKET, flattenSignals, groupByDay, hasGroups, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
+import { LIVE_BUCKET, OLDER_BUCKET, flattenSignals, groupByDay, hasGroups, isDayExpandedByDefault, sessionDayLabel, type BoardSignal, type BoardStatus } from '../boardTypes';
 import { supertrendToBoard } from '../supertrendAdapter';
 import type { EngineSignalRow, OptionLeg } from '../../../../types/kiteEngine';
 
@@ -236,8 +236,8 @@ describe('dates and day order', () => {
   it('takes its date text from the same helper as the day header', () => {
     render(<SignalBoard signals={[dated('a', NOW - 4 * DAY, 'ended')]}
       columns={['instrument', 'time']} nowMs={NOW} openId={null} onToggle={() => {}} />);
-    const header = screen.getByText('Older');
-    fireEvent.click(header);
+    // 'Older' is the only band here, so it is the newest and opens by default.
+    expect(screen.getByText('Older')).toBeTruthy();
     expect(screen.getByText('17 Aug 10:30:00')).toBeTruthy();
     expect(screen.queryByText(/^\w{3},? 17 Aug$/), 'no day band').toBeNull();
   });
@@ -256,6 +256,9 @@ describe('dates and day order', () => {
         onToggle={() => {}}
       />,
     );
+    // Only the newest band ('Today') opens by default, so the two below it have
+    // to be opened before their rows can be ordered against it.
+    fireEvent.click(screen.getByText('Yesterday'));
     fireEvent.click(screen.getByText('Older'));
     const body = document.body.textContent ?? '';
     const at = (sym: string) => body.indexOf(sym);
@@ -406,5 +409,62 @@ describe('collapseOlderDays on SignalBoard', () => {
     // Clicking again collapses it
     fireEvent.click(olderHeader!);
     expect(screen.queryByText('SYMolder-sig')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * One default, shared by every engine's board.
+ *
+ * The three boards each had their own version of "which day starts open" and
+ * all three disagreed — the shared board opened Today and Yesterday together,
+ * Adaptive Edge added Older whenever it held an open row, and SuperTrend's
+ * classic table opened everything. The same history read as three different
+ * amounts of scrolling depending on the tab.
+ */
+describe('only the newest day band opens by default', () => {
+  const makeDaySig = (id: string, atMs: number, status: BoardSignal['status']): BoardSignal => ({
+    id, engine: 'adaptive_edge', underlying: 'NIFTY',
+    instrument: { symbol: `SYM${id}`, exchange: 'NFO', kind: 'option', quoteKey: 'NFO:X' },
+    direction: 'long', status, atMs,
+    levels: { ltp: 100, entry: 100, stop: null, trail: null, target: null, exit: null },
+    sizing: { lots: 1, quantity: 75, atRiskInr: null, deployedInr: null },
+    score: null, reason: null, sections: [],
+  });
+
+  it('opens the first key and nothing else', () => {
+    const keys = [LIVE_BUCKET, '2026-09-04', '2026-09-03', OLDER_BUCKET];
+    expect(isDayExpandedByDefault(LIVE_BUCKET, keys)).toBe(true);
+    for (const key of keys.slice(1)) {
+      expect(isDayExpandedByDefault(key, keys)).toBe(false);
+    }
+  });
+
+  it('opens whichever band happens to lead, not a named one', () => {
+    // No live bucket and no today: the oldest history is all there is, and its
+    // first band still opens. "Newest" is a position in the list, not a label.
+    expect(isDayExpandedByDefault(OLDER_BUCKET, [OLDER_BUCKET])).toBe(true);
+  });
+
+  it('opens nothing when there are no bands', () => {
+    expect(isDayExpandedByDefault('2026-09-04', [])).toBe(false);
+  });
+
+  it('leaves Yesterday closed on a board that has Today', () => {
+    render(
+      <SignalBoard
+        signals={[
+          makeDaySig('today-row', NOW, 'running'),
+          makeDaySig('yesterday-row', NOW - 86_400_000, 'ended'),
+        ]}
+        columns={['instrument', 'time']}
+        nowMs={NOW}
+        openId={null}
+        onToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText('SYMtoday-row')).toBeInTheDocument();
+    expect(screen.queryByText('SYMyesterday-row')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Yesterday'));
+    expect(screen.getByText('SYMyesterday-row')).toBeInTheDocument();
   });
 });

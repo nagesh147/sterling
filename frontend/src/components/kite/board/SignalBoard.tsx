@@ -14,8 +14,9 @@
 import React from 'react';
 import { k, tint } from '../../../styles/kiteUI';
 import {
-  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay, markLegs,
-  parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel, shiftSessionDay, stamp, trailBreached,
+  ACTIONABLE, ENGINE_TAG, LIVE_BUCKET, STATUS_LABEL, STATUS_RANK, flattenSignals, groupByDay,
+  isDayExpandedByDefault, markLegs, parentStamp, sessionDayDate, sessionDayKey, sessionDayLabel,
+  shiftSessionDay, stamp, trailBreached,
 } from './boardTypes';
 import type { BoardDayMove, BoardOrigin, BoardSignal, BoardStatus, EngineId } from './boardTypes';
 import { StatCard, StatCardGrid } from './StatCard';
@@ -1169,24 +1170,10 @@ export function SignalBoard({
     if (userToggledDays.has(key)) {
       return userToggledDays.get(key)!;
     }
-    const todayKey = sessionDayKey(effectiveNowMs);
-    const label = sessionDayLabel(key, effectiveNowMs, isHistoricalSim);
-    // Today and Yesterday are always expanded by default.
-    if (key === todayKey || label === 'Today' || label === 'Yesterday') {
-      return true;
-    }
-    // Yesterday and Older are collapsed by default.
-    const hasTodayGroup = days.some(
-      (d) => d.key === todayKey || sessionDayLabel(d.key, effectiveNowMs, isHistoricalSim) === 'Today',
-    );
-    if (!hasTodayGroup && days.length > 0 && days[0].key === key) {
-      const firstGroup = days[0];
-      const hasActionable = firstGroup.signals.some((s) => ACTIONABLE.includes(s.status));
-      if (hasActionable) {
-        return true;
-      }
-    }
-    return false;
+    // One shared rule for every engine's board — see isDayExpandedByDefault.
+    // This used to open Today and Yesterday together, plus the first group when
+    // it held an actionable row, which left most of a week's history expanded.
+    return isDayExpandedByDefault(key, days.map((d) => d.key));
   };
 
   const toggleDay = (key: string) => {

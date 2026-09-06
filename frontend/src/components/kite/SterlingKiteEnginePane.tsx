@@ -1,5 +1,5 @@
 import React from 'react';
-import { stamp, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs, formatSessionDay } from './board/boardTypes';
+import { stamp, isDayExpandedByDefault, sessionDayKey, shiftSessionDay, underlyingQuoteKey, parseTimestampMs, formatSessionDay } from './board/boardTypes';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import { EngineToolbar, ScopeDivider, ToolbarButton } from './board/EngineToolbar';
@@ -2108,10 +2108,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
 
-  // Recent ended setups are part of the signal board, so show their rows on load.
-  // Users can still collapse any date bucket manually for the current session.
-  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
-    () => new Set(),
+  // What the user has toggled this session, NOT what is collapsed. The default
+  // is a rule (see isDayExpandedByDefault), and storing the collapsed set
+  // instead meant the default could only ever be "everything open" — which is
+  // what this was, so a week of ended setups all arrived expanded.
+  const [userToggledGroups, setUserToggledGroups] = React.useState<Map<string, boolean>>(
+    () => new Map(),
   );
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const [bestOnly, setBestOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_best_only') === 'true');
@@ -2123,11 +2125,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     setBestOnly(next);
     localStorage.setItem('kite_st_best_only', String(next));
   };
-  const toggleGroup = (label: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+  const toggleGroup = (label: string, expandedNow: boolean) => {
+    setUserToggledGroups(prev => {
+      const next = new Map(prev);
+      next.set(label, !expandedNow);
       return next;
     });
   };
@@ -2274,7 +2275,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     setQuery('');
     changeShowEnded(true);
     changeTodayOnly(false);
-    setCollapsedGroups(new Set());
+    // Drop the session's manual toggles so the default rule applies again —
+    // which opens the newest band. Clearing a collapsed SET used to expand
+    // every band at once, and this button exists to undo filters, not to
+    // override the grouping.
+    setUserToggledGroups(new Map());
   };
 
   const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
@@ -2822,11 +2827,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           />
         ) : (
           groupedRows.map(group => {
-            const isCollapsed = collapsedGroups.has(group.label);
+            const expanded = userToggledGroups.has(group.label)
+              ? userToggledGroups.get(group.label)!
+              : isDayExpandedByDefault(group.label, groupedRows.map(g => g.label));
+            const isCollapsed = !expanded;
             return (
               <div key={group.label}>
-                <div 
-                  onClick={() => toggleGroup(group.label)}
+                <div
+                  onClick={() => toggleGroup(group.label, expanded)}
                   className="st-group-header"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',

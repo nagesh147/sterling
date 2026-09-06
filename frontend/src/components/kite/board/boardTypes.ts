@@ -479,6 +479,28 @@ export function groupByDay(
 }
 
 /**
+ * Which day band opens on its own: the newest one, and only that one.
+ *
+ * Every engine's board had grown its own version of this, and all three
+ * disagreed. The shared board opened Today AND Yesterday, plus the first group
+ * if it held anything actionable. Adaptive Edge opened Today, Yesterday, Older
+ * if any row was open, and the first group if the first two were missing.
+ * SuperTrend's classic table opened all of them. So the same signal history
+ * read as three different amounts of scrolling depending on which tab you were
+ * on, and on a board with a week of entries most of it was open at once.
+ *
+ * One rule, in one place: the band at the head of the list stays open, and
+ * everything below it starts closed. `groupByDay` already ranks the live bucket
+ * first and then today, yesterday, dated, older — so "first" is always the one
+ * worth looking at, and no caller has to re-derive which key that is. Callers
+ * keep their own map of what the user has since toggled; this only decides
+ * what happens before anyone touches it.
+ */
+export function isDayExpandedByDefault(key: string, orderedDayKeys: readonly string[]): boolean {
+  return orderedDayKeys.length > 0 && orderedDayKeys[0] === key;
+}
+
+/**
  * Which legs of one signal are worth singling out.
  *
  * Two comparisons a trader makes across the strikes of a single idea, and
