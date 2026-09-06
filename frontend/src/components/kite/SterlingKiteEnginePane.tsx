@@ -2220,10 +2220,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       if (aIdx !== bIdx) return bIdx - aIdx; // indices first
       return a.underlying.localeCompare(b.underlying);
     });
-    if (active.length) {
-      buckets.push({ label: 'Active now', rows: applyUserSort(sortedActive), active: true });
-    }
-
     const nowMs = simNowMs ?? Date.now();
     const todayKey = sessionDayKey(nowMs);
     const realTodayKey = sessionDayKey(Date.now());
@@ -2232,8 +2228,40 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     const todayLabel = isHistorical ? formatSessionDay(todayKey) : 'Today';
     const yesterdayLabel = isHistorical ? formatSessionDay(yesterdayKey) : 'Yesterday';
 
+    /* Still-running signals keep their place at the TOP — a live trade must not
+       hide under an old date — but they are titled by the session they actually
+       entered on. The single "Active now" bucket claimed the present tense for
+       everything in it, so on a closed Saturday it read "Active now" over
+       entries from 31 Aug and 3 Sept. Grouping by day keeps the hoist and drops
+       the false claim.
+
+       Rows from today or yesterday merge into those buckets (already the top
+       two, so nothing moves); older ones get a dated bucket of their own,
+       marked active, above the general history. */
+    const activeByDay = new Map<string, typeof filteredRows>();
+    const activeToday: typeof filteredRows = [];
+    const activeYesterday: typeof filteredRows = [];
+    for (const r of sortedActive) {
+      const day = sessionDayKey(parseTimestampMs(r.timestamp_ms));
+      if (day === todayKey || day === 'unknown') activeToday.push(r);
+      else if (day === yesterdayKey) activeYesterday.push(r);
+      else {
+        const bucket = activeByDay.get(day) ?? [];
+        bucket.push(r);
+        activeByDay.set(day, bucket);
+      }
+    }
+    // Newest dated group first, so the most recent live entry sits highest.
+    for (const day of [...activeByDay.keys()].sort().reverse()) {
+      buckets.push({
+        label: `${formatSessionDay(day)} · active`,
+        rows: applyUserSort(activeByDay.get(day)!),
+        active: true,
+      });
+    }
+
     const groups: Record<string, typeof filteredRows> = {
-      [todayLabel]: [], [yesterdayLabel]: [], Older: [],
+      [todayLabel]: [...activeToday], [yesterdayLabel]: [...activeYesterday], Older: [],
     };
     for (const r of history) {
       const rawTs = parseTimestampMs(
@@ -2244,11 +2272,21 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       else if (day === yesterdayKey) groups[yesterdayLabel].push(r);
       else groups.Older.push(r);
     }
+    const dayBuckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
     for (const label of [todayLabel, yesterdayLabel, 'Older'] as const) {
       if (groups[label]?.length) {
-        buckets.push({ label, rows: applyUserSort(groups[label]) });
+        // `active` drives both the section styling and the `showEnded` filter
+        // below, so a day bucket holding a running signal has to carry it.
+        const hasActive = label === todayLabel ? activeToday.length > 0
+          : label === yesterdayLabel ? activeYesterday.length > 0
+          : false;
+        dayBuckets.push({ label, rows: applyUserSort(groups[label]), active: hasActive });
       }
     }
+    // Today and Yesterday lead; the dated active groups sit between them and
+    // the rest of the history.
+    buckets.unshift(...dayBuckets.filter(b => b.label === todayLabel || b.label === yesterdayLabel));
+    buckets.push(...dayBuckets.filter(b => b.label === 'Older'));
     if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
   }, [filteredRows, showEnded, quotes, s.sortBy, s.chgType, simNowMs]);
@@ -2859,7 +2897,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {/* Inherits the band's micro-type; lighter than the label,
                         as in the shared board's count. */}
-                    <span style={{ fontWeight: 500, color: k.dim }}>{group.rows.length} signals</span>
+                    <span style={{ fontWeight: 500, color: k.dim }}>
+                      {group.rows.length} {group.rows.length === 1 ? 'signal' : 'signals'}
+                    </span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
                       <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
