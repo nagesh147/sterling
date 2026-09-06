@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.csp import csp_nonce
 from fastapi.responses import HTMLResponse
@@ -900,6 +901,54 @@ async def watchlist_sync(user: UserContext = Depends(get_current_user)):
         "items": vals, "count": len(vals), "sources": sources,
         "note": "Kite Connect has no saved-marketwatch endpoint; synced from holdings, positions and GTTs.",
     }
+
+
+# ─── Risk controls ────────────────────────────────────────────────────────────
+class DailyLossRequest(BaseModel):
+    """Both thresholds are a realised INR loss, so both are negative.
+
+    `soft_warn_inr` only colours the readout; `hard_halt_inr` is what stops new
+    entries. Validation lives in `DailyLossConfig.__post_init__` so the API and
+    the engines cannot disagree about what a usable pair looks like.
+    """
+    enabled: bool = True
+    soft_warn_inr: float
+    hard_halt_inr: float
+
+
+def _daily_loss_payload(uid: str) -> dict:
+    cfg = live_safety.daily_loss_config(uid)
+    stored = live_safety.has_daily_loss_override(uid)
+    # The account's own realised P&L against the thresholds actually in force,
+    # so the UI never has to recompute the comparison and get it subtly wrong.
+    state = live_safety.daily_loss_state(uid=uid)
+    return {**cfg.as_dict(), "uid": uid, "is_account_override": stored,
+            "pnl_inr": state["pnl_inr"], "level": state["level"],
+            "default": live_safety.daily_loss_config().as_dict()}
+
+
+@router.get("/risk/daily-loss")
+async def get_daily_loss(user: UserContext = Depends(get_current_user)):
+    """This account's daily-loss thresholds, and where it currently stands."""
+    return _daily_loss_payload(user.user_id)
+
+
+@router.put("/risk/daily-loss")
+async def set_daily_loss(body: DailyLossRequest, user: UserContext = Depends(get_current_user)):
+    try:
+        cfg = live_safety.DailyLossConfig(
+            enabled=body.enabled, soft_warn_inr=body.soft_warn_inr, hard_halt_inr=body.hard_halt_inr)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    live_safety.configure_daily_loss(cfg, uid=user.user_id)
+    return _daily_loss_payload(user.user_id)
+
+
+@router.delete("/risk/daily-loss")
+async def clear_daily_loss(user: UserContext = Depends(get_current_user)):
+    """Drop this account's override so it falls back to the shipped default."""
+    live_safety.clear_daily_loss(user.user_id)
+    return _daily_loss_payload(user.user_id)
 
 
 # ─── Orders ───────────────────────────────────────────────────────────────────
