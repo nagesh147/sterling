@@ -115,6 +115,17 @@ async def run_download(
     root: Any = None,
 ) -> dict[str, Any]:
     """Download ``universe`` for ``interval`` over ``[frm, to]``. Returns a run summary."""
+    from .config import CONTINUOUS_INTERVALS
+
+    if continuous and interval not in CONTINUOUS_INTERVALS:
+        # Every request in the run would 400. Refusing here costs one line; finding
+        # out from the API costs a full pass that marks every chunk failed, and a
+        # ledger of failures a later --resume has to be told to ignore.
+        raise ValueError(
+            f"--continuous is not available for interval {interval!r}: Kite serves "
+            f"continuous data only for {', '.join(sorted(CONTINUOUS_INTERVALS))}. "
+            f"Intraday futures history is limited to the current contract's own life "
+            f"(about three months); expired contracts are not served at all.")
     from .manifest import Manifest
     from .universe import estimate_cost, resolve_universe
     from .volume import logs_dir

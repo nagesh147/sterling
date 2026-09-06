@@ -83,6 +83,12 @@ PRESETS: dict[str, str] = {
     "equity-all": "TIER 3 — nse-all + BSE equities + all indices (~22,810). ~10 h, ~17 GiB",
     # ── components of the tiers, useful on their own ─────────────────────────
     "nse-eq": "NSE cash-market instruments only (~9,890) — stocks, ETFs, SME",
+    # Enabled 2026-09-07 for release gate P0-5. The engine trades derivatives, so
+    # cash and index history cannot measure its edge however much of it there is.
+    # Use --continuous: the master lists live contracts only, so without it each
+    # symbol starts at its own contract's inception rather than running back.
+    "fno-fut": "NFO + BFO futures (~652). Needs --continuous to reach past this "
+               "contract's inception; options remain unobtainable, see OUT_OF_SCOPE",
     "bse-eq": "BSE equities only (~12,760); overlaps NSE heavily and much is illiquid",
     # ── small curated subsets, for a quick smoke test before a long run ──────
     "nifty50": "The NIFTY 50 constituents (curated, as of 2026-08). ~80 s",
@@ -94,8 +100,6 @@ PRESETS: dict[str, str] = {
 #: explanation rather than a bare "unknown preset" — the knowledge of *why* is the useful
 #: part, and re-enabling any of them is a one-line change here plus a mask in _mask_preset.
 OUT_OF_SCOPE: dict[str, str] = {
-    "fno-fut": "futures (~652). Excluded from the current scope; needs --continuous to be "
-               "useful, since the master lists live contracts only.",
     "fno-opt": "options (~39,220). Excluded: expired contracts cannot be enumerated, so "
                "historical option-chain coverage is unobtainable anyway.",
     "derivatives-live": "all live derivatives (~91,563). Excluded: ~1.7 days of downloading "
@@ -157,7 +161,10 @@ def _mask_preset(table: pa.Table, preset: str) -> pa.Array:
     nse_eq = pc.and_(eq(exch, "NSE"), eq(seg, "NSE"))
     nse_idx = pc.and_(eq(exch, "NSE"), indices)
     bse_eq = pc.and_(eq(exch, "BSE"), eq(itype, "EQ"))
+    fno_fut = pc.and_(isin(exch, ("NFO", "BFO")), eq(itype, "FUT"))
 
+    if preset == "fno-fut":
+        return fno_fut
     if preset == "indices":
         return indices
     if preset == "nse-eq":

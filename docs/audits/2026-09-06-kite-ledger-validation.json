@@ -70,6 +70,14 @@
       "exit_code": 0,
       "summary": "NO_EXECUTABLE_CONTRACT_HISTORY \u2014 231,143,717 bars, 0 of them derivative",
       "proves": "The lake holds no option or futures price history, so no executable-contract validation is possible from it."
+    },
+    {
+      "name": "futures_edge_holdout",
+      "command": "PYTHONPATH=. .venv/bin/python study/kite_futures_edge.py --out ../docs/audits/2026-09-07-kite-futures-edge.json",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "FAIL \u2014 holdout gross -7,154 before costs; net -165,089; 27/347 symbols profitable",
+      "proves": "The engine's own entry/exit logic has no edge on real executable futures, out of sample, across 347 instruments and 3,242 trades, at any slippage in the grid."
     }
   ],
   "failed_test_ids": [],
@@ -160,12 +168,12 @@
     {
       "id": "P0-5",
       "title": "Real executable-contract dataset and chronological validation",
-      "status": "NOT_MET",
-      "evidence": "The drive is attached and its data is intact \u2014 the CAS audit reproduced byte-identically, 0 differing fields and 9/9 hashes matching. It holds 231,143,717 minute bars across 12,246 symbols, and NOT ONE of them is an option or a future. The engine trades NFO/BFO options and futures, so cash and index history cannot answer this gate however much of it there is.",
+      "status": "MEASURED_AND_FAILING",
+      "evidence": "Futures history was acquired and the engine's own logic was measured on it. 598,441 real continuous-daily bars for 427 NFO/BFO futures, 2018-01-01..2026-09-04, downloaded 2026-09-07. Replayed through replay_premium_series \u2014 the same compute_regime, entry_transitions and exits the live scanner runs \u2014 with a futures cost schedule. Untouched holdout from 2025-01-01: 347 symbols, 3,242 trades, GROSS PnL -7,154 before a single rupee of cost, net -165,089, median per-symbol -491, 27 of 347 symbols profitable. Full window 2018-2026: 275 symbols, 9,840 trades, gross -32,834, net -508,416, 20 of 275 profitable. The result is flat across slippage 0.0001/0.0002/0.0005 because the failure is not a cost failure \u2014 gross is already negative. Predeclared criterion, recorded in the study before the first run: FAIL.",
       "blocked_by": [
-        "Option history cannot be back-filled through the supported API. Kite's historical endpoint is addressed by instrument_token, and the instrument master lists LIVE contracts only \u2014 the lake's 2026-08-14 snapshot starts at expiry 2026-08-18, so every contract that had already expired is absent and its token is no longer discoverable. kitelake/universe.py records this same conclusion in OUT_OF_SCOPE['fno-opt']. Options must be accumulated forward or bought from a vendor.",
-        "Futures history IS obtainable: `kitelake plan NFO:NIFTY26SEPFUT,...` resolves and costs 12 requests for three contracts, and download.py already takes `continuous`. It is excluded by OUT_OF_SCOPE['fno-fut'] rather than by any technical barrier. That would cover the `futures` vehicle only; the engine's configured vehicle is `otm_options`.",
-        "Any such download writes to the evidence drive and needs a live Kite session, so it was not started without the owner asking for it."
+        "Options: measurement is impossible, not merely absent. Measured against the live API on 2026-09-07 \u2014 an expired futures contract returns \"invalid token\" (HTTP 400) even with its token in hand, and an expired option returns zero candles. Option history can only be accumulated forward or bought.",
+        "Futures intraday: continuous is DAILY ONLY (\"invalid interval for continuous data\" for every other interval), and a live contract's own minute history starts at its inception, about three months. So the intraday strategy cannot be measured on a long executable series.",
+        "What WAS measurable is measured, and it loses money. Long-only and daily, so it does not prove the intraday or short side fails \u2014 but nothing here supports promotion, and the burden is on evidence of edge, not on its absence."
       ]
     },
     {
@@ -203,6 +211,7 @@
   },
   "code_sha256": {
     "backend/app/services/db.py": "44d8bd812df2ecf815de2c325f82ddb9f8ba0f00ec7f518a6f4c2dd375e63ecb",
+    "backend/app/services/kite_engine/backtest.py": "fd46da6bfd21ba8ec3cbc595ab2e460dbb980001e3be056e2b78163da0ea5063",
     "backend/app/services/kite_engine/execution_lease.py": "d594a40c969a275377e21b0f932f9cc511cfdd90c013cc65e2bfec589bc3693c",
     "backend/app/services/kite_engine/execution_lifecycle.py": "8a802febaba451afc399be10fb0cacc9bc4f978912393f31373044e057dc9d09",
     "backend/app/services/kite_engine/fill_ledger.py": "6ad9a8ecf914076890a1bf521eb0990c4695c0ae12548012d9a0c36117b060b8",
@@ -211,17 +220,22 @@
     "backend/app/services/kite_engine/service.py": "fad52a67b31c84bb0e7623e9254417524c9f26fc0d0bdb6ae28603c3fedc4a56",
     "backend/app/services/kite_engine/state.py": "f858d5c1502deb91c1f9ab77c0a1291832da043b7d69a1c029891a60197c4bd1",
     "backend/study/kite_derivative_coverage_audit.py": "980867d7ea352ac3ecb0008c2e949dcd9e70ff880da7117ec2b377d54e02d0c4",
+    "backend/study/kite_futures_edge.py": "797dc57d965c793580b1fb22ca610dea8e087c651b266e5b7096a2c91500d620",
     "backend/tests/engines/sterling_kite_engine/test_execution_lease.py": "f16e1c7582253f84b8c8aa3b35c306f4351fe1b2fca2c75c3b8ed6822baff70d",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger.py": "ad0705838f609a59de7506069c5edbe6003586ffffbfc87de3d760ffaa63dfd1",
     "backend/tests/engines/sterling_kite_engine/test_fill_ledger_integration.py": "89130f3f8f9f3c9cc088406494550881824d3092d5086525910a9f018bb8a63e",
-    "backend/tests/engines/sterling_kite_engine/test_gtt_child_attribution.py": "b0b4dc187dbcd3c8cb0b568e53393c719297770fb333fc5ff27b11d3cfe802d4"
+    "backend/tests/engines/sterling_kite_engine/test_gtt_child_attribution.py": "b0b4dc187dbcd3c8cb0b568e53393c719297770fb333fc5ff27b11d3cfe802d4",
+    "kitelake/config.py": "0236fe9b0cbf00e653bcc92abba6fc02eb47a72d449d05ae084c13ab64edb3f5",
+    "kitelake/download.py": "2356cb2ff93b78cced939d82bd2a2cb0e84b1707875fb7fe684216ac03678b6b",
+    "kitelake/universe.py": "263abfec885c162ef6d135a4c5a47ad94fde0c34e1d61eb36ff92b309dcdcc17"
   },
-  "backend_python_tree_sha256": "5584199336439a9a5a05e6ea9875f81ea3042321fcc8fbe58df02969b48ba52f",
+  "backend_python_tree_sha256": "37b713b64fee2e6233b9144908c2062ce138c473e9169035f943a21f8a1bc1b5",
   "artifact_sha256": {
     "docs/audits/2026-09-06-kite-cas-realdata.json": "ffb8499d62acc2cc145ae298fb958821d501474c6c528447058d50fab8238757",
-    "docs/audits/2026-09-06-kite-derivative-coverage.json": "4874b717221595774ae94c387945e8e038cc3bccdac0431491fbb61f66cf276d",
-    "docs/audits/2026-09-06-kite-implementation-handoff.md": "d5266099f4f556d01b7cb97c5a72053cb45dd7d66617c07efa1519061aaba6cb",
-    "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356"
+    "docs/audits/2026-09-06-kite-derivative-coverage.json": "a7945a5cde1c71e4feecd8134cbdb9904e88c59c4893fa69f29b52fb8c596a51",
+    "docs/audits/2026-09-06-kite-implementation-handoff.md": "122e17d2664f7113f5885ca11ee14ac03cbfd8e33b656dd08a6304a35b2b949c",
+    "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356",
+    "docs/audits/2026-09-07-kite-futures-edge.json": "cefe65176182e0bcd9de60c3a0bd45500fdc2c959ee5e2e1201a54b517148e69"
   },
   "real_data": {
     "lake_attached": true,
@@ -245,6 +259,14 @@
       "instrument_master_catalogues": "35,845 NFO options, 640 NFO futures, 4,532 BFO options, 12 BFO futures \u2014 a catalogue with no prices behind it.",
       "verdict": "NO_EXECUTABLE_CONTRACT_HISTORY"
     },
-    "profitability_established": false
+    "profitability_established": false,
+    "futures_dataset": {
+      "acquired": "2026-09-07",
+      "bars": 598441,
+      "symbols": 427,
+      "span": "2018-01-01..2026-09-04",
+      "interval": "day (continuous)",
+      "report": "docs/audits/2026-09-07-kite-futures-edge.json"
+    }
   }
 }

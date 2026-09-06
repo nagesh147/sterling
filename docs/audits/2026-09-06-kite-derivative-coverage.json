@@ -1,14 +1,14 @@
 {
   "lake": "/run/media/nageshmadaram/3f36ac07-fdbe-48c1-9514-ecf65c6619b0/SterlingLake",
-  "manifest_sha256": "d45dedae6d89a4968f6855767c2c15a8d69ed9b2719d1a3378648ba83cd35138",
+  "manifest_sha256": "f94454d7e8d982e20463c493f0950b75fe8a062145df6bdc28891d1959352d57",
   "lake_id": {
     "lake_id": "a7234900-8ff2-43db-a2b6-2bb310f2cea3",
     "label": "Pendrive",
     "created_at": "2026-08-12T22:13:46+00:00",
     "schema_version": 1
   },
-  "total_symbols_with_bars": 12246,
-  "total_bar_rows": 231143717,
+  "total_symbols_with_bars": 12673,
+  "total_bar_rows": 231742158,
   "bars_by_exchange_segment": [
     {
       "exchange": "BSE",
@@ -25,6 +25,14 @@
       "rows": 106866704,
       "first_ts": "2026-02-13T03:45:00+00:00",
       "last_ts": "2026-08-14T09:59:00+00:00"
+    },
+    {
+      "exchange": "NFO",
+      "segment": "NFO-FUT",
+      "symbols": 427,
+      "rows": 598441,
+      "first_ts": "2018-01-01T03:45:00+00:00",
+      "last_ts": "2026-09-03T18:30:00+00:00"
     },
     {
       "exchange": "NSE",
@@ -207,15 +215,22 @@
       "instruments": 1
     }
   ],
-  "derivative_bars": [],
-  "derivative_bar_rows": 0,
+  "derivative_bars": [
+    {
+      "exchange": "NFO",
+      "segment": "NFO-FUT",
+      "symbols": 427,
+      "rows": 598441
+    }
+  ],
+  "derivative_bar_rows": 598441,
   "derivative_master_expiries": [
     {
       "segment": "BFO-FUT",
       "earliest_expiry": "2026-08-27",
       "latest_expiry": "2026-10-29",
       "instruments": 12,
-      "master_snapshot": "2026-08-14T11:27:07+00:00"
+      "master_snapshot": "2026-09-06T19:08:14+00:00"
     },
     {
       "segment": "BFO-OPT",
@@ -229,7 +244,7 @@
       "earliest_expiry": "2026-08-25",
       "latest_expiry": "2026-10-27",
       "instruments": 640,
-      "master_snapshot": "2026-08-14T11:27:07+00:00"
+      "master_snapshot": "2026-09-06T19:08:14+00:00"
     },
     {
       "segment": "NFO-OPT",
@@ -239,6 +254,6 @@
       "master_snapshot": "2026-08-14T11:27:08+00:00"
     }
   ],
-  "executable_contract_dataset_present": false,
-  "verdict": "NO_EXECUTABLE_CONTRACT_HISTORY"
+  "executable_contract_dataset_present": true,
+  "verdict": "EXECUTABLE_CONTRACT_HISTORY_PRESENT"
 }

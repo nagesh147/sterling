@@ -22,6 +22,7 @@ __all__ = [
     "PRICE_SCALE",
     "VALID_INTERVALS",
     "INTERVAL_DAY_CAP",
+    "CONTINUOUS_INTERVALS",
     "HIST_RATE_LIMIT_HARD",
     "DEFAULT_RATE",
     "KITE_BASE",
@@ -68,6 +69,17 @@ VALID_INTERVALS: tuple[str, ...] = (
     "60minute",
     "day",
 )
+
+#: Intervals the API will serve with ``continuous=1``. Measured against the live API
+#: on 2026-09-07: only ``day`` is accepted; every other interval answers
+#: ``"invalid interval for continuous data" (HTTP 400, InputException)``.
+#:
+#: This matters more than it looks. Continuous is the ONLY way to see a futures series
+#: from before the current contract's inception — Kite refuses history for an expired
+#: contract even when you know its token (``"invalid token"``, also measured). So
+#: futures history is deep at ``day`` and about three months at any intraday interval,
+#: and asking for a continuous minute series is not a slow path, it is an impossible one.
+CONTINUOUS_INTERVALS: frozenset[str] = frozenset({"day"})
 
 #: Maximum span (in days) the API will serve in ONE historical request, per interval.
 #: Exceeding these yields a 400 InputException, so the chunker must respect them.

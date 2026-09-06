@@ -70,6 +70,49 @@ class OptionCosts:
 
 
 @dataclass
+class FuturesCosts:
+    """Per-leg charge schedule for NSE/BSE F&O *futures*, as fractions of turnover.
+
+    Not a variant of :class:`OptionCosts` — the two differ in the places that decide
+    whether a strategy is profitable. Futures turnover is NOTIONAL (contract value),
+    not premium, so a rate that is negligible on a ₹120 option premium is the whole
+    edge on a ₹24,000 index future. STT on the sell side is 0.02% here against 0.15%
+    on option premium, and the exchange charge is ~20x smaller. Passing OptionCosts
+    to a futures replay understates nothing — it overstates costs by roughly an order
+    of magnitude and would reject a strategy that works.
+
+    ``slippage_pct`` is the one number here that is not a published rate. It is an
+    assumption, and results should be reported across a range of it rather than at
+    one flattering value.
+    """
+    brokerage_per_order: float = 20.0      # ₹ flat per order (typical discount broker)
+    stt_sell_pct: Optional[float] = None   # None = effective-date statutory schedule
+    exchange_txn_pct: float = 0.0000173    # NSE futures, ~0.0019% of turnover
+    gst_pct: float = 0.18                  # on (brokerage + exchange txn + sebi)
+    sebi_pct: float = 0.000001             # ₹10 per crore
+    stamp_pct: float = 0.00002             # 0.002% on the buy side
+    slippage_pct: float = 0.0002           # ASSUMPTION: ~1 index-future tick per side
+
+    def round_trip(self, entry_price: float, exit_price: float, qty: int, *,
+                   exit_ms: int | None = None) -> float:
+        """Total charges (₹) for a buy-then-sell of ``qty`` units of notional."""
+        buy_turnover = entry_price * qty
+        sell_turnover = exit_price * qty
+        brokerage = self.brokerage_per_order * 2
+        day = (datetime.fromtimestamp(exit_ms / 1000, ZoneInfo("Asia/Kolkata")).date()
+               if exit_ms is not None else date.today())
+        # STT on the sale of a futures contract: 0.02% from 2024-10-01, 0.0125% before.
+        rate = 0.0002 if day >= date(2024, 10, 1) else 0.000125
+        stt = sell_turnover * (rate if self.stt_sell_pct is None else self.stt_sell_pct)
+        exch = (buy_turnover + sell_turnover) * self.exchange_txn_pct
+        sebi = (buy_turnover + sell_turnover) * self.sebi_pct
+        gst = (brokerage + exch + sebi) * self.gst_pct
+        stamp = buy_turnover * self.stamp_pct
+        slip = (buy_turnover + sell_turnover) * self.slippage_pct
+        return brokerage + stt + exch + gst + sebi + stamp + slip
+
+
+@dataclass
 class BacktestTrade:
     entry_ms: int
     exit_ms: int

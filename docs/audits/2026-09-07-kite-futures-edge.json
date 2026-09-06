@@ -1,0 +1,103 @@
+{
+  "lake": "/run/media/nageshmadaram/3f36ac07-fdbe-48c1-9514-ecf65c6619b0/SterlingLake",
+  "criterion": {
+    "holdout_from": "2025-01-01",
+    "slippage_grid": [
+      0.0001,
+      0.0002,
+      0.0005
+    ],
+    "requires": "holdout aggregate net > 0 AND median per-symbol net > 0, at every slippage in the grid",
+    "predeclared": true
+  },
+  "vehicle": "NFO/BFO futures, continuous daily, long-only",
+  "engine_logic": "app.services.kite_engine.backtest.replay_premium_series (compute_regime + entry_transitions + exits, next-open entry, gap-aware stops)",
+  "position": {
+    "qty": 1,
+    "starting_capital": 1000000.0
+  },
+  "symbols_considered": 427,
+  "symbols_with_enough_bars": 362,
+  "results_by_slippage": {
+    "0.0001": {
+      "full": {
+        "symbols": 275,
+        "trades": 9840,
+        "aggregate_net_pnl": -508415.9,
+        "aggregate_gross_pnl": -32833.65,
+        "aggregate_costs": 475582.28,
+        "median_symbol_net_pnl": -1974.33,
+        "profitable_symbols": 20,
+        "worst_symbol_net_pnl": -13074.66,
+        "best_symbol_net_pnl": 14957.82
+      },
+      "holdout": {
+        "symbols": 347,
+        "trades": 3242,
+        "aggregate_net_pnl": -165089.17,
+        "aggregate_gross_pnl": -7154.04,
+        "aggregate_costs": 157935.12,
+        "median_symbol_net_pnl": -490.84,
+        "profitable_symbols": 27,
+        "worst_symbol_net_pnl": -6404.41,
+        "best_symbol_net_pnl": 11153.38
+      }
+    },
+    "0.0002": {
+      "full": {
+        "symbols": 275,
+        "trades": 9840,
+        "aggregate_net_pnl": -513765.38,
+        "aggregate_gross_pnl": -32833.65,
+        "aggregate_costs": 480931.69,
+        "median_symbol_net_pnl": -1977.07,
+        "profitable_symbols": 18,
+        "worst_symbol_net_pnl": -13347.65,
+        "best_symbol_net_pnl": 14735.87
+      },
+      "holdout": {
+        "symbols": 347,
+        "trades": 3242,
+        "aggregate_net_pnl": -167210.61,
+        "aggregate_gross_pnl": -7154.04,
+        "aggregate_costs": 160056.99,
+        "median_symbol_net_pnl": -492.73,
+        "profitable_symbols": 27,
+        "worst_symbol_net_pnl": -6471.42,
+        "best_symbol_net_pnl": 11079.88
+      }
+    },
+    "0.0005": {
+      "full": {
+        "symbols": 275,
+        "trades": 9840,
+        "aggregate_net_pnl": -529811.44,
+        "aggregate_gross_pnl": -32833.65,
+        "aggregate_costs": 496977.94,
+        "median_symbol_net_pnl": -1998.42,
+        "profitable_symbols": 17,
+        "worst_symbol_net_pnl": -14166.71,
+        "best_symbol_net_pnl": 14069.86
+      },
+      "holdout": {
+        "symbols": 347,
+        "trades": 3242,
+        "aggregate_net_pnl": -173575.47,
+        "aggregate_gross_pnl": -7154.04,
+        "aggregate_costs": 166421.58,
+        "median_symbol_net_pnl": -501.62,
+        "profitable_symbols": 26,
+        "worst_symbol_net_pnl": -6672.4,
+        "best_symbol_net_pnl": 10859.44
+      }
+    }
+  },
+  "verdict": "FAIL",
+  "caveats": [
+    "Long-only. The short side of the futures vehicle is not measured.",
+    "Daily bars. The live engine also runs intraday, which this cannot speak to.",
+    "Continuous series are back-adjusted by the broker; roll costs are not separately modelled.",
+    "One fixed quantity per trade, no position sizing and no portfolio risk.",
+    "Slippage is an assumption swept across a grid, not an observed fill cost."
+  ]
+}
