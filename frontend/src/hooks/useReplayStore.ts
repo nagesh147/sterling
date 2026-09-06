@@ -468,8 +468,18 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
   // Mirrors the workspace's focus so the controls can show which one is on.
   // While the pane is focused the dock owns it, so the host hides its content.
+  // The host calls this on every change of its own focus state, and the value
+  // it reports is usually the one we already hold. Writing anyway is what let a
+  // disagreement between two formulas turn into an unbounded render loop, so
+  // refuse to write when nothing actually moved: zustand's `Object.is` bail-out
+  // then stops the cycle at its source rather than at whichever component
+  // happens to hold a layout effect.
   syncHostFocus: (hostFocusMode) =>
-    set((s) => ({ hostFocusMode, hostContentHidden: hostHidden({ ...s, hostFocusMode }) })),
+    set((s) => {
+      const hostContentHidden = hostHidden({ ...s, hostFocusMode });
+      if (s.hostFocusMode === hostFocusMode && s.hostContentHidden === hostContentHidden) return s;
+      return { hostFocusMode, hostContentHidden };
+    }),
 
   focusHost: (mode) => {
     const { hostFocusApi } = get();
