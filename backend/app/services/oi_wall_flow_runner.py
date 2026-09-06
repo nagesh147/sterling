@@ -86,8 +86,13 @@ def auto_execute(uid: str) -> bool:
 def _safety(uid: str, idempotency_key: Optional[str]) -> tuple[bool, str]:
     try:
         from app.services.live_safety import assert_safe_to_trade
+        # check_daily_loss was False here while the breaker read zero for an INR
+        # position. daily_loss_state(uid=...) now goes through
+        # _account_daily_pnl_inr to state.daily_realized_pnl_strict(uid), which is
+        # INR-native and propagates a failed read instead of returning 0, so the
+        # gate is armed. uid= is what scopes it to the right account.
         decision = assert_safe_to_trade([], idempotency_key,
-                                        check_daily_loss=False, uid=uid)
+                                        check_daily_loss=True, uid=uid)
         return bool(decision.allowed), str(decision.reason or "")
     except Exception as exc:                                       # noqa: BLE001
         log.error("oi_wall_flow: safety check failed closed for %s: %s", uid, exc)
