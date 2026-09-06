@@ -40,18 +40,17 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_orb_config_is_enabled_by_default():
-    """A power switch, not a safety device.
+def test_orb_config_is_disabled_on_a_fresh_install():
+    """Power switch, off until an operator turns it on.
 
-    For THIS engine that is a stronger statement than for the others: its runner
-    gates on `enabled` and the market clock and then executes, with no
-    `auto_execute` check — so `account.is_paper` is what stands between it and
-    real orders.
+    Auto-off is a second, orthogonal gate: even with the engine on,
+    ``execute_scan`` returns ``status=manual`` and places nothing.
     """
     response = client().get("/api/v1/config/nifty-orb-options")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["config"]["enabled"] is True
+    assert payload["config"]["enabled"] is False
+    assert payload["defaults"]["enabled"] is False
     assert payload["config"]["execution_broker"] == "kite"
     assert payload["supported_data_sources"] == ["kite", "truedata"]
     assert payload["execution_brokers"] == ["kite"]
@@ -125,3 +124,37 @@ def test_orb_backtest_requires_ohlcv_list():
     )
     assert response.status_code == 422
     assert "bars must be a list" in response.json()["detail"]
+
+
+def test_orb_config_rejects_a_strategy_local_auto_flag():
+    """Manual/Auto is Trading Mode. A PUT must 422, not silently ignore."""
+    response = client().put("/api/v1/config/nifty-orb-options", json={"auto_execute": True})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    text = detail if isinstance(detail, str) else str(detail)
+    assert "auto_execute" in text
+
+
+def test_orb_config_rejects_a_strategy_local_paper_flag():
+    response = client().put("/api/v1/config/nifty-orb-options", json={"paper_only": True})
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    text = detail if isinstance(detail, str) else str(detail)
+    assert "paper_only" in text
+
+
+def test_orb_execute_returns_manual_and_does_not_place(monkeypatch):
+    """`/execute` used to call place_manual_order. Manual Buy is the board ticket."""
+    placed: list = []
+
+    async def boom(*a, **k):
+        placed.append(1)
+        raise AssertionError("execute must not place")
+
+    monkeypatch.setattr("app.services.kite_engine.service.place_manual_order", boom, raising=False)
+    response = client().post("/api/v1/config/nifty-orb-options/execute")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "manual"
+    assert payload["executed"] == []
+    assert placed == []

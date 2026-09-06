@@ -1,6 +1,6 @@
 # NIFTY ORB Options — Implementation Status and Execution Plan
 
-Last updated: 2026-08-20
+Last updated: 2026-09-07
 
 ## Status
 
@@ -366,21 +366,23 @@ on `validate()`.
 | Unfilled order | A live unfilled order is cancelled and reconciled. |
 | Partial fill | Protection is armed for the quantity *held*, the remainder is cancelled, and `requested_quantity` is reported alongside it. |
 | Protection failure | An unprotectable position is closed; if it cannot be closed the kill switch trips. |
-| Contract authority | A broker strike/expiry/type disagreeing with the plan is refused before any order. |
-| Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget and >0.30% underlying drift each refuse. |
+| Contract authority | A broker strike/expiry/type/lot disagreeing with the plan is refused before any order. |
+| Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget, >0.30% underlying drift, and a live ask that would resize the ticket each refuse. |
 | Daily limit | The count persists, and a second scan returns `daily_limit`. |
-| Advisory mode | `auto_execute` off places nothing. |
+| Manual mode | `auto_execute` off returns `status: manual` and places nothing. `/execute` returns the same ticket and never calls `place_manual_order`. |
 
 Also covered since: refusals no longer consume the daily budget, and a failed
 trade-count write trips the kill switch instead of silently raising the cap.
 
-Still uncovered, and still blocking:
+Still uncovered, and still blocking unattended live:
 
-- **restart recovery** — re-reading trade state and open positions after a
-  process restart;
-- **protection disarming** — the teardown side of `arm_position`;
-- **broker-side expiry square-off** — modelled in replay, not yet proven on the
-  live path.
+- **historical option replay on real data** — schema + fail-closed runner exist; no real corpus;
+- **walk-forward / OOS** — runner exists (`orb_historical_walk_forward.py`); no evidence of edge yet.
+
+Restart recovery, protection disarm, and expiry square-off are implemented
+(`nifty_orb_lifecycle`) and called from the runner: recover once per user per
+start, then expiry SO, then scan, then `execute_scan`. Auto-off returns
+`status: manual` and places nothing. Fresh install `enabled=false`.
 
 ### Step 2 — Historical option dataset (open)
 
@@ -420,13 +422,13 @@ costed replay model honest              [DONE]
 live order path end-to-end              [DONE]
         |
         v
-restart recovery + protection teardown  [OPEN]
+restart recovery + protection teardown  [DONE]
         |
         v
-historical option replay on real data   [OPEN]
+historical option replay on real data   [OPEN — runner fail-closed; no corpus]
         |
         v
-walk-forward                            [OPEN]
+walk-forward                            [OPEN — runner exists; no real OOS]
         |
         v
 out-of-sample stable                    [OPEN]

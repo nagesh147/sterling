@@ -144,13 +144,15 @@ describe('the dock follows the running switches', () => {
     expect(tab('SuperTrend')).toHaveLength(0);
   });
 
-  it('keeps a tab whose config has not answered yet', () => {
+  it('keeps a tab whose config has not answered yet, except ORB which ships off', () => {
     // `undefined` is "still loading", not "off". Treating it as off would blink
     // every tab out on each page load and look like the operator's own setting.
     gmEnabled = undefined;
     orbEnabled = undefined;
     renderPane();
     expect(tab('Gamma Move').length).toBeGreaterThan(0);
-    expect(tab('ORB').length).toBeGreaterThan(0);
+    // ORB's product default is OFF. Treating "not loaded" as on would flash a
+    // live tab on a fresh install, which is the opposite of that default.
+    expect(tab('ORB')).toHaveLength(0);
   });
 });

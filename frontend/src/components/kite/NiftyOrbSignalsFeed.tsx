@@ -2,6 +2,7 @@ import React from 'react';
 import { useEffectiveNowMs } from '../../hooks/useReplayStore';
 import { useOrbSignals } from '../../hooks/useOrbSignals';
 import { useOrbConfig, useSetOrbEnabled } from '../../hooks/useOrbConfig';
+import { useEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import type { OrbFeedEntry } from '../../utils/niftyOrbSignalAdapter';
 import { openSettingsSection } from './config/registry';
 import { EngineOffNotice } from './EngineOffNotice';
@@ -67,8 +68,10 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart, nowMs: nowMsPro
   const rowActions = useBoardRowActions({ onOpenChart });
   const config = useOrbConfig();
   const setEnabled = useSetOrbEnabled();
+  const { data: engineCfg } = useEngineConfig();
+  const autoOn = engineCfg?.auto_execute ?? false;
   const enabled = config.data?.config?.enabled;
-  const { signals, isLoading, error } = useOrbSignals(enabled !== false);
+  const { signals, isLoading, error } = useOrbSignals(enabled === true);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
   // `null` means "nobody has chosen yet", which is not the same as "closed".
@@ -146,6 +149,17 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart, nowMs: nowMsPro
           Scan failed for all {failed.length} underlyings — {failed[0].reason}
         </p>
       )}
+
+      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${k.border}`, background: autoOn ? tint(k.amber, 8) : tint(k.green, 8), display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.04em', color: autoOn ? k.amber : k.green }}>
+          {autoOn ? 'AUTO' : 'MANUAL'}
+        </span>
+        <span style={{ fontSize: 10, color: k.dim, lineHeight: 1.4 }}>
+          {autoOn
+            ? 'Places the same ticket shown below — no second strategy.'
+            : 'Signals only — Buy the ticket below yourself. Same ticket Auto would place.'}
+        </span>
+      </div>
 
       <div style={{ padding: '7px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '.06em', color: k.dim }}>BUY-ONLY · CE / PE</span>

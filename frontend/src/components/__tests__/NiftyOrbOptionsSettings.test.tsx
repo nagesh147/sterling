@@ -154,7 +154,14 @@ describe('NiftyOrbOptionsSettings — section summaries', () => {
 
   it('labels Advanced by how many settings it holds, like every other panel', () => {
     render(<NiftyOrbOptionsSettings />);
-    expect(screen.getByText(/^Advanced · 9$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Advanced · 11$/)).toBeInTheDocument();
+  });
+
+  it('puts the operator knobs on the first screen', () => {
+    render(<NiftyOrbOptionsSettings />);
+    expect(screen.getByText('Entry window')).toBeInTheDocument();
+    expect(screen.getByText('Maximum risk per trade')).toBeInTheDocument();
+    expect(screen.getByText('Maximum trades per day')).toBeInTheDocument();
   });
 });
 

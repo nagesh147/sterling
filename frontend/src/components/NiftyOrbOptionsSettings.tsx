@@ -13,11 +13,9 @@ import type { Moneyness, ScanExpiry } from '../types/kiteEngine';
 /**
  * ORB + VWAP options settings.
  *
- * Deliberately the same order as SuperTrend and Navigator — draft bar → power →
- * chart source → instruments → contracts → engine-specific → advanced — so the
- * settings hub reads as one product rather than three conventions. Numeric
- * tuning lives under Advanced, where each field says whether it is still at the
- * engine's default.
+ * First screen is the product knobs: power, instruments, moneyness/expiry,
+ * entry window, risk cap, max trades. Everything else is collapsed or lives
+ * under Advanced so a fresh install is not a wall of ATR lookbacks.
  */
 const DATA_SOURCE_OPTIONS = [
   { value: 'kite', label: 'Zerodha Kite', hint: 'Broker candles and quotes. The default, and the same feed that executes.' },
@@ -25,13 +23,14 @@ const DATA_SOURCE_OPTIONS = [
 ] as const;
 
 /** Settings inside Advanced. Counts fields, the way every other panel labels it. */
-const ADVANCED_SETTING_COUNT = 9;
+const ADVANCED_SETTING_COUNT = 11;
 
 const THRESHOLD_KEYS = [
   'min_breakout_atr', 'volume_multiplier', 'vwap_slope_lookback', 'trend_lookback', 'atr_period',
 ] as const;
 const STOP_KEYS = ['stop_buffer_atr', 'target_r'] as const;
 const PRICING_KEYS = ['risk_free_rate', 'max_quote_staleness_s'] as const;
+const BAR_KEYS = ['opening_range_minutes', 'interval_minutes'] as const;
 
 export function NiftyOrbOptionsSettings() {
   const { data, isLoading } = useOrbConfig();
@@ -175,7 +174,6 @@ export function NiftyOrbOptionsSettings() {
           title="Chart source"
           description="Which feed ORB reads bars and option quotes from."
           summary={cfg.data_source === 'kite' ? 'Zerodha Kite' : 'TrueData'}
-          defaultOpen
           persistKey="orb-source">
           <Field label="Market data" hint="Order execution stays on Zerodha Kite either way." wide
             badge={defBadge('data_source', (v) => (v === 'kite' ? 'Zerodha Kite' : 'TrueData'))}>
@@ -234,7 +232,6 @@ export function NiftyOrbOptionsSettings() {
           title="Expiry"
           description="Rules governing contract days-to-expiry and settlement dates."
           summary={`${cfg.expiry_dte_min ?? 0}–${cfg.expiry_dte_max ?? 7} DTE${cfg.avoid_expiry_day ? ' · avoid expiry day' : ''}`}
-          defaultOpen
           persistKey="orb-expiry">
           <ExpirySettingsGroup
             dteMin={cfg.expiry_dte_min ?? 0}
@@ -248,8 +245,8 @@ export function NiftyOrbOptionsSettings() {
 
         <Section
           title="Session"
-          description="When the range is measured and when entries may fire."
-          summary={`${cfg.opening_range_minutes}m range · ${cfg.entry_start}–${cfg.entry_end} · ${cfg.interval_minutes}m bars`}
+          description="When entries may fire. The opening range is always 15 minutes from 09:15 IST unless you change it under Advanced."
+          summary={`${cfg.entry_start}–${cfg.entry_end}`}
           defaultOpen
           persistKey="orb-session">
           <Field label="Entry window" hint="The opening range is always anchored to 09:15 IST regardless of this window." wide
@@ -268,15 +265,6 @@ export function NiftyOrbOptionsSettings() {
                 style={{ border: `1px solid ${BORDER}`, borderRadius: 6, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 }} />
             </div>
           </Field>
-          <NumberField
-            label="Opening range" hint="Minutes from 09:15 that define the range being broken."
-            value={num('opening_range_minutes')} defaultValue={def('opening_range_minutes')}
-            onChange={(v) => patch({ opening_range_minutes: v })} min={5} max={60} step={5} suffix="min"
-          />
-          <NumberField
-            label="Bar interval" value={num('interval_minutes')} defaultValue={def('interval_minutes')}
-            onChange={(v) => patch({ interval_minutes: v })} min={1} max={15} suffix="min"
-          />
         </Section>
 
         <Section
@@ -357,6 +345,22 @@ export function NiftyOrbOptionsSettings() {
         )}
 
         <AdvancedSection count={ADVANCED_SETTING_COUNT}>
+          <Section
+            title="Bar timing"
+            description="How the opening range is measured. Leave these at default unless you are changing the strategy, not just the universe."
+            summary={changedSummary(BAR_KEYS, `${cfg.opening_range_minutes}m range · ${cfg.interval_minutes}m bars`)}
+            persistKey="orb-bars">
+            <NumberField
+              label="Opening range" hint="Minutes from 09:15 that define the range being broken."
+              value={num('opening_range_minutes')} defaultValue={def('opening_range_minutes')}
+              onChange={(v) => patch({ opening_range_minutes: v })} min={5} max={60} step={5} suffix="min"
+            />
+            <NumberField
+              label="Bar interval" value={num('interval_minutes')} defaultValue={def('interval_minutes')}
+              onChange={(v) => patch({ interval_minutes: v })} min={1} max={15} suffix="min"
+            />
+          </Section>
+
           <Section
             title="Signal thresholds"
             description="The filters a bar must clear. Every value shows whether it is still the engine default."

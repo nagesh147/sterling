@@ -16,9 +16,7 @@ function vehicleOrderLabel(cfg?: EngineConfigModel | null): string {
 
 // Central trading-mode panel for the active Kite account. Two orthogonal axes:
 //   • WHERE ORDERS GO — PAPER vs LIVE  (account.is_paper)
-//   • WHO PLACES ORDERS — MANUAL vs AUTO (engine.auto_execute)
-// Both read/write existing backend state, so this stays in sync with the
-// per-account row toggles and the engine sidebar's Auto-execute switch.
+//   • MANUAL vs AUTO — same board signals; only who places the order differs
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: 'var(--k-bg)', border: '1px solid var(--k-border)', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -52,12 +50,11 @@ export function TradingModeControls() {
     return (
       <div style={S.card}>
         <div style={S.title}>TRADING CONFIG</div>
-        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, options parameters, and who places orders.</div>
+        <div style={S.hint}>Add and activate a Kite account below to choose paper or live, and Manual vs Auto for the same signals.</div>
       </div>
     );
   }
 
-  // EXECUTION: arming (→LIVE) confirms; de-arming (→PAPER) is immediate.
   const onExec = (side: 'left' | 'right') => {
     if (side === 'right') { setConfirm('go-live'); return; }
     update.mutate({ id: active.id, is_paper: true });
@@ -65,7 +62,6 @@ export function TradingModeControls() {
   const confirmGoLive = () =>
     update.mutate({ id: active.id, is_paper: false }, { onSuccess: () => setConfirm(null) });
 
-  // SIGNALS: arming (→AUTO) confirms; de-arming (→MANUAL) is immediate.
   const onSignals = (side: 'left' | 'right') => {
     if (!cfg) return;
     if (side === 'right') { setConfirm('enable-auto'); return; }
@@ -79,7 +75,6 @@ export function TradingModeControls() {
       <div style={S.title}>TRADING CONFIG · {active.label}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Paper / Live — where orders go */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
             <div style={S.modeLabel}>WHERE ORDERS GO</div>
@@ -100,18 +95,17 @@ export function TradingModeControls() {
 
         <div style={S.divider} />
 
-        {/* Off / On — who places orders */}
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
-            <div style={S.modeLabel}>WHO PLACES ORDERS</div>
+            <div style={S.modeLabel}>MANUAL OR AUTO (same signals)</div>
             <div style={S.modeDesc}>
               {auto
-                ? 'ON — automatic order placement is enabled for active strategies.'
-                : 'OFF — manual order placement only; no automatic orders will be placed.'}
+                ? 'AUTO — places the same signal tickets shown on the board.'
+                : 'MANUAL — board shows signals; you press Buy on the ticket.'}
             </div>
           </div>
           <ModeToggle
-            left="OFF" right="ON"
+            left="MANUAL" right="AUTO"
             value={auto ? 'right' : 'left'}
             onSelect={onSignals}
             leftColor="var(--k-blue-kite)" rightColor="var(--k-amber-2)"
@@ -120,7 +114,6 @@ export function TradingModeControls() {
         </div>
       </div>
 
-      {/* Combined-state callouts */}
       {isLive && auto && (
         <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: '#fff7f0', border: '1px solid #edd6c6', fontSize: 11.5, color: '#9a4b16', lineHeight: 1.5 }}>
           ⚠ <strong>LIVE + AUTO</strong> — the engine will place <strong>real option orders automatically</strong> on ready signals. Funds are at risk without per-order confirmation.
@@ -128,7 +121,7 @@ export function TradingModeControls() {
       )}
       {auto && !connected && (
         <div style={{ marginTop: 8, ...S.hint }}>
-          Automatic is on, but this account isn’t connected — log in below for the engine to trade.
+          Auto is on, but this account isn’t connected — log in below for the engine to trade.
         </div>
       )}
 
@@ -138,16 +131,16 @@ export function TradingModeControls() {
           confirmLabel={execBusy ? 'Switching…' : 'Go Live'}
           onCancel={() => setConfirm(null)} onConfirm={confirmGoLive}
           body={<>Orders on <strong>{active.label}</strong> will execute on your <strong>real Zerodha account</strong>
-            {auto ? ', and AUTO-execute is ON — the engine will trade automatically' : ''}. Continue?</>}
+            {auto ? ', and AUTO is ON — the engine will trade the same board tickets automatically' : ''}. Continue?</>}
         />
       )}
       {confirm === 'enable-auto' && (
         <ConfirmModal
-          title="⚡ Enable AUTO-execute" accent="var(--k-amber-2)" busy={autoBusy}
+          title="⚡ Enable AUTO" accent="var(--k-amber-2)" busy={autoBusy}
           confirmLabel={autoBusy ? 'Enabling…' : 'Enable Auto'}
           onCancel={() => setConfirm(null)} onConfirm={confirmEnableAuto}
-          body={<>Ready signals will place <strong>1-lot {vehicleOrderLabel(cfg)}</strong> on{' '}
-            {isLive ? <strong>your real Zerodha account</strong> : 'the paper account'} under the live-safety gate. Continue?</>}
+          body={<>Ready board tickets will place <strong>1-lot {vehicleOrderLabel(cfg)}</strong> on{' '}
+            {isLive ? <strong>your real Zerodha account</strong> : 'the paper account'} under the live-safety gate. Same ticket Manual would Buy. Continue?</>}
         />
       )}
     </div>

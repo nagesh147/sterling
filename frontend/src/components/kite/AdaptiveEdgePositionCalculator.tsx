@@ -39,6 +39,7 @@ interface Props {
   exchange?: string;
   expiry?: string | null;
   lotSize?: number | null;
+  defaultLots?: number | null;
   defaultEntryPrice?: number | null;
   defaultSl?: number | null;
   defaultTsl?: number | null;
@@ -46,6 +47,8 @@ interface Props {
   currentLtp?: number | null;
   optionType?: 'CE' | 'PE';
   exitState?: string | null;
+  tag?: string;
+  hideTsl?: boolean;
 }
 
 export function AdaptiveEdgePositionCalculator({
@@ -54,6 +57,7 @@ export function AdaptiveEdgePositionCalculator({
   exchange = 'NFO',
   expiry,
   lotSize: propLotSize,
+  defaultLots,
   defaultEntryPrice,
   defaultSl,
   defaultTsl,
@@ -61,6 +65,8 @@ export function AdaptiveEdgePositionCalculator({
   currentLtp,
   optionType = 'CE',
   exitState,
+  tag = 'ADAPTIVE_EDGE',
+  hideTsl = false,
 }: Props) {
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [copied, setCopied] = useState(false);
@@ -74,21 +80,22 @@ export function AdaptiveEdgePositionCalculator({
   const baseTarget = roundToTick(defaultExit ?? (baseEntry + Math.abs(baseEntry - baseSl) * 2)) ?? baseEntry;
 
   // Editable State
-  const [numLots, setNumLots] = useState<number>(1);
+  const plannedLots = defaultLots != null && defaultLots > 0 ? Math.round(defaultLots) : 1;
+  const [numLots, setNumLots] = useState<number>(plannedLots);
   const [entryPrice, setEntryPrice] = useState<number>(baseEntry);
   const [slPrice, setSlPrice] = useState<number>(baseSl);
   const [tslPrice, setTslPrice] = useState<number>(baseTsl);
   const [targetPrice, setTargetPrice] = useState<number>(baseTarget);
 
   const isCustomized =
-    numLots !== 1 ||
+    numLots !== plannedLots ||
     entryPrice !== baseEntry ||
     slPrice !== baseSl ||
     tslPrice !== baseTsl ||
     targetPrice !== baseTarget;
 
   const resetDefaults = () => {
-    setNumLots(1);
+    setNumLots(plannedLots);
     setEntryPrice(baseEntry);
     setSlPrice(baseSl);
     setTslPrice(baseTsl);
@@ -173,12 +180,13 @@ export function AdaptiveEdgePositionCalculator({
       lotSize,
       initialSlPct: slPercentage,
       initialTgtPct: tgtPercentage,
-      tag: 'ADAPTIVE_EDGE',
+      tag,
     });
   };
 
   const handleCopyTradePlan = () => {
-    const text = `ADAPTIVE EDGE TRADE PLAN\nSymbol: ${tradingsymbol || symbol} (${exchange})\nLots: ${numLots} (${totalQty} Qty)\nEntry: ₹${fmtTick(entryPrice)}\nStop Loss: ₹${fmtTick(slPrice)} (-${fmtTick(slDistance)} pts)\nTSL: ₹${fmtTick(tslPrice)}\nTarget: ₹${fmtTick(targetPrice)} (+${fmtTick(targetDistance)} pts)\nRisk/Reward: 1 : ${riskRewardRatio} R`;
+    const tslLine = hideTsl ? '' : `\nTSL: ₹${fmtTick(tslPrice)}`;
+    const text = `TRADE PLAN\nSymbol: ${tradingsymbol || symbol} (${exchange})\nLots: ${numLots} (${totalQty} Qty)\nEntry: ₹${fmtTick(entryPrice)}\nStop Loss: ₹${fmtTick(slPrice)} (-${fmtTick(slDistance)} pts)${tslLine}\nTarget: ₹${fmtTick(targetPrice)} (+${fmtTick(targetDistance)} pts)\nRisk/Reward: 1 : ${riskRewardRatio} R`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       setCopied(true);
@@ -434,7 +442,8 @@ export function AdaptiveEdgePositionCalculator({
             />
           </div>
 
-          {/* 4. TSL (₹) */}
+          {/* 4. TSL (₹) — hidden when the engine does not produce a trail (ORB). */}
+          {!hideTsl && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               TSL (₹)
@@ -461,6 +470,7 @@ export function AdaptiveEdgePositionCalculator({
               }}
             />
           </div>
+          )}
 
           {/* 5. Target (₹) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -593,6 +603,8 @@ export function AdaptiveEdgePositionCalculator({
                 <span style={{ color: k.dim, fontSize: 11, marginLeft: 6 }}>(-{fmtINR(riskPerLot)}/lot)</span>
               </span>
             </div>
+            {!hideTsl && (
+            <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ color: k.dim }}>Trail (TSL)</span>
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -611,6 +623,8 @@ export function AdaptiveEdgePositionCalculator({
                 <span style={{ color: k.dim, fontSize: 11, marginLeft: 6 }}>@ ₹{fmtTick(tslPrice)}</span>
               </span>
             </div>
+            </>
+            )}
           </div>
         </div>
 

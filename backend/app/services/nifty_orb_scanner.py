@@ -418,6 +418,19 @@ async def scan_underlying(uid: str, underlying: str, cfg: StrategyConfig | None 
         # client from the symbol would be a second, drifting source of truth.
         result["exchange"] = _option_exchange(option.symbol, symbol)
         result["lot_size"] = option.lot_size
+        from app.services.nifty_orb_lifecycle import attach_ticket, preview_auto_refusal
+        attach_ticket(result)
+        try:
+            from app.services.nifty_orb_execution import _state
+            filled_today = int(_state(uid).get("count", 0))
+        except Exception:
+            filled_today = 0
+        auto_block = preview_auto_refusal(
+            result, cfg, now=now, filled_today=filled_today, max_trades=cfg.max_trades_per_day,
+        )
+        if auto_block:
+            result["auto_block"] = auto_block
+            result["reason"] = auto_block
         if quote_age is not None:
             result["quote_age_s"] = round(quote_age, 2)
     except (ValueError, RuntimeError) as exc:

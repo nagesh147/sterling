@@ -73,7 +73,9 @@ export function useEngineEnabled(): Record<EngineToggleId, boolean> {
   return {
     supertrend: st.data?.engine_enabled !== false,
     navigator: nav.data?.record ? !!nav.data.record.config.enabled : true,
-    orb: orb.data?.config?.enabled !== false,
+    // ORB ships OFF. Treating "not loaded" as on would flash a live tab on a
+    // fresh install, which is the opposite of the product default.
+    orb: orb.data?.config?.enabled === true,
     gamma_move: (gm.data?.config as { enabled?: boolean } | undefined)?.enabled !== false,
     adaptive_edge: (ae.data?.config as { enabled?: boolean } | undefined)?.enabled !== false,
     atm_premium_imbalance: atm.data?.config?.enabled !== false,

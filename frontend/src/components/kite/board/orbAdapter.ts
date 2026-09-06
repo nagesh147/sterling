@@ -177,7 +177,7 @@ export function orbToBoard(entry: OrbFeedEntry): BoardSignal {
     score: null,
     origin: originOf(entry),
     delta: entry.delta,
-    reason: entry.reason ?? null,
+    reason: entry.autoBlock ?? entry.reason ?? null,
     quoteAgeS: entry.quoteAgeS ?? null,
     sections,
   };

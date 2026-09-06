@@ -2,7 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.core.auth import UserContext, get_current_user
 
@@ -40,6 +40,7 @@ class NiftyOrbConfigRequest(BaseModel):
     min_option_volume: float | None = None
     min_open_interest: float | None = None
     max_quote_staleness_s: int | None = None
+    risk_free_rate: float | None = None
     truedata_use_ticks: bool | None = None
     truedata_use_oi: bool | None = None
     truedata_use_bid_ask: bool | None = None
@@ -49,6 +50,19 @@ class NiftyOrbConfigRequest(BaseModel):
     scan_weekly_series_indices: list[int] | None = None
     scan_monthly_series_indices: list[int] | None = None
     scan_monthly_series_stocks: list[int] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_strategy_local_execution(cls, data):
+        """Paper/Live and Manual/Auto are shared Trading Mode, never ORB config."""
+        if isinstance(data, dict):
+            forbidden = [k for k in ("auto_execute", "paper_only") if k in data]
+            if forbidden:
+                raise ValueError(
+                    "Manual/Auto and Paper/Live are shared Trading Mode switches, "
+                    f"not ORB config fields: {', '.join(forbidden)}"
+                )
+        return data
 
 @router.get("/nifty-orb-options")
 async def get_nifty_orb_options_config() -> dict:
@@ -109,6 +123,11 @@ async def nifty_orb_options_backtest(body: dict) -> dict:
 
 @router.post("/nifty-orb-options/execute")
 async def nifty_orb_options_execute(user: UserContext = Depends(get_current_user)) -> dict:
+    """Return the same ticket Auto would use. Does not place.
+
+    Manual Buy is the board order window. A previous implementation called
+    ``place_manual_order`` here without protection or same-ticket gates.
+    """
     from app.services.nifty_orb_options import execute_manual
     try:
         return await execute_manual(user.user_id)

@@ -100,4 +100,30 @@ describe('AdaptiveEdgePositionCalculator', () => {
     expect(screen.getByText(/-328\.60 pts/)).toBeInTheDocument();
     expect(screen.getByText(/@ ₹473\.50/)).toBeInTheDocument();
   });
+
+  it('omits TSL from the plan and from copy when hideTsl', () => {
+    const writes: string[] = [];
+    Object.assign(navigator, {
+      clipboard: { writeText: (t: string) => { writes.push(t); return Promise.resolve(); } },
+    });
+    render(
+      <AdaptiveEdgePositionCalculator
+        symbol="NIFTY26AUG25000CE"
+        tradingsymbol="NIFTY26AUG25000CE"
+        defaultEntryPrice={18}
+        defaultSl={14}
+        defaultTsl={16}
+        defaultExit={26}
+        currentLtp={18}
+        optionType="CE"
+        hideTsl
+      />,
+    );
+    expect(screen.queryByText('Trail (TSL)')).not.toBeInTheDocument();
+    expect(screen.queryByText('TSL (₹)')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Copy Plan/ }));
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toMatch(/TSL:/);
+    expect(writes[0]).toMatch(/Stop Loss/);
+  });
 });
