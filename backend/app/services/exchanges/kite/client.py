@@ -410,14 +410,20 @@ class KiteClient(TradingExchangeAdapter):
     async def place_order(
         self, symbol: str, side: str, size: float,
         order_type: str = "market_order", limit_price: Optional[float] = None,
-        time_in_force: str = "day", reduce_only: bool = False,
+        time_in_force: str = "day", post_only: bool = False, reduce_only: bool = False,
         stop_loss: Optional[float] = None, take_profit: Optional[float] = None,
         trail_amount: Optional[float] = None, **kwargs,
     ) -> dict:
         """Generic TradingExchangeAdapter entry. Places the ENTRY leg only;
         Kite has no per-order bracket, so stop_loss/take_profit are honored only
         when an explicit ``kite_order_type`` (SL/SL-M) + trigger is supplied —
-        otherwise wire protection via GTT."""
+        otherwise wire protection via GTT. ``post_only`` is unsupported by Kite."""
+        # Dropping this parameter let `post_only=True` fall into **kwargs and be
+        # SILENTLY IGNORED: a caller asking for maker-only got an ordinary order
+        # that can cross the spread and pay taker fees. Kite has no post-only, so
+        # refusing is the only honest answer.
+        if post_only:
+            raise KiteOrderError("post_only (maker-only) is not supported by Kite.", error_type="OrderException")
         exchange, tradingsymbol = self._split_symbol(symbol, kwargs.get("exchange"))
         txn = K.TXN_BUY if str(side).lower() in ("buy", "long") else K.TXN_SELL
         kite_ot = kwargs.get("kite_order_type")

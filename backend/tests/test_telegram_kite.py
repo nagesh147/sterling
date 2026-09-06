@@ -18,12 +18,22 @@ def test_status_text_reports_mode_and_toggles():
 
 
 async def test_callbacks_route_to_kite_module():
-    """All callbacks are delegated to the Kite command surface."""
+    """All callbacks are delegated to the Kite command surface.
+
+    Drives `_handle_update`, the actual update-loop entry point. The private
+    `_handle_callback` hop this used to call was inlined when the crypto command
+    surface was removed — only the Kite namespace is left to route to, so the
+    dispatch no longer needs a branch of its own.
+    """
+    def _cb(data: str) -> dict:
+        return {"callback_query": {"id": "cb", "data": data,
+                                   "message": {"message_id": 1, "chat": {"id": "1"}}}}
+
     with patch("app.services.notifications.telegram_kite.handle_kite_callback",
                new=AsyncMock()) as kite_cb:
-        await tb._handle_callback("1", 1, "cb", "ksig")
-        await tb._handle_callback("1", 1, "cb", "menu_kite")
-        await tb._handle_callback("1", 1, "cb", "menu_unknown")
+        await tb._handle_update(_cb("ksig"))
+        await tb._handle_update(_cb("menu_kite"))
+        await tb._handle_update(_cb("menu_unknown"))
         assert kite_cb.await_count == 3
 
 

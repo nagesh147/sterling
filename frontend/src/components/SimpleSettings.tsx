@@ -1,25 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
 import { api } from '../utils/api';
+import { useKiteTelegramTargets } from '../hooks/useKiteTelegram';
 import { useKiteSettings } from '../store/useKiteSettings';
 import type { NavItem } from './kite/KiteLayout';
 
-interface TelegramConfig {
-  bot_token_set: boolean;
-  bot_token_hint: string;
-  chat_id: string;
-  enabled: boolean;
-  reachable: boolean;
-}
-
 // ── Status dots shown in header (always visible in simple mode) ───────────────
 export function SimpleStatusDots() {
-  const { data: tgData }  = useQuery<TelegramConfig>({
-    queryKey: ['telegram-config'],
-    queryFn: () => api.get<TelegramConfig>('/api/v1/config/telegram'),
-    staleTime: 60_000,
-  });
+  /* Reads the Kite Telegram targets. It used to poll `/api/v1/config/telegram`,
+     which was removed with the crypto surface — so the dot was pinned to "not
+     configured" for everyone, on a page that IS reachable (Dashboard renders
+     SimpleTerminal whenever appMode is not 'pro'). Telegram now lives entirely
+     per-target under `/api/v1/kite/telegram`. */
+  const { data: tgTargets } = useKiteTelegramTargets();
 
-  const tgOk    = !!(tgData?.enabled && tgData?.reachable);
+  const tgOk = !!tgTargets?.targets?.some((t) => t.enabled);
 
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

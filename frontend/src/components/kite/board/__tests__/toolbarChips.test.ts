@@ -129,7 +129,8 @@ describe('no help cursor', () => {
     'components/kite/board/SignalBoard.tsx',
     'components/kite/board/EngineToolbar.tsx',
     'components/kite/OrderWindow.tsx',
-    'components/PositionsPanel.tsx',
+    // `components/PositionsPanel.tsx` was removed with the crypto surface; the
+    // guard still applies to every file that survives.
   ];
 
   it('is gone from every file that had one', () => {

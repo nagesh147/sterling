@@ -11,6 +11,7 @@ from app.core.observability import (
 )
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.backtest import router as backtest_router
+from app.api.v1.endpoints.candles import router as candles_router
 from app.api.v1.endpoints.config import router as config_router
 import secrets
 from app.core.csp import reset_csp_nonce, set_csp_nonce
@@ -37,6 +38,14 @@ async def _background_kite_alerts(interval: int = 60) -> None:
 async def lifespan(app: FastAPI):
     setup_logging()
     configure_json_logging()  # no-op unless settings.log_json (Phase 2 observability)
+    # The SQLite store must be open BEFORE anything reads it. This used to
+    # happen as a side effect of importing `exchange_account_store`, which went
+    # with the crypto surface — after which `kite_accounts.bootstrap()` found
+    # `db._available` False, loaded nothing, and `/kite/status` reported
+    # "No active Kite account" even though the row was still in the database.
+    from app.services import db as _db
+    _db.init()
+
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
     # Adopt KITE_API_KEY / KITE_API_SECRET (and optionally KITE_ACCESS_TOKEN) from
@@ -309,6 +318,11 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
+    # Generic OHLC candles for any underlying. Removed with the crypto sweep,
+    # but 13 MOUNTED Kite components read it through `useCandles` —
+    # KiteTicker, InstrumentPane, KiteDashboard, AstroPane and every chart —
+    # so every chart in the Kite tab was 404ing.
+    app.include_router(candles_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(backtest_router, prefix="/api/v1")
 

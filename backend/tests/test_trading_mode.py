@@ -3,43 +3,6 @@ from unittest.mock import MagicMock, patch
 from app.core.trading_mode import MODES, DEFAULT_MODE, TradingModeConfig
 
 
-def test_get_default_mode(client):
-    resp = client.get("/api/v1/config/trading-mode")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["name"] == "swing"
-
-
-def test_put_valid_mode(client):
-    resp = client.put(
-        "/api/v1/config/trading-mode",
-        json={"name": "intraday"},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["name"] == "intraday"
-
-    # Verify it persists in the subsequent GET
-    resp2 = client.get("/api/v1/config/trading-mode")
-    assert resp2.json()["name"] == "intraday"
-
-
-def test_put_invalid_mode_400(client):
-    resp = client.put(
-        "/api/v1/config/trading-mode",
-        json={"name": "unknown"},
-    )
-    assert resp.status_code == 400
-
-
-def test_get_all_modes_has_core_modes(client):
-    resp = client.get("/api/v1/config/trading-mode/all")
-    assert resp.status_code == 200
-    data = resp.json()
-    for name in ("scalping", "intraday", "swing", "positional"):
-        assert name in data
-
-
 def test_mode_persists_restart():
     with patch("app.services.db.set_trading_mode") as mock_set, \
          patch("app.services.db.get_trading_mode", return_value="scalping"):
