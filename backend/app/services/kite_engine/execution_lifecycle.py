@@ -11,7 +11,7 @@ import asyncio
 from dataclasses import fields
 
 from app.core.logging import get_logger
-from app.services.kite_engine import fill_ledger
+from app.services.kite_engine import execution_lease, fill_ledger
 from app.services.kite_engine import order_journal as journal, positions, state
 
 log = get_logger(__name__)
@@ -61,6 +61,31 @@ async def _protect(client, p) -> None:
         return
     if p.protection_pending:
         return  # prior placement could have succeeded; do not create a rival stop
+    account_id = str(getattr(p, "account_id", "") or "")
+    if not account_id:
+        await _place_protection(client, p)   # paper: no broker to race for
+        return
+    # Two processes placing a stop for one position leaves TWO live triggers, and
+    # the second one sells an option we no longer own the moment it fires.
+    try:
+        with execution_lease.guard(execution_lease.PROTECTION, account_id=account_id,
+                                   uid=p.uid, symbol=p.symbol) as token:
+            if token is None:
+                state.log(p.uid, "info",
+                          f"{p.symbol}: another engine process is arming protection; "
+                          f"not placing a second trigger")
+                return
+            await _place_protection(client, p)
+    except Exception as exc:  # noqa: BLE001
+        state.log(p.uid, "order_failed",
+                  f"{p.symbol}: protection ownership cannot be established ({exc}); "
+                  f"no trigger sent")
+
+
+async def _place_protection(client, p) -> None:
+    """Arm or resize the broker trigger. Caller owns the protection lease."""
+    from app.services.kite_engine import protective_stop as stops
+
     kwargs = dict(tradingsymbol=p.symbol, exchange=p.exchange, qty=p.qty,
                   trigger_premium=p.stop_premium, last_price=p.fill_price,
                   direction=p.direction, target_premium=p.target_premium)

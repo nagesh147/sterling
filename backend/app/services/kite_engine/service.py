@@ -1464,6 +1464,14 @@ def autoexec_preflight(uid: str) -> List[str]:
     Registry-only — no broker calls — so it can run inline on the config write.
     """
     reasons: List[str] = []
+    # Read the registry FIRST. An account whose stored positions could not be
+    # parsed must not look flat to a process about to open more, and every check
+    # below reads it — so establish that it is readable before trusting any of them.
+    try:
+        positions._load(uid)
+    except positions.RegistryUnreadable:
+        return [f"Position registry unreadable ({positions.unreadable_reason(uid)}); "
+                f"reconcile at Zerodha before trading"]
     try:
         pending_intents = list({i.intent_key: i for i in
             order_journal.unresolved(uid) + order_journal.pending_projection(uid)}.values())

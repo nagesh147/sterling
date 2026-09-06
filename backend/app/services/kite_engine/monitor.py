@@ -27,6 +27,7 @@ from app.engines.common.exit_counter import get_exit_threshold
 from app.services.kite_engine import positions as pos
 from app.services.kite_engine import protective_stop as pstop
 from app.services.kite_engine import state
+from app.services.kite_engine import execution_lease
 from app.services.kite_engine import fill_ledger
 from app.services.kite_engine import order_journal
 
@@ -44,7 +45,72 @@ _FILLED_STATUS = "COMPLETE"
 # synchronously (no await between the check and the add, so it is race-free on the
 # single-threaded loop) so a second exit path for the same position bails instead of
 # placing a duplicate SELL (the double-sell / naked-short bug).
-_exiting: set = set()
+class _ExitClaims:
+    """Who is currently placing an exit for one position.
+
+    Deliberately keeps the surface of the plain ``set`` it replaces. Every bail
+    path in ``_exit_position`` already calls ``discard``, so the cross-process
+    claim is released on ALL of them rather than on the ones someone remembered
+    to update — the same reason the realized-PnL claim lives in one helper.
+
+    Only a LIVE position takes a durable claim. A paper position has no broker to
+    race for, and making simulation depend on storage would be a worse trade.
+    """
+
+    def __init__(self) -> None:
+        self._local: set = set()
+        self._tokens: dict = {}
+
+    def claim(self, key, *, account_id: str) -> bool:
+        """Take the exit for this position. False means somebody already has it."""
+        if key in self._local:
+            return False
+        uid, symbol = key
+        if account_id:
+            try:
+                token = execution_lease.acquire(
+                    execution_lease.EXIT, account_id=account_id, uid=uid, symbol=symbol)
+            except Exception as exc:  # noqa: BLE001
+                # A claim store we cannot reach degrades a LIVE exit to
+                # single-process safety, which is how two workers both sell.
+                state.log(uid, "order_failed",
+                          f"{symbol}: exit ownership cannot be established ({exc}); "
+                          f"no order sent")
+                return False
+            if token is None:
+                state.log(uid, "info",
+                          f"{symbol}: another engine process is already exiting this "
+                          f"position; standing down")
+                return False
+            self._tokens[key] = (account_id, token)
+        self._local.add(key)
+        return True
+
+    def __contains__(self, key) -> bool:
+        return key in self._local
+
+    def add(self, key) -> None:
+        self._local.add(key)
+
+    def discard(self, key) -> None:
+        self._local.discard(key)
+        held = self._tokens.pop(key, None)
+        if held is None:
+            return
+        account_id, token = held
+        try:
+            execution_lease.release(execution_lease.EXIT, account_id=account_id,
+                                    uid=key[0], symbol=key[1], owner=token)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("suppressed exit lease release for %s: %s", key, exc)
+
+    def clear(self) -> None:
+        for key in list(self._tokens):
+            self.discard(key)
+        self._local.clear()
+
+
+_exiting = _ExitClaims()
 
 
 def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None:
@@ -153,6 +219,38 @@ def _book_exit(uid: str, p: "pos.OpenPosition", *, order_id: str,
     return ALREADY, applied
 
 
+async def _attribute_trigger_fill(client, uid: str, p: pos.OpenPosition,
+                                  order: dict) -> bool:
+    """Is this unmatched exit-side fill the child order of our own GTT?
+
+    Zerodha places a trigger's child order, not us, so it carries neither our exit
+    order id nor our tag — and a bare symbol match is also what another app's SELL
+    looks like. Attribution therefore comes from the broker's own state rather
+    than from the event: the trigger we armed must no longer be resting, and the
+    holding must actually have shrunk by exactly this fill.
+
+    Attribution only ever CLOSES a registry row; it never places an order. The
+    failure it prevents is the dangerous one — believing we still hold something
+    the broker already sold, and later market-selling it a second time.
+    """
+    filled = int(order.get("filled_quantity") or 0)
+    if filled <= 0 or filled > p.qty:
+        return False
+    verdict = await pstop.stop_status(client, int(p.gtt_id), tradingsymbol=p.symbol,
+                                      direction=p.direction)
+    if verdict not in (pstop.STOP_TRIGGERED, pstop.GONE):
+        # Still resting, or the broker could not tell us. Either way this fill is
+        # not evidence that OUR trigger fired.
+        return False
+    held = await _broker_holding(client, uid, p.symbol, p.direction,
+                                 exchange=p.exchange,
+                                 product=str(getattr(p, "product", "NRML") or "NRML"),
+                                 fresh=True)
+    if held is None:
+        return False   # unanswered, not zero
+    return held == p.qty - filled
+
+
 async def _resize_broker_stop(client, uid: str, p: pos.OpenPosition, old_qty: int) -> None:
     """Re-arm the resting GTT for the quantity we actually hold.
 
@@ -224,6 +322,34 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             oid == p.exit_order_id or (
                 p.exit_order_id in {"submitting", "unknown"}
                 and order.get("tag") == (p.exit_tag or f"trailexit:{symbol}")))
+        # A GTT that fired at Zerodha reaches us as an ordinary fill for a symbol we
+        # hold and nothing else. Left unattributed the registry keeps the position
+        # OPEN, and the tick monitor later market-sells a position we do not own.
+        via_trigger = False
+        if (not matched_exit and not is_entry and txn == exit_side
+                and status == _FILLED_STATUS and p.gtt_id and client is not None
+                and getattr(client, "_is_paper", True) is False
+                and p.status in (pos.PENDING, pos.OPEN)
+                and int(order.get("filled_quantity") or 0) > 0):
+            if await _attribute_trigger_fill(client, uid, p, order):
+                p.exit_order_id = oid
+                p.exit_reason = p.exit_reason or "broker GTT triggered"
+                pos._persist(uid)
+                matched_exit = True
+                via_trigger = True
+                state.log(uid, "info",
+                          f"{symbol}: broker trigger fill #{oid} attributed by trigger "
+                          f"state and fresh holdings")
+            else:
+                # Something sold a contract we hold and we cannot prove it was our
+                # trigger. Do not consume quantity on a symbol match alone.
+                p.pnl_reconciliation_required = True
+                pos._persist(uid)
+                state.log(uid, "order_failed",
+                          f"⚠ {symbol}: an exit-side fill (#{oid}) could not be "
+                          f"attributed to this position — reconcile at Zerodha before "
+                          f"trading it again")
+                return
         if matched_exit and status in _DEAD_STATUSES and not order.get("filled_quantity"):
             p.exit_order_id = ""
             pos._persist(uid)
@@ -248,7 +374,8 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             from app.services.kite_engine import execution_lifecycle as _life
             ledger_outcome, booked = _book_exit(
                 uid, p, order_id=oid, cumulative_quantity=filled, average_price=avg,
-                source="exit", exchange_ts_ms=_life.exchange_ms(order))
+                source="gtt" if via_trigger else "exit",
+                exchange_ts_ms=_life.exchange_ms(order))
             p.exit_fills[oid] = filled
             if delta < p.qty:
                 old_qty = p.qty
@@ -494,9 +621,10 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
     # bail without placing a duplicate SELL. An ambiguous submission keeps a persisted
     # order claim; only an attributable confirmed fill can close the position.
     key = (uid, p.symbol)
-    if key in _exiting or p.exit_order_id or p.status not in (pos.OPEN, pos.PENDING):
+    if p.exit_order_id or p.status not in (pos.OPEN, pos.PENDING):
         return False
-    _exiting.add(key)
+    if not _exiting.claim(key, account_id=str(getattr(p, "account_id", "") or "")):
+        return False
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
     is_live = getattr(client, "_is_paper", True) is False

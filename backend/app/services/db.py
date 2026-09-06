@@ -253,6 +253,22 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     """)
     # Evidence we refused to apply. Contradictions are quarantined, never dropped
     # and never silently applied: a wrong inventory is worse than a stalled one.
+    # ── cross-process execution leases (P0-2) ────────────────────────────────
+    # One holder per (scope, account, user, symbol) across PROCESSES, not just
+    # across coroutines on one event loop. A row here is "someone is already
+    # talking to the broker about this position".
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kite_execution_leases (
+            scope       TEXT NOT NULL,
+            account_id  TEXT NOT NULL,
+            uid         TEXT NOT NULL,
+            symbol      TEXT NOT NULL,
+            owner       TEXT NOT NULL,
+            acquired_ms INTEGER NOT NULL,
+            expires_ms  INTEGER NOT NULL,
+            PRIMARY KEY (scope, account_id, uid, symbol)
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS kite_execution_conflicts (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,

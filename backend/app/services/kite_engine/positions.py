@@ -130,7 +130,20 @@ class OpenPosition:
     # derived threshold from exit_mode for convenience in responses/UI
 
 
+class RegistryUnreadable(RuntimeError):
+    """The stored registry exists but could not be read.
+
+    Distinct from "no positions": callers must fail closed on it rather than
+    treating the account as flat.
+    """
+
+    def __init__(self, uid: str) -> None:
+        super().__init__(f"position_registry_unreadable:{uid}")
+        self.uid = uid
+
+
 _positions: Dict[str, Dict[str, OpenPosition]] = {}   # uid → {symbol → OpenPosition}
+_unreadable: Dict[str, str] = {}                      # uid → why the registry failed to load
 
 
 # ── pure exit predicate ──────────────────────────────────────────────────────
@@ -197,13 +210,35 @@ def _load(uid: str) -> Dict[str, OpenPosition]:
                         out[p.symbol] = p
                     except Exception:  # noqa: BLE001 — one unreadable row, not all
                         log.warning("kite positions: skipped an unreadable row for %s", uid)
-        except Exception:
-            out = {}
+        except Exception as exc:  # noqa: BLE001
+            # A registry we could not READ must never present itself as an empty
+            # one. Empty is a positive claim — "you hold nothing" — and acting on
+            # it leaves every live position unguarded and frees the auto-open
+            # guards to re-enter slots that are already held. The per-row guard
+            # above covers one bad row; this covers a truncated blob or a failed
+            # read, where nothing at all is known.
+            # Scoped to this account rather than tripping the global kill switch:
+            # one corrupt blob must stop THIS account trading, not halt every engine
+            # for every user.
+            _unreadable[uid] = str(exc) or exc.__class__.__name__
+            log.error("kite positions: registry for %s is UNREADABLE: %s", uid, exc)
+            raise RegistryUnreadable(uid) from exc
+        _unreadable.pop(uid, None)
         _positions[uid] = out
     return _positions[uid]
 
 
+def unreadable_reason(uid: str) -> str:
+    """Why this user's registry could not be read, or empty when it is fine."""
+    return _unreadable.get(uid, "")
+
+
 def _persist(uid: str) -> None:
+    if uid in _unreadable:
+        # Writing what we have in memory over a blob we failed to parse would
+        # destroy the only copy of the positions we cannot currently see.
+        log.error("kite positions: refusing to overwrite the unreadable registry for %s", uid)
+        return
     try:
         rows = [asdict(p) for p in _positions.get(uid, {}).values()]
         db.set_config(f"kite_engine_positions_{uid}", json.dumps(rows))
@@ -216,6 +251,8 @@ def persist_strict(uid: str) -> None:
     if not db.is_available():
         raise RuntimeError("position_store_unavailable")
     rows = [asdict(p) for p in _load(uid).values()]
+    if uid in _unreadable:
+        raise RegistryUnreadable(uid)
     with db._conn() as conn:
         conn.execute("PRAGMA synchronous=FULL")
         conn.execute("INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
@@ -355,5 +392,7 @@ def reset(uid: str = "") -> None:
     """Test helper."""
     if uid:
         _positions.pop(uid, None)
+        _unreadable.pop(uid, None)
     else:
         _positions.clear()
+        _unreadable.clear()
