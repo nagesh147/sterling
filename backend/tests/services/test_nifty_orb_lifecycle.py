@@ -41,6 +41,37 @@ def test_ticket_fingerprint_is_stable_for_manual_and_auto():
     assert stamped["ticket"]["symbol"] == "NIFTY26AUG25000CE"
 
 
+def test_fingerprint_moves_when_lot_or_underlying_entry_moves():
+    """SAME_TICKET_FIELDS must all participate in identity — a silent drift
+    in lot_size or underlying_entry used to keep the same fingerprint."""
+    plan = {
+        "quantity": 150,
+        "stop_premium": 14.0,
+        "target_premium": 26.0,
+        "underlying_entry": 25000.0,
+        "contract": {
+            "symbol": "NIFTY26AUG25000CE",
+            "option_type": "CE",
+            "strike": 25000,
+            "expiry": "2026-08-27",
+            "lot_size": 75,
+        },
+    }
+    signal = {"direction": "LONG", "timestamp": "2026-08-25T10:30:00+05:30"}
+    base = life.ticket_fingerprint(plan, signal)
+    fields = life.ticket_fields(plan)
+    for key in life.SAME_TICKET_FIELDS:
+        assert str(fields[key] or "") in base
+
+    lot = dict(plan)
+    lot["contract"] = {**plan["contract"], "lot_size": 50}
+    assert life.ticket_fingerprint(lot, signal) != base
+
+    entry = dict(plan)
+    entry["underlying_entry"] = 25010.0
+    assert life.ticket_fingerprint(entry, signal) != base
+
+
 def test_manual_mode_response_is_signals_only():
     out = life.manual_mode_response()
     assert out["status"] == "manual"
@@ -84,6 +115,12 @@ def test_preview_auto_refusal_matches_execute_scan_reasons():
     assert reason and "stale" in reason
 
     assert life.preview_auto_refusal(row, cfg, now=now, filled_today=2, max_trades=2) == "daily trade limit reached"
+
+    early = now.replace(hour=9, minute=20)
+    assert life.preview_auto_refusal(row, cfg, now=early) == "outside entry window"
+
+    saturday = datetime(2026, 8, 29, 10, 30, tzinfo=IST)
+    assert life.preview_auto_refusal(row, cfg, now=saturday) == "market_closed"
 
     far = dict(row)
     far["trade"] = {**row["trade"], "contract": {**row["trade"]["contract"], "expiry": "2026-12-31"}}

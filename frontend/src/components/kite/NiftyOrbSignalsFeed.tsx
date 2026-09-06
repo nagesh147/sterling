@@ -71,7 +71,7 @@ export function NiftyOrbSignalsFeed({ onOpenDetail, onOpenChart, nowMs: nowMsPro
   const { data: engineCfg } = useEngineConfig();
   const autoOn = engineCfg?.auto_execute ?? false;
   const enabled = config.data?.config?.enabled;
-  const { signals, isLoading, error } = useOrbSignals(enabled !== false);
+  const { signals, isLoading, error } = useOrbSignals(enabled === true);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState(DEFAULT_SORT);
   // `null` means "nobody has chosen yet", which is not the same as "closed".

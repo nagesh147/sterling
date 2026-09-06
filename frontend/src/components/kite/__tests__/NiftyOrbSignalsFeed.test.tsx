@@ -32,7 +32,7 @@ vi.mock('../config/registry', () => ({ openSettingsSection: openSection }));
 vi.mock('../../../hooks/useKite', () => ({ useKiteQuote: () => ({ data: {} }) }));
 vi.mock('../AdaptiveEdgePositionCalculator', () => ({
   AdaptiveEdgePositionCalculator: (p: Record<string, unknown>) => (
-    <div data-testid="sizing">sizing {String(p.tradingsymbol)} @ {String(p.defaultEntryPrice)} sl {String(p.defaultSl)} on {String(p.exchange)}</div>
+    <div data-testid="sizing">{`sizing ${p.tradingsymbol} @ ${p.defaultEntryPrice} sl ${p.defaultSl} on ${p.exchange} lots ${p.defaultLots} hideTsl ${p.hideTsl}`}</div>
   ),
 }));
 
@@ -193,7 +193,7 @@ describe('ORB feed — expanded setup', () => {
   it('hands the plan to the shared position calculator, which owns the Buy path', () => {
     show({ rows: [entry()] });
     fireEvent.click(screen.getByRole('button', { name: /NIFTY CE Armed/ }));
-    expect(screen.getByTestId('sizing')).toHaveTextContent('sizing NIFTY26AUG24000CE @ 18 sl 14 on NFO');
+    expect(screen.getByTestId('sizing')).toHaveTextContent('sizing NIFTY26AUG24000CE @ 18 sl 14 on NFO lots 2 hideTsl true');
   });
 
   it('shows the same order ticket SuperTrend shows', () => {

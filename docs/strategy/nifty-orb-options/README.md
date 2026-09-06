@@ -109,7 +109,7 @@ Implemented in the surrounding ORB/TrueData services:
 | VWAP slope lookback | 3 bars |
 | ATR period | 14 |
 | Initial stop buffer | 0.10 ATR |
-| Trail | 1.25 ATR |
+| Trail | none (Trading Mode owns trailing once a position is open) |
 | Target | 2R |
 | Option moneyness | ATM |
 | ITM/OTM steps | 1 |
@@ -181,16 +181,20 @@ No fabricated option P&L is acceptable when those observations are unavailable.
 
 ## 7. Current verification state
 
-As of the current reconciliation work:
+As of the same-ticket live-ready path:
 
-- Adaptive Edge suite: **141 passed**.
-- ORB/TrueData targeted suite: **15 passed, 5 failures remain** in the latest local run.
-- The remaining ORB failures are concentrated in test-fixture/strategy-semantic alignment; the production data-quality gates should not be weakened to make tests pass.
-- The `volume_multiplier=0` zero-division defect is fixed at its root: the value is rejected by `StrategyConfig.validate()` rather than special-cased inside the confidence calculation, so it can no longer double as a silent filter bypass.
+- ORB targeted backend suite: **358 passed**.
+- Frontend feed/adapter: green. Fresh-install `enabled=false`. Auto-off is `status: manual`.
+- Historical option corpus, walk-forward, and OOS remain **OPEN** — not unattended-live eligible.
 
-Therefore the ORB strategy is **implemented but not yet production-trustworthy for unattended automated options trading**.
+The strategy is **implemented for supervised Paper/Live Manual then Auto**, not yet production-trustworthy for unattended automated options trading.
 
 ## 8. Exact next implementation sequence
+
+Same-ticket Manual/Auto path, restart recovery, and default-off are **done** on
+`feature/orb-live-ready`. Remaining for unattended live is **P8**: historical
+option corpus + walk-forward / OOS (see IMPLEMENTATION_STATUS.md). The items
+below are the original engine-hardening sequence and are already closed.
 
 ### P0 — make the signal contract mathematically testable
 

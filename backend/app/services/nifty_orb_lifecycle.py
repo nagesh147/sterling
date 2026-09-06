@@ -49,19 +49,17 @@ def ticket_fields(plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def ticket_fingerprint(plan: dict[str, Any], signal: dict[str, Any]) -> str:
-    """Stable id for the Manual board ticket and the Auto order."""
+    """Stable id for the Manual board ticket and the Auto order.
+
+    Covers every ``SAME_TICKET_FIELDS`` value plus direction/timestamp so a
+    change in qty, SL, lot, or underlying entry is a different ticket.
+    """
     fields = ticket_fields(plan)
     return "|".join(
         [
             str(signal.get("direction") or ""),
             str(signal.get("timestamp") or ""),
-            str(fields["symbol"] or ""),
-            str(fields["option_type"] or ""),
-            str(fields["strike"] or ""),
-            str(fields["expiry"] or ""),
-            str(fields["quantity"] or ""),
-            str(fields["stop_premium"] or ""),
-            str(fields["target_premium"] or ""),
+            *[str(fields[k] or "") for k in SAME_TICKET_FIELDS],
         ]
     )
 
@@ -101,10 +99,12 @@ def preview_auto_refusal(
     would emit. Broker-only gates (drift, live quote, contract search) stay on
     the order path — they cannot be previewed honestly from the scan snapshot.
     """
-    from app.services.nifty_orb_execution import _entry_window_open, _parse_timestamp
+    from app.services.nifty_orb_execution import _entry_window_open, _market_open, _parse_timestamp
 
     if row.get("status") != "signal":
         return None
+    if not _market_open(now):
+        return "market_closed"
     plan = row.get("trade") or {}
     contract = plan.get("contract") or {}
     signal = row.get("signal") or {}

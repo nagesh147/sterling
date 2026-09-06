@@ -369,7 +369,7 @@ on `validate()`.
 | Contract authority | A broker strike/expiry/type disagreeing with the plan is refused before any order. |
 | Policy re-checks | Expiry policy, stale signal, liquidity floors, premium risk budget and >0.30% underlying drift each refuse. |
 | Daily limit | The count persists, and a second scan returns `daily_limit`. |
-| Advisory mode | `auto_execute` off places nothing. |
+| Manual mode | `auto_execute` off returns `status: manual` and places nothing. |
 
 Also covered since: refusals no longer consume the daily budget, and a failed
 trade-count write trips the kill switch instead of silently raising the cap.

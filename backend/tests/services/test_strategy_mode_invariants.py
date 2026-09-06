@@ -95,8 +95,14 @@ def test_exits_are_never_gated_on_auto_execute(label, module_path, func_name):
     assert not offending, f"{label} gates an exit on auto_execute: {offending}"
 
 
-def test_every_option_engine_ships_enabled():
-    """Consistent power-switch defaults across the option engines."""
+def test_option_engine_power_switch_defaults():
+    """Power-switch defaults are a product decision, not a copy-paste habit.
+
+    Gamma / OI-wall / ATM / opening-volume ship ON: they are the engines an
+    operator already expects to scan. ORB ships OFF — it is not unattended-live
+    eligible until walk-forward on real option history is green, and a fresh
+    install must not start scanning or showing tickets until someone turns it on.
+    """
     from app.engines.gamma_move import GammaMoveConfig
     from app.engines.oi_wall_flow import OIWallFlowConfig
     from app.engines.atm_premium_imbalance import ATMPremiumImbalanceConfig
@@ -105,5 +111,5 @@ def test_every_option_engine_ships_enabled():
     assert GammaMoveConfig().enabled is True
     assert OIWallFlowConfig().enabled is True
     assert ATMPremiumImbalanceConfig().enabled is True
-    assert StrategyConfig().enabled is True
+    assert StrategyConfig().enabled is False
     assert OpeningExecutionConfig().enabled is True

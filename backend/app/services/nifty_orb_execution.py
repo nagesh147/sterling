@@ -108,12 +108,24 @@ def _conservative_quantity(requested,lot_size,ask,max_risk_inr):
 def _signal_age(value):
     ts=_parse_timestamp(value); return None if ts is None else max(0,(datetime.now(IST)-ts.astimezone(IST)).total_seconds())
 
+def _as_ist(now):
+    if getattr(now, "tzinfo", None) is None:
+        return now.replace(tzinfo=IST)
+    return now.astimezone(IST)
+
 def _entry_window_open(now,cfg):
+    now=_as_ist(now)
     try:
         start=datetime.strptime(cfg.entry_start,"%H:%M").time(); end=datetime.strptime(cfg.entry_end,"%H:%M").time()
         return start<=now.time()<=end
     except (TypeError,ValueError):
         return False
+
+def _market_open(now):
+    """NSE F&O cash session in IST. Same gate ``execute_scan`` uses before any order."""
+    now=_as_ist(now)
+    start=datetime.strptime("09:15","%H:%M").time(); end=datetime.strptime("15:29","%H:%M").time()
+    return now.weekday()<5 and start<=now.time()<=end
 
 async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,Any]:
     from app.services.kite_engine import state as engine_state,positions,protection
@@ -130,7 +142,7 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
     client=await accounts.acquire_client(account); executed=[]; open_pos=positions.open_positions(uid)
     seen={str(p.underlying).upper() for p in open_pos if p.status in (positions.OPEN,positions.PENDING)}
     now=datetime.now(IST)
-    if now.weekday()>=5 or now.time()<datetime.strptime("09:15","%H:%M").time() or now.time()>datetime.strptime("15:29","%H:%M").time():return {"status":"market_closed","executed":[]}
+    if not _market_open(now):return {"status":"market_closed","executed":[]}
     if not _entry_window_open(now,cfg):return {"status":"outside_entry_window","executed":[]}
     for row in scan.get("signals",[]):
         if row.get("status")!="signal":continue

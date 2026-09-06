@@ -13,7 +13,7 @@ Not unattended until walk-forward on real option history is green. This is the s
 ## Sequence
 
 1. **Paper + Manual** — confirm the board ticket matches what you would buy.
-2. **Paper + Auto** — soak at least several sessions; compare fills to the board tickets.
+2. **Paper + Auto** — soak at least several sessions; compare fills to the board tickets (`python backend/scripts/orb_paper_soak_compare.py board.json fills.json`).
 3. **Live + Manual** — place one ticket by hand from the board.
 4. **Live + Auto** — only after paper soak; keep tight `max_risk_inr` / `max_trades_per_day`.
 
