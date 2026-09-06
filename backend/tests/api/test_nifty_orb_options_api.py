@@ -1,7 +1,37 @@
+import os
+import tempfile
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints.config import router
+from app.services import db
+
+
+@pytest.fixture(autouse=True)
+def isolated_db():
+    """These cases assert DEFAULTS, so they must not read persisted config.
+
+    Without this they passed only by accident: a fixture in another api test
+    file left `db._DB_PATH` pointing at a temp file it had already deleted, so
+    every config read fell back to the default. Once that leak was fixed these
+    started reading the developer's real database, where the engine may well be
+    switched off. Own the isolation here instead of depending on someone else's
+    bug.
+    """
+    prior_path = db._DB_PATH
+    fd, path = tempfile.mkstemp()
+    os.close(fd)
+    db._DB_PATH = path
+    db.init()
+    try:
+        yield
+    finally:
+        db._DB_PATH = prior_path
+        db.init()
+        if os.path.exists(path):
+            os.unlink(path)
 
 
 def client() -> TestClient:

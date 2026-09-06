@@ -52,13 +52,32 @@ def test_find_by_order_or_tag():
     assert journal.find(uid='u',account_id='a',tag=r.tag).order_id == 'O3'
 
 
+class _LiveClient:
+    """Minimal live client. The journal is only consulted for LIVE orders — a
+    paper run never reserves an intent — so `on_order_update` routes to
+    `execution_lifecycle.consume_order` only when a non-paper client is passed,
+    and every production caller passes one (the ticker's order broadcaster, the
+    engine's own post-submit reconcile, and the monitor's recovery sweep)."""
+    _is_paper = False
+    _account_id = 'a'
+
+
 @pytest.mark.asyncio
 async def test_confirmed_entry_fill_closes_durable_intent():
     r=journal.reserve(**{**args(),'signal_id':'s4'})
     assert journal.claim_submission(r.intent_key)
     journal.transition(r.intent_key,'SUBMITTED',order_id='O4')
-    positions.register(positions.OpenPosition(uid='u',symbol=args()['symbol'],exchange='NFO',
-        qty=65,lot_size=65,entry_premium=120,stop_premium=100,order_id='O4'))
+    # `account_id` must match the intent's, or the postback is not attributable
+    # to it; `stop_mode='monitor'` keeps broker protection out of this test.
+    positions.register(positions.OpenPosition(uid='u',account_id='a',symbol=args()['symbol'],
+        exchange='NFO',qty=65,lot_size=65,entry_premium=120,stop_premium=100,
+        order_id='O4',stop_mode='monitor'))
+    # The persisted contract and the broker's echo must agree on every identity
+    # field, so the postback carries exchange, product and quantity too.
     await monitor.on_order_update('u',dict(tradingsymbol=args()['symbol'],order_id='O4',
-        transaction_type='BUY',status='COMPLETE',filled_quantity=65,average_price=121))
+        exchange='NFO',product='NRML',quantity=65,
+        transaction_type='BUY',status='COMPLETE',filled_quantity=65,average_price=121),
+        client=_LiveClient())
     assert journal.find(uid='u',account_id='a',order_id='O4').state == 'FILLED'
+    p = positions.get('u', args()['symbol'])
+    assert p.status == positions.OPEN and p.qty == 65

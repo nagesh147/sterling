@@ -16,6 +16,11 @@ from app.services.navigator import config_store, runtime as nav_runtime
 
 @pytest.fixture(autouse=True)
 def isolated_db():
+    # `db._DB_PATH` is module-global. Pointing it at a temp file without
+    # restoring it leaves every LATER test in the session reading a database
+    # that this fixture then deletes — which is how the replay test two files
+    # away started seeing an empty candle/signal store and zero trades.
+    prior_path = db._DB_PATH
     fd, path = tempfile.mkstemp()
     os.close(fd)
     db._DB_PATH = path
@@ -25,10 +30,14 @@ def isolated_db():
     nav_service.clear_cache("user-b")
     nav_runtime._snapshots.pop("user-a", None)
     kite_state.reset("user-a")
-    yield
-    nav_runtime._snapshots.pop("user-a", None)
-    kite_state.reset("user-a")
-    os.unlink(path)
+    try:
+        yield
+    finally:
+        nav_runtime._snapshots.pop("user-a", None)
+        kite_state.reset("user-a")
+        db._DB_PATH = prior_path
+        db.init()
+        os.unlink(path)
 
 
 @pytest.fixture

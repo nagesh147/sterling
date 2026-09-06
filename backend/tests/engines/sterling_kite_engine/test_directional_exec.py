@@ -22,6 +22,8 @@ from app.engines.sterling_kite_engine.schemas import (
 )
 from app.services import db, live_safety
 from app.services.exchanges.kite import constants as K
+from app.services.exchanges.kite import accounts as kite_accounts
+from app.services.exchanges.kite.models import KiteAccountCreate
 from app.services.kite_engine import order_journal, positions, service, state
 from app.services.kite_engine.universe import UniverseItem
 
@@ -171,8 +173,21 @@ def test_live_entry_is_reserved_before_send_and_duplicate_signal_cannot_resend()
     prior=db._available; db.init(); order_journal.clear_for_tests(UID)
     try:
         positions.reset(UID); state.reset(UID); state.set_config(UID,EngineConfigModel())
+        # The submission path re-checks `accounts.client_is_current` immediately
+        # before reserving, so a retained client cannot submit after its
+        # account's credentials, owner or paper/live mode changed underneath it.
+        # A fabricated `_account_id` fails that check and the callback returns
+        # before the broker is ever called — so this test needs a REAL account
+        # and a client carrying its identity, exactly as `build_client` does in
+        # production. Weakening the check instead would delete the guard.
+        account = kite_accounts.add(UID, KiteAccountCreate(
+            label="live-exec", api_key="k", api_secret="s", is_paper=False))
+        identity = kite_accounts.build_client(account)
+
         class LostAck(FakeClient):
-            _is_paper=False; _account_id='acct-1'
+            _is_paper=False
+            _account_id=identity._account_id
+            _account_generation=identity._account_generation
             calls=0
             async def place_order_option(self,*a,**kw):
                 self.calls+=1; self.sent_tag=kw['tag']

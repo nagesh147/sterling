@@ -13,15 +13,24 @@ from app.services.providers import truedata as truedata_service
 
 @pytest.fixture(autouse=True)
 def isolated_db():
+    # `db._DB_PATH` is module-global. Pointing it at a temp file without
+    # restoring it leaves every LATER test in the session reading a database
+    # that this fixture then deletes — which is how the replay test two files
+    # away started seeing an empty candle/signal store and zero trades.
+    prior_path = db._DB_PATH
     fd, path = tempfile.mkstemp()
     os.close(fd)
     db._DB_PATH = path
     db.init()
     truedata_service.clear()
-    yield
-    truedata_service.clear()
-    if os.path.exists(path):
-        os.unlink(path)
+    try:
+        yield
+    finally:
+        truedata_service.clear()
+        db._DB_PATH = prior_path
+        db.init()
+        if os.path.exists(path):
+            os.unlink(path)
 
 
 @pytest.fixture
