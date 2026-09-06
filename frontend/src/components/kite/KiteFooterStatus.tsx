@@ -36,7 +36,7 @@ export function KiteFooterStatus({ onOpenSession }: { onOpenSession: () => void 
   const sig = useEngineSignals().data;
   const engineOn = useEngineConfig().data?.engine_enabled !== false;
   const navOn = useNavigatorConfig().data?.record.config.enabled ?? false;
-  const orbOn = useOrbConfig().data?.config?.enabled !== false;
+  const orbOn = useOrbConfig().data?.config?.enabled === true;
   const aeOn = !!useAdaptiveEdgeSnapshot().data;
   const gmOn = !!useGammaMoveSnapshot().data?.strategy?.enabled;
   const owfOn = !!useOiWallFlowSnapshot().data?.strategy?.enabled;

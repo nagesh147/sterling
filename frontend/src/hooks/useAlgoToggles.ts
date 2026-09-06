@@ -1,6 +1,5 @@
 import { useEngineConfig, usePatchEngineConfig } from './useSterlingKiteEngine';
 import { useNavigatorConfig, useSetNavigatorConfig } from './useNavigator';
-import { useOrbConfig, useSetOrbConfig } from './useOrbConfig';
 import { useGammaMoveConfig, useUpdateGammaMove } from './useGammaMove';
 import { useAdaptiveEdgeEngineConfig, useSetAdaptiveEdgeEngineConfig } from './useAdaptiveEdge';
 import { useAtmPremiumImbalanceConfig, useSetAtmPremiumImbalanceConfig } from './useAtmPremiumImbalance';
@@ -22,9 +21,11 @@ export interface AlgoToggle {
 /**
  * Manually control automatic execution (Algo Trade) per strategy.
  *
- * Each strategy engine carries its own `auto_execute` or `auto_execute_originated`
- * setting. This hook centralizes access and toggling for all 7 strategies,
- * ensuring complete parity with `useEngineToggles`.
+ * Most engines carry their own `auto_execute` (or Navigator's
+ * `auto_execute_originated`). ORB does not: Manual/Auto is the shared
+ * Trading Mode switch (`engine_state.auto_execute`). The ORB row mirrors
+ * that switch so a click here cannot 422 against a strategy-local flag
+ * the backend rejects, and cannot silently do nothing.
  */
 export function useAlgoToggles(): AlgoToggle[] {
   const engineOn = useEngineEnabled();
@@ -34,9 +35,6 @@ export function useAlgoToggles(): AlgoToggle[] {
 
   const nav = useNavigatorConfig();
   const navSet = useSetNavigatorConfig();
-
-  const orb = useOrbConfig();
-  const orbSet = useSetOrbConfig();
 
   const gm = useGammaMoveConfig();
   const gmSet = useUpdateGammaMove();
@@ -53,7 +51,6 @@ export function useAlgoToggles(): AlgoToggle[] {
   const stAuto = !!st.data?.auto_execute;
   const navRecord = nav.data?.record;
   const navAuto = !!navRecord?.config.auto_execute_originated;
-  const orbAuto = !!orb.data?.config?.auto_execute;
   const gmAuto = !!(gm.data?.config as { auto_execute?: boolean } | undefined)?.auto_execute;
   const aeAuto = !!(ae.data?.config as { auto_execute?: boolean } | undefined)?.auto_execute;
   const atmAuto = !!atm.data?.config?.auto_execute;
@@ -90,13 +87,13 @@ export function useAlgoToggles(): AlgoToggle[] {
     {
       id: 'orb',
       label: 'ORB + VWAP',
-      enabled: orbAuto,
+      enabled: stAuto,
       engineEnabled: engineOn.orb,
-      pending: orbSet.isPending,
-      toggle: orb.data ? () => orbSet.mutate({ auto_execute: !orbAuto }) : null,
-      description: orbAuto
-        ? 'Algo Trade ON — places orders automatically on index option breakout signals.'
-        : 'Off — manual order placement only for ORB + VWAP setups.',
+      pending: stSet.isPending,
+      toggle: st.data ? () => stSet.mutate({ auto_execute: !stAuto }) : null,
+      description: stAuto
+        ? 'Auto ON (Trading Mode) — places the same board ticket via execute_scan.'
+        : 'Manual (Trading Mode) — board shows the ticket; you press Buy.',
     },
     {
       id: 'gamma_move',

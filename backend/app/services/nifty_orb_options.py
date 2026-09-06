@@ -15,9 +15,7 @@ def get_config()->StrategyConfig:
 
     Two different fallbacks, deliberately not the same one:
 
-    * **Nothing stored** -> the real defaults. Hardcoding a disabled config here
-      made the shipped default unreachable -- the dataclass said one thing and
-      this said another, and this one won.
+    * **Nothing stored** -> the real defaults (engine OFF on a fresh install).
     * **Stored but unreadable or invalid** -> defaults with the engine OFF. A row
       persisted before validation existed, or edited straight in the database,
       must never become a trading config: the invalid value would otherwise
@@ -160,7 +158,14 @@ async def snapshot(uid:str)->dict[str,Any]:
     plan=None
     if signal.direction!="NONE":
         option=select_option(bars[-1].close,signal.direction,contracts,cfg); plan=build_trade_plan(signal,option,cfg,spot=bars[-1].close)
-    return {"enabled":True,"data_source":cfg.data_source,"execution_broker":cfg.execution_broker,"signal":signal.to_dict(),"plan":plan.to_dict() if plan else None}
+    payload={"enabled":True,"data_source":cfg.data_source,"execution_broker":cfg.execution_broker,"signal":signal.to_dict(),"plan":plan.to_dict() if plan else None}
+    if plan is not None:
+        from app.services.nifty_orb_lifecycle import attach_ticket
+        row={"status":"signal","trade":payload["plan"],"signal":payload["signal"]}
+        attach_ticket(row)
+        payload["ticket"]=row.get("ticket")
+        payload["ticket_fingerprint"]=row.get("ticket_fingerprint")
+    return payload
 
 def _trade_state(uid:str)->dict:
     from app.services import db
@@ -203,9 +208,22 @@ def backtest_from_bars(rows:list[dict[str,Any]],cfg:StrategyConfig|None=None)->d
     return {"metrics":{**summarize_pnl(pnls),"model":"underlying-point baseline","costs_included":False,"option_pnl":False},"warning":"Underlying baseline only. Option-level replay requires historical option premiums, contracts, costs and slippage."}
 
 async def execute_manual(uid:str)->dict[str,Any]:
+    """Manual does not place from this endpoint.
+
+    The board Buy button (shared order window) is the Manual path. A previous
+    implementation called ``place_manual_order`` on the snapshot without
+    protection, market hours, or the same-ticket gates — the same class of
+    second order path as the deleted ``execute_auto``. Return the ticket Auto
+    would use; placing it is the operator's Buy click.
+    """
+    from app.services.nifty_orb_lifecycle import attach_ticket, manual_mode_response
     cfg=get_config()
-    if not cfg.enabled:raise ValueError("NIFTY ORB strategy is disabled")
-    snap=await snapshot(uid); plan=snap.get("plan") or {}; contract=plan.get("contract") or {}; qty=int(plan.get("quantity") or 0)
-    if not contract.get("symbol") or qty<=0:raise ValueError("No executable NIFTY ORB trade plan is active")
-    from app.services.kite_engine.service import place_manual_order
-    return {"plan":plan,"execution":await place_manual_order(uid,contract["symbol"],"BUY",qty,exchange="NFO")}
+    out=manual_mode_response()
+    if not cfg.enabled:
+        out["enabled"]=False
+        return out
+    snap=await snapshot(uid)
+    row={"status":"signal" if snap.get("plan") else "watching","trade":snap.get("plan") or {},"signal":snap.get("signal") or {}}
+    attach_ticket(row)
+    out.update({"enabled":True,"ticket":row.get("ticket"),"ticket_fingerprint":row.get("ticket_fingerprint"),"plan":snap.get("plan"),"signal":snap.get("signal")})
+    return out

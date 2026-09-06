@@ -78,6 +78,7 @@ export function BoardTicket({ signal, tag }: {
     exchange,
     initialSide: side,
     lotSize: lotSize || 1,
+    initialQty: signal.sizing.quantity ?? undefined,
     lastPrice: live || 0,
     initialSlPct: bracketPct(live, signal.levels.stop),
     initialTgtPct: bracketPct(live, signal.levels.target),
@@ -93,6 +94,7 @@ export function BoardTicket({ signal, tag }: {
         exchange={exchange}
         expiry={expiry ?? undefined}
         lotSize={lotSize ?? undefined}
+        defaultLots={signal.sizing.lots ?? undefined}
         defaultEntryPrice={roundToTick(signal.levels.entry) ?? undefined}
         defaultSl={roundToTick(signal.levels.stop) ?? undefined}
         defaultTsl={roundToTick(signal.levels.trail) ?? undefined}
@@ -100,6 +102,8 @@ export function BoardTicket({ signal, tag }: {
         currentLtp={roundToTick(live) ?? undefined}
         optionType={(optionType ?? 'CE') as 'CE' | 'PE'}
         exitState={signal.status === 'weakening' ? 'EXIT' : 'HOLD'}
+        tag={tag}
+        hideTsl={signal.engine === 'orb'}
       />
 
       <QuoteDetail

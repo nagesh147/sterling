@@ -108,20 +108,33 @@ def _conservative_quantity(requested,lot_size,ask,max_risk_inr):
 def _signal_age(value):
     ts=_parse_timestamp(value); return None if ts is None else max(0,(datetime.now(IST)-ts.astimezone(IST)).total_seconds())
 
+def _as_ist(now):
+    if getattr(now, "tzinfo", None) is None:
+        return now.replace(tzinfo=IST)
+    return now.astimezone(IST)
+
 def _entry_window_open(now,cfg):
+    now=_as_ist(now)
     try:
         start=datetime.strptime(cfg.entry_start,"%H:%M").time(); end=datetime.strptime(cfg.entry_end,"%H:%M").time()
         return start<=now.time()<=end
     except (TypeError,ValueError):
         return False
 
+def _market_open(now):
+    """NSE F&O cash session in IST. Same gate ``execute_scan`` uses before any order."""
+    now=_as_ist(now)
+    start=datetime.strptime("09:15","%H:%M").time(); end=datetime.strptime("15:29","%H:%M").time()
+    return now.weekday()<5 and start<=now.time()<=end
+
 async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,Any]:
     from app.services.kite_engine import state as engine_state,positions,protection
     from app.services import live_safety
     from app.services.exchanges.kite import accounts
     from app.services.nifty_orb_options import get_config
+    from app.services.nifty_orb_lifecycle import manual_mode_response, ticket_fields, ticket_fingerprint
     universal=engine_state.get_config(uid)
-    if not getattr(universal,"auto_execute",False):return {"status":"advisory","executed":[]}
+    if not getattr(universal,"auto_execute",False):return manual_mode_response()
     account=accounts.get_active(uid)
     if not account:return {"status":"blocked","reason":"No active Kite account","executed":[]}
     cfg=get_config(); trade_state=_state(uid)
@@ -129,12 +142,13 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
     client=await accounts.acquire_client(account); executed=[]; open_pos=positions.open_positions(uid)
     seen={str(p.underlying).upper() for p in open_pos if p.status in (positions.OPEN,positions.PENDING)}
     now=datetime.now(IST)
-    if now.weekday()>=5 or now.time()<datetime.strptime("09:15","%H:%M").time() or now.time()>datetime.strptime("15:29","%H:%M").time():return {"status":"market_closed","executed":[]}
+    if not _market_open(now):return {"status":"market_closed","executed":[]}
     if not _entry_window_open(now,cfg):return {"status":"outside_entry_window","executed":[]}
     for row in scan.get("signals",[]):
         if row.get("status")!="signal":continue
         plan=row.get("trade") or {}; contract=plan.get("contract") or {}; symbol=str(contract.get("symbol") or ""); underlying=str(row.get("underlying") or "").upper(); requested=int(plan.get("quantity") or 0); signal=row.get("signal") or {}; direction=str(signal.get("direction") or "")
         expected="CE" if direction=="LONG" else "PE" if direction=="SHORT" else ""
+        fingerprint=ticket_fingerprint(plan,signal); ticket=ticket_fields(plan)
         if not symbol or requested<=0 or not underlying or underlying in seen:continue
         if expected!=str(contract.get("option_type") or ""):
             executed.append({"status":"blocked","symbol":symbol,"reason":"option direction mismatch"});continue
@@ -182,12 +196,15 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"blocked","symbol":symbol,"reason":"underlying entry/current price unavailable"});continue
         if abs(current-spot)/spot>0.003:
             executed.append({"status":"blocked","symbol":symbol,"reason":"underlying moved >0.30% since signal"});continue
-        lot=int(contract.get("lot_size") or instrument.get("lot_size") or 1)
-        broker_lot=int(instrument.get("lot_size") or lot)
-        if lot!=broker_lot:lot=broker_lot
+        lot=int(contract.get("lot_size") or 0)
+        broker_lot=int(instrument.get("lot_size") or 0)
+        if lot<=0 or broker_lot<=0 or lot!=broker_lot:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"broker contract lot size mismatch"});continue
         quantity=_conservative_quantity(requested,lot,quote["ask"],float(cfg.max_risk_inr))
         if quantity<=0:
             executed.append({"status":"blocked","symbol":symbol,"reason":"one option lot exceeds conservative premium risk budget"});continue
+        if quantity!=requested:
+            executed.append({"status":"blocked","symbol":symbol,"reason":"live premium would change the ticket quantity"});continue
         decision=live_safety.assert_safe_to_trade(positions.open_positions(uid),idem,check_daily_loss=True,uid=uid)
         if not decision.allowed:
             executed.append({"status":"blocked","symbol":symbol,"reason":decision.reason,"code":decision.code});continue
@@ -241,5 +258,5 @@ async def execute_scan(uid:str,*,scan:dict[str,Any],max_trades:int)->dict[str,An
             executed.append({"status":"executed_count_not_persisted","underlying":underlying,"symbol":symbol,"quantity":actual,"order_id":oid,"protected":True,"reason":str(exc)})
             seen.add(underlying);continue
         seen.add(underlying)
-        executed.append({"status":"executed","underlying":underlying,"symbol":symbol,"quantity":actual,"requested_quantity":quantity,"fill_price":fill_price,"broker_status":status,"order_id":oid,"protected":True,"conservative_max_loss_inr":round(quote["ask"]*actual,2),"plan":plan})
+        executed.append({"status":"executed","underlying":underlying,"symbol":symbol,"quantity":actual,"requested_quantity":quantity,"fill_price":fill_price,"broker_status":status,"order_id":oid,"protected":True,"conservative_max_loss_inr":round(quote["ask"]*actual,2),"plan":plan,"ticket_fingerprint":fingerprint,"ticket":ticket})
     return {"status":"executed" if executed else "no_trade","executed":executed,"count":trade_state["count"]}

@@ -191,6 +191,9 @@ async def test_a_complete_fill_is_executed_protected_and_counted(harness):
     assert entry["conservative_max_loss_inr"] == 1350.0     # 18.00 ask * 75
     assert harness["store"]["u1"]["count"] == 1
     assert harness["rec"].kill == []
+    assert entry["ticket_fingerprint"]
+    assert entry["ticket"]["symbol"] == SYMBOL
+    assert entry["ticket"]["quantity"] == 75
 
 
 @pytest.mark.asyncio
@@ -327,11 +330,37 @@ async def test_an_unprotected_position_that_cannot_be_closed_trips_the_kill_swit
 # ---------------------------------------------------------------- policy gates
 
 @pytest.mark.asyncio
-async def test_auto_execute_off_is_advisory_only(harness):
+async def test_auto_execute_off_is_manual_signals_only(harness):
     harness["patch"](harness["state"], "get_config", lambda uid: FakeUniversal(auto_execute=False))
     client = FakeClient()
     out = await _run(harness, client)
-    assert out == {"status": "advisory", "executed": []}
+    assert out["status"] == "manual"
+    assert out["mode"] == "signals_only"
+    assert out["executed"] == []
+    assert client.placed == []
+
+
+@pytest.mark.asyncio
+async def test_a_broker_lot_size_disagreeing_with_the_plan_is_refused(harness):
+    harness["patch"](execution, "_find_contract", _async((
+        "NFO",
+        {"instrument_type": "CE", "strike": 25000.0, "expiry": EXPIRY, "lot_size": 50, "instrument_token": 1},
+    )))
+    client = FakeClient()
+    out = await _run(harness, client)
+    assert out["executed"][0]["reason"] == "broker contract lot size mismatch"
+    assert client.placed == []
+
+
+@pytest.mark.asyncio
+async def test_a_live_ask_that_would_resize_the_ticket_is_refused(harness):
+    """Same ticket: Auto must not silently buy fewer lots than the board showed."""
+    harness["patch"](execution, "_fresh_quote", _async(
+        {"ask": 40.0, "bid": 39.9, "volume": 5000.0, "oi": 50000.0},
+    ))
+    client = FakeClient()
+    out = await _run(harness, client, rows=[_signal_row(quantity=150)])
+    assert out["executed"][0]["reason"] == "live premium would change the ticket quantity"
     assert client.placed == []
 
 

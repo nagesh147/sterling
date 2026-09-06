@@ -79,6 +79,31 @@ def test_quantity_stays_lot_aligned():
         assert plan.quantity % lot_size == 0
 
 
+def test_manual_adapter_and_auto_plan_share_one_fingerprint():
+    """Board ticket fields === execute_scan plan fields for the same row."""
+    from app.services.nifty_orb_lifecycle import SAME_TICKET_FIELDS, attach_ticket, ticket_fields, ticket_fingerprint
+
+    cfg = StrategyConfig(max_risk_inr=3000)
+    plan = build_trade_plan(_signal(), _option(), cfg, spot=24017)
+    row = {
+        "status": "signal",
+        "underlying": "NIFTY",
+        "signal": {"direction": "LONG", "timestamp": "2026-08-25T10:30:00+05:30"},
+        "trade": plan.to_dict(),
+    }
+    attach_ticket(row)
+    auto = ticket_fields(plan.to_dict())
+    assert row["ticket"] == auto
+    assert set(auto) == set(SAME_TICKET_FIELDS)
+    assert row["ticket_fingerprint"] == ticket_fingerprint(plan.to_dict(), row["signal"])
+    assert auto["symbol"] == "NIFTYCE"
+    assert auto["option_type"] == "CE"
+    assert auto["quantity"] == plan.quantity
+    assert auto["stop_premium"] == plan.stop_premium
+    assert auto["target_premium"] == plan.target_premium
+    assert auto["lot_size"] == 75
+
+
 def test_the_plan_dict_carries_the_honest_max_loss():
     plan = build_trade_plan(_signal(), _option(), StrategyConfig(max_risk_inr=3000), spot=24017)
     payload = plan.to_dict()

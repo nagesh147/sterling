@@ -17,7 +17,7 @@ vi.mock('../useNavigator', () => ({
 }));
 
 vi.mock('../useOrbConfig', () => ({
-  useOrbConfig: () => ({ data: { config: { enabled: true, auto_execute: true } } }),
+  useOrbConfig: () => ({ data: { config: { enabled: false } } }),
   useSetOrbConfig: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -69,5 +69,17 @@ describe('useAlgoToggles', () => {
     expect(result.current.find((t) => t.id === 'adaptive_edge')?.enabled).toBe(true);
     expect(result.current.find((t) => t.id === 'atm_premium_imbalance')?.enabled).toBe(false);
     expect(result.current.find((t) => t.id === 'bear_to_bearish')?.enabled).toBe(true);
+  });
+
+  it('ORB Manual/Auto follows Trading Mode, not a strategy-local flag', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAlgoToggles(), { wrapper });
+    const orb = result.current.find((t) => t.id === 'orb');
+    const supertrend = result.current.find((t) => t.id === 'supertrend');
+    expect(orb?.enabled).toBe(supertrend?.enabled);
+    expect(orb?.description).toMatch(/Trading Mode/);
   });
 });

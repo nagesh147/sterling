@@ -110,7 +110,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
   // Same path the pane reads: the flag lives under record.config, and absent
   // means off rather than on — an engine nobody has enabled is not running.
   const navigatorEnabled = useNavigatorConfig().data?.record.config.enabled ?? false;
-  const orb = useOrbSignals(orbEnabled !== false);
+  const orb = useOrbSignals(orbEnabled === true);
   const apiSnapshot = useAtmPremiumImbalanceSnapshot();
   const gmSnapshot = useGammaMoveSnapshot();
   const owfSnapshot = useOiWallFlowSnapshot();
@@ -172,7 +172,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     // work already declined.
     if (e === 'supertrend') return engineConfig.data?.engine_enabled !== false;
     if (e === 'navigator') return navigatorEnabled;
-    if (e === 'orb') return orbEnabled !== false;
+    if (e === 'orb') return orbEnabled === true;
     // Same contract as the three above: a switched-off engine is skipped
     // whatever is ticked in Trading Mode. Absent config (snapshot still
     // loading) means included, so a first press is not a no-op.
@@ -217,7 +217,7 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     const all: EngineTabState[] = [
       { id: 'supertrend', running: engineConfig.data?.engine_enabled !== false, live: live(st), scanned: st.length },
       { id: 'adaptive_edge', running: !!snapshot.data, live: live(ae), scanned: ae.length },
-      { id: 'orb', running: orbEnabled !== false, live: live(ob), scanned: ob.length },
+      { id: 'orb', running: orbEnabled === true, live: live(ob), scanned: ob.length },
       // "running" here means armed, not merely enabled: this engine does nothing
       // until a session is armed, so an enabled-but-unarmed tab must not claim to
       // be running.
@@ -243,6 +243,9 @@ export function AdaptiveEdgeRightSidebar({ onSelectSignal, onOpenChart, onOpenBo
     // `!== false` and not `=== true`: an engine whose config has not arrived yet
     // keeps its tab. Hiding on "not loaded" would blink every tab out on each
     // page load and look exactly like the operator's own setting.
+    //
+    // ORB is the exception: it ships OFF, so useEngineEnabled treats "not
+    // loaded" as off. A fresh install must not flash a live ORB tab.
     ];
     return all.filter((tab) => {
       // The SuperTrend tab HOSTS Navigator — Navigator has no tab of its own, its
