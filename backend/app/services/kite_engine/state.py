@@ -112,8 +112,28 @@ def record_realized_pnl(uid:str,pnl:float,*,day_iso:str|None=None)->float:
         raise RuntimeError(f"daily PnL persistence failed: {exc}") from exc
     return total
 
+def _ledger_realized(uid:str,day:str)->float:
+    """Realized PnL for LIVE broker fills, summed from the signed execution ledger.
+
+    Two accumulators is not duplication: simulated exits never produce a broker
+    fill, so paper PnL can only live in ``_daily_pnl``, while a live exit is only
+    real once the broker says so and therefore only ever settles in the ledger.
+    Whichever booked an exit, it is counted once.
+
+    Deliberately NOT wrapped in a bare except: this feeds the INR daily-loss
+    breaker, and a read error that silently returns 0 is a breaker that fails
+    OPEN. No database at all is the one benign case — nothing can trade live
+    without one, because the order journal refuses to reserve an intent.
+    """
+    if not db.is_available():
+        return 0.0
+    from app.services.kite_engine import fill_ledger
+    return fill_ledger.realized_pnl(uid,day_iso=day)
+
 def daily_realized_pnl(uid:str,*,day_iso:str|None=None)->float:
-    day=day_iso or _ist_today_iso();cur=_load_daily_pnl(uid);return cur[1] if cur and cur[0]==day else 0.0
+    day=day_iso or _ist_today_iso();cur=_load_daily_pnl(uid)
+    paper=cur[1] if cur and cur[0]==day else 0.0
+    return paper+_ledger_realized(uid,day)
 
 def daily_realized_pnl_strict(uid:str,*,day_iso:str|None=None)->float:
     day=day_iso or _ist_today_iso()
@@ -121,7 +141,9 @@ def daily_realized_pnl_strict(uid:str,*,day_iso:str|None=None)->float:
         raw=db.get_config(f"kite_engine_daily_pnl_{uid}")
         if raw:
             d=json.loads(raw);_daily_pnl[uid]=(str(d[0]),float(d[1]))
-    cur=_daily_pnl.get(uid);return cur[1] if cur and cur[0]==day else 0.0
+    cur=_daily_pnl.get(uid)
+    paper=cur[1] if cur and cur[0]==day else 0.0
+    return paper+_ledger_realized(uid,day)
 
 def feed_correlation(uid:str,asset:str,close:float)->None:
     if close<=0:return

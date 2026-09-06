@@ -1,0 +1,158 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-09-06T15:34:17.083747+00:00",
+  "release_verdict": "NO_GO",
+  "supersedes_status_in": "docs/audits/2026-09-06-kite-validation.json",
+  "head_at_report": "01f1621a260971800890025a1d9fb8301859b197",
+  "working_tree_state": "uncommitted; the files under code_sha256 are the tested revision",
+  "scope": "P0 gate 1 only: the signed fill/lot/value/fees/realized-PnL ledger and its wiring into entries, exits and the daily-loss breaker. No other release gate was worked.",
+  "unique_backend_tests_passed": 3764,
+  "backend_tests_skipped": 6,
+  "test_count_note": "The prior manifest recorded 4755 passed / 14 skipped at HEAD d721b7454. The lower count here is the crypto product extraction merged as 01f1621a2 (PR #165) deleting those tests, not tests lost by this change. 47 tests were added by this change.",
+  "checks": [
+    {
+      "name": "fill_ledger_unit",
+      "command": "PYTHONWARNINGS=ignore python3 -m pytest tests/engines/sterling_kite_engine/test_fill_ledger.py -q",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "32 passed",
+      "proves": "Signed inventory, average cost, per-increment realized PnL and fees under duplicate, older, reordered, restated, identity-conflicting and crashed evidence."
+    },
+    {
+      "name": "fill_ledger_integration",
+      "command": "PYTHONWARNINGS=ignore python3 -m pytest tests/engines/sterling_kite_engine/test_fill_ledger_integration.py -q",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "15 passed",
+      "proves": "Journal entries, broker exits and partial exits settle in the ledger; the daily-loss breaker reads the settled figure; quarantined evidence blocks automatic entries."
+    },
+    {
+      "name": "kite_engine_suite",
+      "command": "PYTHONWARNINGS=ignore python3 -m pytest tests/engines/sterling_kite_engine/ -q -p no:randomly",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "603 passed"
+    },
+    {
+      "name": "full_backend_random_order",
+      "command": "PYTHONWARNINGS=ignore python3 -m pytest tests/ -q --deselect tests/engines/sterling_kite_engine/test_delta_iv_socket.py",
+      "cwd": "/home/nageshmadaram/Sterling/backend",
+      "exit_code": 0,
+      "summary": "3767 passed, 3 skipped in 73.38s"
+    },
+    {
+      "name": "full_backend_final",
+      "command": "STERLING_DB_PATH=/tmp/sterling-sep6-p0-final3.db PYTHONWARNINGS=ignore backend/.venv/bin/python -m pytest backend/tests -q --tb=short",
+      "cwd": "/home/nageshmadaram/Sterling",
+      "exit_code": 0,
+      "summary": "3764 passed, 6 skipped in 77.28s"
+    }
+  ],
+  "failed_test_ids": [],
+  "actions": {
+    "live_orders_submitted": false,
+    "account_mode_changed": false,
+    "deployed": false,
+    "strategy_parameters_optimized": false,
+    "synthetic_market_data_used_as_evidence": false,
+    "real_data_reaudited": false
+  },
+  "release_gates": [
+    {
+      "id": "P0-1",
+      "title": "Signed fill/lot/value/fees/realized-PnL ledger shared by entries, exits, GTT children and risk state",
+      "status": "PARTIAL",
+      "met": [
+        "Immutable signed increments with average-cost replay: kite_execution_increments.",
+        "Inventory, average cost, fees and realized PnL derived in ONE BEGIN IMMEDIATE transaction at synchronous=FULL: kite_inventory.",
+        "Duplicate, older-cumulative and reordered evidence converge; a crash before projection books neither quantity nor value.",
+        "Corrections and order-identity contradictions are quarantined in kite_execution_conflicts, never applied and never dropped.",
+        "Journal entries (execution_lifecycle._book_entry) and broker exits (monitor._book_exit) settle in it.",
+        "Partial exits now book their realized PnL instead of setting pnl_reconciliation_required.",
+        "state.daily_realized_pnl / _strict \u2014 the INR daily-loss breaker input \u2014 sum the ledger; the ledger read is deliberately not exception-swallowed, so it cannot fail open.",
+        "Quarantined evidence blocks automatic entries via autoexec_preflight.",
+        "Lot size is recorded on every increment from the instrument's own payload and projected onto the holding (Inventory.net_lots); quantity remains the unit for all value and risk figures.",
+        "Broker charges are fetched per order from /charges/orders and recorded against that order's fills; a cost may not be recorded without provenance, and Inventory.realized_is_gross reports whether the realized figure is still gross of costs.",
+        "Exchange timestamps from the postback drive replay ordering; a missing one records 0 rather than an arrival time posing as ordering information.",
+        "The exit path distinguishes BOOKED / ALREADY / ABSENT / UNKNOWN. Only ABSENT reaches the legacy single-price accumulator, so an unreadable ledger or evidence it already holds can no longer be double-booked into the daily-loss breaker; UNKNOWN books nowhere and blocks auto-entry."
+      ],
+      "not_met": [
+        "GTT children are still unattributed: a trigger's child order carries neither our exit order id nor our tag, so it never reaches the exit path at all. Attribution needs either a broker-verified tag on the GTT order parameters or a get_gtts() correlation pass, and belongs to P0 row 3. Not attempted blind: an unrecognised field on a protective-stop request could fail the stop.",
+        "Charges are best effort. A failed /charges/orders call leaves the holding gross of costs; nothing retries it yet.",
+        "Positions whose entry predates the ledger, and all paper positions, still book through the legacy single-price accumulator.",
+        "No process-level fencing (P0-2): concurrency is proven across threads on one SQLite database, not across engine workers."
+      ]
+    },
+    {
+      "id": "P0-2",
+      "title": "Process-level ownership/fencing across protection, registry projection and exits",
+      "status": "OPEN",
+      "evidence": "Not worked. Use a single engine writer."
+    },
+    {
+      "id": "P0-3",
+      "title": "Independent recovery cadence, authenticated event capture, GTT child/order attribution and uncertain-GTT reconciliation",
+      "status": "OPEN",
+      "evidence": "Not worked."
+    },
+    {
+      "id": "P0-4",
+      "title": "Canonical strict persistence and portfolio risk",
+      "status": "OPEN",
+      "evidence": "Not worked. The ledger is one transactional store, but the position registry, reserved capital and drawdown state remain separate."
+    },
+    {
+      "id": "P0-5",
+      "title": "Real executable-contract dataset and chronological validation",
+      "status": "BLOCKED",
+      "evidence": "The registered lake drive is not attached to this host (no matching mount or block device), so no option/futures replay was possible and no real-data audit was rerun."
+    },
+    {
+      "id": "P1-1",
+      "title": "Versioned calendar/instrument evidence and candle finality",
+      "status": "OPEN"
+    },
+    {
+      "id": "P1-2",
+      "title": "Unified readiness API/UI and operational runbook",
+      "status": "OPEN",
+      "evidence": "autoexec_preflight gained a ledger reason; there is still no unified readiness API, no alerting and no tested rollback."
+    },
+    {
+      "id": "P1-3",
+      "title": "Account/broker production validation",
+      "status": "OPEN"
+    }
+  ],
+  "test_limitations": [
+    "Protocol fixtures are not market-performance evidence.",
+    "Ledger concurrency is proven with threads against one SQLite file; it does not certify multiple engine processes.",
+    "The crash test injects a failure inside the ledger transaction; it is not a process kill.",
+    "No live broker, no live order and no real fill was involved in any check here.",
+    "The /charges/orders response shape is exercised through a fixture, not against Zerodha."
+  ],
+  "graph": {
+    "used_before_exploration": true,
+    "review_methods": [
+      "graphify query",
+      "targeted source reads of the execution modules"
+    ],
+    "limitation": "The graph answered orientation only; the execution-path reasoning came from reading the modules."
+  },
+  "code_sha256": {
+    "backend/app/services/db.py": "144a0600e2fd5bc04cac0770bdbed0f4e742f8af13d7deb515fd8ce1f9cc2d4e",
+    "backend/app/services/kite_engine/execution_lifecycle.py": "021c17975934768b088b3875f95cd5745c1f8179f10bec7cb0a650c939db7864",
+    "backend/app/services/kite_engine/fill_ledger.py": "6ad9a8ecf914076890a1bf521eb0990c4695c0ae12548012d9a0c36117b060b8",
+    "backend/app/services/kite_engine/monitor.py": "3ffc2b22fa2c3266b2a93b0f99746cfdadf3605585332126adcd25a5522a4f68",
+    "backend/app/services/kite_engine/service.py": "42d91ac9eb32f35ac1670e58b13d5338c6acf023d133a813d07b6c4d004c7ec5",
+    "backend/app/services/kite_engine/state.py": "f858d5c1502deb91c1f9ab77c0a1291832da043b7d69a1c029891a60197c4bd1",
+    "backend/tests/engines/sterling_kite_engine/test_fill_ledger.py": "ad0705838f609a59de7506069c5edbe6003586ffffbfc87de3d760ffaa63dfd1",
+    "backend/tests/engines/sterling_kite_engine/test_fill_ledger_integration.py": "89130f3f8f9f3c9cc088406494550881824d3092d5086525910a9f018bb8a63e"
+  },
+  "backend_python_tree_sha256": "a1ded19470d343778ff8b374f635b77182c341cd63154a958be61ccac4655abc",
+  "artifact_sha256": {
+    "docs/audits/2026-09-06-kite-implementation-handoff.md": "0db2b7c5d867b619927797ea238786b49c0c81f4b71811328b17f3e6338df618",
+    "docs/audits/2026-09-06-kite-validation.json": "a48a8dca850143036226c8edbaa34bab94c5590bba5a876ea336302996414356",
+    "docs/audits/2026-09-06-kite-cas-realdata.json": "ffb8499d62acc2cc145ae298fb958821d501474c6c528447058d50fab8238757"
+  }
+}

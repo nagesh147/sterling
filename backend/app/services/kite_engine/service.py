@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
+from app.services.kite_engine import fill_ledger
 from app.services.kite_engine import monitor, order_journal, positions, protection, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
 from app.services.kite_engine.greeks import (
@@ -1479,6 +1480,17 @@ def autoexec_preflight(uid: str) -> List[str]:
     unresolved_pnl = [p.symbol for p in positions._load(uid).values() if p.pnl_reconciliation_required]
     if unresolved_pnl:
         reasons.append("Fill-level PnL reconciliation required: " + ", ".join(unresolved_pnl))
+    # The signed ledger quarantines evidence it will not apply — a restated fill
+    # value, an order id that changed contract. Until an operator resolves it the
+    # cost basis behind an open holding is in doubt, which is the same reason the
+    # flag above blocks: do not let an unattended process add to it.
+    try:
+        flagged = [h.symbol for h in fill_ledger.holdings(uid) if h.reconciliation_required]
+    except Exception:
+        flagged = []
+        reasons.append("Execution ledger unavailable; fill accounting cannot be verified")
+    if flagged:
+        reasons.append("Execution ledger reconciliation required: " + ", ".join(flagged))
     uncertain_exits = [p.symbol for p in live if p.exit_order_id]
     if uncertain_exits:
         reasons.append("Exit confirmation pending: " + ", ".join(uncertain_exits))

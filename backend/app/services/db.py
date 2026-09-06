@@ -195,6 +195,79 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (account_id, order_id, trade_id)
         )
     """)
+    # ── signed execution ledger (P0-1) ───────────────────────────────────────
+    # One immutable row per broker execution INCREMENT, keyed by the cumulative
+    # quantity the broker reported for that order. The key is what makes a
+    # duplicate/replayed postback a no-op and a crash mid-projection replayable:
+    # the same cumulative evidence always lands on the same row.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kite_execution_increments (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id          TEXT NOT NULL,
+            uid                 TEXT NOT NULL,
+            symbol              TEXT NOT NULL,
+            exchange            TEXT NOT NULL,
+            order_id            TEXT NOT NULL,
+            side                TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            cumulative_quantity INTEGER NOT NULL,
+            cumulative_value    REAL NOT NULL,
+            signed_quantity     INTEGER NOT NULL,
+            lot_size            INTEGER NOT NULL DEFAULT 0,
+            price               REAL NOT NULL,
+            fees                REAL NOT NULL DEFAULT 0,
+            fees_source         TEXT NOT NULL DEFAULT '',
+            realized_delta      REAL NOT NULL DEFAULT 0,
+            day_iso             TEXT NOT NULL,
+            exchange_ts_ms      INTEGER NOT NULL DEFAULT 0,
+            received_ts_ms      INTEGER NOT NULL,
+            raw_json            TEXT NOT NULL DEFAULT '{}',
+            UNIQUE(account_id, order_id, cumulative_quantity)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_kite_incr_position "
+                 "ON kite_execution_increments(account_id, uid, symbol)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_kite_incr_day "
+                 "ON kite_execution_increments(uid, day_iso)")
+    # Derived state. Never authoritative on its own: every write recomputes it by
+    # replaying the increments above, so a late or reordered increment converges
+    # instead of leaving a wrong running total behind.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kite_inventory (
+            account_id              TEXT NOT NULL,
+            uid                     TEXT NOT NULL,
+            symbol                  TEXT NOT NULL,
+            exchange                TEXT NOT NULL DEFAULT '',
+            net_quantity            INTEGER NOT NULL DEFAULT 0,
+            lot_size                INTEGER NOT NULL DEFAULT 0,
+            average_cost            REAL NOT NULL DEFAULT 0,
+            realized_pnl            REAL NOT NULL DEFAULT 0,
+            fees                    REAL NOT NULL DEFAULT 0,
+            fees_complete           INTEGER NOT NULL DEFAULT 0,
+            reconciliation_required INTEGER NOT NULL DEFAULT 0,
+            reconciliation_reason   TEXT NOT NULL DEFAULT '',
+            version                 INTEGER NOT NULL DEFAULT 0,
+            updated_ms              INTEGER NOT NULL,
+            PRIMARY KEY (account_id, uid, symbol)
+        )
+    """)
+    # Evidence we refused to apply. Contradictions are quarantined, never dropped
+    # and never silently applied: a wrong inventory is worse than a stalled one.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kite_execution_conflicts (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id          TEXT NOT NULL,
+            uid                 TEXT NOT NULL,
+            symbol              TEXT NOT NULL,
+            order_id            TEXT NOT NULL,
+            side                TEXT NOT NULL,
+            cumulative_quantity INTEGER NOT NULL,
+            cumulative_value    REAL NOT NULL,
+            reason              TEXT NOT NULL,
+            received_ts_ms      INTEGER NOT NULL,
+            raw_json            TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS iv_history (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,

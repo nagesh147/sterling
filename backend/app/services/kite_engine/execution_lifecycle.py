@@ -2,14 +2,19 @@
 
 Broker observations are journaled before projection. Recovery repeats projection,
 never submission. An uncertain initial GTT request requires reconciliation, not a
-second trigger. Live scale-ins are blocked until a signed lot ledger is available.
+second trigger. A signed ledger settles fills and costs. Live scale-ins stay blocked:
+that is a protection question, not an accounting one.
 """
 from __future__ import annotations
 
 import asyncio
 from dataclasses import fields
 
+from app.core.logging import get_logger
+from app.services.kite_engine import fill_ledger
 from app.services.kite_engine import order_journal as journal, positions, state
+
+log = get_logger(__name__)
 
 _locks: dict[tuple[str, str], asyncio.Lock] = {}
 
@@ -75,6 +80,94 @@ async def _protect(client, p) -> None:
         state.log(p.uid, "order_failed", f"{p.symbol}: GTT outcome unresolved; reconcile before retry")
 
 
+def exchange_ms(order: dict) -> int:
+    """Epoch ms the EXCHANGE stamped on this event, or 0 when it did not.
+
+    The ledger replays increments in exchange order, so a real timestamp is what
+    lets a late event land in its true place. 0 means "unknown" and must stay 0 —
+    substituting arrival time here would look like ordering information and
+    silently defeat the replay.
+    """
+    from app.services.exchanges.kite.client import _parse_kite_ts
+    raw = order.get("exchange_timestamp") or order.get("exchange_update_timestamp")
+    if not raw:
+        return 0
+    try:
+        return int(_parse_kite_ts(raw))
+    except Exception as exc:  # noqa: BLE001
+        log.debug("suppressed exchange timestamp parse: %s", exc)
+        return 0
+
+
+async def apply_broker_charges(client, uid: str, p,
+                                order_id: str, order: dict) -> None:
+    """Ask the broker what this order actually cost and record it against the fills.
+
+    Realized PnL is gross of costs until this lands, so it reads better than the
+    truth — the direction that delays the daily-loss breaker rather than tripping
+    it early. Best effort: charges are computed after the fact and a failure here
+    must not disturb an exit that has already happened. ``Inventory.fees_complete``
+    is what says whether the figure is net.
+    """
+    if client is None or getattr(client, "_is_paper", True) is not False:
+        return
+    charges = getattr(client, "order_charges", None)
+    if charges is None:
+        return
+    try:
+        rows = await charges([{
+            "order_id": order_id, "exchange": p.exchange, "tradingsymbol": p.symbol,
+            "transaction_type": str(order.get("transaction_type") or "").upper(),
+            "variety": str(order.get("variety") or "regular"),
+            "product": str(order.get("product") or "NRML"),
+            "order_type": str(order.get("order_type") or "MARKET"),
+            "quantity": int(order.get("filled_quantity") or 0),
+            "average_price": float(order.get("average_price") or 0.0)}])
+        total = float((rows or [{}])[0].get("charges", {}).get("total") or 0.0)
+        if total <= 0:
+            return
+        fill_ledger.apply_fees(account_id=p.account_id, uid=uid, symbol=p.symbol,
+                               order_id=order_id, fees=total, source="broker")
+    except Exception as exc:  # noqa: BLE001
+        state.log(uid, "info",
+                  f"{p.symbol}: broker charges for #{order_id} unavailable ({exc}); "
+                  f"realized PnL stays gross of costs")
+
+
+def _book_entry(uid: str, account_id: str, intent, order: dict) -> bool:
+    """Record the journal's confirmed entry quantity/value in the signed ledger.
+
+    The journal already holds the broker's cumulative figures and rejects older
+    or contradictory evidence, so it is the right thing to forward: the ledger
+    derives the increment itself and is safe to call again on every replay.
+
+    False means the cost basis did NOT reach the ledger. That is not cosmetic:
+    every later exit for this holding then settles on the legacy accumulator, so
+    the caller flags the position rather than letting it look accounted for.
+    """
+    if intent.filled_quantity <= 0 or intent.filled_value <= 0 or not intent.order_id:
+        return True
+    try:
+        applied = fill_ledger.record(
+            account_id=account_id, uid=uid, symbol=intent.symbol,
+            exchange=intent.exchange, side=intent.side.upper(),
+            order_id=intent.order_id, cumulative_quantity=intent.filled_quantity,
+            cumulative_value=intent.filled_value, source="entry",
+            lot_size=int(intent.payload.get("lot_size") or 0),
+            exchange_ts_ms=exchange_ms(order))
+    except Exception as exc:  # noqa: BLE001
+        state.log(uid, "order_failed",
+                  f"{intent.symbol}: entry fill could not be booked to the ledger "
+                  f"({exc}); cost basis needs reconciliation")
+        return False
+    if applied.reconciliation_required:
+        state.log(uid, "order_failed",
+                  f"{intent.symbol}: contradictory entry fill evidence quarantined "
+                  f"({applied.inventory.reconciliation_reason})")
+        return False
+    return True
+
+
 async def consume_order(client, uid: str, order: dict) -> bool:
     """True means a journal-owned entry was handled (including blocked evidence)."""
     aid = account_id(client)
@@ -119,6 +212,14 @@ async def consume_order(client, uid: str, order: dict) -> bool:
         p.status = (positions.OPEN if filled else
                     positions.PENDING if p.entry_pending else positions.REJECTED)
         positions.persist_strict(uid)
+        # Settle the money before the projection is acknowledged. A crash in
+        # between leaves the intent projection_pending, so recovery replays this
+        # same cumulative evidence and the ledger books it exactly once.
+        if not _book_entry(uid, aid, latest, order):
+            p.pnl_reconciliation_required = True
+            positions.persist_strict(uid)
+        elif latest.state in journal.TERMINAL:
+            await apply_broker_charges(client, uid, p, oid, order)
         journal.mark_projected(intent.intent_key, latest.projection_version)
         if p.status == positions.REJECTED and p.guard_key:
             state.clear_auto_open(uid, p.guard_key)

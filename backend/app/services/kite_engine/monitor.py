@@ -27,6 +27,7 @@ from app.engines.common.exit_counter import get_exit_threshold
 from app.services.kite_engine import positions as pos
 from app.services.kite_engine import protective_stop as pstop
 from app.services.kite_engine import state
+from app.services.kite_engine import fill_ledger
 from app.services.kite_engine import order_journal
 
 log = get_logger(__name__)
@@ -51,6 +52,11 @@ def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None
     backs the INR daily-loss breaker. Long: (exit − entry)·qty; short future: negated.
     Uses the confirmed fill price when known, else the intended entry premium.
 
+    This is the LEGACY path, and it is what paper positions and any live position
+    whose entry predates the signed ledger still use. A ledger-backed exit settles
+    per fill in ``fill_ledger`` instead, at the price each increment actually got;
+    it claims the flag below so the two can never both book the same money.
+
     Exactly once per position, whichever exit path gets here first. Both callers —
     this module's ``_exit_position`` and the ``on_order_update`` reconciliation — used
     to guard on ``status`` alone, which does not cover a fill postback arriving while
@@ -65,6 +71,86 @@ def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None
         return
     sign = 1.0 if p.direction == "long" else -1.0
     state.record_realized_pnl(uid, (float(exit_price) - entry) * p.qty * sign)
+
+
+#: What the signed ledger did with an exit fill. The distinction matters because
+#: it decides who books the money, and getting it wrong books it twice:
+#:   BOOKED / ALREADY — the ledger owns this exit; the legacy accumulator must not
+#:                      touch it. ALREADY means the ledger already had the same
+#:                      evidence, which the registry can lose track of on its own.
+#:   ABSENT           — this holding has no cost basis in the ledger (a paper
+#:                      position, or one opened before the ledger existed), so the
+#:                      legacy accumulator is the only thing that can book it.
+#:   UNKNOWN          — the ledger could not answer. Book nowhere and flag: a
+#:                      guessed figure feeds the INR daily-loss breaker.
+BOOKED, ALREADY, ABSENT, UNKNOWN = "booked", "already", "absent", "unknown"
+
+
+def _ledger_holding(uid: str, p: "pos.OpenPosition"):
+    """(outcome, holding) for this position's cost basis in the signed ledger.
+
+    A position whose entry predates the ledger — or never went through the order
+    journal at all, which is every paper position — has no cost basis in it.
+    Booking an exit against that would not close anything; it would open a
+    phantom short at the exit price and report a realized PnL invented from it.
+    """
+    if not getattr(p, "account_id", "") or p.qty <= 0:
+        return ABSENT, None
+    try:
+        holding = fill_ledger.inventory(p.account_id, uid, p.symbol)
+    except Exception as exc:  # noqa: BLE001
+        state.log(uid, "order_failed",
+                  f"{p.symbol}: execution ledger unreadable ({exc}); realized PnL is on hold")
+        return UNKNOWN, None
+    if holding is None:
+        return ABSENT, None
+    if holding.net_quantity == 0:
+        # The ledger knows this holding and says it is already flat. Whatever this
+        # event is, the legacy accumulator must not invent a second closure for it.
+        return ALREADY, holding
+    if (holding.net_quantity > 0) != (p.direction == "long"):
+        state.log(uid, "order_failed",
+                  f"{p.symbol}: ledger holds {holding.net_quantity} against a "
+                  f"{p.direction} position; realized PnL is on hold")
+        return UNKNOWN, holding
+    return BOOKED, holding
+
+
+def _book_exit(uid: str, p: "pos.OpenPosition", *, order_id: str,
+               cumulative_quantity: int, average_price: float, source: str,
+               exchange_ts_ms: int = 0):
+    """Settle one piece of cumulative exit evidence. Returns (outcome, applied).
+
+    The ledger is handed the broker's cumulative figures unchanged and works out
+    the increment itself, so a duplicate postback, a reconnect replay or a
+    restart cannot book the same exit twice.
+    """
+    outcome, _holding = _ledger_holding(uid, p)
+    if outcome != BOOKED:
+        return outcome, None
+    try:
+        applied = fill_ledger.record(
+            account_id=p.account_id, uid=uid, symbol=p.symbol, exchange=p.exchange,
+            side="SELL" if p.direction == "long" else "BUY", order_id=order_id,
+            cumulative_quantity=int(cumulative_quantity),
+            cumulative_value=int(cumulative_quantity) * float(average_price),
+            source=source, lot_size=int(getattr(p, "lot_size", 0) or 0),
+            exchange_ts_ms=int(exchange_ts_ms))
+    except Exception as exc:  # noqa: BLE001
+        state.log(uid, "order_failed",
+                  f"{p.symbol}: exit fill could not be booked to the ledger ({exc}); "
+                  f"realized PnL needs reconciliation")
+        return UNKNOWN, None
+    if applied.reconciliation_required:
+        state.log(uid, "order_failed",
+                  f"{p.symbol}: contradictory exit fill evidence quarantined "
+                  f"({applied.inventory.reconciliation_reason}) — realized PnL is on hold")
+        return UNKNOWN, None
+    if applied.accepted:
+        return BOOKED, applied
+    # Benign non-acceptance — a duplicate or older cumulative. The ledger already
+    # holds this exit, so the legacy accumulator must stay out of it.
+    return ALREADY, applied
 
 
 async def _resize_broker_stop(client, uid: str, p: pos.OpenPosition, old_qty: int) -> None:
@@ -156,20 +242,47 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
             if delta <= 0 or delta > p.qty or not isfinite(avg) or avg <= 0:
                 return
             # Quantity evidence survives duplicate/out-of-order events and restarts.
-            # Partial-fill PnL is left unbooked until a transactional fill ledger exists.
+            # Settle the money in the signed ledger, which owns cost basis and
+            # realized PnL per increment; the registry only tracks quantity.
+            # Named apart from the GTT cancellation's own `outcome` below.
+            from app.services.kite_engine import execution_lifecycle as _life
+            ledger_outcome, booked = _book_exit(
+                uid, p, order_id=oid, cumulative_quantity=filled, average_price=avg,
+                source="exit", exchange_ts_ms=_life.exchange_ms(order))
             p.exit_fills[oid] = filled
             if delta < p.qty:
                 old_qty = p.qty
                 p.qty -= delta
-                p.pnl_reconciliation_required = True
+                # A partial exit used to leave its PnL unbooked and the position
+                # flagged. It is now settled at the price it actually filled at, so
+                # the flag is only for exits the ledger could not account for — and
+                # the legacy accumulator still cannot book a partial at all.
+                if ledger_outcome != BOOKED:
+                    p.pnl_reconciliation_required = True
                 if status in _DEAD_STATUSES or status == _FILLED_STATUS:
                     p.exit_order_id = ""
                 pos._persist(uid)
                 await _resize_broker_stop(client, uid, p, old_qty)
-                state.log(uid, "info", f"{symbol}: partial exit, {p.qty} qty remains; PnL reconciliation required")
+                state.log(uid, "info",
+                          f"{symbol}: partial exit, {p.qty} qty remains; "
+                          + (f"realized ₹{booked.realized_delta:.2f} booked"
+                             if ledger_outcome == BOOKED else "PnL reconciliation required"))
+                if ledger_outcome == BOOKED:
+                    await _life.apply_broker_charges(client, uid, p, oid, order)
                 return
             pos.close(uid, symbol, reason=f"{p.exit_reason or 'broker exit'}; fill @ ₹{avg:.2f}")
-            if prior == 0 and len(p.exit_fills) == 1:
+            if ledger_outcome in (BOOKED, ALREADY):
+                # The ledger holds this day's realized figure. Claim the registry
+                # flag anyway so no other exit path adds the same money twice.
+                pos.claim_realized(uid, symbol)
+            elif ledger_outcome == UNKNOWN:
+                # Neither store can be trusted to hold this exit's money. Booking a
+                # guess into the daily-loss breaker is worse than blocking on it.
+                closed = pos.get(uid, symbol)
+                if closed is not None:
+                    closed.pnl_reconciliation_required = True
+                    pos._persist(uid)
+            elif prior == 0 and len(p.exit_fills) == 1:
                 _record_realized(uid, p, avg)
             # The exit may have come from somewhere other than the GTT — a hand-placed
             # SELL, another app, the Kite web order book. Anything still resting is now
@@ -197,6 +310,10 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
                     log.debug("suppressed: %s", _exc)
             state.log(uid, "order_placed",
                       f"{symbol} exit filled at broker @ ₹{avg:.2f} — position reconciled closed")
+            # Costs last. A resting GTT with nothing behind it is a naked short, so
+            # cancelling it must not wait on a charges round-trip.
+            if ledger_outcome == BOOKED:
+                await _life.apply_broker_charges(client, uid, p, oid, order)
             return
 
         filled = int(float(order.get("filled_quantity") or 0) or 0)
