@@ -57,9 +57,9 @@ class TestWatchlist:
         data = resp.json()
         assert data["count"] > 0
         underlyings = {item["underlying"] for item in data["items"]}
-        assert "BTC" in underlyings
-        assert "ETH" in underlyings
-        assert "XRP" in underlyings
+        assert "NIFTY" in underlyings
+        assert "BANKNIFTY" in underlyings
+        assert "BANKNIFTY" in underlyings
 
     def test_each_item_has_state(self, client):
         resp = client.get("/api/v1/directional/watchlist")
@@ -77,26 +77,26 @@ class TestWatchlist:
 
 class TestEvalHistory:
     def test_empty_history(self, client):
-        resp = client.get("/api/v1/directional/history/BTC")
+        resp = client.get("/api/v1/directional/history/NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["history"] == []
         assert data["count"] == 0
 
     def test_history_grows_after_run_once(self, client):
-        client.post("/api/v1/directional/run-once?underlying=BTC")
-        resp = client.get("/api/v1/directional/history/BTC")
+        client.post("/api/v1/directional/run-once?underlying=NIFTY")
+        resp = client.get("/api/v1/directional/history/NIFTY")
         assert resp.json()["count"] == 1
 
     def test_history_accumulates(self, client):
-        client.post("/api/v1/directional/run-once?underlying=BTC")
-        client.post("/api/v1/directional/run-once?underlying=BTC")
-        assert client.get("/api/v1/directional/history/BTC").json()["count"] == 2
+        client.post("/api/v1/directional/run-once?underlying=NIFTY")
+        client.post("/api/v1/directional/run-once?underlying=NIFTY")
+        assert client.get("/api/v1/directional/history/NIFTY").json()["count"] == 2
 
     def test_history_item_fields(self, client):
-        client.post("/api/v1/directional/run-once?underlying=ETH")
-        item = client.get("/api/v1/directional/history/ETH").json()["history"][0]
+        client.post("/api/v1/directional/run-once?underlying=BANKNIFTY")
+        item = client.get("/api/v1/directional/history/BANKNIFTY").json()["history"][0]
         assert "state" in item
         assert "recommendation" in item
         assert "no_trade_score" in item
@@ -107,8 +107,8 @@ class TestEvalHistory:
         assert resp.status_code == 404
 
     def test_history_isolated_by_underlying(self, client):
-        client.post("/api/v1/directional/run-once?underlying=BTC")
-        eth_hist = client.get("/api/v1/directional/history/ETH").json()
+        client.post("/api/v1/directional/run-once?underlying=NIFTY")
+        eth_hist = client.get("/api/v1/directional/history/BANKNIFTY").json()
         assert eth_hist["count"] == 0
 
 
@@ -161,7 +161,7 @@ class TestRiskConfig:
             "financial_stop_pct": 0.5,
         })
         # run-once should succeed regardless (no options chain → no_trade)
-        resp = client.post("/api/v1/directional/run-once?underlying=BTC")
+        resp = client.post("/api/v1/directional/run-once?underlying=NIFTY")
         assert resp.status_code == 200
 
 
@@ -181,7 +181,7 @@ class TestCachingAdapter:
     async def test_price_cached(self):
         inner = self._inner()
         adapter = CachingAdapter(inner)
-        inst = get_instrument("BTC")
+        inst = get_instrument("NIFTY")
         v1 = await adapter.get_index_price(inst)
         v2 = await adapter.get_index_price(inst)
         assert v1 == v2
@@ -191,7 +191,7 @@ class TestCachingAdapter:
     async def test_candles_cached(self):
         inner = self._inner()
         adapter = CachingAdapter(inner)
-        inst = get_instrument("BTC")
+        inst = get_instrument("NIFTY")
         await adapter.get_candles(inst, "1H", limit=100)
         await adapter.get_candles(inst, "1H", limit=100)
         inner.get_candles.assert_called_once()
@@ -200,7 +200,7 @@ class TestCachingAdapter:
     async def test_different_resolutions_cached_separately(self):
         inner = self._inner()
         adapter = CachingAdapter(inner)
-        inst = get_instrument("BTC")
+        inst = get_instrument("NIFTY")
         await adapter.get_candles(inst, "1H", limit=100)
         await adapter.get_candles(inst, "4H", limit=100)
         assert inner.get_candles.call_count == 2
@@ -209,7 +209,7 @@ class TestCachingAdapter:
     async def test_invalidate_clears_cache(self):
         inner = self._inner()
         adapter = CachingAdapter(inner)
-        inst = get_instrument("BTC")
+        inst = get_instrument("NIFTY")
         await adapter.get_index_price(inst)
         adapter.invalidate("price:")
         await adapter.get_index_price(inst)

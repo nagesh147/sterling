@@ -71,37 +71,32 @@ class TestInstruments:
         data = resp.json()
         assert data["count"] > 0
         underlyings = {i["underlying"] for i in data["instruments"]}
-        assert "BTC" in underlyings
-        assert "ETH" in underlyings
+        assert "NIFTY" in underlyings
+        assert "BANKNIFTY" in underlyings
 
     def test_get_btc(self, client):
-        resp = client.get("/api/v1/instruments/BTC")
+        resp = client.get("/api/v1/instruments/NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["instrument"]["underlying"] == "BTC"
+        assert data["instrument"]["underlying"] == "NIFTY"
         assert data["options_available"] is True
-
-    def test_get_xrp_no_options(self, client):
-        resp = client.get("/api/v1/instruments/XRP")
-        assert resp.status_code == 200
-        assert resp.json()["options_available"] is False
 
     def test_unknown_returns_404(self, client):
         resp = client.get("/api/v1/instruments/DOGE")
         assert resp.status_code == 404
 
     def test_case_insensitive(self, client):
-        resp = client.get("/api/v1/instruments/eth")
+        resp = client.get("/api/v1/instruments/banknifty")
         assert resp.status_code == 200
-        assert resp.json()["instrument"]["underlying"] == "ETH"
+        assert resp.json()["instrument"]["underlying"] == "BANKNIFTY"
 
 
 class TestDirectionalStatus:
     def test_status_btc(self, client):
-        resp = client.get("/api/v1/directional/status?underlying=BTC")
+        resp = client.get("/api/v1/directional/status?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert "paper_mode" in data
         assert "real_public_data" in data
         assert "exchange_status" in data
@@ -114,10 +109,10 @@ class TestDirectionalStatus:
 
 class TestMarketSnapshot:
     def test_snapshot_btc(self, client):
-        resp = client.get("/api/v1/directional/debug/market-snapshot?underlying=BTC")
+        resp = client.get("/api/v1/directional/debug/market-snapshot?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["spot_price"] == 42000.0
         assert data["candles_4h_count"] > 0
 
@@ -128,16 +123,16 @@ class TestMarketSnapshot:
 
 class TestPreview:
     def test_preview_btc(self, client):
-        resp = client.get("/api/v1/directional/preview?underlying=BTC")
+        resp = client.get("/api/v1/directional/preview?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert "state" in data
         assert "direction" in data
 
     def test_preview_xrp_filtered(self, client):
         # XRP-PERPETUAL is not available on Deribit (returns 400 at exchange level)
-        resp = client.get("/api/v1/directional/preview?underlying=XRP")
+        resp = client.get("/api/v1/directional/preview?underlying=BANKNIFTY")
         assert resp.status_code in (200, 400)
 
     def test_preview_unknown_404(self, client):
@@ -147,22 +142,22 @@ class TestPreview:
 
 class TestRunOnce:
     def test_run_once_btc(self, client):
-        resp = client.post("/api/v1/directional/run-once?underlying=BTC")
+        resp = client.post("/api/v1/directional/run-once?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["paper_mode"] is True
         assert "state" in data
         assert "recommendation" in data
 
     def test_run_once_eth(self, client):
-        resp = client.post("/api/v1/directional/run-once?underlying=ETH")
+        resp = client.post("/api/v1/directional/run-once?underlying=BANKNIFTY")
         assert resp.status_code == 200
-        assert resp.json()["underlying"] == "ETH"
+        assert resp.json()["underlying"] == "BANKNIFTY"
 
     def test_run_once_xrp_no_options(self, client):
         # XRP-PERPETUAL excluded from Deribit — expect 400 (not serveable)
-        resp = client.post("/api/v1/directional/run-once?underlying=XRP")
+        resp = client.post("/api/v1/directional/run-once?underlying=BANKNIFTY")
         assert resp.status_code in (200, 400)
 
     def test_run_once_unknown_404(self, client):

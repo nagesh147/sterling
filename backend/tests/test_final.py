@@ -52,10 +52,10 @@ def client():
 
 class TestSnapshotEndpoint:
     def test_snapshot_btc(self, client):
-        resp = client.get("/api/v1/directional/snapshot?underlying=BTC")
+        resp = client.get("/api/v1/directional/snapshot?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert "spot_price" in data
         assert "macro_regime" in data
         assert "signal_trend" in data
@@ -64,39 +64,39 @@ class TestSnapshotEndpoint:
         assert "ivr_band" in data
 
     def test_snapshot_eth(self, client):
-        resp = client.get("/api/v1/directional/snapshot?underlying=ETH")
+        resp = client.get("/api/v1/directional/snapshot?underlying=BANKNIFTY")
         assert resp.status_code == 200
-        assert resp.json()["underlying"] == "ETH"
+        assert resp.json()["underlying"] == "BANKNIFTY"
 
     def test_snapshot_unknown_404(self, client):
         resp = client.get("/api/v1/directional/snapshot?underlying=FAKE")
         assert resp.status_code == 404
 
     def test_snapshot_has_arrows(self, client):
-        data = client.get("/api/v1/directional/snapshot?underlying=BTC").json()
+        data = client.get("/api/v1/directional/snapshot?underlying=NIFTY").json()
         assert "green_arrow" in data
         assert "red_arrow" in data
         assert isinstance(data["green_arrow"], bool)
 
     def test_snapshot_st_trends_length(self, client):
-        data = client.get("/api/v1/directional/snapshot?underlying=BTC").json()
+        data = client.get("/api/v1/directional/snapshot?underlying=NIFTY").json()
         assert len(data["st_trends"]) == 3
 
     def test_snapshot_scores_in_range(self, client):
-        data = client.get("/api/v1/directional/snapshot?underlying=BTC").json()
+        data = client.get("/api/v1/directional/snapshot?underlying=NIFTY").json()
         assert 0.0 <= data["score_long"] <= 100.0
         assert 0.0 <= data["score_short"] <= 100.0
         assert 0.0 <= data["regime_score"] <= 100.0
 
     def test_snapshot_exec_confidence_in_range(self, client):
-        data = client.get("/api/v1/directional/snapshot?underlying=BTC").json()
+        data = client.get("/api/v1/directional/snapshot?underlying=NIFTY").json()
         assert 0.0 <= data["exec_confidence"] <= 1.0
 
     def test_snapshot_default_underlying(self, client):
         resp = client.get("/api/v1/directional/snapshot")
         assert resp.status_code == 200
         # Default is BTC from settings
-        assert resp.json()["underlying"] == "BTC"
+        assert resp.json()["underlying"] == "NIFTY"
 
 
 # ─── asyncio timeout in RetryingAdapter ───────────────────────────────────────
@@ -125,7 +125,7 @@ class TestRetryTimeout:
         # High call_timeout so asyncio.wait_for doesn't interfere —
         # we are testing the retry-on-TimeoutError path, not actual timing.
         adapter = RetryingAdapter(inner, max_attempts=3, base_delay=0.001, call_timeout=5.0)
-        result = await adapter.get_index_price(get_instrument("BTC"))
+        result = await adapter.get_index_price(get_instrument("NIFTY"))
         assert result == 42000.0
         assert call_count == 2
 
@@ -139,7 +139,7 @@ class TestRetryTimeout:
         inner.get_index_price = always_timeout
         adapter = RetryingAdapter(inner, max_attempts=2, base_delay=0.001, call_timeout=5.0)
         with pytest.raises((asyncio.TimeoutError, Exception)):
-            await adapter.get_index_price(get_instrument("BTC"))
+            await adapter.get_index_price(get_instrument("NIFTY"))
 
     @pytest.mark.asyncio
     async def test_timeout_counted_as_attempt(self):
@@ -155,7 +155,7 @@ class TestRetryTimeout:
         inner.get_index_price = always_timeout
         adapter = RetryingAdapter(inner, max_attempts=3, base_delay=0.001, call_timeout=5.0)
         with pytest.raises(Exception):
-            await adapter.get_index_price(get_instrument("BTC"))
+            await adapter.get_index_price(get_instrument("NIFTY"))
         assert call_count == 3
 
 
@@ -170,7 +170,7 @@ class TestConftestIsolation:
 
     def test_history_empty_at_start(self):
         from app.services import eval_history
-        assert eval_history.get_history("BTC") == []
+        assert eval_history.get_history("NIFTY") == []
 
     def test_positions_still_empty_in_next_test(self, client):
         from app.services import paper_store
@@ -182,7 +182,7 @@ class TestConftestIsolation:
 class TestHealthFinal:
     def test_health_exchange_adapter_field(self, client):
         data = client.get("/health").json()
-        assert data["exchange_adapter"] in ("deribit", "okx", "delta_india")
+        assert data["exchange_adapter"] == "zerodha"
 
     def test_health_cache_keys_field(self, client):
         data = client.get("/health").json()

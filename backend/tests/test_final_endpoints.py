@@ -25,7 +25,7 @@ def _make_options():
         for opt_type in ["call", "put"]:
             opts.append(OptionSummary(
                 instrument_name=f"BTC-12JAN25-{strike}-{'C' if opt_type=='call' else 'P'}",
-                underlying="BTC", strike=float(strike), expiry_date="12JAN25", dte=12,
+                underlying="NIFTY", strike=float(strike), expiry_date="12JAN25", dte=12,
                 option_type=opt_type, bid=400.0, ask=420.0, mark_price=410.0, mid_price=410.0,
                 mark_iv=55.0 + (strike - 42000) / 1000, delta=0.45 if opt_type == "call" else -0.45,
                 open_interest=200.0, volume_24h=30.0, last_updated_ms=now,
@@ -62,7 +62,7 @@ def client():
 class TestAlertCRUDComplete:
     def test_get_alert_by_id(self, client):
         created = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 50000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0
         }).json()
         aid = created["id"]
         resp = client.get(f"/api/v1/alerts/{aid}")
@@ -75,11 +75,11 @@ class TestAlertCRUDComplete:
 
     def test_put_alert_updates_threshold(self, client):
         created = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 50000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0
         }).json()
         aid = created["id"]
         updated = client.put(f"/api/v1/alerts/{aid}", json={
-            "underlying": "BTC", "condition": "price_above",
+            "underlying": "NIFTY", "condition": "price_above",
             "threshold": 55000.0, "cooldown_hours": 2.0, "notes": "revised"
         })
         assert updated.status_code == 200
@@ -88,13 +88,13 @@ class TestAlertCRUDComplete:
 
     def test_bulk_delete_dismissed(self, client):
         c1 = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0
         }).json()["id"]
         # Dismiss it
         client.post(f"/api/v1/alerts/{c1}/dismiss")
         # Add another active
         client.post("/api/v1/alerts", json={
-            "underlying": "ETH", "condition": "price_below", "threshold": 1000.0
+            "underlying": "BANKNIFTY", "condition": "price_below", "threshold": 1000.0
         })
         # Bulk clear
         resp = client.delete("/api/v1/alerts")
@@ -110,7 +110,7 @@ class TestAlertCRUDComplete:
     def test_alert_routing_not_shadowed(self, client):
         """GET /alerts/{id} must not be caught by wrong route."""
         created = client.post("/api/v1/alerts", json={
-            "underlying": "SOL", "condition": "signal_green_arrow"
+            "underlying": "NIFTY", "condition": "signal_green_arrow"
         }).json()
         aid = created["id"]
         resp = client.get(f"/api/v1/alerts/{aid}")
@@ -130,7 +130,7 @@ class TestPositionNotes:
         from app.schemas.directional import Direction
         from app.services import paper_store
         leg = CandidateContract(
-            instrument_name="BTC-12JAN25-42000-C", underlying="BTC",
+            instrument_name="BTC-12JAN25-42000-C", underlying="NIFTY",
             strike=42000.0, expiry_date="12JAN25", dte=12, option_type="call",
             bid=400.0, ask=420.0, mark_price=410.0, mid_price=410.0,
             mark_iv=55.0, delta=0.45, open_interest=100.0, volume_24h=20.0,
@@ -144,7 +144,7 @@ class TestPositionNotes:
             ),
             contracts=1, position_value=420.0, max_risk_usd=420.0, capital_at_risk_pct=0.42,
         )
-        pos = paper_store.add_position("BTC", sized, 42000.0)
+        pos = paper_store.add_position("NIFTY", sized, 42000.0)
         resp = client.patch(f"/api/v1/positions/{pos.id}/notes?notes=Entry+at+42k+good+setup")
         assert resp.status_code == 200
         data = resp.json()
@@ -156,7 +156,7 @@ class TestPositionNotes:
 
 class TestOptionChainComplete:
     def test_chain_returns_all_types_by_default(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         all_types = set()
         for contracts in data["by_expiry"].values():
             for c in contracts:
@@ -164,13 +164,13 @@ class TestOptionChainComplete:
         assert len(all_types) == 2  # both calls and puts
 
     def test_chain_put_filter(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC&type=put").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY&type=put").json()
         for contracts in data["by_expiry"].values():
             for c in contracts:
                 assert c["option_type"] == "put"
 
     def test_chain_healthy_count_accurate(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         # Manually count healthy from response
         actual_healthy = sum(
             1 for contracts in data["by_expiry"].values()
@@ -179,7 +179,7 @@ class TestOptionChainComplete:
         assert data["healthy_contracts"] == actual_healthy
 
     def test_chain_spot_price(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         assert data["spot_price"] == 42000.0
 
 
@@ -216,7 +216,7 @@ class TestRunAllComplete:
         results = data["results"]
         # XRP has has_options=False, excluded from run-all
         # BTC/ETH/SOL should be present
-        assert "BTC" in results or "ETH" in results
+        assert "NIFTY" in results or "BANKNIFTY" in results
 
     def test_run_all_instruments_evaluated(self, client):
         data = client.post("/api/v1/directional/run-all").json()

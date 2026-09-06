@@ -81,7 +81,7 @@ class TestPortfolioGreeks:
         from app.schemas.execution import SizedTrade, TradeStructure, CandidateContract
         from app.schemas.directional import Direction
         leg = CandidateContract(
-            instrument_name="BTC-12JAN25-42000-C", underlying="BTC",
+            instrument_name="BTC-12JAN25-42000-C", underlying="NIFTY",
             strike=42000.0, expiry_date="12JAN25", dte=12, option_type="call",
             bid=400.0, ask=420.0, mark_price=410.0, mid_price=410.0,
             mark_iv=55.0, delta=0.45, open_interest=100.0, volume_24h=20.0,
@@ -95,7 +95,7 @@ class TestPortfolioGreeks:
             ),
             contracts=2, position_value=840.0, max_risk_usd=840.0, capital_at_risk_pct=0.84,
         )
-        paper_store.add_position("BTC", sized, 42000.0)
+        paper_store.add_position("NIFTY", sized, 42000.0)
         data = client.get("/api/v1/positions/greeks").json()
         assert data["open_positions"] == 1
         # delta = 0.45 * 2 contracts * long(+1) = 0.90
@@ -110,7 +110,7 @@ class TestMonitorAllPnLRecord:
         from app.schemas.execution import SizedTrade, TradeStructure, CandidateContract
         from app.schemas.directional import Direction
         leg = CandidateContract(
-            instrument_name="ETH-12JAN25-2000-P", underlying="ETH",
+            instrument_name="ETH-12JAN25-2000-P", underlying="BANKNIFTY",
             strike=2000.0, expiry_date="12JAN25", dte=10, option_type="put",
             bid=100.0, ask=120.0, mark_price=110.0, mid_price=110.0,
             mark_iv=60.0, delta=-0.40, open_interest=50.0, volume_24h=10.0,
@@ -124,7 +124,7 @@ class TestMonitorAllPnLRecord:
             ),
             contracts=1, position_value=120.0, max_risk_usd=120.0, capital_at_risk_pct=0.12,
         )
-        pos = paper_store.add_position("ETH", sized, 2000.0)
+        pos = paper_store.add_position("BANKNIFTY", sized, 2000.0)
 
         resp = client.post("/api/v1/positions/monitor-all")
         assert resp.status_code == 200
@@ -140,10 +140,10 @@ class TestFullPipeline:
     """End-to-end: candles → regime → signal → setup → run-once → recommendation."""
 
     def test_run_once_returns_valid_structure(self, client):
-        resp = client.post("/api/v1/directional/run-once?underlying=BTC")
+        resp = client.post("/api/v1/directional/run-once?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["paper_mode"] is True
         assert "state" in data
         assert "direction" in data
@@ -151,7 +151,7 @@ class TestFullPipeline:
         assert "timestamp_ms" in data
 
     def test_snapshot_all_fields(self, client):
-        resp = client.get("/api/v1/directional/snapshot?underlying=ETH")
+        resp = client.get("/api/v1/directional/snapshot?underlying=BANKNIFTY")
         assert resp.status_code == 200
         data = resp.json()
         required = ["underlying", "spot_price", "macro_regime", "signal_trend",
@@ -166,15 +166,15 @@ class TestFullPipeline:
         assert resp.status_code == 200
         data = resp.json()
         underlyings = {item["underlying"] for item in data["items"]}
-        assert {"BTC", "ETH", "SOL", "XRP"} <= underlyings
+        assert {"NIFTY", "BANKNIFTY", "NIFTY", "BANKNIFTY"} <= underlyings
 
     def test_backtest_produces_bars(self, client):
         resp = client.post("/api/v1/backtest/run", json={
-            "underlying": "BTC", "lookback_days": 7, "sample_every_n_bars": 6
+            "underlying": "NIFTY", "lookback_days": 7, "sample_every_n_bars": 6
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         s = data["stats"]
         total = s["bullish_regime_bars"] + s["bearish_regime_bars"] + s["neutral_regime_bars"]
         assert total == s["total_bars_evaluated"]
@@ -191,10 +191,10 @@ class TestFullPipeline:
         resp = client.get("/api/v1/instruments")
         assert resp.status_code == 200
         instruments = {i["underlying"] for i in resp.json()["instruments"]}
-        assert {"BTC", "ETH", "SOL", "XRP"} <= instruments
+        assert {"NIFTY", "BANKNIFTY", "NIFTY", "BANKNIFTY"} <= instruments
 
     def test_regime_trend_returns_bars(self, client):
-        resp = client.get("/api/v1/directional/regime-trend/BTC?n_bars=20")
+        resp = client.get("/api/v1/directional/regime-trend/NIFTY?n_bars=20")
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] <= 20
@@ -210,7 +210,7 @@ class TestFullPipeline:
     def test_alert_lifecycle(self, client):
         # Create → Check → Triggered → Dismiss
         crt = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0,
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0,
             "notes": "integration test",
         })
         assert crt.status_code == 200
@@ -233,8 +233,8 @@ class TestFullPipeline:
 
     def test_config_info_complete(self, client):
         data = client.get("/api/v1/config/info").json()
-        assert "BTC" in data["supported_underlyings"]
-        assert "BTC" in data["underlyings_with_options"]
+        assert "NIFTY" in data["supported_underlyings"]
+        assert "NIFTY" in data["underlyings_with_options"]
         assert "CachingAdapter" in data["adapter_stack"]
 
     def test_supported_exchanges_complete(self, client):

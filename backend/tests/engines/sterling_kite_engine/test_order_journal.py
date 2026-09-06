@@ -30,9 +30,10 @@ def test_reservation_is_atomic_and_idempotent():
 
 def test_state_machine_rejects_terminal_resurrection():
     r=journal.reserve(**{**args(),'signal_id':'s2'})
-    journal.transition(r.intent_key,'SUBMITTING')
+    assert journal.claim_submission(r.intent_key)
     journal.transition(r.intent_key,'SUBMITTED',order_id='O1')
-    journal.transition(r.intent_key,'FILLED')
+    journal.observe_order(r.intent_key, status='COMPLETE', order_id='O1',
+                          filled_quantity=65, average_price=101.5)
     with pytest.raises(ValueError): journal.transition(r.intent_key,'SUBMITTED')
 
 
@@ -45,19 +46,19 @@ def test_fill_event_is_exactly_once():
 
 def test_find_by_order_or_tag():
     r=journal.reserve(**{**args(),'signal_id':'s3'})
-    journal.transition(r.intent_key,'SUBMITTING')
+    assert journal.claim_submission(r.intent_key)
     r=journal.transition(r.intent_key,'SUBMITTED',order_id='O3')
-    assert journal.find(uid='u',order_id='O3').tag == r.tag
-    assert journal.find(uid='u',tag=r.tag).order_id == 'O3'
+    assert journal.find(uid='u',account_id='a',order_id='O3').tag == r.tag
+    assert journal.find(uid='u',account_id='a',tag=r.tag).order_id == 'O3'
 
 
 @pytest.mark.asyncio
 async def test_confirmed_entry_fill_closes_durable_intent():
     r=journal.reserve(**{**args(),'signal_id':'s4'})
-    journal.transition(r.intent_key,'SUBMITTING')
+    assert journal.claim_submission(r.intent_key)
     journal.transition(r.intent_key,'SUBMITTED',order_id='O4')
     positions.register(positions.OpenPosition(uid='u',symbol=args()['symbol'],exchange='NFO',
         qty=65,lot_size=65,entry_premium=120,stop_premium=100,order_id='O4'))
     await monitor.on_order_update('u',dict(tradingsymbol=args()['symbol'],order_id='O4',
         transaction_type='BUY',status='COMPLETE',filled_quantity=65,average_price=121))
-    assert journal.find(uid='u',order_id='O4').state == 'FILLED'
+    assert journal.find(uid='u',account_id='a',order_id='O4').state == 'FILLED'

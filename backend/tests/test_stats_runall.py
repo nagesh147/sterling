@@ -65,28 +65,28 @@ class TestSessionStats:
 
     def test_stats_counts_arrows(self, client):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "IDLE", now, "test")
-        arrow_store.record("ETH", "red", 3000.0, "short", "IDLE", now, "test")
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "IDLE", now, "test")
+        arrow_store.record("BANKNIFTY", "red", 3000.0, "short", "IDLE", now, "test")
         data = client.get("/api/v1/stats/session").json()
         assert data["green_arrows"] == 1
         assert data["red_arrows"] == 1
         assert data["total_arrows"] == 2
 
     def test_stats_counts_alerts(self, client):
-        client.post("/api/v1/alerts", json={"underlying": "BTC", "condition": "price_above", "threshold": 40000.0})
+        client.post("/api/v1/alerts", json={"underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0})
         data = client.get("/api/v1/stats/session").json()
         assert data["alerts_active"] == 1
 
     def test_stats_after_run_once(self, client):
-        client.post("/api/v1/directional/run-once?underlying=BTC")
+        client.post("/api/v1/directional/run-once?underlying=NIFTY")
         data = client.get("/api/v1/stats/session").json()
         assert data["run_once_total"] >= 1
 
     def test_underlyings_with_arrows(self, client):
         now = int(time.time() * 1000)
-        arrow_store.record("SOL", "green", 100.0, "long", "IDLE", now, "test")
+        arrow_store.record("NIFTY", "green", 100.0, "long", "IDLE", now, "test")
         data = client.get("/api/v1/stats/session").json()
-        assert "SOL" in data["underlyings_with_arrows"]
+        assert "NIFTY" in data["underlyings_with_arrows"]
 
 
 # ─── Run-All ──────────────────────────────────────────────────────────────────
@@ -98,12 +98,12 @@ class TestRunAll:
         data = resp.json()
         assert "results" in data
         assert "instruments_evaluated" in data
-        assert data["instruments_evaluated"] >= 3  # BTC, ETH, SOL
+        assert data["instruments_evaluated"] >= 2  # NIFTY, BANKNIFTY
 
     def test_run_all_results_keyed_by_underlying(self, client):
         data = client.post("/api/v1/directional/run-all").json()
         results = data["results"]
-        assert "BTC" in results or "ETH" in results
+        assert "NIFTY" in results or "BANKNIFTY" in results
 
     def test_run_all_each_has_state(self, client):
         data = client.post("/api/v1/directional/run-all").json()
@@ -115,7 +115,7 @@ class TestRunAll:
     def test_run_all_records_eval_history(self, client):
         client.post("/api/v1/directional/run-all")
         from app.services import eval_history
-        btc_hist = eval_history.get_history("BTC")
+        btc_hist = eval_history.get_history("NIFTY")
         assert len(btc_hist) >= 1
 
     def test_run_all_timestamp(self, client):
@@ -128,7 +128,7 @@ class TestRunAll:
 class TestAlertCooldown:
     def test_cooldown_field_in_create(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC",
+            "underlying": "NIFTY",
             "condition": "price_above",
             "threshold": 40000.0,
             "cooldown_hours": 4.0,
@@ -140,7 +140,7 @@ class TestAlertCooldown:
     def test_zero_cooldown_stays_triggered(self):
         """Alert with cooldown_hours=0 stays TRIGGERED after firing."""
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0,
+            underlying="NIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0,
             cooldown_hours=0.0
         ))
         alert_store.fire_alert(alert.id, trigger_value=42000.0)
@@ -151,7 +151,7 @@ class TestAlertCooldown:
     def test_cooldown_not_elapsed_stays_triggered(self):
         """Alert with cooldown > 0 stays TRIGGERED if cooldown hasn't elapsed."""
         alert = alert_store.add_alert(AlertCreate(
-            underlying="ETH", condition=AlertCondition.PRICE_ABOVE, threshold=3000.0,
+            underlying="BANKNIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=3000.0,
             cooldown_hours=24.0  # 24 hours — won't elapse in test
         ))
         alert_store.fire_alert(alert.id, trigger_value=3500.0)
@@ -162,7 +162,7 @@ class TestAlertCooldown:
     def test_cooldown_elapsed_rearmed(self):
         """Simulate cooldown elapsed → alert rearms to ACTIVE."""
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0,
+            underlying="NIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0,
             cooldown_hours=0.001  # ~3.6 seconds
         ))
         # Fire it with a past trigger time (cooldown already elapsed)
@@ -178,7 +178,7 @@ class TestAlertCooldown:
     def test_fire_count_increments(self):
         """fire_count tracks how many times alert has fired."""
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.SIGNAL_GREEN_ARROW, cooldown_hours=0.0
+            underlying="NIFTY", condition=AlertCondition.SIGNAL_GREEN_ARROW, cooldown_hours=0.0
         ))
         assert alert.fire_count == 0
         alert_store.fire_alert(alert.id)
@@ -187,7 +187,7 @@ class TestAlertCooldown:
     def test_check_rearms_before_evaluating(self, client):
         """POST /alerts/check rearms expired cooldowns before evaluating."""
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0,
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0,
             "cooldown_hours": 0.001,
         })
         aid = resp.json()["id"]

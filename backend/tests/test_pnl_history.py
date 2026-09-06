@@ -118,7 +118,7 @@ class TestAutoAlertSSE:
     def test_price_alert_not_yet_triggered(self, client):
         # Create alert: BTC price > 50000 (current mock is 42000 → not triggered)
         client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 50000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0
         })
         resp = client.post("/api/v1/alerts/check")
         assert resp.status_code == 200
@@ -128,14 +128,14 @@ class TestAutoAlertSSE:
     def test_price_alert_triggered_on_check(self, client):
         # Alert: BTC price > 40000, mock returns 42000 → triggered
         client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0
         })
         resp = client.post("/api/v1/alerts/check")
         assert resp.json()["newly_triggered"] == 1
 
     def test_triggered_alert_appears_in_list(self, client):
         client.post("/api/v1/alerts", json={
-            "underlying": "ETH", "condition": "price_above", "threshold": 40000.0
+            "underlying": "BANKNIFTY", "condition": "price_above", "threshold": 40000.0
         })
         client.post("/api/v1/alerts/check")
         resp = client.get("/api/v1/alerts/triggered")
@@ -144,7 +144,7 @@ class TestAutoAlertSSE:
     def test_alert_not_double_fired(self, client):
         """Second check shouldn't re-fire an already-triggered alert."""
         client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0
         })
         r1 = client.post("/api/v1/alerts/check")
         r2 = client.post("/api/v1/alerts/check")

@@ -68,7 +68,7 @@ class TestSessionEndpoints:
     def test_reset_preserves_alerts(self, client):
         """Alerts now persist across session reset (they have SQLite persistence)."""
         client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 40000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 40000.0
         })
         assert client.get("/api/v1/alerts").json()["active_count"] == 1
         client.delete("/api/v1/session/reset")
@@ -77,7 +77,7 @@ class TestSessionEndpoints:
 
     def test_export_captures_alerts(self, client):
         client.post("/api/v1/alerts", json={
-            "underlying": "ETH", "condition": "signal_green_arrow", "cooldown_hours": 2.0
+            "underlying": "BANKNIFTY", "condition": "signal_green_arrow", "cooldown_hours": 2.0
         })
         data = client.get("/api/v1/session/export").json()
         assert len(data["alerts"]) == 1
@@ -89,68 +89,68 @@ class TestSessionEndpoints:
 class TestAlertValidation:
     def test_price_above_requires_positive_threshold(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 0.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 0.0
         })
         assert resp.status_code == 422
 
     def test_price_above_requires_threshold(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above"
+            "underlying": "NIFTY", "condition": "price_above"
         })
         assert resp.status_code == 422
 
     def test_price_above_positive_ok(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 50000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0
         })
         assert resp.status_code == 200
 
     def test_ivr_above_requires_0_to_100(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "ivr_above", "threshold": 110.0
+            "underlying": "NIFTY", "condition": "ivr_above", "threshold": 110.0
         })
         assert resp.status_code == 422
 
     def test_ivr_above_valid(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "ivr_above", "threshold": 70.0
+            "underlying": "NIFTY", "condition": "ivr_above", "threshold": 70.0
         })
         assert resp.status_code == 200
 
     def test_ivr_below_zero_invalid(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "ivr_below", "threshold": -5.0
+            "underlying": "NIFTY", "condition": "ivr_below", "threshold": -5.0
         })
         assert resp.status_code == 422
 
     def test_state_is_requires_target_state(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "state_is"
+            "underlying": "NIFTY", "condition": "state_is"
         })
         assert resp.status_code == 422
 
     def test_state_is_with_target_ok(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "state_is",
+            "underlying": "NIFTY", "condition": "state_is",
             "target_state": "CONFIRMED_SETUP_ACTIVE"
         })
         assert resp.status_code == 200
 
     def test_arrow_conditions_no_threshold_needed(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "ETH", "condition": "signal_green_arrow"
+            "underlying": "BANKNIFTY", "condition": "signal_green_arrow"
         })
         assert resp.status_code == 200
 
     def test_cooldown_max_168h(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "signal_red_arrow", "cooldown_hours": 200.0
+            "underlying": "NIFTY", "condition": "signal_red_arrow", "cooldown_hours": 200.0
         })
         assert resp.status_code == 422
 
     def test_cooldown_168h_ok(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "signal_red_arrow", "cooldown_hours": 168.0
+            "underlying": "NIFTY", "condition": "signal_red_arrow", "cooldown_hours": 168.0
         })
         assert resp.status_code == 200
 
@@ -175,7 +175,7 @@ class TestHealthV2:
 
     def test_health_alerts_count_matches(self, client):
         client.post("/api/v1/alerts", json={
-            "underlying": "SOL", "condition": "price_above", "threshold": 100.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 100.0
         })
         data = client.get("/health").json()
         assert data["alerts"]["active"] == 1
@@ -196,20 +196,22 @@ class TestCISmoke:
 
     def test_instruments_load(self, client):
         data = client.get("/api/v1/instruments").json()
-        assert data["count"] >= 4
+        assert data["count"] >= 2
 
-    def test_btc_has_options(self, client):
-        inst = client.get("/api/v1/instruments/BTC").json()
-        assert inst["options_available"] is True
+    def test_nifty_has_options(self, client):
+        inst = client.get("/api/v1/instruments/NIFTY").json()["instrument"]
+        assert inst["has_options"] is True
 
     def test_run_once_returns_valid(self, client):
-        data = client.post("/api/v1/directional/run-once?underlying=BTC").json()
+        resp = client.post("/api/v1/directional/run-once?underlying=NIFTY")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
         assert data["paper_mode"] is True
         assert "state" in data
 
     def test_watchlist_all_instruments(self, client):
         data = client.get("/api/v1/directional/watchlist").json()
-        assert data["count"] >= 4
+        assert data["count"] >= 2
 
     def test_zerodha_account_active(self, client):
         info = client.get("/api/v1/account/info").json()
@@ -227,7 +229,7 @@ class TestCISmoke:
 
     def test_alerts_crud(self, client):
         crt = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_above", "threshold": 50000.0
+            "underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0
         }).json()
         assert crt["status"] == "active"
         client.delete(f"/api/v1/alerts/{crt['id']}")

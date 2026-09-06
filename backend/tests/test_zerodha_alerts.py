@@ -94,7 +94,7 @@ class TestZerodhaAdapterPaper:
     async def test_candles_stub(self):
         adapter = ZerodhaAdapter(is_paper=True)
         # Candles not yet implemented → returns []
-        candles = await adapter.get_candles(get_instrument("BTC"), "1H", 10)
+        candles = await adapter.get_candles(get_instrument("NIFTY"), "1H", 10)
         assert candles == []
 
     @pytest.mark.asyncio
@@ -152,16 +152,16 @@ class TestZerodhaExchangeAPI:
 class TestAlertStore:
     def test_add_and_list(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.PRICE_ABOVE, threshold=50000.0
+            underlying="NIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=50000.0
         ))
         assert alert.id
         assert alert.status == AlertStatus.ACTIVE
-        alerts = alert_store.list_alerts("BTC")
+        alerts = alert_store.list_alerts("NIFTY")
         assert len(alerts) == 1
 
     def test_fire_alert(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="ETH", condition=AlertCondition.IVR_ABOVE, threshold=70.0
+            underlying="BANKNIFTY", condition=AlertCondition.IVR_ABOVE, threshold=70.0
         ))
         fired = alert_store.fire_alert(alert.id, trigger_value=75.0)
         assert fired is not None
@@ -170,14 +170,14 @@ class TestAlertStore:
 
     def test_dismiss(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.SIGNAL_GREEN_ARROW
+            underlying="NIFTY", condition=AlertCondition.SIGNAL_GREEN_ARROW
         ))
         dismissed = alert_store.dismiss_alert(alert.id)
         assert dismissed.status == AlertStatus.DISMISSED
 
     def test_check_price_above_triggered(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0
+            underlying="NIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=40000.0
         ))
         result = alert_store.check_alert(alert, spot_price=45000.0)
         assert result.triggered
@@ -185,20 +185,20 @@ class TestAlertStore:
 
     def test_check_price_above_not_triggered(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.PRICE_ABOVE, threshold=50000.0
+            underlying="NIFTY", condition=AlertCondition.PRICE_ABOVE, threshold=50000.0
         ))
         result = alert_store.check_alert(alert, spot_price=42000.0)
         assert not result.triggered
 
     def test_check_green_arrow(self):
         alert = alert_store.add_alert(AlertCreate(
-            underlying="BTC", condition=AlertCondition.SIGNAL_GREEN_ARROW
+            underlying="NIFTY", condition=AlertCondition.SIGNAL_GREEN_ARROW
         ))
         result = alert_store.check_alert(alert, green_arrow=True)
         assert result.triggered
 
     def test_counts(self):
-        alert_store.add_alert(AlertCreate(underlying="BTC", condition=AlertCondition.SIGNAL_RED_ARROW))
+        alert_store.add_alert(AlertCreate(underlying="NIFTY", condition=AlertCondition.SIGNAL_RED_ARROW))
         assert alert_store.active_count() == 1
         assert alert_store.triggered_count() == 0
 
@@ -213,14 +213,14 @@ class TestAlertAPI:
 
     def test_create_alert(self, client):
         resp = client.post("/api/v1/alerts", json={
-            "underlying": "BTC",
+            "underlying": "NIFTY",
             "condition": "price_above",
             "threshold": 50000.0,
             "notes": "BTC ATH watch",
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["status"] == "active"
 
     def test_create_alert_unknown_underlying(self, client):
@@ -231,20 +231,20 @@ class TestAlertAPI:
 
     def test_list_after_create(self, client):
         client.post("/api/v1/alerts", json={
-            "underlying": "ETH", "condition": "ivr_above", "threshold": 70.0
+            "underlying": "BANKNIFTY", "condition": "ivr_above", "threshold": 70.0
         })
         resp = client.get("/api/v1/alerts")
         assert resp.json()["active_count"] == 1
 
     def test_filter_by_underlying(self, client):
-        client.post("/api/v1/alerts", json={"underlying": "BTC", "condition": "price_above", "threshold": 50000.0})
-        client.post("/api/v1/alerts", json={"underlying": "ETH", "condition": "price_above", "threshold": 3000.0})
+        client.post("/api/v1/alerts", json={"underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0})
+        client.post("/api/v1/alerts", json={"underlying": "BANKNIFTY", "condition": "price_above", "threshold": 3000.0})
         resp = client.get("/api/v1/alerts?underlying=BTC")
         alerts = resp.json()["alerts"]
         assert all(a["underlying"] == "BTC" for a in alerts)
 
     def test_check_alerts(self, client):
-        client.post("/api/v1/alerts", json={"underlying": "BTC", "condition": "price_above", "threshold": 50000.0})
+        client.post("/api/v1/alerts", json={"underlying": "NIFTY", "condition": "price_above", "threshold": 50000.0})
         resp = client.post("/api/v1/alerts/check")
         assert resp.status_code == 200
         data = resp.json()
@@ -253,7 +253,7 @@ class TestAlertAPI:
 
     def test_dismiss_alert(self, client):
         create = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "signal_green_arrow"
+            "underlying": "NIFTY", "condition": "signal_green_arrow"
         })
         aid = create.json()["id"]
         resp = client.post(f"/api/v1/alerts/{aid}/dismiss")
@@ -262,7 +262,7 @@ class TestAlertAPI:
 
     def test_delete_alert(self, client):
         create = client.post("/api/v1/alerts", json={
-            "underlying": "BTC", "condition": "price_below", "threshold": 30000.0
+            "underlying": "NIFTY", "condition": "price_below", "threshold": 30000.0
         })
         aid = create.json()["id"]
         del_resp = client.delete(f"/api/v1/alerts/{aid}")

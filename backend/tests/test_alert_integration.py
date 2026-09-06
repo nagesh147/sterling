@@ -19,7 +19,7 @@ from app.schemas.alerts import AlertCreate, AlertCondition
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
 
-def _make_alert(condition: AlertCondition, threshold=None, underlying="BTC") -> str:
+def _make_alert(condition: AlertCondition, threshold=None, underlying="NIFTY") -> str:
     data = AlertCreate(
         underlying=underlying,
         condition=condition,
@@ -50,7 +50,7 @@ async def test_check_and_fire_delivers_webhook():
 
     with patch("app.services.alert_service.webhook_store.deliver_all", side_effect=_fake_deliver):
         fired = await alert_service.check_and_fire(
-            sym="BTC",
+            sym="NIFTY",
             spot_price=51_000.0,
             ivr=45.0,
             green_arrow=False,
@@ -65,7 +65,7 @@ async def test_check_and_fire_delivers_webhook():
     assert len(fired) == 1, "Expected one fired alert"
     assert fired[0]["condition"] == "price_above"
     assert len(delivered) == 1, "Webhook must be delivered"
-    assert "BTC" in delivered[0][0]
+    assert "NIFTY" in delivered[0][0]
 
     # Alert should now be TRIGGERED, not ACTIVE
     a = alert_store.get_alert(aid)
@@ -81,7 +81,7 @@ async def test_check_and_fire_no_trigger_below_threshold():
 
     with patch("app.services.alert_service.webhook_store.deliver_all") as mock_deliver:
         fired = await alert_service.check_and_fire(
-            sym="BTC",
+            sym="NIFTY",
             spot_price=55_000.0,
             ivr=None,
             green_arrow=False,
@@ -100,7 +100,7 @@ async def test_duplicate_alert_suppressed_by_cooldown():
     _clear()
     # cooldown_hours=24 means once triggered it won't rearm until 24h elapsed
     data = AlertCreate(
-        underlying="BTC",
+        underlying="NIFTY",
         condition=AlertCondition.PRICE_ABOVE,
         threshold=50_000.0,
         cooldown_hours=24,
@@ -114,11 +114,11 @@ async def test_duplicate_alert_suppressed_by_cooldown():
 
     with patch("app.services.alert_service.webhook_store.deliver_all", side_effect=_fake_deliver):
         # First call — should trigger
-        await alert_service.check_and_fire("BTC", 51_000.0, None, False, False, "IDLE")
+        await alert_service.check_and_fire("NIFTY", 51_000.0, None, False, False, "IDLE")
         await asyncio.sleep(0)
 
         # Second call immediately after — alert is TRIGGERED, cooldown not elapsed → no fire
-        await alert_service.check_and_fire("BTC", 52_000.0, None, False, False, "IDLE")
+        await alert_service.check_and_fire("NIFTY", 52_000.0, None, False, False, "IDLE")
         await asyncio.sleep(0)
 
     assert len(delivered) == 1, "Second call must be suppressed by cooldown"
@@ -139,7 +139,7 @@ async def test_failed_webhook_does_not_crash():
 
     with patch("app.services.alert_service.webhook_store.deliver_all", side_effect=_raise):
         # Must not raise
-        fired = await alert_service.check_and_fire("BTC", 45_000.0, None, False, False, "IDLE")
+        fired = await alert_service.check_and_fire("NIFTY", 45_000.0, None, False, False, "IDLE")
         await asyncio.sleep(0)  # flush create_task
 
     assert len(fired) == 1, "Alert should still be recorded as fired"
@@ -154,11 +154,11 @@ async def test_background_poller_reuses_snapshot_cache():
     without calling get_index_price / get_candles on the adapter.
     """
     _clear()
-    _make_alert(AlertCondition.PRICE_ABOVE, threshold=50_000.0, underlying="BTC")
+    _make_alert(AlertCondition.PRICE_ABOVE, threshold=50_000.0, underlying="NIFTY")
 
     # Seed the cache as if SSE wrote it
     snapshot_cache.put(
-        sym="BTC",
+        sym="NIFTY",
         spot_price=55_000.0,
         ivr=60.0,
         green_arrow=True,
@@ -181,13 +181,13 @@ async def test_background_poller_reuses_snapshot_cache():
             with patch("app.services.adapter_manager.get_data_source", return_value="deribit"):
                 with patch("app.api.v1.endpoints.directional._adapter_can_serve", return_value=True):
                     from app.services.exchanges import instrument_registry as reg
-                    inst = reg.get_instrument("BTC")
+                    inst = reg.get_instrument("NIFTY")
                     if inst:
-                        cached = snapshot_cache.get("BTC")
+                        cached = snapshot_cache.get("NIFTY")
                         assert cached is not None, "Cache should be fresh"
                         # Simulate the poller's cache-hit path
                         await _fake_check_and_fire(
-                            sym="BTC",
+                            sym="NIFTY",
                             spot_price=cached.spot_price,
                             ivr=cached.ivr,
                             green_arrow=cached.green_arrow,
@@ -198,7 +198,7 @@ async def test_background_poller_reuses_snapshot_cache():
     # Adapter fetch methods should NOT have been called (cache hit)
     mock_adapter.get_index_price.assert_not_called()
     mock_adapter.get_candles.assert_not_called()
-    assert "BTC" in fired_calls
+    assert "NIFTY" in fired_calls
 
 
 # ─── 6. Green-arrow alert fires on signal_green_arrow condition ───────────────
@@ -206,7 +206,7 @@ async def test_background_poller_reuses_snapshot_cache():
 @pytest.mark.asyncio
 async def test_green_arrow_alert_condition():
     _clear()
-    _make_alert(AlertCondition.SIGNAL_GREEN_ARROW, underlying="ETH")
+    _make_alert(AlertCondition.SIGNAL_GREEN_ARROW, underlying="BANKNIFTY")
 
     delivered: list = []
     async def _fake_deliver(subject, message, data):
@@ -214,15 +214,15 @@ async def test_green_arrow_alert_condition():
 
     with patch("app.services.alert_service.webhook_store.deliver_all", side_effect=_fake_deliver):
         # No green arrow — should not trigger
-        await alert_service.check_and_fire("ETH", 3_000.0, None, False, False, "IDLE")
+        await alert_service.check_and_fire("BANKNIFTY", 3_000.0, None, False, False, "IDLE")
         await asyncio.sleep(0)
 
         # Re-add alert (previous test consumed it)
         _clear()
-        _make_alert(AlertCondition.SIGNAL_GREEN_ARROW, underlying="ETH")
+        _make_alert(AlertCondition.SIGNAL_GREEN_ARROW, underlying="BANKNIFTY")
 
         # Green arrow fires — should trigger
-        await alert_service.check_and_fire("ETH", 3_100.0, None, True, False, "CONFIRMED_SETUP_ACTIVE")
+        await alert_service.check_and_fire("BANKNIFTY", 3_100.0, None, True, False, "CONFIRMED_SETUP_ACTIVE")
         await asyncio.sleep(0)
 
     assert len(delivered) == 1, "Only green_arrow=True call should trigger"
@@ -233,7 +233,7 @@ async def test_green_arrow_alert_condition():
 @pytest.mark.asyncio
 async def test_ivr_above_alert_condition():
     _clear()
-    _make_alert(AlertCondition.IVR_ABOVE, threshold=70.0, underlying="BTC")
+    _make_alert(AlertCondition.IVR_ABOVE, threshold=70.0, underlying="NIFTY")
 
     delivered: list = []
     async def _fake_deliver(subject, message, data):
@@ -241,15 +241,15 @@ async def test_ivr_above_alert_condition():
 
     with patch("app.services.alert_service.webhook_store.deliver_all", side_effect=_fake_deliver):
         # IVR below threshold
-        await alert_service.check_and_fire("BTC", 50_000.0, 65.0, False, False, "IDLE")
+        await alert_service.check_and_fire("NIFTY", 50_000.0, 65.0, False, False, "IDLE")
         await asyncio.sleep(0)
         assert len(delivered) == 0
 
         _clear()
-        _make_alert(AlertCondition.IVR_ABOVE, threshold=70.0, underlying="BTC")
+        _make_alert(AlertCondition.IVR_ABOVE, threshold=70.0, underlying="NIFTY")
 
         # IVR above threshold
-        await alert_service.check_and_fire("BTC", 50_000.0, 80.0, False, False, "IDLE")
+        await alert_service.check_and_fire("NIFTY", 50_000.0, 80.0, False, False, "IDLE")
         await asyncio.sleep(0)
         assert len(delivered) == 1
 
@@ -260,5 +260,5 @@ async def test_ivr_above_alert_condition():
 async def test_check_and_fire_no_alerts():
     _clear()
     # Should return empty list without raising
-    fired = await alert_service.check_and_fire("BTC", 50_000.0, None, False, False, "IDLE")
+    fired = await alert_service.check_and_fire("NIFTY", 50_000.0, None, False, False, "IDLE")
     assert fired == []

@@ -417,14 +417,14 @@ async def test_aggregator_uses_live_iv_when_chain_available():
     # Submit a benign new order — we don't care if it passes; we want to
     # verify the chain was fetched (live-IV refresh path triggered).
     class _Req:
-        underlying = "BTC"
+        underlying = "NIFTY"
         direction = "long"
         instrument_type = "options"
-        option_symbol = "C-BTC-50000-310525"
+        option_symbol = "NIFTY25MAY50000CE"
         size = 1.0
 
     await check_against_budget(_Req(), [pos], adapter, checker, _spot)
-    # The aggregator should have hit the chain once for BTC's open option.
+    # The aggregator should have hit the chain once for NIFTY's open option.
     assert adapter.get_option_chain.call_count == 1
 
 
@@ -439,7 +439,7 @@ async def test_aggregator_falls_back_to_entry_iv_when_chain_unavailable():
     checker = GreeksBudgetChecker(GreeksBudget(), portfolio_value=100_000.0)
 
     class _Req:
-        underlying = "BTC"
+        underlying = "NIFTY"
         direction = "long"
         instrument_type = "futures"
         option_symbol = None
@@ -478,7 +478,7 @@ async def test_aggregator_skips_chain_fetch_for_futures_only_portfolio():
     checker = GreeksBudgetChecker(GreeksBudget(), portfolio_value=100_000.0)
 
     class _Req:
-        underlying = "BTC"
+        underlying = "NIFTY"
         direction = "long"
         instrument_type = "futures"
         option_symbol = None

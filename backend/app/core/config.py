@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     paper_trading: bool = True
     real_public_data: bool = True
-    default_underlying: str = "BTC"
+    default_underlying: str = "NIFTY"
     deribit_base_url: str = "https://www.deribit.com/api/v2"
     log_level: str = "INFO"
     log_json: bool = False  # opt-in structured JSON logging (Phase 2 observability)
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     use_sqlalchemy: bool = False  # Phase 5 dual-write flag (default OFF)
     enable_event_bus: bool = False  # Phase 3 live event bus + agents wiring (default OFF)
     cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
-    exchange_adapter: str = "delta_india"  # "delta_india" | "deribit" | "okx" | "binance"
+    exchange_adapter: str = "zerodha"  # the only adapter in this build
 
     max_contracts: int = 10
     max_position_pct: float = 0.05

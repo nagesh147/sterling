@@ -40,9 +40,9 @@ def _candle_series(n: int = 200, base: float = 100.0):
 def _instrument():
     from app.schemas.instruments import InstrumentMeta
     return InstrumentMeta(
-        underlying="BTC", tick_size=0.5, strike_step=100.0,
-        has_options=True, exchange="deribit", exchange_currency="BTC",
-        perp_symbol="BTC-PERPETUAL", index_name="btc_usd", dvol_symbol="BTC_DVOL",
+        underlying="NIFTY", tick_size=0.5, strike_step=100.0,
+        has_options=True, exchange="deribit", exchange_currency="NIFTY",
+        perp_symbol="NIFTY", index_name="btc_usd", dvol_symbol="BTC_DVOL",
         delta_perp_symbol="BTCUSD",
         min_dte=5, preferred_dte_min=10, preferred_dte_max=21,
     )
@@ -129,26 +129,6 @@ class TestUnsupportedResolutionFallback:
 
 class TestResolutionMapExtensions:
     """Adapter _RESOLUTION_MAPs must now cover 1m, 5m, D for finer modes."""
-
-    def test_deribit_supports_finer_resolutions(self):
-        from app.services.exchanges.adapters.deribit import _RESOLUTION_MAP
-        for tf in ("1m", "5m", "15m", "1H", "4H", "D", "1D"):
-            assert tf in _RESOLUTION_MAP, f"Deribit must accept {tf}"
-
-    def test_delta_india_supports_finer_resolutions(self):
-        from app.services.exchanges.adapters.delta_india import _RESOLUTION_MAP
-        for tf in ("1m", "5m", "15m", "1H", "4H", "D"):
-            assert tf in _RESOLUTION_MAP
-
-    def test_okx_supports_finer_resolutions(self):
-        from app.services.exchanges.adapters.okx import _RESOLUTION_MAP
-        for tf in ("1m", "5m", "15m", "1H", "4H", "D"):
-            assert tf in _RESOLUTION_MAP
-
-    def test_binance_supports_finer_resolutions(self):
-        from app.services.exchanges.adapters.binance import _INTERVAL_MAP
-        for tf in ("1m", "5m", "15m", "1H", "4H", "D"):
-            assert tf in _INTERVAL_MAP
 
     def test_zerodha_supports_finer_resolutions(self):
         from app.services.exchanges.adapters.zerodha import _RESOLUTION_MAP

@@ -51,43 +51,43 @@ def client():
 class TestArrowStore:
     def test_record_and_retrieve(self):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "CONFIRMED_SETUP_ACTIVE", now, "test")
-        arrows = arrow_store.get_arrows("BTC")
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "CONFIRMED_SETUP_ACTIVE", now, "test")
+        arrows = arrow_store.get_arrows("NIFTY")
         assert len(arrows) == 1
         assert arrows[0].arrow_type == "green"
-        assert arrows[0].underlying == "BTC"
+        assert arrows[0].underlying == "NIFTY"
         assert arrows[0].spot_price == 42000.0
 
     def test_newest_first(self):
         now = int(time.time() * 1000)
-        arrow_store.record("ETH", "green", 3000.0, "long", "IDLE", now - 10000, "test")
-        arrow_store.record("ETH", "red", 3100.0, "short", "IDLE", now, "test")
-        arrows = arrow_store.get_arrows("ETH")
+        arrow_store.record("BANKNIFTY", "green", 3000.0, "long", "IDLE", now - 10000, "test")
+        arrow_store.record("BANKNIFTY", "red", 3100.0, "short", "IDLE", now, "test")
+        arrows = arrow_store.get_arrows("BANKNIFTY")
         assert arrows[0].arrow_type == "red"  # newest first
 
     def test_get_all_across_underlyings(self):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "IDLE", now, "test")
-        arrow_store.record("ETH", "red", 3000.0, "short", "IDLE", now, "test")
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "IDLE", now, "test")
+        arrow_store.record("BANKNIFTY", "red", 3000.0, "short", "IDLE", now, "test")
         all_arrows = arrow_store.get_all()
         underlyings = {a.underlying for a in all_arrows}
-        assert "BTC" in underlyings
-        assert "ETH" in underlyings
+        assert "NIFTY" in underlyings
+        assert "BANKNIFTY" in underlyings
 
     def test_empty_returns_empty_list(self):
-        assert arrow_store.get_arrows("SOL") == []
+        assert arrow_store.get_arrows("NIFTY") == []
 
     def test_clear_specific(self):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "IDLE", now, "test")
-        arrow_store.record("ETH", "red", 3000.0, "short", "IDLE", now, "test")
-        arrow_store.clear("BTC")
-        assert arrow_store.get_arrows("BTC") == []
-        assert len(arrow_store.get_arrows("ETH")) == 1
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "IDLE", now, "test")
+        arrow_store.record("BANKNIFTY", "red", 3000.0, "short", "IDLE", now, "test")
+        arrow_store.clear("NIFTY")
+        assert arrow_store.get_arrows("NIFTY") == []
+        assert len(arrow_store.get_arrows("BANKNIFTY")) == 1
 
     def test_clear_all(self):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "IDLE", now, "test")
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "IDLE", now, "test")
         arrow_store.clear()
         assert arrow_store.get_all() == []
 
@@ -96,17 +96,17 @@ class TestArrowStore:
 
 class TestArrowsEndpoint:
     def test_get_arrows_btc_empty(self, client):
-        resp = client.get("/api/v1/directional/arrows/BTC")
+        resp = client.get("/api/v1/directional/arrows/NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert data["count"] == 0
         assert data["arrows"] == []
 
     def test_get_arrows_after_record(self, client):
         now = int(time.time() * 1000)
-        arrow_store.record("BTC", "green", 42000.0, "long", "CONFIRMED_SETUP_ACTIVE", now, "test")
-        resp = client.get("/api/v1/directional/arrows/BTC")
+        arrow_store.record("NIFTY", "green", 42000.0, "long", "CONFIRMED_SETUP_ACTIVE", now, "test")
+        resp = client.get("/api/v1/directional/arrows/NIFTY")
         assert resp.status_code == 200
         assert resp.json()["count"] == 1
         assert resp.json()["arrows"][0]["arrow_type"] == "green"
@@ -127,10 +127,10 @@ class TestArrowsEndpoint:
 class TestPositionsFilter:
     def test_filter_by_underlying(self, client):
         # Empty anyway, but endpoint should accept the param
-        resp = client.get("/api/v1/positions?underlying=BTC")
+        resp = client.get("/api/v1/positions?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert all(p["underlying"] == "BTC" for p in data["positions"])
+        assert all(p["underlying"] == "NIFTY" for p in data["positions"])
 
     def test_filter_by_status(self, client):
         resp = client.get("/api/v1/positions?status=open")
@@ -164,9 +164,11 @@ class TestConfigInfo:
 
     def test_info_instruments(self, client):
         data = client.get("/api/v1/config/info").json()
-        assert "BTC" in data["supported_underlyings"]
-        assert "ETH" in data["underlyings_with_options"]
-        assert "XRP" not in data["underlyings_with_options"]
+        assert "NIFTY" in data["supported_underlyings"]
+        assert "BANKNIFTY" in data["supported_underlyings"]
+        # Both registered instruments are index options underlyings.
+        assert "NIFTY" in data["underlyings_with_options"]
+        assert "BANKNIFTY" in data["underlyings_with_options"]
 
     def test_info_adapter_stack_format(self, client):
         stack = client.get("/api/v1/config/info").json()["adapter_stack"]

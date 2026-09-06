@@ -19,7 +19,7 @@ def _make_options():
     now_ms = int(time.time() * 1000)
     return [OptionSummary(
         instrument_name=f"BTC-12JAN25-{s}-C",
-        underlying="BTC", strike=float(s), expiry_date="12JAN25", dte=12,
+        underlying="NIFTY", strike=float(s), expiry_date="12JAN25", dte=12,
         option_type="call", bid=400.0, ask=420.0, mark_price=410.0, mid_price=410.0,
         mark_iv=55.0, delta=0.45, open_interest=200.0, volume_24h=30.0,
         last_updated_ms=now_ms,
@@ -139,23 +139,23 @@ class TestWebhookCRUD:
 
 class TestOptionChainBrowser:
     def test_chain_btc(self, client):
-        resp = client.get("/api/v1/options/chain?underlying=BTC")
+        resp = client.get("/api/v1/options/chain?underlying=NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert "spot_price" in data
         assert "total_contracts" in data
         assert "by_expiry" in data
         assert "timestamp_ms" in data
 
     def test_chain_field_structure(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         assert "healthy_contracts" in data
         assert "expiry_count" in data
         assert "filter" in data
 
     def test_chain_filter_calls(self, client):
-        resp = client.get("/api/v1/options/chain?underlying=BTC&type=call")
+        resp = client.get("/api/v1/options/chain?underlying=NIFTY&type=call")
         assert resp.status_code == 200
         data = resp.json()
         for expiry, contracts in data["by_expiry"].items():
@@ -163,7 +163,7 @@ class TestOptionChainBrowser:
                 assert c["option_type"] == "call"
 
     def test_chain_dte_filter(self, client):
-        resp = client.get("/api/v1/options/chain?underlying=BTC&min_dte=5&max_dte=20")
+        resp = client.get("/api/v1/options/chain?underlying=NIFTY&min_dte=5&max_dte=20")
         assert resp.status_code == 200
         data = resp.json()
         for expiry, contracts in data["by_expiry"].items():
@@ -174,16 +174,12 @@ class TestOptionChainBrowser:
         resp = client.get("/api/v1/options/chain?underlying=FAKE")
         assert resp.status_code == 404
 
-    def test_chain_no_options_400(self, client):
-        resp = client.get("/api/v1/options/chain?underlying=XRP")
-        assert resp.status_code == 400
-
     def test_chain_invalid_type_422(self, client):
-        resp = client.get("/api/v1/options/chain?underlying=BTC&type=invalid")
+        resp = client.get("/api/v1/options/chain?underlying=NIFTY&type=invalid")
         assert resp.status_code == 422
 
     def test_chain_contracts_health_assessed(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         for expiry, contracts in data["by_expiry"].items():
             for c in contracts:
                 assert "healthy" in c
@@ -191,7 +187,7 @@ class TestOptionChainBrowser:
                 assert "spread_pct" in c
 
     def test_chain_strikes_sorted_asc(self, client):
-        data = client.get("/api/v1/options/chain?underlying=BTC").json()
+        data = client.get("/api/v1/options/chain?underlying=NIFTY").json()
         for expiry, contracts in data["by_expiry"].items():
             strikes = [c["strike"] for c in contracts]
             assert strikes == sorted(strikes)

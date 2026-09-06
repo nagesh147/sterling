@@ -85,15 +85,15 @@ class TestAnalyticsRoute:
 
 class TestRegimeTrend:
     def test_regime_trend_btc(self, client):
-        resp = client.get("/api/v1/directional/regime-trend/BTC")
+        resp = client.get("/api/v1/directional/regime-trend/NIFTY")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["underlying"] == "BTC"
+        assert data["underlying"] == "NIFTY"
         assert "bars" in data
         assert data["count"] == len(data["bars"])
 
     def test_regime_trend_bar_fields(self, client):
-        data = client.get("/api/v1/directional/regime-trend/BTC").json()
+        data = client.get("/api/v1/directional/regime-trend/NIFTY").json()
         if data["bars"]:
             bar = data["bars"][0]
             assert "timestamp_ms" in bar
@@ -105,7 +105,7 @@ class TestRegimeTrend:
             assert isinstance(bar["is_bullish"], bool)
 
     def test_regime_trend_n_bars_param(self, client):
-        resp = client.get("/api/v1/directional/regime-trend/BTC?n_bars=10")
+        resp = client.get("/api/v1/directional/regime-trend/NIFTY?n_bars=10")
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] <= 10
@@ -115,12 +115,12 @@ class TestRegimeTrend:
         assert resp.status_code == 404
 
     def test_regime_trend_n_bars_validation(self, client):
-        resp = client.get("/api/v1/directional/regime-trend/BTC?n_bars=1")
+        resp = client.get("/api/v1/directional/regime-trend/NIFTY?n_bars=1")
         assert resp.status_code == 422  # below min=5
 
     def test_regime_trend_bullish_in_uptrend(self, client):
         """With uptrend candles, most bars should be bullish after warmup."""
-        data = client.get("/api/v1/directional/regime-trend/BTC?n_bars=30").json()
+        data = client.get("/api/v1/directional/regime-trend/NIFTY?n_bars=30").json()
         if data["count"] >= 5:
             # After EMA warmup, uptrend → mostly bullish
             bullish_count = sum(1 for b in data["bars"] if b["is_bullish"])
@@ -144,7 +144,7 @@ class TestProfitFactorEdgeCases:
             ),
             contracts=1, position_value=500.0, max_risk_usd=500.0, capital_at_risk_pct=0.5,
         )
-        pos = ps.add_position("BTC", sized, 42000.0)
+        pos = ps.add_position("NIFTY", sized, 42000.0)
         ps.close_position(pos.id, 43000.0)
         # Set realized P&L manually to positive
         ps._positions[pos.id] = ps._positions[pos.id].model_copy(
